@@ -62,7 +62,7 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 !-----------------------------------------------------------------------
 
 character(len=128) :: version = '$Id: atmosphere.F90,v 14.0 2007/03/15 21:57:53 fms Exp $'
-character(len=128) :: tag = '$Name: nalanda $'
+character(len=128) :: tag = '$Name: nalanda_2007_04 $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
