@@ -118,13 +118,13 @@ contains
                     u, v, pt, q, pe, delp, peln, pkz, pdt,       &
                     ua, va, phis, grid, ak, bk, ks, ps, pk,      &
                     u_srf, v_srf, delz, hydrostatic,             &
-                    oro, strat, rayf, master,                    &
+                    oro, strat, rayf, p_ref, master,             &
                     do_Held_Suarez, Time, time_total)
 
 
     integer, INTENT(IN   ) :: npx, npy, npz
     integer, INTENT(IN   ) :: is, ie, js, je, ng, nq
-
+    real, INTENT(IN) :: p_ref
     real, INTENT(IN) :: oro(is:ie,js:je)
 
     real   , INTENT(INOUT) ::    u(is-ng:ie+  ng,js-ng:je+1+ng,npz)
@@ -189,10 +189,9 @@ contains
        call timing_on('SIM_PHYS')
        call Sim_phys(npx, npy, npz, is, ie, js, je, ng, nq,       &
                      u_dt, v_dt, t_dt, q_dt, u, v, ua, va, pt, q, &
-                     pe, delp, peln, oro, pdt, grid, ak, bk,      &
-                     rayf, master, Time, time_total)
+                     pe, delp, peln, oro, hydrostatic, pdt, grid, ak, bk, &
+                     rayf, p_ref, master, Time, time_total)
        call timing_off('SIM_PHYS')
-
     endif
 
 #ifndef HS_UPDATE

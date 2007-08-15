@@ -32,7 +32,7 @@ module atmosphere_mod
 !-----------------------------------------------------------------------
 
 
-use constants_mod, only: grav, kappa, cp_air, pi
+use constants_mod, only: grav, kappa, cp_air, pi, SECONDS_PER_DAY
 use fms_mod,       only: file_exist, open_namelist_file,   &
                          error_mesg, FATAL,                &
                          check_nml_error, stdlog, stdout,  &
@@ -45,12 +45,13 @@ use mpp_domains_mod,  only: domain2d
 ! FV specific codes:
 !------------------
 use fv_arrays_mod, only: fv_atmos_type
-use fv_pack_mod,   only: fv_init, domain, fv_end, adiabatic
+use fv_pack_mod,   only: fv_init, domain, fv_end, adiabatic, p_ref
 use fv_phys_mod,   only: fv_phys, fv_nudge
 use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time
 use timingModule,   only: timing_on, timing_off
 use fv_restart_mod, only: fv_restart
 use fv_dynamics_mod, only: fv_dynamics
+use grid_tools, only: grid_type
 
 !-----------------------------------------------------------------------
 
@@ -61,8 +62,8 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 
 !-----------------------------------------------------------------------
 
-character(len=128) :: version = '$Id: atmosphere.F90,v 14.0 2007/03/15 21:57:53 fms Exp $'
-character(len=128) :: tag = '$Name: nalanda_2007_06 $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 15.0 2007/08/14 03:50:52 fms Exp $'
+character(len=128) :: tag = '$Name: omsk $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
@@ -114,7 +115,7 @@ contains
 
     ! Init model data
          call timing_on('fv_restart')
-    call fv_restart(domain, Atm, dt_atmos, seconds, days, cold_start)
+    call fv_restart(domain, Atm, dt_atmos, seconds, days, cold_start, grid_type)
          call timing_off('fv_restart')
 
 #ifdef PERTURB_IC
@@ -157,7 +158,7 @@ contains
 
     Atm(1)%full_phys = .false.
 
-    call fv_diag_init(Atm, axes, Time, Atm(1)%npx, Atm(1)%npy, Atm(1)%npz)
+    call fv_diag_init(Atm, axes, Time, Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, p_ref)
 
 !   if( nlev > 1 ) call hs_forcing_init ( axes, Time )
 
@@ -188,7 +189,7 @@ contains
     fv_time = Time + Time_step_atmos
     call get_time (fv_time, seconds,  days)
 
-    time_total = days*86400. + seconds
+    time_total = days*SECONDS_PER_DAY + seconds
 
     if ( tau_winds>0. .or. tau_press>0. .or. tau_temp>0. )     &
     call  fv_nudge(Atm(1)%npz, Atm(1)%isc, Atm(1)%iec, Atm(1)%jsc, Atm(1)%jec, Atm(1)%ng, &
@@ -223,7 +224,7 @@ contains
                     Atm(1)%ua, Atm(1)%va, Atm(1)%phis, Atm(1)%agrid,             &
                     Atm(1)%ak, Atm(1)%bk, Atm(1)%ks, Atm(1)%ps, Atm(1)%pk,       &
                     Atm(1)%u_srf, Atm(1)%v_srf, Atm(1)%delz,                     &
-                    Atm(1)%hydrostatic, Atm(1)%oro, .true., .false.,             &
+                    Atm(1)%hydrostatic, Atm(1)%oro, .true., .false., p_ref,     &
                     (mpp_pe()==mpp_root_pe()), Atm(1)%do_Held_Suarez,            &
                     fv_time, time_total)
                                                         call timing_off('FV_PHYS')
@@ -260,10 +261,9 @@ contains
 
 !  returns the domain2d variable associated with the coupling grid
 !  note: coupling is done using the mass/temperature grid with no halos
-
+        
    fv_domain = domain
-
+        
  end subroutine atmosphere_domain
-
 
 end module atmosphere_mod
