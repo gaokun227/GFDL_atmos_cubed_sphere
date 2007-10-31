@@ -63,7 +63,7 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 !-----------------------------------------------------------------------
 
 character(len=128) :: version = '$Id: atmosphere.F90,v 15.0 2007/08/14 03:50:52 fms Exp $'
-character(len=128) :: tag = '$Name: omsk $'
+character(len=128) :: tag = '$Name: omsk_2007_10 $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
