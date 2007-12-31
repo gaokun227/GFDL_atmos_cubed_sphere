@@ -32,7 +32,7 @@ module atmosphere_mod
 !-----------------------------------------------------------------------
 
 
-use constants_mod, only: grav, kappa, cp_air, pi, SECONDS_PER_DAY
+use constants_mod, only: grav, kappa, cp_air, pi, rdgas, rvgas, SECONDS_PER_DAY
 use fms_mod,       only: file_exist, open_namelist_file,   &
                          error_mesg, FATAL,                &
                          check_nml_error, stdlog, stdout,  &
@@ -45,13 +45,14 @@ use mpp_domains_mod,  only: domain2d
 ! FV specific codes:
 !------------------
 use fv_arrays_mod, only: fv_atmos_type
-use fv_pack_mod,   only: fv_init, domain, fv_end, adiabatic, p_ref
+use fv_control_mod,only: fv_init, domain, fv_end, adiabatic, p_ref
 use fv_phys_mod,   only: fv_phys, fv_nudge
 use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time
-use timingModule,   only: timing_on, timing_off
+use fv_timing_mod,   only: timing_on, timing_off
 use fv_restart_mod, only: fv_restart
 use fv_dynamics_mod, only: fv_dynamics
-use grid_tools, only: grid_type
+use fv_grid_tools_mod, only: grid_type
+use mp_lin_mod, only: micro_phys_init, micro_phys_end
 
 !-----------------------------------------------------------------------
 
@@ -62,8 +63,8 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 
 !-----------------------------------------------------------------------
 
-character(len=128) :: version = '$Id: atmosphere.F90,v 15.0 2007/08/14 03:50:52 fms Exp $'
-character(len=128) :: tag = '$Name: omsk_2007_10 $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 1.1.4.14.2.17.2.2.2.1.2.3 2007/11/26 22:08:12 sjl Exp $'
+character(len=128) :: tag = '$Name: omsk_2007_12 $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
@@ -113,6 +114,8 @@ contains
     allocate(Atm(ntiles))
     call fv_init(Atm(:),dt_atmos)  ! allocates Atm components
 
+    Atm(1)%full_phys = .false.
+
     ! Init model data
          call timing_on('fv_restart')
     call fv_restart(domain, Atm, dt_atmos, seconds, days, cold_start, grid_type)
@@ -156,9 +159,9 @@ contains
 !   endif
 
 
-    Atm(1)%full_phys = .false.
 
     call fv_diag_init(Atm, axes, Time, Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, p_ref)
+    call micro_phys_init(axes, Time)
 
 !   if( nlev > 1 ) call hs_forcing_init ( axes, Time )
 
@@ -172,7 +175,7 @@ contains
   subroutine atmosphere (Time)
     type(time_type), intent(in) :: Time
 
-    real:: zvir = 0.           ! !!! need to be changed
+    real:: zvir
     real:: time_total
     real:: tau_winds, tau_press, tau_temp
 
@@ -197,10 +200,14 @@ contains
                    tau_winds, tau_press, tau_temp)
 
   !---- call fv dynamics -----
-    zvir = 0.         ! no virtual effect if not full physics
+    if ( adiabatic .or. Atm(1)%do_Held_Suarez ) then
+         zvir = 0.         ! no virtual effect
+    else
+         zvir = rvgas/rdgas - 1.
+    endif
 
-    call timing_on('fv_dynamics')
     call set_domain(Atm(1)%domain)  ! needed for diagnostic output done in fv_dynamics
+    call timing_on('fv_dynamics')
     call fv_dynamics(Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, Atm(1)%ncnst, Atm(1)%ng,   & 
                      dt_atmos, Atm(1)%consv_te, Atm(1)%fill, Atm(1)%reproduce_sum, kappa,   &
                      cp_air, zvir, Atm(1)%ks, Atm(1)%ncnst, Atm(1)%n_split, Atm(1)%q_split, &
@@ -209,9 +216,7 @@ contains
                      Atm(1)%pe, Atm(1)%pk, Atm(1)%peln, Atm(1)%pkz,                         &
                      Atm(1)%phis, Atm(1)%omga, Atm(1)%ua, Atm(1)%va, Atm(1)%uc, Atm(1)%vc,  &
                      Atm(1)%ak, Atm(1)%bk, Atm(1)%mfx, Atm(1)%mfy, Atm(1)%cx, Atm(1)%cy,    &
-                     Atm(1)%u_srf, Atm(1)%v_srf, Atm(1)%srf_init, Atm(1)%ze0,               &
-                     Atm(1)%hybrid_z, time_total)
-    call nullify_domain()
+                     Atm(1)%ze0, Atm(1)%hybrid_z, time_total)
     call timing_off('fv_dynamics')
 
     if(Atm(1)%npz /=1 .and. .not. adiabatic)then
@@ -225,10 +230,12 @@ contains
                     Atm(1)%ak, Atm(1)%bk, Atm(1)%ks, Atm(1)%ps, Atm(1)%pk,       &
                     Atm(1)%u_srf, Atm(1)%v_srf, Atm(1)%delz,                     &
                     Atm(1)%hydrostatic, Atm(1)%oro, .true., .false., p_ref,     &
-                    (mpp_pe()==mpp_root_pe()), Atm(1)%do_Held_Suarez,            &
+                    Atm(1)%fv_sg_adj, (mpp_pe()==mpp_root_pe()), Atm(1)%do_Held_Suarez,  &
                     fv_time, time_total)
                                                         call timing_off('FV_PHYS')
     endif
+
+    call nullify_domain()
 
   !---- diagnostics for FV dynamics -----
 
@@ -238,20 +245,17 @@ contains
 
     call timing_off('FV_DIAG')
 
-  end subroutine atmosphere
+ end subroutine atmosphere
 
 
  subroutine atmosphere_end
 
-!----- initialize domains for writing global physics data -----
-
-!   call set_domain ( domain )
     call get_time (fv_time, seconds,  days)
-!   call write_fv_rst( 'RESTART/fv_rst.res', days, seconds, grav, &
-!        restart_format )
+
+    if ( Atm(1)%nwat==6 )    & 
+    call micro_phys_end
 
     call fv_end(Atm)
-
     deallocate(Atm)
 
   end subroutine atmosphere_end

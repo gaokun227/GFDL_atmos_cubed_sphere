@@ -2,8 +2,8 @@ module fv_phys_mod
 
 use time_manager_mod, only: time_type
 use hswf_mod, only: Held_Suarez_Strat, Held_Suarez_Tend, Sim_phys
-use update_fv_phys_mod, only: update_fv_phys
-use timingModule,   only: timing_on, timing_off
+use fv_update_phys_mod, only: fv_update_phys
+use fv_timing_mod,   only: timing_on, timing_off
 
 implicit none
   logical:: nudge_initialized = .false.
@@ -118,12 +118,13 @@ contains
                     u, v, pt, q, pe, delp, peln, pkz, pdt,       &
                     ua, va, phis, grid, ak, bk, ks, ps, pk,      &
                     u_srf, v_srf, delz, hydrostatic,             &
-                    oro, strat, rayf, p_ref, master,             &
+                    oro, strat, rayf, p_ref, fv_sg_adj, master,  &
                     do_Held_Suarez, Time, time_total)
 
 
     integer, INTENT(IN   ) :: npx, npy, npz
     integer, INTENT(IN   ) :: is, ie, js, je, ng, nq
+    integer, INTENT(IN   ) :: fv_sg_adj
     real, INTENT(IN) :: p_ref
     real, INTENT(IN) :: oro(is:ie,js:je)
 
@@ -153,7 +154,7 @@ contains
     type (time_type), intent(in) :: Time
     real, INTENT(IN), optional:: time_total
     logical, intent(in) ::  hydrostatic
-    real, intent(in) ::  delz(is:ie,js:je,npz)
+    real, intent(inout) ::  delz(is:ie,js:je,npz)
     real, allocatable:: u_dt(:,:,:), v_dt(:,:,:), t_dt(:,:,:), q_dt(:,:,:,:)
 
     integer  isd, ied, jsd, jed
@@ -162,10 +163,10 @@ contains
     jsd = js-ng;   jed = je + ng
 
 #ifndef HS_UPDATE
-       allocate ( u_dt(is-ng:ie+ng,js-ng:je+ng,npz) )
-       allocate ( v_dt(is-ng:ie+ng,js-ng:je+ng,npz) )
+       allocate ( u_dt(isd:ied,jsd:jed,npz) )
+       allocate ( v_dt(isd:ied,jsd:jed,npz) )
        allocate ( t_dt(is:ie,js:je,npz) )
-       allocate ( q_dt(is:ie,js:je,npz, nq) )
+       allocate ( q_dt(is:ie,js:je,npz,nq) )
        u_dt = 0.
        v_dt = 0.
        t_dt = 0.
@@ -188,15 +189,15 @@ contains
     else
        call timing_on('SIM_PHYS')
        call Sim_phys(npx, npy, npz, is, ie, js, je, ng, nq,       &
-                     u_dt, v_dt, t_dt, q_dt, u, v, ua, va, pt, q, &
+                     u_dt, v_dt, t_dt, q_dt, u, v, ua, va, pt, delz, q, &
                      pe, delp, peln, oro, hydrostatic, pdt, grid, ak, bk, &
-                     rayf, p_ref, master, Time, time_total)
+                     rayf, p_ref, fv_sg_adj, master, Time, time_total)
        call timing_off('SIM_PHYS')
     endif
 
 #ifndef HS_UPDATE
        call timing_on('UPDATE_PHYS')
-       call update_fv_phys (pdt, is, ie, js, je, isd, ied, jsd, jed, ng, nq,   &
+       call fv_update_phys (pdt, is, ie, js, je, isd, ied, jsd, jed, ng, nq,   &
                             u, v, delp, pt, q, ua, va, ps, pe, peln, pk, pkz,  &
                             ak, bk, u_dt, v_dt, t_dt, q_dt, u_srf, v_srf,      &
                             delz, hydrostatic, .false., Time )
