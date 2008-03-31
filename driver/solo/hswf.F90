@@ -429,9 +429,9 @@ contains
 		      frac(i,j) = max(0., (sigl-sigb)*rsgb )
 		    enddo
 		  enddo
-	#if defined(SPMD)
+#if defined(SPMD)
 		  call mpp_update_domains( frac, domain )
-	#endif
+#endif
 	! Backward adjustment
 		  do j=js,je+1
 		    do i=is,ie+1
