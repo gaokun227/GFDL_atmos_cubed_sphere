@@ -63,8 +63,8 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 
 !-----------------------------------------------------------------------
 
-character(len=128) :: version = '$Id: atmosphere.F90,v 1.1.4.14.2.17.2.2.2.1.2.3 2007/11/26 22:08:12 sjl Exp $'
-character(len=128) :: tag = '$Name: omsk_2008_03 $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 16.0 2008/07/30 22:04:40 fms Exp $'
+character(len=128) :: tag = '$Name: perth $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
@@ -114,7 +114,7 @@ contains
     allocate(Atm(ntiles))
     call fv_init(Atm(:),dt_atmos)  ! allocates Atm components
 
-    Atm(1)%full_phys = .false.
+    Atm(1)%moist_phys = .false.
 
     ! Init model data
          call timing_on('fv_restart')
@@ -224,7 +224,7 @@ contains
                                                          call timing_on('FV_PHYS')
        call fv_phys(Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, Atm(1)%isc, Atm(1)%iec,  &
                     Atm(1)%jsc, Atm(1)%jec, Atm(1)%ng, Atm(1)%ncnst,             &
-                    Atm(1)%u, Atm(1)%v, Atm(1)%pt, Atm(1)%q, Atm(1)%pe,          &
+                    Atm(1)%u, Atm(1)%v, Atm(1)%w, Atm(1)%pt, Atm(1)%q, Atm(1)%pe,  &
                     Atm(1)%delp, Atm(1)%peln, Atm(1)%pkz, dt_atmos,              &
                     Atm(1)%ua, Atm(1)%va, Atm(1)%phis, Atm(1)%agrid,             &
                     Atm(1)%ak, Atm(1)%bk, Atm(1)%ks, Atm(1)%ps, Atm(1)%pk,       &

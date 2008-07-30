@@ -1,15 +1,14 @@
 module hswf_mod
 
- use constants_mod,      only: grav, rdgas, RADIAN, kappa, radius
+ use constants_mod,      only: grav, rdgas, rvgas, RADIAN, kappa, radius
  use fv_grid_tools_mod,  only: area
  use fv_grid_utils_mod,  only: g_sum
  use mpp_domains_mod,    only: mpp_update_domains
  use fv_mp_mod,          only: domain
- use fv_sg_mod,          only: fv_sg_conv, qsmith, neg_adj3
  use time_manager_mod,   only: time_type, get_date, get_time
  use diag_manager_mod,   only: send_data
  use fv_diagnostics_mod, only: prt_maxmin
- use  mp_lin_mod,        only: micro_phys_driver
+ use mp_lin_mod,         only: micro_phys_driver, sg_conv, qsmith
  use fv_timing_mod,      only: timing_on, timing_off
 
 #ifdef MARS_GCM
@@ -429,9 +428,9 @@ contains
 		      frac(i,j) = max(0., (sigl-sigb)*rsgb )
 		    enddo
 		  enddo
-#if defined(SPMD)
+	#if defined(SPMD)
 		  call mpp_update_domains( frac, domain )
-#endif
+	#endif
 	! Backward adjustment
 		  do j=js,je+1
 		    do i=is,ie+1
@@ -709,9 +708,9 @@ contains
 #else
 
  subroutine Sim_phys(npx, npy, npz, is, ie, js, je, ng, nq,  &
-                     u_dt, v_dt, t_dt, q_dt, u, v, ua, va,   &
+                     u_dt, v_dt, t_dt, q_dt, u, v, w, ua, va,   &
                      pt, delz, q, pe, delp, peln, oro, hydrostatic, &
-                     pdt, agrid, ak, bk, rayf, p_ref, fv_sg_adj,    &
+                     pdt, agrid, ak, bk, p_ref, fv_sg_adj,    &
                      master, Time, time_total)
 
 
@@ -721,7 +720,7 @@ contains
  real   , INTENT(IN) :: pdt
  real   , INTENT(IN) :: agrid(is-ng:ie+ng,js-ng:je+ng, 2)
  real   , INTENT(IN) :: ak(npz+1), bk(npz+1)
- logical, INTENT(IN) :: rayf, master
+ logical, INTENT(IN) :: master
  real, INTENT(IN):: p_ref
  real, INTENT(IN):: oro(is:ie,js:je)       ! land fraction
  logical, INTENT(IN):: hydrostatic
@@ -737,6 +736,7 @@ contains
  real, INTENT(INOUT)::   pe(is-1:ie+1 ,1:npz+1,js-1:je+1)
  real, INTENT(INOUT):: peln(is  :ie   ,1:npz+1,js  :je  )
  real, INTENT(INOUT):: delz(is   :ie   ,js   :je   ,npz)
+ real, intent(inout):: w(is-ng:ie+ng,js-ng:je+ng,npz)
 
 ! Tendencies:
  real, INTENT(INOUT):: u_dt(is-ng:ie+ng,js-ng:je+ng,npz)
@@ -746,47 +746,51 @@ contains
  real, INTENT(INOUT):: ua(is-ng:ie+ng,js-ng:je+ng,npz)
  real, INTENT(INOUT):: va(is-ng:ie+ng,js-ng:je+ng,npz)
 ! Local
+ real, parameter:: tice = 273.16
  real, dimension(is:ie,js:je,npz):: t3, p3, dz
- real, dimension(is:ie,js:je,npz):: qa, qa_dt     ! cloud
-! real, dimension(is:ie,js:je,npz+1):: ze
+ real, dimension(is:ie,js:je,npz+1):: zhalf, phalf
+ real, dimension(is:ie,js:je,npz  ):: zfull
  real, dimension(is:ie,js:je,npz,nq):: q3
  real, dimension(is:ie,js:je):: rain, snow, ice, graupel, prec_mp, land
  real qs(is:ie)
  real pedge(npz+1)
  real pref(npz)
- real sst, sday, shour, rkv, rka, rks, rkt, sigb, rsgb
- real  rk1, sigl, tmp, rkq, pc, c1, cooling, frac
+ real sst, sday, shour, rkv, rka, rks, rkt, zvir, rrg, tvm
+ real rk1, tmp, rkq, pc, c1, cooling, frac
  real T0, pi, rdt, convt , tot_prec
  real fac_sm
  logical used
  logical mp_lin
  integer  i,j,k, iq, nq_con, k_mp
  integer  isd, jsd
- integer  Tau_sg, seconds, days
+ integer  tau_sg, seconds, days
+ integer  nqv, nql, nqi
+
+
+   isd = is - ng
+   jsd = js - ng
 
    mp_lin = .true.
 
 ! Factor for Small-Earth Appprox.
 !  fac_sm = RADIUS / 6371.0e3
    fac_sm = 1.
+   pi = 4.*atan(1.)
+
+   rrg  = rdgas / grav
 
    sday  = 24.*3600.*fac_sm
    shour = 3600.*fac_sm
 
-!  Tau_sg = nint ( real(fv_sg_adj)*fac_sm )
-   Tau_sg = fv_sg_adj
+   rdt = 1. / pdt
+   tau_sg = fv_sg_adj
 
-   rkt = pdt / (4.*sday)       !  temp relaxation in the srtat
-   rkv = pdt / sday
-
-!  rk1 = pdt / (4.*shour)      ! temp
-!  rkq = pdt / (4.*shour)      ! sphum
-!  cooling = 1.5 * pdt / sday
-   cooling = 1.0 * pdt / sday
-   rk1 = pdt / (3.*shour)      ! temp
+   cooling = 1.5 * pdt / sday
+!  cooling = 1.0 * pdt / sday
+   rkt = pdt / (6.*sday)       ! temp relaxation
    rkq = pdt / (3.*shour)      ! sphum
-
-   pi = 4.*atan(1.)
+   rk1 = pdt / (3.*shour)      ! sensible heat (from prescribed SST)
+   rkv = pdt / (6.*shour)
 
    t_dt = 0.;  q_dt = 0.
    u_dt = 0.;  v_dt = 0.
@@ -800,100 +804,50 @@ contains
 
 ! Determine k_mp: top layer for microphysics to operate
    k_mp = 1
+!  do k=1,npz
+!     if ( pref(k) > 1.E2 ) then
+!          k_mp = k
+!          exit
+!     endif
+!  enddo
+
+   T0 = 200.
    do k=1,npz
-      if ( pref(k) > 30.E2 ) then
-           k_mp = k
-           exit
-      endif
-   enddo
-!  k_mp = 1
-
-   rdt = 1. / pdt
-   sigb = 0.7
-   rsgb = 1./(1.-sigb)
- 
-
-   isd = is - ng
-   jsd = js - ng
-
-   if ( nq>=6 .and.  mp_lin) then
-        call timing_on ("Adjust_NEG_3D")
-        call neg_adj3(is, ie, js, je, ng, npz,         &
-                      pt, delp,                        &
-                      q(isd,jsd,1,1), q(isd,jsd,1,2),  &
-                      q(isd,jsd,1,3), q(isd,jsd,1,4),  &
-                      q(isd,jsd,1,5), q(isd,jsd,1,6) )
-        call timing_off("Adjust_NEG_3D")
-   endif
-
-#ifdef OLD_WAY
-      do k=1,npz
-        if ( pref(k) >75.E2 ) then
-         do j=js,je
-            do i=is,ie
-               tmp = pt(i,j,k) - cooling
-               if ( tmp > 200. ) then
-                    t3(i,j,k) = tmp
-               else
-                    t3(i,j,k) = pt(i,j,k)
-               endif
-            enddo 
+      do j=js,je
+         do i=is,ie
+            tmp = pt(i,j,k) - cooling
+            if ( tmp > T0 ) then
+                 t3(i,j,k) = tmp
+            else
+                 t3(i,j,k) = (pt(i,j,k)+rkt*T0)/(1.+rkt)
+            endif
          enddo 
-        else
-          tmp = 200.
-          do j=js,je
-             do i=is,ie
-                t3(i,j,k) = (pt(i,j,k)+rkt*tmp)/(1.+rkt)
-             enddo 
-          enddo 
-        endif
-      enddo      ! k-loop
-#else
-      T0 = 200.
-      do k=1,npz
-         do j=js,je
-            do i=is,ie
-               tmp = pt(i,j,k) - cooling
-               if ( tmp > T0 ) then
-                    t3(i,j,k) = tmp
-               else
-                    t3(i,j,k) = (pt(i,j,k)+rkt*T0)/(1.+rkt)
-               endif
-            enddo 
-         enddo 
-      enddo      ! k-loop
-#endif
+      enddo 
+   enddo      ! k-loop
 
 
+!----------
 ! Setup SST:
+!----------
    do j=js,je
       do i=is,ie
 #ifdef UNIFORM_SST
-         sst = 302.
+!        sst = 302.
+         sst = tice + 30.
 #else
 ! Neale & Hoskins 2001
         if ( abs(agrid(i,j,2)) <  pi/3. ) then
              tmp = sin( 1.5*agrid(i,j,2) ) ** 2
 
-#ifdef QOBS
-             sst = 273.16 + 27.*(1.-0.5*(tmp + tmp**2))
-#else
-#ifdef FLAT_SST
-             sst = 273.16 + 27.*(1.-tmp**2)
-#else
+! QOBS
+!            sst = 273.16 + 27.*(1.-0.5*(tmp + tmp**2))
+! FLAT_SST
+!            sst = 273.16 + 27.*(1.-tmp**2)
 ! Default control case:
              sst = 273.16 + 27.*(1.-tmp)
-!Enhanced:
-!            sst = 273.16 + 29.*(1.-tmp**2)
-!            sst = 273.16 + 29.*(1.-tmp)
-#endif
-#endif
          else
              sst = 273.16
          endif
-#endif
-#ifdef FV_LAND
-         if ( oro(i,j) < 0.1 ) &
 #endif
          t3(i,j,npz) = (t3(i,j,npz)+rk1*sst)/(1.+rk1)
        enddo
@@ -903,69 +857,80 @@ contains
       do k=1,npz
          do j=js,je
             do i=is,ie
-             q3(i,j,k,iq) = q(i,j,k,iq)
+               q3(i,j,k,iq) = q(i,j,k,iq)
             enddo
          enddo
       enddo
    enddo
-
-   if ( hydrostatic ) then
-! Should use virtual temp here:
-           do k=npz,1,-1
-              do j=js,je
-                 do i=is,ie
-                    dz(i,j,k) = -rdgas*t3(i,j,k)*(peln(i,k+1,j)-peln(i,k,j))/grav
-!                   p3(i,j,k) = delp(i,j,k) / (peln(i,k+1,j)-peln(i,k,j))
-                 enddo
-               enddo
-            enddo
-   else
-        do k=1,npz
-           do j=js,je
-              do i=is,ie
-                 dz(i,j,k) = delz(i,j,k)
-!                p3(i,j,k) = -delp(i,j,k)/(grav*delz(i,j,k))*rdgas*t3(i,j,k)
-              enddo
-           enddo
-        enddo
-   endif
-
-   do k=1,npz
+         
+   do k=1,npz+1
       do j=js,je
          do i=is,ie
-            p3(i,j,k) = -delp(i,j,k)/(grav*dz(i,j,k))*rdgas*t3(i,j,k)
+            phalf(i,j,k) = pe(i,k,j)
          enddo
       enddo
    enddo
 
-!--------------------
-! Latent heat fluxes:
-!--------------------
+
+! Compute zfull, zhalf
+   do j=js,je
+      do i=is,ie
+         zhalf(i,j,npz+1) = 0.
+      enddo
+   enddo
+
+   zvir = rvgas/rdgas - 1.
+   do k=npz,1,-1
       do j=js,je
-         call qsmith(ie-is+1, 1, 1, t3(is:ie,j,npz), p3(is:ie,j,npz), qs)
+         do i=is,ie
+#ifdef PHYS_NON_HYDRO
+               dz(i,j,k) =  delz(i,j,k)
+               p3(i,j,k) = -rrg*delp(i,j,k)/delz(i,j,k)*t3(i,j,k)*(1.+zvir*q3(i,j,k,1))
+            zhalf(i,j,k) = zhalf(i,j,k+1) - dz(i,j,k)
+            zfull(i,j,k) = 0.5*(zhalf(i,j,k)+zhalf(i,j,k+1))
+#else
+                     tvm = rrg*t3(i,j,k)*(1.+zvir*q3(i,j,k,1))
+               dz(i,j,k) = -tvm*(peln(i,k+1,j)-peln(i,k,j))
+               p3(i,j,k) = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
+            zfull(i,j,k) = zhalf(i,j,k+1) + tvm*(1.-phalf(i,j,k)/p3(i,j,k))
+            zhalf(i,j,k) = zhalf(i,j,k+1) - dz(i,j,k)
+#endif
+         enddo
+      enddo
+   enddo
+
+!--------------------------
+! Moist Physical processes:
+!--------------------------
+
+! Latent heat fluxes:
+      do j=js,je
+         call qsmith(ie-is+1, 1, 1, t3(is:ie,j,npz), p3(is:ie,j,npz), q3(is:ie,j,npz,1), qs)
          do i=is,ie
             rkt = rkq * max( 0.5, sqrt(ua(i,j,npz)**2+va(i,j,npz)**2) )
 !                     * min(5.E2, delp(i,j,npz) ) / delp(i,j,npz)
-#ifdef FV_LAND
-           if ( oro(i,j) < 0.1 ) &
-#endif
            q3(i,j,npz,1) = (q3(i,j,npz,1) + rkt*qs(i)) / (1.+rkt)
          enddo
       enddo   ! j-loop
 
-! 3D Physical processes:
+   land = 0.
 
-   if ( fv_sg_adj > 0 ) then
-! Updated fields: (t_dt, q_dt, u_dt, v_dt) 
-        nq_con = nq
-        call fv_sg_conv(is, ie, js, je, is, ie, js, je,   &
-                        is, ie, js, je, npz, nq_con, pdt, Tau_sg,   &
-                        delp(is:ie,js:je,1:npz), pe, peln, t3, q3,  &
-                        ua(is:ie,js:je,1:npz),       &
-                        va(is:ie,js:je,1:npz),       &
-                        u_dt(is:ie,js:je,1:npz),     &
-                        v_dt(is:ie,js:je,1:npz),     &
-                        t_dt, q_dt, ak, bk)
+   if ( tau_sg > 0 ) then
+         nq_con = nq
+         nqv = 1
+         nql = 2
+         nqi = 3
+
+         call sg_conv(is, ie, js, je,  is, ie, js, je,    &
+                      is, ie, js, je, npz, nq_con, pdt, tau_sg,  &
+                      delp(is:ie,js:je,1:npz), phalf,    &
+                      p3, zfull, zhalf, t3, q3,    &
+                      ua(is:ie,js:je,1:npz),       &
+                      va(is:ie,js:je,1:npz),       &
+                       w(is:ie,js:je,1:npz),       &
+                      u_dt(is:ie,js:je,1:npz),     &
+                      v_dt(is:ie,js:je,1:npz),     &
+                      t_dt, q_dt, 1, land, oro, nqv, nql, nqi)
        do k=1,npz
           do j=js,je
              do i=is,ie
@@ -988,61 +953,62 @@ contains
           enddo
        enddo
        enddo
-   endif
+     else
+       do k=1,npz
+          do j=js,je
+             do i=is,ie
+                u_dt(i,j,k) = 0.
+                v_dt(i,j,k) = 0.
+                t_dt(i,j,k) = (t3(i,j,k)-pt(i,j,k))*rdt
+             enddo
+          enddo
+       enddo
+
+       do iq=1,nq
+       do k=1,npz
+          do j=js,je
+             do i=is,ie
+                q_dt(i,j,k,iq) = (q3(i,j,k,iq)-q(i,j,k,iq))*rdt
+             enddo
+          enddo
+       enddo
+       enddo
+     endif
 
 
    if ( mp_lin ) then
-!------------------------------------------------------
-! Lin et al. 1983 cloud microphysics (with various mods)
-!------------------------------------------------------
-      land = 0.
-      qa = 0.;  qa_dt = 0.
+!---------------------------------------
+! A 6-class cloud microphysics 
+!---------------------------------------
       call micro_phys_driver(q3(is,js,1,1),   q3(is,js,1,2),   q3(is,js,1,3),  &
                      q3(is,js,1,4),   q3(is,js,1,5),   q3(is,js,1,6),  &
-                     qa, q_dt(is,js,1,1), q_dt(is,js,1,2), q_dt(is,js,1,3), &
+                     q3(is,js,1,7), q_dt(is,js,1,1), q_dt(is,js,1,2), q_dt(is,js,1,3), &
                      q_dt(is,js,1,4), q_dt(is,js,1,5), q_dt(is,js,1,6), &
-                     qa_dt, t_dt, t3, p3, dz, delp(is:ie,js:je,1:npz),  &
+                     q_dt(is,js,1,7), t_dt, t3, p3, dz, delp(is:ie,js:je,1:npz),  &
                      pdt, land, rain, snow, ice, graupel,  &
                      is,ie, js,je, 1,npz, k_mp,npz, Time)
 
-
-    endif
-
 #ifdef DEBUG_MP
-      call prt_maxmin('Prec', prec_mp, is, ie, js, je, 0, 1, 1., master)
+      prec_mp(:,:) = rain(:,:) + snow(:,:) + ice(:,:) + graupel(:,:) 
+      call prt_maxmin('prec_mp', prec_mp, is, ie, js, je, 0, 1, 1., master)
       call prt_maxmin('Rain', rain, is, ie, js, je, 0, 1, 1., master)
       call prt_maxmin('Snow', snow, is, ie, js, je, 0, 1, 1., master)
       call prt_maxmin('ice',   ice, is, ie, js, je, 0, 1, 1., master)
       call prt_maxmin('Graupel', graupel, is, ie, js, je, 0, 1, 1., master)
 #endif
+    endif
 
-#ifndef USE_HS_DRAG
-!------------------------
-! Surface drag as in H-S
-!------------------------
-    do k=1,npz
-       do j=js,je
-          do i=is,ie
-             sigl = p3(i,j,k) / pe(i,npz+1,j)
-             frac = rkv * (sigl-sigb)*rsgb
-             if (frac > 0.) then
-                 u_dt(i,j,k) = u_dt(i,j,k) - ua(i,j,k)*frac/(1.+frac) * rdt
-                 v_dt(i,j,k) = v_dt(i,j,k) - va(i,j,k)*frac/(1.+frac) * rdt
-             endif
-         enddo
-      enddo
-   enddo
-#else
-   rkv = pdt / (6.*shour)
+!-------------------------
+! one-layer (surface) drag 
+!-------------------------
    k=npz
    do j=js,je
       do i=is,ie
-         frac = rkv * max(0.5, sqrt(ua(i,j,npz)**2+va(i,j,npz)**2))
+                frac = rkv*max(0.5, sqrt(ua(i,j,npz)**2+va(i,j,npz)**2))
          u_dt(i,j,k) = u_dt(i,j,k) - ua(i,j,k)*frac/(1.+frac) * rdt
          v_dt(i,j,k) = v_dt(i,j,k) - va(i,j,k)*frac/(1.+frac) * rdt
       enddo
    enddo
-#endif
 
  end subroutine Sim_phys
 
@@ -1071,7 +1037,7 @@ contains
       parameter ( p_source = 75000. )
       parameter ( ascale = 5.e-6 / 60. )
 
-!$omp parallel do private(i, j, k)
+!$omp parallel do default(shared) private(i, j, k)
       do k=1,km
         do j=js,je
             do i=is,ie
