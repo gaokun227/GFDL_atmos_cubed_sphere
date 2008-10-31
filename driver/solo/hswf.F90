@@ -1,14 +1,15 @@
 module hswf_mod
 
  use constants_mod,      only: grav, rdgas, rvgas, RADIAN, kappa, radius
- use fv_grid_tools_mod,  only: area
- use fv_grid_utils_mod,  only: g_sum
  use mpp_domains_mod,    only: mpp_update_domains
- use fv_mp_mod,          only: domain
  use time_manager_mod,   only: time_type, get_date, get_time
  use diag_manager_mod,   only: send_data
+ use lin_cld_microphys_mod,         only: lin_cld_microphys_driver, sg_conv, qsmith
+
+ use fv_grid_tools_mod,  only: area
+ use fv_grid_utils_mod,  only: g_sum
+ use fv_mp_mod,          only: domain
  use fv_diagnostics_mod, only: prt_maxmin
- use mp_lin_mod,         only: micro_phys_driver, sg_conv, qsmith
  use fv_timing_mod,      only: timing_on, timing_off
 
 #ifdef MARS_GCM
@@ -980,12 +981,12 @@ contains
 !---------------------------------------
 ! A 6-class cloud microphysics 
 !---------------------------------------
-      call micro_phys_driver(q3(is,js,1,1),   q3(is,js,1,2),   q3(is,js,1,3),  &
+      call lin_cld_microphys_driver(q3(is,js,1,1),   q3(is,js,1,2),   q3(is,js,1,3),  &
                      q3(is,js,1,4),   q3(is,js,1,5),   q3(is,js,1,6),  &
                      q3(is,js,1,7), q_dt(is,js,1,1), q_dt(is,js,1,2), q_dt(is,js,1,3), &
                      q_dt(is,js,1,4), q_dt(is,js,1,5), q_dt(is,js,1,6), &
                      q_dt(is,js,1,7), t_dt, t3, p3, dz, delp(is:ie,js:je,1:npz),  &
-                     pdt, land, rain, snow, ice, graupel,  &
+                     area, pdt, land, rain, snow, ice, graupel,  &
                      is,ie, js,je, 1,npz, k_mp,npz, Time)
 
 #ifdef DEBUG_MP

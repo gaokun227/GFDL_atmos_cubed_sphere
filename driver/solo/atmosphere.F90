@@ -52,7 +52,7 @@ use fv_timing_mod,   only: timing_on, timing_off
 use fv_restart_mod, only: fv_restart
 use fv_dynamics_mod, only: fv_dynamics
 use fv_grid_tools_mod, only: grid_type
-use mp_lin_mod, only: micro_phys_init, micro_phys_end
+use lin_cld_microphys_mod, only: lin_cld_microphys_init, lin_cld_microphys_end
 
 !-----------------------------------------------------------------------
 
@@ -63,8 +63,8 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 
 !-----------------------------------------------------------------------
 
-character(len=128) :: version = '$Id: atmosphere.F90,v 16.0 2008/07/30 22:04:40 fms Exp $'
-character(len=128) :: tag = '$Name: perth $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 16.0.2.2 2008/09/18 20:54:00 rab Exp $'
+character(len=128) :: tag = '$Name: perth_2008_10 $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
@@ -161,7 +161,7 @@ contains
 
 
     call fv_diag_init(Atm, axes, Time, Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, p_ref)
-    call micro_phys_init(axes, Time)
+    call lin_cld_microphys_init(axes, Time)
 
 !   if( nlev > 1 ) call hs_forcing_init ( axes, Time )
 
@@ -208,28 +208,30 @@ contains
 
     call set_domain(Atm(1)%domain)  ! needed for diagnostic output done in fv_dynamics
     call timing_on('fv_dynamics')
-    call fv_dynamics(Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, Atm(1)%ncnst, Atm(1)%ng,   & 
-                     dt_atmos, Atm(1)%consv_te, Atm(1)%fill, Atm(1)%reproduce_sum, kappa,   &
-                     cp_air, zvir, Atm(1)%ks, Atm(1)%ncnst, Atm(1)%n_split, Atm(1)%q_split, &
-                     Atm(1)%u, Atm(1)%v, Atm(1)%w, Atm(1)%delz,                             &
-                     Atm(1)%hydrostatic, Atm(1)%pt, Atm(1)%delp, Atm(1)%q, Atm(1)%ps,       &
-                     Atm(1)%pe, Atm(1)%pk, Atm(1)%peln, Atm(1)%pkz,                         &
-                     Atm(1)%phis, Atm(1)%omga, Atm(1)%ua, Atm(1)%va, Atm(1)%uc, Atm(1)%vc,  &
-                     Atm(1)%ak, Atm(1)%bk, Atm(1)%mfx, Atm(1)%mfy, Atm(1)%cx, Atm(1)%cy,    &
-                     Atm(1)%ze0, Atm(1)%hybrid_z, time_total)
+    call fv_dynamics(Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, Atm(1)%ncnst-Atm(1)%pnats,         &
+                     Atm(1)%ng, dt_atmos, Atm(1)%consv_te,                                  &
+                     Atm(1)%fill, Atm(1)%reproduce_sum, kappa, cp_air, zvir,                &
+                     Atm(1)%ks, Atm(1)%ncnst, Atm(1)%n_split, Atm(1)%q_split,               &
+                     Atm(1)%u, Atm(1)%v, Atm(1)%um, Atm(1)%vm,                              &
+                     Atm(1)%w, Atm(1)%delz, Atm(1)%hydrostatic,                             &
+                     Atm(1)%pt, Atm(1)%delp, Atm(1)%q, Atm(1)%ps,                           &
+                     Atm(1)%pe, Atm(1)%pk, Atm(1)%peln, Atm(1)%pkz, Atm(1)%phis,            &
+                     Atm(1)%omga, Atm(1)%ua, Atm(1)%va, Atm(1)%uc, Atm(1)%vc,               &
+                     Atm(1)%ak, Atm(1)%bk, Atm(1)%mfx, Atm(1)%mfy,                          &
+                     Atm(1)%cx, Atm(1)%cy, Atm(1)%ze0, Atm(1)%hybrid_z, time_total)
     call timing_off('fv_dynamics')
 
     if(Atm(1)%npz /=1 .and. .not. adiabatic)then
 
                                                          call timing_on('FV_PHYS')
-       call fv_phys(Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, Atm(1)%isc, Atm(1)%iec,  &
-                    Atm(1)%jsc, Atm(1)%jec, Atm(1)%ng, Atm(1)%ncnst,             &
-                    Atm(1)%u, Atm(1)%v, Atm(1)%w, Atm(1)%pt, Atm(1)%q, Atm(1)%pe,  &
-                    Atm(1)%delp, Atm(1)%peln, Atm(1)%pkz, dt_atmos,              &
-                    Atm(1)%ua, Atm(1)%va, Atm(1)%phis, Atm(1)%agrid,             &
-                    Atm(1)%ak, Atm(1)%bk, Atm(1)%ks, Atm(1)%ps, Atm(1)%pk,       &
-                    Atm(1)%u_srf, Atm(1)%v_srf, Atm(1)%delz,                     &
-                    Atm(1)%hydrostatic, Atm(1)%oro, .true., .false., p_ref,     &
+       call fv_phys(Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, Atm(1)%isc, Atm(1)%iec,          &
+                    Atm(1)%jsc, Atm(1)%jec, Atm(1)%ng, Atm(1)%ncnst,                     &
+                    Atm(1)%u, Atm(1)%v, Atm(1)%w, Atm(1)%pt, Atm(1)%q, Atm(1)%pe,        &
+                    Atm(1)%delp, Atm(1)%peln, Atm(1)%pkz, dt_atmos,                      &
+                    Atm(1)%ua, Atm(1)%va, Atm(1)%phis, Atm(1)%agrid,                     &
+                    Atm(1)%ak, Atm(1)%bk, Atm(1)%ks, Atm(1)%ps, Atm(1)%pk,               &
+                    Atm(1)%u_srf, Atm(1)%v_srf, Atm(1)%ts, Atm(1)%delz,                  &
+                    Atm(1)%hydrostatic, Atm(1)%oro, .true., .false., p_ref,              &
                     Atm(1)%fv_sg_adj, (mpp_pe()==mpp_root_pe()), Atm(1)%do_Held_Suarez,  &
                     fv_time, time_total)
                                                         call timing_off('FV_PHYS')
@@ -253,7 +255,7 @@ contains
     call get_time (fv_time, seconds,  days)
 
     if ( Atm(1)%nwat==6 )    & 
-    call micro_phys_end
+    call lin_cld_microphys_end
 
     call fv_end(Atm)
     deallocate(Atm)

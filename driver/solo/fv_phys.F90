@@ -16,9 +16,9 @@ contains
 !-----------------------------------------------------------------------
 
  subroutine fv_phys(npx, npy, npz, is, ie, js, je, ng, nq,       &
-                    u, v, w, pt, q, pe, delp, peln, pkz, pdt,       &
+                    u, v, w, pt, q, pe, delp, peln, pkz, pdt,    &
                     ua, va, phis, grid, ak, bk, ks, ps, pk,      &
-                    u_srf, v_srf, delz, hydrostatic,             &
+                    u_srf, v_srf, ts, delz, hydrostatic,         &
                     oro, strat, rayf, p_ref, fv_sg_adj, master,  &
                     do_Held_Suarez, Time, time_total)
 
@@ -52,6 +52,7 @@ contains
     logical, INTENT(IN   )    :: strat, rayf, master, do_Held_Suarez
     real, INTENT(inout):: u_srf(is:ie,js:je)
     real, INTENT(inout):: v_srf(is:ie,js:je)
+    real, INTENT(inout):: ts(is:ie,js:je)
 
     type (time_type), intent(in) :: Time
     real, INTENT(IN), optional:: time_total
@@ -98,8 +99,8 @@ contains
        call timing_on('UPDATE_PHYS')
     call fv_update_phys (pdt, is, ie, js, je, isd, ied, jsd, jed, ng, nq,   &
                          u, v, delp, pt, q, ua, va, ps, pe, peln, pk, pkz,  &
-                         ak, bk, u_dt, v_dt, t_dt, q_dt, u_srf, v_srf,      &
-                         delz, hydrostatic, moist_phys, Time )
+                         ak, bk, phis, u_srf, v_srf, ts, delz, hydrostatic, &
+                         u_dt, v_dt, t_dt, q_dt, moist_phys, Time )
     deallocate ( u_dt )
     deallocate ( v_dt )
     deallocate ( t_dt )
