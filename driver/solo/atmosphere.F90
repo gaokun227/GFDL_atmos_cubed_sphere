@@ -63,8 +63,8 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 
 !-----------------------------------------------------------------------
 
-character(len=128) :: version = '$Id: atmosphere.F90,v 16.0.2.2 2008/09/18 20:54:00 rab Exp $'
-character(len=128) :: tag = '$Name: perth_2008_10 $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 17.0 2009/07/21 02:51:44 fms Exp $'
+character(len=128) :: tag = '$Name: quebec $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
@@ -94,6 +94,7 @@ contains
     integer :: ss, ds
     integer :: ntiles=1
     integer i,j, isc, iec, jsc, jec
+    integer :: unit
     real pp(2)
 
 
@@ -150,8 +151,9 @@ contains
 !     call get_time (Time, ss,  ds)
 !
 !     if(seconds /= ss .or. days /= ds) then
-!       write(stdout(),*) 'FMS:', ds, ss
-!       write(stdout(),*) 'FV:', days, seconds
+!        unit = stdout()
+!       write(unit,*) 'FMS:', ds, ss
+!       write(unit,*) 'FV:', days, seconds
 !       call error_mesg('FV_init:','Time inconsistent between fv_rst and INPUT/atmos_model.res',FATAL)
 !     endif
 !   else

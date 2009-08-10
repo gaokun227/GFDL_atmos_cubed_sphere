@@ -12,21 +12,9 @@ module hswf_mod
  use fv_diagnostics_mod, only: prt_maxmin
  use fv_timing_mod,      only: timing_on, timing_off
 
-#ifdef MARS_GCM
-      use fms_mod, only: file_exist, read_data, field_size
-      use mpp_mod, only: mpp_error, FATAL
-      use horiz_interp_mod, only: horiz_interp
-#endif
-
       implicit none
 !-----------------------------------------------------------------------
       logical :: rf_initialized = .false.
-
-#ifdef MARS_GCM
-      logical :: tmars_initialized = .false.
-      real,  allocatable, dimension(:,:,:):: tmars
-#endif
-
 
       private
       public :: Held_Suarez_Strat, Held_Suarez_Tend, Sim_phys, age_of_air
@@ -429,9 +417,9 @@ contains
 		      frac(i,j) = max(0., (sigl-sigb)*rsgb )
 		    enddo
 		  enddo
-	#if defined(SPMD)
+#if defined(SPMD)
 		  call mpp_update_domains( frac, domain )
-	#endif
+#endif
 	! Backward adjustment
 		  do j=js,je+1
 		    do i=is,ie+1
@@ -462,251 +450,6 @@ contains
 
 	 end subroutine Held_Suarez_Strat
 
-
-#ifdef MARS_GCM
-! Forcing for MARS_GCM
- subroutine Mars_phys(npx, npy, npz, is, ie, js, je, ng, nq,  &
-		     u_dt, v_dt, t_dt, q_dt, u, v, ua, va,   &
-		     pt, q, pe, delp, peln, oro, hydrostatic, &
-		     pdt, agrid, ak, bk, rayf, p_ref, master, Time, time_total)
-
-	      integer, INTENT(IN) :: npx, npy, npz
-	      integer, INTENT(IN) :: is, ie, js, je, ng, nq
-	      real   , INTENT(IN) :: pdt
-	      real   , INTENT(IN) :: agrid(is-ng:ie+ng,js-ng:je+ng, 2)
-	      real   , INTENT(IN) :: ak(npz+1), bk(npz+1)
-	      logical, INTENT(IN) :: rayf, master
-	      real, INTENT(IN):: oro(is:ie,js:je)       ! land fraction
-	      logical, INTENT(IN):: hydrostatic
-	      real, INTENT(IN):: p_ref
-
-	      type(time_type), intent(in) :: Time
-	      real, INTENT(IN), optional:: time_total
-
-	      real   , INTENT(INOUT) :: u(is-ng:ie+  ng,js-ng:je+1+ng,npz)
-	      real   , INTENT(INOUT) :: v(is-ng:ie+1+ng,js-ng:je+  ng,npz)
-
-	      real, INTENT(INOUT)::   pt(is-ng:ie+ng,js-ng:je+ng,npz)
-	      real, INTENT(INOUT):: delp(is-ng:ie+ng,js-ng:je+ng,npz)
-	      real, INTENT(INOUT)::    q(is-ng:ie+ng,js-ng:je+ng,npz, nq)
-	      real, INTENT(INOUT)::   pe(is-1:ie+1 ,1:npz+1,js-1:je+1)
-	      real, INTENT(INOUT):: peln(is  :ie   ,1:npz+1,js  :je  )
-
-	! Tendencies:
-	      real, INTENT(INOUT):: u_dt(is-ng:ie+ng,js-ng:je+ng,npz)
-	      real, INTENT(INOUT):: v_dt(is-ng:ie+ng,js-ng:je+ng,npz)
-	      real, INTENT(INOUT):: t_dt(is:ie,js:je,npz)
-	      real, INTENT(INOUT):: q_dt(is:ie,js:je,npz,nq)
-
-	      real, INTENT(INOUT):: ua(is-ng:ie+ng,js-ng:je+ng,npz)
-	      real, INTENT(INOUT):: va(is-ng:ie+ng,js-ng:je+ng,npz)
-
-	! Local
-	      real pedge(npz+1)
-	      real pref(npz)
-
-	      real  sday, rkv, rkt, sigb, rsgb, sigl, cs
-	      real frac
-	      real rdt                    ! Reciprocal of dt
-	      character (len=128) :: filename
-	      integer  i,j,k
-
-	      sday = 24.*3600.
-
-	      do k=1,npz+1
-		 pedge(k) = ak(k) + bk(k)*p_ref
-	      enddo
-
-	      do k=1,npz
-		 pref(k) = (pedge(k+1)-pedge(k)) / log(pedge(k+1)/pedge(k))
-	      enddo
-
-	      if ( .not. tmars_initialized ) then
-		  allocate( tmars(is:ie,js:je,npz) )
-
-		  filename= 'INPUT/teq.nc' 
-		  if( file_exist( trim( filename ) ) ) then 
-		      call read_teq( filename, npz, agrid(is:ie,js:je,1), agrid(is:ie,js:je,2),  &
-				     pref, tmars(is:ie,js:je,:)  )
-		      if(master) write(6,*) 'TEQ for Mars initialized.'
-		  else
-#ifdef FAIL_SAFE
-	      call mpp_error(FATAL,'Mars_GCM: TEQ data not found')
-#else
-		      do k=1,npz
-			 do j=js,je
-			    do i=is,ie
-			       tmars(i,j,k) = 100.+ 100.*max(0.25, (1.-sin(agrid(i,j,2)))*pref(k)/pedge(npz+1))
-	!                      tmars(i,j,k) = 120. + 100.*    &
-	!                      max(0.2, (1.-sin(agrid(i,j,2)))*log(pref(k))/log(pedge(npz+1)))
-			    enddo 
-			 enddo 
-		      enddo
-		      if(master) write(6,*) 'Data for Mars not found; using analytic profile'
-#endif
-		  endif 
-		  cs = sqrt( rdgas * 273./(1.-kappa) ) 
-		  if(master) write(6,*) 'Sound speed (T=273)=', cs
-		  tmars_initialized = .true.
-	      endif
-
-	! ***  Newtonian cooling/relaxation
-	      rdt = 1. / pdt
-	!     rkt = pdt / (4.*sday)
-	      rkt = pdt / (8.*sday)
-
-	      do k=1,npz
-		 do j=js,je
-		    do i=is,ie
-		       t_dt(i,j,k) = rkt*(tmars(i,j,k)-pt(i,j,k))/(1.+rkt) * rdt
-		    enddo 
-		 enddo 
-	      enddo
-
-	! *** Surface Rayleigh friction according to Held-Suarez
-	      rkv = pdt / (1.*sday)          ! 1 day
-	!     rkv = pdt / (2.*sday)          ! 2 day
-	      sigb = 0.7
-	      rsgb = 1./(1.-sigb)
-
-	      do k=1,npz
-		  do j=js,je
-		     do i=is,ie
-			sigl = 0.5*(pe(i,k,j)+pe(i,k+1,j)) / pe(i,npz+1,j)
-			frac = rkv * (sigl-sigb)*rsgb
-			if (frac > 0.) then
-			    u_dt(i,j,k) = -ua(i,j,k)*frac/(1.+frac) * rdt
-			    v_dt(i,j,k) = -va(i,j,k)*frac/(1.+frac) * rdt
-			endif
-		     enddo
-		  enddo
-	      enddo
-
-
-
-	 end subroutine Mars_phys
-
-
-	 subroutine read_teq ( filename, nlevels, lon, lat, pstd, tout )
-
-	!-----------------------------------------------------------------------
-	!
-	! routine for initializing the radiative-convective temperature cross-section
-	!
-	!-----------------------------------------------------------------------
-
-
-
-	   character(len=128), intent(in)            :: filename
-	   integer, intent(in):: nlevels
-	   real,    intent(in),  dimension(:,:)      :: lon, lat 
-	   real,    intent(in)       ::  pstd(nlevels)
-
-	   real,    intent(out),  dimension(:,:,:)   ::  tout
-
-	!-----------------------------------------------------------------------
-	   integer  unit, io, ierr, i, j, k, klev, kk
-
-	   integer  im, jm, km, fld_dims(4)
-	   real    ::  frac
-
-	   real, dimension(:,:,:),  allocatable  ::   teq_inpt
-	   real, dimension(:,:),    allocatable  ::   txy
-
-	   real, dimension(:),  allocatable  ::   lat_inpt, pres_inpt,  presh_inpt
-	   real, dimension(:),  allocatable  ::   lonb_inpt, latb_inpt 
-
-
-
-	!       Get input field teq
-	   call field_size( trim(filename), 'lat', fld_dims )
-
-	   allocate( lat_inpt (fld_dims(1)  ) )
-	   allocate( latb_inpt(fld_dims(1)+1) )
-
-	   call read_data( trim(filename), 'lat',  lat_inpt,  no_domain=.true. )
-	   call read_data( trim(filename), 'latb', latb_inpt, no_domain=.true. )
-
-	   call field_size( trim(filename), 'lonb', fld_dims )
-
-	   allocate( lonb_inpt (fld_dims(1)  ) )
-
-	   call read_data( trim(filename), 'lonb', lonb_inpt, no_domain=.true. )
-
-
-	   call field_size( trim(filename), 'pfull', fld_dims )
-	   allocate( pres_inpt( fld_dims(1) ) )
-	   call read_data( trim(filename), 'pfull', pres_inpt, no_domain=.true. )
-	   print *, 'pfull dims:  ', fld_dims 
-	   pres_inpt= 100.0 * pres_inpt
-
-
-
-	   call field_size( trim(filename), 'teq', fld_dims )
-
-	   im= fld_dims(1);  jm= fld_dims(2);  km= fld_dims(3) 
-	       print *, 'Input Teq dims:  ', fld_dims 
-
-	   allocate( teq_inpt( im,jm,km ) )
-	   allocate( txy     ( im,jm )    )
-
-	   call read_data( trim(filename), 'teq', teq_inpt, no_domain=.true. )
-
-	   latb_inpt(:)= latb_inpt(:)/RADIAN
-	   lonb_inpt(:)= lonb_inpt(:)/RADIAN
-
-
-	!           If km != nlevels  then require vertical interpolation 
-	  if( nlevels > km .or. nlevels < km )  then
-
-	     DO k= 1, nlevels
-		if( pres_inpt(1) > pstd(k) ) then
-		   klev= 2;  frac= 1.0
-		else
-		  DO kk= 2, km
-		    if( pres_inpt(kk) > pstd(k) ) then
-		       frac=  ( pres_inpt(kk) - pstd(k) )/(pres_inpt(kk)-pres_inpt(kk-1))
-		       klev= kk
-		       exit
-		    endif
-		  ENDDO
-
-		  if( kk > km )  then
-		       klev= km;  frac= 0.0
-		  endif 
-		endif
-
-	!             Complete pressure interpolation 
-		DO i= 1, im
-		  DO j= 1, jm
-		    txy(i,j)= (1.0-frac)*teq_inpt(i,j,klev) + frac *teq_inpt(i,j,klev-1)
-		  ENDDO
-		ENDDO
-
-	!             Carry out horizontal interpolation 
-		 call horiz_interp( txy(:,:), lonb_inpt, latb_inpt, lon, lat,    &
-					      tout(:,:,k), interp_method= 'bilinear' )
-	     ENDDO      ! -----------  end loop over k 
-
-	  else
-
-	       DO k= 1, nlevels
-		 call horiz_interp( teq_inpt(:,:,k), lonb_inpt, latb_inpt, lon, lat, &
-				     tout(:,:,k), interp_method= 'bilinear' )
-	       ENDDO
-	  endif
-
-	   deallocate ( teq_inpt )
-	   deallocate ( txy )
-	   deallocate ( lat_inpt )
-	   deallocate ( latb_inpt )
-	   deallocate ( lonb_inpt )
-	   deallocate ( pres_inpt )
-
-
-	 end subroutine read_teq
-
-#else
 
  subroutine Sim_phys(npx, npy, npz, is, ie, js, je, ng, nq,  &
                      u_dt, v_dt, t_dt, q_dt, u, v, w, ua, va,   &
@@ -761,7 +504,7 @@ contains
  real T0, pi, rdt, convt , tot_prec
  real fac_sm
  logical used
- logical mp_lin
+ logical :: do_lin_cld_microphys = .true.
  integer  i,j,k, iq, nq_con, k_mp
  integer  isd, jsd
  integer  tau_sg, seconds, days
@@ -770,8 +513,6 @@ contains
 
    isd = is - ng
    jsd = js - ng
-
-   mp_lin = .true.
 
 ! Factor for Small-Earth Appprox.
 !  fac_sm = RADIUS / 6371.0e3
@@ -977,15 +718,15 @@ contains
      endif
 
 
-   if ( mp_lin ) then
+   if ( do_lin_cld_microphys ) then
 !---------------------------------------
 ! A 6-class cloud microphysics 
 !---------------------------------------
-      call lin_cld_microphys_driver(q3(is,js,1,1),   q3(is,js,1,2),   q3(is,js,1,3),  &
-                     q3(is,js,1,4),   q3(is,js,1,5),   q3(is,js,1,6),  &
-                     q3(is,js,1,7), q_dt(is,js,1,1), q_dt(is,js,1,2), q_dt(is,js,1,3), &
-                     q_dt(is,js,1,4), q_dt(is,js,1,5), q_dt(is,js,1,6), &
-                     q_dt(is,js,1,7), t_dt, t3, p3, dz, delp(is:ie,js:je,1:npz),  &
+      call lin_cld_microphys_driver(q3(:,:,:,1),   q3(:,:,:,2),   q3(:,:,:,3),  &
+                     q3(:,:,:,4),   q3(:,:,:,5),   q3(:,:,:,6),  &
+                     q3(:,:,:,7), q_dt(:,:,:,1), q_dt(:,:,:,2), q_dt(:,:,:,3), &
+                     q_dt(:,:,:,4), q_dt(:,:,:,5), q_dt(:,:,:,6), &
+                     q_dt(:,:,:,7), t_dt, t3, p3, dz, delp(is:ie,js:je,1:npz),  &
                      area, pdt, land, rain, snow, ice, graupel,  &
                      is,ie, js,je, 1,npz, k_mp,npz, Time)
 
@@ -1012,8 +753,6 @@ contains
    enddo
 
  end subroutine Sim_phys
-
-#endif MARS_GCM
 
       subroutine age_of_air(is, ie, js, je, km, ng, time, pe, q)
 

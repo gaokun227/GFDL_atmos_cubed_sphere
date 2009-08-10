@@ -1,9 +1,14 @@
 module fv_phys_mod
 
-use time_manager_mod, only: time_type
-use hswf_mod, only: Held_Suarez_Strat, Held_Suarez_Tend, Sim_phys
+use time_manager_mod,   only: time_type
 use fv_update_phys_mod, only: fv_update_phys
-use fv_timing_mod,   only: timing_on, timing_off
+use fv_timing_mod,      only: timing_on, timing_off
+
+#ifdef MARS_GCM
+use  Mars_phys_mod,     only:   Mars_phys
+#else
+use hswf_mod,           only: Held_Suarez_Strat, Held_Suarez_Tend, Sim_phys
+#endif
 
 implicit none
   logical:: nudge_initialized = .false.
@@ -63,6 +68,12 @@ contains
 
     integer  isd, ied, jsd, jed
 
+#ifdef MARS_GCM
+    real, allocatable:: qratio(:,:,:)
+    integer :: i, j, k, m
+#endif MARS_GCM
+
+
     isd = is-ng;   ied = ie + ng
     jsd = js-ng;   jed = je + ng
 
@@ -74,6 +85,50 @@ contains
        v_dt = 0.
        t_dt = 0.
        q_dt = 0.
+
+#ifdef MARS_GCM
+       allocate ( qratio(is:ie,js:je,npz) )
+
+       call timing_on('Mars_PHYS')
+       call Mars_phys(npx, npy, npz, is, ie, js, je, ng, nq,   &
+                     u_dt, v_dt, t_dt, q_dt, ua, va, pt, q,   &
+                     phis, pe, delp, peln, pdt, grid, ak, bk,       &
+                     qratio, rayf, master, Time, time_total )
+
+       call timing_off('Mars_PHYS')
+
+!!!      Be sure to set moist_phys to true
+       call timing_on('UPDATE_PHYS')
+
+       call fv_update_phys (pdt, is, ie, js, je, isd, ied, jsd, jed, ng, nq,   &
+                            u, v, delp, pt, q, ua, va, ps, pe, peln, pk, pkz,  &
+                            ak, bk, phis, u_srf, v_srf, ts, delz, hydrostatic, &
+                            u_dt, v_dt, t_dt, q_dt, .true., Time )
+
+!-----------------------------------------
+! Adjust mass mixing ratio of all tracers:
+!!!! May NEED TO FIX THIS?!?!  Perhaps do this for prognostic tracers only, and
+!!!!      let the physics code figure out how to handle diagnostic tracers
+!-----------------------------------------
+     do m=1,nq
+       do k=1,npz
+         do j=js,je
+             do i= is,ie
+                q(i,j,k,m) = q(i,j,k,m) / qratio(i,j,k)
+             enddo
+          enddo
+       enddo
+     enddo
+
+       deallocate ( u_dt )
+       deallocate ( v_dt )
+       deallocate ( t_dt )
+       deallocate ( q_dt )
+       deallocate ( qratio )
+       call timing_off('UPDATE_PHYS')
+
+! ------------------------------------------------
+#else
 
     if( do_Held_Suarez ) then
        moist_phys = .false.
@@ -107,6 +162,8 @@ contains
     deallocate ( q_dt )
 
        call timing_off('UPDATE_PHYS')
+
+#endif
 
  end subroutine fv_phys
 
