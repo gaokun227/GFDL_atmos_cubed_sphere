@@ -454,7 +454,7 @@ contains
  subroutine Sim_phys(npx, npy, npz, is, ie, js, je, ng, nq,  &
                      u_dt, v_dt, t_dt, q_dt, u, v, w, ua, va,   &
                      pt, delz, q, pe, delp, peln, oro, hydrostatic, &
-                     pdt, agrid, ak, bk, p_ref, fv_sg_adj,    &
+                     phys_hydrostatic, pdt, agrid, ak, bk, p_ref, fv_sg_adj,    &
                      master, Time, time_total)
 
 
@@ -467,7 +467,7 @@ contains
  logical, INTENT(IN) :: master
  real, INTENT(IN):: p_ref
  real, INTENT(IN):: oro(is:ie,js:je)       ! land fraction
- logical, INTENT(IN):: hydrostatic
+ logical, INTENT(IN):: hydrostatic, phys_hydrostatic
 
  type(time_type), intent(in) :: Time
  real, INTENT(IN), optional:: time_total
@@ -672,7 +672,8 @@ contains
                        w(is:ie,js:je,1:npz),       &
                       u_dt(is:ie,js:je,1:npz),     &
                       v_dt(is:ie,js:je,1:npz),     &
-                      t_dt, q_dt, 1, land, oro, nqv, nql, nqi)
+                      t_dt, q_dt, 1, land, oro, nqv, nql, nqi, &
+                      hydrostatic, phys_hydrostatic)
        do k=1,npz
           do j=js,je
              do i=is,ie
@@ -728,6 +729,7 @@ contains
                      q_dt(:,:,:,4), q_dt(:,:,:,5), q_dt(:,:,:,6), &
                      q_dt(:,:,:,7), t_dt, t3, p3, dz, delp(is:ie,js:je,1:npz),  &
                      area, pdt, land, rain, snow, ice, graupel,  &
+                     hydrostatic, phys_hydrostatic,  &
                      is,ie, js,je, 1,npz, k_mp,npz, Time)
 
 #ifdef DEBUG_MP

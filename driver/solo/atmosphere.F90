@@ -63,8 +63,8 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 
 !-----------------------------------------------------------------------
 
-character(len=128) :: version = '$Id: atmosphere.F90,v 17.0 2009/07/21 02:51:44 fms Exp $'
-character(len=128) :: tag = '$Name: quebec_200910 $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 18.0 2010/03/02 23:26:58 fms Exp $'
+character(len=128) :: tag = '$Name: riga $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
@@ -233,9 +233,9 @@ contains
                     Atm(1)%ua, Atm(1)%va, Atm(1)%phis, Atm(1)%agrid,                     &
                     Atm(1)%ak, Atm(1)%bk, Atm(1)%ks, Atm(1)%ps, Atm(1)%pk,               &
                     Atm(1)%u_srf, Atm(1)%v_srf, Atm(1)%ts, Atm(1)%delz,                  &
-                    Atm(1)%hydrostatic, Atm(1)%oro, .true., .false., p_ref,              &
-                    Atm(1)%fv_sg_adj, (mpp_pe()==mpp_root_pe()), Atm(1)%do_Held_Suarez,  &
-                    fv_time, time_total)
+                    Atm(1)%hydrostatic, Atm(1)%phys_hydrostatic, Atm(1)%oro, .true.,     &
+                    .false., p_ref, Atm(1)%fv_sg_adj, (mpp_pe()==mpp_root_pe()),         &
+                    Atm(1)%do_Held_Suarez, fv_time, time_total)
                                                         call timing_off('FV_PHYS')
     endif
 

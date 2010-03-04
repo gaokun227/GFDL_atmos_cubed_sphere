@@ -23,7 +23,7 @@ contains
  subroutine fv_phys(npx, npy, npz, is, ie, js, je, ng, nq,       &
                     u, v, w, pt, q, pe, delp, peln, pkz, pdt,    &
                     ua, va, phis, grid, ak, bk, ks, ps, pk,      &
-                    u_srf, v_srf, ts, delz, hydrostatic,         &
+                    u_srf, v_srf, ts, delz, hydrostatic, phys_hydrostatic, &
                     oro, strat, rayf, p_ref, fv_sg_adj, master,  &
                     do_Held_Suarez, Time, time_total)
 
@@ -61,7 +61,7 @@ contains
 
     type (time_type), intent(in) :: Time
     real, INTENT(IN), optional:: time_total
-    logical, intent(in) ::  hydrostatic
+    logical, intent(in) ::  hydrostatic, phys_hydrostatic
     real, intent(inout) ::  delz(is:ie,js:je,npz)
     real, allocatable:: u_dt(:,:,:), v_dt(:,:,:), t_dt(:,:,:), q_dt(:,:,:,:)
     logical moist_phys
@@ -144,10 +144,10 @@ contains
     else
        moist_phys = .true.
                                              call timing_on('SIM_PHYS')
-       call Sim_phys(npx, npy, npz, is, ie, js, je, ng, nq,       &
+       call Sim_phys(npx, npy, npz, is, ie, js, je, ng, nq,                &
                      u_dt, v_dt, t_dt, q_dt, u, v, w, ua, va, pt, delz, q, &
-                     pe, delp, peln, oro, hydrostatic, pdt, grid, ak, bk, &
-                     p_ref, fv_sg_adj, master, Time, time_total)
+                     pe, delp, peln, oro, hydrostatic, phys_hydrostatic,   &
+                     pdt, grid, ak, bk, p_ref, fv_sg_adj, master, Time, time_total)
                                             call timing_off('SIM_PHYS')
     endif
 
