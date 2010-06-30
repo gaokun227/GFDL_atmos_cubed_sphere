@@ -63,8 +63,8 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 
 !-----------------------------------------------------------------------
 
-character(len=128) :: version = '$Id: atmosphere.F90,v 18.0 2010/03/02 23:26:58 fms Exp $'
-character(len=128) :: tag = '$Name: riga_201004 $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 18.0.2.1 2010/05/26 20:46:13 pjp Exp $'
+character(len=128) :: tag = '$Name: riga_201006 $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
@@ -163,7 +163,7 @@ contains
 
 
     call fv_diag_init(Atm, axes, Time, Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, p_ref)
-    call lin_cld_microphys_init(axes, Time)
+    call lin_cld_microphys_init(Atm(1)%iec-Atm(1)%isc+1, Atm(1)%jec-Atm(1)%jsc+1, Atm(1)%npz, axes, Time)
 
 !   if( nlev > 1 ) call hs_forcing_init ( axes, Time )
 
