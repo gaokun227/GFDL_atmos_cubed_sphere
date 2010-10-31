@@ -64,7 +64,7 @@ public   atmosphere_init, atmosphere,  atmosphere_end, atmosphere_domain
 !-----------------------------------------------------------------------
 
 character(len=128) :: version = '$Id: atmosphere.F90,v 18.0.2.1 2010/05/26 20:46:13 pjp Exp $'
-character(len=128) :: tag = '$Name: riga_201006 $'
+character(len=128) :: tag = '$Name: riga_201012 $'
 
 !-----------------------------------------------------------------------
 !---- private data ----
