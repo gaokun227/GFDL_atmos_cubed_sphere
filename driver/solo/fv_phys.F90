@@ -18,7 +18,7 @@ public :: fv_phys, fv_nudge
 
 !---- version number -----
   character(len=128) :: version = '$Id: fv_phys.F90,v 19.0 2012/01/06 19:56:26 fms Exp $'
-  character(len=128) :: tagname = '$Name: siena $'
+  character(len=128) :: tagname = '$Name: siena_201202 $'
 
 contains
 
