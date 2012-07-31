@@ -9,6 +9,7 @@ module hswf_mod
  use fv_timing_mod,      only: timing_on, timing_off
 
 #ifdef MARS_GCM
+      use fv_current_grid_mod, only: tmars_initialized, tmars
       use fms_mod, only: file_exist, read_data, field_size
       use mpp_mod, only: mpp_error, FATAL
       use horiz_interp_mod, only: horiz_interp
@@ -28,8 +29,8 @@ module hswf_mod
       public :: Held_Suarez_Strat, Held_Suarez_Tend, age_of_air
 
 !---- version number -----
-      character(len=128) :: version = '$Id: hswf.F90,v 19.0 2012/01/06 19:56:28 fms Exp $'
-      character(len=128) :: tagname = '$Name: siena_201204 $'
+      character(len=128) :: version = '$Id: hswf.F90,v 17.0.2.2.2.3.2.2 2012/04/30 17:08:46 Lucas.Harris Exp $'
+      character(len=128) :: tagname = '$Name: siena_201207 $'
 
 contains
 
@@ -233,7 +234,9 @@ contains
         endif
 #endif
 
-
+!!! NOTE: Not sure what to do in the boundary for a nested grid
+        u_dt = 0.
+        v_dt = 0.
 ! Velocity dissipation damping
       do 2000 k=1,npz
 
@@ -423,6 +426,7 @@ contains
 ! Velocity dissipation damping
   do 2000 k=1,npz
 
+     frac = 0. !Avoids severe errors at nested grid boundary
       if (rayf .and. k <= ks) then
 ! Apply Rayleigh friction
           do j=js,je+1

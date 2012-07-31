@@ -8,17 +8,11 @@ use hswf_mod,              only: Held_Suarez_Strat, Held_Suarez_Tend
 use fv_sg_mod,             only: fv_dry_conv
 use fv_update_phys_mod,    only: fv_update_phys
 use fv_timing_mod,         only: timing_on, timing_off
+use fv_current_grid_mod, only: nudge_initialized, u0, v0, t0, dp
 
 implicit none
 
-  logical:: nudge_initialized = .false.
-  real, allocatable:: u0(:,:,:), v0(:,:,:), t0(:,:,:), dp(:,:,:)
-
 public :: fv_phys, fv_nudge
-
-!---- version number -----
-  character(len=128) :: version = '$Id: fv_phys.F90,v 19.0 2012/01/06 19:56:26 fms Exp $'
-  character(len=128) :: tagname = '$Name: siena_201204 $'
 
 contains
 
