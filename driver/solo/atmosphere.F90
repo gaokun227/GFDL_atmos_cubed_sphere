@@ -41,6 +41,7 @@ use fms_mod,       only: file_exist, open_namelist_file,   &
                          mpp_error, NOTE
 use time_manager_mod, only: time_type, get_time, set_time, operator(+)
 use mpp_domains_mod,  only: domain2d
+use mpp_mod,          only: input_nml_file
 !------------------
 ! FV specific codes:
 !------------------
@@ -81,8 +82,8 @@ integer :: ntiles=1
 !-----------------------------------------------------------------------
 
 !---- version number -----
-character(len=128) :: version = '$Id: atmosphere.F90,v 17.0.2.1.2.4.2.8.4.1 2012/06/12 15:25:25 Rusty.Benson Exp $'
-character(len=128) :: tagname = '$Name: siena_201207 $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 17.0.2.1.2.4.2.8.4.1.2.1 2012/09/28 17:38:04 Rusty.Benson Exp $'
+character(len=128) :: tagname = '$Name: siena_201211 $'
 
 contains
 
