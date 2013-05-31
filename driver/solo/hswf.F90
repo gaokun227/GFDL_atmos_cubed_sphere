@@ -1,15 +1,13 @@
 module hswf_mod
 
- use constants_mod,      only: grav, rdgas, rvgas, RADIAN, kappa, radius
+ use constants_mod,      only: grav, rdgas, cp_air, RADIAN, kappa, radius, pi
  use fv_grid_utils_mod,  only: g_sum
- use mpp_domains_mod,    only: mpp_update_domains
- use fv_mp_mod,          only: domain
+ use mpp_domains_mod,    only: mpp_update_domains, domain2d
  use time_manager_mod,   only: time_type, get_date, get_time
  use diag_manager_mod,   only: send_data
  use fv_timing_mod,      only: timing_on, timing_off
 
 #ifdef MARS_GCM
-      use fv_current_grid_mod, only: tmars_initialized, tmars
       use fms_mod, only: file_exist, read_data, field_size
       use mpp_mod, only: mpp_error, FATAL
       use horiz_interp_mod, only: horiz_interp
@@ -29,8 +27,8 @@ module hswf_mod
       public :: Held_Suarez_Strat, Held_Suarez_Tend, age_of_air
 
 !---- version number -----
-      character(len=128) :: version = '$Id: hswf.F90,v 17.0.2.2.2.3.2.2 2012/04/30 17:08:46 Lucas.Harris Exp $'
-      character(len=128) :: tagname = '$Name: siena_201303 $'
+      character(len=128) :: version = '$Id: hswf.F90,v 17.0.2.2.2.3.2.2.2.5 2013/01/24 18:16:50 Lucas.Harris Exp $'
+      character(len=128) :: tagname = '$Name: siena_201305 $'
 
 contains
 
@@ -38,13 +36,14 @@ contains
  subroutine Held_Suarez_Tend(npx, npy, npz, is, ie, js, je, ng, nq,   &
                               u, v, pt, q, pe, delp, peln, pkz, pdt,  &
                               ua, va, u_dt, v_dt, t_dt, q_dt, agrid,  &
-                              delz, hydrostatic, ak, bk, ks,   &
+                              delz, phis, hydrostatic, ak, bk, ks,    &
                               strat, rayf, master, Time, time_total)
 
       integer, INTENT(IN   ) :: npx, npy, npz
       integer, INTENT(IN   ) :: is, ie, js, je, ng, nq
       logical, intent(IN)    :: hydrostatic
-      real   , INTENT(IN   ) ::  delz(is:ie,js:je,npz)
+      real   , INTENT(IN   ) ::  phis(is-ng:ie+ng,js-ng:je+ng)
+      real   , INTENT(IN   ) ::  delz(is-ng:ie+ng,js-ng:je+ng,npz)
 
       real   , INTENT(INOUT) ::    u(is-ng:ie+  ng,js-ng:je+1+ng,npz)
       real   , INTENT(INOUT) ::    v(is-ng:ie+1+ng,js-ng:je+  ng,npz)
@@ -78,9 +77,10 @@ contains
 ! Local
       real pref(npz)
       integer  i,j,k
+      integer  seconds, days
       real  ty, tz, akap 
       real  p0, t0, sday, rkv, rka, rks, rkt, sigb, rsgb
-      real  tmp
+      real  tmp, solar_ang, solar_rate
       real  ap0k, algpk
       real  tey, tez, fac, pw, sigl
       real  h0, dz
@@ -144,14 +144,14 @@ contains
           allocate( rf(npz) )
           c1 = 1. / (36.*3600)
           pc = 1.
-          if(master) write(6,*) 'HSWF Forcing ...' 
+          if(master) write(*,*) 'HSWF Forcing ...' 
           do k=1,ks
              tmp = (ak(k+1)-ak(k))/log(ak(k+1)/ak(k))
              rf(k) = c1*(1.+tanh(log10(pc/tmp)))
-             if(master) write(6,*) k, 0.01*tmp, 1./(rf(k)*sday)
+             if(master) write(*,*) k, 0.01*tmp, 1./(rf(k)*sday)
              rf(k) = 1./(1.+pdt*rf(k))
           enddo
-          if(master) write(6,*) ' '
+          if(master) write(*,*) ' '
           rf_initialized = .true.
       endif
 
@@ -264,6 +264,24 @@ contains
 
 2000  continue
 
+#ifdef SOLAR_FORCING
+      call get_time (Time, seconds,  days)
+
+! Heating the surface layer with a 24-hr period:
+!     solar_rate = (cp_air-rdgas)/cp_air* 15./kf_day * 500.   ! apply for the lowest 5-mb (to make it resolution independ)
+      solar_rate = 20./kf_day * 500.   ! apply for the lowest 5-mb (to make it resolution independ)
+
+!$omp parallel do private(i, j, solar_ang)
+      do j=js,je
+         do i=is,ie
+!           if ( phis(i,j) > 0.1 ) then          ! Land only
+                solar_ang = 2*pi*real(seconds)/kf_day + agrid(i,j,1)
+                t_dt(i,j,npz) = t_dt(i,j,npz) + solar_rate/delp(i,j,npz)*cos(agrid(i,j,2))*sin(solar_ang)
+!           endif
+         enddo
+      enddo 
+#endif
+
 #ifdef DO_AGE
       if( nq/=0 )     &
       call age_of_air(is, ie, js, je, npz, ng, time_total, pe, q(is-ng,js-ng,1,nq))
@@ -275,10 +293,11 @@ contains
  subroutine Held_Suarez_Strat(npx, npy, npz, is, ie, js, je, ng, nq,  &
                               u, v, pt, q, pe, delp, peln, pkz, pdt,  &
                               ua, va, agrid, ak, bk, ks, strat,  &
-                              rayf, master, Time, time_total)
+                              rayf, master, Time, time_total, domain)
 
       integer, INTENT(IN   ) :: npx, npy, npz
       integer, INTENT(IN   ) :: is, ie, js, je, ng, nq
+      type(domain2d), intent(INOUT) :: domain
 
 	      real   , INTENT(INOUT) ::    u(is-ng:ie+  ng,js-ng:je+1+ng,npz)
 	      real   , INTENT(INOUT) ::    v(is-ng:ie+1+ng,js-ng:je+  ng,npz)
@@ -363,14 +382,14 @@ contains
            allocate( rf(npz) )
            c1 = 1. / (36.*3600)
            pc = 1.
-           if(master) write(6,*) 'HSWF Forcing ...' 
+           if(master) write(*,*) 'HSWF Forcing ...' 
            do k=1,ks
               tmp = (ak(k+1)-ak(k))/log(ak(k+1)/ak(k))
               rf(k) = c1*(1.+tanh(log10(pc/tmp)))
-             if(master) write(6,*) k, 0.01*tmp, 1./(rf(k)*sday)
+             if(master) write(*,*) k, 0.01*tmp, 1./(rf(k)*sday)
              rf(k) = 1./(1.+pdt*rf(k))
            enddo
-           if(master) write(6,*) ' '
+           if(master) write(*,*) ' '
            rf_initialized = .true.
       endif
 
@@ -547,7 +566,7 @@ contains
 		  if( file_exist( trim( filename ) ) ) then 
 		      call read_teq( filename, npz, agrid(is:ie,js:je,1), agrid(is:ie,js:je,2),  &
 				     pref, tmars(is:ie,js:je,:)  )
-		      if(master) write(6,*) 'TEQ for Mars initialized.'
+		      if(master) write(*,*) 'TEQ for Mars initialized.'
 		  else
 #ifdef FAIL_SAFE
 	      call mpp_error(FATAL,'Mars_GCM: TEQ data not found')
@@ -561,11 +580,11 @@ contains
 			    enddo 
 			 enddo 
 		      enddo
-		      if(master) write(6,*) 'Data for Mars not found; using analytic profile'
+		      if(master) write(*,*) 'Data for Mars not found; using analytic profile'
 #endif
 		  endif 
 		  cs = sqrt( rdgas * 273./(1.-kappa) ) 
-		  if(master) write(6,*) 'Sound speed (T=273)=', cs
+		  if(master) write(*,*) 'Sound speed (T=273)=', cs
 		  tmars_initialized = .true.
 	      endif
 
