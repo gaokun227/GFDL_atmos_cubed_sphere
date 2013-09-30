@@ -88,7 +88,7 @@ logical, allocatable :: grids_on_this_pe(:)
 
 !---- version number -----
 character(len=128) :: version = '$Id: atmosphere.F90,v 17.0.2.1.2.4.2.8.2.19 2013/05/14 19:53:49 Lucas.Harris Exp $'
-character(len=128) :: tagname = '$Name: siena_201308 $'
+character(len=128) :: tagname = '$Name: siena_201309 $'
 
 contains
 

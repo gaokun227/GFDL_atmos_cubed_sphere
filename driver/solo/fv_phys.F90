@@ -36,7 +36,7 @@ public :: fv_phys, fv_nudge
 
 !---- version number -----
   character(len=128) :: version = '$Id: fv_phys.F90,v 17.0.2.2.2.4.2.1.2.11 2013/03/18 21:49:24 Lucas.Harris Exp $'
-  character(len=128) :: tagname = '$Name: siena_201308 $'
+  character(len=128) :: tagname = '$Name: siena_201309 $'
 
   integer:: sphum, liq_wat, rainwat, snowwat, graupel, ice_wat, cld_amt
   real::  zvir

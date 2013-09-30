@@ -28,7 +28,7 @@ module hswf_mod
 
 !---- version number -----
       character(len=128) :: version = '$Id: hswf.F90,v 17.0.2.2.2.3.2.2.2.5 2013/01/24 18:16:50 Lucas.Harris Exp $'
-      character(len=128) :: tagname = '$Name: siena_201308 $'
+      character(len=128) :: tagname = '$Name: siena_201309 $'
 
 contains
 
