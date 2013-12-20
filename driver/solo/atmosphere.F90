@@ -87,8 +87,8 @@ logical, allocatable :: grids_on_this_pe(:)
 !-----------------------------------------------------------------------
 
 !---- version number -----
-character(len=128) :: version = '$Id: atmosphere.F90,v 17.0.2.1.2.4.2.8.2.19 2013/05/14 19:53:49 Lucas.Harris Exp $'
-character(len=128) :: tagname = '$Name: siena_201309 $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 20.0 2013/12/13 23:04:06 fms Exp $'
+character(len=128) :: tagname = '$Name: tikal $'
 
 contains
 
@@ -112,6 +112,7 @@ contains
   real,  allocatable   ::   p_std(:)
 #endif
 
+                                           call timing_on('ATMOS_INIT')
   !----- write version and namelist to log file -----
 
     call write_version_number ( version, tagname )
@@ -187,10 +188,11 @@ contains
     else
          zvir = rvgas/rdgas - 1.
 !         call fv_phys_init(axes, Time, Atm(n)%pt, Atm(n)%npz, (mpp_pe()==mpp_root_pe()), test_case == 55, 302.15)
-         if ( grids_on_this_pe(n)) call fv_phys_init
+         if ( grids_on_this_pe(n)) call fv_phys_init(Atm(n)%flagstruct%nwat)
          Atm(n)%flagstruct%moist_phys = .true.
-         if ( Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(n))    & 
-              call lin_cld_microphys_init(iec-isc+1, jec-jsc+1, Atm(n)%npz, axes, Time)
+         if ( Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(n))    then
+            call lin_cld_microphys_init(iec-isc+1, jec-jsc+1, Atm(n)%npz, axes, Time)
+         endif
     endif
 
 #endif
@@ -205,6 +207,7 @@ contains
 
 !-----------------------------------------------------------------------
 
+                                           call timing_off('ATMOS_INIT')
   end subroutine atmosphere_init
 
 
@@ -229,6 +232,7 @@ contains
     tau_temp  = -1.
 #endif
 
+                                           call timing_on('ATMOSPHERE')
     fv_time = Time + Time_step_atmos
     call get_time (fv_time, seconds,  days)
 
@@ -307,7 +311,8 @@ contains
                     Atm(n)%flagstruct%p_ref,                                        &
                     Atm(n)%flagstruct%fv_sg_adj, Atm(n)%flagstruct%do_Held_Suarez,  &
                     Atm(n)%gridstruct, Atm(n)%flagstruct, Atm(n)%neststruct,        &
-                    Atm(n)%bd, Atm(n)%domain, fv_time, time_total)
+                    Atm(n)%flagstruct%nwat, Atm(n)%bd,                              &
+                    Atm(n)%domain, fv_time, time_total)
                                                         call timing_off('FV_PHYS')
        endif
 
@@ -336,6 +341,7 @@ contains
        call timing_off('FV_DIAG')
     end do
 
+                                           call timing_off('ATMOSPHERE')
  end subroutine atmosphere
 
 

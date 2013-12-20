@@ -16,7 +16,7 @@ use tracer_manager_mod,    only: get_tracer_index
 use field_manager_mod,     only: MODEL_ATMOS
 use fms_mod,               only: error_mesg, FATAL, file_exist, open_namelist_file,  &
                                  check_nml_error, mpp_pe, mpp_root_pe, close_file, &
-                                 write_version_number, stdlog
+                                 write_version_number, stdlog, mpp_error
 use fv_mp_mod,             only: is_master
 use fv_diagnostics_mod,    only: prt_maxmin
 
@@ -35,8 +35,8 @@ implicit none
 public :: fv_phys, fv_nudge
 
 !---- version number -----
-  character(len=128) :: version = '$Id: fv_phys.F90,v 17.0.2.2.2.4.2.1.2.11 2013/03/18 21:49:24 Lucas.Harris Exp $'
-  character(len=128) :: tagname = '$Name: siena_201309 $'
+  character(len=128) :: version = '$Id: fv_phys.F90,v 20.0 2013/12/13 23:04:08 fms Exp $'
+  character(len=128) :: tagname = '$Name: tikal $'
 
   integer:: sphum, liq_wat, rainwat, snowwat, graupel, ice_wat, cld_amt
   real::  zvir
@@ -66,13 +66,14 @@ public :: fv_phys, fv_nudge
   logical:: do_t_strat = .false.
   real:: p_strat = 30.E2
   real:: t_strat = 200.
-  real:: tau_strat = 1.     ! days
+  real:: tau_strat = 10.     ! days
+  integer:: print_freq = 86400   ! sec
 
 namelist /sim_phys_nml/mixed_layer, gray_rad, strat_rad, do_lin_microphys,   &
                        heating_rate, cooling_rate, uniform_sst, sst0, c0,    &
                        sw_abs, prog_cloud, low_c, do_sg_conv, diurnal_cycle, &
                        do_mon_obkv, do_t_strat, p_strat, t_strat, tau_strat, &
-                       do_abl, tau_difz, do_strat_forcing, s_fac, shift_n
+                       do_abl, tau_difz, do_strat_forcing, s_fac, shift_n, print_freq
 
 
 contains
@@ -83,10 +84,10 @@ contains
                     u_srf, v_srf, ts, delz, hydrostatic,         &
                     oro, rayf, p_ref, fv_sg_adj,                 &
                     do_Held_Suarez, gridstruct, flagstruct,      &
-                    neststruct, bd, domain, Time, time_total)
+                    neststruct, nwat, bd, domain, Time, time_total)
 
     integer, INTENT(IN   ) :: npx, npy, npz
-    integer, INTENT(IN   ) :: is, ie, js, je, ng, nq
+    integer, INTENT(IN   ) :: is, ie, js, je, ng, nq, nwat
     integer, INTENT(IN   ) :: fv_sg_adj
     real, INTENT(IN) :: p_ref, ptop
     real, INTENT(IN) :: oro(is:ie,js:je)
@@ -219,7 +220,7 @@ contains
     else
        moist_phys = .true.
                                              call timing_on('SIM_PHYS')
-       call sim_phys(npx, npy, npz, is, ie, js, je, ng, nq,       &
+       call sim_phys(npx, npy, npz, is, ie, js, je, ng, nq, nwat,      &
                      u_dt, v_dt, t_dt, q_dt, u, v, w, ua, va, pt, delz, q, &
                      pe, delp, peln, ts, oro, hydrostatic, pdt, grid, ak, bk, &
                      p_ref, fv_sg_adj, Time, time_total, gridstruct)
@@ -245,7 +246,7 @@ contains
 
 
 #ifndef MARS_GCM
- subroutine sim_phys(npx, npy, npz, is, ie, js, je, ng, nq,  &
+ subroutine sim_phys(npx, npy, npz, is, ie, js, je, ng, nq, nwat,  &
                      u_dt, v_dt, t_dt, q_dt, u, v, w, ua, va,   &
                      pt, delz, q, pe, delp, peln, sst, oro, hydrostatic, &
                      pdt, agrid, ak, bk, p_ref, fv_sg_adj,    &
@@ -256,7 +257,7 @@ contains
 
 
  integer, INTENT(IN) :: npx, npy, npz
- integer, INTENT(IN) :: is, ie, js, je, ng, nq
+ integer, INTENT(IN) :: is, ie, js, je, ng, nq, nwat
  integer, INTENT(IN) :: fv_sg_adj
  real   , INTENT(IN) :: pdt
  real   , INTENT(IN) :: agrid(is-ng:ie+ng,js-ng:je+ng, 2)
@@ -310,11 +311,11 @@ contains
  integer  seconds, days
  logical print_diag
 
-   if (.not. sim_phys_initialized) call fv_phys_init
+   if (.not. sim_phys_initialized) call fv_phys_init(nwat)
 
    call get_time (time, seconds, days)
 
-   if ( mod(seconds, 86400)==0 ) then
+   if ( mod(seconds, print_freq)==0 ) then
         print_diag = .true.
    else
         print_diag = .false.
@@ -448,7 +449,7 @@ contains
        call gray_radiation(seconds, is, ie, km, agrid(is,j,1), agrid(is,j,2), clouds(is,j), &
                            sst(is,j), pt(is:ie,j,1:km), ps(is,j), phalf(is:ie,j,1:km+1), &
                            dz(is:ie,j,1:km), den, t_dt_rad,              &
-                           olr(is,j), lwu(is,j), lwd(is,j), sw_surf(is,j))
+                           olr(is,j), lwu(is,j), lwd(is,j), sw_surf(is,j), ng)
        do k=1, km
           do i=is,ie
              t_dt(i,j,k) = t_dt(i,j,k) + t_dt_rad(i,k)
@@ -490,22 +491,18 @@ contains
             cooling = cooling_rate*(f1+f2*cos(agrid(i,j,2)))/sday
 #ifdef OLD_COOLING
             if ( p3(i,j,k) >= 100.E2 ) then
-                 t_dt(i,j,k) = t_dt(i,j,k) + cooling*min(1.0, dim(p3(i,j,k),100.E2)/200.E2)
-            else
-! Nudging to t_strat
-!!!              if ( do_t_strat .and. p3(i,j,k)<p_strat ) then
-!!!                   t_dt(i,j,k) = t_dt(i,j,k) + (t_strat - pt(i,j,k))*rate_t
-!!!              endif
-                 if ( do_t_strat .and. t3(i,j,k)<t_strat ) then
-                      t_dt(i,j,k) = t_dt(i,j,k) + (t_strat - t3(i,j,k))*rate_t
-                 endif
+               t_dt(i,j,k) = t_dt(i,j,k) + cooling*min(1.0, (p3(i,j,k)-100.E2)/200.E2)
+            elseif ( do_t_strat ) then
+               if ( p3(i,j,k) < 50.E2 ) then
+                    t_dt(i,j,k) = t_dt(i,j,k) + (t_strat - t3(i,j,k))*rate_t
+               endif
             endif
 #else
             if ( p3(i,j,k) >= 100.E2 ) then
                t_dt(i,j,k) = t_dt(i,j,k) + cooling*min(1.0, (p3(i,j,k)-100.E2)/200.E2)
             elseif ( do_t_strat ) then
-               if ( t3(i,j,k) < 190. ) then
-                    t_dt(i,j,k) = t_dt(i,j,k) + (190. - t3(i,j,k))*rate_t
+               if ( p3(i,j,k) < 50.E2 ) then
+                    t_dt(i,j,k) = t_dt(i,j,k) + (t_strat - t3(i,j,k))*rate_t
                endif
             endif
 #endif
@@ -616,17 +613,15 @@ endif
 
   if ( do_lin_microphys ) then
       land(:,:) = 0.
-#ifndef TEST_K
       k_mp = 1
+#ifdef TEST_MP
       do k=2, km
          tmp = ak(k) + bk(k)*1000.E2
-         if ( tmp > 10.E2 ) then
+         if ( tmp > 30.E2 ) then
               k_mp = k
               exit
          endif
       enddo
-#else
-      k_mp = 1
 #endif
       if(master .and. print_diag) write(*,*) 'k_mp=', k_mp
                                                                              call timing_on('LIN_CLD_MICROPHYS')
@@ -980,16 +975,16 @@ endif
  end subroutine fv_nudge
 
  subroutine gray_radiation(sec, is, ie, km, lon, lat, clouds, ts, temp, ps, phalf, &
-                           delz, rho, t_dt, olr, lwu, lwd, sw_surf)
+                           delz, rho, t_dt, olr, lwu, lwd, sw_surf, ng)
 
 ! Gray-Radiation algorithms based on Frierson, Held, and Zurita-Gotor, 2006 JAS
 ! Note: delz is negative
 ! Coded by S.-J. Lin, June 20, 2012
       integer, intent(in):: sec
-      integer, intent(in):: is, ie, km
+      integer, intent(in):: is, ie, km, ng
       real, dimension(is:ie):: ts
       real, intent(in), dimension(is:ie):: lon, lat
-      real, intent(in), dimension(is:ie,km):: temp, phalf, delz, rho
+      real, intent(in), dimension(is-ng:ie+ng,km):: temp, phalf, delz, rho
       real, intent(in), dimension(is:ie):: ps, clouds
       real, intent(out), dimension(is:ie,km):: t_dt
       real, intent(out), dimension(is:ie):: olr, lwu, lwd, sw_surf
@@ -1108,8 +1103,9 @@ endif
 
  end subroutine get_low_clouds
 
- subroutine fv_phys_init
+ subroutine fv_phys_init(nwat)
 
+ integer, intent(IN) :: nwat
  integer :: unit, ierr, io
 
 !   ----- read and write namelist -----
@@ -1118,6 +1114,10 @@ endif
          read  (unit, nml=sim_phys_nml, iostat=io, end=10)
          ierr = check_nml_error(io,'sim_phys_nml')
  10     call close_file (unit)
+    endif
+
+    if (nwat /= 6 .and. do_lin_microphys) then
+       call mpp_error(FATAL, "Need nwat == 6 to run Lin Microphysics.")
     endif
 
     sim_phys_initialized = .true.

@@ -35,6 +35,10 @@ module monin_obukhov_mod
   real, parameter :: zref   = 10.
   real, parameter :: zref_t = 2.
 
+!---- version number -----
+  character(len=128) :: version = '$Id: monin_obukhov_drag.F90,v 20.0 2013/12/13 23:04:11 fms Exp $'
+  character(len=128) :: tagname = '$Name: tikal $'
+
 contains
 
   subroutine Mon_obkv(zvir, ps, t_atm, z, rho, p_atm, u_atm, v_atm,   &

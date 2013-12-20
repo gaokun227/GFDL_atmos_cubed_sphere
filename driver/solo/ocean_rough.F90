@@ -55,6 +55,10 @@ namelist /ocean_rough_nml/ roughness_init, roughness_heat,  &
   real, parameter :: grav = 9.80
   real, parameter :: us10_adj = 0.9     ! reduction factor; added by SJL
 
+!---- version number -----
+  character(len=128) :: version = '$Id: ocean_rough.F90,v 20.0 2013/12/13 23:04:12 fms Exp $'
+  character(len=128) :: tagname = '$Name: tikal $'
+
 contains
 
 !#######################################################################
