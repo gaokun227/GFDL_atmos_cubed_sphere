@@ -36,8 +36,8 @@ implicit none
 public :: fv_phys, fv_nudge
 
 !---- version number -----
-  character(len=128) :: version = '$Id: fv_phys.F90,v 17.0.2.2.2.4.2.1.2.14.2.12.2.1 2014/09/22 03:55:20 Rusty.Benson Exp $'
-  character(len=128) :: tagname = '$Name: testing $'
+  character(len=128) :: version = '$Id$'
+  character(len=128) :: tagname = '$Name$'
 
   integer:: sphum, liq_wat, rainwat, snowwat, graupel, ice_wat, cld_amt
 ! For nudging the IC to a steady state:

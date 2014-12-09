@@ -88,8 +88,8 @@ integer :: axes(4)
 !-----------------------------------------------------------------------
 
 !---- version number -----
-character(len=128) :: version = '$Id: atmosphere.F90,v 17.0.2.1.2.4.2.8.2.22.2.6 2014/08/27 12:59:32 Lucas.Harris Exp $'
-character(len=128) :: tagname = '$Name: testing $'
+character(len=128) :: version = '$Id$'
+character(len=128) :: tagname = '$Name$'
 
 contains
 

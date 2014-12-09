@@ -27,8 +27,8 @@ module hswf_mod
       public :: Held_Suarez_Tend, age_of_air
 
 !---- version number -----
-      character(len=128) :: version = '$Id: hswf.F90,v 17.0.2.2.2.3.2.2.2.6.2.1 2014/04/18 13:38:40 Lucas.Harris Exp $'
-      character(len=128) :: tagname = '$Name: testing $'
+      character(len=128) :: version = '$Id$'
+      character(len=128) :: tagname = '$Name$'
 
 contains
 
