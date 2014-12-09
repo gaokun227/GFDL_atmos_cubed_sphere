@@ -24,15 +24,16 @@ module hswf_mod
 
 
       private
-      public :: Held_Suarez_Strat, Held_Suarez_Tend, age_of_air
+      public :: Held_Suarez_Tend, age_of_air
 
 !---- version number -----
-      character(len=128) :: version = '$Id: hswf.F90,v 20.0 2013/12/13 23:04:10 fms Exp $'
-      character(len=128) :: tagname = '$Name: tikal_201409 $'
+      character(len=128) :: version = '$Id: hswf.F90,v 17.0.2.2.2.3.2.2.2.6.2.1 2014/04/18 13:38:40 Lucas.Harris Exp $'
+      character(len=128) :: tagname = '$Name: testing $'
 
 contains
 
 !-----------------------------------------------------------------------
+
  subroutine Held_Suarez_Tend(npx, npy, npz, is, ie, js, je, ng, nq,   &
                               u, v, pt, q, pe, delp, peln, pkz, pdt,  &
                               ua, va, u_dt, v_dt, t_dt, q_dt, agrid,  &
@@ -42,8 +43,9 @@ contains
       integer, INTENT(IN   ) :: npx, npy, npz
       integer, INTENT(IN   ) :: is, ie, js, je, ng, nq
       logical, intent(IN)    :: hydrostatic
-      real   , INTENT(IN   ) ::  phis(is-ng:ie+ng,js-ng:je+ng)
-      real   , INTENT(IN   ) ::  delz(is-ng:ie+ng,js-ng:je+ng,npz)
+      real   , INTENT(IN   ) :: phis(is-ng:ie+ng,js-ng:je+ng)
+      real   , INTENT(IN   ) :: delz(is-ng:ie+ng,js-ng:je+ng,npz)
+      real   , INTENT(IN) ::  pkz(is  :ie     ,js   :je     ,1:npz)
 
       real   , INTENT(INOUT) ::    u(is-ng:ie+  ng,js-ng:je+1+ng,npz)
       real   , INTENT(INOUT) ::    v(is-ng:ie+1+ng,js-ng:je+  ng,npz)
@@ -52,7 +54,6 @@ contains
       real   , INTENT(INOUT) ::    q(is-ng:ie+  ng,js-ng:je+  ng,npz, nq)
       real   , INTENT(INOUT) ::   pe(is-1:ie+1 ,1:npz+1,js-1:je+1)
       real   , INTENT(INOUT) :: peln(is  :ie     ,1:npz+1,js   :je     )
-      real   , INTENT(INOUT) ::  pkz(is  :ie     ,js   :je     ,1:npz)
 
       real   , INTENT(INOUT) ::   ua(is-ng:ie+ng,js-ng:je+ng,npz)
       real   , INTENT(INOUT) ::   va(is-ng:ie+ng,js-ng:je+ng,npz)
@@ -75,7 +76,7 @@ contains
       real, INTENT(IN), optional:: time_total
 
 ! Local
-      real pref(npz)
+      real, dimension(is:ie,npz):: teq, pl
       integer  i,j,k
       integer  seconds, days
       real  ty, tz, akap 
@@ -89,12 +90,6 @@ contains
       real  relx, tau
       real  t_st, t_ms
       real  rdt, f1
-      real  pc, c1
-
-      real, allocatable, SAVE ::  rf(:)
-      real :: frac(is-ng:ie+ng,js-ng:je+ng)
-      real ::  pl(is:ie, js:je, 1:npz)
-      real :: teq(is:ie, js:je, 1:npz)
       real rdg, rad_ratio, kf_day
 
       rdg = -rdgas / grav
@@ -117,11 +112,6 @@ contains
       rka = pdt      / (40.*kf_day)
       rks = pdt      / (4.0*kf_day)
 
-!     rkv = pdt/sday
-!     rka = pdt/ (40.*sday)      ! was 40 days
-!     rks = pdt/ (4.*sday)       ! was 4 days
-!--------------------------
-
 ! For strat-mesosphere
       t_ms = 10.*rad_ratio
       t_st = 40.*rad_ratio
@@ -135,370 +125,62 @@ contains
       ap0k = 1./p0**akap
       algpk = log(ap0k)
 
-      do k=1,npz
-         pref(k) = ak(k) + bk(k)*1.E5
-      enddo
-
-! Setup...
-      if ( rayf .and. (.not. rf_initialized) ) then
-          allocate( rf(npz) )
-          c1 = 1. / (36.*3600)
-          pc = 1.
-          if(master) write(*,*) 'HSWF Forcing ...' 
-          do k=1,ks
-             tmp = (ak(k+1)-ak(k))/log(ak(k+1)/ak(k))
-             rf(k) = c1*(1.+tanh(log10(pc/tmp)))
-             if(master) write(*,*) k, 0.01*tmp, 1./(rf(k)*sday)
-             rf(k) = 1./(1.+pdt*rf(k))
-          enddo
-          if(master) write(*,*) ' '
-          rf_initialized = .true.
-      endif
-
-        do k=1,npz
-           do j=js,je
-              do i=is,ie
-                 pl(i,j,k) = delp(i,j,k) / ( peln(i,k+1,j)-peln(i,k,j))
-              enddo
-           enddo 
-        enddo
-
-#ifdef TEST_HYDRO
-        if ( .not. hydrostatic ) then
-           do k=1,npz
-              do j=js,je
-                 do i=is,ie
-                    pkz(i,j,k) = pl(i,j,k)**akap
-                 enddo
-              enddo 
-           enddo
-         endif
-#endif
-        
 ! Temperature forcing...
+!$omp parallel do default(shared) private(pl, teq, tey, tez, dz, relx, dt_tropic, sigl, f1, rkt)
+     do j=js,je
+        do k=1,npz
+           do i=is,ie
+              pl(i,k) = delp(i,j,k) / ( peln(i,k+1,j)-peln(i,k,j))
+           enddo
+        enddo
         do k=npz,1,-1
-           do j=js,je
-              do i=is,ie
-                 tey = ap0k*( 315.0 - ty*SIN(agrid(i,j,2))*SIN(agrid(i,j,2)) )
-                 tez = tz*( ap0k/akap )*COS(agrid(i,j,2))*COS(agrid(i,j,2)) 
-
-                 if (strat .and. pl(i,j,k) < 10000.    &
-                           .and. pl(i,j,k) > 100.  )  then
-                   dz = h0 * log(pl(i,j,k+1)/pl(i,j,k))
-!
+           do i=is,ie
+              tey = ap0k*( 315.0 - ty*SIN(agrid(i,j,2))*SIN(agrid(i,j,2)) )
+              tez =  tz*( ap0k/akap )*COS(agrid(i,j,2))*COS(agrid(i,j,2)) 
+              if (strat .and. pl(i,k) <= 1.E2)  then
+! Mesosphere: defined as the region above 1 mb
+                  dz = h0 * log(pl(i,k+1)/pl(i,k))
+                  dt_tropic = -2.25*COS(agrid(i,j,2)) * dz
+                  teq(i,k) = teq(i,k+1) + dt_tropic
+                  t_dt(i,j,k) = t_dt(i,j,k) + ((pt(i,j,k)+rms*teq(i,k))*rmr - pt(i,j,k))*rdt
+! Stratosphere:
+              elseif (strat .and. pl(i,k)<100.E2 ) then
+                  dz = h0 * log(pl(i,k+1)/pl(i,k))
 ! Lapse rate above tropic stratopause is 2.25 deg/km
 ! Relaxation time is t_st days at 100 mb (as H-S) and gradually
 ! decreases to t_ms Days at and above the stratopause
-!
-                   relx =  t_ms + tau*log(0.01*pl(i,j,k))
-                   relx = pdt/(relx*sday)
-                   dt_tropic = 2.25*COS(agrid(i,j,2)) * dz
-                   teq(i,j,k)  =  teq(i,j,k+1) + dt_tropic
-                   t_dt(i,j,k) = t_dt(i,j,k) + relx*(teq(i,j,k)-pt(i,j,k))/(1.+relx) * rdt
-                 elseif (strat .and. pl(i,j,k) <= 100.)  then
-!
-! Mesosphere: defined as the region above 1 mb
-!
-                   dz = h0 * log(pl(i,j,k+1)/pl(i,j,k))
-                   dt_tropic = -2.25*COS(agrid(i,j,2)) * dz
-                   teq(i,j,k) = teq(i,j,k+1) + dt_tropic
-                   t_dt(i,j,k) = t_dt(i,j,k) + ((pt(i,j,k)+rms*teq(i,j,k))*rmr - pt(i,j,k))*rdt
-                 else
-
-! Trop:  strictly Held-Suarez
-
-                   sigl = pl(i,j,k)/pe(i,npz+1,j)
-                   f1 = max(0., (sigl-sigb) * rsgb )
-                   teq(i,j,k) = tey - tez*(log(pkz(i,j,k))+algpk)
-                   teq(i,j,k) = max(t0, teq(i,j,k)*pkz(i,j,k))
-                   rkt = rka + (rks-rka)*f1*(COS(agrid(i,j,2))**4.0)
-                   t_dt(i,j,k) = t_dt(i,j,k) + rkt*(teq(i,j,k)-pt(i,j,k))/(1.+rkt) * rdt
-                 endif
-              enddo     !i-loop
-           enddo     !j-loop
+                  relx =  t_ms + tau*log(0.01*pl(i,k))
+                  relx = pdt/(relx*sday)
+                  dt_tropic = 2.25*COS(agrid(i,j,2)) * dz
+                  teq(i,k)  =  teq(i,k+1) + dt_tropic
+                  t_dt(i,j,k) = t_dt(i,j,k) + relx*(teq(i,k)-pt(i,j,k))/(1.+relx) * rdt
+              else
+! Troposphere: standard Held-Suarez
+                  sigl = pl(i,k)/pe(i,npz+1,j)
+                  f1 = max(0., (sigl-sigb) * rsgb )
+                  teq(i,k) = tey - tez*(log(pkz(i,j,k))+algpk)
+                  teq(i,k) = max(t0, teq(i,k)*pkz(i,j,k))
+                  rkt = rka + (rks-rka)*f1*(COS(agrid(i,j,2))**4.0)
+                  t_dt(i,j,k) = t_dt(i,j,k) + rkt*(teq(i,k)-pt(i,j,k))/(1.+rkt) * rdt
+                                                       ! Bottom friction:
+                  sigl = pl(i,k) / pe(i,npz+1,j)
+                  sigl = (sigl-sigb)*rsgb * rkv
+                  if (sigl > 0.) then
+                      tmp = sigl / (1.+sigl) * rdt
+                      u_dt(i,j,k) = u_dt(i,j,k) - ua(i,j,k)*tmp
+                      v_dt(i,j,k) = v_dt(i,j,k) - va(i,j,k)*tmp
+                  endif
+              endif
+           enddo     !i-loop
         enddo     !k-loop
-
-#ifdef TEST_HYDRO
-        if ( .not. hydrostatic ) then
-!------------------------------------------------------------------------
-! The nonhydrostatic pressure changes if there is heating (under constant
-! volume and mass is locally conserved).
-!------------------------------------------------------------------------
-           do k=1,npz
-              do j=js,je
-                 do i=is,ie
-                      pkz(i,j,k) = (rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k))**akap
-                 enddo
-              enddo 
-           enddo
-        endif
-#endif
-
-!!! NOTE: Not sure what to do in the boundary for a nested grid
-        u_dt = 0.
-        v_dt = 0.
-! Velocity dissipation damping
-      do 2000 k=1,npz
-
-        if (rayf .and. k <= ks) then
-! Apply Rayleigh friction
-          do j=js,je
-             do i=is,ie
-                u_dt(i,j,k) = u_dt(i,j,k) + ua(i,j,k)*(rf(k) - 1.) * rdt
-                v_dt(i,j,k) = v_dt(i,j,k) + va(i,j,k)*(rf(k) - 1.) * rdt
-             enddo
-          enddo
-        else
-! Surface Rayleigh friction according to Held-Suarez
-           do j=js,je
-              do i=is,ie
-                 sigl = 0.5*(pe(i,k,j)+pe(i,k+1,j)) / pe(i,npz+1,j)
-                 frac(i,j) = max(0., (sigl-sigb)*rsgb ) * rkv
-                 if (frac(i,j) > 0.) then
-                     u_dt(i,j,k) = u_dt(i,j,k) - ua(i,j,k)*frac(i,j)/(1.+frac(i,j)) * rdt
-                     v_dt(i,j,k) = v_dt(i,j,k) - va(i,j,k)*frac(i,j)/(1.+frac(i,j)) * rdt
-                 endif
-               enddo
-           enddo
-        endif
-
-2000  continue
-
-#ifdef SOLAR_FORCING
-      call get_time (Time, seconds,  days)
-
-! Heating the surface layer with a 24-hr period:
-!     solar_rate = (cp_air-rdgas)/cp_air* 15./kf_day * 500.   ! apply for the lowest 5-mb (to make it resolution independ)
-      solar_rate = 20./kf_day * 500.   ! apply for the lowest 5-mb (to make it resolution independ)
-
-!$omp parallel do private(i, j, solar_ang)
-      do j=js,je
-         do i=is,ie
-!           if ( phis(i,j) > 0.1 ) then          ! Land only
-                solar_ang = 2*pi*real(seconds)/kf_day + agrid(i,j,1)
-                t_dt(i,j,npz) = t_dt(i,j,npz) + solar_rate/delp(i,j,npz)*cos(agrid(i,j,2))*sin(solar_ang)
-!           endif
-         enddo
-      enddo 
-#endif
+     enddo     !j-loop
 
 #ifdef DO_AGE
       if( nq/=0 )     &
       call age_of_air(is, ie, js, je, npz, ng, time_total, pe, q(is-ng,js-ng,1,nq))
 #endif
 
-
  end subroutine Held_Suarez_Tend
-
- subroutine Held_Suarez_Strat(npx, npy, npz, is, ie, js, je, ng, nq,  &
-                              u, v, pt, q, pe, delp, peln, pkz, pdt,  &
-                              ua, va, agrid, ak, bk, ks, strat,  &
-                              rayf, master, Time, time_total, domain)
-
-      integer, INTENT(IN   ) :: npx, npy, npz
-      integer, INTENT(IN   ) :: is, ie, js, je, ng, nq
-      type(domain2d), intent(INOUT) :: domain
-
-	      real   , INTENT(INOUT) ::    u(is-ng:ie+  ng,js-ng:je+1+ng,npz)
-	      real   , INTENT(INOUT) ::    v(is-ng:ie+1+ng,js-ng:je+  ng,npz)
-	      real   , INTENT(INOUT) ::   pt(is-ng:ie+  ng,js-ng:je+  ng,npz)
-	      real   , INTENT(INOUT) :: delp(is-ng:ie+  ng,js-ng:je+  ng,npz)
-	      real   , INTENT(INOUT) ::    q(is-ng:ie+  ng,js-ng:je+  ng,npz, nq)
-	      real   , INTENT(INOUT) ::   pe(is-1:ie+1 ,1:npz+1,js-1:je+1)
-	      real   , INTENT(INOUT) :: peln(is   :ie     ,1:npz+1,js   :je     )
-	      real   , INTENT(INOUT) ::  pkz(is   :ie     ,js   :je     ,1:npz)
-
-	      real   , INTENT(INOUT) ::   ua(is-ng:ie+ng,js-ng:je+ng,npz)
-	      real   , INTENT(INOUT) ::   va(is-ng:ie+ng,js-ng:je+ng,npz)
-
-	      real   , INTENT(IN   ) :: agrid(is-ng:ie+ng,js-ng:je+ng, 2)
-	      real   , INTENT(IN   ) :: ak(npz+1), bk(npz+1)
-              integer, INTENT(IN   ) :: ks
-
-	      real   , INTENT(IN   ) :: pdt
-	      logical, INTENT(IN   ) :: strat, rayf, master
-
-              type(time_type), intent(in) :: Time
-	      real, INTENT(IN), optional:: time_total
-
-! Local
-	      real pref(npz)
-              integer  i,j,k
-	      real  ty, tz, akap 
-	      real  p0, t0, sday, rkv, rka, rks, rkt, sigb, rsgb
-	      real  tmp
-	      real  ap0k, algpk
-	      real  tey, tez, fac, pw, sigl
-	      real  h0, dz
-	      real  dt_tropic
-	      real  rmr, rms
-	      real  relx, tau
-	      real  t_st, t_ms
-	      real  f1
-	      real  pc, c1, kf_day
-              real  rad_ratio        ! small earth ratio
-
-	      real, allocatable, SAVE ::  rf(:)
-	      real :: frac(is-ng:ie+ng,js-ng:je+ng)
-	      real ::  pl(is:ie, js:je, 1:npz)
-	      real :: teq(is:ie, js:je, 1:npz)
-
-      ty = 60.0   ! origina; setting
-      tz = 10.0   ! Original value from H-S was 10.
-      akap = 2./7.
-
-      p0 = 100000.
-      t0 = 200.
-      h0 = 7.
-
-      rad_ratio = radius / 6371.0e3
-
-        sday = 24.*3600.
-      kf_day = sday * rad_ratio
-
-      rkv = (0.5*pdt) / kf_day
-      rka = pdt      / (40.*kf_day)
-      rks = pdt      / (4.0*kf_day)
-
-! For strat-mesosphere
-      t_ms = 10.*rad_ratio
-      t_st = 40.*rad_ratio
-
-      tau = (t_st - t_ms) / log(100.)
-      rms = pdt/(t_ms*sday)
-      rmr =  1./(1.+rms)
-
-      sigb = 0.7
-      rsgb = 1./(1.-sigb)
-      ap0k = 1./p0**akap
-      algpk = log(ap0k)
-
-      do k=1,npz
-         pref(k) = ak(k) + bk(k)*1.E5
-      enddo
-
-! Setup...
-      if ( rayf .and. (.not. rf_initialized) ) then
-           allocate( rf(npz) )
-           c1 = 1. / (36.*3600)
-           pc = 1.
-           if(master) write(*,*) 'HSWF Forcing ...' 
-           do k=1,ks
-              tmp = (ak(k+1)-ak(k))/log(ak(k+1)/ak(k))
-              rf(k) = c1*(1.+tanh(log10(pc/tmp)))
-             if(master) write(*,*) k, 0.01*tmp, 1./(rf(k)*sday)
-             rf(k) = 1./(1.+pdt*rf(k))
-           enddo
-           if(master) write(*,*) ' '
-           rf_initialized = .true.
-      endif
-
-   do k=1,npz
-      do j=js,je
-         do i=is,ie
-            pl(i,j,k) = delp(i,j,k) / ( peln(i,k+1,j)-peln(i,k,j))
-         enddo
-      enddo 
-   enddo
-
-! Temperature forcing...
-   do k=npz,1,-1
-      do j=js,je
-      do i=is,ie
-         tey = ap0k*( 315.0 - ty*SIN(agrid(i,j,2))*SIN(agrid(i,j,2)) )
-         tez = tz*( ap0k/akap )*COS(agrid(i,j,2))*COS(agrid(i,j,2)) 
-
-      if (strat .and. pl(i,j,k) < 10000.    &
-          .and. pl(i,j,k) > 100.  )  then
-         dz = h0 * log(pl(i,j,k+1)/pl(i,j,k))
-! Lapse rate above tropic stratopause is 2.25 deg/km
-! Relaxation time is t_st days at 100 mb (as H-S) and gradually
-! decreases to t_ms Days at and above the stratopause
-         relx =  t_ms + tau*log(0.01*pl(i,j,k))
-         relx = pdt/(relx*sday)
-         dt_tropic = 2.25*COS(agrid(i,j,2)) * dz
-         teq(i,j,k)  =  teq(i,j,k+1) + dt_tropic
-         pt(i,j,k) = (pt(i,j,k)+relx*teq(i,j,k))/(1.+relx)
-      elseif (strat .and. pl(i,j,k) <= 100.)  then
-!
-! Mesosphere: defined as the region above 1 mb
-!
-         dz = h0 * log(pl(i,j,k+1)/pl(i,j,k))
-         dt_tropic = -2.25*COS(agrid(i,j,2)) * dz
-         teq(i,j,k) = teq(i,j,k+1) + dt_tropic
-         pt(i,j,k) = (pt(i,j,k)+rms*teq(i,j,k))*rmr
-      else
-
-! Trop:  strictly Held-Suarez
-
-         sigl = pl(i,j,k)/pe(i,npz+1,j)
-         f1 = max(0., (sigl-sigb) * rsgb )
-         teq(i,j,k) = tey - tez*(log(pkz(i,j,k))+algpk)
-         teq(i,j,k) = max(t0, teq(i,j,k)*pkz(i,j,k))
-         rkt = rka + (rks-rka)*f1*(COS(agrid(i,j,2))**4.0)
-         pt(i,j,k) = (pt(i,j,k)+rkt*teq(i,j,k))/(1.+rkt)
-      endif
-      enddo     !i-loop
-   enddo     !j-loop
-   enddo     !k-loop
-
-! Velocity dissipation damping
-  do 2000 k=1,npz
-
-     frac = 0. !Avoids severe errors at nested grid boundary
-      if (rayf .and. k <= ks) then
-! Apply Rayleigh friction
-          do j=js,je+1
-             do i=is,ie
-                u(i,j,k) = u(i,j,k)*rf(k)
-              enddo
-          enddo
-          do j=js,je
-             do i=is,ie+1
-                v(i,j,k) = v(i,j,k)*rf(k)
-             enddo
-          enddo
-       else
-! Surface Rayleigh friction according to Held-Suarez
-          do j=js,je
-             do i=is,ie
-                sigl = 0.5*(pe(i,k,j)+pe(i,k+1,j)) / pe(i,npz+1,j)
-                frac(i,j) = max(0., (sigl-sigb)*rsgb )
-             enddo
-          enddo
-
-     call mpp_update_domains( frac, domain )
-
-! Backward adjustment
-  do j=js,je+1
-    do i=is,ie+1
-      fac = frac(i,j)+frac(i,j-1)
-      if (fac > 0.) then
-         u(i,j,k) = u(i,j,k)/(1.+rkv*fac)
-      endif
-    enddo
-  enddo
-
-  do j=js,je
-    do i=is,ie+1
-       fac = frac(i,j)+frac(i-1,j)
-       if (fac > 0.) then
-           v(i,j,k) = v(i,j,k)/(1.+rkv*fac)
-       endif
-    enddo
-  enddo
-
-  endif
-
-2000  continue
-
-#ifdef DO_AGE
-       if( nq/=0 )     &
-        call age_of_air(is, ie, js, je, npz, ng, time_total, pe, q(is-ng,js-ng,1,nq))
-#endif
-
-
-  end subroutine Held_Suarez_Strat
 
 
 #ifdef MARS_GCM

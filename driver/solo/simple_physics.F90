@@ -51,10 +51,6 @@ subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel
   use fv_sg_mod, only: qsmith
   implicit none
 
-!---- version number -----
-   character(len=128) :: version = '$Id: simple_physics.F90,v 20.0 2013/12/13 23:04:13 fms Exp $'
-   character(len=128) :: tagname = '$Name: tikal_201409 $'
-
    integer, parameter :: r8 = selected_real_kind(12)
 
 !

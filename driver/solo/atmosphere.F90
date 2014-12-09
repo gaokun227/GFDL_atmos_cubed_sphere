@@ -84,11 +84,12 @@ integer :: p_split = 1
 type(fv_atmos_type), allocatable, target :: Atm(:)
 
 logical, allocatable :: grids_on_this_pe(:)
+integer :: axes(4)
 !-----------------------------------------------------------------------
 
 !---- version number -----
-character(len=128) :: version = '$Id: atmosphere.F90,v 20.0 2013/12/13 23:04:06 fms Exp $'
-character(len=128) :: tagname = '$Name: tikal_201409 $'
+character(len=128) :: version = '$Id: atmosphere.F90,v 17.0.2.1.2.4.2.8.2.22.2.6 2014/08/27 12:59:32 Lucas.Harris Exp $'
+character(len=128) :: tagname = '$Name: testing $'
 
 contains
 
@@ -101,7 +102,6 @@ contains
     type (time_type), intent(in) :: Time
 
     ! local:
-    integer :: axes(4)
     integer :: ss, ds
     integer i,j, isc, iec, jsc, jec
     real:: zvir
@@ -154,48 +154,19 @@ contains
 
        endif
 
-#if defined(MARS_GCM) || defined(VENUS_GCM) || defined(STRAT_GCM)
-   allocate(  p_std(Atm(1)%npz+1) )
-
-   DO k= 1, Atm(1)%npz + 1
-      p_std(k)= Atm(1)%ak(k) + Atm(1)%bk(k)*Atm(1)%flagstruct%p_ref
-   ENDDO
-
-! Set domain so that diag_manager can access tile information
-   call set_domain ( Atm(n)%domain )
-
-!!!   call fv_physics_init (Atm, atmos_axes, Time, physics_window, Surf_diff)
-
-   !!CLEANUP: should this be Atm(n)% ???
-   call hs_forcing_init( Atm(1)%npx, Atm(1)%npy, Atm(1)%npz, &
-                 Atm(1)%gridstruct%grid (isc:iec+1,jsc:jec+1,1),            &
-                 Atm(1)%gridstruct%grid (isc:iec+1,jsc:jec+1,2),            &
-                 Atm(1)%gridstruct%agrid(isc:iec  ,jsc:jec  ,1),            &
-                 Atm(1)%gridstruct%agrid(isc:iec  ,jsc:jec  ,2),            &
-                 p_std, axes, Time   )
-
-   deallocate( p_std )
-
-   call nullify_domain ( )
-
-   zvir = 0.         ! no virtual effect
-
-
-#else
     if ( Atm(n)%flagstruct%adiabatic .or. Atm(n)%flagstruct%do_Held_Suarez ) then
          zvir = 0.         ! no virtual effect
          Atm(n)%flagstruct%moist_phys = .false.
     else
          zvir = rvgas/rdgas - 1.
 !         call fv_phys_init(axes, Time, Atm(n)%pt, Atm(n)%npz, (mpp_pe()==mpp_root_pe()), test_case == 55, 302.15)
-         if ( grids_on_this_pe(n)) call fv_phys_init(Atm(n)%flagstruct%nwat)
+         if ( grids_on_this_pe(n)) call fv_phys_init(Atm(n)%flagstruct%nwat, axes, Time)
          Atm(n)%flagstruct%moist_phys = .true.
          if ( Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(n))    then
             call lin_cld_microphys_init(iec-isc+1, jec-jsc+1, Atm(n)%npz, axes, Time)
          endif
     endif
 
-#endif
 
     if ( Atm(n)%flagstruct%nudge .and. grids_on_this_pe(n) )    &
          call fv_nwp_nudge_init( Time, axes, Atm(n)%npz, zvir, Atm(n)%ak, Atm(n)%bk, Atm(n)%ts, &
@@ -218,19 +189,9 @@ contains
 
     real:: zvir
     real:: time_total
-    real:: tau_winds, tau_press, tau_temp
     integer :: n, sphum, p, nc
     integer :: psc ! p_split counter
 
-#ifdef NUDGE_IC
-    tau_winds =  3600.
-    tau_press = -1.
-    tau_temp  = -1.
-#else
-    tau_winds = -1.
-    tau_press = -1.
-    tau_temp  = -1.
-#endif
 
                                            call timing_on('ATMOSPHERE')
     fv_time = Time + Time_step_atmos
@@ -249,10 +210,9 @@ contains
        call switch_current_Atm(Atm(n)) 
 
        call set_domain(Atm(n)%domain)  ! needed for diagnostic output done in fv_dynamics
-       if ( tau_winds>0. .or. tau_press>0. .or. tau_temp>0. )     &
+       if ( Atm(n)%flagstruct%nudge_ic )     &
             call  fv_nudge(Atm(n)%npz, Atm(n)%bd%isc, Atm(n)%bd%iec, Atm(n)%bd%jsc, Atm(n)%bd%jec, Atm(n)%ng, &
-            Atm(n)%u, Atm(n)%v, Atm(n)%delp, Atm(n)%pt, dt_atmos/real(p_split),    &
-            tau_winds, tau_press, tau_temp)
+            Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%delz, Atm(n)%delp, Atm(n)%pt, dt_atmos/real(p_split), Atm(n)%flagstruct%hydrostatic )
 
        !---- call fv dynamics -----
        if ( Atm(n)%flagstruct%adiabatic .or. Atm(n)%flagstruct%do_Held_Suarez ) then
@@ -261,7 +221,7 @@ contains
           zvir = rvgas/rdgas - 1.
        endif
 
-       call set_domain(Atm(n)%domain)  ! needed for diagnostic output done in fv_dynamics
+!!!!!       call set_domain(Atm(n)%domain)  ! needed for diagnostic output done in fv_dynamics
                                               call timing_on('fv_dynamics')
        call fv_dynamics(Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%ncnst, Atm(n)%ng,   & 
             dt_atmos/real(p_split), Atm(n)%flagstruct%consv_te, Atm(n)%flagstruct%fill, &
@@ -270,12 +230,8 @@ contains
             Atm(n)%flagstruct%n_split, Atm(n)%flagstruct%q_split, &
             Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%delz,       &
             Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%delp, Atm(n)%q, Atm(n)%ps, &
-#ifdef PKC
-            Atm(n)%pe, Atm(n)%pk, Atm(n)%peln, Atm(n)%pkz, Atm(n)%pkc,             &
-#else
             Atm(n)%pe, Atm(n)%pk, Atm(n)%peln, Atm(n)%pkz,             &
-#endif
-            Atm(n)%phis, Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc, Atm(n)%vc,  &
+            Atm(n)%phis, Atm(n)%q_con, Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc, Atm(n)%vc,  &
             Atm(n)%ak, Atm(n)%bk, Atm(n)%mfx, Atm(n)%mfy, Atm(n)%cx, Atm(n)%cy,    &
             Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z, Atm(n)%gridstruct, Atm(n)%flagstruct, &
             Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid, Atm(n)%domain, time_total)
@@ -312,7 +268,7 @@ contains
                     Atm(n)%flagstruct%fv_sg_adj, Atm(n)%flagstruct%do_Held_Suarez,  &
                     Atm(n)%gridstruct, Atm(n)%flagstruct, Atm(n)%neststruct,        &
                     Atm(n)%flagstruct%nwat, Atm(n)%bd,                              &
-                    Atm(n)%domain, fv_time, time_total)
+                    Atm(n)%domain, axes, fv_time, time_total)
                                                         call timing_off('FV_PHYS')
        endif
 

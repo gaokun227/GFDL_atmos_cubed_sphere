@@ -35,19 +35,16 @@ module monin_obukhov_mod
   real, parameter :: zref   = 10.
   real, parameter :: zref_t = 2.
 
-!---- version number -----
-  character(len=128) :: version = '$Id: monin_obukhov_drag.F90,v 20.0 2013/12/13 23:04:11 fms Exp $'
-  character(len=128) :: tagname = '$Name: tikal_201409 $'
-
 contains
 
   subroutine Mon_obkv(zvir, ps, t_atm, z, rho, p_atm, u_atm, v_atm,   &
                       t_surf0, q_surf0, q_atm, flux_t, flux_q, flux_u, &
-                      flux_v, u_star, delm, dt, mu, master)
+                      flux_v, u_star, delm, dt, mu, t_fac, master)
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!   pt, virtual potential temperature at lowest model level (kelvin)
 !!   pt0, virtual potential temperature at surface (kelvin)
+!!   t_atm:  temperature at the lowest model layer
 !!   z, height above surface of lowest model layer (meter)
 !!   rho, air density
 !!   p_atm, pressure at lowest model level (Pa)
@@ -66,6 +63,7 @@ contains
 
   logical:: master
   real, intent(in):: zvir, dt
+  real, intent(in):: t_fac        ! t_flux enhancer!
   real, intent(in), dimension(:,:):: ps, t_atm
   real, intent(in) :: z(:,:), rho(:,:), delm(:,:)
   real, intent(in) :: p_atm(:,:), u_atm(:,:), v_atm(:,:)
@@ -86,8 +84,8 @@ contains
   integer:: i,j
 
      p_fac(:,:) = (ps(:,:)/p_atm(:,:)) ** kappa
-        pt(:,:) =   t_atm(:,:)*(1.+zvir*q_atm(:,:))*(p00/p_atm(:,:))**kappa
-       pt0(:,:) = t_surf0(:,:)*(1.+zvir*q_surf0(:,:))*(p00/ps(:,:))**kappa
+        pt(:,:) =   t_atm(:,:)*(1.+zvir*q_atm(:,:  ))*(p00/p_atm(:,:))**kappa
+       pt0(:,:) = t_surf0(:,:)*(1.+zvir*q_surf0(:,:))*(p00/   ps(:,:))**kappa
      speed(:,:) = sqrt(u_atm(:,:)**2+v_atm(:,:)**2) 
 
   lavail = .false.
@@ -122,20 +120,25 @@ contains
 ! momentum flux
         mu(:,:) = drag_m(:,:)*speed(:,:)   ! diffusion coefficient / Z
   rho_drag(:,:) = rho(:,:)*mu(:,:)
-#ifdef EXPLICIT_FLUX
+
+#ifdef IMPLICIT_FLUX
   flux_u(:,:) = rho_drag(:,:) * (u_surf0(:,:) - u_atm(:,:))
   flux_v(:,:) = rho_drag(:,:) * (v_surf0(:,:) - v_atm(:,:))
+
 ! flux of sensible heat (W/m**2)
-  flux_t(:,:) = cp_air*drag_t(:,:)*speed(:,:)*rho(:,:)*(t_surf0(:,:)-t_atm(:,:)*p_fac(:,:))
-! flux of water vapor  (Kg/(m**2 s))
-  flux_q(:,:) = drag_q(:,:)*speed(:,:)*rho(:,:)*(q_surf0(:,:) - q_atm(:,:)) 
+  rho_drag(:,:) = rho(:,:)*speed(:,:)
+    flux_t(:,:) = cp_air*drag_t(:,:)*rho_drag(:,:)*(t_surf0(:,:)-t_atm(:,:)*p_fac(:,:))*t_fac
+!                                         flux of water vapor  (Kg/(m**2 s))
+    flux_q(:,:) =        drag_q(:,:)*rho_drag(:,:)*(q_surf0(:,:)-q_atm(:,:)) 
+
 #else
   deno(:,:) = 1. + dt*rho_drag(:,:)/delm(:,:)
   flux_u(:,:) = rho_drag(:,:) * (u_surf0(:,:) - u_atm(:,:)) / deno(:,:)
   flux_v(:,:) = rho_drag(:,:) * (v_surf0(:,:) - v_atm(:,:)) / deno(:,:)
 !                                         flux of sensible heat (W/m**2)
-  rho_drag(:,:) = rho(:,:)*drag_t(:,:)*speed(:,:)
-  deno(:,:) = delm(:,:) / ( delm(:,:) + dt*rho_drag(:,:)*p_fac(:,:))
+! flux of sensible heat (W/m**2)
+  rho_drag(:,:) = rho(:,:)*drag_t(:,:)*speed(:,:) * t_fac
+      deno(:,:) = delm(:,:) / ( delm(:,:) +  dt*rho_drag(:,:)*p_fac(:,:))
   flux_t(:,:) = cp_air*rho_drag(:,:)*(t_surf0(:,:)-t_atm(:,:)*p_fac(:,:))*deno(:,:)
 !                                         flux of water vapor  (Kg/(m**2 s))
   rho_drag(:,:) = rho(:,:)*drag_q(:,:)*speed(:,:)
