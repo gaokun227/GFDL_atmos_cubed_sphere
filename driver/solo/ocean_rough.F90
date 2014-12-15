@@ -27,6 +27,8 @@ public :: compute_ocean_roughness, fixed_ocean_roughness
   real            :: zcoq1 = 0.0 !miz
   logical :: do_highwind     = .false.
   logical :: do_cap40        = .false.
+  real    :: v10m  = 32.5 !jhc
+  real    :: v10n  = 17.5 !jhc
   logical :: do_init = .true.
 
   character(len=32) :: rough_scheme = 'fixed'   ! possible values:
@@ -40,7 +42,7 @@ namelist /ocean_rough_nml/ roughness_init, roughness_heat,  &
                            roughness_min,                   &
                            charnock,                        &
                            rough_scheme, do_highwind,       &!miz
-                           do_cap40, do_init, zcoh1, zcoq1   !sjl
+                           v10m, v10n, do_cap40, do_init, zcoh1, zcoq1   !sjl
 
 !-----------------------------------------------------------------------
 ! ---- constants ----
@@ -54,10 +56,6 @@ namelist /ocean_rough_nml/ roughness_init, roughness_heat,  &
   real, parameter :: zcoq2 = 0.62
   real, parameter :: grav = 9.80
   real, parameter :: us10_adj = 0.9     ! reduction factor; added by SJL
-
-!---- version number -----
-  character(len=128) :: version = '$Id: ocean_rough.F90,v 20.0 2013/12/13 23:04:12 fms Exp $'
-  character(len=128) :: tagname = '$Name: tikal_201409 $'
 
 contains
 
@@ -76,7 +74,7 @@ contains
 !-----------------------------------------------------------------------
 
    real, dimension(size(speed,1),size(speed,2)) :: ustar2, xx1, xx2, w10 !miz
-   real ::  a=0.001, b=0.028 !miz
+   real:: zt1
    integer :: i, j
    integer :: unit, ierr, io
 
@@ -124,8 +122,8 @@ contains
               rough_heat (:,:) = rough_mom  (:,:)
               rough_moist(:,:) = rough_mom  (:,:)
       else if (trim(rough_scheme) == 'beljaars') then
-! --- SJL ---- High Wind correction following Moon et al 2007 ------
           if (do_highwind) then       !  Moon et al. formular
+! --- SJL ---- High Wind correction following Moon et al 2007 ------
               do j=1,size(speed,2)
                  do i=1,size(speed,1)
                       w10(i,j) = 2.458 + u_star(i,j)*(20.255-0.56*u_star(i,j))  ! Eq(7) Moon et al.
@@ -137,8 +135,10 @@ contains
                       else    
                            rough_mom(i,j) = 0.0185/grav*u_star(i,j)**2  ! (8a) Moon et al.
                       endif
-                      rough_heat (i,j) = zcoh1 * xx2(i,j) + zcoh2 * xx1(i,j)
-                      rough_moist(i,j) = zcoq1 * xx2(i,j) + zcoq2 * xx1(i,j)
+! Ramp up the coefficient:
+                      zt1 = min( 1., (w10(i,j)-v10n)/(v10m-v10n) )
+                      rough_heat (i,j) = zcoh1*zt1*xx2(i,j) + zcoh2 * xx1(i,j)
+                      rough_moist(i,j) = zcoq1*zt1*xx2(i,j) + zcoq2 * xx1(i,j)
 !                 --- lower limit on roughness? ---
                       rough_mom  (i,j) = max( rough_mom  (i,j), roughness_min )
                       rough_heat (i,j) = max( rough_heat (i,j), roughness_min )
@@ -146,7 +146,6 @@ contains
                  enddo
               enddo
 ! SJL -----------------------------------------------------------------------------------
-
           else
               rough_mom  (:,:) = zcom1 * xx2(:,:) + zcom2 * xx1(:,:)
               rough_heat (:,:) = zcoh1 * xx2(:,:) + zcoh2 * xx1(:,:)
