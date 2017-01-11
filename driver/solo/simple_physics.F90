@@ -50,36 +50,33 @@ subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel
 
   use fv_sg_mod, only: qsmith
   implicit none
-
-   integer, parameter :: r8 = selected_real_kind(12)
-
 !
 ! Input arguments - MODEL DEPENDENT
 !
    integer, intent(in)  :: pcols        ! Set number of atmospheric columns       
    integer, intent(in)  :: pver         ! Set number of model levels
-   real(r8), intent(in) :: dtime        ! Set model physics timestep
+   real, intent(in) :: dtime        ! Set model physics timestep
    logical, intent(IN) :: cond_only     ! Only do large-scale condensation
 !
 ! Input/Output arguments 
 !
 !  pcols is the maximum number of vertical columns per 'chunk' of atmosphere
 !
-   real(r8), intent(inout) :: t(pcols,pver)      ! Temperature at full-model level (K)
-   real(r8), intent(inout) :: q(pcols,pver)      ! Specific Humidity at full-model level (kg/kg)
-   real(r8), intent(inout) :: u(pcols,pver)      ! Zonal wind at full-model level (m/s)
-   real(r8), intent(inout) :: v(pcols,pver)      ! Meridional wind at full-model level (m/s)
-   real(r8), intent(inout) :: pmid(pcols,pver)   ! Pressure is full-model level (Pa)
-   real(r8), intent(inout) :: pint(pcols,pver+1) ! Pressure at model interfaces (Pa)
-   real(r8), intent(inout) :: pdel(pcols,pver)   ! Layer thickness (Pa)
-   real(r8), intent(inout) :: rpdel(pcols,pver)  ! Reciprocal of layer thickness (1/Pa)
-   real(r8), intent(inout) :: ps(pcols)          ! Surface Pressue (Pa)
-   real(r8), intent(IN)    :: Tsurf(pcols)              ! Specified SST
+   real, intent(inout) :: t(pcols,pver)      ! Temperature at full-model level (K)
+   real, intent(inout) :: q(pcols,pver)      ! Specific Humidity at full-model level (kg/kg)
+   real, intent(inout) :: u(pcols,pver)      ! Zonal wind at full-model level (m/s)
+   real, intent(inout) :: v(pcols,pver)      ! Meridional wind at full-model level (m/s)
+   real, intent(inout) :: pmid(pcols,pver)   ! Pressure is full-model level (Pa)
+   real, intent(inout) :: pint(pcols,pver+1) ! Pressure at model interfaces (Pa)
+   real, intent(inout) :: pdel(pcols,pver)   ! Layer thickness (Pa)
+   real, intent(inout) :: rpdel(pcols,pver)  ! Reciprocal of layer thickness (1/Pa)
+   real, intent(inout) :: ps(pcols)          ! Surface Pressue (Pa)
+   real, intent(IN)    :: Tsurf(pcols)              ! Specified SST
 !
 ! Output arguments 
 !
-   real(r8), intent(out) :: precl(pcols)         ! Precipitation rate (m_water / s)
-   real(r8), intent(OUT)   :: RH(pcols,pver)     !Output RH
+   real, intent(out) :: precl(pcols)         ! Precipitation rate (m_water / s)
+   real, intent(OUT)   :: RH(pcols,pver)     !Output RH
 
 !
 !---------------------------Local workspace-----------------------------
@@ -91,114 +88,114 @@ subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel
 
 ! Physical Constants - Many of these may be model dependent
 
-   real(r8) gravit                      ! Gravity
-   real(r8) rair                        ! Gas constant for dry air
-   real(r8) cpair                       ! Specific heat of dry air 
-   real(r8) latvap                      ! Latent heat of vaporization
-   real(r8) rh2o                        ! Gas constant for water vapor
-   real(r8) epsilo                      ! Ratio of gas constant for dry air to that for vapor
-   real(r8) zvir                        ! Constant for virtual temp. calc. =(rh2o/rair) - 1
+   real gravit                      ! Gravity
+   real rair                        ! Gas constant for dry air
+   real cpair                       ! Specific heat of dry air 
+   real latvap                      ! Latent heat of vaporization
+   real rh2o                        ! Gas constant for water vapor
+   real epsilo                      ! Ratio of gas constant for dry air to that for vapor
+   real zvir                        ! Constant for virtual temp. calc. =(rh2o/rair) - 1
 
 ! Simple Physics Specific Constants 
 
-   real(r8) T0                          ! Control temp for calculation of qsat
-   real(r8) e0                          ! Saturation vapor pressure at T0 for calculation of qsat
-   real(r8) rhow                        ! Density of Liquid Water
-   real(r8) p0                          ! Constant for calculation of potential temperature
-   real(r8) Cd0                         ! Constant for calculating Cd from Smith and Vogl 2008
-   real(r8) Cd1                         ! Constant for calculating Cd from Smith and Vogl 2008
-   real(r8) Cm                          ! Constant for calculating Cd from Smith and Vogl 2008
-   real(r8) v20                         ! Threshold wind speed for calculating Cd from Smith and Vogl 2008
-   real(r8) C                           ! Drag coefficient for sensible heat and evaporation
+   real T0                          ! Control temp for calculation of qsat
+   real e0                          ! Saturation vapor pressure at T0 for calculation of qsat
+   real rhow                        ! Density of Liquid Water
+   real p0                          ! Constant for calculation of potential temperature
+   real Cd0                         ! Constant for calculating Cd from Smith and Vogl 2008
+   real Cd1                         ! Constant for calculating Cd from Smith and Vogl 2008
+   real Cm                          ! Constant for calculating Cd from Smith and Vogl 2008
+   real v20                         ! Threshold wind speed for calculating Cd from Smith and Vogl 2008
+   real C                           ! Drag coefficient for sensible heat and evaporation
 
 ! Physics Tendency Arrays
-  real(r8), intent(OUT) ::  dtdt(pcols,pver)             ! Temperature tendency 
-  real(r8), intent(OUT) ::  dqdt(pcols,pver)             ! Specific humidity tendency
-  real(r8), intent(OUT) ::  dudt(pcols,pver)             ! Zonal wind tendency
-  real(r8), intent(OUT) ::  dvdt(pcols,pver)             ! Meridional wind tendency
+  real, intent(OUT) ::  dtdt(pcols,pver)             ! Temperature tendency 
+  real, intent(OUT) ::  dqdt(pcols,pver)             ! Specific humidity tendency
+  real, intent(OUT) ::  dudt(pcols,pver)             ! Zonal wind tendency
+  real, intent(OUT) ::  dvdt(pcols,pver)             ! Meridional wind tendency
 
-  real(r8) q_orig(pcols,pver)
+  real q_orig(pcols,pver)
 
 ! Temporary variables for tendency calculations
 
-   real(r8) tmp                         ! Temporary
-   real(r8) qsat(pcols,pver)                        ! Saturation vapor pressure
-   !real(r8) qsat                        ! Saturation vapor pressure
-   real(r8) qsats(pcols,1)                       ! Saturation vapor pressure of SST
-   !real(r8) qsats                       ! Saturation vapor pressure of SST
+   real tmp                         ! Temporary
+   real qsat(pcols,pver)                        ! Saturation vapor pressure
+   !real qsat                        ! Saturation vapor pressure
+   real qsats(pcols,1)                       ! Saturation vapor pressure of SST
+   !real qsats                       ! Saturation vapor pressure of SST
 
    !Updated variables, using the tendencies from LS precipitation and
    !surface fluxes after each is computed to yield the same answer as
    !if the tendencies were added into the original variables
    !immediately after each step of the physics was called.
-!!$   real(r8) :: tup(pcols,pver)      ! Temperature at full-model level (K)
-!!$   real(r8) :: qup(pcols,pver)      ! Specific Humidity at full-model level (kg/kg)
-!!$   real(r8) :: uup(pcols,pver)      ! Zonal wind at full-model level (m/s)
-!!$   real(r8) :: vup(pcols,pver)      ! Meridional wind at full-model level (m/s)
+!!$   real :: tup(pcols,pver)      ! Temperature at full-model level (K)
+!!$   real :: qup(pcols,pver)      ! Specific Humidity at full-model level (kg/kg)
+!!$   real :: uup(pcols,pver)      ! Zonal wind at full-model level (m/s)
+!!$   real :: vup(pcols,pver)      ! Meridional wind at full-model level (m/s)
 
 ! Variables for Boundary Layer Calculation
 
-   real(r8) wind(pcols)                 ! Magnitude of Wind
-   real(r8) Cd(pcols)                   ! Drag coefficient for momentum
-   real(r8) Km(pcols,pver+1)            ! Eddy diffusivity for boundary layer calculations 
-   real(r8) Ke(pcols,pver+1)            ! Eddy diffusivity for boundary layer calculations
-   real(r8) rho                         ! Density at lower/upper interface
-   real(r8) za(pcols)                   ! Heights at midpoints of first model level
-   real(r8) dlnpint                     ! Used for calculation of heights
-   real(r8) pbltop                      ! Top of boundary layer
-   real(r8) pblconst                    ! Constant for the calculation of the decay of diffusivity 
-   real(r8) CA(pcols,pver)              ! Matrix Coefficents for PBL Scheme 
-   real(r8) CC(pcols,pver)              ! Matrix Coefficents for PBL Scheme 
-   real(r8) CE(pcols,pver+1)            ! Matrix Coefficents for PBL Scheme
-   real(r8) CAm(pcols,pver)             ! Matrix Coefficents for PBL Scheme
-   real(r8) CCm(pcols,pver)             ! Matrix Coefficents for PBL Scheme
-   real(r8) CEm(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
-   real(r8) CFu(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
-   real(r8) CFv(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
-   real(r8) CFt(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
-   real(r8) CFq(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
+   real wind(pcols)                 ! Magnitude of Wind
+   real Cd(pcols)                   ! Drag coefficient for momentum
+   real Km(pcols,pver+1)            ! Eddy diffusivity for boundary layer calculations 
+   real Ke(pcols,pver+1)            ! Eddy diffusivity for boundary layer calculations
+   real rho                         ! Density at lower/upper interface
+   real za(pcols)                   ! Heights at midpoints of first model level
+   real dlnpint                     ! Used for calculation of heights
+   real pbltop                      ! Top of boundary layer
+   real pblconst                    ! Constant for the calculation of the decay of diffusivity 
+   real CA(pcols,pver)              ! Matrix Coefficents for PBL Scheme 
+   real CC(pcols,pver)              ! Matrix Coefficents for PBL Scheme 
+   real CE(pcols,pver+1)            ! Matrix Coefficents for PBL Scheme
+   real CAm(pcols,pver)             ! Matrix Coefficents for PBL Scheme
+   real CCm(pcols,pver)             ! Matrix Coefficents for PBL Scheme
+   real CEm(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
+   real CFu(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
+   real CFv(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
+   real CFt(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
+   real CFq(pcols,pver+1)           ! Matrix Coefficents for PBL Scheme
 
 
 ! Variable for Dry Mass Adjustment, this dry air adjustment is necessary to
 ! conserve the mass of the dry air
 
-   real(r8) qini(pcols,pver)            ! Initial specific humidity
-   real(r8) ddelp(pcols)                ! Column delp change
+   real qini(pcols,pver)            ! Initial specific humidity
+   real ddelp(pcols)                ! Column delp change
 
 !===============================================================================
 !
 ! Physical Constants - MAY BE MODEL DEPENDENT 
 !
 !===============================================================================
-   gravit = 9.80616_r8                   ! Gravity
-   rair   = 287.0_r8                     ! Gas constant for dry air
-   cpair  = 1.004e3_r8                   ! Specific heat of dry air 
-   latvap = 2.5e6_r8                     ! Latent heat of vaporization
-   rh2o   = 461.5_r8                     ! Gas constant for water vapor
+   gravit = 9.80616                   ! Gravity
+   rair   = 287.0                     ! Gas constant for dry air
+   cpair  = 1.004e3                   ! Specific heat of dry air 
+   latvap = 2.5e6                     ! Latent heat of vaporization
+   rh2o   = 461.5                     ! Gas constant for water vapor
    epsilo = rair/rh2o                    ! Ratio of gas constant for dry air to that for vapor
-   zvir   = (rh2o/rair) - 1._r8          ! Constant for virtual temp. calc. =(rh2o/rair) - 1 is approx. 0.608
+   zvir   = (rh2o/rair) - 1.          ! Constant for virtual temp. calc. =(rh2o/rair) - 1 is approx. 0.608
 
 !===============================================================================
 !
 ! Local Constants for Simple Physics
 !
 !===============================================================================
-!!$      C        = 0.0011_r8*2.      ! From Smith and Vogl 2008
-      C        = 0.0011_r8      ! From Smith and Vogl 2008
-      !Tsurf    = 302.15_r8      ! Constant Value for SST
-      T0       = 273.16_r8      ! control temp for calculation of qsat
-      e0       = 610.78_r8      ! saturation vapor pressure at T0 for calculation of qsat
-      rhow     = 1000.0_r8      ! Density of Liquid Water 
-!!$      Cd0      = 0.007_r8      ! Constant for Cd calc. Smith and Vogl 2008
-!!$      Cd1      = 0.00065_r8    ! Constant for Cd calc. Smith and Vogl 2008
-!!$      Cm       = 0.02_r8       ! Constant for Cd calc. Smith and Vogl 2008
-      Cd0      = 0.0007_r8      ! Constant for Cd calc. Smith and Vogl 2008
-      Cd1      = 0.000065_r8    ! Constant for Cd calc. Smith and Vogl 2008
-      Cm       = 0.002_r8       ! Constant for Cd calc. Smith and Vogl 2008
-      v20      = 20.0_r8        ! Threshold wind speed for calculating Cd from Smith and Vogl 2008
-      p0       = 100000.0_r8    ! Constant for potential temp calculation
-      pbltop   = 85000._r8      ! Top of boundary layer
-      pblconst = 10000._r8      ! Constant for the calculation of the decay of diffusivity
+!!$      C        = 0.0011*2.      ! From Smith and Vogl 2008
+      C        = 0.0011      ! From Smith and Vogl 2008
+      !Tsurf    = 302.15      ! Constant Value for SST
+      T0       = 273.16      ! control temp for calculation of qsat
+      e0       = 610.78      ! saturation vapor pressure at T0 for calculation of qsat
+      rhow     = 1000.0      ! Density of Liquid Water 
+!!$      Cd0      = 0.007      ! Constant for Cd calc. Smith and Vogl 2008
+!!$      Cd1      = 0.00065    ! Constant for Cd calc. Smith and Vogl 2008
+!!$      Cm       = 0.02       ! Constant for Cd calc. Smith and Vogl 2008
+      Cd0      = 0.0007      ! Constant for Cd calc. Smith and Vogl 2008
+      Cd1      = 0.000065    ! Constant for Cd calc. Smith and Vogl 2008
+      Cm       = 0.002       ! Constant for Cd calc. Smith and Vogl 2008
+      v20      = 20.0        ! Threshold wind speed for calculating Cd from Smith and Vogl 2008
+      p0       = 100000.0    ! Constant for potential temp calculation
+      pbltop   = 85000.      ! Top of boundary layer
+      pblconst = 10000.      ! Constant for the calculation of the decay of diffusivity
 
 !===============================================================================
 !
@@ -213,7 +210,7 @@ subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel
 !
      do i=1,pcols 
         dlnpint = log(ps(i)) - log(pint(i,pver))                 ! ps(i) is identical to pint(i,pver+1), note: this is the correct sign (corrects typo in paper)
-        za(i) = rair/gravit*t(i,pver)*(1._r8+zvir*q(i,pver))*0.5_r8*dlnpint
+        za(i) = rair/gravit*t(i,pver)*(1.+zvir*q(i,pver))*0.5*dlnpint
      end do
 !
 ! Set Initial Specific Humidity - For dry mass adjustment at the end
@@ -225,11 +222,11 @@ subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel
 ! Set initial physics time tendencies and precipitation field to zero
 !
 !===============================================================================
-     dtdt(:pcols,:pver)  = 0._r8            ! initialize temperature tendency with zero
-     dqdt(:pcols,:pver)  = 0._r8            ! initialize specific humidity tendency with zero
-     dudt(:pcols,:pver)  = 0._r8            ! initialize zonal wind tendency with zero
-     dvdt(:pcols,:pver)  = 0._r8            ! initialize meridional wind tendency with zero
-     precl(:pcols) = 0._r8                  ! initialize precipitation rate with zero
+     dtdt(:pcols,:pver)  = 0.            ! initialize temperature tendency with zero
+     dqdt(:pcols,:pver)  = 0.            ! initialize specific humidity tendency with zero
+     dudt(:pcols,:pver)  = 0.            ! initialize zonal wind tendency with zero
+     dvdt(:pcols,:pver)  = 0.            ! initialize meridional wind tendency with zero
+     precl(:pcols) = 0.                  ! initialize precipitation rate with zero
 
 !===============================================================================
 !
@@ -242,11 +239,11 @@ subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel
      call qsmith(pcols,pver,1, t, pmid, q, qsat)
       do k=1,pver
          do i=1,pcols
-            !qsat = epsilo*e0/pmid(i,k)*exp(-latvap/rh2o*((1._r8/t(i,k))-1._r8/T0))  ! saturation specific humidity
+            !qsat = epsilo*e0/pmid(i,k)*exp(-latvap/rh2o*((1./t(i,k))-1./T0))  ! saturation specific humidity
             !if (q(i,k) > qsat) then                                                 ! saturated?
             if (q(i,k) > qsat(i,k)) then                                                 ! saturated?
-               !tmp  = 1._r8/dtime*(q(i,k)-qsat)/(1._r8+(latvap/cpair)*(epsilo*latvap*qsat/(rair*t(i,k)**2)))
-               tmp  = 1._r8/dtime*(q(i,k)-qsat(i,k))/(1._r8+(latvap/cpair)*(epsilo*latvap*qsat(i,k)/(rair*t(i,k)**2)))
+               !tmp  = 1./dtime*(q(i,k)-qsat)/(1.+(latvap/cpair)*(epsilo*latvap*qsat/(rair*t(i,k)**2)))
+               tmp  = 1./dtime*(q(i,k)-qsat(i,k))/(1.+(latvap/cpair)*(epsilo*latvap*qsat(i,k)/(rair*t(i,k)**2)))
                dtdt(i,k) = dtdt(i,k)+latvap/cpair*tmp
                dqdt(i,k) = dqdt(i,k)-tmp
                precl(i) = precl(i) + tmp*pdel(i,k)/(gravit*rhow)                    ! precipitation rate, computed via a vertical integral
@@ -339,29 +336,29 @@ if (.not. cond_only) then
       !vup = v
 
      do i=1,pcols 
-        !qsats = epsilo*e0/ps(i)*exp(-latvap/rh2o*((1._r8/Tsurf(i))-1._r8/T0))  ! saturation specific humidity at the surface
+        !qsats = epsilo*e0/ps(i)*exp(-latvap/rh2o*((1./Tsurf(i))-1./T0))  ! saturation specific humidity at the surface
         dudt(i,pver) = dudt(i,pver) + (u(i,pver) &
-                            /(1._r8+Cd(i)*wind(i)*dtime/za(i))-u(i,pver))/dtime
+                            /(1.+Cd(i)*wind(i)*dtime/za(i))-u(i,pver))/dtime
         dvdt(i,pver) = dvdt(i,pver) + (v(i,pver) &
-                            /(1._r8+Cd(i)*wind(i)*dtime/za(i))-v(i,pver))/dtime
-        !uup(i,pver)   = u(i,pver)/(1._r8+Cd(i)*wind(i)*dtime/za(i))
-        !vup(i,pver)   = v(i,pver)/(1._r8+Cd(i)*wind(i)*dtime/za(i))
+                            /(1.+Cd(i)*wind(i)*dtime/za(i))-v(i,pver))/dtime
+        !uup(i,pver)   = u(i,pver)/(1.+Cd(i)*wind(i)*dtime/za(i))
+        !vup(i,pver)   = v(i,pver)/(1.+Cd(i)*wind(i)*dtime/za(i))
         dtdt(i,pver) = dtdt(i,pver) +((t(i,pver)+C*wind(i)*Tsurf(i)*dtime/za(i)) &
-                            /(1._r8+C*wind(i)*dtime/za(i))-t(i,pver))/dtime 
+                            /(1.+C*wind(i)*dtime/za(i))-t(i,pver))/dtime 
 !!$        dtdt(i,pver) = dtdt(i,pver) +((tup(i,pver)+C*wind(i)*Tsurf(i)*dtime/za(i)) &
-!!$                            /(1._r8+C*wind(i)*dtime/za(i))-tup(i,pver))/dtime 
+!!$                            /(1.+C*wind(i)*dtime/za(i))-tup(i,pver))/dtime 
 !!$        tup(i,pver)   = (tup(i,pver)+C*wind(i)*Tsurf(i)*dtime/za(i)) &
-!!$                            /(1._r8+C*wind(i)*dtime/za(i))  
+!!$                            /(1.+C*wind(i)*dtime/za(i))  
         dqdt(i,pver) = dqdt(i,pver) +((q(i,pver)+C*wind(i)*qsats(i,1)*dtime/za(i)) &
-                            /(1._r8+C*wind(i)*dtime/za(i))-q(i,pver))/dtime
+                            /(1.+C*wind(i)*dtime/za(i))-q(i,pver))/dtime
 !!$        dqdt(i,pver) = dqdt(i,pver) +((qup(i,pver)+C*wind(i)*qsats(i,1)*dtime/za(i)) &
-!!$                            /(1._r8+C*wind(i)*dtime/za(i))-qup(i,pver))/dtime
-!!$        qup(i,pver) = (qup(i,pver)+C*wind(i)*qsats(i,1)*dtime/za(i))/(1._r8+C*wind(i)*dtime/za(i))
-!!! DEBUG CODE
-        !if (wind(i) > 10.) print*, 'dudt 1:', dudt(i,pver), dvdt(i,pver)
-        !rh(i,pver) = q(i,pver)/qsats*100.
-        rh(i,pver) = q(i,pver)/qsats(i,1)*100.
-!!! END DEBUG CODE
+!!$                            /(1.+C*wind(i)*dtime/za(i))-qup(i,pver))/dtime
+!!$        qup(i,pver) = (qup(i,pver)+C*wind(i)*qsats(i,1)*dtime/za(i))/(1.+C*wind(i)*dtime/za(i))
+!!$!!! DEBUG CODE
+!!$        !if (wind(i) > 10.) print*, 'dudt 1:', dudt(i,pver), dvdt(i,pver)
+!!$        !rh(i,pver) = q(i,pver)/qsats*100.
+!!$        rh(i,pver) = q(i,pver)/qsats(i,1)*100.
+!!$!!! END DEBUG CODE
      end do
 !===============================================================================
 
@@ -373,8 +370,8 @@ if (.not. cond_only) then
 !
       do k=1,pver-1
          do i=1,pcols
-            rho = (pint(i,k+1)/(rair*(t(i,k+1)+t(i,k))/2.0_r8))
-!!$            rho = (pint(i,k+1)/(rair*(tup(i,k+1)+tup(i,k))/2.0_r8))
+            rho = (pint(i,k+1)/(rair*(t(i,k+1)+t(i,k))/2.0))
+!!$            rho = (pint(i,k+1)/(rair*(tup(i,k+1)+tup(i,k))/2.0))
             CAm(i,k)   = rpdel(i,k)*dtime*gravit*gravit*Km(i,k+1)*rho*rho   &
                          /(pmid(i,k+1)-pmid(i,k))    
             CCm(i,k+1) = rpdel(i,k+1)*dtime*gravit*gravit*Km(i,k+1)*rho*rho &
@@ -386,37 +383,37 @@ if (.not. cond_only) then
          end do
       end do
       do i=1,pcols
-         CAm(i,pver) = 0._r8
-         CCm(i,1) = 0._r8
-         CEm(i,pver+1) = 0._r8
-         CA(i,pver) = 0._r8
-         CC(i,1) = 0._r8
-         CE(i,pver+1) = 0._r8
-         CFu(i,pver+1) = 0._r8
-         CFv(i,pver+1) = 0._r8
-         CFt(i,pver+1) = 0._r8
-         CFq(i,pver+1) = 0._r8 
+         CAm(i,pver) = 0.
+         CCm(i,1) = 0.
+         CEm(i,pver+1) = 0.
+         CA(i,pver) = 0.
+         CC(i,1) = 0.
+         CE(i,pver+1) = 0.
+         CFu(i,pver+1) = 0.
+         CFv(i,pver+1) = 0.
+         CFt(i,pver+1) = 0.
+         CFq(i,pver+1) = 0. 
       end do
       do i=1,pcols
          do k=pver,1,-1
-            CE(i,k)  = CC(i,k)/(1._r8+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1)) 
-            CEm(i,k) = CCm(i,k)/(1._r8+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
+            CE(i,k)  = CC(i,k)/(1.+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1)) 
+            CEm(i,k) = CCm(i,k)/(1.+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
             CFu(i,k) = (u(i,k)+CAm(i,k)*CFu(i,k+1)) &
-                       /(1._r8+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
+                       /(1.+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
             CFv(i,k) = (v(i,k)+CAm(i,k)*CFv(i,k+1)) &
-                       /(1._r8+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
+                       /(1.+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
             CFt(i,k) = ((p0/pmid(i,k))**(rair/cpair)*t(i,k)+CA(i,k)*CFt(i,k+1)) &
-                       /(1._r8+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1)) 
+                       /(1.+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1)) 
             CFq(i,k) = (q(i,k)+CA(i,k)*CFq(i,k+1)) &
-                       /(1._r8+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1))
+                       /(1.+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1))
 !!$            CFu(i,k) = (uup(i,k)+CAm(i,k)*CFu(i,k+1)) &
-!!$                       /(1._r8+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
+!!$                       /(1.+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
 !!$            CFv(i,k) = (vup(i,k)+CAm(i,k)*CFv(i,k+1)) &
-!!$                       /(1._r8+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
+!!$                       /(1.+CAm(i,k)+CCm(i,k)-CAm(i,k)*CEm(i,k+1))
 !!$            CFt(i,k) = ((p0/pmid(i,k))**(rair/cpair)*tup(i,k)+CA(i,k)*CFt(i,k+1)) &
-!!$                       /(1._r8+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1)) 
+!!$                       /(1.+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1)) 
 !!$            CFq(i,k) = (qup(i,k)+CA(i,k)*CFq(i,k+1)) &
-!!$                       /(1._r8+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1))
+!!$                       /(1.+CA(i,k)+CC(i,k)-CA(i,k)*CE(i,k+1))
         end do
       end do
 

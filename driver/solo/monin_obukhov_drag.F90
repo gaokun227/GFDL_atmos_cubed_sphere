@@ -1,5 +1,25 @@
+!***********************************************************************
+!*                   GNU General Public License                        *
+!* This file is a part of fvGFS.                                       *
+!*                                                                     *
+!* fvGFS is free software; you can redistribute it and/or modify it    *
+!* and are expected to follow the terms of the GNU General Public      *
+!* License as published by the Free Software Foundation; either        *
+!* version 2 of the License, or (at your option) any later version.    *
+!*                                                                     *
+!* fvGFS is distributed in the hope that it will be useful, but        *
+!* WITHOUT ANY WARRANTY; without even the implied warranty of          *
+!* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU   *
+!* General Public License for more details.                            *
+!*                                                                     *
+!* For the full text of the GNU General Public License,                *
+!* write to: Free Software Foundation, Inc.,                           *
+!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
+!* or see:   http://www.gnu.org/licenses/gpl.html                      *
+!***********************************************************************
 
 module monin_obukhov_mod
+
 !==============================================================================
 ! Kernel routines
 !==============================================================================
@@ -37,8 +57,8 @@ module monin_obukhov_mod
 
 contains
 
-  subroutine Mon_obkv(zvir, ps, t_atm, z, rho, p_atm, u_atm, v_atm,   &
-                      t_surf0, q_surf0, q_atm, flux_t, flux_q, flux_u, &
+  subroutine Mon_obkv(zvir, ps, t_atm, z, rho, p_atm, u_atm, v_atm,u_mean, do_fixed_cd, cd,  &
+                      t_surf0, q_surf0, q_atm, drag_t,drag_q,flux_t, flux_q, flux_u, &
                       flux_v, u_star, delm, dt, mu, t_fac, master)
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -62,11 +82,13 @@ contains
 ! PS: surface pressure (Pa)
 
   logical:: master
+  logical, intent(in) :: do_fixed_cd
   real, intent(in):: zvir, dt
   real, intent(in):: t_fac        ! t_flux enhancer!
   real, intent(in), dimension(:,:):: ps, t_atm
   real, intent(in) :: z(:,:), rho(:,:), delm(:,:)
   real, intent(in) :: p_atm(:,:), u_atm(:,:), v_atm(:,:)
+  real, intent(in) :: u_mean, cd
   real, intent(in) :: t_surf0(:,:), q_surf0(:,:), q_atm(:,:)
   real, intent(inout) :: u_star(:,:)
   real, intent(out) :: flux_t(:,:), flux_q(:,:), flux_u(:,:), flux_v(:,:)   
@@ -74,7 +96,8 @@ contains
 
   logical, dimension(size(ps,1)) :: avail 
   logical :: lavail
-  real, dimension(size(ps,1),size(ps,2)) :: speed, drag_m, drag_t, drag_q, rho_drag
+  real, dimension(size(ps,1),size(ps,2)) :: speed, drag_m, rho_drag
+  real, intent(inout), dimension(size(ps,1),size(ps,2)) :: drag_t, drag_q 
   real, dimension(size(ps,1),size(ps,2)) :: b_star, u_surf0, v_surf0
   real, dimension(size(ps,1),size(ps,2)) :: rough_mom, rough_heat, rough_moist
 !
@@ -86,7 +109,7 @@ contains
      p_fac(:,:) = (ps(:,:)/p_atm(:,:)) ** kappa
         pt(:,:) =   t_atm(:,:)*(1.+zvir*q_atm(:,:  ))*(p00/p_atm(:,:))**kappa
        pt0(:,:) = t_surf0(:,:)*(1.+zvir*q_surf0(:,:))*(p00/   ps(:,:))**kappa
-     speed(:,:) = sqrt(u_atm(:,:)**2+v_atm(:,:)**2) 
+     speed(:,:) = sqrt(u_atm(:,:)**2+v_atm(:,:)**2+u_mean**2) 
 
   lavail = .false.
   avail  = .true.
@@ -116,6 +139,12 @@ contains
 ! Ocean currents:
   u_surf0(:,:) = 0.
   v_surf0(:,:) = 0.
+
+  if (do_fixed_cd) then
+	drag_m(:,:) = cd
+	drag_t(:,:) = cd
+	drag_q(:,:) = cd
+  end if
 
 ! momentum flux
         mu(:,:) = drag_m(:,:)*speed(:,:)   ! diffusion coefficient / Z
