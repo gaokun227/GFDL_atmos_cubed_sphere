@@ -744,7 +744,7 @@ contains
                            '700-mb relative humidity', '%', missing_value=missing_value )
        idiag%id_rh850 = register_diag_field ( trim(field), 'rh850', axes(1:2), Time,       &
                            '850-mb relative humidity', '%', missing_value=missing_value )
-       idiag%id_rh925 = register_diag_field ( trim(field), 'rh850', axes(1:2), Time,       &
+       idiag%id_rh925 = register_diag_field ( trim(field), 'rh925', axes(1:2), Time,       &
                            '925-mb relative humidity', '%', missing_value=missing_value )
        idiag%id_rh1000 = register_diag_field ( trim(field), 'rh1000', axes(1:2), Time,       &
                            '1000-mb relative humidity', '%', missing_value=missing_value )
