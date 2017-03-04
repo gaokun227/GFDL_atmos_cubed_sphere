@@ -559,7 +559,7 @@ module fv_control_mod
                             nested, twowaynest, parent_grid_num, parent_tile, nudge_qv, &
                             refinement, nestbctype, nestupdate, nsponge, s_weight, &
                             ioffset, joffset, check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
-                            adj_mass_vmr
+                            do_uni_zfull, adj_mass_vmr
 
       namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size
 
