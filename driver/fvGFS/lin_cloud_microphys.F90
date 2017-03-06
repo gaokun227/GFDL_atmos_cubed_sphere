@@ -237,7 +237,21 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  real:: tice0, t_wfr
  real:: log_10
 
- public mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
+ namelist /lin_cld_microphysics_nml/   &
+        mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
+        vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, &
+        vi_max, vs_max, vg_max, vr_max,        &
+        qs0_crt, qi_gen, ql0_max, qi0_max, qi0_crt, qr0_crt, fast_sat_adj, &
+        rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, const_vr,    &
+        use_ccn, rthresh, ccn_l, ccn_o, qc_crt, tau_g2v, tau_v2g, sat_adj0,    &
+        c_piacr, tau_mlt, tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen,  &
+        c_paut, c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn,  &
+        c_cracw, alin, clin, tice, rad_snow, rad_graupel, rad_rain,   &
+        cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
+        do_sedi_w, de_ice, mp_print
+
+public   &
+        mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, &
         vi_max, vs_max, vg_max, vr_max,        &
         qs0_crt, qi_gen, ql0_max, qi0_max, qi0_crt, qr0_crt, fast_sat_adj, &
@@ -2603,15 +2617,22 @@ endif   ! end ice-physics
 
 
 ! subroutine lin_cld_microphys_init(id, jd, kd, axes, time)
- subroutine lin_cld_microphys_init
-
+ subroutine lin_cld_microphys_init (me, master, nlunit, logunit, fn_nml)
+    integer,           intent(in) :: me
+    integer,           intent(in) :: master
+    integer,           intent(in) :: nlunit
+    integer,           intent(in) :: logunit
+    character(len=64), intent(in) :: fn_nml
+    !--- local variables
+    integer :: ios
+    logical :: exists
 !    integer,         intent(in) :: id, jd, kd
 !    integer,         intent(in) :: axes(4)
 !    type(time_type), intent(in) :: time
 
-    integer   :: unit, io, ierr, k, logunit
-    logical   :: flag
-    real :: tmp, q1, q2
+!    integer   :: unit, io, ierr, k, logunit
+!    logical   :: flag
+!    real :: tmp, q1, q2
 
     log_10 = log(10.)
 
@@ -2633,6 +2654,19 @@ endif   ! end ice-physics
 !#endif
 !    call write_version_number (version, tagname)
 !    logunit = stdlog()
+
+    inquire (file=trim(fn_nml), exist=exists)
+    if (.not. exists) then
+      write(6,*) 'GFDL-MP:: namelist file: ',trim(fn_nml),' does not exist'
+      stop
+    else
+      open (unit=nlunit, file=fn_nml, READONLY, status='OLD', iostat=ios)
+    endif
+    rewind(nlunit)
+    read (nlunit, nml=lin_cld_microphysics_nml)
+    close (nlunit)
+    !--- write version number and namelist to log file ---
+    if (me == master) write(logunit, nml=lin_cld_microphysics_nml)
 
     if ( do_setup ) then
       call setup_con
