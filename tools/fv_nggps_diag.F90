@@ -84,6 +84,7 @@ contains
 
     field= 'gfs_dyn'
 
+    if (Atm(n)%flagstruct%write_3d_diags) then
 !-------------------
 ! A grid winds (lat-lon)
 !-------------------
@@ -120,6 +121,7 @@ contains
                                    axes(1:3), Time, trim(tlongname), &
                                    trim(tunits), missing_value=missing_value)
        enddo
+    endif
 
  end subroutine fv_nggps_diag_init
 

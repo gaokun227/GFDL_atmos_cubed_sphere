@@ -373,6 +373,8 @@ module fv_arrays_mod
                              ! positive n: every n hours
                              ! negative n: every time step
 
+   logical :: write_3d_diags = .true. !whether to write large 3d outputs
+                                      !on this grid
 !------------------------------------------
 ! Model Domain parameters
 !------------------------------------------

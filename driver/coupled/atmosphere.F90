@@ -318,40 +318,42 @@ contains
    !and so for now we will only define for the coarsest grid
 
 !miz
-   id_udt_dyn    =register_diag_field(mod_name,'udt_dyn',    Atm(mytile)%atmos_axes(1:3),  &
-                         Time,'udt_dyn',    'm/s/s', missing_value=mv)
-   id_vdt_dyn    =register_diag_field(mod_name,'vdt_dyn',    Atm(mytile)%atmos_axes(1:3),  &
-                         Time,'vdt_dyn',    'm/s/s', missing_value=mv)
-   id_tdt_dyn    =register_diag_field(mod_name,'tdt_dyn',    Atm(mytile)%atmos_axes(1:3),  &
-                         Time,'tdt_dyn',    'K/s', missing_value=mv)
-   id_qdt_dyn    =register_diag_field(mod_name,'qdt_dyn',    Atm(mytile)%atmos_axes(1:3),  &
-                         Time,'qdt_dyn',    'kg/kg/s', missing_value=mv)
-   id_qldt_dyn   =register_diag_field(mod_name,'qldt_dyn',   Atm(mytile)%atmos_axes(1:3),  &
-                         Time,'qldt_dyn',   'kg/kg/s', missing_value=mv)
-   id_qidt_dyn   =register_diag_field(mod_name,'qidt_dyn',   Atm(mytile)%atmos_axes(1:3),  &
-                         Time,'qidt_dyn',   'kg/kg/s', missing_value=mv)
-   id_qadt_dyn   =register_diag_field(mod_name,'qadt_dyn',   Atm(mytile)%atmos_axes(1:3),  &
-                         Time,'qadt_dyn',   '1/s', missing_value=mv)
-!--- register cmip tendency fields ---
-   ID_tnta = register_cmip_diag_field_3d (mod_name, 'tnta', Time, &
-                         'Tendency of Air Temperature due to Advection', 'K s-1', &
-                         standard_name='tendency_of_air_temperature_due_to_advection')
-   ID_tnhusa = register_cmip_diag_field_3d (mod_name, 'tnhusa', Time, &
-                         'Tendency of Specific Humidity due to Advection', 's-1', &
-                         standard_name='tendency_of_specific_humidity_due_to_advection')
-
-!---allocate id_tracer_*
+   !---allocate id_tracer_*
    allocate (id_tracerdt_dyn    (num_tracers))
-!---loop for tracers
-   do itrac = 1, num_tracers
-     call get_tracer_names (MODEL_ATMOS, itrac, name = tracer_name, units = tracer_units)
-     if (get_tracer_index(MODEL_ATMOS,tracer_name)>0) then
-         id_tracerdt_dyn(itrac) = register_diag_field(mod_name, TRIM(tracer_name)//'dt_dyn',  &
-                                      Atm(mytile)%atmos_axes(1:3),Time,                       &
-                                      TRIM(tracer_name)//' total tendency from advection',    &
-                                      TRIM(tracer_units)//'/s', missing_value = mv)
-     endif
-   enddo
+   if ( Atm(mytile)%flagstruct%write_3d_diags) then
+      id_udt_dyn    =register_diag_field(mod_name,'udt_dyn',    Atm(mytile)%atmos_axes(1:3),  &
+           Time,'udt_dyn',    'm/s/s', missing_value=mv)
+      id_vdt_dyn    =register_diag_field(mod_name,'vdt_dyn',    Atm(mytile)%atmos_axes(1:3),  &
+           Time,'vdt_dyn',    'm/s/s', missing_value=mv)
+      id_tdt_dyn    =register_diag_field(mod_name,'tdt_dyn',    Atm(mytile)%atmos_axes(1:3),  &
+           Time,'tdt_dyn',    'K/s', missing_value=mv)
+      id_qdt_dyn    =register_diag_field(mod_name,'qdt_dyn',    Atm(mytile)%atmos_axes(1:3),  &
+           Time,'qdt_dyn',    'kg/kg/s', missing_value=mv)
+      id_qldt_dyn   =register_diag_field(mod_name,'qldt_dyn',   Atm(mytile)%atmos_axes(1:3),  &
+           Time,'qldt_dyn',   'kg/kg/s', missing_value=mv)
+      id_qidt_dyn   =register_diag_field(mod_name,'qidt_dyn',   Atm(mytile)%atmos_axes(1:3),  &
+           Time,'qidt_dyn',   'kg/kg/s', missing_value=mv)
+      id_qadt_dyn   =register_diag_field(mod_name,'qadt_dyn',   Atm(mytile)%atmos_axes(1:3),  &
+           Time,'qadt_dyn',   '1/s', missing_value=mv)
+      !--- register cmip tendency fields ---
+      ID_tnta = register_cmip_diag_field_3d (mod_name, 'tnta', Time, &
+           'Tendency of Air Temperature due to Advection', 'K s-1', &
+           standard_name='tendency_of_air_temperature_due_to_advection')
+      ID_tnhusa = register_cmip_diag_field_3d (mod_name, 'tnhusa', Time, &
+           'Tendency of Specific Humidity due to Advection', 's-1', &
+           standard_name='tendency_of_specific_humidity_due_to_advection')
+
+      !---loop for tracers
+      do itrac = 1, num_tracers
+         call get_tracer_names (MODEL_ATMOS, itrac, name = tracer_name, units = tracer_units)
+         if (get_tracer_index(MODEL_ATMOS,tracer_name)>0) then
+            id_tracerdt_dyn(itrac) = register_diag_field(mod_name, TRIM(tracer_name)//'dt_dyn',  &
+                 Atm(mytile)%atmos_axes(1:3),Time,                       &
+                 TRIM(tracer_name)//' total tendency from advection',    &
+                 TRIM(tracer_units)//'/s', missing_value = mv)
+         endif
+      enddo
+   endif
    if (any(id_tracerdt_dyn(:)>0)) allocate(qtendyyf(isc:iec, jsc:jec,1:npz,num_tracers))
    if ( id_tdt_dyn>0 .or. query_cmip_diag_id(ID_tnta) ) allocate(ttend(isc:iec, jsc:jec, 1:npz))
    if ( any((/ id_qdt_dyn, id_qldt_dyn, id_qidt_dyn, id_qadt_dyn /) > 0) .or. &

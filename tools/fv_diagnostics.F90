@@ -535,64 +535,79 @@ contains
 !-------------------
 ! A grid winds (lat-lon)
 !-------------------
-       idiag%id_ua = register_diag_field ( trim(field), 'ucomp', axes(1:3), Time,        &
-            'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
-       idiag%id_va = register_diag_field ( trim(field), 'vcomp', axes(1:3), Time,        &
-            'meridional wind', 'm/sec', missing_value=missing_value, range=vrange)
-       if ( .not. Atm(n)%flagstruct%hydrostatic )                                        &
-          idiag%id_w = register_diag_field ( trim(field), 'w', axes(1:3), Time,        &
+       if (Atm(n)%flagstruct%write_3d_diags) then
+          idiag%id_ua = register_diag_field ( trim(field), 'ucomp', axes(1:3), Time,        &
+               'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
+          idiag%id_va = register_diag_field ( trim(field), 'vcomp', axes(1:3), Time,        &
+               'meridional wind', 'm/sec', missing_value=missing_value, range=vrange)
+          if ( .not. Atm(n)%flagstruct%hydrostatic )                                        &
+               idiag%id_w = register_diag_field ( trim(field), 'w', axes(1:3), Time,        &
                'vertical wind', 'm/sec', missing_value=missing_value, range=wrange )
 
-       idiag%id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
-            'temperature', 'K', missing_value=missing_value, range=trange )
-       idiag%id_ppt  = register_diag_field ( trim(field), 'ppt', axes(1:3), Time,       &
-            'potential temperature perturbation', 'K', missing_value=missing_value )
-       idiag%id_theta_e = register_diag_field ( trim(field), 'theta_e', axes(1:3), Time,       &
-            'theta_e', 'K', missing_value=missing_value )
-       idiag%id_omga = register_diag_field ( trim(field), 'omega', axes(1:3), Time,      &
-            'omega', 'Pa/s', missing_value=missing_value )
-       idiag%id_divg  = register_diag_field ( trim(field), 'divg', axes(1:3), Time,      &
-            'mean divergence', '1/s', missing_value=missing_value )
+          idiag%id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
+               'temperature', 'K', missing_value=missing_value, range=trange )
+          idiag%id_ppt  = register_diag_field ( trim(field), 'ppt', axes(1:3), Time,       &
+               'potential temperature perturbation', 'K', missing_value=missing_value )
+          idiag%id_theta_e = register_diag_field ( trim(field), 'theta_e', axes(1:3), Time,       &
+               'theta_e', 'K', missing_value=missing_value )
+          idiag%id_omga = register_diag_field ( trim(field), 'omega', axes(1:3), Time,      &
+               'omega', 'Pa/s', missing_value=missing_value )
+          idiag%id_divg  = register_diag_field ( trim(field), 'divg', axes(1:3), Time,      &
+               'mean divergence', '1/s', missing_value=missing_value )
 
-       idiag%id_rh = register_diag_field ( trim(field), 'rh', axes(1:3), Time,        &
-            'Relative Humidity', '%', missing_value=missing_value )
-!            'Relative Humidity', '%', missing_value=missing_value, range=rhrange )
+          idiag%id_rh = register_diag_field ( trim(field), 'rh', axes(1:3), Time,        &
+               'Relative Humidity', '%', missing_value=missing_value )
+          !            'Relative Humidity', '%', missing_value=missing_value, range=rhrange )
+          idiag%id_delp = register_diag_field ( trim(field), 'delp', axes(1:3), Time,        &
+               'pressure thickness', 'pa', missing_value=missing_value )
+          if ( .not. Atm(n)%flagstruct%hydrostatic )                                        &
+               idiag%id_delz = register_diag_field ( trim(field), 'delz', axes(1:3), Time,        &
+               'height thickness', 'm', missing_value=missing_value )
+          if( Atm(n)%flagstruct%hydrostatic ) then 
+             idiag%id_pfhy = register_diag_field ( trim(field), 'pfhy', axes(1:3), Time,        &
+                  'hydrostatic pressure', 'pa', missing_value=missing_value )
+          else
+             idiag%id_pfnh = register_diag_field ( trim(field), 'pfnh', axes(1:3), Time,        &
+                  'non-hydrostatic pressure', 'pa', missing_value=missing_value )
+          endif
+          idiag%id_zratio = register_diag_field ( trim(field), 'zratio', axes(1:3), Time,        &
+               'nonhydro_ratio', 'n/a', missing_value=missing_value )
+          !--------------------
+          ! 3D Condensate
+          !--------------------
+          idiag%id_qn = register_diag_field ( trim(field), 'qn', axes(1:3), Time,       &
+               'cloud condensate', 'kg/m/s^2', missing_value=missing_value )
+          idiag%id_qp = register_diag_field ( trim(field), 'qp', axes(1:3), Time,       &
+               'precip condensate', 'kg/m/s^2', missing_value=missing_value )
+          ! fast moist phys tendencies:
+          idiag%id_mdt = register_diag_field ( trim(field), 'mdt', axes(1:3), Time,       &
+               'DT/Dt: fast moist phys', 'deg/sec', missing_value=missing_value )
+          idiag%id_qdt = register_diag_field ( trim(field), 'qdt', axes(1:3), Time,       &
+               'Dqv/Dt: fast moist phys', 'kg/kg/sec', missing_value=missing_value )
+          idiag%id_dbz = register_diag_field ( trim(field), 'reflectivity', axes(1:3), time, &
+               'Stoelinga simulated reflectivity', 'dBz', missing_value=missing_value)
+
+          !--------------------
+          ! Relative vorticity
+          !--------------------
+          idiag%id_vort = register_diag_field ( trim(field), 'vort', axes(1:3), Time,       &
+               'vorticity', '1/s', missing_value=missing_value )
+          !--------------------
+          ! Potential vorticity
+          !--------------------
+          idiag%id_pv = register_diag_field ( trim(field), 'pv', axes(1:3), Time,       &
+               'potential vorticity', '1/s', missing_value=missing_value )
+
+       endif
+
 ! Total energy (only when moist_phys = .T.)
        idiag%id_te    = register_diag_field ( trim(field), 'te', axes(1:2), Time,      &
             'Total Energy', 'J/kg', missing_value=missing_value )
 ! Total Kinetic energy
        idiag%id_ke    = register_diag_field ( trim(field), 'ke', axes(1:2), Time,      &
             'Total KE', 'm^2/s^2', missing_value=missing_value )
-       idiag%id_delp = register_diag_field ( trim(field), 'delp', axes(1:3), Time,        &
-            'pressure thickness', 'pa', missing_value=missing_value )
-       if ( .not. Atm(n)%flagstruct%hydrostatic )                                        &
-          idiag%id_delz = register_diag_field ( trim(field), 'delz', axes(1:3), Time,        &
-               'height thickness', 'm', missing_value=missing_value )
-       if( Atm(n)%flagstruct%hydrostatic ) then 
-          idiag%id_pfhy = register_diag_field ( trim(field), 'pfhy', axes(1:3), Time,        &
-               'hydrostatic pressure', 'pa', missing_value=missing_value )
-       else
-          idiag%id_pfnh = register_diag_field ( trim(field), 'pfnh', axes(1:3), Time,        &
-               'non-hydrostatic pressure', 'pa', missing_value=missing_value )
-       endif
-       idiag%id_zratio = register_diag_field ( trim(field), 'zratio', axes(1:3), Time,        &
-            'nonhydro_ratio', 'n/a', missing_value=missing_value )
        idiag%id_ws     = register_diag_field ( trim(field), 'ws', axes(1:2), Time,        &
             'Terrain W', 'm/s', missing_value=missing_value )
-!--------------------
-! 3D Condensate
-!--------------------
-       idiag%id_qn = register_diag_field ( trim(field), 'qn', axes(1:3), Time,       &
-               'cloud condensate', 'kg/m/s^2', missing_value=missing_value )
-       idiag%id_qp = register_diag_field ( trim(field), 'qp', axes(1:3), Time,       &
-               'precip condensate', 'kg/m/s^2', missing_value=missing_value )
-! fast moist phys tendencies:
-       idiag%id_mdt = register_diag_field ( trim(field), 'mdt', axes(1:3), Time,       &
-               'DT/Dt: fast moist phys', 'deg/sec', missing_value=missing_value )
-       idiag%id_qdt = register_diag_field ( trim(field), 'qdt', axes(1:3), Time,       &
-               'Dqv/Dt: fast moist phys', 'kg/kg/sec', missing_value=missing_value )
-       idiag%id_dbz = register_diag_field ( trim(field), 'reflectivity', axes(1:3), time, &
-                'Stoelinga simulated reflectivity', 'dBz', missing_value=missing_value)
        idiag%id_maxdbz = register_diag_field ( trim(field), 'max_reflectivity', axes(1:2), time, &
                 'Stoelinga simulated maximum (composite) reflectivity', 'dBz', missing_value=missing_value)
        idiag%id_basedbz = register_diag_field ( trim(field), 'base_reflectivity', axes(1:2), time, &
@@ -600,16 +615,6 @@ contains
        idiag%id_dbz4km = register_diag_field ( trim(field), '4km_reflectivity', axes(1:2), time, &
                 'Stoelinga simulated base reflectivity', 'dBz', missing_value=missing_value)
             
-!--------------------
-! Relative vorticity
-!--------------------
-       idiag%id_vort = register_diag_field ( trim(field), 'vort', axes(1:3), Time,       &
-            'vorticity', '1/s', missing_value=missing_value )
-!--------------------
-! Potential vorticity
-!--------------------
-       idiag%id_pv = register_diag_field ( trim(field), 'pv', axes(1:3), Time,       &
-            'potential vorticity', '1/s', missing_value=missing_value )
 
 !--------------------------
 ! Extra surface diagnistics:
@@ -768,56 +773,58 @@ contains
        idiag%id_rh1000_cmip = register_diag_field ( trim(field), 'rh1000_cmip', axes(1:2), Time,       &
                            '1000-mb relative humidity (CMIP)', '%', missing_value=missing_value )
 
-       do i=1, ncnst
-!--------------------
-! Tracer diagnostics:
-!--------------------
-           call get_tracer_names ( MODEL_ATMOS, i, tname, tlongname, tunits )
-           idiag%id_tracer(i) = register_diag_field ( field, trim(tname),  &
-                axes(1:3), Time, trim(tlongname), &
-                trim(tunits), missing_value=missing_value)
-           if (master) then
-               if (idiag%id_tracer(i) > 0) then
+       if (Atm(n)%flagstruct%write_3d_diags) then
+          do i=1, ncnst
+             !--------------------
+             ! Tracer diagnostics:
+             !--------------------
+             call get_tracer_names ( MODEL_ATMOS, i, tname, tlongname, tunits )
+             idiag%id_tracer(i) = register_diag_field ( field, trim(tname),  &
+                  axes(1:3), Time, trim(tlongname), &
+                  trim(tunits), missing_value=missing_value)
+             if (master) then
+                if (idiag%id_tracer(i) > 0) then
                    unit = stdlog()
                    write(unit,'(a,a,a,a)') &
                         & 'Diagnostics available for tracer ',trim(tname), &
                         ' in module ', trim(field)
-               end if
-           endif
-!----------------------------------
-! ESM Tracer dmmr/dvmr diagnostics:
-!   for specific elements only
-!----------------------------------
-!---co2
-           if (trim(tname).eq.'co2') then
-               idiag%w_mr(:) = WTMCO2
-               idiag%id_tracer_dmmr(i) = register_diag_field ( field, trim(tname)//'_dmmr',  &
-                    axes(1:3), Time, trim(tlongname)//" (dry mmr)",           &
-                    trim(tunits), missing_value=missing_value)
-               idiag%id_tracer_dvmr(i) = register_diag_field ( field, trim(tname)//'_dvmr',  &
-                    axes(1:3), Time, trim(tlongname)//" (dry vmr)",           &
-                    'mol/mol', missing_value=missing_value)
-               if (master) then
+                end if
+             endif
+             !----------------------------------
+             ! ESM Tracer dmmr/dvmr diagnostics:
+             !   for specific elements only
+             !----------------------------------
+             !---co2
+             if (trim(tname).eq.'co2') then
+                idiag%w_mr(:) = WTMCO2
+                idiag%id_tracer_dmmr(i) = register_diag_field ( field, trim(tname)//'_dmmr',  &
+                     axes(1:3), Time, trim(tlongname)//" (dry mmr)",           &
+                     trim(tunits), missing_value=missing_value)
+                idiag%id_tracer_dvmr(i) = register_diag_field ( field, trim(tname)//'_dvmr',  &
+                     axes(1:3), Time, trim(tlongname)//" (dry vmr)",           &
+                     'mol/mol', missing_value=missing_value)
+                if (master) then
                    unit = stdlog()
                    if (idiag%id_tracer_dmmr(i) > 0) then
-                       write(unit,'(a,a,a,a)') 'Diagnostics available for '//trim(tname)//' dry mmr ', &
-                              trim(tname)//'_dmmr', ' in module ', trim(field)
+                      write(unit,'(a,a,a,a)') 'Diagnostics available for '//trim(tname)//' dry mmr ', &
+                           trim(tname)//'_dmmr', ' in module ', trim(field)
                    end if
                    if (idiag%id_tracer_dvmr(i) > 0) then
-                       write(unit,'(a,a,a,a)') 'Diagnostics available for '//trim(tname)//' dry vmr ', &
-                            trim(tname)//'_dvmr', ' in module ', trim(field)
+                      write(unit,'(a,a,a,a)') 'Diagnostics available for '//trim(tname)//' dry vmr ', &
+                           trim(tname)//'_dvmr', ' in module ', trim(field)
                    end if
-               endif
-           endif
-!---end co2
+                endif
+             endif
+             !---end co2
 
-       enddo
+          enddo
+       endif
 
        if ( Atm(1)%flagstruct%consv_am .or. idiag%id_mq > 0 .or. idiag%id_amdt > 0 )  then
-            allocate ( idiag%zxg(isc:iec,jsc:jec) )
-! Initialize gradient of terrain for mountain torque computation:
-            call init_mq(Atm(n)%phis, Atm(n)%gridstruct, &
-                 npx, npy, isc, iec, jsc, jec, Atm(n)%ng)
+          allocate ( idiag%zxg(isc:iec,jsc:jec) )
+          ! Initialize gradient of terrain for mountain torque computation:
+          call init_mq(Atm(n)%phis, Atm(n)%gridstruct, &
+               npx, npy, isc, iec, jsc, jec, Atm(n)%ng)
        endif
 
 !    end do

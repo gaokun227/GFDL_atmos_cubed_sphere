@@ -137,6 +137,7 @@ module fv_control_mod
 
    integer , pointer :: q_split 
    integer , pointer :: print_freq 
+   logical , pointer :: write_3d_diags
 
    integer , pointer :: npx           
    integer , pointer :: npy           
@@ -540,7 +541,7 @@ module fv_control_mod
 
       namelist /fv_grid_nml/ grid_name, grid_file
       namelist /fv_core_nml/npx, npy, ntiles, npz, npz_rst, layout, io_layout, ncnst, nwat,  &
-                            use_logp, p_fac, a_imp, k_split, n_split, m_split, q_split, print_freq, do_schmidt,      &
+                            use_logp, p_fac, a_imp, k_split, n_split, m_split, q_split, print_freq, write_3d_diags, do_schmidt,  &
                             hord_mt, hord_vt, hord_tm, hord_dp, hord_tr, shift_fac, stretch_fac, target_lat, target_lon, &
                             kord_mt, kord_wz, kord_tm, kord_tr, fv_debug, fv_land, nudge, do_sat_adj, do_f3d, &
                             external_ic, ncep_ic, nggps_ic, ecmwf_ic, use_new_ncep, use_ncep_phy, fv_diag_ic, &
@@ -1135,6 +1136,7 @@ module fv_control_mod
      use_logp                      => Atm%flagstruct%use_logp
      q_split                       => Atm%flagstruct%q_split
      print_freq                    => Atm%flagstruct%print_freq
+     write_3d_diags                => Atm%flagstruct%write_3d_diags
      npx                           => Atm%flagstruct%npx
      npy                           => Atm%flagstruct%npy
      npz                           => Atm%flagstruct%npz
