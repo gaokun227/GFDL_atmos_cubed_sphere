@@ -236,7 +236,9 @@ contains
        if ( dq0 > 0. ) then ! whole grid-box saturated
             src(i) = min(adj_fac*dq0, max(ql_gen-ql(i,j), fac_v2l*dq0))
        else   ! Evaporation of ql
-            src(i) = -min(ql(i,j), -fac_l2v*dq0)
+! The RH dependent factor = 1 at 90%
+            factor = fac_l2v * 10.*(qv(i,j)/wqsat(i)-1.)  ! ljz note: fac_l2v * (1 - RH) / (1 - 0.9)
+            src(i) = -min(ql(i,j), factor*dq0)
        endif
     enddo
 
@@ -264,7 +266,9 @@ contains
             src(i) = dq0
          else
 ! Evaporation of ql
-            src(i) = -min( ql(i,j), -dq0 )
+! The RH dependent factor = 1 at 90%
+            factor = fac_l2v * 10.*(qv(i,j)/wqsat(i)-1.)  ! ljz note: fac_l2v * (1 - RH) / (1 - 0.9)
+            src(i) = -min(ql(i,j), factor*dq0)
          endif
       enddo
       adj_fac = 1.

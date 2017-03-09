@@ -1537,7 +1537,9 @@ endif   ! end ice-physics
    qsw = wqs2(tz(k), den(k), dwsdt)
    dq0 = qsw - qv(k)
    if ( dq0 > 0. ) then
-        evap =  min( ql(k), fac_l2v*dq0/(1.+tcp3(k)*dwsdt) )
+! The RH dependent factor = 1 at 90%
+        factor = fac_l2v * (10.*dq0/qsw)  ! ljz note: fac_l2v * (1 - RH) / (1 - 0.9)
+        evap =  min( ql(k), factor*dq0/(1.+tcp3(k)*dwsdt) )
    else   ! condensate all excess vapor into cloud water
 !       evap = fac_v2l*dq0/(1.+tcp3(k)*dwsdt)
 ! 20161108

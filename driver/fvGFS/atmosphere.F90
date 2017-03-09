@@ -911,7 +911,7 @@ contains
 
 
  subroutine adiabatic_init(zvir)
-   real, allocatable, dimension(:,:,:):: u0, v0, t0, dp0
+   real, allocatable, dimension(:,:,:):: u0, v0, t0, dz0, dp0
    real, intent(in):: zvir
 !  real, parameter:: wt = 1.  ! was 2.
    real, parameter:: wt = 2.
@@ -954,11 +954,16 @@ contains
 
      allocate ( u0(isc:iec,  jsc:jec+1, npz) )
      allocate ( v0(isc:iec+1,jsc:jec,   npz) )
-     allocate ( t0(isc:iec,jsc:jec, npz) )
      allocate (dp0(isc:iec,jsc:jec, npz) )
 
+     if ( Atm(mytile)%flagstruct%hydrostatic ) then
+          allocate ( t0(isc:iec,jsc:jec, npz) )
+     else
+          allocate (dz0(isc:iec,jsc:jec, npz) )
+     endif
+
 !$omp parallel do default (none) & 
-!$omp              shared (npz, jsc, jec, isc, iec, n, sphum, u0, v0, t0, dp0, Atm, zvir, mytile) &
+!$omp              shared (npz, jsc, jec, isc, iec, n, sphum, u0, v0, t0, dz0, dp0, Atm, zvir, mytile) &
 !$omp             private (k, j, i) 
        do k=1,npz
           do j=jsc,jec+1
@@ -971,12 +976,21 @@ contains
                 v0(i,j,k) = Atm(mytile)%v(i,j,k)
              enddo
           enddo
-          do j=jsc,jec
-             do i=isc,iec
-                t0(i,j,k) = Atm(mytile)%pt(i,j,k)*(1.+zvir*Atm(mytile)%q(i,j,k,sphum))  ! virt T
-               dp0(i,j,k) = Atm(mytile)%delp(i,j,k)
+          if ( Atm(mytile)%flagstruct%hydrostatic ) then
+             do j=jsc,jec
+                do i=isc,iec
+                   t0(i,j,k) = Atm(mytile)%pt(i,j,k)*(1.+zvir*Atm(mytile)%q(i,j,k,sphum))  ! virt T
+                   dp0(i,j,k) = Atm(mytile)%delp(i,j,k)
+                enddo
              enddo
-          enddo
+          else
+             do j=jsc,jec
+                do i=isc,iec
+                   dp0(i,j,k) = Atm(mytile)%delp(i,j,k)
+                   dz0(i,j,k) = Atm(mytile)%delz(i,j,k)
+                enddo
+             enddo
+          endif
        enddo
 
      do m=1,Atm(mytile)%flagstruct%na_init
@@ -1010,7 +1024,7 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (pref, q00, p00,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mytile) &
+!$omp             shared (pref, q00, p00,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
 !$omp            private (i, j, k)
        do k=1,npz
           do j=jsc,jec+1
@@ -1048,12 +1062,22 @@ contains
              enddo
           endif
       endif
+      if ( Atm(mytile)%flagstruct%hydrostatic ) then
           do j=jsc,jec
              do i=isc,iec
                 Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
                 Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
              enddo
           enddo
+       else
+          do j=jsc,jec
+             do i=isc,iec
+                Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
+                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
+             enddo
+          enddo
+       endif
+
        enddo
 
 ! Backward
@@ -1086,7 +1110,7 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mytile) &
+!$omp             shared (npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
 !$omp            private (i, j, k)
        do k=1,npz
           do j=jsc,jec+1
@@ -1099,20 +1123,30 @@ contains
                 Atm(mytile)%v(i,j,k) = xt*(Atm(mytile)%v(i,j,k) + wt*v0(i,j,k))
              enddo
           enddo
-          do j=jsc,jec
+          if ( Atm(mytile)%flagstruct%hydrostatic ) then
+             do j=jsc,jec
              do i=isc,iec
                 Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
                 Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
              enddo
-          enddo
+             enddo
+          else
+             do j=jsc,jec
+             do i=isc,iec
+                Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
+                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
+             enddo
+             enddo
+          endif
        enddo
 
      enddo
 
      deallocate ( u0 )
      deallocate ( v0 )
-     deallocate ( t0 )
      deallocate (dp0 )
+     if ( allocated(t0) )  deallocate ( t0 )
+     if ( allocated(dz0) ) deallocate ( dz0 )
 
      do_adiabatic_init = .false.
      call timing_off('adiabatic_init')
@@ -1187,11 +1221,11 @@ contains
            IPD_Data(nb)%Statein%phii(ix,k+1) = IPD_Data(nb)%Statein%phii(ix,k) - _DBL_(_RL_(Atm(mytile)%delz(i,j,k1)*grav))
 
 ! Convert to tracer mass:
-         IPD_Data(nb)%Statein%qgrs(ix,k,1:nq) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,1:nq))) &
+         IPD_Data(nb)%Statein%qgrs(ix,k,1:nq-Atm(mytile)%flagstruct%dnats) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,1:nq-Atm(mytile)%flagstruct%dnats))) &
                                                           * IPD_Data(nb)%Statein%prsl(ix,k)
          !--- SHOULD THESE BE CONVERTED TO MASS SINCE THE DYCORE DOES NOT TOUCH THEM IN ANY WAY???
          !--- See Note in state update...
-         IPD_Data(nb)%Statein%qgrs(ix,k,nq+1:ncnst) = _DBL_(_RL_(Atm(mytile)%qdiag(i,j,k1,nq+1:ncnst)))
+         IPD_Data(nb)%Statein%qgrs(ix,k,nq-Atm(mytile)%flagstruct%dnats+1:ncnst) = _DBL_(_RL_(Atm(mytile)%qdiag(i,j,k1,nq-Atm(mytile)%flagstruct%dnats+1:ncnst)))
 ! Remove the contribution of condensates to delp (mass):
          if ( Atm(mytile)%flagstruct%nwat .eq. 2 ) then  ! GFS
             IPD_Data(nb)%Statein%prsl(ix,k) = IPD_Data(nb)%Statein%prsl(ix,k) &
@@ -1217,8 +1251,9 @@ contains
                                            + IPD_Data(nb)%Statein%prsl(i,k)
            IPD_Data(nb)%Statein%prsik(i,k) = log( IPD_Data(nb)%Statein%prsi(i,k) )
 ! Redefine mixing ratios for GFS == tracer_mass / (dry_air_mass + water_vapor_mass)
-           IPD_Data(nb)%Statein%qgrs(i,k,1:ncnst) = IPD_Data(nb)%Statein%qgrs(i,k,1:ncnst) &
+           IPD_Data(nb)%Statein%qgrs(i,k,1:nq-Atm(mytile)%flagstruct%dnats) = IPD_Data(nb)%Statein%qgrs(i,k,1:nq-Atm(mytile)%flagstruct%dnats) &
                                                   / IPD_Data(nb)%Statein%prsl(i,k)
+           IPD_Data(nb)%Statein%qgrs(i,k,nq-Atm(mytile)%flagstruct%dnats+1:ncnst) = IPD_Data(nb)%Statein%qgrs(i,k,nq-Atm(mytile)%flagstruct%dnats+1:ncnst)
         enddo
      enddo
      do i=1,blen
