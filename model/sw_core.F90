@@ -985,6 +985,7 @@
                       mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v)
 !                     mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t)
 #endif
+#endif
 
      if ( inline_q ) then
         do j=js,je
