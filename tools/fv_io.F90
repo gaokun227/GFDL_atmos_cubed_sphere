@@ -37,7 +37,6 @@ module fv_io_mod
                                      restart_file_type, register_restart_field, &
                                      save_restart, restore_state, &
                                      set_domain, nullify_domain, set_filename_appendix, &
-                                     nullify_filename_appendix, &
                                      get_mosaic_tile_file, get_instance_filename, & 
                                      save_restart_border, restore_state_border, free_restart_type, &
                                      field_exist
@@ -551,8 +550,6 @@ contains
        enddo
 
     enddo
-
-    call nullify_filename_appendix
 
   end subroutine  fv_io_register_restart
   ! </SUBROUTINE> NAME="fv_io_register_restart"
