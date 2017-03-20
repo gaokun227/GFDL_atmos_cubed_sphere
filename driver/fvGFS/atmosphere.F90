@@ -1223,9 +1223,12 @@ contains
 ! Convert to tracer mass:
          IPD_Data(nb)%Statein%qgrs(ix,k,1:nq-Atm(mytile)%flagstruct%dnats) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,1:nq-Atm(mytile)%flagstruct%dnats))) &
                                                           * IPD_Data(nb)%Statein%prsl(ix,k)
+         if (Atm(mytile)%flagstruct%dnats .gt. 0) then
+             IPD_Data(nb)%Statein%qgrs(ix,k,nq-Atm(mytile)%flagstruct%dnats+1:nq) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,nq-Atm(mytile)%flagstruct%dnats+1:nq)))
+         endif
          !--- SHOULD THESE BE CONVERTED TO MASS SINCE THE DYCORE DOES NOT TOUCH THEM IN ANY WAY???
          !--- See Note in state update...
-         IPD_Data(nb)%Statein%qgrs(ix,k,nq-Atm(mytile)%flagstruct%dnats+1:ncnst) = _DBL_(_RL_(Atm(mytile)%qdiag(i,j,k1,nq-Atm(mytile)%flagstruct%dnats+1:ncnst)))
+         IPD_Data(nb)%Statein%qgrs(ix,k,nq+1:ncnst) = _DBL_(_RL_(Atm(mytile)%qdiag(i,j,k1,nq+1:ncnst)))
 ! Remove the contribution of condensates to delp (mass):
          if ( Atm(mytile)%flagstruct%nwat .eq. 2 ) then  ! GFS
             IPD_Data(nb)%Statein%prsl(ix,k) = IPD_Data(nb)%Statein%prsl(ix,k) &
@@ -1253,7 +1256,6 @@ contains
 ! Redefine mixing ratios for GFS == tracer_mass / (dry_air_mass + water_vapor_mass)
            IPD_Data(nb)%Statein%qgrs(i,k,1:nq-Atm(mytile)%flagstruct%dnats) = IPD_Data(nb)%Statein%qgrs(i,k,1:nq-Atm(mytile)%flagstruct%dnats) &
                                                   / IPD_Data(nb)%Statein%prsl(i,k)
-           IPD_Data(nb)%Statein%qgrs(i,k,nq-Atm(mytile)%flagstruct%dnats+1:ncnst) = IPD_Data(nb)%Statein%qgrs(i,k,nq-Atm(mytile)%flagstruct%dnats+1:ncnst)
         enddo
      enddo
      do i=1,blen

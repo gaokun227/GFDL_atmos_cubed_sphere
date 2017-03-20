@@ -46,7 +46,7 @@ module external_ic_mod
    use fv_grid_utils_mod, only: ptop_min, g_sum,mid_pt_sphere,get_unit_vect2,get_latlon_vector,inner_prod
    use fv_io_mod,         only: fv_io_read_tracers 
    use fv_mapz_mod,       only: mappm
-   use fv_mp_mod,         only: ng, is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
+   use fv_mp_mod,         only: ng, is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max, mp_reduce_sum
    use fv_surf_map_mod,   only: surfdrv, FV3_zs_filter
    use fv_surf_map_mod,   only: sgh_g, oro_g
    use fv_surf_map_mod,   only: del2_cubed_sphere, del4_cubed_sphere
@@ -265,7 +265,7 @@ contains
 
     end do
 
-	!Needed for reproducibility. DON'T REMOVE THIS!!
+! Needed for reproducibility. DON'T REMOVE THIS!!
     call mpp_update_domains( Atm(1)%phis, Atm(1)%domain ) 
     ftop = g_sum(Atm(1)%domain, Atm(1)%phis(is:ie,js:je), is, ie, js, je, ng, Atm(1)%gridstruct%area_64, 1)
  
@@ -689,6 +689,7 @@ contains
         ak(1) = max(1.e-9, ak(1))
 
         call remap_scalar_nggps(Atm(n), levp, npz, ntracers, ak, bk, ps, q, omga, zh)
+!       call mpp_update_domains(Atm(n)%phis, Atm(n)%domain)
 
         allocate ( ud(is:ie,  js:je+1, 1:levp) )
         allocate ( vd(is:ie+1,js:je,   1:levp) )
@@ -1647,6 +1648,7 @@ contains
       deallocate ( psc )
 
       call remap_scalar_ec(Atm(1), km, npz, 6, ak0, bk0, psc_r8, qc, wc, zhc )
+      call mpp_update_domains(Atm(1)%phis, Atm(1)%domain)
       if(is_master()) write(*,*) 'done remap_scalar_ec'
        
       deallocate ( zhc )
@@ -2369,6 +2371,10 @@ contains
        call mpp_error(FATAL,'SPHUM must be 1st tracer')
   endif
 
+#ifdef USE_GFS_ZS
+   Atm%phis(is:ie,js:je) = zh(is:ie,js:je,km+1)*grav
+#endif
+
 !$OMP parallel do default(none) &
 !$OMP             shared(sphum,liq_wat,rainwat,ice_wat,snowwat,graupel,&
 !$OMP                    cld_amt,ncnst,npz,is,ie,js,je,km,k2,ak0,bk0,psc,zh,omga,qa,Atm,z500) &
@@ -2594,7 +2600,8 @@ contains
      enddo
   enddo
   call pmaxmn('ZS_diff (m)', wk, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
-  call pmaxmn('Z500 (m)',  z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
+! call pmaxmn('Z500 (m)',  z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
+  call prt_gb_nh_sh('GFS_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64, Atm%gridstruct%agrid_64(is:ie,js:je,2))
 
   do j=js,je
      do i=is,ie
@@ -2843,7 +2850,8 @@ contains
      enddo
   enddo
   call pmaxmn('ZS_diff (m)', wk, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
-  call pmaxmn('Z500 (m)', z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
+! call pmaxmn('Z500 (m)', z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
+  call prt_gb_nh_sh('IFS_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64, Atm%gridstruct%agrid_64(is:ie,js:je,2))
 
   do j=js,je
      do i=is,ie
@@ -3877,6 +3885,49 @@ subroutine pmaxmn(qname, q, is, ie, js, je, km, fac, area, domain)
     enddo
 
   end subroutine get_staggered_grid
+
+  subroutine prt_gb_nh_sh(qname, is,ie, js,je, a2, area, lat)
+  character(len=*), intent(in)::  qname
+  integer, intent(in):: is, ie, js, je
+  real, intent(in), dimension(is:ie, js:je):: a2
+  real(kind=R_GRID), intent(in), dimension(is:ie, js:je):: area, lat
+! Local:
+  real(R_GRID), parameter:: rad2deg = 180./pi
+  real(R_GRID):: slat
+  real:: t_eq, t_nh, t_sh, t_gb
+  real:: area_eq, area_nh, area_sh, area_gb
+  integer:: i,j
+
+     t_eq = 0.   ;    t_nh = 0.;    t_sh = 0.;    t_gb = 0.
+     area_eq = 0.; area_nh = 0.; area_sh = 0.; area_gb = 0.
+     do j=js,je
+        do i=is,ie
+           slat = lat(i,j)*rad2deg
+           area_gb = area_gb + area(i,j)
+           t_gb = t_gb + a2(i,j)*area(i,j)
+           if( (slat>-20. .and. slat<20.) ) then
+                area_eq = area_eq + area(i,j)
+                t_eq = t_eq + a2(i,j)*area(i,j)
+           elseif( slat>=20. .and. slat<80. ) then
+                area_nh = area_nh + area(i,j)
+                t_nh = t_nh + a2(i,j)*area(i,j)
+           elseif( slat<=-20. .and. slat>-80. ) then
+                area_sh = area_sh + area(i,j)
+                t_sh = t_sh + a2(i,j)*area(i,j)
+           endif
+        enddo
+     enddo
+     call mp_reduce_sum(area_gb)
+     call mp_reduce_sum(   t_gb)
+     call mp_reduce_sum(area_nh)
+     call mp_reduce_sum(   t_nh)
+     call mp_reduce_sum(area_sh)
+     call mp_reduce_sum(   t_sh)
+     call mp_reduce_sum(area_eq)
+     call mp_reduce_sum(   t_eq)
+     if (is_master()) write(*,*) qname, t_gb/area_gb, t_nh/area_nh, t_sh/area_sh, t_eq/area_eq
+
+  end subroutine prt_gb_nh_sh
 
  end module external_ic_mod
 

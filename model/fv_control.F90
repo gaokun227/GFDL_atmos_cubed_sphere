@@ -230,6 +230,7 @@ module fv_control_mod
 
    integer :: ntilesMe                ! Number of tiles on this process =1 for now
 
+!   real, public :: lim_fac = 2.
 #ifdef OVERLOAD_R4
    real    :: too_big  = 1.E8
 #else

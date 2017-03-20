@@ -655,8 +655,8 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 endif        ! end last_step check
 
 ! Note: pt at this stage is T_v
-  if ( (.not.do_adiabatic_init) .and. do_sat_adj ) then
-! if ( do_sat_adj ) then
+! if ( (.not.do_adiabatic_init) .and. do_sat_adj ) then
+  if ( do_sat_adj ) then
                                            call timing_on('sat_adj2')
 !$OMP do
            do k=kmp,km

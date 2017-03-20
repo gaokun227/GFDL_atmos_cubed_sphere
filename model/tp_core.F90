@@ -25,12 +25,14 @@ module tp_core_mod
  use fv_mp_mod,         only: ng 
  use fv_grid_utils_mod, only: big_number
  use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type
+! use fv_control_mod,    only: lim_fac
 
  implicit none
 
  private
  public fv_tp_2d, pert_ppm, copy_corners
 
+ real, parameter:: lim_fac = 2.0   ! linear scheme limiting factor
  real, parameter:: ppm_fac = 1.5   ! nonlinear scheme limiter: between 1 and 2
  real, parameter:: r3 = 1./3.
  real, parameter:: near_zero = 1.E-25
@@ -307,7 +309,7 @@ contains
 ! Local
  real, dimension(is-1:ie+1):: bl, br, b0
  real:: q1(isd:ied)
- real, dimension(is:ie+1):: fx0, fx1
+ real, dimension(is:ie+1):: fx0, fx1, xt1
  logical, dimension(is-1:ie+1):: smt5, smt6
  real  al(is-1:ie+2)
  real  dm(is-2:ie+2)
@@ -367,7 +369,26 @@ contains
      endif
    endif
 
-   if ( iord==2 ) then  ! perfectly linear scheme
+   if ( iord==1 ) then  ! perfectly linear scheme
+        do i=is-1,ie+1
+           bl(i) = al(i)   - q1(i)
+           br(i) = al(i+1) - q1(i)
+           b0(i) = bl(i) + br(i)
+           smt5(i) = abs(lim_fac*b0(i)) < abs(bl(i)-br(i))
+        enddo
+!DEC$ VECTOR ALWAYS
+      do i=is,ie+1
+         if ( c(i,j) > 0. ) then
+             fx1(i) = (1.-c(i,j))*(br(i-1) - c(i,j)*b0(i-1))
+             flux(i,j) = q1(i-1)
+         else
+             fx1(i) = (1.+c(i,j))*(bl(i) + c(i,j)*b0(i))
+             flux(i,j) = q1(i)
+         endif
+         if (smt5(i-1).or.smt5(i)) flux(i,j) = flux(i,j) + fx1(i) 
+      enddo
+
+   elseif ( iord==2 ) then  ! perfectly linear scheme
 ! Diffusivity: ord2 < ord5 < ord3 < ord4 < ord6  < ord7
 
 !DEC$ VECTOR ALWAYS
@@ -398,25 +419,24 @@ contains
         enddo
         do i=is,ie+1
            fx1(i) = 0.
+           xt1(i) = c(i,j)
         enddo
         do i=is,ie+1
-           xt = c(i,j)
-           if ( xt > 0. ) then
-                fx0(i) = q1(i-1)
+           if ( xt1(i) > 0. ) then
                 if ( smt6(i-1).or.smt5(i) ) then
-                   fx1(i) = br(i-1) - xt*b0(i-1)
+                   fx1(i) = br(i-1) - xt1(i)*b0(i-1)
                 elseif ( smt5(i-1) ) then   ! 2nd order, piece-wise linear
                    fx1(i) = sign(min(abs(bl(i-1)),abs(br(i-1))), br(i-1))
                 endif
+                flux(i,j) = q1(i-1) + (1.-xt1(i))*fx1(i)
            else
-                fx0(i) = q1(i)
                 if ( smt6(i).or.smt5(i-1) ) then
-                   fx1(i) = bl(i) + xt*b0(i)
+                   fx1(i) = bl(i) + xt1(i)*b0(i)
                 elseif ( smt5(i) ) then
                    fx1(i) = sign(min(abs(bl(i)), abs(br(i))), bl(i))
                 endif
+                flux(i,j) = q1(i) + (1.+xt1(i))*fx1(i)
            endif
-           flux(i,j) = fx0(i) + (1.-abs(xt))*fx1(i)
         enddo
    elseif ( iord==4 ) then
         do i=is-1,ie+1
@@ -596,7 +616,7 @@ contains
  real:: al(ifirst:ilast,js-1:je+2)
  real, dimension(ifirst:ilast,js-1:je+1):: bl, br, b0
  real:: dq(ifirst:ilast,js-3:je+2)
- real,    dimension(ifirst:ilast):: fx0, fx1
+ real,    dimension(ifirst:ilast):: fx0, fx1, xt1
  logical, dimension(ifirst:ilast,js-1:je+1):: smt5, smt6
  real:: x0, xt, qtmp, pmp_1, lac_1, pmp_2, lac_2, r1
  integer:: i, j, js1, je3, je1
@@ -659,7 +679,30 @@ if ( jord < 8 ) then
       endif
    endif
 
-   if ( jord==2 ) then   ! Perfectly linear scheme
+   if ( jord==1 ) then
+       do j=js-1,je+1
+          do i=ifirst,ilast
+             bl(i,j) = al(i,j  ) - q(i,j)
+             br(i,j) = al(i,j+1) - q(i,j)
+             b0(i,j) = bl(i,j) + br(i,j)
+             smt5(i,j) = abs(lim_fac*b0(i,j)) < abs(bl(i,j)-br(i,j))
+          enddo
+       enddo
+       do j=js,je+1
+!DEC$ VECTOR ALWAYS
+          do i=ifirst,ilast
+             if ( c(i,j) > 0. ) then
+                  fx1(i) = (1.-c(i,j))*(br(i,j-1) - c(i,j)*b0(i,j-1))
+                  flux(i,j) = q(i,j-1)
+             else
+                  fx1(i) = (1.+c(i,j))*(bl(i,j) + c(i,j)*b0(i,j))
+                  flux(i,j) = q(i,j)
+             endif
+             if (smt5(i,j-1).or.smt5(i,j)) flux(i,j) = flux(i,j) + fx1(i) 
+          enddo
+       enddo
+
+   elseif ( jord==2 ) then   ! Perfectly linear scheme
 ! Diffusivity: ord2 < ord5 < ord3 < ord4 < ord6  < ord7
 
       do j=js,je+1
@@ -691,25 +734,24 @@ if ( jord < 8 ) then
         do j=js,je+1
            do i=ifirst,ilast
               fx1(i) = 0.
+              xt1(i) = c(i,j)
            enddo
            do i=ifirst,ilast
-              xt = c(i,j)
-              if ( xt > 0. ) then
-                   fx0(i) = q(i,j-1)
+              if ( xt1(i) > 0. ) then
                    if( smt6(i,j-1).or.smt5(i,j) ) then
-                       fx1(i) = br(i,j-1) - xt*b0(i,j-1)
+                       fx1(i) = br(i,j-1) - xt1(i)*b0(i,j-1)
                    elseif ( smt5(i,j-1) ) then ! both up-downwind sides are noisy; 2nd order, piece-wise linear
                        fx1(i) = sign(min(abs(bl(i,j-1)),abs(br(i,j-1))),br(i,j-1))
                    endif
+                   flux(i,j) = q(i,j-1) + (1.-xt1(i))*fx1(i)
               else
-                   fx0(i) = q(i,j)
                    if( smt6(i,j).or.smt5(i,j-1) ) then
-                       fx1(i) = bl(i,j) + xt*b0(i,j)
+                       fx1(i) = bl(i,j) + xt1(i)*b0(i,j)
                    elseif ( smt5(i,j) ) then
                        fx1(i) = sign(min(abs(bl(i,j)),abs(br(i,j))), bl(i,j))
                    endif
+                   flux(i,j) = q(i,j) + (1.+xt1(i))*fx1(i)
               endif
-              flux(i,j) = fx0(i) + (1.-abs(xt))*fx1(i)
            enddo
         enddo
 

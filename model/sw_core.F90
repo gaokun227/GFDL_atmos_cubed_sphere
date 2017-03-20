@@ -24,6 +24,7 @@
  use fv_mp_mod, only: fill_corners, XDir, YDir
  use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_flags_type
  use a2b_edge_mod, only: a2b_ord4
+! use fv_control_mod,    only: lim_fac
 
 #ifdef SW_DYNAMICS
  use test_cases_mod,   only: test_case
@@ -31,7 +32,8 @@
 
  implicit none
 
-  real, parameter:: r3 =   1./3.
+  real, parameter:: lim_fac = 2.
+  real, parameter:: r3 = 1./3.
   real, parameter:: t11=27./28., t12=-13./28., t13=3./7., t14=6./7., t15=3./28.
   real, parameter:: s11=11./14., s13=-13./14., s14=4./7., s15=3./14.
   real, parameter:: near_zero = 1.E-9     ! for KE limiter
@@ -984,7 +986,6 @@
                       xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y,     &
                       mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v)
 !                     mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t)
-#endif
 #endif
 
      if ( inline_q ) then
@@ -1994,19 +1995,8 @@ end subroutine divergence_corner_nest
     is3 = max(3,is-1) ; ie3 = min(npx-3,ie+1)
  end if
 
- if ( iord==1 ) then
 
-     do j=js,je+1
-        do i=is,ie+1
-           if( c(i,j)>0. ) then
-               flux(i,j) = u(i-1,j)
-           else
-               flux(i,j) = u(i,j)
-           endif
-        enddo
-     enddo
-
- elseif ( iord < 8 ) then
+ if ( iord < 8 ) then
 ! Diffusivity: ord2 < ord5 < ord3 < ord4 < ord6 
 
      do j=js,je+1
@@ -2064,7 +2054,26 @@ end subroutine divergence_corner_nest
         b0(i) = bl(i) + br(i)
      enddo
 
-     if ( iord==2 ) then   ! Perfectly linear
+    if ( iord==1 ) then
+
+      do i=is-1, ie+1
+         smt5(i) = abs(lim_fac*b0(i)) < abs(bl(i)-br(i))
+      enddo
+!DEC$ VECTOR ALWAYS
+      do i=is,ie+1
+         if( c(i,j)>0. ) then
+             cfl = c(i,j)*rdx(i-1,j)
+             fx0(i) = (1.-cfl)*(br(i-1)-cfl*b0(i-1))
+             flux(i,j) = u(i-1,j)
+         else
+             cfl = c(i,j)*rdx(i,j)
+             fx0(i) = (1.+cfl)*(bl(i)+cfl*b0(i))
+             flux(i,j) = u(i,j)
+         endif
+         if (smt5(i-1).or.smt5(i)) flux(i,j) = flux(i,j) + fx0(i)
+      enddo
+
+     elseif ( iord==2 ) then   ! Perfectly linear
 
 !DEC$ VECTOR ALWAYS
         do i=is,ie+1
@@ -2335,19 +2344,7 @@ end subroutine divergence_corner_nest
     js3 = max(3,js-1); je3 = min(npy-3,je+1)
  end if
 
- if ( jord==1 ) then
-
-      do j=js,je+1
-         do i=is,ie+1
-            if( c(i,j)>0. ) then
-               flux(i,j) = v(i,j-1)
-            else
-               flux(i,j) = v(i,j)
-            endif
-         enddo
-      enddo
-
- elseif ( jord<8 ) then
+ if ( jord<8 ) then
 ! Diffusivity: ord2 < ord5 < ord3 < ord4 < ord6 
 
    do j=js3,je3+1
@@ -2425,7 +2422,31 @@ end subroutine divergence_corner_nest
       enddo
    enddo
 
-   if ( jord==2 ) then    ! Perfectly linear
+   if ( jord==1 ) then    ! Perfectly linear
+
+     do j=js-1,je+1
+        do i=is,ie+1
+           smt5(i,j) = abs(lim_fac*b0(i,j)) < abs(bl(i,j)-br(i,j))
+        enddo
+     enddo
+     do j=js,je+1
+!DEC$ VECTOR ALWAYS
+        do i=is,ie+1
+           if( c(i,j)>0. ) then
+               cfl = c(i,j)*rdy(i,j-1)
+               fx0(i) = (1.-cfl)*(br(i,j-1)-cfl*b0(i,j-1))
+               flux(i,j) = v(i,j-1)
+           else
+               cfl = c(i,j)*rdy(i,j)
+               fx0(i) = (1.+cfl)*(bl(i,j)+cfl*b0(i,j))
+               flux(i,j) = v(i,j)
+           endif
+           if (smt5(i,j-1).or.smt5(i,j)) flux(i,j) = flux(i,j) + fx0(i)
+        enddo
+     enddo
+
+
+   elseif ( jord==2 ) then    ! Perfectly linear
       do j=js,je+1
 !DEC$ VECTOR ALWAYS
          do i=is,ie+1
