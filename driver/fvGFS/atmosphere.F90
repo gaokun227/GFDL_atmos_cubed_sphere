@@ -1172,7 +1172,7 @@ contains
    real(kind=kind_phys), parameter:: qmin = 1.0e-10   
    real(kind=kind_phys):: pk0inv, ptop, pktop
    real(kind=kind_phys) :: rTv, dm, qgrs_rad
-   integer :: nb, blen, npz, i, j, k, ix, k1
+   integer :: nb, blen, npz, i, j, k, ix, k1, dnats, nq_adv
 
 !!! NOTES: lmh 6nov15
 !!! - "Layer" means "layer mean", ie. the average value in a layer
@@ -1183,6 +1183,8 @@ contains
    pk0inv = (1.0_kind_phys/p00)**kappa
 
    npz = Atm_block%npz
+   dnats = Atm(mytile)%flagstruct%dnats
+   nq_adv = nq - dnats
 
 !---------------------------------------------------------------------
 ! use most up to date atmospheric properties when running serially
@@ -1190,7 +1192,7 @@ contains
 !$OMP parallel do default (none) & 
 !$OMP             shared  (Atm_block, Atm, IPD_Data, npz, nq, ncnst, sphum, liq_wat, &
 !$OMP                      ice_wat, rainwat, snowwat, graupel, pk0inv, ptop,   &
-!$OMP                      pktop, zvir, mytile) &
+!$OMP                      pktop, zvir, mytile, dnats, nq_adv) &
 !$OMP             private (dm, nb, blen, i, j, ix, k1, rTv, qgrs_rad)
 
    do nb = 1,Atm_block%nblks
@@ -1221,14 +1223,14 @@ contains
            IPD_Data(nb)%Statein%phii(ix,k+1) = IPD_Data(nb)%Statein%phii(ix,k) - _DBL_(_RL_(Atm(mytile)%delz(i,j,k1)*grav))
 
 ! Convert to tracer mass:
-         IPD_Data(nb)%Statein%qgrs(ix,k,1:nq-Atm(mytile)%flagstruct%dnats) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,1:nq-Atm(mytile)%flagstruct%dnats))) &
+         IPD_Data(nb)%Statein%qgrs(ix,k,1:nq_adv) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,1:nq_adv))) &
                                                           * IPD_Data(nb)%Statein%prsl(ix,k)
-         if (Atm(mytile)%flagstruct%dnats .gt. 0) then
-             IPD_Data(nb)%Statein%qgrs(ix,k,nq-Atm(mytile)%flagstruct%dnats+1:nq) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,nq-Atm(mytile)%flagstruct%dnats+1:nq)))
-         endif
+         if (dnats .gt. 0) &
+             IPD_Data(nb)%Statein%qgrs(ix,k,nq_adv+1:nq) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,nq_adv+1:nq)))
          !--- SHOULD THESE BE CONVERTED TO MASS SINCE THE DYCORE DOES NOT TOUCH THEM IN ANY WAY???
          !--- See Note in state update...
-         IPD_Data(nb)%Statein%qgrs(ix,k,nq+1:ncnst) = _DBL_(_RL_(Atm(mytile)%qdiag(i,j,k1,nq+1:ncnst)))
+         if ( ncnst > nq) &
+             IPD_Data(nb)%Statein%qgrs(ix,k,nq+1:ncnst) = _DBL_(_RL_(Atm(mytile)%qdiag(i,j,k1,nq+1:ncnst)))
 ! Remove the contribution of condensates to delp (mass):
          if ( Atm(mytile)%flagstruct%nwat .eq. 2 ) then  ! GFS
             IPD_Data(nb)%Statein%prsl(ix,k) = IPD_Data(nb)%Statein%prsl(ix,k) &
@@ -1254,7 +1256,7 @@ contains
                                            + IPD_Data(nb)%Statein%prsl(i,k)
            IPD_Data(nb)%Statein%prsik(i,k) = log( IPD_Data(nb)%Statein%prsi(i,k) )
 ! Redefine mixing ratios for GFS == tracer_mass / (dry_air_mass + water_vapor_mass)
-           IPD_Data(nb)%Statein%qgrs(i,k,1:nq-Atm(mytile)%flagstruct%dnats) = IPD_Data(nb)%Statein%qgrs(i,k,1:nq-Atm(mytile)%flagstruct%dnats) &
+           IPD_Data(nb)%Statein%qgrs(i,k,1:nq_adv) = IPD_Data(nb)%Statein%qgrs(i,k,1:nq_adv) &
                                                   / IPD_Data(nb)%Statein%prsl(i,k)
         enddo
      enddo
@@ -1279,20 +1281,11 @@ contains
 
 !!! Ensure subgrid MONOTONICITY of Pressure: SJL 09/11/2016
            if ( .not.Atm(mytile)%flagstruct%hydrostatic ) then
-#ifdef ALT_METHOD
 ! If violated, replaces it with hydrostatic pressure
-              if (IPD_Data(nb)%Statein%prsl(i,k).ge.IPD_Data(nb)%Statein%prsi(i,k) .or. &
-                                IPD_Data(nb)%Statein%prsl(i,k).le.IPD_Data(nb)%Statein%prsi(i,k+1)) then
-                  IPD_Data(nb)%Statein%prsl(i,k) = dm / (IPD_Data(nb)%Statein%prsik(i,k) &
-                                                       - IPD_Data(nb)%Statein%prsik(i,k+1))
-              endif
-               
-#else
               IPD_Data(nb)%Statein%prsl(i,k) = min(IPD_Data(nb)%Statein%prsl(i,k), &
                                                    IPD_Data(nb)%Statein%prsi(i,k)   - 0.01*dm)
               IPD_Data(nb)%Statein%prsl(i,k) = max(IPD_Data(nb)%Statein%prsl(i,k), &
                                                    IPD_Data(nb)%Statein%prsi(i,k+1) + 0.01*dm)
-#endif
            endif
         enddo
      enddo
