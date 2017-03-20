@@ -46,7 +46,7 @@ module external_ic_mod
    use fv_grid_utils_mod, only: ptop_min, g_sum,mid_pt_sphere,get_unit_vect2,get_latlon_vector,inner_prod
    use fv_io_mod,         only: fv_io_read_tracers 
    use fv_mapz_mod,       only: mappm
-   use fv_mp_mod,         only: ng, is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
+   use fv_mp_mod,         only: ng, is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max, mp_reduce_sum
    use fv_surf_map_mod,   only: surfdrv, FV3_zs_filter
    use fv_surf_map_mod,   only: sgh_g, oro_g
    use fv_surf_map_mod,   only: del2_cubed_sphere, del4_cubed_sphere
@@ -265,7 +265,7 @@ contains
 
     end do
 
-	!Needed for reproducibility. DON'T REMOVE THIS!!
+! Needed for reproducibility. DON'T REMOVE THIS!!
     call mpp_update_domains( Atm(1)%phis, Atm(1)%domain ) 
     ftop = g_sum(Atm(1)%domain, Atm(1)%phis(is:ie,js:je), is, ie, js, je, ng, Atm(1)%gridstruct%area_64, 1)
  
@@ -682,10 +682,13 @@ contains
         ak(1) = max(1.e-9, ak(1))
 
         call remap_scalar_nggps(Atm(n), levp, npz, ntracers, ak, bk, ps, q, omga, zh)
+!       call mpp_update_domains(Atm(n)%phis, Atm(n)%domain)
 
         allocate ( ud(is:ie,  js:je+1, 1:levp) )
         allocate ( vd(is:ie+1,js:je,   1:levp) )
 
+!$OMP parallel do default(none) shared(is,ie,js,je,levp,Atm,ud,vd,u_s,v_s,u_w,v_w) &
+!$OMP               private(p1,p2,p3,e1,e2,ex,ey)
         do k=1,levp
           do j=js,je+1
             do i=is,ie
@@ -780,13 +783,11 @@ contains
         endif
 
         call mpp_update_domains( Atm(n)%phis, Atm(n)%domain, complete=.true. )
-        liq_wat  = get_tracer_index(MODEL_ATMOS, 'liq_wat')
-        if ( Atm(n)%flagstruct%nwat .eq. 6 ) then
-           ice_wat = get_tracer_index(MODEL_ATMOS, 'ice_wat')
-           rainwat = get_tracer_index(MODEL_ATMOS, 'rainwat')
-           snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
-           graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
-        endif
+        liq_wat = get_tracer_index(MODEL_ATMOS, 'liq_wat')
+        ice_wat = get_tracer_index(MODEL_ATMOS, 'ice_wat')
+        rainwat = get_tracer_index(MODEL_ATMOS, 'rainwat')
+        snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
+        graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
 !--- Add cloud condensate from GFS to total MASS
 ! 20160928: Adjust the mixing ratios consistently...
         do k=1,npz
@@ -801,6 +802,8 @@ contains
                                Atm(n)%q(i,j,k,rainwat) + &
                                Atm(n)%q(i,j,k,snowwat) + &
                                Atm(n)%q(i,j,k,graupel))
+              else   ! all other values of nwat
+                 qt = wt*(1. + sum(Atm(n)%q(i,j,k,2:Atm(n)%flagstruct%nwat)))
               endif
               m_fac = wt / qt
               do iq=1,ntracers
@@ -1315,13 +1318,11 @@ contains
 
       sphum   = get_tracer_index(MODEL_ATMOS, 'sphum')
       liq_wat = get_tracer_index(MODEL_ATMOS, 'liq_wat')
+      ice_wat = get_tracer_index(MODEL_ATMOS, 'ice_wat')
+      rainwat = get_tracer_index(MODEL_ATMOS, 'rainwat')
+      snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
+      graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
       o3mr    = get_tracer_index(MODEL_ATMOS, 'o3mr')
-      if ( Atm(1)%flagstruct%nwat .eq. 6 ) then
-         ice_wat = get_tracer_index(MODEL_ATMOS, 'ice_wat')
-         rainwat = get_tracer_index(MODEL_ATMOS, 'rainwat')
-         snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
-         graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
-      endif
 
       if (is_master()) then
          print *, 'sphum = ', sphum
@@ -1568,6 +1569,8 @@ contains
       deallocate ( zsec )
 
       allocate (zhc(is:ie,js:je,km+1))
+!$OMP parallel do default(none) shared(is,ie,js,je,km,s2c,id1,id2,jdc,zhc,zhec)  &
+!$OMP               private(i1,i2,j1)
       do k=1,km+1
         do j=js,je
          do i=is,ie
@@ -1587,6 +1590,8 @@ contains
       allocate ( qc(is:ie,js:je,km,6) )
 
       do n = 1, 5
+!$OMP parallel do default(none) shared(n,is,ie,js,je,km,s2c,id1,id2,jdc,qc,qec) &
+!$OMP               private(i1,i2,j1)
         do k=1,km
           do j=js,je
             do i=is,ie
@@ -1615,6 +1620,8 @@ contains
       wec(:,:,:) = wec(:,:,:)*scale_value + offset
       !call p_maxmin('wec', wec, 1, im, jbeg, jend, km, 1.)
 
+!$OMP parallel do default(none) shared(is,ie,js,je,km,id1,id2,jdc,s2c,wc,wec) &
+!$OMP               private(i1,i2,j1)
       do k=1,km
         do j=js,je
          do i=is,ie
@@ -1636,6 +1643,7 @@ contains
       deallocate ( psc )
 
       call remap_scalar_ec(Atm(1), km, npz, 6, ak0, bk0, psc_r8, qc, wc, zhc )
+      call mpp_update_domains(Atm(1)%phis, Atm(1)%domain)
       if(is_master()) write(*,*) 'done remap_scalar_ec'
        
       deallocate ( zhc )
@@ -1697,6 +1705,8 @@ contains
 
       if(is_master()) write(*,*) 'first time done reading vec'
 
+!$OMP parallel do default(none) shared(is,ie,js,je,km,s2c_c,id1_c,id2_c,jdc_c,uec,vec,Atm,vd) &
+!$OMP                     private(i1,i2,j1,p1,p2,p3,e2,ex,ey,utmp,vtmp)
       do k=1,km
         do j=js,je
           do i=is,ie+1
@@ -1755,6 +1765,8 @@ contains
       vec(:,:,:) = vec(:,:,:)*scale_value + offset
       if(is_master()) write(*,*) 'second time done reading vec'
 
+!$OMP parallel do default(none) shared(is,ie,js,je,km,id1_d,id2_d,jdc_d,s2c_d,uec,vec,Atm,ud) &
+!$OMP                     private(i1,i2,j1,p1,p2,p3,e1,ex,ey,utmp,vtmp)
       do k=1,km
         do j=js,je+1
           do i=is,ie
@@ -2334,17 +2346,12 @@ contains
 
   sphum   = get_tracer_index(MODEL_ATMOS, 'sphum')
   liq_wat = get_tracer_index(MODEL_ATMOS, 'liq_wat')
+  ice_wat = get_tracer_index(MODEL_ATMOS, 'ice_wat')
+  rainwat = get_tracer_index(MODEL_ATMOS, 'rainwat')
+  snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
+  graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
+  cld_amt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
   o3mr    = get_tracer_index(MODEL_ATMOS, 'o3mr')
-
-  cld_amt = 0
-
-  if ( Atm%flagstruct%nwat .eq. 6 ) then
-    ice_wat = get_tracer_index(MODEL_ATMOS, 'ice_wat')
-    rainwat = get_tracer_index(MODEL_ATMOS, 'rainwat')
-    snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
-    graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
-    cld_amt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
-  endif
 
   k2 = max(10, km/2)
 
@@ -2359,6 +2366,14 @@ contains
        call mpp_error(FATAL,'SPHUM must be 1st tracer')
   endif
 
+#ifdef USE_GFS_ZS
+   Atm%phis(is:ie,js:je) = zh(is:ie,js:je,km+1)*grav
+#endif
+
+!$OMP parallel do default(none) &
+!$OMP             shared(sphum,liq_wat,rainwat,ice_wat,snowwat,graupel,&
+!$OMP                    cld_amt,ncnst,npz,is,ie,js,je,km,k2,ak0,bk0,psc,zh,omga,qa,Atm,z500) &
+!$OMP             private(l,m,pst,pn,gz,pe0,pn0,pe1,pn1,dp2,qp,qn1,gz_fv)
   do 5000 j=js,je
      do k=1,km+1
         do i=is,ie
@@ -2457,9 +2472,9 @@ contains
       enddo
 !-------------------------------------------------
       do k=km+2, km+k2
-         m = 2*(km+1) - k
-         gz(k) = 2.*gz(km+1) - gz(m)
-         pn(k) = 2.*pn(km+1) - pn(m)
+         l = 2*(km+1) - k
+         gz(k) = 2.*gz(km+1) - gz(l)
+         pn(k) = 2.*pn(km+1) - pn(l)
       enddo
 !-------------------------------------------------
 
@@ -2580,7 +2595,8 @@ contains
      enddo
   enddo
   call pmaxmn('ZS_diff (m)', wk, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
-  call pmaxmn('Z500 (m)',  z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
+! call pmaxmn('Z500 (m)',  z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
+  call prt_gb_nh_sh('GFS_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64, Atm%gridstruct%agrid_64(is:ie,js:je,2))
 
   do j=js,je
      do i=is,ie
@@ -2649,6 +2665,8 @@ contains
     endif
   endif
  
+!$OMP parallel do default(none) shared(sphum,ncnst,npz,is,ie,js,je,km,k2,ak0,bk0,psc,zh,qa,wc,Atm,z500) &
+!$OMP   private(l,m,pst,pn,gz,pe0,pn0,pe1,pn1,dp2,qp,qn1,gz_fv)
  do 5000 j=js,je
      do k=1,km+1
         do i=is,ie
@@ -2746,9 +2764,9 @@ contains
       enddo
 !-------------------------------------------------
       do k=km+2, km+k2
-         m = 2*(km+1) - k
-         gz(k) = 2.*gz(km+1) - gz(m)
-         pn(k) = 2.*pn(km+1) - pn(m)
+         l = 2*(km+1) - k
+         gz(k) = 2.*gz(km+1) - gz(l)
+         pn(k) = 2.*pn(km+1) - pn(l)
       enddo
 !-------------------------------------------------
       gz_fv(npz+1) = Atm%phis(i,j)
@@ -2827,7 +2845,8 @@ contains
      enddo
   enddo
   call pmaxmn('ZS_diff (m)', wk, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
-  call pmaxmn('Z500 (m)', z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
+! call pmaxmn('Z500 (m)', z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
+  call prt_gb_nh_sh('IFS_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64, Atm%gridstruct%agrid_64(is:ie,js:je,2))
 
   do j=js,je
      do i=is,ie
@@ -3006,6 +3025,8 @@ contains
   call mpp_update_domains( psd,    Atm%domain, complete=.false. )
   call mpp_update_domains( Atm%ps, Atm%domain, complete=.true. )
 
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,km,ak0,bk0,Atm,psc,psd,ud,vd) &
+!$OMP                          private(pe1,pe0,qn1)
   do 5000 j=js,je+1
 !------
 ! map u
@@ -3177,9 +3198,6 @@ contains
   agrid => Atm%gridstruct%agrid
 
   sphum   = get_tracer_index(MODEL_ATMOS, 'sphum')
-! liq_wat = get_tracer_index(MODEL_ATMOS, 'liq_wat')
-! ice_wat = get_tracer_index(MODEL_ATMOS, 'ice_wat')
-! cld_amt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
 
    if ( sphum/=1 ) then
         call mpp_error(FATAL,'SPHUM must be 1st tracer')
@@ -3806,6 +3824,8 @@ subroutine pmaxmn(qname, q, is, ie, js, je, km, fac, area, domain)
 !      real:: qc
        integer:: i,j,k
       
+!$OMP parallel do default(none) shared(im,jm,levp,ak0,bk0,zs,ps,t,q,zh) &
+!$OMP                          private(pe0,pn0)
        do j = 1, jm
          do i=1, im
            pe0(i,1) = ak0(1)
@@ -3860,6 +3880,49 @@ subroutine pmaxmn(qname, q, is, ie, js, je, km, fac, area, domain)
     enddo
 
   end subroutine get_staggered_grid
+
+  subroutine prt_gb_nh_sh(qname, is,ie, js,je, a2, area, lat)
+  character(len=*), intent(in)::  qname
+  integer, intent(in):: is, ie, js, je
+  real, intent(in), dimension(is:ie, js:je):: a2
+  real(kind=R_GRID), intent(in), dimension(is:ie, js:je):: area, lat
+! Local:
+  real(R_GRID), parameter:: rad2deg = 180./pi
+  real(R_GRID):: slat
+  real:: t_eq, t_nh, t_sh, t_gb
+  real:: area_eq, area_nh, area_sh, area_gb
+  integer:: i,j
+
+     t_eq = 0.   ;    t_nh = 0.;    t_sh = 0.;    t_gb = 0.
+     area_eq = 0.; area_nh = 0.; area_sh = 0.; area_gb = 0.
+     do j=js,je
+        do i=is,ie
+           slat = lat(i,j)*rad2deg
+           area_gb = area_gb + area(i,j)
+           t_gb = t_gb + a2(i,j)*area(i,j)
+           if( (slat>-20. .and. slat<20.) ) then
+                area_eq = area_eq + area(i,j)
+                t_eq = t_eq + a2(i,j)*area(i,j)
+           elseif( slat>=20. .and. slat<80. ) then
+                area_nh = area_nh + area(i,j)
+                t_nh = t_nh + a2(i,j)*area(i,j)
+           elseif( slat<=-20. .and. slat>-80. ) then
+                area_sh = area_sh + area(i,j)
+                t_sh = t_sh + a2(i,j)*area(i,j)
+           endif
+        enddo
+     enddo
+     call mp_reduce_sum(area_gb)
+     call mp_reduce_sum(   t_gb)
+     call mp_reduce_sum(area_nh)
+     call mp_reduce_sum(   t_nh)
+     call mp_reduce_sum(area_sh)
+     call mp_reduce_sum(   t_sh)
+     call mp_reduce_sum(area_eq)
+     call mp_reduce_sum(   t_eq)
+     if (is_master()) write(*,*) qname, t_gb/area_gb, t_nh/area_nh, t_sh/area_sh, t_eq/area_eq
+
+  end subroutine prt_gb_nh_sh
 
  end module external_ic_mod
 

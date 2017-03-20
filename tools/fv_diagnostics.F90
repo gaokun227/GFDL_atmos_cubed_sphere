@@ -749,6 +749,8 @@ contains
                            '700-mb relative humidity', '%', missing_value=missing_value )
        idiag%id_rh850 = register_diag_field ( trim(field), 'rh850', axes(1:2), Time,       &
                            '850-mb relative humidity', '%', missing_value=missing_value )
+       idiag%id_rh925 = register_diag_field ( trim(field), 'rh925', axes(1:2), Time,       &
+                           '925-mb relative humidity', '%', missing_value=missing_value )
        idiag%id_rh1000 = register_diag_field ( trim(field), 'rh1000', axes(1:2), Time,       &
                            '1000-mb relative humidity', '%', missing_value=missing_value )
 !--------------------------
@@ -770,6 +772,8 @@ contains
                            '700-mb relative humidity (CMIP)', '%', missing_value=missing_value )
        idiag%id_rh850_cmip = register_diag_field ( trim(field), 'rh850_cmip', axes(1:2), Time,       &
                            '850-mb relative humidity (CMIP)', '%', missing_value=missing_value )
+       idiag%id_rh925_cmip = register_diag_field ( trim(field), 'rh925_cmip', axes(1:2), Time,       &
+                           '925-mb relative humidity (CMIP)', '%', missing_value=missing_value )
        idiag%id_rh1000_cmip = register_diag_field ( trim(field), 'rh1000_cmip', axes(1:2), Time,       &
                            '1000-mb relative humidity (CMIP)', '%', missing_value=missing_value )
 
@@ -1305,7 +1309,8 @@ contains
 
        ! rel hum from physics at selected press levels (for IPCC)
        if (idiag%id_rh50>0  .or. idiag%id_rh100>0 .or. idiag%id_rh200>0 .or. idiag%id_rh250>0 .or. &
-           idiag%id_rh500>0 .or. idiag%id_rh700>0 .or. idiag%id_rh850>0 .or. idiag%id_rh1000>0) then
+           idiag%id_rh300>0 .or. idiag%id_rh500>0 .or. idiag%id_rh700>0 .or. idiag%id_rh850>0 .or. &
+           idiag%id_rh925>0 .or. idiag%id_rh1000>0) then
            ! compute mean pressure
            do k=1,npz
                do j=jsc,jec
@@ -1332,6 +1337,10 @@ contains
                call interpolate_vertical(isc, iec, jsc, jec, npz, 250.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
                used=send_data(idiag%id_rh250, a2, Time)
            endif
+           if (idiag%id_rh300>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 300.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_rh300, a2, Time)
+           endif
            if (idiag%id_rh500>0) then
                call interpolate_vertical(isc, iec, jsc, jec, npz, 500.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
                used=send_data(idiag%id_rh500, a2, Time)
@@ -1344,6 +1353,10 @@ contains
                call interpolate_vertical(isc, iec, jsc, jec, npz, 850.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
                used=send_data(idiag%id_rh850, a2, Time)
            endif
+           if (idiag%id_rh925>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 925.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_rh925, a2, Time)
+           endif
            if (idiag%id_rh1000>0) then
                call interpolate_vertical(isc, iec, jsc, jec, npz, 1000.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
                used=send_data(idiag%id_rh1000, a2, Time)
@@ -1351,9 +1364,10 @@ contains
        endif
 
        ! rel hum (CMIP definition) at selected press levels  (for IPCC)
-       if (idiag%id_rh10_cmip>0 .or. idiag%id_rh50_cmip>0  .or. idiag%id_rh100_cmip>0 .or. &
-           idiag%id_rh250_cmip>0 .or. idiag%id_rh500_cmip>0 .or. idiag%id_rh700_cmip>0 .or. &
-           idiag%id_rh850_cmip>0 .or. idiag%id_rh1000_cmip>0) then
+       if (idiag%id_rh10_cmip>0  .or. idiag%id_rh50_cmip>0  .or. idiag%id_rh100_cmip>0 .or. &
+           idiag%id_rh250_cmip>0 .or. idiag%id_rh300_cmip>0 .or. idiag%id_rh500_cmip>0 .or. &
+           idiag%id_rh700_cmip>0 .or. idiag%id_rh850_cmip>0 .or. idiag%id_rh925_cmip>0 .or. &
+           idiag%id_rh1000_cmip>0) then
            ! compute mean pressure
            do k=1,npz
                do j=jsc,jec
@@ -1380,6 +1394,10 @@ contains
                call interpolate_vertical(isc, iec, jsc, jec, npz, 250.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
                used=send_data(idiag%id_rh250_cmip, a2, Time)
            endif
+           if (idiag%id_rh300_cmip>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 300.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_rh300_cmip, a2, Time)
+           endif
            if (idiag%id_rh500_cmip>0) then
                call interpolate_vertical(isc, iec, jsc, jec, npz, 500.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
                used=send_data(idiag%id_rh500_cmip, a2, Time)
@@ -1391,6 +1409,10 @@ contains
            if (idiag%id_rh850_cmip>0) then
                call interpolate_vertical(isc, iec, jsc, jec, npz, 850.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
                used=send_data(idiag%id_rh850_cmip, a2, Time)
+           endif
+           if (idiag%id_rh925_cmip>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 925.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_rh925_cmip, a2, Time)
            endif
            if (idiag%id_rh1000_cmip>0) then
                call interpolate_vertical(isc, iec, jsc, jec, npz, 1000.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
