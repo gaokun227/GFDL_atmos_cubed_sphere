@@ -809,6 +809,8 @@ contains
                                Atm(n)%q(i,j,k,rainwat) + &
                                Atm(n)%q(i,j,k,snowwat) + &
                                Atm(n)%q(i,j,k,graupel))
+              else   ! all other values of nwat
+                 qt = wt*(1. + sum(Atm(n)%q(i,j,k,2:Atm(n)%flagstruct%nwat)))
               endif
               m_fac = wt / qt
               do iq=1,ntracers
