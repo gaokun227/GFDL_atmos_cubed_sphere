@@ -24,7 +24,6 @@ module lin_cld_microphys_mod
  public  qsmith_init, qsmith, es2_table1d, es3_table1d, esw_table1d, wqsat_moist, wqsat2_moist
  public  setup_con, wet_bulb
  public  cloud_diagnosis
- public  cracw
  real             :: missing_value = -1.e10
  logical          :: module_is_initialized = .false.
  logical          :: qsmith_tables_initialized = .false.
@@ -182,6 +181,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  real :: qi_gen  = 1.82E-6
  real :: qi_lim  = 1.
  real :: ql_mlt  = 2.0e-3    ! max value of cloud water allowed from melted cloud ice
+ real :: qs_mlt  = 1.0e-6    ! 
  real :: ql_gen  = 1.0e-3    ! max ql generation during remapping step if fast_sat_adj = .T.
  real :: sat_adj0 = 0.90     ! adjustment factor (0: no, 1: full) during fast_sat_adj
 
@@ -240,7 +240,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  namelist /lin_cld_microphysics_nml/   &
         mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, &
-        vi_max, vs_max, vg_max, vr_max,        &
+        vi_max, vs_max, vg_max, vr_max, qs_mlt,       &
         qs0_crt, qi_gen, ql0_max, qi0_max, qi0_crt, qr0_crt, fast_sat_adj, &
         rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, const_vr,    &
         use_ccn, rthresh, ccn_l, ccn_o, qc_crt, tau_g2v, tau_v2g, sat_adj0,    &
@@ -253,7 +253,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
 public   &
         mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, &
-        vi_max, vs_max, vg_max, vr_max,        &
+        vi_max, vs_max, vg_max, vr_max, qs_mlt,       &
         qs0_crt, qi_gen, ql0_max, qi0_max, qi0_crt, qr0_crt, fast_sat_adj, &
         rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, const_vr,    &
         use_ccn, rthresh, ccn_l, ccn_o, qc_crt, tau_g2v, tau_v2g, sat_adj0,    &
@@ -1139,7 +1139,7 @@ public   &
  real:: pracs, psacw, pgacw, pgmlt,    &
         psmlt, psacr, pgacr, pgfr,     &
         pgaut, pgaci, praci, psaut, psaci, pgsub
- real:: tc, tsq, dqs0, qden, qim, qsm, pssub
+ real:: tc, tsq, dqs0, qden, qim, qsm
  real:: dt5, factor, sink, qi_crt
  real:: tmp1, qsw, qsi, dqsdt, dq
  real:: dtmp, qc, q_plus, q_minus, cvm
@@ -1252,9 +1252,12 @@ if ( tc .ge. 0. ) then
 ! * Snow melt (due to rain accretion): snow --> rain
         psmlt = max(0., smlt(tc, dqs0, qs*den(k), psacw, psacr, csmlt, den(k), denfac(k)))
          sink = min(qs, dts*(psmlt+pracs), tc/icpk(k))
-
         qs = qs - sink
-        qr = qr + sink
+!       qr = qr + sink
+! SJL 20170321:
+        tmp1 = min(sink, dim(qs_mlt, ql))   ! max ql due to snow melt
+        ql = ql + tmp1
+        qr = qr + sink - tmp1
 ! cooling due to snow melting
         tz = tz - sink*lhi(k)/(c_air+qv*c_vap+(ql+qr)*c_liq+(qi+qs+qg)*c_ice)
         tc = tz-tice

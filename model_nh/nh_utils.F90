@@ -1200,12 +1200,12 @@ CONTAINS
 
     do k=1,km
        do i=is, ie
-          w1(i,k) = w2(i,k)
 #ifdef MOIST_CAPPA
           pe(i,k) = exp(gm2(i,k)*log(-dm2(i,k)/dz2(i,k)*rgas*pt2(i,k))) - pm2(i,k)
 #else
           pe(i,k) = exp(gama*log(-dm2(i,k)/dz2(i,k)*rgas*pt2(i,k))) - pm2(i,k)
 #endif
+          w1(i,k) = w2(i,k)
        enddo
     enddo
 
