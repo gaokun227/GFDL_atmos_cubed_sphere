@@ -297,6 +297,7 @@ module fv_arrays_mod
    integer :: nord_zs_filter=4      !  use del-2 (2) OR del-4 (4)
    logical :: full_zs_filter=.false.! perform full filtering of topography (in external_ic only )
 
+   logical :: RF_fast =.false.      !  Fast inline Rayleigh Friction
    logical :: consv_am  = .false.   ! Apply Angular Momentum Correction (to zonal wind component)
    logical :: do_sat_adj= .false.   ! 
    logical :: do_f3d    = .false.   ! 

@@ -342,7 +342,7 @@ contains
                            ptop, ua, va, u, v, delp, teq, ps2, m_fac)
       endif
 
-      if( flagstruct%tau > 0. ) then
+      if( .not. flagstruct%RF_fast .and. flagstruct%tau > 0. ) then
         if ( gridstruct%grid_type<4 ) then
              call Rayleigh_Super(abs(bdt), npx, npy, npz, ks, pfull, phis, flagstruct%tau, u, v, w, pt,  &
                   ua, va, delz, gridstruct%agrid, cp_air, rdgas, ptop, hydrostatic, (.not. neststruct%nested), flagstruct%rf_cutoff, gridstruct, domain, bd)
