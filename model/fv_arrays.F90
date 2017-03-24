@@ -274,6 +274,7 @@ module fv_arrays_mod
    real    :: scale_z = 0.   ! diff_z = scale_z**2 * 0.25
    real    :: w_max = 75.    ! max w (m/s) threshold for hydostatiic adjustment 
    real    :: z_min = 0.05   ! min ratio of dz_nonhydrostatic/dz_hydrostatic
+   real    :: lim_fac = 2.0  ! linear scheme limiting factor, 1: hord = 5, 3: hord = 6
 
    integer :: nord=1         ! 0: del-2, 1: del-4, 2: del-6, 3: del-8 divergence damping
                              ! Alternative setting for high-res: nord=1; d4_bg = 0.075

@@ -25,14 +25,12 @@ module tp_core_mod
  use fv_mp_mod,         only: ng 
  use fv_grid_utils_mod, only: big_number
  use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type
-! use fv_control_mod,    only: lim_fac
 
  implicit none
 
  private
  public fv_tp_2d, pert_ppm, copy_corners
 
- real, parameter:: lim_fac = 2.0   ! linear scheme limiting factor
  real, parameter:: ppm_fac = 1.5   ! nonlinear scheme limiter: between 1 and 2
  real, parameter:: r3 = 1./3.
  real, parameter:: near_zero = 1.E-25
@@ -82,7 +80,7 @@ module tp_core_mod
 contains
 
  subroutine fv_tp_2d(q, crx, cry, npx, npy, hord, fx, fy, xfx, yfx,  &
-                     gridstruct, bd, ra_x, ra_y, mfx, mfy, mass, nord, damp_c)
+                     gridstruct, bd, ra_x, ra_y, lim_fac, mfx, mfy, mass, nord, damp_c)
    type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(in):: npx, npy
    integer, intent(in)::hord
@@ -98,6 +96,8 @@ contains
    real, intent(out)::fy(bd%is:bd%ie,   bd%js:bd%je+1 )    ! Flux in y ( N )
 
    type(fv_grid_type), intent(IN), target :: gridstruct
+
+   real, intent(in):: lim_fac
 ! optional Arguments:
    real, OPTIONAL, intent(in):: mfx(bd%is:bd%ie+1,bd%js:bd%je  )  ! Mass Flux X-Dir
    real, OPTIONAL, intent(in):: mfy(bd%is:bd%ie  ,bd%js:bd%je+1)  ! Mass Flux Y-Dir
@@ -136,7 +136,7 @@ contains
    if (.not. gridstruct%nested) call copy_corners(q, npx, npy, 2, gridstruct%nested, bd, &
                                 gridstruct%sw_corner, gridstruct%se_corner, gridstruct%nw_corner, gridstruct%ne_corner)
 
-   call yppm(fy2, q, cry, ord_in, isd,ied,isd,ied, js,je,jsd,jed, npx,npy, gridstruct%dya, gridstruct%nested, gridstruct%grid_type)
+   call yppm(fy2, q, cry, ord_in, isd,ied,isd,ied, js,je,jsd,jed, npx,npy, gridstruct%dya, gridstruct%nested, gridstruct%grid_type, lim_fac)
 
    do j=js,je+1
       do i=isd,ied
@@ -149,12 +149,12 @@ contains
       enddo
    enddo
 
-   call xppm(fx, q_i, crx(is,js), ord_ou, is,ie,isd,ied, js,je,jsd,jed, npx,npy, gridstruct%dxa, gridstruct%nested, gridstruct%grid_type)
+   call xppm(fx, q_i, crx(is,js), ord_ou, is,ie,isd,ied, js,je,jsd,jed, npx,npy, gridstruct%dxa, gridstruct%nested, gridstruct%grid_type, lim_fac)
 
   if (.not. gridstruct%nested) call copy_corners(q, npx, npy, 1, gridstruct%nested, bd, &
                                gridstruct%sw_corner, gridstruct%se_corner, gridstruct%nw_corner, gridstruct%ne_corner)
 
-  call xppm(fx2, q, crx, ord_in, is,ie,isd,ied, jsd,jed,jsd,jed, npx,npy, gridstruct%dxa, gridstruct%nested, gridstruct%grid_type)
+  call xppm(fx2, q, crx, ord_in, is,ie,isd,ied, jsd,jed,jsd,jed, npx,npy, gridstruct%dxa, gridstruct%nested, gridstruct%grid_type, lim_fac)
 
   do j=jsd,jed
      do i=is,ie+1
@@ -165,7 +165,7 @@ contains
      enddo
   enddo
 
-  call yppm(fy, q_j, cry, ord_ou, is,ie,isd,ied, js,je,jsd,jed, npx, npy, gridstruct%dya, gridstruct%nested, gridstruct%grid_type)
+  call yppm(fy, q_j, cry, ord_ou, is,ie,isd,ied, js,je,jsd,jed, npx, npy, gridstruct%dya, gridstruct%nested, gridstruct%grid_type, lim_fac)
 
 !----------------
 ! Flux averaging:
@@ -294,7 +294,7 @@ contains
       
  end subroutine copy_corners
 
- subroutine xppm(flux, q, c, iord, is,ie,isd,ied, jfirst,jlast,jsd,jed, npx, npy, dxa, nested, grid_type)
+ subroutine xppm(flux, q, c, iord, is,ie,isd,ied, jfirst,jlast,jsd,jed, npx, npy, dxa, nested, grid_type, lim_fac)
  integer, INTENT(IN) :: is, ie, isd, ied, jsd, jed
  integer, INTENT(IN) :: jfirst, jlast  ! compute domain
  integer, INTENT(IN) :: iord
@@ -304,6 +304,7 @@ contains
  real   , intent(IN) :: dxa(isd:ied,jsd:jed)
  logical, intent(IN) :: nested
  integer, intent(IN) :: grid_type
+ real   , intent(IN) :: lim_fac
 ! !OUTPUT PARAMETERS:
  real  , INTENT(OUT) :: flux(is:ie+1,jfirst:jlast) !  Flux
 ! Local
@@ -600,7 +601,7 @@ contains
  end subroutine xppm
 
 
- subroutine yppm(flux, q, c, jord, ifirst,ilast, isd,ied, js,je,jsd,jed, npx, npy, dya, nested, grid_type)
+ subroutine yppm(flux, q, c, jord, ifirst,ilast, isd,ied, js,je,jsd,jed, npx, npy, dya, nested, grid_type, lim_fac)
  integer, INTENT(IN) :: ifirst,ilast    ! Compute domain
  integer, INTENT(IN) :: isd,ied, js,je,jsd,jed
  integer, INTENT(IN) :: jord
@@ -611,6 +612,7 @@ contains
  real   , intent(IN) :: dya(isd:ied,jsd:jed)
  logical, intent(IN) :: nested
  integer, intent(IN) :: grid_type
+ real   , intent(IN) :: lim_fac
 ! Local:
  real:: dm(ifirst:ilast,js-2:je+2)
  real:: al(ifirst:ilast,js-1:je+2)
