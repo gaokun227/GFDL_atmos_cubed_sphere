@@ -62,7 +62,7 @@ use fv_eta_mod,         only: get_eta_level
 use fv_fill_mod,        only: fill_gfs
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
-use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time, prt_maxmin
+use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time, prt_maxmin, prt_height
 use fv_nggps_diags_mod, only: fv_nggps_diag_init, fv_nggps_diag
 use fv_restart_mod,     only: fv_restart, fv_write_restart
 use fv_timing_mod,      only: timing_on, timing_off
@@ -286,6 +286,9 @@ contains
       call adiabatic_init(zvir)
       if ( .not. Atm(mytile)%flagstruct%hydrostatic ) then
            call prt_maxmin('After adi: W', Atm(mytile)%w, isc, iec, jsc, jec, Atm(mytile)%ng, npz, 1.)
+! Not nested?
+           call prt_height('na_ini Z500', isc,iec, jsc,jec, 3, npz, 500.E2, Atm(mytile)%phis, Atm(mytile)%delz,    &
+                Atm(mytile)%peln, Atm(mytile)%gridstruct%area_64(isc:iec,jsc:jec), Atm(mytile)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
       endif
    else
       call mpp_error(NOTE,'No adiabatic initialization correction in use')
@@ -927,6 +930,7 @@ contains
    real:: xt, p00, q00
    integer:: isc, iec, jsc, jec, npz
    integer:: m, n, i,j,k, ngc
+   logical:: nudge_dz = .true.
 
    character(len=80) :: errstr
 
@@ -956,14 +960,16 @@ contains
      allocate ( v0(isc:iec+1,jsc:jec,   npz) )
      allocate (dp0(isc:iec,jsc:jec, npz) )
 
-     if ( Atm(mytile)%flagstruct%hydrostatic ) then
-          allocate ( t0(isc:iec,jsc:jec, npz) )
-     else
+     if ( Atm(mytile)%flagstruct%hydrostatic ) nudge_dz = .false.
+
+     if ( nudge_dz ) then
           allocate (dz0(isc:iec,jsc:jec, npz) )
+     else
+          allocate ( t0(isc:iec,jsc:jec, npz) )
      endif
 
 !$omp parallel do default (none) & 
-!$omp              shared (npz, jsc, jec, isc, iec, n, sphum, u0, v0, t0, dz0, dp0, Atm, zvir, mytile) &
+!$omp              shared (nudge_dz, npz, jsc, jec, isc, iec, n, sphum, u0, v0, t0, dz0, dp0, Atm, zvir, mytile) &
 !$omp             private (k, j, i) 
        do k=1,npz
           do j=jsc,jec+1
@@ -976,18 +982,18 @@ contains
                 v0(i,j,k) = Atm(mytile)%v(i,j,k)
              enddo
           enddo
-          if ( Atm(mytile)%flagstruct%hydrostatic ) then
+          if ( nudge_dz ) then
              do j=jsc,jec
                 do i=isc,iec
-                   t0(i,j,k) = Atm(mytile)%pt(i,j,k)*(1.+zvir*Atm(mytile)%q(i,j,k,sphum))  ! virt T
                    dp0(i,j,k) = Atm(mytile)%delp(i,j,k)
+                   dz0(i,j,k) = Atm(mytile)%delz(i,j,k)
                 enddo
              enddo
           else
              do j=jsc,jec
                 do i=isc,iec
+                   t0(i,j,k) = Atm(mytile)%pt(i,j,k)*(1.+zvir*Atm(mytile)%q(i,j,k,sphum))  ! virt T
                    dp0(i,j,k) = Atm(mytile)%delp(i,j,k)
-                   dz0(i,j,k) = Atm(mytile)%delz(i,j,k)
                 enddo
              enddo
           endif
@@ -1024,7 +1030,7 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (pref, q00, p00,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
+!$omp             shared (nudge_dz,pref, q00, p00,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
 !$omp            private (i, j, k)
        do k=1,npz
           do j=jsc,jec+1
@@ -1062,18 +1068,18 @@ contains
              enddo
           endif
       endif
-      if ( Atm(mytile)%flagstruct%hydrostatic ) then
+      if ( nudge_dz ) then
           do j=jsc,jec
              do i=isc,iec
-                Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
                 Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
+                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
              enddo
           enddo
        else
           do j=jsc,jec
              do i=isc,iec
+                Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
                 Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
-                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
              enddo
           enddo
        endif
@@ -1110,7 +1116,7 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
+!$omp             shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
 !$omp            private (i, j, k)
        do k=1,npz
           do j=jsc,jec+1
@@ -1123,18 +1129,18 @@ contains
                 Atm(mytile)%v(i,j,k) = xt*(Atm(mytile)%v(i,j,k) + wt*v0(i,j,k))
              enddo
           enddo
-          if ( Atm(mytile)%flagstruct%hydrostatic ) then
+          if ( nudge_dz ) then
              do j=jsc,jec
              do i=isc,iec
-                Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
                 Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
+                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
              enddo
              enddo
           else
              do j=jsc,jec
              do i=isc,iec
+                Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
                 Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
-                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
              enddo
              enddo
           endif

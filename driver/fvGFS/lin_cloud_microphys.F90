@@ -99,6 +99,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  real :: lcp, icp, tcp
  real :: lv00, d0_vap, c_air, c_vap
 
+ integer :: icloud_f = 0       ! 
  logical :: de_ice = .false.     !
  logical :: sedi_transport = .true.     !
  logical :: do_sedi_w = .false.
@@ -248,7 +249,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
         c_paut, c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn,  &
         c_cracw, alin, clin, tice, rad_snow, rad_graupel, rad_rain,   &
         cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
-        do_sedi_w, de_ice, mp_print
+        do_sedi_w, de_ice, icloud_f, mp_print
 
 public   &
         mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
@@ -261,7 +262,7 @@ public   &
         c_paut, c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn,  &
         c_cracw, alin, clin, tice, rad_snow, rad_graupel, rad_rain,   &
         cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
-        do_sedi_w, de_ice, mp_print
+        do_sedi_w, de_ice, icloud_f, mp_print
 
 !---- version number -----
  character(len=128) :: version = '$Id: lin_cloud_microphys.F90,v 21.0.2.1 2014/12/18 21:14:54 Lucas.Harris Exp $'
@@ -1258,6 +1259,7 @@ if ( tc .ge. 0. ) then
         tmp1 = min(sink, dim(qs_mlt, ql))   ! max ql due to snow melt
         ql = ql + tmp1
         qr = qr + sink - tmp1
+!       qr = qr + sink
 ! cooling due to snow melting
         tz = tz - sink*lhi(k)/(c_air+qv*c_vap+(ql+qr)*c_liq+(qi+qs+qg)*c_ice)
         tc = tz-tice

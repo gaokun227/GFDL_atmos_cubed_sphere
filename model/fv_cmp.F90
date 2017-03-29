@@ -3,7 +3,7 @@ module fv_cmp_mod
   use constants_mod,         only: pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
   use fv_mp_mod,             only: is_master
   use fv_arrays_mod,         only: R_GRID
-  use lin_cld_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql0_max, qi_lim
+  use lin_cld_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql0_max, qi_lim, icloud_f
   use lin_cld_microphys_mod, only: tau_r, tau_s, tau_i2s, tau_v2l, tau_l2v, tau_mlt
   use lin_cld_microphys_mod, only: rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
   use lin_cld_microphys_mod, only: sat_adj0, t_sub, cld_min, qs_mlt
@@ -348,6 +348,7 @@ contains
            tmp = min(sink, dim(qs_mlt, ql(i,j)))   ! max ql due to snow melt
            ql(i,j) = ql(i,j) + tmp
            qr(i,j) = qr(i,j) + sink - tmp
+!          qr(i,j) = qr(i,j) + sink
           q_liq(i) = ql(i,j) + qr(i,j)
           q_sol(i) = qi(i,j) + qs(i,j) + qg(i,j)
            cvm(i) = mc_air(i) + qv(i,j)*c_vap + q_liq(i)*c_liq + q_sol(i)*c_ice
@@ -465,10 +466,10 @@ contains
 if ( do_qa .and. last_step ) then
 
     do i=is, ie
-       qa(i,j) = 0.
 ! Higher than 10 m is considered "land" and will have higher subgrid variability
        dw = dw_ocean + (dw_land-dw_ocean)*min(1., abs(hs(i,j))/(10.*grav))
-       hvar(i) = min(0.2, max(0.01, dw*sqrt(sqrt(area(i,j)/1.E10))) )
+! "Scale-aware" subgrid variability:  100-km as the base
+       hvar(i) = min(0.2, max(0.01, dw*sqrt(sqrt(area(i,j))/100.E3)))
     enddo
 
     if ( rad_snow ) then
@@ -518,24 +519,44 @@ if ( do_qa .and. last_step ) then
 ! Assuming subgrid linear distribution in horizontal; this is effectively a smoother for the
 ! binary cloud scheme;  qa=0.5 if qstar==qpz
  
-      rh = qpz(i) / qstar
-      if ( rh > 0.75 .and. qpz(i) > 1.E-7 ) then
-                dq = hvar(i)*qpz(i)
+    rh = qpz(i) / qstar
+
+! icloud_f = 0: bug-fxied
+! icloud_f = 1: Old fvGFS GFDL)MP implementation
+! icloud_f = 2: Binary cloud scheme (0/1)
+
+    if ( rh > 0.75 .and. qpz(i) > 1.E-6 ) then
+           dq = hvar(i)*qpz(i)
            q_plus  = qpz(i) + dq
            q_minus = qpz(i) - dq
+        if ( icloud_f==2 ) then
+           if ( qpz(i) > qstar ) then
+                qa(i,j) = 1.
+           elseif ( qstar<q_plus .and. condensates>1.e-6 ) then
+                qa(i,j) = ( (q_plus-qstar)/dq )**2
+                qa(i,j) = min(1., qa(i,j))
+           else
+                qa(i,j) = 0. 
+           endif
+        else
            if ( qstar < q_minus ) then
                 qa(i,j) = 1.
            else
              if ( qstar<q_plus ) then
-                qa(i,j) = (q_plus-qstar)/(dq+dq)        ! partial cloud cover:
-                                                        ! qa = 0 if qstar = q_plus 
-                                                        ! qa = 1 if qstar = q_minus
-!               qa(i,j) = sqrt(qa(i,j))
+                if (icloud_f==0 ) then
+                    qa(i,j) = (q_plus-qstar)/(dq+dq)
+                else
+                    qa(i,j) = (q_plus-qstar)/(2.*dq*(1.-condensates))
+                endif
              endif
 ! Impose minimum cloudiness if substantial condensates exist
              if ( condensates > 1.E-6 ) qa(i,j) = max(cld_min, qa(i,j))
+             qa(i,j) = min(1., qa(i,j))
            endif
-      endif
+        endif
+    else
+        qa(i,j) = 0.
+    endif
    enddo
 endif
 
