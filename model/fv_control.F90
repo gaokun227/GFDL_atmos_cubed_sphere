@@ -153,6 +153,7 @@ module fv_control_mod
    integer , pointer :: fv_sg_adj 
                                       
    integer , pointer :: na_init 
+   logical , pointer :: nudge_dz
    real    , pointer :: p_ref 
    real    , pointer :: dry_mass 
    integer , pointer :: nt_prog 
@@ -553,7 +554,7 @@ module fv_control_mod
                             consv_te, fill, filter_phys, fill_dp, fill_wz, consv_am, RF_fast, &
                             range_warn, dwind_2d, inline_q, z_tracer, reproduce_sum, adiabatic, do_vort_damp, no_dycore,   &
                             tau, tau_h2o, rf_cutoff, nf_omega, hydrostatic, fv_sg_adj, breed_vortex_inline,  &
-                            na_init, hybrid_z, Make_NH, n_zs_filter, nord_zs_filter, full_zs_filter, reset_eta,         &
+                            na_init, nudge_dz, hybrid_z, Make_NH, n_zs_filter, nord_zs_filter, full_zs_filter, reset_eta,         &
                             pnats, dnats, a2b_ord, remap_t, p_ref, d2_bg_k1, d2_bg_k2,  &
                             c2l_ord, dx_const, dy_const, umax, deglat,      &
                             deglon_start, deglon_stop, deglat_start, deglat_stop, &
@@ -1151,6 +1152,7 @@ module fv_control_mod
      nf_omega                      => Atm%flagstruct%nf_omega
      fv_sg_adj                     => Atm%flagstruct%fv_sg_adj
      na_init                       => Atm%flagstruct%na_init
+     nudge_dz                      => Atm%flagstruct%nudge_dz
      p_ref                         => Atm%flagstruct%p_ref
      dry_mass                      => Atm%flagstruct%dry_mass
      nt_prog                       => Atm%flagstruct%nt_prog

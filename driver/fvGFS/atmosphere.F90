@@ -283,7 +283,7 @@ contains
       if ( .not. Atm(mytile)%flagstruct%hydrostatic ) then
            call prt_maxmin('Before adi: W', Atm(mytile)%w, isc, iec, jsc, jec, Atm(mytile)%ng, npz, 1.)
       endif
-      call adiabatic_init(zvir)
+      call adiabatic_init(zvir,Atm(mytile)%flagstruct%nudge_dz)
       if ( .not. Atm(mytile)%flagstruct%hydrostatic ) then
            call prt_maxmin('After adi: W', Atm(mytile)%w, isc, iec, jsc, jec, Atm(mytile)%ng, npz, 1.)
 ! Not nested?
@@ -913,9 +913,10 @@ contains
  end subroutine atmosphere_state_update
 
 
- subroutine adiabatic_init(zvir)
+ subroutine adiabatic_init(zvir,nudge_dz)
    real, allocatable, dimension(:,:,:):: u0, v0, t0, dz0, dp0
    real, intent(in):: zvir
+   logical, intent(in):: nudge_dz
 !  real, parameter:: wt = 1.  ! was 2.
    real, parameter:: wt = 2.
 !***********
@@ -930,7 +931,6 @@ contains
    real:: xt, p00, q00
    integer:: isc, iec, jsc, jec, npz
    integer:: m, n, i,j,k, ngc
-   logical:: nudge_dz = .true.
 
    character(len=80) :: errstr
 

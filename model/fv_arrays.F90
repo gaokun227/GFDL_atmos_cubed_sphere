@@ -392,6 +392,7 @@ module fv_arrays_mod
    integer :: fv_sg_adj = -1          ! Perform grid-scale dry adjustment if > 0
                                       ! Relaxzation time  scale (sec) if positive
    integer :: na_init = 0             ! Perform adiabatic initialization
+   logical :: nudge_dz = .false.      ! Whether to nudge delz in the adiabatic initialization
    real    :: p_ref = 1.E5
    real    :: dry_mass = 98290.
    integer :: nt_prog = 0
