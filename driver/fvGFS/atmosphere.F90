@@ -916,7 +916,7 @@ contains
  subroutine adiabatic_init(zvir,nudge_dz)
    real, allocatable, dimension(:,:,:):: u0, v0, t0, dz0, dp0
    real, intent(in):: zvir
-   logical, intent(in):: nudge_dz
+   logical, intent(inout):: nudge_dz
 !  real, parameter:: wt = 1.  ! was 2.
    real, parameter:: wt = 2.
 !***********
