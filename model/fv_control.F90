@@ -242,10 +242,6 @@ module fv_control_mod
    integer :: commID, max_refinement_of_global = 1.
    integer :: gid
 
-!---- version number -----
-   character(len=128) :: version = '$Id$'
-   character(len=128) :: tagname = '$Name$'
-
    real :: umax = 350.           ! max wave speed for grid_type>3
    integer :: parent_grid_num = -1
 

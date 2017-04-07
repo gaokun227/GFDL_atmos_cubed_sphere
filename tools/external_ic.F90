@@ -74,9 +74,9 @@ module external_ic_mod
 
    public get_external_ic, get_cubed_sphere_terrain
 
-!---- version number -----
-   character(len=128) :: version = '$Id$'
-   character(len=128) :: tagname = '$Name$'
+! version number of this module
+! Include variable "version" to be written to log file.
+#include<file_version.h>
 
 contains
 
@@ -495,7 +495,7 @@ contains
 #endif
 
       unit = stdlog()
-      call write_version_number ( 'NGGPS_release', 'get_nggps_ic' )
+      call write_version_number ( 'external_ic_mod::get_nggps_ic', version )
       write(unit, nml=external_ic_nml)
 
       remap = .true.

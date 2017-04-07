@@ -79,11 +79,6 @@ module fv_diagnostics_mod
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: get_height_given_pressure, interpolate_vertical, rh_calc, get_height_field
 
-
-!---- version number -----
- character(len=128) :: version = '$Id$'
- character(len=128) :: tagname = '$Name$'
-
  integer, parameter :: nplev = 31
  integer :: levs(nplev)
 

@@ -263,9 +263,9 @@ public   &
         cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
         do_sedi_w, de_ice, mp_print
 
-!---- version number -----
- character(len=128) :: version = '$Id: lin_cloud_microphys.F90,v 21.0.2.1 2014/12/18 21:14:54 Lucas.Harris Exp $'
- character(len=128) :: tagname = '$Name:  $'
+! version number of this module
+! Include variable "version" to be written to log file.
+!#include<file_version.h>
 
  contains
 
@@ -2640,19 +2640,19 @@ endif   ! end ice-physics
 
 !#ifdef INTERNAL_FILE_NML
 !    read( input_nml_file, nml = lin_cld_microphys_nml, iostat = io )
-!    ierr = check_nml_error(io,'lin_cloud_microphys_nml')
+!    ierr = check_nml_error(io,'lin_cld_microphys_nml')
 !#else
 !    if( file_exist( 'input.nml' ) ) then
 !       unit = open_namelist_file ()
 !       io = 1
 !       do while ( io .ne. 0 )
 !          read( unit, nml = lin_cld_microphys_nml, iostat = io, end = 10 )
-!          ierr = check_nml_error(io,'lin_cloud_microphys_nml')
+!          ierr = check_nml_error(io,'lin_cld_microphys_nml')
 !       end do
 !10     call close_file ( unit )
 !    end if
 !#endif
-!    call write_version_number (version, tagname)
+!    call write_version_number ('lin_cld_microphys_mod', version)
 !    logunit = stdlog()
 
     inquire (file=trim(fn_nml), exist=exists)
@@ -2666,7 +2666,11 @@ endif   ! end ice-physics
     read (nlunit, nml=lin_cld_microphysics_nml)
     close (nlunit)
     !--- write version number and namelist to log file ---
-    if (me == master) write(logunit, nml=lin_cld_microphysics_nml)
+    if (me == master) then
+      write(logunit, *) "================================================================================"
+      write(logunit, *) "LIN_CLD_MICORPHYS_MOD"
+      write(logunit, nml=lin_cld_microphysics_nml)
+   endif
 
     if ( do_setup ) then
       call setup_con
