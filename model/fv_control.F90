@@ -249,6 +249,10 @@ module fv_control_mod
                                    ! 2 for block
                                    ! 3 for four-interfaces non-block
 
+! version number of this module
+! Include variable "version" to be written to log file.
+#include<file_version.h>
+
  contains
 
 !-------------------------------------------------------------------------------
@@ -596,6 +600,7 @@ module fv_control_mod
       rewind (f_unit)
 #endif
 
+      call write_version_number ( 'FV_CONTROL_MOD', version )
       unit = stdlog()
       write(unit, nml=fv_grid_nml)
 

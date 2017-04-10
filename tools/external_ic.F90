@@ -495,7 +495,7 @@ contains
 #endif
 
       unit = stdlog()
-      call write_version_number ( 'external_ic_mod::get_nggps_ic', version )
+      call write_version_number ( 'EXTERNAL_IC_mod::get_nggps_ic', version )
       write(unit, nml=external_ic_nml)
 
       remap = .true.

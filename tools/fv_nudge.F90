@@ -1186,7 +1186,7 @@ module fv_nwp_nudge_mod
        end do
 10     call close_file ( unit )
     end if
-    call write_version_number ( 'fv_nudge_mod', version )
+    call write_version_number ( 'FV_NUDGE_MOD', version )
     if ( master ) then
          f_unit=stdlog()
          write( f_unit, nml = fv_nwp_nudge_nml )

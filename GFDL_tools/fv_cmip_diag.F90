@@ -112,7 +112,7 @@ character(len=4)      :: plabel
 !----- write version and namelist to log file -----
 
   iunit = stdlog()
-  call write_version_number ( 'fv_cmip_diag_mod',  version )
+  call write_version_number ( 'FV_CMIP_DIAG_MOD',  version )
   if (mpp_pe() == mpp_root_pe()) write (iunit, nml=fv_cmip_diag_nml)
 
 

@@ -174,7 +174,7 @@ contains
    Atm(mytile)%Time_init = Time_init
 
 !----- write version and namelist to log file -----
-   call write_version_number ( mod_name, version )
+   call write_version_number ( 'fvGFS/ATMOSPHERE_MOD', version )
 
 !-----------------------------------
 

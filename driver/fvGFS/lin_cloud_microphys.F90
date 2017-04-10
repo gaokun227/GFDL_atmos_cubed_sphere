@@ -2652,7 +2652,7 @@ endif   ! end ice-physics
 !10     call close_file ( unit )
 !    end if
 !#endif
-!    call write_version_number ('lin_cld_microphys_mod', version)
+!    call write_version_number ('LIN_CLD_MICROPHYS_MOD', version)
 !    logunit = stdlog()
 
     inquire (file=trim(fn_nml), exist=exists)
@@ -2668,7 +2668,7 @@ endif   ! end ice-physics
     !--- write version number and namelist to log file ---
     if (me == master) then
       write(logunit, *) "================================================================================"
-      write(logunit, *) "LIN_CLD_MICORPHYS_MOD"
+      write(logunit, *) "LIN_CLD_MICROPHYS_MOD"
       write(logunit, nml=lin_cld_microphysics_nml)
    endif
 

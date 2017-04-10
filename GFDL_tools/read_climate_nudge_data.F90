@@ -116,7 +116,7 @@ integer, intent(out) :: nlon, nlat, nlev, ntime
 !----- write version and namelist to log file -----
 
   iunit = stdlog()
-  call write_version_number ( 'read_climate_nudge_data_mod', version )
+  call write_version_number ( 'READ_CLIMATE_NUDGE_DATA_MOD', version )
   if (mpp_pe() == mpp_root_pe()) write (iunit, nml=read_climate_nudge_data_nml)
 
   ! determine the number of files

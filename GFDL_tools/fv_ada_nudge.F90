@@ -1516,7 +1516,7 @@ endif
 10     call close_file ( unit )
     end if
 #endif
-    call write_version_number ( 'fv_ada_nudge_mod', version )
+    call write_version_number ( 'FV_ADA_NUDGE_MOD', version )
     if ( master ) then
          f_unit=stdlog()
          write( f_unit, nml = fv_ada_nudge_nml )

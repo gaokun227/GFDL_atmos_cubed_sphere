@@ -195,7 +195,7 @@ contains
    enddo
 
 !----- write version and namelist to log file -----
-   call write_version_number ( 'coupled/atmosphere_mod', version )
+   call write_version_number ( 'COUPLED/ATMOSPHERE_MOD', version )
 
 !-----------------------------------
 

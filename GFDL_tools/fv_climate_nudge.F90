@@ -127,7 +127,7 @@ real :: missing_value = -1.e10
 !----- write version and namelist to log file -----
 
    unit = stdlog()
-   call write_version_number ( 'fv_climate_nudge_mod', version )
+   call write_version_number ( 'FV_CLIMATE_NUDGE_MOD', version )
    if (mpp_pe() == mpp_root_pe()) write (unit, nml=fv_climate_nudge_nml)
 
  ! initialize flags
