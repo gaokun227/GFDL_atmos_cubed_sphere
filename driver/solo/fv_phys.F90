@@ -57,8 +57,6 @@ implicit none
 public :: fv_phys, fv_nudge
 
 !---- version number -----
-  character(len=128) :: version = '$Id: fv_phys.F90,v 20.0 2013/12/13 23:04:08 fms Exp $'
-  character(len=128) :: tagname = '$Name: tikal $'
   character(len=8)   :: mod_name = 'sim_phys'
 
   integer:: sphum, liq_wat, rainwat, snowwat, graupel, ice_wat, cld_amt
