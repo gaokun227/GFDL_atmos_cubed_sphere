@@ -32,10 +32,6 @@ module hswf_mod
       private
       public :: Held_Suarez_Tend, age_of_air
 
-!---- version number -----
-      character(len=128) :: version = '$Id: $'
-      character(len=128) :: tagname = '$Name: $'
-
 contains
 
 !-----------------------------------------------------------------------
