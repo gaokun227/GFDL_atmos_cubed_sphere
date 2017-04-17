@@ -1024,8 +1024,8 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (pref, q00, p00,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
-!$omp            private (i, j, k)
+!$omp             shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mytile) &
+!$omp            private (i, j, k, p00, q00)
        do k=1,npz
           do j=jsc,jec+1
              do i=isc,iec
@@ -1037,46 +1037,46 @@ contains
                 Atm(mytile)%v(i,j,k) = xt*(Atm(mytile)%v(i,j,k) + wt*v0(i,j,k))
              enddo
           enddo
-      if( Atm(mytile)%flagstruct%nudge_qv ) then
+          if( Atm(mytile)%flagstruct%nudge_qv ) then
 ! SJL note: Nudging water vaport towards HALOE climatology:
 ! In case of better IC (IFS) this step may not be necessary
-          p00 = Atm(mytile)%pe(isc,k,jsc)
-          if ( p00 < 30.E2 ) then
-             if ( p00 < 1. ) then
-                  q00 = q1_h2o
-             elseif ( p00 <= 7. .and. p00 >= 1. ) then
-                  q00 = q1_h2o + (q7_h2o-q1_h2o)*log(pref(k,1)/1.)/log(7.)
-             elseif ( p00 < 100. .and. p00 >= 7. ) then
-                  q00 = q7_h2o + (q100_h2o-q7_h2o)*log(pref(k,1)/7.)/log(100./7.)
-             elseif ( p00 < 1000. .and. p00 >= 100. ) then
-                  q00 = q100_h2o + (q1000_h2o-q100_h2o)*log(pref(k,1)/1.E2)/log(10.)
-             elseif ( p00 < 2000. .and. p00 >= 1000. ) then
-                  q00 = q1000_h2o + (q2000_h2o-q1000_h2o)*log(pref(k,1)/1.E3)/log(2.)
-             else
-                  q00 = q2000_h2o + (q3000_h2o-q2000_h2o)*log(pref(k,1)/2.E3)/log(1.5)
+             p00 = Atm(mytile)%pe(isc,k,jsc)
+             if ( p00 < 30.E2 ) then
+                if ( p00 < 1. ) then
+                     q00 = q1_h2o
+                elseif ( p00 <= 7. .and. p00 >= 1. ) then
+                     q00 = q1_h2o + (q7_h2o-q1_h2o)*log(pref(k,1)/1.)/log(7.)
+                elseif ( p00 < 100. .and. p00 >= 7. ) then
+                     q00 = q7_h2o + (q100_h2o-q7_h2o)*log(pref(k,1)/7.)/log(100./7.)
+                elseif ( p00 < 1000. .and. p00 >= 100. ) then
+                     q00 = q100_h2o + (q1000_h2o-q100_h2o)*log(pref(k,1)/1.E2)/log(10.)
+                elseif ( p00 < 2000. .and. p00 >= 1000. ) then
+                     q00 = q1000_h2o + (q2000_h2o-q1000_h2o)*log(pref(k,1)/1.E3)/log(2.)
+                else
+                     q00 = q2000_h2o + (q3000_h2o-q2000_h2o)*log(pref(k,1)/2.E3)/log(1.5)
+                endif
+                do j=jsc,jec
+                   do i=isc,iec
+                      Atm(mytile)%q(i,j,k,sphum) = xt*(Atm(mytile)%q(i,j,k,sphum) + wt*q00)
+                   enddo
+                enddo
              endif
+          endif
+          if ( Atm(mytile)%flagstruct%hydrostatic ) then
              do j=jsc,jec
                 do i=isc,iec
-                   Atm(mytile)%q(i,j,k,sphum) = xt*(Atm(mytile)%q(i,j,k,sphum) + wt*q00)
+                   Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
+                   Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
+                enddo
+             enddo
+          else
+             do j=jsc,jec
+                do i=isc,iec
+                   Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
+                   Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
                 enddo
              enddo
           endif
-      endif
-      if ( Atm(mytile)%flagstruct%hydrostatic ) then
-          do j=jsc,jec
-             do i=isc,iec
-                Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
-                Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
-             enddo
-          enddo
-       else
-          do j=jsc,jec
-             do i=isc,iec
-                Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
-                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
-             enddo
-          enddo
-       endif
 
        enddo
 
