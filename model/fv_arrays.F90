@@ -277,6 +277,7 @@ module fv_arrays_mod
    real    :: scale_z = 0.   ! diff_z = scale_z**2 * 0.25
    real    :: w_max = 75.    ! max w (m/s) threshold for hydostatiic adjustment 
    real    :: z_min = 0.05   ! min ratio of dz_nonhydrostatic/dz_hydrostatic
+   real    :: lim_fac = 2.0  ! linear scheme limiting factor, 1: hord = 5, 3: hord = 6
 
    integer :: nord=1         ! 0: del-2, 1: del-4, 2: del-6, 3: del-8 divergence damping
                              ! Alternative setting for high-res: nord=1; d4_bg = 0.075
@@ -300,6 +301,7 @@ module fv_arrays_mod
    integer :: nord_zs_filter=4      !  use del-2 (2) OR del-4 (4)
    logical :: full_zs_filter=.false.! perform full filtering of topography (in external_ic only )
 
+   logical :: RF_fast =.false.      !  Fast inline Rayleigh Friction
    logical :: consv_am  = .false.   ! Apply Angular Momentum Correction (to zonal wind component)
    logical :: do_sat_adj= .false.   ! 
    logical :: do_f3d    = .false.   ! 
@@ -395,6 +397,7 @@ module fv_arrays_mod
    integer :: fv_sg_adj = -1          ! Perform grid-scale dry adjustment if > 0
                                       ! Relaxzation time  scale (sec) if positive
    integer :: na_init = 0             ! Perform adiabatic initialization
+   logical :: nudge_dz = .false.      ! Whether to nudge delz in the adiabatic initialization
    real    :: p_ref = 1.E5
    real    :: dry_mass = 98290.
    integer :: nt_prog = 0
@@ -747,10 +750,6 @@ module fv_arrays_mod
 
 
   end type fv_atmos_type
-
-!---- version number -----
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
 
 contains
 

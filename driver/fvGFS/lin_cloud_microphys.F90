@@ -24,7 +24,6 @@ module lin_cld_microphys_mod
  public  qsmith_init, qsmith, es2_table1d, es3_table1d, esw_table1d, wqsat_moist, wqsat2_moist
  public  setup_con, wet_bulb
  public  cloud_diagnosis
- public  cracw
  real             :: missing_value = -1.e10
  logical          :: module_is_initialized = .false.
  logical          :: qsmith_tables_initialized = .false.
@@ -100,6 +99,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  real :: lcp, icp, tcp
  real :: lv00, d0_vap, c_air, c_vap
 
+ integer :: icloud_f = 0       ! 
  logical :: de_ice = .false.     !
  logical :: sedi_transport = .true.     !
  logical :: do_sedi_w = .false.
@@ -182,6 +182,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  real :: qi_gen  = 1.82E-6
  real :: qi_lim  = 1.
  real :: ql_mlt  = 2.0e-3    ! max value of cloud water allowed from melted cloud ice
+ real :: qs_mlt  = 1.0e-6    ! 
  real :: ql_gen  = 1.0e-3    ! max ql generation during remapping step if fast_sat_adj = .T.
  real :: sat_adj0 = 0.90     ! adjustment factor (0: no, 1: full) during fast_sat_adj
 
@@ -240,7 +241,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  namelist /lin_cld_microphysics_nml/   &
         mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, &
-        vi_max, vs_max, vg_max, vr_max,        &
+        vi_max, vs_max, vg_max, vr_max, qs_mlt,       &
         qs0_crt, qi_gen, ql0_max, qi0_max, qi0_crt, qr0_crt, fast_sat_adj, &
         rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, const_vr,    &
         use_ccn, rthresh, ccn_l, ccn_o, qc_crt, tau_g2v, tau_v2g, sat_adj0,    &
@@ -248,12 +249,12 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
         c_paut, c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn,  &
         c_cracw, alin, clin, tice, rad_snow, rad_graupel, rad_rain,   &
         cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
-        do_sedi_w, de_ice, mp_print
+        do_sedi_w, de_ice, icloud_f, mp_print
 
 public   &
         mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, &
-        vi_max, vs_max, vg_max, vr_max,        &
+        vi_max, vs_max, vg_max, vr_max, qs_mlt,       &
         qs0_crt, qi_gen, ql0_max, qi0_max, qi0_crt, qr0_crt, fast_sat_adj, &
         rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, const_vr,    &
         use_ccn, rthresh, ccn_l, ccn_o, qc_crt, tau_g2v, tau_v2g, sat_adj0,    &
@@ -261,11 +262,11 @@ public   &
         c_paut, c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn,  &
         c_cracw, alin, clin, tice, rad_snow, rad_graupel, rad_rain,   &
         cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
-        do_sedi_w, de_ice, mp_print
+        do_sedi_w, de_ice, icloud_f, mp_print
 
-!---- version number -----
- character(len=128) :: version = '$Id: lin_cloud_microphys.F90,v 21.0.2.1 2014/12/18 21:14:54 Lucas.Harris Exp $'
- character(len=128) :: tagname = '$Name:  $'
+! version number of this module
+! Include variable "version" to be written to log file.
+!#include<file_version.h>
 
  contains
 
@@ -1139,7 +1140,7 @@ public   &
  real:: pracs, psacw, pgacw, pgmlt,    &
         psmlt, psacr, pgacr, pgfr,     &
         pgaut, pgaci, praci, psaut, psaci, pgsub
- real:: tc, tsq, dqs0, qden, qim, qsm, pssub
+ real:: tc, tsq, dqs0, qden, qim, qsm
  real:: dt5, factor, sink, qi_crt
  real:: tmp1, qsw, qsi, dqsdt, dq
  real:: dtmp, qc, q_plus, q_minus, cvm
@@ -1252,9 +1253,13 @@ if ( tc .ge. 0. ) then
 ! * Snow melt (due to rain accretion): snow --> rain
         psmlt = max(0., smlt(tc, dqs0, qs*den(k), psacw, psacr, csmlt, den(k), denfac(k)))
          sink = min(qs, dts*(psmlt+pracs), tc/icpk(k))
-
         qs = qs - sink
-        qr = qr + sink
+!       qr = qr + sink
+! SJL 20170321:
+        tmp1 = min(sink, dim(qs_mlt, ql))   ! max ql due to snow melt
+        ql = ql + tmp1
+        qr = qr + sink - tmp1
+!       qr = qr + sink
 ! cooling due to snow melting
         tz = tz - sink*lhi(k)/(c_air+qv*c_vap+(ql+qr)*c_liq+(qi+qs+qg)*c_ice)
         tc = tz-tice
@@ -2642,19 +2647,19 @@ endif   ! end ice-physics
 
 !#ifdef INTERNAL_FILE_NML
 !    read( input_nml_file, nml = lin_cld_microphys_nml, iostat = io )
-!    ierr = check_nml_error(io,'lin_cloud_microphys_nml')
+!    ierr = check_nml_error(io,'lin_cld_microphys_nml')
 !#else
 !    if( file_exist( 'input.nml' ) ) then
 !       unit = open_namelist_file ()
 !       io = 1
 !       do while ( io .ne. 0 )
 !          read( unit, nml = lin_cld_microphys_nml, iostat = io, end = 10 )
-!          ierr = check_nml_error(io,'lin_cloud_microphys_nml')
+!          ierr = check_nml_error(io,'lin_cld_microphys_nml')
 !       end do
 !10     call close_file ( unit )
 !    end if
 !#endif
-!    call write_version_number (version, tagname)
+!    call write_version_number ('LIN_CLD_MICROPHYS_MOD', version)
 !    logunit = stdlog()
 
     inquire (file=trim(fn_nml), exist=exists)
@@ -2668,7 +2673,11 @@ endif   ! end ice-physics
     read (nlunit, nml=lin_cld_microphysics_nml)
     close (nlunit)
     !--- write version number and namelist to log file ---
-    if (me == master) write(logunit, nml=lin_cld_microphysics_nml)
+    if (me == master) then
+      write(logunit, *) "================================================================================"
+      write(logunit, *) "LIN_CLD_MICROPHYS_MOD"
+      write(logunit, nml=lin_cld_microphysics_nml)
+   endif
 
     if ( do_setup ) then
       call setup_con

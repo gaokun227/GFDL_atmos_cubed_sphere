@@ -3,13 +3,13 @@ module fv_cmp_mod
   use constants_mod,         only: pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
   use fv_mp_mod,             only: is_master
   use fv_arrays_mod,         only: R_GRID
-  use lin_cld_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql0_max, qi_lim
-  use lin_cld_microphys_mod, only: tau_r, tau_s, tau_i2s, tau_v2l, tau_l2v, tau_mlt, tau_l2r
-  use lin_cld_microphys_mod, only: rad_rain, rad_snow, rad_graupel
-  use lin_cld_microphys_mod, only: sat_adj0, t_sub, cld_min
-  use lin_cld_microphys_mod, only: cracw
+  use lin_cld_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql0_max, qi_lim, icloud_f
+  use lin_cld_microphys_mod, only: tau_r, tau_s, tau_i2s, tau_v2l, tau_l2v, tau_mlt
+  use lin_cld_microphys_mod, only: rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
+  use lin_cld_microphys_mod, only: sat_adj0, t_sub, cld_min, qs_mlt
 
   implicit none
+  real, parameter:: tau_l2r = 900.
   real, parameter:: cv_vap = 3.*rvgas  ! 1384.8
   real, parameter:: cv_air =  cp_air - rdgas ! = rdgas * (7/2-1) = 2.5*rdgas=717.68
 ! 2050 at 0 deg C; 1972 at -15 C; 1818. at -40 C
@@ -34,8 +34,8 @@ module fv_cmp_mod
  real(kind=R_GRID), parameter:: d2ice  = cp_vap - c_ice
  real(kind=R_GRID), parameter:: Li2 = hlv0+hlf0 - d2ice*tice
 ! Local:
- real:: dw_ocean = 0.12 ! This parameter is different from that in major MP
- real:: crevp(5), lat2
+!!! real:: dw_ocean = 0.12 ! This parameter is different from that in major MP
+ real:: lat2
  real, allocatable:: table(:), table2(:), tablew(:), des2(:), desw(:)
  real:: d0_vap, lv00
 
@@ -47,7 +47,7 @@ module fv_cmp_mod
 contains
 
  subroutine fv_sat_adj(mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
-                       te0, qv, ql, qi, qr, qs, qg, dpln, delz, pt, dp,  &
+                       te0, qv, ql, qi, qr, qs, qg, hs, dpln, delz, pt, dp,  &
                        q_con, cappa, area, dtdt, out_dt, last_step, do_qa, qa)
 ! This is designed for 6-class micro-physics schemes; handles the heat release
 ! due to in situ phase changes
@@ -58,7 +58,7 @@ contains
  logical, intent(in):: hydrostatic, consv_te, out_dt
  logical, intent(in):: last_step
  logical, intent(in):: do_qa
- real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng):: dp, delz
+ real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng):: dp, delz, hs
  real, intent(in):: dpln(is:ie,js:je)
  real, intent(inout), dimension(is-ng:ie+ng,js-ng:je+ng):: pt, qv, ql, qi, qr, qs, qg
  real, intent(out):: qa(is-ng:ie+ng,js-ng:je+ng)
@@ -75,7 +75,7 @@ contains
  real:: tc, qsi, dqsdt, dq, dq0, pidep, qi_crt, tmp, dtmp
  real:: condensates, tin, qstar, rqi, q_plus, q_minus
  real:: sdt, dt_Bigg, adj_fac, fac_s, fac_r, fac_i2s, fac_mlt, fac_l2r
- real:: factor, qim, tice0, c_air, c_vap
+ real:: factor, qim, tice0, c_air, c_vap, dw
  integer i,j
 
  sdt = 0.5 * mdt
@@ -117,7 +117,6 @@ contains
        pt1(i) = pt(i,j) / (1.+zvir*qv(i,j))
 #endif
         t0(i) = pt1(i)     ! true temperature
-        hvar(i) = min(0.2, max(0.01, dw_ocean*sqrt(sqrt(area(i,j)/1.E10))) )
          qpz(i) = qpz(i) + qv(i,j)    ! Total_wat conserved in this routine
     enddo
 
@@ -237,7 +236,7 @@ contains
             src(i) = min(adj_fac*dq0, max(ql_gen-ql(i,j), fac_v2l*dq0))
        else   ! Evaporation of ql
 ! The RH dependent factor = 1 at 90%
-            factor = -min(1., fac_l2v*10.*(1.-qv(i,j)/wqsat(i)))  ! ljz note: fac_l2v * (1 - RH) / (1 - 0.9)
+            factor = -min(1., fac_l2v*10.*(1.-qv(i,j)/wqsat(i)))
             src(i) = -min(ql(i,j), factor*dq0)
        endif
     enddo
@@ -267,7 +266,7 @@ contains
          else
 ! Evaporation of ql
 ! The RH dependent factor = 1 at 90%
-            factor = -min(1., fac_l2v*10.*(1.-qv(i,j)/wqsat(i)))  ! ljz note: fac_l2v * (1 - RH) / (1 - 0.9)
+            factor = -min(1., fac_l2v*10.*(1.-qv(i,j)/wqsat(i)))
             src(i) = -min(ql(i,j), factor*dq0)
          endif
       enddo
@@ -346,7 +345,10 @@ contains
             tmp = min( 1., (dtmp*0.1)**2 ) * qs(i,j)
            sink = min( tmp,  fac_s*dtmp/icp2(i) )
            qs(i,j) = qs(i,j) - sink
-           qr(i,j) = qr(i,j) + sink
+           tmp = min(sink, dim(qs_mlt, ql(i,j)))   ! max ql due to snow melt
+           ql(i,j) = ql(i,j) + tmp
+           qr(i,j) = qr(i,j) + sink - tmp
+!          qr(i,j) = qr(i,j) + sink
           q_liq(i) = ql(i,j) + qr(i,j)
           q_sol(i) = qi(i,j) + qs(i,j) + qg(i,j)
            cvm(i) = mc_air(i) + qv(i,j)*c_vap + q_liq(i)*c_liq + q_sol(i)*c_ice
@@ -464,7 +466,10 @@ contains
 if ( do_qa .and. last_step ) then
 
     do i=is, ie
-       qa(i,j) = 0.
+! Higher than 10 m is considered "land" and will have higher subgrid variability
+       dw = dw_ocean + (dw_land-dw_ocean)*min(1., abs(hs(i,j))/(10.*grav))
+! "Scale-aware" subgrid variability:  100-km as the base
+       hvar(i) = min(0.2, max(0.01, dw*sqrt(sqrt(area(i,j))/100.E3)))
     enddo
 
     if ( rad_snow ) then
@@ -492,7 +497,7 @@ if ( do_qa .and. last_step ) then
 ! Using the "liquid-frozen water temperature": tin
        tin = pt1(i) - ( lcp2(i)*condensates + icp2(i)*q_sol(i) )  ! minimum  temperature
 !      tin = pt1(i) - ((lv00+d0_vap*pt1(i))*condensates+(li00+dc_ice*pt1(i))*q_sol(i)) /   &
-!                                                              (mc_air(i)+qpz(i)*c_vap)
+!                                                             (mc_air(i)+qpz(i)*c_vap)
        if( tin <= t_wfr ) then
            qstar = iqs1(tin, den(i))
        elseif ( tin >= tice ) then
@@ -514,111 +519,50 @@ if ( do_qa .and. last_step ) then
 ! Assuming subgrid linear distribution in horizontal; this is effectively a smoother for the
 ! binary cloud scheme;  qa=0.5 if qstar==qpz
  
-      rh = qpz(i) / qstar
-      if ( rh > 0.75 .and. qpz(i) > 1.E-7 ) then
-                dq = hvar(i)*qpz(i)
+    rh = qpz(i) / qstar
+
+! icloud_f = 0: bug-fxied
+! icloud_f = 1: Old fvGFS GFDL)MP implementation
+! icloud_f = 2: Binary cloud scheme (0/1)
+
+    if ( rh > 0.75 .and. qpz(i) > 1.E-6 ) then
+           dq = hvar(i)*qpz(i)
            q_plus  = qpz(i) + dq
            q_minus = qpz(i) - dq
+        if ( icloud_f==2 ) then
+           if ( qpz(i) > qstar ) then
+                qa(i,j) = 1.
+           elseif ( qstar<q_plus .and. condensates>1.e-6 ) then
+                qa(i,j) = ( (q_plus-qstar)/dq )**2
+                qa(i,j) = min(1., qa(i,j))
+           else
+                qa(i,j) = 0. 
+           endif
+        else
            if ( qstar < q_minus ) then
                 qa(i,j) = 1.
            else
              if ( qstar<q_plus ) then
-                qa(i,j) = (q_plus-qstar)/(dq+dq)        ! partial cloud cover:
-                                                        ! qa = 0 if qstar = q_plus 
-                                                        ! qa = 1 if qstar = q_minus
+                if (icloud_f==0 ) then
+                    qa(i,j) = (q_plus-qstar)/(dq+dq)
+                else
+                    qa(i,j) = (q_plus-qstar)/(2.*dq*(1.-condensates))
+                endif
              endif
 ! Impose minimum cloudiness if substantial condensates exist
              if ( condensates > 1.E-6 ) qa(i,j) = max(cld_min, qa(i,j))
+             qa(i,j) = min(1., qa(i,j))
            endif
-      endif
+        endif
+    else
+        qa(i,j) = 0.
+    endif
    enddo
 endif
 
  enddo
 
  end subroutine fv_sat_adj
-
-
- subroutine revap_rac1(hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den, hvar)
- logical, intent(in):: hydrostatic
- integer, intent(in):: is, ie
- real, intent(in):: dt       ! time step (s)
- real, intent(in),    dimension(is:ie):: den, hvar, qi, qs, qg
- real, intent(inout), dimension(is:ie):: tz, qv, qr, ql
-! local:
- real, parameter:: rh_rain = 0.6
- real, parameter::  sfcrho = 1.2         ! surface air density
- real, dimension(is:ie):: lcp2
- real:: dqv, qsat, dqsdt, evap, qden, q_plus, q_minus, sink
- real:: tin, t2, qpz, dq, dqh, dqm, q_liq, q_sol
- integer i
-
-  if ( hydrostatic ) then
-     do i=is, ie
-        q_liq = ql(i) + qr(i)
-        q_sol = qi(i) + qs(i) + qg(i)
-        lcp2(i) = (lv00+d0_vap*tz(i)) /     &
-                  ((1.-(qv(i)+q_liq+q_sol))*cp_air+qv(i)*cp_vap+q_liq*c_liq+q_sol*c_ice)
-     enddo
-  else
-     do i=is, ie
-        q_liq = ql(i) + qr(i)
-        q_sol = qi(i) + qs(i) + qg(i)
-        lcp2(i) = (lv00+d0_vap*tz(i)) /   &
-                  ((1.-(qv(i)+q_liq+q_sol))*cv_air+qv(i)*cv_vap+q_liq*c_liq+q_sol*c_ice)
-     enddo
-  endif
-
-  do i=is, ie
-     if ( qr(i) > 1.E-7 .and. tz(i) > t_wfr ) then
-          qpz = qv(i) + ql(i)
-          tin = tz(i) - lcp2(i)*ql(i) ! presence of clouds suppresses the rain evap
-         qsat = wqs2(tin, den(i), dqsdt)
-          dqh = max( ql(i), hvar(i)*max(qpz, 1.E-7) )
-          dqh = min( dqh, 0.2*qpz ) ! New limiter
-          dqv = qsat - qv(i)
-         q_minus = qpz - dqh
-         q_plus  = qpz + dqh
-
-! qsat must be > q_minus to activate evaporation
-! qsat must be < q_plus  to activate accretion
-
-!-------------------
-! * Rain evaporation
-!-------------------
-         dqm = qsat - q_minus
-         if ( dqv > 1.E-8  .and. dqm > 0. ) then
-              if ( qsat > q_plus ) then
-                   dq = qsat - qpz
-              else
-! q_minus < qsat < q_plus
-! dq == dqh if qsat == q_minus
-                   dq = 0.25*dqm*dqm/dqh
-              endif
-              qden = qr(i)*den(i)
-              t2 = tin * tin
-              evap =  crevp(1)*t2*dq*(crevp(2)*sqrt(qden)+crevp(3)*exp(0.725*log(qden)))   &
-                   / (crevp(4)*t2  +  crevp(5)*qsat*den(i))
-              evap = min( qr(i), dt*evap, dqv/(1.+lcp2(i)*dqsdt) )
-!             Minimum Evap of rain in dry environmental air
-              evap = max( evap, min(qr(i),dim(rh_rain*qsat, qv(i))/(1.+lcp2(i)*dqsdt)) )
-             qr(i) = qr(i) - evap
-             qv(i) = qv(i) + evap
-             tz(i) = tz(i) - evap*lcp2(i)
-         endif
-         if ( qr(i)>1.E-7 .and. ql(i)>1.E-6 .and. qsat<q_plus ) then
-!-------------------
-! * Accretion: pracc
-!-------------------
-               sink = dt*sqrt(sfcrho/den(i))*cracw*exp(0.95*log(qr(i)*den(i)))
-               sink = sink/(1.+sink)*ql(i)
-              ql(i) = ql(i) - sink
-              qr(i) = qr(i) + sink
-         endif
-     endif
-  enddo
-
- end subroutine revap_rac1
 
  real function wqs1(ta, den)
 ! Pure water phase; universal dry/moist formular using air density
@@ -736,24 +680,12 @@ endif
  real, parameter:: alin = 842.0
  !Intercept parameters
  real, parameter:: rnzr = 8.0e6
- real, parameter:: c_cracw = 0.9      ! rain accretion efficiency
- real:: scm3, act2
  integer i
 
  if (  mp_initialized ) return
       if (is_master()) write(*,*) 'Top layer for GFDL_MP=', kmp
 
       lat2 = (hlv + hlf) ** 2
-
-      scm3 = (visk/vdifu)**(1./3.)
-      act2 = pi * rnzr * rhor
-      cracw = c_cracw* pi*rnzr*alin*gam380/(4.*act2**0.95)
-
-      crevp(1) = 2.*pi*vdifu*tcond*rvgas*rnzr
-      crevp(2) = 0.78/sqrt(act2)
-      crevp(3) = 0.31*scm3*gam290*sqrt(alin/visk)/act2**0.725
-      crevp(4) = tcond*rvgas
-      crevp(5) = hltc**2*vdifu
 
 ! generate es table (dt = 0.1 deg. c)
        allocate ( table (length) )

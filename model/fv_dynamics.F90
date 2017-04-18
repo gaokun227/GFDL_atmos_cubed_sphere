@@ -53,10 +53,6 @@ implicit none
 private
 public :: fv_dynamics
 
-!---- version number -----
-   character(len=128) :: version = '$Id$'
-   character(len=128) :: tagname = '$Name$'
-
 contains
 
 !-----------------------------------------------------------------------
@@ -342,7 +338,7 @@ contains
                            ptop, ua, va, u, v, delp, teq, ps2, m_fac)
       endif
 
-      if( flagstruct%tau > 0. ) then
+      if( .not. flagstruct%RF_fast .and. flagstruct%tau > 0. ) then
         if ( gridstruct%grid_type<4 ) then
              call Rayleigh_Super(abs(bdt), npx, npy, npz, ks, pfull, phis, flagstruct%tau, u, v, w, pt,  &
                   ua, va, delz, gridstruct%agrid, cp_air, rdgas, ptop, hydrostatic, (.not. neststruct%nested), flagstruct%rf_cutoff, gridstruct, domain, bd)
@@ -469,16 +465,16 @@ contains
          call tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
                         flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), &
                         flagstruct%nord_tr, flagstruct%trdm2, &
-                        k_split, neststruct, parent_grid)          
+                        k_split, neststruct, parent_grid, flagstruct%lim_fac)
        else
          if ( flagstruct%z_tracer ) then
          call tracer_2d_1L(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
                         flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), &
-                        flagstruct%nord_tr, flagstruct%trdm2)
+                        flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac)
          else
          call tracer_2d(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
                         flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), &
-                        flagstruct%nord_tr, flagstruct%trdm2)
+                        flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac)
          endif
        endif
                                              call timing_off('tracer_2d')

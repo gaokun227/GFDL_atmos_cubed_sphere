@@ -42,11 +42,11 @@ module external_ic_mod
 
    use constants_mod,     only: pi=>pi_8, omega, grav, kappa, rdgas, rvgas, cp_air
    use fv_arrays_mod,     only: fv_atmos_type, fv_grid_type, fv_grid_bounds_type, R_GRID
-   use fv_diagnostics_mod,only: prt_maxmin
+   use fv_diagnostics_mod,only: prt_maxmin, prt_gb_nh_sh, prt_height
    use fv_grid_utils_mod, only: ptop_min, g_sum,mid_pt_sphere,get_unit_vect2,get_latlon_vector,inner_prod
    use fv_io_mod,         only: fv_io_read_tracers 
    use fv_mapz_mod,       only: mappm
-   use fv_mp_mod,         only: ng, is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max, mp_reduce_sum
+   use fv_mp_mod,         only: ng, is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
    use fv_surf_map_mod,   only: surfdrv, FV3_zs_filter
    use fv_surf_map_mod,   only: sgh_g, oro_g
    use fv_surf_map_mod,   only: del2_cubed_sphere, del4_cubed_sphere
@@ -74,9 +74,9 @@ module external_ic_mod
 
    public get_external_ic, get_cubed_sphere_terrain
 
-!---- version number -----
-   character(len=128) :: version = '$Id$'
-   character(len=128) :: tagname = '$Name$'
+! version number of this module
+! Include variable "version" to be written to log file.
+#include<file_version.h>
 
 contains
 
@@ -495,7 +495,7 @@ contains
 #endif
 
       unit = stdlog()
-      call write_version_number ( 'NGGPS_release', 'get_nggps_ic' )
+      call write_version_number ( 'EXTERNAL_IC_mod::get_nggps_ic', version )
       write(unit, nml=external_ic_nml)
 
       remap = .true.
@@ -2496,7 +2496,7 @@ contains
             endif
          enddo
 #else
-         do l=m,km+k2
+         do l=m,km+k2-1
             if ( (pn1(i,k).le.pn(l+1)) .and. (pn1(i,k).ge.pn(l)) ) then
                 gz_fv(k) = gz(l) + (gz(l+1)-gz(l))*(pn1(i,k)-pn(l))/(pn(l+1)-pn(l))
                 goto 555
@@ -2504,6 +2504,10 @@ contains
          enddo
 #endif
 555   m = l
+      enddo
+
+      do k=1,npz+1
+         Atm%peln(i,k,j) = pn1(i,k)
       enddo
 
 ! Compute true temperature using hydrostatic balance
@@ -2595,8 +2599,13 @@ contains
      enddo
   enddo
   call pmaxmn('ZS_diff (m)', wk, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
-! call pmaxmn('Z500 (m)',  z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
-  call prt_gb_nh_sh('GFS_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64, Atm%gridstruct%agrid_64(is:ie,js:je,2))
+
+  if (.not.Atm%neststruct%nested) then
+      call prt_gb_nh_sh('GFS_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
+      if ( .not. Atm%flagstruct%hydrostatic )  &
+      call prt_height('fv3_IC Z500', is,ie, js,je, 3, npz, 500.E2, Atm%phis, Atm%delz, Atm%peln,   &
+                      Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
+  endif
 
   do j=js,je
      do i=is,ie
@@ -2631,9 +2640,9 @@ contains
   real(kind=R_GRID):: pst
   real, dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je):: z500
 !!! High-precision
-  integer i,j,k,l,m,k2, iq
-  integer  sphum, o3mr, liq_wat, ice_wat, rainwat, snowwat, graupel
-  integer :: is,  ie,  js,  je
+  integer:: sphum, o3mr, liq_wat, ice_wat, rainwat, snowwat, graupel, cld_amt
+  integer:: i,j,k,l,m,k2, iq
+  integer:: is,  ie,  js,  je
 
   is  = Atm%bd%is
   ie  = Atm%bd%ie
@@ -2648,7 +2657,9 @@ contains
     rainwat = get_tracer_index(MODEL_ATMOS, 'rainwat')
     snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
     graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
+    cld_amt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
   endif
+  if (cld_amt .gt. 0) Atm%q(:,:,:,cld_amt) = 0.
 
   k2 = max(10, km/2)
 
@@ -2786,7 +2797,7 @@ contains
             endif
          enddo
 #else
-         do l=m,km+k2
+         do l=m,km+k2-1
             if ( (pn1(i,k).le.pn(l+1)) .and. (pn1(i,k).ge.pn(l)) ) then
                 gz_fv(k) = gz(l) + (gz(l+1)-gz(l))*(pn1(i,k)-pn(l))/(pn(l+1)-pn(l))
                 goto 555
@@ -2794,6 +2805,10 @@ contains
          enddo
 #endif
 555   m = l
+      enddo
+
+      do k=1,npz+1
+         Atm%peln(i,k,j) = pn1(i,k)
       enddo
 
 ! Compute true temperature using hydrostatic balance
@@ -2845,8 +2860,13 @@ contains
      enddo
   enddo
   call pmaxmn('ZS_diff (m)', wk, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
-! call pmaxmn('Z500 (m)', z500, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
-  call prt_gb_nh_sh('IFS_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64, Atm%gridstruct%agrid_64(is:ie,js:je,2))
+
+  if (.not.Atm%neststruct%nested) then
+      call prt_gb_nh_sh('IFS_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
+      if ( .not. Atm%flagstruct%hydrostatic )  &
+      call prt_height('fv3_IC Z500', is,ie, js,je, 3, npz, 500.E2, Atm%phis, Atm%delz, Atm%peln,   &
+                       Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
+  endif
 
   do j=js,je
      do i=is,ie
@@ -3881,48 +3901,6 @@ subroutine pmaxmn(qname, q, is, ie, js, je, km, fac, area, domain)
 
   end subroutine get_staggered_grid
 
-  subroutine prt_gb_nh_sh(qname, is,ie, js,je, a2, area, lat)
-  character(len=*), intent(in)::  qname
-  integer, intent(in):: is, ie, js, je
-  real, intent(in), dimension(is:ie, js:je):: a2
-  real(kind=R_GRID), intent(in), dimension(is:ie, js:je):: area, lat
-! Local:
-  real(R_GRID), parameter:: rad2deg = 180./pi
-  real(R_GRID):: slat
-  real:: t_eq, t_nh, t_sh, t_gb
-  real:: area_eq, area_nh, area_sh, area_gb
-  integer:: i,j
-
-     t_eq = 0.   ;    t_nh = 0.;    t_sh = 0.;    t_gb = 0.
-     area_eq = 0.; area_nh = 0.; area_sh = 0.; area_gb = 0.
-     do j=js,je
-        do i=is,ie
-           slat = lat(i,j)*rad2deg
-           area_gb = area_gb + area(i,j)
-           t_gb = t_gb + a2(i,j)*area(i,j)
-           if( (slat>-20. .and. slat<20.) ) then
-                area_eq = area_eq + area(i,j)
-                t_eq = t_eq + a2(i,j)*area(i,j)
-           elseif( slat>=20. .and. slat<80. ) then
-                area_nh = area_nh + area(i,j)
-                t_nh = t_nh + a2(i,j)*area(i,j)
-           elseif( slat<=-20. .and. slat>-80. ) then
-                area_sh = area_sh + area(i,j)
-                t_sh = t_sh + a2(i,j)*area(i,j)
-           endif
-        enddo
-     enddo
-     call mp_reduce_sum(area_gb)
-     call mp_reduce_sum(   t_gb)
-     call mp_reduce_sum(area_nh)
-     call mp_reduce_sum(   t_nh)
-     call mp_reduce_sum(area_sh)
-     call mp_reduce_sum(   t_sh)
-     call mp_reduce_sum(area_eq)
-     call mp_reduce_sum(   t_eq)
-     if (is_master()) write(*,*) qname, t_gb/area_gb, t_nh/area_nh, t_sh/area_sh, t_eq/area_eq
-
-  end subroutine prt_gb_nh_sh
 
  end module external_ic_mod
 

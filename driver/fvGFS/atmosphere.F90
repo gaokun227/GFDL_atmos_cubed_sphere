@@ -62,7 +62,7 @@ use fv_eta_mod,         only: get_eta_level
 use fv_fill_mod,        only: fill_gfs
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
-use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time, prt_maxmin
+use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time, prt_maxmin, prt_height
 use fv_nggps_diags_mod, only: fv_nggps_diag_init, fv_nggps_diag
 use fv_restart_mod,     only: fv_restart, fv_write_restart
 use fv_timing_mod,      only: timing_on, timing_off
@@ -93,10 +93,10 @@ public :: atmosphere_resolution, atmosphere_boundary, &
 public :: atmos_phys_driver_statein
 
 !-----------------------------------------------------------------------
-
-character(len=128) :: version = '$Id$'
-character(len=128) :: tagname = '$Name$'
-character(len=7)   :: mod_name = 'atmos'
+! version number of this module
+! Include variable "version" to be written to log file.
+#include<file_version.h>
+character(len=7)   :: mod_name = 'fvGFS/atmosphere_mod'
 
 !---- private data ----
   type (time_type) :: Time_step_atmos
@@ -174,7 +174,7 @@ contains
    Atm(mytile)%Time_init = Time_init
 
 !----- write version and namelist to log file -----
-   call write_version_number ( version, tagname )
+   call write_version_number ( 'fvGFS/ATMOSPHERE_MOD', version )
 
 !-----------------------------------
 
@@ -283,9 +283,12 @@ contains
       if ( .not. Atm(mytile)%flagstruct%hydrostatic ) then
            call prt_maxmin('Before adi: W', Atm(mytile)%w, isc, iec, jsc, jec, Atm(mytile)%ng, npz, 1.)
       endif
-      call adiabatic_init(zvir)
+      call adiabatic_init(zvir,Atm(mytile)%flagstruct%nudge_dz)
       if ( .not. Atm(mytile)%flagstruct%hydrostatic ) then
            call prt_maxmin('After adi: W', Atm(mytile)%w, isc, iec, jsc, jec, Atm(mytile)%ng, npz, 1.)
+! Not nested?
+           call prt_height('na_ini Z500', isc,iec, jsc,jec, 3, npz, 500.E2, Atm(mytile)%phis, Atm(mytile)%delz,    &
+                Atm(mytile)%peln, Atm(mytile)%gridstruct%area_64(isc:iec,jsc:jec), Atm(mytile)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
       endif
    else
       call mpp_error(NOTE,'No adiabatic initialization correction in use')
@@ -910,9 +913,10 @@ contains
  end subroutine atmosphere_state_update
 
 
- subroutine adiabatic_init(zvir)
+ subroutine adiabatic_init(zvir,nudge_dz)
    real, allocatable, dimension(:,:,:):: u0, v0, t0, dz0, dp0
    real, intent(in):: zvir
+   logical, intent(inout):: nudge_dz
 !  real, parameter:: wt = 1.  ! was 2.
    real, parameter:: wt = 2.
 !***********
@@ -956,14 +960,16 @@ contains
      allocate ( v0(isc:iec+1,jsc:jec,   npz) )
      allocate (dp0(isc:iec,jsc:jec, npz) )
 
-     if ( Atm(mytile)%flagstruct%hydrostatic ) then
-          allocate ( t0(isc:iec,jsc:jec, npz) )
-     else
+     if ( Atm(mytile)%flagstruct%hydrostatic ) nudge_dz = .false.
+
+     if ( nudge_dz ) then
           allocate (dz0(isc:iec,jsc:jec, npz) )
+     else
+          allocate ( t0(isc:iec,jsc:jec, npz) )
      endif
 
 !$omp parallel do default (none) & 
-!$omp              shared (npz, jsc, jec, isc, iec, n, sphum, u0, v0, t0, dz0, dp0, Atm, zvir, mytile) &
+!$omp              shared (nudge_dz, npz, jsc, jec, isc, iec, n, sphum, u0, v0, t0, dz0, dp0, Atm, zvir, mytile) &
 !$omp             private (k, j, i) 
        do k=1,npz
           do j=jsc,jec+1
@@ -976,18 +982,18 @@ contains
                 v0(i,j,k) = Atm(mytile)%v(i,j,k)
              enddo
           enddo
-          if ( Atm(mytile)%flagstruct%hydrostatic ) then
+          if ( nudge_dz ) then
              do j=jsc,jec
                 do i=isc,iec
-                   t0(i,j,k) = Atm(mytile)%pt(i,j,k)*(1.+zvir*Atm(mytile)%q(i,j,k,sphum))  ! virt T
                    dp0(i,j,k) = Atm(mytile)%delp(i,j,k)
+                   dz0(i,j,k) = Atm(mytile)%delz(i,j,k)
                 enddo
              enddo
           else
              do j=jsc,jec
                 do i=isc,iec
+                   t0(i,j,k) = Atm(mytile)%pt(i,j,k)*(1.+zvir*Atm(mytile)%q(i,j,k,sphum))  ! virt T
                    dp0(i,j,k) = Atm(mytile)%delp(i,j,k)
-                   dz0(i,j,k) = Atm(mytile)%delz(i,j,k)
                 enddo
              enddo
           endif
@@ -1024,8 +1030,8 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (pref, q00, p00,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
-!$omp            private (i, j, k)
+!$omp             shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mytile) &
+!$omp            private (i, j, k, p00, q00)
        do k=1,npz
           do j=jsc,jec+1
              do i=isc,iec
@@ -1037,46 +1043,46 @@ contains
                 Atm(mytile)%v(i,j,k) = xt*(Atm(mytile)%v(i,j,k) + wt*v0(i,j,k))
              enddo
           enddo
-      if( Atm(mytile)%flagstruct%nudge_qv ) then
+          if( Atm(mytile)%flagstruct%nudge_qv ) then
 ! SJL note: Nudging water vaport towards HALOE climatology:
 ! In case of better IC (IFS) this step may not be necessary
-          p00 = Atm(mytile)%pe(isc,k,jsc)
-          if ( p00 < 30.E2 ) then
-             if ( p00 < 1. ) then
-                  q00 = q1_h2o
-             elseif ( p00 <= 7. .and. p00 >= 1. ) then
-                  q00 = q1_h2o + (q7_h2o-q1_h2o)*log(pref(k,1)/1.)/log(7.)
-             elseif ( p00 < 100. .and. p00 >= 7. ) then
-                  q00 = q7_h2o + (q100_h2o-q7_h2o)*log(pref(k,1)/7.)/log(100./7.)
-             elseif ( p00 < 1000. .and. p00 >= 100. ) then
-                  q00 = q100_h2o + (q1000_h2o-q100_h2o)*log(pref(k,1)/1.E2)/log(10.)
-             elseif ( p00 < 2000. .and. p00 >= 1000. ) then
-                  q00 = q1000_h2o + (q2000_h2o-q1000_h2o)*log(pref(k,1)/1.E3)/log(2.)
-             else
-                  q00 = q2000_h2o + (q3000_h2o-q2000_h2o)*log(pref(k,1)/2.E3)/log(1.5)
+             p00 = Atm(mytile)%pe(isc,k,jsc)
+             if ( p00 < 30.E2 ) then
+                if ( p00 < 1. ) then
+                     q00 = q1_h2o
+                elseif ( p00 <= 7. .and. p00 >= 1. ) then
+                     q00 = q1_h2o + (q7_h2o-q1_h2o)*log(pref(k,1)/1.)/log(7.)
+                elseif ( p00 < 100. .and. p00 >= 7. ) then
+                     q00 = q7_h2o + (q100_h2o-q7_h2o)*log(pref(k,1)/7.)/log(100./7.)
+                elseif ( p00 < 1000. .and. p00 >= 100. ) then
+                     q00 = q100_h2o + (q1000_h2o-q100_h2o)*log(pref(k,1)/1.E2)/log(10.)
+                elseif ( p00 < 2000. .and. p00 >= 1000. ) then
+                     q00 = q1000_h2o + (q2000_h2o-q1000_h2o)*log(pref(k,1)/1.E3)/log(2.)
+                else
+                     q00 = q2000_h2o + (q3000_h2o-q2000_h2o)*log(pref(k,1)/2.E3)/log(1.5)
+                endif
+                do j=jsc,jec
+                   do i=isc,iec
+                      Atm(mytile)%q(i,j,k,sphum) = xt*(Atm(mytile)%q(i,j,k,sphum) + wt*q00)
+                   enddo
+                enddo
              endif
+          endif
+          if ( nudge_dz ) then
              do j=jsc,jec
                 do i=isc,iec
-                   Atm(mytile)%q(i,j,k,sphum) = xt*(Atm(mytile)%q(i,j,k,sphum) + wt*q00)
+                   Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
+                   Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
+                enddo
+             enddo
+          else
+             do j=jsc,jec
+                do i=isc,iec
+                   Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
+                   Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
                 enddo
              enddo
           endif
-      endif
-      if ( Atm(mytile)%flagstruct%hydrostatic ) then
-          do j=jsc,jec
-             do i=isc,iec
-                Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
-                Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
-             enddo
-          enddo
-       else
-          do j=jsc,jec
-             do i=isc,iec
-                Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
-                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
-             enddo
-          enddo
-       endif
 
        enddo
 
@@ -1110,7 +1116,7 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
+!$omp             shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
 !$omp            private (i, j, k)
        do k=1,npz
           do j=jsc,jec+1
@@ -1123,18 +1129,18 @@ contains
                 Atm(mytile)%v(i,j,k) = xt*(Atm(mytile)%v(i,j,k) + wt*v0(i,j,k))
              enddo
           enddo
-          if ( Atm(mytile)%flagstruct%hydrostatic ) then
+          if ( nudge_dz ) then
              do j=jsc,jec
              do i=isc,iec
-                Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
                 Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
+                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
              enddo
              enddo
           else
              do j=jsc,jec
              do i=isc,iec
+                Atm(mytile)%pt(i,j,k) = xt*(Atm(mytile)%pt(i,j,k) + wt*t0(i,j,k)/(1.+zvir*Atm(mytile)%q(i,j,k,sphum)))
                 Atm(mytile)%delp(i,j,k) = xt*(Atm(mytile)%delp(i,j,k) + wt*dp0(i,j,k))
-                Atm(mytile)%delz(i,j,k) = xt*(Atm(mytile)%delz(i,j,k) + wt*dz0(i,j,k))
              enddo
              enddo
           endif

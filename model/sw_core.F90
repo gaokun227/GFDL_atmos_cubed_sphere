@@ -24,7 +24,6 @@
  use fv_mp_mod, only: fill_corners, XDir, YDir
  use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_flags_type
  use a2b_edge_mod, only: a2b_ord4
-! use fv_control_mod,    only: lim_fac
 
 #ifdef SW_DYNAMICS
  use test_cases_mod,   only: test_case
@@ -32,7 +31,6 @@
 
  implicit none
 
-  real, parameter:: lim_fac = 2.
   real, parameter:: r3 = 1./3.
   real, parameter:: t11=27./28., t12=-13./28., t13=3./7., t14=6./7., t15=3./28.
   real, parameter:: s11=11./14., s13=-13./14., s14=4./7., s15=3./14.
@@ -69,10 +67,6 @@
   real, parameter:: b4 =  0.45
   real, parameter:: b5 = -0.05
 
-
-!---- version number -----
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
 
       private
       public :: c_sw, d_sw, fill_4corners, del6_vt_flux, divergence_corner, divergence_corner_nest
@@ -913,7 +907,7 @@
 
 
       call fv_tp_2d(delp, crx_adv, cry_adv, npx, npy, hord_dp, fx, fy,  &
-                    xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, nord=nord_v, damp_c=damp_v)
+                    xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, nord=nord_v, damp_c=damp_v)
 
 ! <<< Save the mass fluxes to the "Flux Capacitor" for tracer transport >>>
         do j=jsd,jed
@@ -957,7 +951,7 @@
                 enddo
             endif
             call fv_tp_2d(w, crx_adv,cry_adv, npx, npy, hord_vt, gx, gy, xfx_adv, yfx_adv, &
-                          gridstruct, bd, ra_x, ra_y, mfx=fx, mfy=fy)
+                          gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, mfx=fx, mfy=fy)
             do j=js,je
                do i=is,ie
                   w(i,j) = delp(i,j)*w(i,j) + (gx(i,j)-gx(i+1,j)+gy(i,j)-gy(i,j+1))*rarea(i,j)
@@ -967,7 +961,7 @@
 
 #ifdef USE_COND
            call fv_tp_2d(q_con, crx_adv,cry_adv, npx, npy, hord_dp, gx, gy,  &
-                xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t)
+                xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t)
             do j=js,je
                do i=is,ie
                   q_con(i,j) = delp(i,j)*q_con(i,j) + (gx(i,j)-gx(i+1,j)+gy(i,j)-gy(i,j+1))*rarea(i,j)
@@ -983,7 +977,7 @@
 !       enddo
 !    endif
         call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
-                      xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y,     &
+                      xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
                       mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v)
 !                     mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t)
 #endif
@@ -1003,7 +997,7 @@
         enddo
         do iq=1,nq
            call fv_tp_2d(q(isd,jsd,k,iq), crx_adv,cry_adv, npx, npy, hord_tr, gx, gy,  &
-                         xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y,     &
+                         xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
                          mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t)
            do j=js,je
               do i=is,ie
@@ -1104,7 +1098,7 @@
       endif
 
       call ytp_v(is,ie,js,je,isd,ied,jsd,jed, vb, u, v, ub, hord_mt, gridstruct%dy, gridstruct%rdy, &
-                 npx, npy, flagstruct%grid_type, nested)
+                 npx, npy, flagstruct%grid_type, nested, flagstruct%lim_fac)
 
       do j=js,je+1
          do i=is,ie+1
@@ -1161,7 +1155,7 @@
       endif
 
       call xtp_u(is,ie,js,je, isd,ied,jsd,jed, ub, u, v, vb, hord_mt, gridstruct%dx, gridstruct%rdx, &
-                 npx, npy, flagstruct%grid_type, nested)
+                 npx, npy, flagstruct%grid_type, nested, flagstruct%lim_fac)
 
       do j=js,je+1
          do i=is,ie+1
@@ -1468,7 +1462,7 @@
    endif
 
     call fv_tp_2d(vort, crx_adv, cry_adv, npx, npy, hord_vt, fx, fy, &
-                  xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y)
+                  xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac)
     do j=js,je+1
        do i=is,ie
           u(i,j) = vt(i,j) + ke(i,j) - ke(i+1,j) + fy(i,j)
@@ -1965,7 +1959,7 @@ end subroutine divergence_corner_nest
  end subroutine smag_corner
 
 
- subroutine xtp_u(is,ie,js,je,isd,ied,jsd,jed,c, u, v, flux, iord, dx, rdx, npx, npy, grid_type, nested)
+ subroutine xtp_u(is,ie,js,je,isd,ied,jsd,jed,c, u, v, flux, iord, dx, rdx, npx, npy, grid_type, nested, lim_fac)
 
  integer, intent(in):: is,ie,js,je, isd,ied,jsd,jed
  real, INTENT(IN)::   u(isd:ied,jsd:jed+1)
@@ -1976,6 +1970,7 @@ end subroutine divergence_corner_nest
  real, INTENT(IN) ::  rdx(isd:ied,  jsd:jed+1)
  integer, INTENT(IN) :: iord, npx, npy, grid_type
  logical, INTENT(IN) :: nested
+ real, INTENT(IN) ::  lim_fac
 ! Local
  real, dimension(is-1:ie+1):: bl, br, b0
  logical, dimension(is-1:ie+1):: smt5, smt6
@@ -2315,7 +2310,7 @@ end subroutine divergence_corner_nest
  end subroutine xtp_u
 
 
- subroutine ytp_v(is,ie,js,je,isd,ied,jsd,jed, c, u, v, flux, jord, dy, rdy, npx, npy, grid_type, nested)
+ subroutine ytp_v(is,ie,js,je,isd,ied,jsd,jed, c, u, v, flux, jord, dy, rdy, npx, npy, grid_type, nested, lim_fac)
  integer, intent(in):: is,ie,js,je, isd,ied,jsd,jed
  integer, intent(IN):: jord
  real, INTENT(IN)  ::   u(isd:ied,jsd:jed+1)
@@ -2326,6 +2321,7 @@ end subroutine divergence_corner_nest
  real, INTENT(IN) ::  rdy(isd:ied+1,jsd:jed)
  integer, INTENT(IN) :: npx, npy, grid_type
  logical, INTENT(IN) :: nested
+ real, INTENT(IN) ::  lim_fac
 ! Local:
  logical, dimension(is:ie+1,js-1:je+1):: smt5, smt6
  real:: fx0(is:ie+1)

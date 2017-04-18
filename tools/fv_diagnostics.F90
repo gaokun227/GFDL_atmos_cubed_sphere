@@ -21,7 +21,8 @@ module fv_diagnostics_mod
 
  use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, radius, kappa, WTMAIR, WTMCO2, &
                                omega, hlv, cp_air, cp_vapor
- use fms_io_mod,         only: set_domain, nullify_domain
+ use fms_mod,            only: write_version_number
+ use fms_io_mod,         only: set_domain, nullify_domain, write_version_number
  use time_manager_mod,   only: time_type, get_date, get_time
  use mpp_domains_mod,    only: domain2d, mpp_update_domains, DGRID_NE
  use diag_manager_mod,   only: diag_axis_init, register_diag_field, &
@@ -63,7 +64,7 @@ module fv_diagnostics_mod
  logical :: module_is_initialized=.false.
  logical :: prt_minmax =.false.
  logical :: m_calendar
- integer  sphum, liq_wat, ice_wat       ! GFDL physics
+ integer  sphum, liq_wat, ice_wat, cld_amt    ! GFDL physics
  integer  rainwat, snowwat, graupel
  integer :: istep
  real    :: ptop
@@ -77,15 +78,14 @@ module fv_diagnostics_mod
 
  public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, range_check!, id_divg, id_te
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
- public :: get_height_given_pressure, interpolate_vertical, rh_calc, get_height_field
-
-
-!---- version number -----
- character(len=128) :: version = '$Id$'
- character(len=128) :: tagname = '$Name$'
+ public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field
 
  integer, parameter :: nplev = 31
  integer :: levs(nplev)
+
+! version number of this module
+! Include variable "version" to be written to log file.
+#include<file_version.h>
 
 contains
 
@@ -121,6 +121,7 @@ contains
     integer :: axe2(3)
 
 
+    call write_version_number ( 'FV_DIAGNOSTICS_MOD', version )
     idiag => Atm(1)%idiag
 
 ! For total energy diagnostics:
@@ -140,6 +141,7 @@ contains
     rainwat = get_tracer_index (MODEL_ATMOS, 'rainwat')
     snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat')
     graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
+    cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
 
 ! valid range for some fields
 
@@ -956,7 +958,7 @@ contains
     real:: plevs(nplev), pout(nplev)
     integer:: idg(nplev), id1(nplev)
     real    :: tot_mq, tmp, sar, slon, slat
-    real    :: t_gb, t_nh, t_sh, t_eq, area_gb, area_nh, area_sh, area_eq
+!   real    :: t_gb, t_nh, t_sh, t_eq, area_gb, area_nh, area_sh, area_eq
     logical :: do_cs_intp
     logical :: used
     logical :: bad_range
@@ -1498,7 +1500,7 @@ contains
                   idg(minloc(abs(levs-500))) = idiag%id_h(minloc(abs(levs-500)))
              endif
 
-             call get_height_given_pressure(isc, iec, jsc, jec, ngc, npz, wz, nplev, idg, plevs, Atm(n)%peln, a3)
+             call get_height_given_pressure(isc, iec, jsc, jec, npz, wz, nplev, idg, plevs, Atm(n)%peln, a3)
              ! reset 
              idg(minloc(abs(levs-300))) = idiag%id_h(minloc(abs(levs-300)))
              idg(minloc(abs(levs-500))) = idiag%id_h(minloc(abs(levs-500)))
@@ -1509,7 +1511,7 @@ contains
 
              if (idiag%id_h_plev>0)  then
                id1(:) = 1
-               call get_height_given_pressure(isc, iec, jsc, jec, ngc, npz, wz, nplev, id1, plevs, Atm(n)%peln, a3)
+               call get_height_given_pressure(isc, iec, jsc, jec, npz, wz, nplev, id1, plevs, Atm(n)%peln, a3)
                used=send_data(idiag%id_h_plev, a3(isc:iec,jsc:jec,:), Time)
              endif
 
@@ -1519,8 +1521,8 @@ contains
                 call prt_mxm('Z100',a3(isc:iec,jsc:jec,11),isc,iec,jsc,jec,0,1,1.E-3,Atm(n)%gridstruct%area_64,Atm(n)%domain)
 
                 if(all(idiag%id_h(minloc(abs(levs-500)))>0))  then
-!                  call prt_mxm('Z500',a3(isc:iec,jsc:jec,19),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
                    if (.not. Atm(n)%neststruct%nested) then
+#ifdef TO_BE_DELETED
                    t_eq = 0.   ;    t_nh = 0.;    t_sh = 0.;    t_gb = 0.
                    area_eq = 0.; area_nh = 0.; area_sh = 0.; area_gb = 0.
                    do j=jsc,jec
@@ -1552,6 +1554,10 @@ contains
                    call mp_reduce_sum(area_eq)
                    call mp_reduce_sum(   t_eq)
                    if (master) write(*,*) 'Z500 GB_NH_SH_EQ=', t_gb/area_gb, t_nh/area_nh, t_sh/area_sh, t_eq/area_eq
+#endif
+!                  call prt_mxm('Z500',a3(isc:iec,jsc:jec,19),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
+                   call prt_gb_nh_sh('fv_GFS Z500', isc,iec, jsc,jec, a3(isc,jsc,19), Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
+                                     Atm(n)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
                    endif
                 endif
 
@@ -2670,7 +2676,7 @@ contains
             used = send_data (idiag%id_tracer(itrac), Atm(n)%q(isc:iec,jsc:jec,:,itrac), Time )
           endif
           if (itrac .le. nq) then
-            if( prt_minmax ) call prt_maxmin(trim(tname), Atm(n)%q(:,:,1,itrac), &
+            if( prt_minmax ) call prt_maxmin(trim(tname), Atm(n)%q(:,:,1,itrac),     &
                               isc, iec, jsc, jec, ngc, npz, 1.)
           else
             if( prt_minmax ) call prt_maxmin(trim(tname), Atm(n)%qdiag(:,:,1,itrac), &
@@ -2703,7 +2709,21 @@ contains
           endif
         enddo
 
-
+! Maximum overlap cloud fraction
+      if ( .not. Atm(n)%neststruct%nested )  then
+        if ( cld_amt > 0 .and. prt_minmax ) then
+          a2(:,:) = 0.
+          do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) =  max(a2(i,j), Atm(n)%q(i,j,k,cld_amt) )
+             enddo
+             enddo
+          enddo
+          call prt_gb_nh_sh('Max_cld GB_NH_SH_EQ',isc,iec, jsc,jec, a2, Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
+                            Atm(n)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
+        endif
+      endif
 
 #endif
 
@@ -3171,8 +3191,9 @@ contains
 
  end subroutine get_pressure_given_height
 
- subroutine get_height_given_pressure(is, ie, js, je, ng, km, wz, kd, id, log_p, peln, a2)
- integer,  intent(in):: is, ie, js, je, ng, km
+
+ subroutine get_height_given_pressure(is, ie, js, je, km, wz, kd, id, log_p, peln, a2)
+ integer,  intent(in):: is, ie, js, je, km
  integer,  intent(in):: kd       ! vertical dimension of the ouput height
  integer,  intent(in):: id(kd)
  real, intent(in):: log_p(kd)    ! must be monotonically increasing  with increasing k
@@ -3181,33 +3202,134 @@ contains
  real, intent(in):: peln(is:ie,km+1,js:je)
  real, intent(out):: a2(is:ie,js:je,kd)      ! height (m)
 ! local:
- integer n,i,j,k, k1
+ real, dimension(2*km+1):: pn, gz
+ integer n,i,j,k, k1, k2, l
 
-!$OMP parallel do default(none) shared(is,ie,js,je,km,kd,id,log_p,peln,a2,wz)   &
-!$OMP             private(i,j,n,k,k1)
+ k2 = max(12, km/2+1)
+
+!$OMP parallel do default(none) shared(k2,is,ie,js,je,km,kd,id,log_p,peln,a2,wz)   &
+!$OMP             private(i,j,n,k,k1,l,pn,gz)
  do j=js,je
     do i=is,ie
+!---------------
+! Mirror method:
+!---------------
+       do k=1,km+1
+          pn(k) = peln(i,k,j)
+          gz(k) = wz(i,j,k)
+       enddo
+       do k=km+2, km+k2
+          l = 2*(km+1) - k
+          gz(k) = 2.*gz(km+1) - gz(l)
+          pn(k) = 2.*pn(km+1) - pn(l)
+       enddo
        k1 = 1
        do 1000 n=1,kd
           if( id(n)<0 ) goto 1000
-          do k=k1,km
-             if( log_p(n) <= peln(i,k+1,j) .and. log_p(n) >= peln(i,k,j) ) then
-                 a2(i,j,n) = wz(i,j,k)  +  (wz(i,j,k+1) - wz(i,j,k)) *   &
-                            (log_p(n)-peln(i,k,j)) / (peln(i,k+1,j)-peln(i,k,j) )
+          do k=k1,km+k2-1
+             if( log_p(n) <= pn(k+1) .and. log_p(n) >= pn(k) ) then
+                 a2(i,j,n) = gz(k) + (gz(k+1)-gz(k))*(log_p(n)-pn(k))/(pn(k+1)-pn(k))
                  k1 = k
                  go to 1000
              endif
           enddo
-!         a2(i,j,n) = missing_value
-! Extrapolation into ground: use lowest 4-layer mean
-          a2(i,j,n) = wz(i,j,km+1) + (wz(i,j,km+1) - wz(i,j,km-3)) *   &
-                    (log_p(n)-peln(i,km+1,j)) / (peln(i,km+1,j)-peln(i,km-3,j) )
-          k1 = km
 1000   continue
     enddo
  enddo
 
  end subroutine get_height_given_pressure
+
+ subroutine prt_height(qname, is, ie, js, je, ng, km, press, phis, delz, peln, area, lat)
+ character(len=*), intent(in)::  qname
+ integer,  intent(in):: is, ie, js, je, ng, km
+ real, intent(in):: press
+ real, intent(in):: peln(is:ie,km+1,js:je)
+ real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
+ real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+ real(kind=R_GRID), intent(in), dimension(is:ie, js:je):: area, lat
+! local:
+ real:: a2(is:ie,js:je)      ! height (m)
+ real(kind=R_GRID), dimension(2*km+1):: pn, gz
+ real(kind=R_GRID):: log_p
+ integer i,j,k, k2, l
+
+ log_p = log(press)
+ k2 = max(12, km/2+1)
+
+!$OMP parallel do default(none) shared(k2,is,ie,js,je,km,log_p,peln,phis,delz,a2)   &
+!$OMP             private(i,j,k,l,pn,gz)
+ do j=js,je
+    do 1000 i=is,ie
+!---------------
+! Mirror method:
+!---------------
+       do k=1,km+1
+          pn(k) = peln(i,k,j)
+       enddo
+       gz(km+1) = phis(i,j)/grav
+       do k=km,1,-1
+          gz(k) = gz(k+1) - delz(i,j,k)
+       enddo
+       do k=km+2, km+k2
+          l = 2*(km+1) - k
+          gz(k) = 2.*gz(km+1) - gz(l)
+          pn(k) = 2.*pn(km+1) - pn(l)
+       enddo
+
+       do k=1,km+k2-1
+          if( log_p <= pn(k+1) .and. log_p >= pn(k) ) then
+              a2(i,j) = gz(k) + (gz(k+1)-gz(k))*(log_p-pn(k))/(pn(k+1)-pn(k))
+              go to 1000
+          endif
+       enddo
+1000   continue
+ enddo
+ call prt_gb_nh_sh(qname, is,ie, js,je, a2, area, lat)
+
+ end subroutine prt_height
+
+ subroutine prt_gb_nh_sh(qname, is,ie, js,je, a2, area, lat)
+  character(len=*), intent(in)::  qname
+  integer, intent(in):: is, ie, js, je
+  real, intent(in), dimension(is:ie, js:je):: a2
+  real(kind=R_GRID), intent(in), dimension(is:ie, js:je):: area, lat
+! Local:
+  real(R_GRID), parameter:: rad2deg = 180./pi
+  real(R_GRID):: slat
+  real:: t_eq, t_nh, t_sh, t_gb
+  real:: area_eq, area_nh, area_sh, area_gb
+  integer:: i,j
+
+     t_eq = 0.   ;    t_nh = 0.;    t_sh = 0.;    t_gb = 0.
+     area_eq = 0.; area_nh = 0.; area_sh = 0.; area_gb = 0.
+     do j=js,je
+        do i=is,ie
+           slat = lat(i,j)*rad2deg
+           area_gb = area_gb + area(i,j)
+           t_gb = t_gb + a2(i,j)*area(i,j)
+           if( (slat>-20. .and. slat<20.) ) then
+                area_eq = area_eq + area(i,j)
+                t_eq = t_eq + a2(i,j)*area(i,j)
+           elseif( slat>=20. .and. slat<80. ) then
+                area_nh = area_nh + area(i,j)
+                t_nh = t_nh + a2(i,j)*area(i,j)
+           elseif( slat<=-20. .and. slat>-80. ) then
+                area_sh = area_sh + area(i,j)
+                t_sh = t_sh + a2(i,j)*area(i,j)
+           endif
+        enddo
+     enddo
+     call mp_reduce_sum(area_gb)
+     call mp_reduce_sum(   t_gb)
+     call mp_reduce_sum(area_nh)
+     call mp_reduce_sum(   t_nh)
+     call mp_reduce_sum(area_sh)
+     call mp_reduce_sum(   t_sh)
+     call mp_reduce_sum(area_eq)
+     call mp_reduce_sum(   t_eq)
+     if (is_master()) write(*,*) qname, t_gb/area_gb, t_nh/area_nh, t_sh/area_sh, t_eq/area_eq
+
+ end subroutine prt_gb_nh_sh
 
  subroutine cs3_interpolator(is, ie, js, je, km, qin, kd, pout, wz, pe, id, qout, iv)
 ! iv =-1: winds

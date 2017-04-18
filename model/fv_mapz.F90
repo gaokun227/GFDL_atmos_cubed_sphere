@@ -53,10 +53,6 @@ module fv_mapz_mod
   public compute_total_energy, Lagrangian_to_Eulerian, moist_cv, moist_cp,   &
          rst_remap, mappm, E_Flux
 
-!---- version number -----
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
-
 contains
 
  subroutine Lagrangian_to_Eulerian(last_step, consv, ps, pe, delp, pkz, pk,   &
@@ -669,7 +665,7 @@ endif        ! end last_step check
                              te(isd,jsd,k), q(isd,jsd,k,sphum), q(isd,jsd,k,liq_wat),   &
                              q(isd,jsd,k,ice_wat), q(isd,jsd,k,rainwat),    &
                              q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel),    &
-                             dpln, delz(isd:,jsd:,k), pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), &
+                             hs ,dpln, delz(isd:,jsd:,k), pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), &
               cappa(isd:,jsd:,k), gridstruct%area_64, dtdt(is,js,k), out_dt, last_step, cld_amt>0, q(isd,jsd,k,cld_amt))
               if ( .not. hydrostatic  ) then
                  do j=js,je
