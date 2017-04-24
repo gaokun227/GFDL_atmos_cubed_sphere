@@ -51,6 +51,7 @@ module fv_diagnostics_mod
 
 
  real, parameter:: missing_value = -1.e10
+ real, parameter:: missing_value2 = -1.e3 ! for variables with many missing values
  real :: ginv
  real :: pk0
  logical master
@@ -617,7 +618,7 @@ contains
        idiag%id_dbz4km = register_diag_field ( trim(field), '4km_reflectivity', axes(1:2), time, &
                 'Stoelinga simulated base reflectivity', 'dBz', missing_value=missing_value)
        idiag%id_dbztop = register_diag_field ( trim(field), 'echo_top', axes(1:2), time, &
-                'Echo top ( <= 18.5 dBz )', 'm', missing_value=missing_value)
+                'Echo top ( <= 18.5 dBz )', 'm', missing_value=missing_value2)
        idiag%id_dbz_m10C = register_diag_field ( trim(field), 'm10C_reflectivity', axes(1:2), time, &
                 'Reflectivity at -10C level', 'm', missing_value=missing_value)
 
@@ -642,11 +643,11 @@ contains
        idiag%id_tb = register_diag_field ( trim(field), 'tb', axes(1:2), Time,  &
                                         'lowest layer temperature', 'K' )
        idiag%id_ctt = register_diag_field( trim(field), 'ctt', axes(1:2), Time,  &
-                                        'cloud_top temperature', 'K', missing_value=missing_value )
+                                        'cloud_top temperature', 'K', missing_value=missing_value2 )
        idiag%id_ctp = register_diag_field( trim(field), 'ctp', axes(1:2), Time,  &
-                                        'cloud_top pressure', 'hPa' , missing_value=missing_value )
+                                        'cloud_top pressure', 'hPa' , missing_value=missing_value2 )
        idiag%id_ctz = register_diag_field( trim(field), 'ctz', axes(1:2), Time,  &
-                                        'cloud_top height', 'hPa' , missing_value=missing_value )
+                                        'cloud_top height', 'hPa' , missing_value=missing_value2 )
        idiag%id_cape = register_diag_field( trim(field), 'cape', axes(1:2), Time,  &
                                         'Convective available potential energy (surface-based)', 'J/kg' , missing_value=missing_value )
        idiag%id_cin = register_diag_field( trim(field), 'cin', axes(1:2), Time,  &
@@ -772,6 +773,31 @@ contains
                            '925-mb relative humidity', '%', missing_value=missing_value )
        idiag%id_rh1000 = register_diag_field ( trim(field), 'rh1000', axes(1:2), Time,       &
                            '1000-mb relative humidity', '%', missing_value=missing_value )
+!--------------------------
+! Dew Point
+!--------------------------
+       idiag%id_dp10 = register_diag_field ( trim(field), 'dp10', axes(1:2), Time,       &
+                           '10-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp50 = register_diag_field ( trim(field), 'dp50', axes(1:2), Time,       &
+                           '50-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp100 = register_diag_field ( trim(field), 'dp100', axes(1:2), Time,       &
+                           '100-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp200 = register_diag_field ( trim(field), 'dp200', axes(1:2), Time,       &
+                           '200-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp250 = register_diag_field ( trim(field), 'dp250', axes(1:2), Time,       &
+                           '250-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp300 = register_diag_field ( trim(field), 'dp300', axes(1:2), Time,       &
+                           '300-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp500 = register_diag_field ( trim(field), 'dp500', axes(1:2), Time,       &
+                           '500-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp700 = register_diag_field ( trim(field), 'dp700', axes(1:2), Time,       &
+                           '700-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp850 = register_diag_field ( trim(field), 'dp850', axes(1:2), Time,       &
+                           '850-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp925 = register_diag_field ( trim(field), 'dp925', axes(1:2), Time,       &
+                           '925-mb dew point', 'K', missing_value=missing_value )
+       idiag%id_dp1000 = register_diag_field ( trim(field), 'dp1000', axes(1:2), Time,       &
+                           '1000-mb dew point', 'K', missing_value=missing_value )
 !--------------------------
 ! relative humidity (CMIP definition):
 !--------------------------
@@ -1329,7 +1355,10 @@ contains
        ! rel hum from physics at selected press levels (for IPCC)
        if (idiag%id_rh50>0  .or. idiag%id_rh100>0 .or. idiag%id_rh200>0 .or. idiag%id_rh250>0 .or. &
            idiag%id_rh300>0 .or. idiag%id_rh500>0 .or. idiag%id_rh700>0 .or. idiag%id_rh850>0 .or. &
-           idiag%id_rh925>0 .or. idiag%id_rh1000>0) then
+           idiag%id_rh925>0 .or. idiag%id_rh1000>0 .or.                                            &
+           idiag%id_dp50>0  .or. idiag%id_dp100>0 .or. idiag%id_dp200>0 .or. idiag%id_dp250>0 .or. &
+           idiag%id_dp300>0 .or. idiag%id_dp500>0 .or. idiag%id_dp700>0 .or. idiag%id_dp850>0 .or. &
+           idiag%id_dp925>0 .or. idiag%id_dp1000>0) then
            ! compute mean pressure
            do k=1,npz
                do j=jsc,jec
@@ -1379,6 +1408,64 @@ contains
            if (idiag%id_rh1000>0) then
                call interpolate_vertical(isc, iec, jsc, jec, npz, 1000.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
                used=send_data(idiag%id_rh1000, a2, Time)
+           endif
+
+           if (idiag%id_dp50>0  .or. idiag%id_dp100>0 .or. idiag%id_dp200>0 .or. idiag%id_dp250>0 .or. &
+                idiag%id_dp300>0 .or. idiag%id_dp500>0 .or. idiag%id_dp700>0 .or. idiag%id_dp850>0 .or. &
+                idiag%id_dp925>0 .or. idiag%id_dp1000>0 ) then
+
+              !compute dew point (K)
+              !using formula at https://cals.arizona.edu/azmet/dewpoint.html
+              do k=1,npz
+              do j=jsc,jec
+              do i=isc,iec
+                 tmp = ( log(wk(i,j,k)*1.e-2) + 17.27 * ( Atm(n)%pt(i,j,k) - 273.14 )/ ( -35.84 + Atm(n)%pt(i,j,k)) ) / 17.27 
+                 wk(i,j,k) = 273.14 + 237.3*tmp/ ( 1. - tmp )
+              enddo
+              enddo
+              enddo
+
+           endif
+
+           if (idiag%id_dp50>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 50.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp50, a2, Time)
+           endif
+           if (idiag%id_dp100>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 100.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp100, a2, Time)
+           endif
+           if (idiag%id_dp200>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 200.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp200, a2, Time)
+           endif
+           if (idiag%id_dp250>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 250.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp250, a2, Time)
+           endif
+           if (idiag%id_dp300>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 300.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp300, a2, Time)
+           endif
+           if (idiag%id_dp500>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 500.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp500, a2, Time)
+           endif
+           if (idiag%id_dp700>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 700.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp700, a2, Time)
+           endif
+           if (idiag%id_dp850>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 850.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp850, a2, Time)
+           endif
+           if (idiag%id_dp925>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 925.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp925, a2, Time)
+           endif
+           if (idiag%id_dp1000>0) then
+               call interpolate_vertical(isc, iec, jsc, jec, npz, 1000.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
+               used=send_data(idiag%id_dp1000, a2, Time)
            endif
        endif
 
@@ -1979,9 +2066,9 @@ contains
                          var2(i,j) = wz(i,j,k) - wz(i,j,npz+1) ! height AGL
                          exit
                      elseif( k==npz ) then
-                        a2(i,j) = missing_value
-                        var1(i,j) = missing_value
-                        var2(i,j) = missing_value
+                        a2(i,j) = missing_value2
+                        var1(i,j) = missing_value2
+                        var2(i,j) = missing_value2
 !!$                           a2(i,j) = Atm(n)%pt(i,j,k)
 !!$                         var1(i,j) = 0.01*Atm(n)%pe(i,k+1,j)   ! surface pressure
                      endif

@@ -72,6 +72,8 @@ module fv_arrays_mod
 ! IPCC diag
  integer :: id_rh10,  id_rh50,  id_rh100, id_rh200,  id_rh250, id_rh300, &
             id_rh500, id_rh700, id_rh850, id_rh925,  id_rh1000
+ integer :: id_dp10,  id_dp50,  id_dp100, id_dp200,  id_dp250, id_dp300, &
+            id_dp500, id_dp700, id_dp850, id_dp925,  id_dp1000
 
  integer :: id_rh1000_cmip, id_rh925_cmip, id_rh850_cmip, id_rh700_cmip, id_rh500_cmip, &
             id_rh300_cmip,  id_rh250_cmip, id_rh100_cmip, id_rh50_cmip,  id_rh10_cmip
