@@ -727,12 +727,17 @@ contains
 !                           '2-5 km vertical comp. of helicity', 'm**2/s**2', missing_value=missing_value )
 
 ! Storm Relative Helicity
-       idiag%id_srh = register_diag_field ( trim(field), 'srh', axes(1:2), Time,       &
+       idiag%id_srh1 = register_diag_field ( trim(field), 'srh01', axes(1:2), Time,       &
+                           '0-1 km Storm Relative Helicity', 'm/s**2', missing_value=missing_value )
+       idiag%id_srh3 = register_diag_field ( trim(field), 'srh03', axes(1:2), Time,       &
                            '0-3 km Storm Relative Helicity', 'm/s**2', missing_value=missing_value )
+       idiag%id_ustm = register_diag_field ( trim(field), 'ustm', axes(1:2), Time,       &
+                           'u Component of Storm Motion', 'm/s', missing_value=missing_value )
+       idiag%id_vstm = register_diag_field ( trim(field), 'vstm', axes(1:2), Time,       &
+                           'v Component of Storm Motion', 'm/s', missing_value=missing_value )
+
        idiag%id_srh25 = register_diag_field ( trim(field), 'srh25', axes(1:2), Time,       &
                            '2-5 km Storm Relative Helicity', 'm/s**2', missing_value=missing_value )
-       idiag%id_srh01 = register_diag_field ( trim(field), 'srh01', axes(1:2), Time,       &
-                           '0-1 km Storm Relative Helicity', 'm/s**2', missing_value=missing_value )
        
        if( .not. Atm(n)%flagstruct%hydrostatic ) then
           idiag%id_uh03 = register_diag_field ( trim(field), 'uh03', axes(1:2), Time,       &
@@ -977,6 +982,7 @@ contains
     integer :: ngc, nwater
 
     real, allocatable :: a2(:,:),a3(:,:,:), wk(:,:,:), wz(:,:,:), ucoor(:,:,:), vcoor(:,:,:)
+    real, allocatable :: ustm(:,:), vstm(:,:)
     real, allocatable :: slp(:,:), depress(:,:), ws_max(:,:), tc_count(:,:)
     real, allocatable :: u2(:,:), v2(:,:), x850(:,:), var1(:,:), var2(:,:), var3(:,:)
     real, allocatable :: dmmr(:,:,:), dvmr(:,:,:)
@@ -1282,6 +1288,84 @@ contains
           endif
 
 
+          if ( idiag%id_srh1 > 0 .or. idiag%id_srh3 > 0 .or. idiag%id_srh25 > 0 .or. idiag%id_ustm > 0 .or. idiag%id_vstm > 0) then
+              allocate(ustm(isc:iec,jsc:jec), vstm(isc:iec,jsc:jec))
+
+              call bunkers_vector(isc, iec, jsc, jec, ngc, npz, zvir, sphum, ustm, vstm, &
+                   Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+                   Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav)
+
+              if ( idiag%id_ustm > 0 ) then
+                 used = send_data ( idiag%id_ustm, ustm, Time )
+              endif
+              if ( idiag%id_vstm > 0 ) then
+                 used = send_data ( idiag%id_vstm, vstm, Time )
+              endif
+
+              if ( idiag%id_srh1 > 0 ) then
+                 call helicity_relative_CAPS(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, ustm, vstm, &
+                      Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+                      Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 1.e3)
+                 used = send_data ( idiag%id_srh1, a2, Time )
+                 if(prt_minmax) then
+                    do j=jsc,jec
+                       do i=isc,iec
+                          tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
+                          tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
+                          if (  tmp2<25. .or. tmp2>50.    &
+                               .or. tmp<235. .or. tmp>300. ) then
+                             a2(i,j) = 0.
+                          endif
+                       enddo
+                    enddo
+                    call prt_maxmin('SRH (0-1 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
+                 endif
+              endif
+
+              if ( idiag%id_srh3 > 0 ) then
+                 call helicity_relative_CAPS(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, ustm, vstm, &
+                      Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+                      Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 3e3)
+                 used = send_data ( idiag%id_srh3, a2, Time )
+                 if(prt_minmax) then
+                    do j=jsc,jec
+                       do i=isc,iec
+                          tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
+                          tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
+                          if (  tmp2<25. .or. tmp2>50.    &
+                               .or. tmp<235. .or. tmp>300. ) then
+                             a2(i,j) = 0.
+                          endif
+                       enddo
+                    enddo
+                    call prt_maxmin('SRH (0-3 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
+                 endif
+              endif
+
+              if ( idiag%id_srh25 > 0 ) then
+                 call helicity_relative_CAPS(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, ustm, vstm, &
+                      Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+                      Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 2.e3, 5e3)
+                 used = send_data ( idiag%id_srh25, a2, Time )
+                 if(prt_minmax) then
+                    do j=jsc,jec
+                       do i=isc,iec
+                          tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
+                          tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
+                          if (  tmp2<25. .or. tmp2>50.    &
+                               .or. tmp<235. .or. tmp>300. ) then
+                             a2(i,j) = 0.
+                          endif
+                       enddo
+                    enddo
+                    call prt_maxmin('SRH (2-5 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
+                 endif
+              endif
+
+              deallocate(ustm, vstm)
+          endif
+
+
           if ( idiag%id_pv > 0 ) then
 ! Note: this is expensive computation.
               call pv_entropy(isc, iec, jsc, jec, ngc, npz, wk,    &
@@ -1294,38 +1378,32 @@ contains
 
 
        
-       if ( idiag%id_srh > 0 ) then
-          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
-               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
-               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 3.e3)
-          used = send_data ( idiag%id_srh, a2, Time )
-          if(prt_minmax) then
-             do j=jsc,jec
-                do i=isc,iec
-                   tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
-                   tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
-                   if (  tmp2<25. .or. tmp2>50.    &
-                        .or. tmp<235. .or. tmp>300. ) then
-                      a2(i,j) = 0.
-                   endif
-                enddo
-             enddo
-             call prt_maxmin('SRH over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
-          endif
-       endif
+!!$       if ( idiag%id_srh > 0 ) then
+!!$          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
+!!$               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+!!$               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 3.e3)
+!!$          used = send_data ( idiag%id_srh, a2, Time )
+!!$          if(prt_minmax) then
+!!$             do j=jsc,jec
+!!$                do i=isc,iec
+!!$                   tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
+!!$                   tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
+!!$                   if (  tmp2<25. .or. tmp2>50.    &
+!!$                        .or. tmp<235. .or. tmp>300. ) then
+!!$                      a2(i,j) = 0.
+!!$                   endif
+!!$                enddo
+!!$             enddo
+!!$             call prt_maxmin('SRH over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
+!!$          endif
+!!$       endif
 
-       if ( idiag%id_srh25 > 0 ) then
-          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
-               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
-               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 2.e3, 5.e3)
-          used = send_data ( idiag%id_srh25, a2, Time )
-       endif
-       if ( idiag%id_srh01 > 0 ) then
-          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
-               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
-               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0.e3, 1.e3)
-          used = send_data ( idiag%id_srh01, a2, Time )
-       endif
+!!$       if ( idiag%id_srh25 > 0 ) then
+!!$          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
+!!$               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+!!$               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 2.e3, 5.e3)
+!!$          used = send_data ( idiag%id_srh25, a2, Time )
+!!$       endif
 
 
        ! Relative Humidity
@@ -3778,6 +3856,160 @@ contains
    enddo   ! j-loop
 
  end subroutine helicity_relative
+
+ subroutine helicity_relative_CAPS(is, ie, js, je, ng, km, zvir, sphum, srh, uc, vc,  &
+                              ua, va, delz, q, hydrostatic, pt, peln, phis, grav, z_bot, z_top)
+! !INPUT PARAMETERS:
+   integer, intent(in):: is, ie, js, je, ng, km, sphum
+   real, intent(in):: grav, zvir, z_bot, z_top
+   real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
+   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
+   real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
+   real, intent(in):: peln(is:ie,km+1,js:je) 
+   real, intent(in):: uc(is:ie,js:je), vc(is:ie,js:je)
+   logical, intent(in):: hydrostatic
+   real, intent(out):: srh(is:ie,js:je)   ! unit: (m/s)**2
+!---------------------------------------------------------------------------------
+! SRH = 150-299 ... supercells possible with weak tornadoes
+! SRH = 300-449 ... very favourable to supercells development and strong tornadoes
+! SRH > 450 ... violent tornadoes
+!---------------------------------------------------------------------------------
+! if z_crit = 1E3, the threshold for supercells is 100 (m/s)**2
+! Coded by S.-J. Lin for CONUS regional climate simulations
+!
+   real:: rdg
+   real, dimension(is:ie):: zh, dz, zh0
+   integer i, j, k, k0, k1
+   logical below
+
+   rdg = rdgas / grav
+
+!$OMP parallel do default(none) shared(is,ie,js,je,km,hydrostatic,rdg,pt,zvir,sphum, &
+!$OMP                                  peln,delz,ua,va,srh,uc,vc,z_bot,z_top) &
+!$OMP                          private(zh,dz,k0,k1,zh0,below)
+   do j=js,je
+
+      do i=is,ie
+         srh(i,j) = 0.
+         zh(i) = 0.
+         zh0 = 0.
+         below = .true.
+
+         do k=km,1,-1
+            if ( hydrostatic ) then
+                 dz(i) = rdg*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))*(peln(i,k+1,j)-peln(i,k,j))
+            else
+                 dz(i) = -delz(i,j,k)
+            endif
+
+            zh(i) = zh(i) + dz(i)
+            if (zh(i) <= z_bot ) continue
+            if (zh(i) > z_bot .and. below) then
+               zh0(i) = zh(i) - dz(i)
+               k1 = k
+               below = .false.
+! Compute mean winds below z_top
+            elseif ( zh(i) < z_top ) then
+                k0 = k
+            else
+                goto 123
+            endif
+
+         enddo
+123      continue
+
+! Lowest layer wind shear computed betw top edge and mid-layer
+         k = k1
+         srh(i,j) = 0.5*(va(i,j,k1)-vc(i,j))*(ua(i,j,k1-1)-ua(i,j,k1))  -  &
+                    0.5*(ua(i,j,k1)-uc(i,j))*(va(i,j,k1-1)-va(i,j,k1))
+         do k=k0, k1-1
+            srh(i,j) = srh(i,j) + 0.5*(va(i,j,k)-vc(i,j))*(ua(i,j,k-1)-ua(i,j,k+1)) -  &
+                                  0.5*(ua(i,j,k)-uc(i,j))*(va(i,j,k-1)-va(i,j,k+1))
+         enddo
+      enddo  ! i-loop
+   enddo   ! j-loop
+
+ end subroutine helicity_relative_CAPS
+
+
+ subroutine bunkers_vector(is, ie, js, je, ng, km, zvir, sphum, uc, vc,  &
+                           ua, va, delz, q, hydrostatic, pt, peln, phis, grav)
+
+   integer, intent(in):: is, ie, js, je, ng, km, sphum
+   real, intent(in):: grav, zvir
+   real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
+   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
+   real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
+   real, intent(in):: peln(is:ie,km+1,js:je) 
+   logical, intent(in):: hydrostatic
+   real, intent(out):: uc(is:ie,js:je), vc(is:ie,js:je)
+
+   real:: rdg
+   real :: zh, dz, usfc, vsfc, u6km, v6km, umn, vmn
+   real :: ushr, vshr, shrmag
+   integer i, j, k
+   real, parameter :: bunkers_d = 7.5 ! Empirically derived parameter
+   logical :: has_sfc, has_6km
+
+   rdg = rdgas / grav
+
+!$OMP parallel do default(none) shared(is,ie,js,je,km,hydrostatic,rdg,pt,zvir,sphum, &
+!$OMP                                  peln,delz,ua,va,uc,vc) &
+!$OMP                           private(zh,dz,usfc,vsfc,u6km,v6km,umn,vmn, &
+!$OMP                                  ushr,vshr,shrmag)
+   do j=js,je
+      do i=is,ie
+         zh = 0.
+         usfc = 0.
+         vsfc = 0.
+         u6km = 0.
+         v6km = 0.
+         umn = 0.
+         vmn = 0.
+
+         usfc = ua(i,j,km)
+         vsfc = va(i,j,km)
+
+         do k=km,1,-1
+            if ( hydrostatic ) then
+                 dz = rdg*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))*(peln(i,k+1,j)-peln(i,k,j))
+            else
+                 dz = -delz(i,j,k)
+            endif
+            zh = zh + dz
+
+            if (zh < 6000) then
+                u6km = ua(i,j,k)
+                v6km = va(i,j,k)
+
+                umn = umn + ua(i,j,k)*dz
+                vmn = vmn + va(i,j,k)*dz
+            else
+                goto 123
+            endif
+
+         enddo
+123      continue
+
+         u6km = u6km + (ua(i,j,k) - u6km) / dz * (6000. - (zh - dz))
+         v6km = v6km + (va(i,j,k) - v6km) / dz * (6000. - (zh - dz))
+
+         umn = umn / (zh - dz)
+         vmn = vmn / (zh - dz)
+
+         ushr = u6km - usfc
+         vshr = v6km - vsfc
+         shrmag = sqrt(ushr * ushr + vshr * vshr)
+         uc(i,j) = umn + bunkers_d * vshr / shrmag
+         vc(i,j) = vmn - bunkers_d * ushr / shrmag
+
+      enddo  ! i-loop
+   enddo   ! j-loop
+
+ end subroutine bunkers_vector
+
 
  subroutine updraft_helicity(is, ie, js, je, ng, km, zvir, sphum, uh,   &
                              w, vort, delz, q, hydrostatic, pt, peln, phis, grav, z_bot, z_top)
