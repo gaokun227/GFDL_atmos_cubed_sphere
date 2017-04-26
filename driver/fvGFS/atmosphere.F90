@@ -82,12 +82,13 @@ public :: atmosphere_init, atmosphere_end, atmosphere_restart, &
           atmosphere_dynamics, atmosphere_state_update
 
 !--- utility routines
-public :: atmosphere_resolution, atmosphere_boundary, &
-          atmosphere_grid_center, atmosphere_domain, &
+public :: atmosphere_resolution, atmosphere_grid_bdry, &
+          atmosphere_grid_ctr,   atmosphere_domain, &
           atmosphere_control_data, atmosphere_pref, &
-          get_atmosphere_axes, get_bottom_mass, &
-          get_bottom_wind, get_stock_pe, &
-          set_atmosphere_pelist, get_atmosphere_grid
+          atmosphere_diag_axes, atmosphere_etalvls, &
+          atmosphere_hgt,                           &
+          get_bottom_mass, get_bottom_wind,   &
+          get_stock_pe, set_atmosphere_pelist
 
 !--- physics/radiation data exchange routines
 public :: atmos_phys_driver_statein
@@ -136,10 +137,9 @@ contains
 
 
 
- subroutine atmosphere_init (Time_init, Time, Time_step, Grid_box, ak, bk, dx, dy, area)
+ subroutine atmosphere_init (Time_init, Time, Time_step, Grid_box, dx, dy, area)
    type (time_type),    intent(in)    :: Time_init, Time, Time_step
    type(grid_box_type), intent(inout) :: Grid_box
-   real(kind=kind_phys), pointer, dimension(:), intent(inout) :: ak, bk
    real(kind=kind_phys), pointer, dimension(:,:), intent(inout) :: dx, dy, area
 
 !--- local variables ---
@@ -266,10 +266,6 @@ contains
     pref(npz+1,2) = ps2
     call get_eta_level ( npz, ps1, pref(1,1), dum1d, Atm(mytile)%ak, Atm(mytile)%bk )
     call get_eta_level ( npz, ps2, pref(1,2), dum1d, Atm(mytile)%ak, Atm(mytile)%bk )
-    allocate (ak(npz+1))
-    allocate (bk(npz+1))
-    ak(1:npz+1) = Atm(mytile)%ak(npz+1:1:-1)
-    bk(1:npz+1) = Atm(mytile)%bk(npz+1:1:-1)
 
 !  --- initialize clocks for dynamics, physics_down and physics_up
    id_dynam     = mpp_clock_id ('FV dy-core',  flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
@@ -526,7 +522,7 @@ contains
  end subroutine atmosphere_control_data
 
 
- subroutine atmosphere_grid_center (lon, lat)
+ subroutine atmosphere_grid_ctr (lon, lat)
 !---------------------------------------------------------------
 !    returns the longitude and latitude cell centers
 !---------------------------------------------------------------
@@ -541,10 +537,10 @@ contains
        enddo
     end do
 
- end subroutine atmosphere_grid_center
+ end subroutine atmosphere_grid_ctr
 
 
- subroutine atmosphere_boundary (blon, blat, global)
+ subroutine atmosphere_grid_bdry (blon, blat, global)
 !---------------------------------------------------------------
 !    returns the longitude and latitude grid box edges
 !    for either the local PEs grid (default) or the global grid
@@ -566,7 +562,7 @@ contains
        enddo
     end do
 
- end subroutine atmosphere_boundary
+ end subroutine atmosphere_grid_bdry
 
 
  subroutine set_atmosphere_pelist ()
@@ -584,16 +580,7 @@ contains
  end subroutine atmosphere_domain
 
 
- subroutine get_atmosphere_grid (dxmax, dxmin)
-   real(kind=R_GRID), intent(out) :: dxmax, dxmin
-
-   dxmax = Atm(mytile)%gridstruct%da_max
-   dxmin = Atm(mytile)%gridstruct%da_min
-
- end subroutine get_atmosphere_grid
-
-
- subroutine get_atmosphere_axes ( axes )
+ subroutine atmosphere_diag_axes ( axes )
    integer, intent(out) :: axes (:)
 
 !----- returns the axis indices for the atmospheric (mass) grid -----
@@ -603,8 +590,92 @@ contains
 
    axes (1:size(axes(:))) = Atm(mytile)%atmos_axes (1:size(axes(:)))
 
- end subroutine get_atmosphere_axes
+ end subroutine atmosphere_diag_axes
 
+
+ subroutine atmosphere_etalvls (ak, bk, flip)
+   real(kind=kind_phys), pointer, dimension(:), intent(inout) :: ak, bk
+   logical, intent(in) :: flip
+
+   allocate(ak(npz+1))
+   allocate(bk(npz+1))
+
+   if (flip) then
+     ak(1:npz+1) = Atm(mytile)%ak(npz+1:1:-1)
+     bk(1:npz+1) = Atm(mytile)%bk(npz+1:1:-1)
+   else
+     ak(1:npz+1) = Atm(mytile)%ak(1:npz+1)
+     bk(1:npz+1) = Atm(mytile)%bk(1:npz+1)
+   endif
+ end subroutine atmosphere_etalvls
+
+
+ subroutine atmosphere_hgt (hgt, position, relative, flip)
+   real(kind=kind_phys), pointer, dimension(:,:,:), intent(inout) :: hgt
+   character(len=5), intent(in) :: position
+   logical, intent(in) :: relative
+   logical, intent(in) :: flip
+   !--- local variables
+   integer:: lev, k, j, i
+   real(kind=kind_phys), allocatable, dimension(:,:,:) :: z, dz
+
+   if ((position .ne. "layer") .and. (position .ne. "level")) then
+     call mpp_error (FATAL, 'atmosphere_hgt:: incorrect position specification')
+   endif
+
+   allocate(z(iec-isc+1,jec-jsc+1,npz+1))
+   allocate(dz(iec-isc+1,jec-jsc+1,npz))
+   z  = 0
+   dz = 0 
+
+   if (Atm(mytile)%flagstruct%hydrostatic) then
+     !--- generate dz using hydrostatic assumption
+     do j = jsc, jec
+       do i = isc, iec
+         dz(i-isc+1,j-jsc+1,1:npz) = (rdgas/grav)*Atm(mytile)%pt(i,j,1:npz)  &
+                         * (Atm(mytile)%peln(i,1:npz,j) - Atm(mytile)%peln(i,2:npz+1,j))
+       enddo
+     enddo
+   else
+     !--- use non-hydrostatic delz directly
+     do j = jsc, jec
+       do i = isc, iec
+         dz(i-isc+1,j-jsc+1,1:npz) = Atm(mytile)%delz(i,j,1:npz)
+       enddo
+     enddo
+   endif
+
+   !--- calculate geometric heights at the interfaces (levels)
+   !--- if needed, flip the indexing during this step
+   if (flip) then
+     if (.not. relative) then
+       z(:,:,1) = Atm(mytile)%phis(:,:)/grav
+     endif
+     do k = 2,npz+1
+       z(:,:,k) = z(:,:,k-1) - dz(:,:,npz+2-k)
+     enddo
+   else
+     if (.not. relative) then
+       z(:,:,npz+1) = Atm(mytile)%phis(:,:)/grav
+     endif
+     do k = npz,1,-1
+       z(:,:,k) = z(:,:,k+1) - dz(:,:,k)
+     enddo
+   endif
+
+   !--- allocate and set either the level or layer height for return
+   if (position == "level") then
+     allocate (hgt(iec-isc+1,jec-jsc+1,npz+1))
+     hgt = z
+   elseif (position == "layer") then
+     allocate (hgt(iec-isc+1,jec-jsc+1,npz))
+     hgt(:,:,1:npz) = 0.5d0 * (z(:,:,1:npz) + z(:,:,2:npz+1))
+   endif
+
+   deallocate (z)
+   deallocate (dz)
+
+ end subroutine atmosphere_hgt
 
 
  subroutine get_bottom_mass ( t_bot, tr_bot, p_bot, z_bot, p_surf, slp )
@@ -1248,6 +1319,9 @@ contains
                                             - IPD_Data(nb)%Statein%qgrs(ix,k,rainwat)   &
                                             - IPD_Data(nb)%Statein%qgrs(ix,k,snowwat)   &
                                             - IPD_Data(nb)%Statein%qgrs(ix,k,graupel)
+         else !variable condensate numbers
+            IPD_Data(nb)%Statein%prsl(ix,k) = IPD_Data(nb)%Statein%prsl(ix,k) &
+                                            - sum(IPD_Data(nb)%Statein%qgrs(ix,k,2:Atm(mytile)%flagstruct%nwat))   
          endif
        enddo
      enddo
