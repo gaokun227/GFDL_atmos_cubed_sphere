@@ -53,6 +53,10 @@ module fv_mapz_mod
   public compute_total_energy, Lagrangian_to_Eulerian, moist_cv, moist_cp,   &
          rst_remap, mappm, E_Flux
 
+!---- version number -----
+  character(len=128) :: version = '$Id$'
+  character(len=128) :: tagname = '$Name$'
+
 contains
 
  subroutine Lagrangian_to_Eulerian(last_step, consv, ps, pe, delp, pkz, pk,   &
@@ -1840,7 +1844,8 @@ endif        ! end last_step check
      elseif ( abs(kord)==16 ) then
        do i=i1,i2
           if( ext6(i,k) ) then
-             if ( extm(i,k-1) .or. extm(i,k+1) ) then
+!            if ( extm(i,k-1) .or. extm(i,k+1) ) then
+             if ( ext6(i,k-1) .or. ext6(i,k+1) ) then
                  ! Left  edges
                  pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
                  lac_1 = pmp_1 + 1.5*gam(i,k+2)
@@ -1910,7 +1915,7 @@ endif        ! end last_step check
  real, intent(in)   :: delp(i1:i2,km)     ! layer pressure thickness
  real, intent(inout):: a4(4,i1:i2,km)     ! Interpolated values
 !-----------------------------------------------------------------------
- logical:: extm(i1:i2,km) 
+ logical:: extm(i1:i2,km) , ext6(i1:i2,km)
  real  gam(i1:i2,km)
  real    q(i1:i2,km+1)
  real   d4(i1:i2)
@@ -2042,6 +2047,12 @@ endif        ! end last_step check
      else
        do i=i1,i2
           extm(i,k) = gam(i,k)*gam(i,k+1) < 0.
+       enddo
+     endif
+     if ( abs(kord)==16 ) then
+       do i=i1,i2
+          a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
+          ext6(i,k) = abs(a4(4,i,k)) > abs(a4(2,i,k)-a4(3,i,k))
        enddo
      endif
   enddo
@@ -2208,6 +2219,25 @@ endif        ! end last_step check
      elseif ( abs(kord)==14 ) then
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
+       enddo
+     elseif ( abs(kord)==16 ) then
+       do i=i1,i2
+          if( ext6(i,k) ) then
+!            if ( extm(i,k-1) .or. extm(i,k+1) ) then
+             if ( ext6(i,k-1) .or. ext6(i,k+1) ) then
+                 ! Left  edges
+                 pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
+                 lac_1 = pmp_1 + 1.5*gam(i,k+2)
+                 a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),   &
+                                     max(a4(1,i,k), pmp_1, lac_1) )
+                 ! Right edges
+                 pmp_2 = a4(1,i,k) + 2.*gam(i,k)
+                 lac_2 = pmp_2 - 1.5*gam(i,k-1)
+                 a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),    &
+                                     max(a4(1,i,k), pmp_2, lac_2) )
+                 a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
+             endif
+          endif
        enddo
      else      ! kord = 11
        do i=i1,i2
