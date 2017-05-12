@@ -898,9 +898,9 @@ contains
    endif
                                        call timing_off('PG_D')
 
-! Inline Rayleigh friction here?
+! *** Inline Rayleigh friction here?
    if( flagstruct%RF_fast .and. flagstruct%tau > 0. )  &
-   call Rayleigh_fast(abs(dt), npx, npy, npz, pfull, flagstruct%tau, u, v, w,  &
+   call Ray_fast(abs(dt), npx, npy, npz, pfull, flagstruct%tau, u, v, w,  &
                       ks, dp_ref, ptop, hydrostatic, flagstruct%rf_cutoff, bd)
 
 !-------------------------------------------------------------------------------------------------------
@@ -2208,7 +2208,7 @@ do 1000 j=jfirst,jlast
  end subroutine init_ijk_mem
 
 
- subroutine Rayleigh_fast(dt, npx, npy, npz, pfull, tau, u, v, w,  &
+ subroutine Ray_fast(dt, npx, npy, npz, pfull, tau, u, v, w,  &
                           ks, dp, ptop, hydrostatic, rf_cutoff, bd)
 ! Simple "inline" version of the Rayleigh friction
     real, intent(in):: dt
@@ -2262,7 +2262,7 @@ do 1000 j=jfirst,jlast
           enddo
           dm = 0.
           do k=1,ks
-             if ( pfull(k) < 100.E2 ) then
+             if ( pfull(k) < rf_cutoff + min(100., 10.*ptop) ) then
                   dm = dm + dp(k)
                   k_rf = k
              else
@@ -2324,7 +2324,7 @@ do 1000 j=jfirst,jlast
 
      enddo
 
- end subroutine Rayleigh_fast
+ end subroutine Ray_fast
 
 
 end module dyn_core_mod
