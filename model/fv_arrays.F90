@@ -62,9 +62,10 @@ module fv_arrays_mod
 
 ! Selected p-level fields from 3D variables:
  integer :: id_vort200, id_vort500, id_w500, id_w700
- integer :: id_vort850, id_w850, id_x850, id_srh, id_srh25, id_srh01, &
+ integer :: id_vort850, id_w850, id_x850, id_srh25, &
             id_uh03, id_uh25, id_theta_e,  &
             id_w200, id_s200, id_sl12, id_sl13, id_w5km, id_rain5km, id_w2500m
+ integer :: id_srh1, id_srh3, id_ustm, id_vstm
 ! NGGPS 31-level diag
  integer, allocatable :: id_u(:), id_v(:), id_t(:), id_h(:), id_q(:), id_omg(:)
 

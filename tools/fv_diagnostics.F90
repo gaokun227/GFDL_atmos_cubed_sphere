@@ -40,7 +40,7 @@ module fv_diagnostics_mod
 
  use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
  use field_manager_mod,  only: MODEL_ATMOS
- use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, mpp_max
+ use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, mpp_max, NOTE
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
  use fv_arrays_mod, only: max_step 
@@ -727,12 +727,17 @@ contains
 !                           '2-5 km vertical comp. of helicity', 'm**2/s**2', missing_value=missing_value )
 
 ! Storm Relative Helicity
-       idiag%id_srh = register_diag_field ( trim(field), 'srh', axes(1:2), Time,       &
+       idiag%id_srh1 = register_diag_field ( trim(field), 'srh01', axes(1:2), Time,       &
+                           '0-1 km Storm Relative Helicity', 'm/s**2', missing_value=missing_value )
+       idiag%id_srh3 = register_diag_field ( trim(field), 'srh03', axes(1:2), Time,       &
                            '0-3 km Storm Relative Helicity', 'm/s**2', missing_value=missing_value )
+       idiag%id_ustm = register_diag_field ( trim(field), 'ustm', axes(1:2), Time,       &
+                           'u Component of Storm Motion', 'm/s', missing_value=missing_value )
+       idiag%id_vstm = register_diag_field ( trim(field), 'vstm', axes(1:2), Time,       &
+                           'v Component of Storm Motion', 'm/s', missing_value=missing_value )
+
        idiag%id_srh25 = register_diag_field ( trim(field), 'srh25', axes(1:2), Time,       &
                            '2-5 km Storm Relative Helicity', 'm/s**2', missing_value=missing_value )
-       idiag%id_srh01 = register_diag_field ( trim(field), 'srh01', axes(1:2), Time,       &
-                           '0-1 km Storm Relative Helicity', 'm/s**2', missing_value=missing_value )
        
        if( .not. Atm(n)%flagstruct%hydrostatic ) then
           idiag%id_uh03 = register_diag_field ( trim(field), 'uh03', axes(1:2), Time,       &
@@ -977,6 +982,7 @@ contains
     integer :: ngc, nwater
 
     real, allocatable :: a2(:,:),a3(:,:,:), wk(:,:,:), wz(:,:,:), ucoor(:,:,:), vcoor(:,:,:)
+    real, allocatable :: ustm(:,:), vstm(:,:)
     real, allocatable :: slp(:,:), depress(:,:), ws_max(:,:), tc_count(:,:)
     real, allocatable :: u2(:,:), v2(:,:), x850(:,:), var1(:,:), var2(:,:), var3(:,:)
     real, allocatable :: dmmr(:,:,:), dvmr(:,:,:)
@@ -984,6 +990,7 @@ contains
     real:: plevs(nplev), pout(nplev)
     integer:: idg(nplev), id1(nplev)
     real    :: tot_mq, tmp, sar, slon, slat
+    real    :: a1d(Atm(1)%npz)
 !   real    :: t_gb, t_nh, t_sh, t_eq, area_gb, area_nh, area_sh, area_eq
     logical :: do_cs_intp
     logical :: used
@@ -1282,6 +1289,84 @@ contains
           endif
 
 
+          if ( idiag%id_srh1 > 0 .or. idiag%id_srh3 > 0 .or. idiag%id_srh25 > 0 .or. idiag%id_ustm > 0 .or. idiag%id_vstm > 0) then
+              allocate(ustm(isc:iec,jsc:jec), vstm(isc:iec,jsc:jec))
+
+              call bunkers_vector(isc, iec, jsc, jec, ngc, npz, zvir, sphum, ustm, vstm, &
+                   Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+                   Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav)
+
+              if ( idiag%id_ustm > 0 ) then
+                 used = send_data ( idiag%id_ustm, ustm, Time )
+              endif
+              if ( idiag%id_vstm > 0 ) then
+                 used = send_data ( idiag%id_vstm, vstm, Time )
+              endif
+
+              if ( idiag%id_srh1 > 0 ) then
+                 call helicity_relative_CAPS(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, ustm, vstm, &
+                      Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+                      Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 1.e3)
+                 used = send_data ( idiag%id_srh1, a2, Time )
+                 if(prt_minmax) then
+                    do j=jsc,jec
+                       do i=isc,iec
+                          tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
+                          tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
+                          if (  tmp2<25. .or. tmp2>50.    &
+                               .or. tmp<235. .or. tmp>300. ) then
+                             a2(i,j) = 0.
+                          endif
+                       enddo
+                    enddo
+                    call prt_maxmin('SRH (0-1 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
+                 endif
+              endif
+
+              if ( idiag%id_srh3 > 0 ) then
+                 call helicity_relative_CAPS(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, ustm, vstm, &
+                      Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+                      Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 3e3)
+                 used = send_data ( idiag%id_srh3, a2, Time )
+                 if(prt_minmax) then
+                    do j=jsc,jec
+                       do i=isc,iec
+                          tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
+                          tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
+                          if (  tmp2<25. .or. tmp2>50.    &
+                               .or. tmp<235. .or. tmp>300. ) then
+                             a2(i,j) = 0.
+                          endif
+                       enddo
+                    enddo
+                    call prt_maxmin('SRH (0-3 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
+                 endif
+              endif
+
+              if ( idiag%id_srh25 > 0 ) then
+                 call helicity_relative_CAPS(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, ustm, vstm, &
+                      Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+                      Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 2.e3, 5e3)
+                 used = send_data ( idiag%id_srh25, a2, Time )
+                 if(prt_minmax) then
+                    do j=jsc,jec
+                       do i=isc,iec
+                          tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
+                          tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
+                          if (  tmp2<25. .or. tmp2>50.    &
+                               .or. tmp<235. .or. tmp>300. ) then
+                             a2(i,j) = 0.
+                          endif
+                       enddo
+                    enddo
+                    call prt_maxmin('SRH (2-5 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
+                 endif
+              endif
+
+              deallocate(ustm, vstm)
+          endif
+
+
           if ( idiag%id_pv > 0 ) then
 ! Note: this is expensive computation.
               call pv_entropy(isc, iec, jsc, jec, ngc, npz, wk,    &
@@ -1294,38 +1379,32 @@ contains
 
 
        
-       if ( idiag%id_srh > 0 ) then
-          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
-               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
-               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 3.e3)
-          used = send_data ( idiag%id_srh, a2, Time )
-          if(prt_minmax) then
-             do j=jsc,jec
-                do i=isc,iec
-                   tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
-                   tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
-                   if (  tmp2<25. .or. tmp2>50.    &
-                        .or. tmp<235. .or. tmp>300. ) then
-                      a2(i,j) = 0.
-                   endif
-                enddo
-             enddo
-             call prt_maxmin('SRH over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
-          endif
-       endif
+!!$       if ( idiag%id_srh > 0 ) then
+!!$          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
+!!$               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+!!$               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 3.e3)
+!!$          used = send_data ( idiag%id_srh, a2, Time )
+!!$          if(prt_minmax) then
+!!$             do j=jsc,jec
+!!$                do i=isc,iec
+!!$                   tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
+!!$                   tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
+!!$                   if (  tmp2<25. .or. tmp2>50.    &
+!!$                        .or. tmp<235. .or. tmp>300. ) then
+!!$                      a2(i,j) = 0.
+!!$                   endif
+!!$                enddo
+!!$             enddo
+!!$             call prt_maxmin('SRH over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
+!!$          endif
+!!$       endif
 
-       if ( idiag%id_srh25 > 0 ) then
-          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
-               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
-               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 2.e3, 5.e3)
-          used = send_data ( idiag%id_srh25, a2, Time )
-       endif
-       if ( idiag%id_srh01 > 0 ) then
-          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
-               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
-               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0.e3, 1.e3)
-          used = send_data ( idiag%id_srh01, a2, Time )
-       endif
+!!$       if ( idiag%id_srh25 > 0 ) then
+!!$          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
+!!$               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+!!$               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 2.e3, 5.e3)
+!!$          used = send_data ( idiag%id_srh25, a2, Time )
+!!$       endif
 
 
        ! Relative Humidity
@@ -2289,14 +2368,19 @@ contains
           !wk here contains layer-mean pressure
 
           allocate(var2(isc:iec,jsc:jec))
+          allocate(a3(isc:iec,jsc:jec,npz))
 
+          call eqv_pot(a3, Atm(n)%pt, Atm(n)%delp, Atm(n)%delz, Atm(n)%peln, Atm(n)%pkz, Atm(n)%q(isd,jsd,1,sphum),    &
+               isc, iec, jsc, jec, ngc, npz, Atm(n)%flagstruct%hydrostatic, Atm(n)%flagstruct%moist_phys)
+
+
+!$OMP parallel do default(shared)
           do j=jsc,jec
           do i=isc,iec
              a2(i,j) = 0.
              var2(i,j) = 0.
-             call capecalcnew(npz, wk(i,j,:), Atm(n)%pe(i,:,j), &
-                  Atm(n)%pt(i,j,:), Atm(n)%q(i,j,:,sphum), &
-                  .false., a2(i,j), var2(i,j)) 
+
+             call getcape(npz, wk(i,j,:), Atm(n)%pt(i,j,:), -Atm(n)%delz(i,j,:), Atm(n)%q(i,j,:,sphum), a3(i,j,:), a2(i,j), var2(i,j), source_in=1)
           enddo
           enddo
 
@@ -2314,6 +2398,7 @@ contains
           endif
 
           deallocate(var2)
+          deallocate(a3)
 
        endif
 
@@ -2443,6 +2528,7 @@ contains
              !interpolate to 1km dbz
              call interpolate_z(isc, iec, jsc, jec, npz, 1000., wz, a3, a2)
              used=send_data(idiag%id_basedbz, a2, time)
+             if (prt_minmax) call prt_maxmin('Base reflectivity', a2, isc, iec, jsc, jec, 0, 1, 1.)
           endif
           if (idiag%id_dbz4km > 0) then
              !interpolate to 1km dbz
@@ -2981,14 +3067,14 @@ contains
             do j=js,je
                do i=is,ie
                   if( q(i,j,k)<q_low .or. q(i,j,k)>q_hi ) then
-                      write(*,*) 'Crash_K=',k,'(i,j)=',i,j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, q(i,j,k)
+                      write(*,*) 'Warn_K=',k,'(i,j)=',i,j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, q(i,j,k)
                       if ( k/= 1 ) write(*,*) k-1, q(i,j,k-1)
                       if ( k/=km ) write(*,*) k+1, q(i,j,k+1)
                   endif
                enddo
             enddo
          enddo
-         call mpp_error(FATAL,'==> Error from range_check: data out of bound')
+         call mpp_error(NOTE,'==> Error from range_check: data out of bound')
       endif
 
  end subroutine range_check
@@ -3778,6 +3864,160 @@ contains
    enddo   ! j-loop
 
  end subroutine helicity_relative
+
+ subroutine helicity_relative_CAPS(is, ie, js, je, ng, km, zvir, sphum, srh, uc, vc,  &
+                              ua, va, delz, q, hydrostatic, pt, peln, phis, grav, z_bot, z_top)
+! !INPUT PARAMETERS:
+   integer, intent(in):: is, ie, js, je, ng, km, sphum
+   real, intent(in):: grav, zvir, z_bot, z_top
+   real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
+   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
+   real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
+   real, intent(in):: peln(is:ie,km+1,js:je) 
+   real, intent(in):: uc(is:ie,js:je), vc(is:ie,js:je)
+   logical, intent(in):: hydrostatic
+   real, intent(out):: srh(is:ie,js:je)   ! unit: (m/s)**2
+!---------------------------------------------------------------------------------
+! SRH = 150-299 ... supercells possible with weak tornadoes
+! SRH = 300-449 ... very favourable to supercells development and strong tornadoes
+! SRH > 450 ... violent tornadoes
+!---------------------------------------------------------------------------------
+! if z_crit = 1E3, the threshold for supercells is 100 (m/s)**2
+! Coded by S.-J. Lin for CONUS regional climate simulations
+!
+   real:: rdg
+   real, dimension(is:ie):: zh, dz, zh0
+   integer i, j, k, k0, k1
+   logical below
+
+   rdg = rdgas / grav
+
+!$OMP parallel do default(none) shared(is,ie,js,je,km,hydrostatic,rdg,pt,zvir,sphum, &
+!$OMP                                  peln,delz,ua,va,srh,uc,vc,z_bot,z_top) &
+!$OMP                          private(zh,dz,k0,k1,zh0,below)
+   do j=js,je
+
+      do i=is,ie
+         srh(i,j) = 0.
+         zh(i) = 0.
+         zh0 = 0.
+         below = .true.
+
+         do k=km,1,-1
+            if ( hydrostatic ) then
+                 dz(i) = rdg*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))*(peln(i,k+1,j)-peln(i,k,j))
+            else
+                 dz(i) = -delz(i,j,k)
+            endif
+
+            zh(i) = zh(i) + dz(i)
+            if (zh(i) <= z_bot ) continue
+            if (zh(i) > z_bot .and. below) then
+               zh0(i) = zh(i) - dz(i)
+               k1 = k
+               below = .false.
+! Compute mean winds below z_top
+            elseif ( zh(i) < z_top ) then
+                k0 = k
+            else
+                goto 123
+            endif
+
+         enddo
+123      continue
+
+! Lowest layer wind shear computed betw top edge and mid-layer
+         k = k1
+         srh(i,j) = 0.5*(va(i,j,k1)-vc(i,j))*(ua(i,j,k1-1)-ua(i,j,k1))  -  &
+                    0.5*(ua(i,j,k1)-uc(i,j))*(va(i,j,k1-1)-va(i,j,k1))
+         do k=k0, k1-1
+            srh(i,j) = srh(i,j) + 0.5*(va(i,j,k)-vc(i,j))*(ua(i,j,k-1)-ua(i,j,k+1)) -  &
+                                  0.5*(ua(i,j,k)-uc(i,j))*(va(i,j,k-1)-va(i,j,k+1))
+         enddo
+      enddo  ! i-loop
+   enddo   ! j-loop
+
+ end subroutine helicity_relative_CAPS
+
+
+ subroutine bunkers_vector(is, ie, js, je, ng, km, zvir, sphum, uc, vc,  &
+                           ua, va, delz, q, hydrostatic, pt, peln, phis, grav)
+
+   integer, intent(in):: is, ie, js, je, ng, km, sphum
+   real, intent(in):: grav, zvir
+   real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
+   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
+   real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
+   real, intent(in):: peln(is:ie,km+1,js:je) 
+   logical, intent(in):: hydrostatic
+   real, intent(out):: uc(is:ie,js:je), vc(is:ie,js:je)
+
+   real:: rdg
+   real :: zh, dz, usfc, vsfc, u6km, v6km, umn, vmn
+   real :: ushr, vshr, shrmag
+   integer i, j, k
+   real, parameter :: bunkers_d = 7.5 ! Empirically derived parameter
+   logical :: has_sfc, has_6km
+
+   rdg = rdgas / grav
+
+!$OMP parallel do default(none) shared(is,ie,js,je,km,hydrostatic,rdg,pt,zvir,sphum, &
+!$OMP                                  peln,delz,ua,va,uc,vc) &
+!$OMP                           private(zh,dz,usfc,vsfc,u6km,v6km,umn,vmn, &
+!$OMP                                  ushr,vshr,shrmag)
+   do j=js,je
+      do i=is,ie
+         zh = 0.
+         usfc = 0.
+         vsfc = 0.
+         u6km = 0.
+         v6km = 0.
+         umn = 0.
+         vmn = 0.
+
+         usfc = ua(i,j,km)
+         vsfc = va(i,j,km)
+
+         do k=km,1,-1
+            if ( hydrostatic ) then
+                 dz = rdg*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))*(peln(i,k+1,j)-peln(i,k,j))
+            else
+                 dz = -delz(i,j,k)
+            endif
+            zh = zh + dz
+
+            if (zh < 6000) then
+                u6km = ua(i,j,k)
+                v6km = va(i,j,k)
+
+                umn = umn + ua(i,j,k)*dz
+                vmn = vmn + va(i,j,k)*dz
+            else
+                goto 123
+            endif
+
+         enddo
+123      continue
+
+         u6km = u6km + (ua(i,j,k) - u6km) / dz * (6000. - (zh - dz))
+         v6km = v6km + (va(i,j,k) - v6km) / dz * (6000. - (zh - dz))
+
+         umn = umn / (zh - dz)
+         vmn = vmn / (zh - dz)
+
+         ushr = u6km - usfc
+         vshr = v6km - vsfc
+         shrmag = sqrt(ushr * ushr + vshr * vshr)
+         uc(i,j) = umn + bunkers_d * vshr / shrmag
+         vc(i,j) = vmn - bunkers_d * ushr / shrmag
+
+      enddo  ! i-loop
+   enddo   ! j-loop
+
+ end subroutine bunkers_vector
+
 
  subroutine updraft_helicity(is, ie, js, je, ng, km, zvir, sphum, uh,   &
                              w, vort, delz, q, hydrostatic, pt, peln, phis, grav, z_bot, z_top)
@@ -4697,311 +4937,482 @@ end subroutine eqv_pot
    
  end subroutine fv_diag_init_gn
 
-! From GFDL AMx Moist Processes
-!
-!    Input:
-!
-!    kx          number of levels
-!    p           pressure (index 1 refers to TOA, index kx refers to surface)
-!    phalf       pressure at half levels
-!    cp          specific heat of dry air
-!    rdgas       gas constant for dry air
-!    rvgas       gas constant for water vapor (used in Clausius-Clapeyron,
-!                not for virtual temperature effects, which are not considered)
-!    hlv         latent heat of vaporization
-!    kappa       the constant kappa
-!    tin         temperature of the environment
-!    rin         specific humidity of the environment
-!    avgbl       if true, the parcel is averaged in theta and r up to its LCL
-!
-!    Output:
-!    cape        Convective available potential energy
-!    cin         Convective inhibition (if there's no LFC, then this is set
-!                to zero)
-!
-!    Algorithm:
-!    Start with surface parcel.
-!    Calculate the lifting condensation level (uses an analytic formula and a
-!       lookup table).
-!    Average under the LCL if desired, if this is done, then a new LCL must
-!       be calculated.
-!    Calculate parcel ascent up to LZB.
-!    Calculate CAPE and CIN.
- subroutine capecalcnew(kx,p,phalf,tin,rin,&
-                        avgbl, cape, cin)
-!                        avgbl, cape, cin, tp, rp, klcl, klfc, klzb)                                                                                
-      implicit none
-      integer, intent(in)                    :: kx
-      logical, intent(in)                    :: avgbl
-      real, intent(in), dimension(kx)      :: p, tin, rin
-      real, intent(in), dimension(kx+1)    :: phalf
-      real, intent(out)                      :: cape, cin
-!      real,    intent(out), dimension(kx), OPTIONAL :: tp, rp
-!      integer, intent(out), OPTIONAL               :: klcl, klfc, klzb
-      real,    dimension(kx) :: tp, rp
-      integer               :: klcl, klfc, klzb
-                                                                                
-      integer            :: k!, klcl, klfc, klzb
-      logical            :: nocape
-!      real, dimension(kx)   :: tp, rp
-      real                  :: t0, r0, es, rs, theta0, pstar, value, tlcl, &
-                               a, b, dtdlnp, &
-                               plcl, plzb
+!-----------------------------------------------------------------------
+!ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+!-----------------------------------------------------------------------
 
-      pstar = 1.e5
-                                                                                
-      nocape = .true.
-      cape = 0.
-      cin = 0.
-      plcl = 0.
-      plzb = 0.
-      klfc = 0
-      klcl = 0
-      klzb = 0
-      tp(1:kx) = tin(1:kx)
-      rp(1:kx) = rin(1:kx)
-                                                                                
-! start with surface parcel
-      t0 = tin(kx)
-      r0 = rin(kx)
-! calculate the lifting condensation level by the following:
-! are you saturated to begin with?
-      call lookup_es(t0,es)
-      rs = rdgas/rvgas*es/p(kx)
-      if (r0.ge.rs) then
-! if you're already saturated, set lcl to be the surface value.
-         plcl = p(kx)
-! the first level where you're completely saturated.
-         klcl = kx
-! saturate out to get the parcel temp and humidity at this level
-! first order (in delta T) accurate expression for change in temp
-         tp(kx) = t0 + (r0 - rs)/(cp_air/hlv + hlv*rs/rvgas/t0**2.)
-         call lookup_es(tp(kx),es)
-         rp(kx) = rdgas/rvgas*es/p(kx)
+    subroutine getcape( nk , p , t , dz, q, the, cape , cin, source_in )
+    implicit none
+
+    integer, intent(in) :: nk
+    real, dimension(nk), intent(in) :: p,t,dz,q,the
+    real, intent(out) :: cape,cin
+    integer, intent(IN), OPTIONAL :: source_in
+
+!-----------------------------------------------------------------------
+!
+!  getcape - a fortran90 subroutine to calculate Convective Available
+!            Potential Energy (CAPE) from a sounding.
+!
+!  Version 1.02                           Last modified:  10 October 2008
+!
+!  Author:  George H. Bryan
+!           Mesoscale and Microscale Meteorology Division
+!           National Center for Atmospheric Research
+!           Boulder, Colorado, USA
+!           gbryan@ucar.edu
+!
+!  Disclaimer:  This code is made available WITHOUT WARRANTY.
+!
+!  References:  Bolton (1980, MWR, p. 1046) (constants and definitions)
+!               Bryan and Fritsch (2004, MWR, p. 2421) (ice processes)
+!
+!-----------------------------------------------------------------------
+!
+!  Input:     nk - number of levels in the sounding (integer)
+!
+!           p - one-dimensional array of pressure (Pa) (real)
+!
+!           t - one-dimensional array of temperature (K) (real)
+!
+!           dz - one-dimensional array of height thicknesses (m) (real)
+!
+!           q - one-dimensional array of specific humidity (kg/kg) (real)
+!
+!          source - source parcel:
+!                   1 = surface (default)
+!                   2 = most unstable (max theta-e)
+!                   3 = mixed-layer (specify ml_depth)
+!
+!  Output:  cape - Convective Available Potential Energy (J/kg) (real)
+!
+!            cin - Convective Inhibition (J/kg) (real)
+!
+!-----------------------------------------------------------------------
+!  User options:
+
+    real, parameter :: pinc = 10000.0   ! Pressure increment (Pa)
+                                      ! (smaller number yields more accurate
+                                      !  results,larger number makes code 
+                                      !  go faster)
+
+
+    real, parameter :: ml_depth =  200.0  ! depth (m) of mixed layer 
+                                          ! for source=3
+
+    integer, parameter :: adiabat = 1   ! Formulation of moist adiabat:
+                                        ! 1 = pseudoadiabatic, liquid only
+                                        ! 2 = reversible, liquid only
+                                        ! 3 = pseudoadiabatic, with ice
+                                        ! 4 = reversible, with ice
+
+!-----------------------------------------------------------------------
+!ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+!-----------------------------------------------------------------------
+!            No need to modify anything below here:
+!-----------------------------------------------------------------------
+!ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+!-----------------------------------------------------------------------
+
+    integer :: source = 1
+    logical :: doit,ice,cloud,not_converged
+    integer :: k,kmin,n,nloop,i,orec
+    real, dimension(nk) :: pi,th,thv,z,pt,pb,pc,pn,ptv
+
+    real :: maxthe,parea,narea,lfc
+    real :: th1,p1,t1,qv1,ql1,qi1,b1,pi1,thv1,qt,dp,frac
+    real :: th2,p2,t2,qv2,ql2,qi2,b2,pi2,thv2
+    real :: thlast,fliq,fice,tbar,qvbar,qlbar,qibar,lhv,lhs,lhf,rm,cpm
+    real*8 :: avgth,avgqv
+
+!-----------------------------------------------------------------------
+
+    real, parameter :: g     = 9.81
+    real, parameter :: p00   = 100000.0
+    real, parameter :: cp    = 1005.7
+    real, parameter :: rd    = 287.04
+    real, parameter :: rv    = 461.5
+    real, parameter :: xlv   = 2501000.0
+    real, parameter :: xls   = 2836017.0
+    real, parameter :: t0    = 273.15
+    real, parameter :: cpv   = 1875.0
+    real, parameter :: cpl   = 4190.0
+    real, parameter :: cpi   = 2118.636
+    real, parameter :: lv1   = xlv+(cpl-cpv)*t0
+    real, parameter :: lv2   = cpl-cpv
+    real, parameter :: ls1   = xls+(cpi-cpv)*t0
+    real, parameter :: ls2   = cpi-cpv
+
+    real, parameter :: rp00  = 1.0/p00
+    real, parameter :: eps   = rd/rv
+    real, parameter :: reps  = rv/rd
+    real, parameter :: rddcp = rd/cp
+    real, parameter :: cpdrd = cp/rd
+    real, parameter :: cpdg  = cp/g
+
+    real, parameter :: converge = 0.1
+
+    integer, parameter :: debug_level =   0
+
+    if (present(source_in)) source = source_in
+
+!-----------------------------------------------------------------------
+
+!---- convert p,t to mks units; get pi,th,thv ----!
+
+    do k=1,nk
+       pi(k) = (p(k)*rp00)**rddcp
+       th(k) = t(k)/pi(k)
+      thv(k) = th(k)*(1.0+reps*q(k))/(1.0+q(k))
+    enddo
+
+!---- get height using the hydrostatic equation ----!
+
+    z(nk) = 0.5*dz(nk)
+    do k=nk-1,1,-1
+      z(k) = z(k+1) + 0.5*(dz(k+1)+dz(k))
+    enddo
+
+!---- find source parcel ----!
+
+  IF(source.eq.1)THEN
+    ! use surface parcel
+    kmin = nk
+
+  ELSEIF(source.eq.2)THEN
+    ! use most unstable parcel (max theta-e)
+
+    IF(p(1).lt.50000.0)THEN
+      ! first report is above 500 mb ... just use the first level reported
+      kmin = nk
+      maxthe = the(nk)
+    ELSE
+      ! find max thetae below 500 mb
+      maxthe = 0.0
+      do k=nk,1,-1
+        if(p(k).ge.50000.0)then
+          if( the(nk).gt.maxthe )then
+            maxthe = the(nk)
+            kmin = k
+          endif
+        endif
+      enddo
+    ENDIF
+    if(debug_level.ge.100) print *,'  kmin,maxthe = ',kmin,maxthe
+
+!!$  ELSEIF(source.eq.3)THEN
+!!$    ! use mixed layer
+!!$
+!!$    IF( dz(nk).gt.ml_depth )THEN
+!!$      ! the second level is above the mixed-layer depth:  just use the
+!!$      ! lowest level
+!!$
+!!$      avgth = th(nk)
+!!$      avgqv = q(nk)
+!!$      kmin = nk
+!!$
+!!$    ELSEIF( z(1).lt.ml_depth )THEN
+!!$      ! the top-most level is within the mixed layer:  just use the
+!!$      ! upper-most level (not 
+!!$
+!!$      avgth = th(1)
+!!$      avgqv = q(1)
+!!$      kmin = 1
+!!$
+!!$    ELSE
+!!$      ! calculate the mixed-layer properties:
+!!$
+!!$      avgth = 0.0
+!!$      avgqv = 0.0
+!!$      k = nk-1
+!!$      if(debug_level.ge.100) print *,'  ml_depth = ',ml_depth
+!!$      if(debug_level.ge.100) print *,'  k,z,th,q:'
+!!$      if(debug_level.ge.100) print *,nk,z(nk),th(nk),q(nk)
+!!$
+!!$      do while( (z(k).le.ml_depth) .and. (k.ge.1) )
+!!$
+!!$        if(debug_level.ge.100) print *,k,z(k),th(k),q(k)
+!!$
+!!$        avgth = avgth + dz(k)*th(k)
+!!$        avgqv = avgqv + dz(k)*q(k)
+!!$
+!!$        k = k - 1
+!!$
+!!$      enddo
+!!$
+!!$      th2 = th(k+1)+(th(k)-th(k+1))*(ml_depth-z(k-1))/dz(k)
+!!$      qv2 =  q(k+1)+( q(k)- q(k+1))*(ml_depth-z(k-1))/dz(k)
+!!$
+!!$      if(debug_level.ge.100) print *,999,ml_depth,th2,qv2
+!!$
+!!$      avgth = avgth + 0.5*(ml_depth-z(k-1))*(th2+th(k-1))
+!!$      avgqv = avgqv + 0.5*(ml_depth-z(k-1))*(qv2+q(k-1))
+!!$
+!!$      if(debug_level.ge.100) print *,k,z(k),th(k),q(k)
+!!$
+!!$      avgth = avgth/ml_depth
+!!$      avgqv = avgqv/ml_depth
+!!$
+!!$      kmin = nk
+!!$
+!!$    ENDIF
+!!$
+!!$    if(debug_level.ge.100) print *,avgth,avgqv
+
+  ELSE
+
+    print *
+    print *,'  Unknown value for source'
+    print *
+    print *,'  source = ',source
+    print *
+    call mpp_error(FATAL, " Unknown CAPE source")
+
+  ENDIF
+
+!---- define parcel properties at initial location ----!
+    narea = 0.0
+
+  if( (source.eq.1).or.(source.eq.2) )then
+    k    = kmin
+    th2  = th(kmin)
+    pi2  = pi(kmin)
+    p2   = p(kmin)
+    t2   = t(kmin)
+    thv2 = thv(kmin)
+    qv2  = q(kmin)
+    b2   = 0.0
+  elseif( source.eq.3 )then
+    k    = kmin
+    th2  = avgth
+    qv2  = avgqv
+    thv2 = th2*(1.0+reps*qv2)/(1.0+qv2)
+    pi2  = pi(kmin)
+    p2   = p(kmin)
+    t2   = th2*pi2
+    b2   = g*( thv2-thv(kmin) )/thv(kmin)
+  endif
+
+    ql2 = 0.0
+    qi2 = 0.0
+    qt  = qv2
+
+    cape = 0.0
+    cin  = 0.0
+    lfc  = 0.0
+
+    doit = .true.
+    cloud = .false.
+    if(adiabat.eq.1.or.adiabat.eq.2)then
+      ice = .false.
+    else
+      ice = .true.
+    endif
+
+!      the = getthe(p2,t2,t2,qv2)
+!      if(debug_level.ge.100) print *,'  the = ',the
+
+!---- begin ascent of parcel ----!
+
+      if(debug_level.ge.100)then
+        print *,'  Start loop:'
+        print *,'  p2,th2,qv2 = ',p2,th2,qv2
+      endif
+
+    do while( doit .and. (k.gt.1) )
+
+        k = k-1
+       b1 =  b2
+
+       dp = p(k)-p(k-1)
+
+      if( dp.lt.pinc )then
+        nloop = 1
       else
-! if not saturated to begin with, use the analytic expression to calculate the
-! exact pressure and temperature where you?re saturated.
-         theta0 = tin(kx)*(pstar/p(kx))**kappa
-! the expression that we utilize is 
-! log(r/theta**(1/kappa)*pstar*rvgas/rdgas/es00) = log(es/T**(1/kappa))
-! The right hand side of this is only a function of temperature, therefore
-! this is put into a lookup table to solve for temperature.
-         if (r0.gt.0.) then
-            value = log(theta0**(-1./kappa)*r0*pstar*rvgas/rdgas) 
-            call lcltabl(value,tlcl)
-            plcl = pstar*(tlcl/theta0)**(1./kappa)
-! just in case plcl is very high up
-            if (plcl.lt.p(1)) then
-               plcl = p(1)
-               tlcl = theta0*(plcl/pstar)**kappa
-               write (*,*) 'hi lcl'
-            end if
-            k = kx
-         else
-! if the parcel sp hum is zero or negative, set lcl to 2nd to top level
-            plcl = p(2)
-            tlcl = theta0*(plcl/pstar)**kappa
-!            write (*,*) 'zero r0', r0
-            do k=2,kx
-               tp(k) = theta0*(p(k)/pstar)**kappa
-               rp(k) = 0.
-! this definition of CIN contains everything below the LCL
-               cin = cin + rdgas*(tin(k) - tp(k))*log(phalf(k+1)/phalf(k))
-            end do
-            go to 11
-         end if
-! calculate the parcel temperature (adiabatic ascent) below the LCL.
-! the mixing ratio stays the same
-         do while (p(k).gt.plcl)
-            tp(k) = theta0*(p(k)/pstar)**kappa
-            call lookup_es(tp(k),es)
-            rp(k) = rdgas/rvgas*es/p(k)
-! this definition of CIN contains everything below the LCL
-            cin = cin + rdgas*(tin(k) - tp(k))*log(phalf(k+1)/phalf(k))
-            k = k-1
-         end do
-! first level where you're saturated at the level
-         klcl = k
-         if (klcl.eq.1) klcl = 2
-! do a saturated ascent to get the parcel temp at the LCL.
-! use your 2nd order equation up to the pressure above.
-! moist adaibat derivatives: (use the lcl values for temp, humid, and
-! pressure)
-         a = kappa*tlcl + hlv/cp_air*r0
-         b = hlv**2.*r0/cp_air/rvgas/tlcl**2.
-         dtdlnp = a/(1. + b)
-! first order in p
-!         tp(klcl) = tlcl + dtdlnp*log(p(klcl)/plcl)
-! second order in p (RK2)
-! first get temp halfway up
-         tp(klcl) = tlcl + dtdlnp*log(p(klcl)/plcl)/2.
-         if ((tp(klcl).lt.173.16).and.nocape) go to 11
-         call lookup_es(tp(klcl),es)
-         rp(klcl) = rdgas/rvgas*es/(p(klcl) + plcl)*2.
-         a = kappa*tp(klcl) + hlv/cp_air*rp(klcl)
-         b = hlv**2./cp_air/rvgas*rp(klcl)/tp(klcl)**2.
-         dtdlnp = a/(1. + b)
-! second half of RK2
-         tp(klcl) = tlcl + dtdlnp*log(p(klcl)/plcl)
-!         d2tdlnp2 = (kappa + b - 1. - b/tlcl*(hlv/rvgas/tlcl - &
-!                   2.)*dtdlnp)/ (1. + b)*dtdlnp - hlv*r0/cp_air/ &
-!                   (1. + b)
-! second order in p
-!         tp(klcl) = tlcl + dtdlnp*log(p(klcl)/plcl) + .5*d2tdlnp2*(log(&
-!             p(klcl)/plcl))**2.
-         if ((tp(klcl).lt.173.16).and.nocape) go to 11
-         call lookup_es(tp(klcl),es)
-         rp(klcl) = rdgas/rvgas*es/p(klcl)
-!         write (*,*) 'tp, rp klcl:kx, new', tp(klcl:kx), rp(klcl:kx)
-! CAPE/CIN stuff
-         if ((tp(klcl).lt.tin(klcl)).and.nocape) then
-! if you're not yet buoyant, then add to the CIN and continue
-            cin = cin + rdgas*(tin(klcl) - &
-                 tp(klcl))*log(phalf(klcl+1)/phalf(klcl))
-         else
-! if you're buoyant, then add to cape
-            cape = cape + rdgas*(tp(klcl) - &
-                  tin(klcl))*log(phalf(klcl+1)/phalf(klcl))
-! if it's the first time buoyant, then set the level of free convection to k
-            if (nocape) then
-               nocape = .false.
-               klfc = klcl
-            endif
-         end if
-      end if
-! then, start at the LCL, and do moist adiabatic ascent by the first order
-! scheme -- 2nd order as well
-      do k=klcl-1,1,-1
-         a = kappa*tp(k+1) + hlv/cp_air*rp(k+1)
-         b = hlv**2./cp_air/rvgas*rp(k+1)/tp(k+1)**2.
-         dtdlnp = a/(1. + b)
-! first order in p
-!         tp(k) = tp(k+1) + dtdlnp*log(p(k)/p(k+1))
-! second order in p (RK2)
-! first get temp halfway up
-         tp(k) = tp(k+1) + dtdlnp*log(p(k)/p(k+1))/2.
-         if ((tp(k).lt.173.16).and.nocape) go to 11
-         call lookup_es(tp(k),es)
-         rp(k) = rdgas/rvgas*es/(p(k) + p(k+1))*2.
-         a = kappa*tp(k) + hlv/cp_air*rp(k)
-         b = hlv**2./cp_air/rvgas*rp(k)/tp(k)**2.
-         dtdlnp = a/(1. + b)
-! second half of RK2
-         tp(k) = tp(k+1) + dtdlnp*log(p(k)/p(k+1))
-!         d2tdlnp2 = (kappa + b - 1. - b/tp(k+1)*(hlv/rvgas/tp(k+1) - &
-!               2.)*dtdlnp)/(1. + b)*dtdlnp - hlv/cp_air*rp(k+1)/(1. + b)
-! second order in p
+        nloop = 1 + int( dp/pinc )
+        dp = dp/float(nloop)
+      endif
 
-!         tp(k) = tp(k+1) + dtdlnp*log(p(k)/p(k+1)) + .5*d2tdlnp2*(log( &
-!             p(k)/p(k+1)))**2.
-! if you're below the lookup table value, just presume that there's no way
-! you could have cape and call it quits
-         if ((tp(k).lt.173.16).and.nocape) go to 11
-         call lookup_es(tp(k),es)
-         rp(k) = rdgas/rvgas*es/p(k)
-         if ((tp(k).lt.tin(k)).and.nocape) then
-! if you're not yet buoyant, then add to the CIN and continue
-            cin = cin + rdgas*(tin(k) - tp(k))*log(phalf(k+1)/phalf(k))
-         elseif((tp(k).lt.tin(k)).and.(.not.nocape)) then
-! if you have CAPE, and it's your first time being negatively buoyant,
-! then set the level of zero buoyancy to k+1, and stop the moist ascent
-            klzb = k+1
-            go to 11
-         else
-! if you're buoyant, then add to cape
-            cape = cape + rdgas*(tp(k) - tin(k))*log(phalf(k+1)/phalf(k))
-! if it's the first time buoyant, then set the level of free convection to k
-            if (nocape) then
-               nocape = .false.
-               klfc = k
-            endif
-         end if
-      end do
- 11   if(nocape) then
-! this is if you made it through without having a LZB
-! set LZB to be the top level.
-         plzb = p(1)
-         klzb = 0
-         klfc = 0
-         cin = 0.
-         tp(1:kx) = tin(1:kx)
-         rp(1:kx) = rin(1:kx)
-      end if
-!      write (*,*) 'plcl, klcl, tlcl, r0 new', plcl, klcl, tlcl, r0
-!      write (*,*) 'tp, rp new', tp, rp
-!       write (*,*) 'tp, new', tp
-!       write (*,*) 'tin new', tin
-!       write (*,*) 'klcl, klfc, klzb new', klcl, klfc, klzb
-      end subroutine capecalcnew
+      do n=1,nloop
 
+         p1 =  p2
+         t1 =  t2
+        pi1 = pi2
+        th1 = th2
+        qv1 = qv2
+        ql1 = ql2
+        qi1 = qi2
+        thv1 = thv2
 
-!#######################################################################
-! lookup table for the analytic evaluation of LCL
-      subroutine lcltabl(value,tlcl)
-!
-! Table of values used to compute the temperature of the lifting condensation
-! level.
-!
-! the expression that we utilize is 
-! log(r/theta**(1/kappa)*pstar*rvgas/rdgas/es00) = log(es/T**(1/kappa))
-! the RHS is tabulated for the control amount of moisture, hence the 
-! division by es00 on the LHS
+        p2 = p2 - dp
+        pi2 = (p2*rp00)**rddcp
 
-! Gives the values of the temperature for the following range:
-!   starts with -23, is uniformly distributed up to -10.4.  There are a
-! total of 127 values, and the increment is .1.
-!
-      implicit none
-      real, intent(in)     :: value
-      real, intent(out)    :: tlcl
-      integer              :: ival
-      real, dimension(127) :: lcltable
-      real                 :: v1, v2
-                                                                                
-      data lcltable/   1.7364512e+02,   1.7427449e+02,   1.7490874e+02, &
-      1.7554791e+02,   1.7619208e+02,   1.7684130e+02,   1.7749563e+02, &
-      1.7815514e+02,   1.7881989e+02,   1.7948995e+02,   1.8016539e+02, &
-      1.8084626e+02,   1.8153265e+02,   1.8222461e+02,   1.8292223e+02, &
-      1.8362557e+02,   1.8433471e+02,   1.8504972e+02,   1.8577068e+02, &
-      1.8649767e+02,   1.8723077e+02,   1.8797006e+02,   1.8871561e+02, &
-      1.8946752e+02,   1.9022587e+02,   1.9099074e+02,   1.9176222e+02, &
-      1.9254042e+02,   1.9332540e+02,   1.9411728e+02,   1.9491614e+02, &
-      1.9572209e+02,   1.9653521e+02,   1.9735562e+02,   1.9818341e+02, &
-      1.9901870e+02,   1.9986158e+02,   2.0071216e+02,   2.0157057e+02, &
-      2.0243690e+02,   2.0331128e+02,   2.0419383e+02,   2.0508466e+02, &
-      2.0598391e+02,   2.0689168e+02,   2.0780812e+02,   2.0873335e+02, &
-      2.0966751e+02,   2.1061074e+02,   2.1156316e+02,   2.1252493e+02, &
-      2.1349619e+02,   2.1447709e+02,   2.1546778e+02,   2.1646842e+02, &
-      2.1747916e+02,   2.1850016e+02,   2.1953160e+02,   2.2057364e+02, &
-      2.2162645e+02,   2.2269022e+02,   2.2376511e+02,   2.2485133e+02, &
-      2.2594905e+02,   2.2705847e+02,   2.2817979e+02,   2.2931322e+02, &
-      2.3045895e+02,   2.3161721e+02,   2.3278821e+02,   2.3397218e+02, &
-      2.3516935e+02,   2.3637994e+02,   2.3760420e+02,   2.3884238e+02, &
-      2.4009473e+02,   2.4136150e+02,   2.4264297e+02,   2.4393941e+02, &
-      2.4525110e+02,   2.4657831e+02,   2.4792136e+02,   2.4928053e+02, &
-      2.5065615e+02,   2.5204853e+02,   2.5345799e+02,   2.5488487e+02, &
-      2.5632953e+02,   2.5779231e+02,   2.5927358e+02,   2.6077372e+02, &
-      2.6229310e+02,   2.6383214e+02,   2.6539124e+02,   2.6697081e+02, &
-      2.6857130e+02,   2.7019315e+02,   2.7183682e+02,   2.7350278e+02, &
-      2.7519152e+02,   2.7690354e+02,   2.7863937e+02,   2.8039954e+02, &
-      2.8218459e+02,   2.8399511e+02,   2.8583167e+02,   2.8769489e+02, &
-      2.8958539e+02,   2.9150383e+02,   2.9345086e+02,   2.9542719e+02, &
-      2.9743353e+02,   2.9947061e+02,   3.0153922e+02,   3.0364014e+02, &
-      3.0577420e+02,   3.0794224e+02,   3.1014515e+02,   3.1238386e+02, &
-      3.1465930e+02,   3.1697246e+02,   3.1932437e+02,   3.2171609e+02, &
-      3.2414873e+02,   3.2662343e+02,   3.2914139e+02,   3.3170385e+02 /
-                                                                                
-      v1 = value
-      if (value.lt.-23.0) v1 = -23.0
-      if (value.gt.-10.4) v1 = -10.4
-      ival = floor(10.*(v1 + 23.0))
-      v2 = -230. + ival
-      v1 = 10.*v1
-      tlcl = (v2 + 1.0 - v1)*lcltable(ival+1) + (v1 - v2)*lcltable(ival+2)
-                                                                                
-      end subroutine lcltabl
+        thlast = th1
+        i = 0
+        not_converged = .true.
 
- 
+        do while( not_converged )
+          i = i + 1
+          t2 = thlast*pi2
+          if(ice)then
+            fliq = max(min((t2-233.15)/(273.15-233.15),1.0),0.0)
+            fice = 1.0-fliq
+          else
+            fliq = 1.0
+            fice = 0.0
+          endif
+          qv2 = min( qt , fliq*getqvs(p2,t2) + fice*getqvi(p2,t2) )
+          qi2 = max( fice*(qt-qv2) , 0.0 )
+          ql2 = max( qt-qv2-qi2 , 0.0 )
 
+          tbar  = 0.5*(t1+t2)
+          qvbar = 0.5*(qv1+qv2)
+          qlbar = 0.5*(ql1+ql2)
+          qibar = 0.5*(qi1+qi2)
+
+          lhv = lv1-lv2*tbar
+          lhs = ls1-ls2*tbar
+          lhf = lhs-lhv
+
+          rm=rd+rv*qvbar
+          cpm=cp+cpv*qvbar+cpl*qlbar+cpi*qibar
+          th2=th1*exp(  lhv*(ql2-ql1)/(cpm*tbar)     &
+                       +lhs*(qi2-qi1)/(cpm*tbar)     &
+                       +(rm/cpm-rd/cp)*alog(p2/p1) )
+
+          if(i.gt.90) print *,i,th2,thlast,th2-thlast
+          if(i.gt.100)then
+            print *
+            print *,'  Error:  lack of convergence'
+            print *
+            print *,'  ... stopping iteration '
+            print *
+            stop 1001
+          endif
+          if( abs(th2-thlast).gt.converge )then
+            thlast=thlast+0.3*(th2-thlast)
+          else
+            not_converged = .false.
+          endif
+        enddo
+
+        ! Latest pressure increment is complete.  Calculate some
+        ! important stuff:
+
+        if( ql2.ge.1.0e-10 ) cloud = .true.
+
+        IF(adiabat.eq.1.or.adiabat.eq.3)THEN
+          ! pseudoadiabat
+          qt  = qv2
+          ql2 = 0.0
+          qi2 = 0.0
+        ELSEIF(adiabat.le.0.or.adiabat.ge.5)THEN
+          print *
+          print *,'  Undefined adiabat'
+          print *
+          stop 10000
+        ENDIF
+
+      enddo
+
+      thv2 = th2*(1.0+reps*qv2)/(1.0+qv2+ql2+qi2)
+        b2 = g*( thv2-thv(k) )/thv(k)
+
+!      the = getthe(p2,t2,t2,qv2)
+
+      ! Get contributions to CAPE and CIN:
+
+      if( (b2.ge.0.0) .and. (b1.lt.0.0) )then
+        ! first trip into positive area
+        !ps = p(k-1)+(p(k)-p(k-1))*(0.0-b1)/(b2-b1)
+        frac = b2/(b2-b1)
+        parea =  0.5*b2*dz(k)*frac
+        narea = narea-0.5*b1*dz(k)*(1.0-frac)
+        if(debug_level.ge.200)then
+          print *,'      b1,b2 = ',b1,b2
+          !print *,'      p1,ps,p2 = ',p(k-1),ps,p(k)
+          print *,'      frac = ',frac
+          print *,'      parea = ',parea
+          print *,'      narea = ',narea
+        endif
+        cin  = cin  + narea
+        narea = 0.0
+      elseif( (b2.lt.0.0) .and. (b1.gt.0.0) )then
+        ! first trip into neg area
+        !ps = p(k-1)+(p(k)-p(k-1))*(0.0-b1)/(b2-b1)
+        frac = b1/(b1-b2)
+        parea =  0.5*b1*dz(k)*frac
+        narea = -0.5*b2*dz(k)*(1.0-frac)
+        if(debug_level.ge.200)then
+          print *,'      b1,b2 = ',b1,b2
+          !print *,'      p1,ps,p2 = ',p(k-1),ps,p(k)
+          print *,'      frac = ',frac
+          print *,'      parea = ',parea
+          print *,'      narea = ',narea
+        endif
+      elseif( b2.lt.0.0 )then
+        ! still collecting negative buoyancy
+        parea =  0.0
+        narea = narea-0.5*dz(k)*(b1+b2)
+      else
+        ! still collecting positive buoyancy
+        parea =  0.5*dz(k)*(b1+b2)
+        narea =  0.0
+      endif
+
+      cape = cape + max(0.0,parea)
+
+      if(debug_level.ge.200)then
+        write(6,102) p2,b1,b2,cape,cin,cloud
+102     format(5(f13.4),2x,l1)
+      endif
+
+      if( (p(k).le.10000.0).and.(b2.lt.0.0) )then
+        ! stop if b < 0 and p < 100 mb
+        doit = .false.
+      endif
+
+    enddo
+
+!---- All done ----!
+
+    return
+  end subroutine getcape
+
+!-----------------------------------------------------------------------
+!ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+!-----------------------------------------------------------------------
+
+  real function getqvs(p,t)
+    implicit none
+
+    real :: p,t,es
+
+    real, parameter :: eps = 287.04/461.5
+
+    es = 611.2*exp(17.67*(t-273.15)/(t-29.65))
+    getqvs = eps*es/(p-es)
+
+    return
+  end function getqvs
+
+!-----------------------------------------------------------------------
+!ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+!-----------------------------------------------------------------------
+
+  real function getqvi(p,t)
+    implicit none
+
+    real :: p,t,es
+
+    real, parameter :: eps = 287.04/461.5
+
+    es = 611.2*exp(21.8745584*(t-273.15)/(t-7.66))
+    getqvi = eps*es/(p-es)
+
+    return
+  end function getqvi
+
+!-----------------------------------------------------------------------
 
 end module fv_diagnostics_mod
