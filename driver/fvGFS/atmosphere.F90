@@ -972,7 +972,7 @@ contains
      fv_time = Time_next - Atm(n)%Time_init
      call get_time (fv_time, seconds,  days)
     !--- perform diagnostics on GFS fdiag schedule
-     if (ANY(Atm(mytile)%fdiag(:) == (real(days)*24. + real(seconds)/3600.))) then
+     if (ANY(nint(Atm(mytile)%fdiag(:)*3600.) == (days*24*3600+seconds)) .or. (days*24*3600+seconds) == dt_atmos ) then
        if (mpp_pe() == mpp_root_pe()) write(6,*) 'NGGPS:FV3 DIAG STEP', (real(days)*24. + real(seconds)/3600.)
        call fv_nggps_diag(Atm(mytile:mytile), zvir, Time_next)
      endif
@@ -1101,8 +1101,8 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mytile, nudge_dz, dz0) &
-!$omp            private (i, j, k, p00, q00)
+!$omp              shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mytile, nudge_dz, dz0) &
+!$omp             private (i, j, k, p00, q00)
        do k=1,npz
           do j=jsc,jec+1
              do i=isc,iec
@@ -1187,8 +1187,8 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
-!$omp            private (i, j, k)
+!$omp              shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
+!$omp             private (i, j, k)
        do k=1,npz
           do j=jsc,jec+1
              do i=isc,iec
@@ -1337,7 +1337,7 @@ contains
            IPD_Data(nb)%Statein%prsik(i,k) = log( IPD_Data(nb)%Statein%prsi(i,k) )
 ! Redefine mixing ratios for GFS == tracer_mass / (dry_air_mass + water_vapor_mass)
            IPD_Data(nb)%Statein%qgrs(i,k,1:nq_adv) = IPD_Data(nb)%Statein%qgrs(i,k,1:nq_adv) &
-                                                  / IPD_Data(nb)%Statein%prsl(i,k)
+                                                   / IPD_Data(nb)%Statein%prsl(i,k)
         enddo
      enddo
      do i=1,blen
