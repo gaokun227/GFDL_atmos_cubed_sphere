@@ -53,7 +53,7 @@ module external_ic_mod
    use fv_timing_mod,     only: timing_on, timing_off
    use init_hydro_mod,    only: p_var
    use fv_fill_mod,       only: fillz
-   use fv_eta_mod,        only: set_eta
+   use fv_eta_mod,        only: set_eta, set_external_eta
    use sim_nc_mod,        only: open_ncfile, close_ncfile, get_ncdim1, get_var1_double, get_var2_real,   &
                                 get_var3_r4, get_var2_r4, get_var1_real, get_var_att_double
    use fv_nwp_nudge_mod,  only: T_is_Tv
@@ -304,7 +304,6 @@ contains
 !                                        Cloud mixing ratio)
 !--- Namelist variables 
 !       filtered_terrain  -  use orography maker filtered terrain mapping
-!       ncep_plevels      -  use NCEP pressure levels (implies no vertical remapping)
 
 
       type(fv_atmos_type), intent(inout) :: Atm(:)
@@ -330,7 +329,6 @@ contains
       character(len=64) :: fn_oro_ics = 'oro_data.nc'
       logical :: remap
       logical :: filtered_terrain = .true.
-      logical :: ncep_plevels = .false.
       logical :: gfs_dwinds = .true.
       integer :: levp = 64
       logical :: checker_tr = .false.
@@ -339,7 +337,7 @@ contains
       real(kind=R_GRID), dimension(3):: e1, e2, ex, ey
       integer:: i,j,k,nts, ks
       integer:: liq_wat, ice_wat, rainwat, snowwat, graupel
-      namelist /external_ic_nml/ filtered_terrain, ncep_plevels, levp, gfs_dwinds, &
+      namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds, &
                                  checker_tr, nt_checker
 #ifdef GFSL64
    real, dimension(65):: ak_sj, bk_sj
@@ -499,15 +497,15 @@ contains
       write(unit, nml=external_ic_nml)
 
       remap = .true.
-      if (ncep_plevels) then
+      if (Atm(1)%flagstruct%external_eta) then
         if (filtered_terrain) then
           call mpp_error(NOTE,'External_IC::get_nggps_ic -  use externally-generated, filtered terrain &
-                              &and NCEP pressure levels (vertical remapping)')
+                              &and NCEP pressure levels (no vertical remapping)')
         else if (.not. filtered_terrain) then
           call mpp_error(NOTE,'External_IC::get_nggps_ic -  use externally-generated, raw terrain &
-                              &and NCEP pressure levels (vertical remapping)')
+                              &and NCEP pressure levels (no vertical remapping)')
         endif
-      else  ! (.not.ncep_plevels)
+      else  ! (.not.external_eta)
         if (filtered_terrain) then
           call mpp_error(NOTE,'External_IC::get_nggps_ic -  use externally-generated, filtered terrain &
                               &and FV3 pressure levels (vertical remapping)')
@@ -663,11 +661,12 @@ contains
         Atm(n)%phis = Atm(n)%phis*grav
         
         ! set the pressure levels and ptop to be used
-        if (ncep_plevels) then
+        if (Atm(1)%flagstruct%external_eta) then
           itoa = levp - npz + 1
           Atm(n)%ptop = ak(itoa)
           Atm(n)%ak(1:npz+1) = ak(itoa:levp+1)
           Atm(n)%bk(1:npz+1) = bk(itoa:levp+1)
+          call set_external_eta (Atm(n)%ak, Atm(n)%bk, Atm(n)%ptop, Atm(n)%ks)
         else
           if ( npz <= 64 ) then
              Atm(n)%ak(:) = ak_sj(:)
@@ -682,7 +681,6 @@ contains
         ak(1) = max(1.e-9, ak(1))
 
         call remap_scalar_nggps(Atm(n), levp, npz, ntracers, ak, bk, ps, q, omga, zh)
-!       call mpp_update_domains(Atm(n)%phis, Atm(n)%domain)
 
         allocate ( ud(is:ie,  js:je+1, 1:levp) )
         allocate ( vd(is:ie+1,js:je,   1:levp) )
@@ -3900,7 +3898,6 @@ subroutine pmaxmn(qname, q, is, ie, js, je, km, fac, area, domain)
     enddo
 
   end subroutine get_staggered_grid
-
 
  end module external_ic_mod
 
