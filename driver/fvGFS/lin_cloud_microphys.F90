@@ -1052,8 +1052,8 @@ public   &
                    / (crevp(4)*t2 + crevp(5)*qsat*den(k))
               evap = min( qr(k), dt*evap, dqv/(1.+lcpk*dqsdt) )
 ! Alternative Minimum Evap in dry environmental air
-              sink = min( qr(k), dim(rh_rain*qsat, qv(k))/(1.+lcpk*dqsdt) )
-              evap = max( evap, sink )
+!             sink = min( qr(k), dim(rh_rain*qsat, qv(k))/(1.+lcpk*dqsdt) )
+!             evap = max( evap, sink )
              qr(k) = qr(k) - evap
              qv(k) = qv(k) + evap
              tz(k) = tz(k) - evap*(lv00+d0_vap*tz(k)) / (c_air + qv(k)*c_vap + (qr(k)+ql(k))*c_liq + &
@@ -1670,6 +1670,7 @@ endif   ! end ice-physics
 !------------------------------------------------
 ! * Minimum Evap of rain in dry environmental air
 !------------------------------------------------
+#ifdef USE_MIN_EVAP
   if( qr(k)>qcmin) then
       qsw = wqs2(tz(k), den(k), dqsdt)
      sink = min(qr(k), dim(rh_rain*qsw, qv(k))/(1.+lcpk(k)*dqsdt))
@@ -1677,6 +1678,7 @@ endif   ! end ice-physics
       qr(k) = qr(k) - sink
       tz(k) = tz(k) - sink*(lv00+d0_vap*tz(k))/(c_air+qv(k)*c_vap+(ql(k)+qr(k))*c_liq+(qi(k)+qs(k)+qg(k))*c_ice)
   endif
+#endif
 
    if ( do_qa ) goto 4000
 
