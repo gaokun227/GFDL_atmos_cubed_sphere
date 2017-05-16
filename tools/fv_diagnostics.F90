@@ -2526,13 +2526,14 @@ contains
           endif
           if (idiag%id_basedbz > 0) then
              !interpolate to 1km dbz
-             call interpolate_z(isc, iec, jsc, jec, npz, 1000., wz, a3, a2)
+             call cs_interpolator(isc, iec, jsc, jec, npz, a3, 1000., wz, a2, -20.)
              used=send_data(idiag%id_basedbz, a2, time)
-             if (prt_minmax) call prt_maxmin('Base reflectivity', a2, isc, iec, jsc, jec, 0, 1, 1.)
+             if(prt_minmax) call prt_maxmin('Base_dBz', a2, isc, iec, jsc, jec, 0, 1, 1.)
           endif
+
           if (idiag%id_dbz4km > 0) then
              !interpolate to 1km dbz
-             call interpolate_z(isc, iec, jsc, jec, npz, 4000., wz, a3, a2)
+             call cs_interpolator(isc, iec, jsc, jec, npz, a3, 4000., wz, a2, -20.)
              used=send_data(idiag%id_dbz4km, a2, time)
           endif
           if (idiag%id_dbztop > 0) then
@@ -3576,50 +3577,50 @@ contains
 
  end subroutine cs3_interpolator
 
- subroutine cs_interpolator(is, ie, js, je, km, qin, kd, pout, pe, id, qout, iv)
-! This is the old-style linear in log-p interpolation
+ subroutine cs_interpolator(is, ie, js, je, km, qin, zout, wz, qout, qmin)
  integer,  intent(in):: is, ie, js, je, km
- integer,  intent(in):: kd      ! vertical dimension of the ouput height
- integer,  intent(in):: id(kd)
- integer, optional, intent(in):: iv
- real, intent(in):: pout(kd)    ! must be monotonically increasing with increasing k
- real, intent(in):: pe(is:ie,km+1,js:je)
- real, intent(in)::   qin(is:ie,js:je,km)
- real, intent(out):: qout(is:ie,js:je,kd)
+ real, intent(in):: zout, qmin
+ real, intent(in):: qin(is:ie,js:je,km)
+ real, intent(in):: wz(is:ie,js:je,km+1)
+ real, intent(out):: qout(is:ie,js:je)
 ! local:
- real:: pm(km)
- integer i,j,k, n, k1
+ real:: qe(is:ie,km+1)
+ real, dimension(is:ie,km):: q2, dz
+ real:: s0, a6
+ integer:: i,j,k
 
-!$OMP parallel do default(none) shared(id,is,ie,js,je,km,kd,pout,qin,qout,pe) & 
-!$OMP             private(k1,pm)
+!$OMP parallel do default(none) shared(qmin,is,ie,js,je,km,zout,qin,qout,wz) & 
+!$OMP             private(s0,a6,q2,dz,qe)
  do j=js,je
-    do i=is,ie
-       do k=1,km
-! consider using true log(p) here for non-hydro?
-          pm(k) = 0.5*(pe(i,k,j)+pe(i,k+1,j))
-       enddo
 
-       k1 = 1
-       do n=1,kd
-          if ( id(n) < 0 ) go to 500
-          if( pout(n) <= pm(1) ) then
-! Higher than the top: using constant value
-              qout(i,j,n) = qin(i,j,1)
-          elseif ( pout(n) >= pm(km) ) then
-! lower than the bottom surface:
-              qout(i,j,n) = qin(i,j,km)
-          else 
-            do k=k1,km-1
-               if ( pout(n)>=pm(k) .and. pout(n) <= pm(k+1) ) then
-                   qout(i,j,n) = qin(i,j,k) + (qin(i,j,k+1)-qin(i,j,k))*(pout(n)-pm(k))/(pm(k+1)-pm(k))
-                   k1 = k     ! next level
-                   go to 500
-               endif
-            enddo
-          endif
-500       continue
-       enddo
-    enddo
+   do i=is,ie
+      do k=1,km
+         dz(i,k) = wz(i,j,k) - wz(i,j,k+1)
+         q2(i,k) = qin(i,j,k)
+      enddo
+   enddo
+
+   call cs_prof(q2, dz, qe, km, is, ie, 1)
+
+   do i=is,ie
+      if( zout >= wz(i,j,1) ) then
+! Higher than the top:
+          qout(i,j) = qe(i,1)
+      elseif ( zout <= wz(i,j,km+1) ) then
+          qout(i,j) = qe(i,km+1)
+      else 
+          do k=1,km
+             if ( zout<=wz(i,j,k) .and. zout >= wz(i,j,k+1) ) then
+! PPM distribution: f(s) = AL + s*[(AR-AL) + A6*(1-s)]         ( 0 <= s <= 1 )
+                  a6 = 3.*(2.*q2(i,k) - (qe(i,k)+qe(i,k+1)))
+                  s0 = (wz(i,j,k)-zout) / dz(i,k)
+                  qout(i,j) = qe(i,k) + s0*(qe(i,k+1)-qe(i,k)+a6*(1.-s0))
+                  go to 500
+             endif
+          enddo
+      endif
+500   qout(i,j) = max(qmin, qout(i,j))
+   enddo
  enddo
 
  end subroutine cs_interpolator
@@ -4635,12 +4636,13 @@ end subroutine eqv_pot
         * (rho_s/rho_r)**2 * alpha
    real, parameter :: factor_g = gamma_seven * 1.e18 * (1./(pi*rho_g))**1.75 &
         * (rho_g/rho_r)**2 * alpha
+   real, parameter :: qmin = 1.E-12
    real, parameter :: tice = 273.16
 
    integer :: i,j,k
    real :: factorb_s, factorb_g, rhoair
    real :: temp_c, pres, sonv, gonv, ronv, z_e
-   real :: qr1, qs1, qg1
+   real :: qr1, qs1, qg1, t1, t2, t3
 
    integer :: is, ie, js, je
 
@@ -4686,14 +4688,14 @@ end subroutine eqv_pot
          sonv = rn0_s
       end if
 
-      qr1 = max(0., q(i,j,k,rainwat))
+      qr1 = max(qmin, q(i,j,k,rainwat))
       if (graupel > 0) then
-         qg1 = max(0., q(i,j,k,graupel))
+         qg1 = max(qmin, q(i,j,k,graupel))
       else
          qg1 = 0.
       endif
       if (snowwat > 0) then
-         qs1 = max(0., q(i,j,k,snowwat))
+         qs1 = max(qmin, q(i,j,k,snowwat))
       else
          qs1 = 0.
       endif
@@ -4718,14 +4720,13 @@ end subroutine eqv_pot
       end if
 
       !Total equivalent reflectivity: mm^6 m^-3
-      z_e =   factor_r  * (rhoair*qr1)**1.75 / ronv**.75    & ! rain
-            + factorb_s * (rhoair*qs1)**1.75 / sonv**.75    & ! snow
-            + factorb_g * (rhoair*qg1)**1.75 / gonv**.75      ! graupel
-      
       !Minimum allowed dbz is -20
-      z_e = max(z_e,0.01)
-      dbz(i,j,k) = 10. * log10(z_e)
-
+      ! Optimized form :
+      t1 = rhoair*qr1
+      t2 = rhoair*qs1
+      t3 = rhoair*qg1
+      z_e = max(0.01,factor_r*t1*(t1/ronv)**.75 + factorb_s*t2*(t2/sonv)**.75 + factorb_g*t3*(t3/gonv)**.75)
+      dbz(i,j,k) = 10.*log10(z_e)
       maxdbz(i,j) = max(dbz(i,j,k), maxdbz(i,j))
       allmax      = max(dbz(i,j,k), allmax)
 
