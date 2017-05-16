@@ -3623,6 +3623,8 @@ contains
    enddo
  enddo
 
+! Send_data here
+
  end subroutine cs_interpolator
 
  subroutine cs_prof(q2, delp, q, km, i1, i2, iv)
@@ -4652,7 +4654,7 @@ end subroutine eqv_pot
    je = bd%je
 
    maxdbz(:,:) = -20. !Minimum value
-   allmax = -20. 
+   allmax = -20.
 
    if (rainwat < 1) return
 
@@ -4729,7 +4731,6 @@ end subroutine eqv_pot
       dbz(i,j,k) = 10.*log10(z_e)
       maxdbz(i,j) = max(dbz(i,j,k), maxdbz(i,j))
       allmax      = max(dbz(i,j,k), allmax)
-
    enddo
    enddo
    enddo

@@ -548,6 +548,8 @@ if ( do_qa .and. last_step ) then
                 else
                     qa(i,j) = (q_plus-qstar)/(2.*dq*(1.-condensates))
                 endif
+             else
+                qa(i,j) = 0.
              endif
 ! Impose minimum cloudiness if substantial condensates exist
              if ( condensates > 1.E-6 ) qa(i,j) = max(cld_min, qa(i,j))

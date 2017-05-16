@@ -816,7 +816,7 @@ contains
    type(time_type) :: Time_prev, Time_next
 !--- local variables ---
    integer :: i, j, ix, k, k1, n, w_diff, nt_dyn, iq
-   integer :: nb, blen, nwat, dnats
+   integer :: nb, blen, nwat, dnats, nq_adv
    real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
 
    Time_prev = Time
@@ -826,6 +826,7 @@ contains
    n = mytile
    nwat = Atm(n)%flagstruct%nwat
    dnats = Atm(mytile)%flagstruct%dnats
+   nq_adv = nq - dnats
 
    if( nq<3 ) call mpp_error(FATAL, 'GFS phys must have 3 interactive tracers')
 
@@ -836,7 +837,7 @@ contains
 !$OMP parallel do default (none) & 
 !$OMP              shared (rdt, n, nq, dnats, npz, ncnst, nwat, mytile, u_dt, v_dt, t_dt,&
 !$OMP                      Atm, IPD_Data, Atm_block, sphum, liq_wat, rainwat, ice_wat,   &
-!$OMP                      snowwat, graupel)   &
+!$OMP                      snowwat, graupel, nq_adv)   &
 !$OMP             private (nb, blen, i, j, k, k1, ix, q0, qwat, qt)
    do nb = 1,Atm_block%nblks
 
@@ -860,7 +861,7 @@ contains
 ! FV3 total air mass = dry_mass + [water_vapor + condensate ]
 ! FV3 mixing ratios  = tracer_mass / (dry_mass+vapor_mass+cond_mass)
          q0 = IPD_Data(nb)%Statein%prsi(ix,k) - IPD_Data(nb)%Statein%prsi(ix,k+1)
-         qwat(1:nq-dnats) = q0*IPD_Data(nb)%Stateout%gq0(ix,k,1:nq-dnats)
+         qwat(1:nq_adv) = q0*IPD_Data(nb)%Stateout%gq0(ix,k,1:nq_adv)
 ! **********************************************************************************************************
 ! Dry mass: the following way of updating delp is key to mass conservation with hybrid 32-64 bit computation
 ! **********************************************************************************************************
@@ -869,7 +870,8 @@ contains
          qt = sum(qwat(1:nwat))
          q0 = Atm(n)%delp(i,j,k1)*(1.-sum(Atm(n)%q(i,j,k1,1:nwat))) + qt 
          Atm(n)%delp(i,j,k1) = q0
-         Atm(n)%q(i,j,k1,1:nq-dnats) = qwat(1:nq-dnats) / q0
+         Atm(n)%q(i,j,k1,1:nq_adv) = qwat(1:nq_adv) / q0
+         if (dnats .gt. 0) Atm(n)%q(i,j,k1,nq_adv+1:nq) = IPD_Data(nb)%Stateout%gq0(ix,k,nq_adv+1:nq)
        enddo
      enddo
 
@@ -972,7 +974,7 @@ contains
      fv_time = Time_next - Atm(n)%Time_init
      call get_time (fv_time, seconds,  days)
     !--- perform diagnostics on GFS fdiag schedule
-     if (ANY(Atm(mytile)%fdiag(:) == (real(days)*24. + real(seconds)/3600.))) then
+     if (ANY(nint(Atm(mytile)%fdiag(:)*3600.) == (days*24*3600+seconds)) .or. (days*24*3600+seconds) == dt_atmos ) then
        if (mpp_pe() == mpp_root_pe()) write(6,*) 'NGGPS:FV3 DIAG STEP', (real(days)*24. + real(seconds)/3600.)
        call fv_nggps_diag(Atm(mytile:mytile), zvir, Time_next)
      endif
@@ -1101,8 +1103,8 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mytile, nudge_dz, dz0) &
-!$omp            private (i, j, k, p00, q00)
+!$omp              shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mytile, nudge_dz, dz0) &
+!$omp             private (i, j, k, p00, q00)
        do k=1,npz
           do j=jsc,jec+1
              do i=isc,iec
@@ -1187,8 +1189,8 @@ contains
                      Atm(mytile)%domain)
 ! Nudging back to IC
 !$omp parallel do default (none) &
-!$omp             shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
-!$omp            private (i, j, k)
+!$omp              shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
+!$omp             private (i, j, k)
        do k=1,npz
           do j=jsc,jec+1
              do i=isc,iec
@@ -1337,7 +1339,7 @@ contains
            IPD_Data(nb)%Statein%prsik(i,k) = log( IPD_Data(nb)%Statein%prsi(i,k) )
 ! Redefine mixing ratios for GFS == tracer_mass / (dry_air_mass + water_vapor_mass)
            IPD_Data(nb)%Statein%qgrs(i,k,1:nq_adv) = IPD_Data(nb)%Statein%qgrs(i,k,1:nq_adv) &
-                                                  / IPD_Data(nb)%Statein%prsl(i,k)
+                                                   / IPD_Data(nb)%Statein%prsl(i,k)
         enddo
      enddo
      do i=1,blen
