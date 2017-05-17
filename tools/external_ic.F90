@@ -792,9 +792,7 @@ contains
           do j=js,je
             do i=is,ie
               wt = Atm(n)%delp(i,j,k)
-              if ( Atm(n)%flagstruct%nwat .eq. 2 ) then
-                 qt = wt*(1.+Atm(n)%q(i,j,k,liq_wat))
-              elseif ( Atm(n)%flagstruct%nwat .eq. 6 ) then
+              if ( Atm(n)%flagstruct%nwat .eq. 6 ) then
                  qt = wt*(1. + Atm(n)%q(i,j,k,liq_wat) + &
                                Atm(n)%q(i,j,k,ice_wat) + &
                                Atm(n)%q(i,j,k,rainwat) + &

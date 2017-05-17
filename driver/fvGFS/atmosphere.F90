@@ -1309,10 +1309,7 @@ contains
          if ( ncnst > nq) &
              IPD_Data(nb)%Statein%qgrs(ix,k,nq+1:ncnst) = _DBL_(_RL_(Atm(mytile)%qdiag(i,j,k1,nq+1:ncnst)))
 ! Remove the contribution of condensates to delp (mass):
-         if ( Atm(mytile)%flagstruct%nwat .eq. 2 ) then  ! GFS
-            IPD_Data(nb)%Statein%prsl(ix,k) = IPD_Data(nb)%Statein%prsl(ix,k) &
-                                            - IPD_Data(nb)%Statein%qgrs(ix,k,liq_wat)
-         elseif ( Atm(mytile)%flagstruct%nwat .eq. 6 ) then
+         if ( Atm(mytile)%flagstruct%nwat .eq. 6 ) then
             IPD_Data(nb)%Statein%prsl(ix,k) = IPD_Data(nb)%Statein%prsl(ix,k) &
                                             - IPD_Data(nb)%Statein%qgrs(ix,k,liq_wat)   &
                                             - IPD_Data(nb)%Statein%qgrs(ix,k,ice_wat)   &
