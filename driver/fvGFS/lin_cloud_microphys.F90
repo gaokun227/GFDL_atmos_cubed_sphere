@@ -100,6 +100,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  real :: lv00, d0_vap, c_air, c_vap
 
  integer :: icloud_f = 0       ! 
+ integer :: irain_f = 0       ! 
  logical :: de_ice = .false.     !
  logical :: sedi_transport = .true.     !
  logical :: do_sedi_w = .false.
@@ -249,7 +250,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
         c_paut, c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn,  &
         c_cracw, alin, clin, tice, rad_snow, rad_graupel, rad_rain,   &
         cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
-        do_sedi_w, de_ice, icloud_f, mp_print
+        do_sedi_w, de_ice, icloud_f, irain_f, mp_print
 
 public   &
         mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
@@ -975,6 +976,31 @@ public   &
 ! Assuming linear subgrid vertical distribution of cloud water
 ! following Lin et al. 1994, MWR
 
+if ( irain_f /= 0 ) then
+!-----------------------
+! No subgrid varaibility:
+!-----------------------
+  do k=ktop,kbot
+    qc0 = fac_rc*ccn(k)
+    if ( tz(k) > t_wfr ) then
+!--------------------------------------------------------------------
+!  As in Klein's GFDL AM2 stratiform scheme (with subgrid variations)
+!--------------------------------------------------------------------
+      if ( use_ccn ) then
+!  CCN is formulted as CCN = CCN_surface * (den/den_surface)
+           qc = qc0
+      else
+           qc = qc0/den(k)
+      endif
+      dq = ql(k) - qc
+      if ( dq > 0. ) then
+            sink = min(dq, dt*c_praut(k)*den(k)*exp(so3*log(ql(k))))
+           ql(k) = ql(k) - sink
+           qr(k) = qr(k) + sink
+      endif
+    endif
+  enddo
+else
   call linear_prof( kbot-ktop+1, ql(ktop), dl(ktop), z_slope_liq, h_var )
 
   do k=ktop,kbot
@@ -1002,6 +1028,7 @@ public   &
       endif
     endif
   enddo
+endif
 
 
  end subroutine warm_rain
