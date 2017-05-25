@@ -194,7 +194,7 @@ contains
               neststruct%nested, flagstruct%inline_q, flagstruct%make_nh, ng, &
               gridstruct, flagstruct, neststruct, &
               neststruct%nest_timestep, neststruct%tracer_nest_timestep, &
-              domain, bd, nwat)
+              domain, parent_grid, bd, nwat, ak, bk)
 
 #ifndef SW_DYNAMICS
          if (gridstruct%nested) then

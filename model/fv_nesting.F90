@@ -27,7 +27,7 @@ module fv_nesting_mod
    use mpp_domains_mod,     only: mpp_get_data_domain, mpp_get_compute_domain, mpp_get_global_domain
    use mpp_domains_mod,     only: DGRID_NE, mpp_update_domains, domain2D
    use fv_restart_mod,      only: d2a_setup, d2c_setup
-   use mpp_mod,             only: mpp_sync_self, mpp_sync, mpp_send, mpp_recv, mpp_error, FATAL
+   use mpp_mod,             only: mpp_sync_self, mpp_sync, mpp_send, mpp_recv, mpp_error, FATAL, mpp_pe
    use mpp_domains_mod,     only: mpp_global_sum, BITWISE_EFP_SUM, BITWISE_EXACT_SUM
    use boundary_mod,        only: update_coarse_grid
    use boundary_mod,        only: nested_grid_BC_send, nested_grid_BC_recv, nested_grid_BC_save_proc
@@ -74,7 +74,7 @@ contains
                         nested, inline_q, make_nh, ng, &
                         gridstruct, flagstruct, neststruct, &
                         nest_timestep, tracer_nest_timestep, &
-                        domain, bd, nwat)
+                        domain, parent_grid, bd, nwat, ak, bk)
 
    
     type(fv_grid_bounds_type), intent(IN) :: bd
@@ -83,6 +83,7 @@ contains
     integer, intent(IN) :: npx, npy, npz
     integer, intent(IN) :: ncnst, ng, nwat
     logical, intent(IN) :: inline_q, make_nh,nested
+    real, intent(IN), dimension(npz) :: ak, bk
 
     real, intent(inout), dimension(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz) :: u ! D grid zonal wind (m/s)
     real, intent(inout), dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) :: v ! D grid meridional wind (m/s)
@@ -95,6 +96,7 @@ contains
     real, intent(inout) :: vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
     real, intent(inout) :: pkz (bd%is:bd%ie,bd%js:bd%je,npz)             ! finite-volume mean pk
     integer, intent(INOUT) :: nest_timestep, tracer_nest_timestep
+    type(fv_atmos_type), intent(INOUT) :: parent_grid
 
     type(fv_grid_type), intent(INOUT) :: gridstruct
     type(fv_flags_type), intent(INOUT) :: flagstruct
@@ -105,10 +107,10 @@ contains
     real :: va(bd%isd:bd%ied,bd%jsd:bd%jed)
 
     real :: pkz_coarse(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
-    integer :: i,j,k,n,p, sphum
+    integer :: i,j,k,n,p, sphum, npz_coarse
     logical :: do_pd
 
-   type(fv_nest_BC_type_3d) :: pkz_BC
+   type(fv_nest_BC_type_3d) :: pkz_BC, delp_lag_BC
 
     !local pointers
     logical, pointer :: child_grids(:)
@@ -187,40 +189,42 @@ contains
 #endif 
 !! Nested grid: receive from parent grid
     if (neststruct%nested) then
+
+       npz_coarse = parent_grid%npz
+
        if (.not. allocated(q_buf)) then
           allocate(q_buf(ncnst))
        endif
 
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz_coarse, bd, &
             delp_buf)
        do n=1,ncnst
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz, bd, &
+          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, &
                q_buf(n))
        enddo
 #ifndef SW_DYNAMICS
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, &
             pt_buf)
 
        if (flagstruct%hydrostatic) then
-          call allocate_fv_nest_BC_type(pkz_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz,ng,0,0,0,.false.)
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz, bd, &
+          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, &
                pkz_buf)
        else
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz, bd, &
+          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz_coarse, bd, &
                w_buf)
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz, bd, &
+          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz_coarse, bd, &
                delz_buf)
        endif
 #endif
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz_coarse, bd, &
             u_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz_coarse, bd, &
             vc_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz_coarse, bd, &
             v_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz_coarse, bd, &
             uc_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 1, 1,  npz, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 1, 1,  npz_coarse, bd, &
             divg_buf)
     endif
 
@@ -248,15 +252,19 @@ contains
           call nested_grid_BC_send(vc, neststruct%nest_domain_all(p), 0, 1)
           call nested_grid_BC_send(v, neststruct%nest_domain_all(p), 1, 0)
           call nested_grid_BC_send(uc, neststruct%nest_domain_all(p), 1, 0)
-       call nested_grid_BC_send(divg, neststruct%nest_domain_all(p), 1, 1)
+          call nested_grid_BC_send(divg, neststruct%nest_domain_all(p), 1, 1)
        endif
     enddo
     
     !Nested grid: do computations
     if (nested) then
+       call allocate_fv_nest_BC_type(delp_lag_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz,ng,0,0,0,.false.)
        call nested_grid_BC_save_proc(neststruct%nest_domain, &
             neststruct%ind_h, neststruct%wt_h, 0, 0,  npx, npy, npz, bd, &
-            neststruct%delp_BC, delp_buf, pd_in=do_pd)
+            delp_lag_BC, delp_buf, pd_in=do_pd)
+       !The incoming delp is on the coarse grid's lagrangian coordinate. Re-create the reference coordinate
+       call setup_eul_delp_BC(delp_lag_BC, neststruct%delp_BC, ak, bk, npx, npy, npz, parent_grid%ak(1), bd)
+
        do n=1,ncnst
           call nested_grid_BC_save_proc(neststruct%nest_domain, &
                neststruct%ind_h, neststruct%wt_h, 0, 0, npx,  npy,  npz, bd, &
@@ -269,6 +277,7 @@ contains
 
        sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
        if (flagstruct%hydrostatic) then
+          call allocate_fv_nest_BC_type(pkz_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz,ng,0,0,0,.false.)
           call nested_grid_BC_save_proc(neststruct%nest_domain, &
             neststruct%ind_h, neststruct%wt_h, 0, 0, npx,  npy,  npz, bd, &
             pkz_BC, pkz_buf)
@@ -440,6 +449,93 @@ contains
    end if
    
  end subroutine setup_pt_BC
+
+ subroutine setup_eul_delp_BC(delp_lag_BC, delp_eul_BC, ak_dst, bk_dst, npx, npy, npz, ptop_src, bd)
+
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: delp_lag_BC
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: delp_eul_BC
+   integer, intent(IN) :: npx, npy, npz
+   real, intent(IN), dimension(npz+1) :: ak_dst, bk_dst
+   real, intent(IN) :: ptop_src
+
+   integer :: i,j,k, istart, iend
+
+   integer :: is,  ie,  js,  je
+   integer :: isd, ied, jsd, jed
+
+   is  = bd%is
+   ie  = bd%ie
+   js  = bd%js
+   je  = bd%je
+   isd = bd%isd
+   ied = bd%ied
+   jsd = bd%jsd
+   jed = bd%jed
+   
+   if (is == 1) then
+      call setup_eul_delp_BC_k(delp_lag_BC%west_t1, delp_eul_BC%west_t1, ptop_src, ak_dst, bk_dst, isd, 0, isd, 0, jsd, jed, npz)
+   end if
+
+   if (ie == npx-1) then
+      call setup_eul_delp_BC_k(delp_lag_BC%east_t1, delp_eul_BC%east_t1, ptop_src, ak_dst, bk_dst, npx, ied, npx, ied, jsd, jed, npz)
+   end if
+
+   if (is == 1) then
+      istart = is
+   else
+      istart = isd
+   end if
+   if (ie == npx-1) then
+      iend = ie
+   else
+      iend = ied
+   end if
+
+   if (js == 1) then
+      call setup_eul_delp_BC_k(delp_lag_BC%south_t1, delp_eul_BC%south_t1, ptop_src, ak_dst, bk_dst, isd, ied, istart, iend, jsd, 0, npz)
+   end if
+
+   if (je == npy-1) then
+      call setup_eul_delp_BC_k(delp_lag_BC%north_t1, delp_eul_BC%north_t1, ptop_src, ak_dst, bk_dst, isd, ied, istart, iend, npy, jed, npz)
+   end if
+   
+ end subroutine setup_eul_delp_BC
+
+ subroutine setup_eul_delp_BC_k(delplagBC, delpeulBC, ptop_src, ak_dst, bk_dst, isd, ied, istart, iend, jstart, jend, npz)
+
+   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz
+   real, intent(INOUT) :: delplagBC(isd:ied,jstart:jend,npz)
+   real, intent(INOUT) :: delpeulBC(isd:ied,jstart:jend,npz)
+   real, intent(IN) :: ptop_src, ak_dst(npz+1), bk_dst(npz+1)
+
+   real psBC(istart:iend,jstart:jend)
+   integer :: i,j,k
+
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,psBC,ptop_src)
+   do j=jstart,jend
+   do i=istart,iend
+      psBC(i,j) = ptop_src 
+   enddo
+   enddo
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,psBC,delplagBC)
+   do k=1,npz
+   do j=jstart,jend
+   do i=istart,iend
+      psBC(i,j) = psBC(i,j) + delplagBC(i,j,k)
+   end do
+   end do
+   end do
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,psBC,delpeulBC,ak_dst,bk_dst)
+   do k=1,npz
+   do j=jstart,jend
+   do i=istart,iend
+      delpeulBC(i,j,k) = (ak_dst(k+1) - ak_dst(k)) + psBC(i,j)*(bk_dst(k+1) - bk_dst(k))
+   enddo
+   enddo
+   enddo
+
+ end subroutine setup_eul_delp_BC_k
 
  subroutine setup_pt_NH_BC(pt_BC, delp_BC, delz_BC, sphum_BC, q_BC, nq, &
 #ifdef USE_COND
@@ -927,7 +1023,6 @@ contains
    neststruct%divg_BC%west_t0  = neststruct%divg_BC%west_t1
    neststruct%divg_BC%north_t0 = neststruct%divg_BC%north_t1
    neststruct%divg_BC%south_t0 = neststruct%divg_BC%south_t1
-
 
  end subroutine set_BCs_t0
 
