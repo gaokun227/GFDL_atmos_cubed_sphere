@@ -3501,6 +3501,10 @@ contains
      call mp_reduce_sum(   t_sh)
      call mp_reduce_sum(area_eq)
      call mp_reduce_sum(   t_eq)
+     if (area_gb <= 1.) area_gb = -1.0
+     if (area_nh <= 1.) area_nh = -1.0
+     if (area_sh <= 1.) area_sh = -1.0
+     if (area_eq <= 1.) area_eq = -1.0
      if (is_master()) write(*,*) qname, t_gb/area_gb, t_nh/area_nh, t_sh/area_sh, t_eq/area_eq
 
  end subroutine prt_gb_nh_sh
