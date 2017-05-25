@@ -3,10 +3,10 @@ module fv_cmp_mod
   use constants_mod,         only: pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
   use fv_mp_mod,             only: is_master
   use fv_arrays_mod,         only: R_GRID
-  use lin_cld_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql_mlt, ql0_max, qi_lim, icloud_f
-  use lin_cld_microphys_mod, only: tau_r, tau_s, tau_i2s, tau_v2l, tau_l2v, tau_mlt
-  use lin_cld_microphys_mod, only: rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
-  use lin_cld_microphys_mod, only: sat_adj0, t_sub, cld_min, qs_mlt
+  use gfdl_cloud_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql_mlt, ql0_max, qi_lim, icloud_f
+  use gfdl_cloud_microphys_mod, only: tau_r, tau_s, tau_i2s, tau_v2l, tau_l2v, tau_mlt
+  use gfdl_cloud_microphys_mod, only: rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
+  use gfdl_cloud_microphys_mod, only: sat_adj0, t_sub, cld_min, qs_mlt
 
   implicit none
   real, parameter:: tau_l2r = 900.

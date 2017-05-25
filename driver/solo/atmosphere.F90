@@ -48,7 +48,7 @@ use fv_timing_mod,      only: timing_on, timing_off
 use fv_restart_mod,     only: fv_restart
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
-use lin_cld_microphys_mod, only: lin_cld_microphys_init, lin_cld_microphys_end
+use gfdl_cloud_microphys_mod, only: gfdl_cloud_microphys_init, gfdl_cloud_microphys_end
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
 use fv_mp_mod,          only: switch_current_Atm
 use field_manager_mod,  only: MODEL_ATMOS
@@ -156,7 +156,7 @@ contains
            Atm(n)%flagstruct%moist_phys = .true.
            if ( grids_on_this_pe(n)) then
               call fv_phys_init(isc,iec,jsc,jec,Atm(n)%flagstruct%nwat, Atm(n)%ts, Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
-              if ( Atm(n)%flagstruct%nwat==6) call lin_cld_microphys_init
+              if ( Atm(n)%flagstruct%nwat==6) call gfdl_cloud_microphys_init
            endif
         endif
 
@@ -524,7 +524,7 @@ contains
     call get_time (fv_time, seconds,  days)
 
     do n=1,ngrids
-       if ( Atm(n)%flagstruct%moist_phys .and. Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(N)) call lin_cld_microphys_end
+       if ( Atm(n)%flagstruct%moist_phys .and. Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(N)) call gfdl_cloud_microphys_end
     enddo
 
     call fv_end(Atm, grids_on_this_pe)
