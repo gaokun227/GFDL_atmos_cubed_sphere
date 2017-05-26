@@ -16,6 +16,14 @@ module gfdl_cloud_microphys_mod
 ! use fms_mod,           only: write_version_number, open_namelist_file, &
 !                              check_nml_error, file_exist, close_file,  &
 !                              error_mesg, FATAL
+ use physcons,           only: grav     => con_g
+                               rdgas    => con_rd
+                               rvgas    => con_rv
+                               cp_air   => con_cp
+                               cp_vapor => con_cvap
+                               hlv      => con_hvap
+                               hlf      => con_hfus
+                               pi       => con_pi
 
  implicit none
  private
@@ -28,19 +36,6 @@ module gfdl_cloud_microphys_mod
  logical          :: module_is_initialized = .false.
  logical          :: qsmith_tables_initialized = .false.
  character(len=17) :: mod_name = 'gfdl_cloud_microphys'
-
-!==== constants_mod ====
-integer, public, parameter :: R_GRID=8
-real, parameter :: grav = 9.80665_R_GRID
-real, parameter :: rdgas = 287.05_R_GRID
-real, parameter :: rvgas = 461.50_R_GRID
-real, parameter :: cp_air = 1004.6_R_GRID
-real, parameter :: cp_vapor = 4.0_R_GRID*RVGAS
-real, parameter :: hlv = 2.5e6_R_GRID
-real, parameter :: hlf = 3.3358e5_R_GRID
-real, parameter :: kappa = rdgas/cp_air
-real, parameter :: pi = 3.1415926535897931_R_GRID
-!==== constants_mod ====
 
 !==== fms constants ====================
 !!! real, parameter :: latv  = hlv             ! = 2.500e6
