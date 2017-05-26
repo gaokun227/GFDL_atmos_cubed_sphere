@@ -133,7 +133,7 @@ contains
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gz, cvm, qv
-  real rcp, rg, tmp, tpe, rrg, bkh, dtmp, k1k
+  real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
   integer:: i,j,k 
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
@@ -511,7 +511,7 @@ contains
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm) &
-!$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,tpe,tmp, dpln)
+!$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
 !$OMP do
   do k=2,km
@@ -608,13 +608,13 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
     enddo   ! j-loop
 
 !$OMP single
-         tpe = consv*g_sum(domain, te_2d, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
-      E_Flux = tpe / (grav*pdt*4.*pi*radius**2)    ! unit: W/m**2
+         dtmp = consv*g_sum(domain, te_2d, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
+      E_Flux = dtmp / (grav*pdt*4.*pi*radius**2)    ! unit: W/m**2
                                                    ! Note pdt is "phys" time step
       if ( hydrostatic ) then
-           dtmp = tpe / (cp*g_sum(domain, zsum0,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+           dtmp = dtmp / (cp*    g_sum(domain, zsum0, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
       else
-           dtmp = tpe / (cv_air*g_sum(domain, zsum1, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+           dtmp = dtmp / (cv_air*g_sum(domain, zsum1, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
       endif
 !$OMP end single
 
@@ -696,6 +696,7 @@ endif        ! end last_step check
 
   if ( last_step ) then
        ! Output temperature if last_step
+!!!  if ( is_master() ) write(*,*) 'dtmp=', dtmp, nwat
 !$OMP do
         do k=1,km
            do j=js,je
@@ -1665,7 +1666,8 @@ endif        ! end last_step check
      if ( abs(kord)==16 ) then
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-          ext6(i,k) = abs(a4(4,i,k)) > abs(a4(2,i,k)-a4(3,i,k))
+!         ext6(i,k) = abs(a4(4,i,k)) > abs(a4(2,i,k)-a4(3,i,k))
+          ext6(i,k) = abs(r3*a4(4,i,k)) > abs(a4(2,i,k)-a4(3,i,k))
        enddo
      endif
   enddo
@@ -1840,7 +1842,6 @@ endif        ! end last_step check
      elseif ( abs(kord)==16 ) then
        do i=i1,i2
           if( ext6(i,k) ) then
-!            if ( extm(i,k-1) .or. extm(i,k+1) ) then
              if ( ext6(i,k-1) .or. ext6(i,k+1) ) then
                  ! Left  edges
                  pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
@@ -2048,7 +2049,8 @@ endif        ! end last_step check
      if ( abs(kord)==16 ) then
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-          ext6(i,k) = abs(a4(4,i,k)) > abs(a4(2,i,k)-a4(3,i,k))
+!         ext6(i,k) = abs(a4(4,i,k)) > abs(a4(2,i,k)-a4(3,i,k))
+          ext6(i,k) = abs(r3*a4(4,i,k)) > abs(a4(2,i,k)-a4(3,i,k))
        enddo
      endif
   enddo
@@ -2219,7 +2221,6 @@ endif        ! end last_step check
      elseif ( abs(kord)==16 ) then
        do i=i1,i2
           if( ext6(i,k) ) then
-!            if ( extm(i,k-1) .or. extm(i,k+1) ) then
              if ( ext6(i,k-1) .or. ext6(i,k+1) ) then
                  ! Left  edges
                  pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)

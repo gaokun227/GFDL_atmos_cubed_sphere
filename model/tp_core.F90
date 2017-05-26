@@ -338,11 +338,6 @@ contains
    do i=is1, ie3
       al(i) = p1*(q1(i-1)+q1(i)) + p2*(q1(i-2)+q1(i+1))
    enddo
-   if ( iord<0 ) then
-       do i=is1, ie3
-          al(i) = max(0., al(i))
-       enddo
-   endif
 
    if ( .not.nested .and. grid_type<3 ) then
      if ( is==1 ) then
@@ -350,23 +345,19 @@ contains
        al(1) = 0.5*(((2.*dxa(0,j)+dxa(-1,j))*q1(0)-dxa(0,j)*q1(-1))/(dxa(-1,j)+dxa(0,j)) &
              +      ((2.*dxa(1,j)+dxa( 2,j))*q1(1)-dxa(1,j)*q1( 2))/(dxa(1, j)+dxa(2,j)))
        al(2) = c3*q1(1) + c2*q1(2) +c1*q1(3)
-       if( iord<0 ) then
-          al(0) = max(0., al(0))
-          al(1) = max(0., al(1))
-          al(2) = max(0., al(2))
-       endif
      endif
      if ( (ie+1)==npx ) then
        al(npx-1) = c1*q1(npx-3) + c2*q1(npx-2) + c3*q1(npx-1)
        al(npx) = 0.5*(((2.*dxa(npx-1,j)+dxa(npx-2,j))*q1(npx-1)-dxa(npx-1,j)*q1(npx-2))/(dxa(npx-2,j)+dxa(npx-1,j)) &
                +      ((2.*dxa(npx,  j)+dxa(npx+1,j))*q1(npx  )-dxa(npx,  j)*q1(npx+1))/(dxa(npx,  j)+dxa(npx+1,j)))
        al(npx+1) = c3*q1(npx) + c2*q1(npx+1) + c1*q1(npx+2)
-       if( iord<0 ) then
-          al(npx-1) = max(0., al(npx-1))
-          al(npx  ) = max(0., al(npx  ))
-          al(npx+1) = max(0., al(npx+1))
-       endif
      endif
+   endif
+
+   if ( iord<0 ) then
+       do i=is-1, ie+2
+          al(i) = max(0., al(i))
+       enddo
    endif
 
    if ( mord==1 ) then  ! perfectly linear scheme
@@ -653,13 +644,6 @@ if ( jord < 8 ) then
          al(i,j) = p1*(q(i,j-1)+q(i,j)) + p2*(q(i,j-2)+q(i,j+1))
       enddo
    enddo
-   if ( jord<0 ) then
-      do j=js1, je3
-         do i=ifirst,ilast
-            al(i,j) = max(0., al(i,j))
-         enddo
-      enddo
-   endif
 
    if ( .not. nested .and. grid_type<3 ) then
       if( js==1 ) then
@@ -669,13 +653,6 @@ if ( jord < 8 ) then
                    +      ((2.*dya(i,1)+dya(i,2))*q(i,1)-dya(i,1)*q(i,2))/(dya(i,1)+dya(i,2)))
            al(i,2) = c3*q(i,1) + c2*q(i,2) + c1*q(i,3)
         enddo
-        if ( jord<0 ) then
-           do i=ifirst,ilast
-              al(i,0) = max(0., al(i,0))
-              al(i,1) = max(0., al(i,1))
-              al(i,2) = max(0., al(i,2))
-           enddo
-        endif
       endif
       if( (je+1)==npy ) then
         do i=ifirst,ilast
@@ -684,14 +661,15 @@ if ( jord < 8 ) then
                    +      ((2.*dya(i,npy)+dya(i,npy+1))*q(i,npy)-dya(i,npy)*q(i,npy+1))/(dya(i,npy)+dya(i,npy+1)))
          al(i,npy+1) = c3*q(i,npy) + c2*q(i,npy+1) + c1*q(i,npy+2)
         enddo
-        if ( jord<0 ) then
-           do i=ifirst,ilast
-              al(i,npy-1) = max(0., al(i,npy-1))
-              al(i,npy  ) = max(0., al(i,npy  ))
-              al(i,npy+1) = max(0., al(i,npy+1))
-           enddo
-        endif
       endif
+   endif
+
+   if ( jord<0 ) then
+      do j=js-1, je+2
+         do i=ifirst,ilast
+            al(i,j) = max(0., al(i,j))
+         enddo
+      enddo
    endif
 
    if ( mord==1 ) then
