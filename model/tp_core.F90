@@ -308,10 +308,11 @@ contains
  real:: q1(isd:ied)
  real, dimension(is:ie+1):: fx0, fx1, xt1
  logical, dimension(is-1:ie+1):: smt5, smt6
+ logical, dimension(is:ie+1):: hi5, hi6
  real  al(is-1:ie+2)
  real  dm(is-2:ie+2)
  real  dq(is-3:ie+2)
- integer:: i, j, ie3, is1, ie1
+ integer:: i, j, ie3, is1, ie1, mord
  real:: x0, x1, xt, qtmp, pmp_1, lac_1, pmp_2, lac_2
 
  if ( .not. nested .and. grid_type<3 ) then
@@ -322,22 +323,24 @@ contains
                         ie1 = ie+1
  end if
 
+ mord = abs(iord)
+
  do 666 j=jfirst,jlast
 
     do i=isd, ied
        q1(i) = q(i,j)
     enddo
 
-  if ( iord < 8 ) then
+ if ( iord < 8 ) then
 ! ord = 2: perfectly linear ppm scheme
 ! Diffusivity: ord2 < ord5 < ord3 < ord4 < ord6 
 
    do i=is1, ie3
       al(i) = p1*(q1(i-1)+q1(i)) + p2*(q1(i-2)+q1(i+1))
    enddo
-   if ( iord==7 ) then
+   if ( iord<0 ) then
        do i=is1, ie3
-          if ( al(i)<0. ) al(i) = 0.5*(q1(i-1)+q1(i))
+          al(i) = max(0., al(i))
        enddo
    endif
 
@@ -347,7 +350,7 @@ contains
        al(1) = 0.5*(((2.*dxa(0,j)+dxa(-1,j))*q1(0)-dxa(0,j)*q1(-1))/(dxa(-1,j)+dxa(0,j)) &
              +      ((2.*dxa(1,j)+dxa( 2,j))*q1(1)-dxa(1,j)*q1( 2))/(dxa(1, j)+dxa(2,j)))
        al(2) = c3*q1(1) + c2*q1(2) +c1*q1(3)
-       if(iord==7) then
+       if( iord<0 ) then
           al(0) = max(0., al(0))
           al(1) = max(0., al(1))
           al(2) = max(0., al(2))
@@ -358,7 +361,7 @@ contains
        al(npx) = 0.5*(((2.*dxa(npx-1,j)+dxa(npx-2,j))*q1(npx-1)-dxa(npx-1,j)*q1(npx-2))/(dxa(npx-2,j)+dxa(npx-1,j)) &
                +      ((2.*dxa(npx,  j)+dxa(npx+1,j))*q1(npx  )-dxa(npx,  j)*q1(npx+1))/(dxa(npx,  j)+dxa(npx+1,j)))
        al(npx+1) = c3*q1(npx) + c2*q1(npx+1) + c1*q1(npx+2)
-       if(iord==7) then
+       if( iord<0 ) then
           al(npx-1) = max(0., al(npx-1))
           al(npx  ) = max(0., al(npx  ))
           al(npx+1) = max(0., al(npx+1))
@@ -366,7 +369,7 @@ contains
      endif
    endif
 
-   if ( iord==1 ) then  ! perfectly linear scheme
+   if ( mord==1 ) then  ! perfectly linear scheme
         do i=is-1,ie+1
            bl(i) = al(i)   - q1(i)
            br(i) = al(i+1) - q1(i)
@@ -385,7 +388,7 @@ contains
          if (smt5(i-1).or.smt5(i)) flux(i,j) = flux(i,j) + fx1(i) 
       enddo
 
-   elseif ( iord==2 ) then  ! perfectly linear scheme
+   elseif ( mord==2 ) then  ! perfectly linear scheme
 ! Diffusivity: ord2 < ord5 < ord3 < ord4 < ord6  < ord7
 
 !DEC$ VECTOR ALWAYS
@@ -404,7 +407,8 @@ contains
 !                  + x1*(q1(i)  +(1.+xt)*(al(i)-qtmp+xt*(al(i)+al(i+1)-(qtmp+qtmp))))
       enddo
 
-   elseif ( iord==3 ) then
+   elseif ( mord==3 ) then
+
         do i=is-1,ie+1
            bl(i) = al(i)   - q1(i)
            br(i) = al(i+1) - q1(i)
@@ -417,51 +421,59 @@ contains
         do i=is,ie+1
            fx1(i) = 0.
            xt1(i) = c(i,j)
+           hi5(i) = smt5(i-1) .and. smt5(i)   ! more diffusive
+           hi6(i) = smt6(i-1) .or.  smt6(i)
         enddo
         do i=is,ie+1
            if ( xt1(i) > 0. ) then
-                if ( smt6(i-1).or.smt5(i) ) then
+                if ( hi6(i) ) then
                    fx1(i) = br(i-1) - xt1(i)*b0(i-1)
-                elseif ( smt5(i-1) ) then   ! 2nd order, piece-wise linear
+                elseif ( hi5(i) ) then   ! 2nd order, piece-wise linear
                    fx1(i) = sign(min(abs(bl(i-1)),abs(br(i-1))), br(i-1))
                 endif
                 flux(i,j) = q1(i-1) + (1.-xt1(i))*fx1(i)
            else
-                if ( smt6(i).or.smt5(i-1) ) then
+                if ( hi6(i) ) then
                    fx1(i) = bl(i) + xt1(i)*b0(i)
-                elseif ( smt5(i) ) then
+                elseif ( hi5(i) ) then   ! 2nd order, piece-wise linear
                    fx1(i) = sign(min(abs(bl(i)), abs(br(i))), bl(i))
                 endif
                 flux(i,j) = q1(i) + (1.+xt1(i))*fx1(i)
            endif
         enddo
-   elseif ( iord==4 ) then
+
+   elseif ( mord==4 ) then
+
         do i=is-1,ie+1
            bl(i) = al(i)   - q1(i)
            br(i) = al(i+1) - q1(i)
            b0(i) = bl(i) + br(i)
               x0 = abs(b0(i))
               xt = abs(bl(i)-br(i))
-           smt5(i) =    x0 < xt
-           smt6(i) = 3.*x0 < xt
+           smt5(i) = lim_fac*x0 < xt
+           smt6(i) =      3.*x0 < xt
         enddo
         do i=is,ie+1
-           fx1(i) = 0.
+           xt1(i) = c(i,j)
+           hi5(i) = smt5(i-1) .and. smt5(i)   ! more diffusive
+           hi6(i) = smt6(i-1) .or.  smt6(i)
+           hi5(i) = hi5(i) .or. hi6(i)
         enddo
 !DEC$ VECTOR ALWAYS
         do i=is,ie+1
-           if ( c(i,j) > 0. ) then
-                fx0(i) = q1(i-1)
-                if ( smt6(i-1).or.smt5(i) ) fx1(i) = (1.-c(i,j))*(br(i-1) - c(i,j)*b0(i-1))
+           if ( xt1(i) > 0. ) then
+               fx1(i) = (1.-xt1(i))*(br(i-1) - xt1(i)*b0(i-1))
+               flux(i,j) = q1(i-1)
            else
-                fx0(i) = q1(i)
-                if ( smt6(i).or.smt5(i-1) ) fx1(i) = (1.+c(i,j))*(bl(i) + c(i,j)*b0(i))
+               fx1(i) = (1.+xt1(i))*(bl(i) + xt1(i)*b0(i))
+               flux(i,j) = q1(i)
            endif
-           flux(i,j) = fx0(i) + fx1(i)
+           if ( hi5(i) ) flux(i,j) = flux(i,j) + fx1(i) 
         enddo
+
    else
-! iord = 5 & 6
-      if ( iord==5 ) then
+
+      if ( mord==5 ) then
         do i=is-1,ie+1
            bl(i) = al(i)   - q1(i)
            br(i) = al(i+1) - q1(i)
@@ -473,20 +485,22 @@ contains
            bl(i) = al(i)   - q1(i)
            br(i) = al(i+1) - q1(i)
            b0(i) = bl(i) + br(i)
-           smt5(i) = abs(3.*b0(i)) < abs(bl(i)-br(i))
+           smt5(i) = 3.*abs(b0(i)) < abs(bl(i)-br(i))
         enddo
       endif
+
 !DEC$ VECTOR ALWAYS
       do i=is,ie+1
          if ( c(i,j) > 0. ) then
-             fx1(i) = (1.-c(i,j))*(br(i-1) - c(i,j)*b0(i-1))
-             flux(i,j) = q1(i-1)
+              fx1(i) = (1.-c(i,j))*(br(i-1) - c(i,j)*b0(i-1))
+              flux(i,j) = q1(i-1)
          else
-             fx1(i) = (1.+c(i,j))*(bl(i) + c(i,j)*b0(i))
-             flux(i,j) = q1(i)
+              fx1(i) = (1.+c(i,j))*(bl(i) + c(i,j)*b0(i))
+              flux(i,j) = q1(i)
          endif
          if (smt5(i-1).or.smt5(i)) flux(i,j) = flux(i,j) + fx1(i) 
       enddo
+
    endif
    goto 666
 
@@ -616,8 +630,9 @@ contains
  real:: dq(ifirst:ilast,js-3:je+2)
  real,    dimension(ifirst:ilast):: fx0, fx1, xt1
  logical, dimension(ifirst:ilast,js-1:je+1):: smt5, smt6
+ logical, dimension(ifirst:ilast):: hi5, hi6
  real:: x0, xt, qtmp, pmp_1, lac_1, pmp_2, lac_2, r1
- integer:: i, j, js1, je3, je1
+ integer:: i, j, js1, je3, je1, mord
 
    if ( .not.nested .and. grid_type < 3 ) then
 ! Cubed-sphere:
@@ -629,6 +644,8 @@ contains
                          je1 = je+1
    endif
 
+ mord = abs(jord)
+
 if ( jord < 8 ) then
 
    do j=js1, je3
@@ -636,10 +653,10 @@ if ( jord < 8 ) then
          al(i,j) = p1*(q(i,j-1)+q(i,j)) + p2*(q(i,j-2)+q(i,j+1))
       enddo
    enddo
-   if ( jord==7 ) then
+   if ( jord<0 ) then
       do j=js1, je3
          do i=ifirst,ilast
-            if ( al(i,j)<0. ) al(i,j) = 0.5*(q(i,j)+q(i,j+1))
+            al(i,j) = max(0., al(i,j))
          enddo
       enddo
    endif
@@ -652,7 +669,7 @@ if ( jord < 8 ) then
                    +      ((2.*dya(i,1)+dya(i,2))*q(i,1)-dya(i,1)*q(i,2))/(dya(i,1)+dya(i,2)))
            al(i,2) = c3*q(i,1) + c2*q(i,2) + c1*q(i,3)
         enddo
-        if ( jord==7 ) then
+        if ( jord<0 ) then
            do i=ifirst,ilast
               al(i,0) = max(0., al(i,0))
               al(i,1) = max(0., al(i,1))
@@ -667,7 +684,7 @@ if ( jord < 8 ) then
                    +      ((2.*dya(i,npy)+dya(i,npy+1))*q(i,npy)-dya(i,npy)*q(i,npy+1))/(dya(i,npy)+dya(i,npy+1)))
          al(i,npy+1) = c3*q(i,npy) + c2*q(i,npy+1) + c1*q(i,npy+2)
         enddo
-        if (jord==7 ) then
+        if ( jord<0 ) then
            do i=ifirst,ilast
               al(i,npy-1) = max(0., al(i,npy-1))
               al(i,npy  ) = max(0., al(i,npy  ))
@@ -677,7 +694,7 @@ if ( jord < 8 ) then
       endif
    endif
 
-   if ( jord==1 ) then
+   if ( mord==1 ) then
        do j=js-1,je+1
           do i=ifirst,ilast
              bl(i,j) = al(i,j  ) - q(i,j)
@@ -700,7 +717,7 @@ if ( jord < 8 ) then
           enddo
        enddo
 
-   elseif ( jord==2 ) then   ! Perfectly linear scheme
+   elseif ( mord==2 ) then   ! Perfectly linear scheme
 ! Diffusivity: ord2 < ord5 < ord3 < ord4 < ord6  < ord7
 
       do j=js,je+1
@@ -717,7 +734,8 @@ if ( jord < 8 ) then
          enddo
       enddo
 
-   elseif ( jord==3 ) then
+   elseif ( mord==3 ) then
+
         do j=js-1,je+1
            do i=ifirst,ilast
               bl(i,j) = al(i,j  ) - q(i,j)
@@ -733,19 +751,21 @@ if ( jord < 8 ) then
            do i=ifirst,ilast
               fx1(i) = 0.
               xt1(i) = c(i,j)
+              hi5(i) = smt5(i,j-1) .and. smt5(i,j)
+              hi6(i) = smt6(i,j-1) .or.  smt6(i,j)
            enddo
            do i=ifirst,ilast
               if ( xt1(i) > 0. ) then
-                   if( smt6(i,j-1).or.smt5(i,j) ) then
+                   if( hi6(i) ) then
                        fx1(i) = br(i,j-1) - xt1(i)*b0(i,j-1)
-                   elseif ( smt5(i,j-1) ) then ! both up-downwind sides are noisy; 2nd order, piece-wise linear
+                   elseif ( hi5(i) ) then ! both up-downwind sides are noisy; 2nd order, piece-wise linear
                        fx1(i) = sign(min(abs(bl(i,j-1)),abs(br(i,j-1))),br(i,j-1))
                    endif
                    flux(i,j) = q(i,j-1) + (1.-xt1(i))*fx1(i)
               else
-                   if( smt6(i,j).or.smt5(i,j-1) ) then
+                   if( hi6(i) ) then
                        fx1(i) = bl(i,j) + xt1(i)*b0(i,j)
-                   elseif ( smt5(i,j) ) then
+                   elseif ( hi5(i) ) then ! both up-downwind sides are noisy; 2nd order, piece-wise linear
                        fx1(i) = sign(min(abs(bl(i,j)),abs(br(i,j))), bl(i,j))
                    endif
                    flux(i,j) = q(i,j) + (1.+xt1(i))*fx1(i)
@@ -753,7 +773,8 @@ if ( jord < 8 ) then
            enddo
         enddo
 
-   elseif ( jord==4 ) then
+   elseif ( mord==4 ) then
+
         do j=js-1,je+1
            do i=ifirst,ilast
               bl(i,j) = al(i,j  ) - q(i,j)
@@ -761,29 +782,32 @@ if ( jord < 8 ) then
               b0(i,j) = bl(i,j) + br(i,j)
                    x0 = abs(b0(i,j)) 
                    xt = abs(bl(i,j)-br(i,j))
-              smt5(i,j) =    x0 < xt
-              smt6(i,j) = 3.*x0 < xt
+              smt5(i,j) = lim_fac*x0 < xt
+              smt6(i,j) =      3.*x0 < xt
            enddo
         enddo
         do j=js,je+1
            do i=ifirst,ilast
-              fx1(i) = 0.
+              xt1(i) = c(i,j)
+              hi5(i) = smt5(i,j-1) .and. smt5(i,j)
+              hi6(i) = smt6(i,j-1) .or.  smt6(i,j)
+              hi5(i) = hi5(i) .or. hi6(i)
            enddo
 !DEC$ VECTOR ALWAYS
            do i=ifirst,ilast
-              if ( c(i,j) > 0. ) then
-                   fx0(i) = q(i,j-1)
-                   if( smt6(i,j-1).or.smt5(i,j) )  fx1(i) = (1.-c(i,j))*(br(i,j-1) - c(i,j)*b0(i,j-1))
-              else
-                   fx0(i) = q(i,j)
-                   if( smt6(i,j).or.smt5(i,j-1) )  fx1(i) = (1.+c(i,j))*(bl(i,j)   + c(i,j)*b0(i,j))
-              endif
-              flux(i,j) = fx0(i) + fx1(i)
+                if ( xt1(i) > 0. ) then
+                     fx1(i) = (1.-xt1(i))*(br(i,j-1) - xt1(i)*b0(i,j-1))
+                     flux(i,j) = q(i,j-1)
+                else
+                     fx1(i) = (1.+xt1(i))*(bl(i,j) + xt1(i)*b0(i,j))
+                     flux(i,j) = q(i,j)
+                endif
+                if ( hi5(i) ) flux(i,j) = flux(i,j) + fx1(i) 
            enddo
         enddo
 
-   else  ! jord=5,6,7
-       if ( jord==5 ) then
+   else  ! mord=5,6,7
+       if ( mord==5 ) then
           do j=js-1,je+1
              do i=ifirst,ilast
                 bl(i,j) = al(i,j  ) - q(i,j)
@@ -798,10 +822,11 @@ if ( jord < 8 ) then
                 bl(i,j) = al(i,j  ) - q(i,j)
                 br(i,j) = al(i,j+1) - q(i,j)
                 b0(i,j) = bl(i,j) + br(i,j)
-                smt5(i,j) = abs(3.*b0(i,j)) < abs(bl(i,j)-br(i,j))
+                smt5(i,j) = 3.*abs(b0(i,j)) < abs(bl(i,j)-br(i,j))
              enddo
           enddo
        endif
+
        do j=js,je+1
 !DEC$ VECTOR ALWAYS
           do i=ifirst,ilast
@@ -815,6 +840,7 @@ if ( jord < 8 ) then
              if (smt5(i,j-1).or.smt5(i,j)) flux(i,j) = flux(i,j) + fx1(i) 
           enddo
        enddo
+
    endif
    return
 

@@ -71,7 +71,7 @@ contains
 
 ! Local
    integer  sphum, liq_wat, ice_wat
-   integer  rainwat, snowwat, graupel          ! Lin Micro-physics
+   integer  rainwat, snowwat, graupel          ! GFDL Cloud Microphysics
    real ratio(ifirst:ilast)
    real pek, lnp, ak1, rdg, dpd, zvir
    integer i, j, k

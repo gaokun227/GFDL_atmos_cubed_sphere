@@ -141,7 +141,7 @@ module fv_update_phys_mod
     type(group_halo_update_type), save :: i_pack(2)
     integer  i, j, k, m, n, nwat
     integer  sphum, liq_wat, ice_wat, cld_amt   ! GFDL AM physics
-    integer  rainwat, snowwat, graupel          ! Lin Micro-physics
+    integer  rainwat, snowwat, graupel          ! GFDL Cloud Microphysics
     integer  w_diff                             ! w-tracer for PBL diffusion
     real:: qstar, dbk, rdg, zvir, p_fac, cv_air, gama_dt
 
@@ -335,7 +335,7 @@ module fv_update_phys_mod
                 enddo
              enddo
          else
-            !NOTE: only works for either no physics or Lin MP
+            !NOTE: only works for either no physics or GFDL MP
             if (nwat == 0) then
                do j=js,je
                   do i=is,ie
