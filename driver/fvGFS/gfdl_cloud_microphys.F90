@@ -16,13 +16,13 @@ module gfdl_cloud_microphys_mod
 ! use fms_mod,           only: write_version_number, open_namelist_file, &
 !                              check_nml_error, file_exist, close_file,  &
 !                              error_mesg, FATAL
- use physcons,           only: grav     => con_g
-                               rdgas    => con_rd
-                               rvgas    => con_rv
-                               cp_air   => con_cp
-                               cp_vapor => con_cvap
-                               hlv      => con_hvap
-                               hlf      => con_hfus
+ use physcons,           only: grav     => con_g,        &
+                               rdgas    => con_rd,       &
+                               rvgas    => con_rv,       &
+                               cp_air   => con_cp,       &
+                               cp_vapor => con_cvap,     &
+                               hlv      => con_hvap,     &
+                               hlf      => con_hfus,     &
                                pi       => con_pi
 
  implicit none
