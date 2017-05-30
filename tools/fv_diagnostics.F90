@@ -2518,17 +2518,14 @@ contains
                a3, a2, allmax, Atm(n)%bd, npz, Atm(n)%ncnst, Atm(n)%flagstruct%hydrostatic, &
                zvir, .false., .false., .false., .true. ) ! GFDL MP has constant N_0 intercept
 
-          if (idiag%id_dbz > 0) then
-             used=send_data(idiag%id_dbz, a3, time)
-          endif
-          if (idiag%id_maxdbz > 0) then
-             used=send_data(idiag%id_maxdbz, a2, time)
-          endif
+          if (idiag%id_dbz > 0) used=send_data(idiag%id_dbz, a3, time)
+          if (idiag%id_maxdbz > 0) used=send_data(idiag%id_maxdbz, a2, time)
+
           if (idiag%id_basedbz > 0) then
              !interpolate to 1km dbz
              call cs_interpolator(isc, iec, jsc, jec, npz, a3, 1000., wz, a2, -20.)
              used=send_data(idiag%id_basedbz, a2, time)
-             if (prt_minmax) call prt_maxmin('Base reflectivity', a2, isc, iec, jsc, jec, 0, 1, 1.)
+             if(prt_minmax) call prt_maxmin('Base_dBz', a2, isc, iec, jsc, jec, 0, 1, 1.)
           endif
           if (idiag%id_dbz4km > 0) then
              !interpolate to 1km dbz

@@ -380,7 +380,6 @@ contains
       enddo
 
    elseif ( mord==2 ) then  ! perfectly linear scheme
-! Diffusivity: ord2 < ord5 < ord3 < ord4 < ord6  < ord7
 
 !DEC$ VECTOR ALWAYS
       do i=is,ie+1
