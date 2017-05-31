@@ -27,7 +27,7 @@ module fv_nesting_mod
    use mpp_domains_mod,     only: mpp_get_data_domain, mpp_get_compute_domain, mpp_get_global_domain
    use mpp_domains_mod,     only: DGRID_NE, mpp_update_domains, domain2D
    use fv_restart_mod,      only: d2a_setup, d2c_setup
-   use mpp_mod,             only: mpp_sync_self, mpp_sync, mpp_send, mpp_recv, mpp_error, FATAL, mpp_pe
+   use mpp_mod,             only: mpp_sync_self, mpp_sync, mpp_send, mpp_recv, mpp_error, FATAL, mpp_pe, WARNING
    use mpp_domains_mod,     only: mpp_global_sum, BITWISE_EFP_SUM, BITWISE_EXACT_SUM
    use boundary_mod,        only: update_coarse_grid
    use boundary_mod,        only: nested_grid_BC_send, nested_grid_BC_recv, nested_grid_BC_save_proc
@@ -37,7 +37,7 @@ module fv_nesting_mod
    use fv_grid_utils_mod,   only: ptop_min, g_sum, cubed_to_latlon, f_p
    use init_hydro_mod,      only: p_var
    use constants_mod,       only: grav, pi=>pi_8, radius, hlv, rdgas, cp_air, rvgas, cp_vapor, kappa
-   use fv_mapz_mod,         only: mappm
+   use fv_mapz_mod,         only: mappm, remap_2d
    use fv_timing_mod,       only: timing_on, timing_off
    use fv_mp_mod,           only: is_master
    use fv_mp_mod,           only: mp_reduce_sum
@@ -107,7 +107,7 @@ contains
     real :: va(bd%isd:bd%ied,bd%jsd:bd%jed)
 
     real :: pkz_coarse(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
-    integer :: i,j,k,n,p, sphum, npz_coarse
+    integer :: i,j,k,n,p, sphum
     logical :: do_pd
 
    type(fv_nest_BC_type_3d) :: pkz_BC, delp_lag_BC
@@ -189,42 +189,39 @@ contains
 #endif 
 !! Nested grid: receive from parent grid
     if (neststruct%nested) then
-
-       npz_coarse = parent_grid%npz
-
        if (.not. allocated(q_buf)) then
           allocate(q_buf(ncnst))
        endif
 
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz_coarse, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz, bd, &
             delp_buf)
        do n=1,ncnst
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, &
+          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz, bd, &
                q_buf(n))
        enddo
 #ifndef SW_DYNAMICS
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz, bd, &
             pt_buf)
 
        if (flagstruct%hydrostatic) then
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, &
+          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz, bd, &
                pkz_buf)
        else
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz_coarse, bd, &
+          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz, bd, &
                w_buf)
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz_coarse, bd, &
+          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz, bd, &
                delz_buf)
        endif
 #endif
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz_coarse, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz, bd, &
             u_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz_coarse, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz, bd, &
             vc_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz_coarse, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz, bd, &
             v_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz_coarse, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz, bd, &
             uc_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 1, 1,  npz_coarse, bd, &
+       call nested_grid_BC_recv(neststruct%nest_domain, 1, 1,  npz, bd, &
             divg_buf)
     endif
 
@@ -262,6 +259,7 @@ contains
        call nested_grid_BC_save_proc(neststruct%nest_domain, &
             neststruct%ind_h, neststruct%wt_h, 0, 0,  npx, npy, npz, bd, &
             delp_lag_BC, delp_buf, pd_in=do_pd)
+!            neststruct%delp_BC, delp_buf, pd_in=do_pd)
        !The incoming delp is on the coarse grid's lagrangian coordinate. Re-create the reference coordinate
        call setup_eul_delp_BC(delp_lag_BC, neststruct%delp_BC, ak, bk, npx, npy, npz, parent_grid%ak(1), bd)
 
@@ -512,13 +510,15 @@ contains
    real psBC(istart:iend,jstart:jend)
    integer :: i,j,k
 
-!$OMP parallel do default(none) shared(istart,iend,jstart,jend,psBC,ptop_src)
+   character(len=120) :: errstring
+
+!$no-OMP parallel do default(none) shared(istart,iend,jstart,jend,psBC,ptop_src)
    do j=jstart,jend
    do i=istart,iend
       psBC(i,j) = ptop_src 
    enddo
    enddo
-!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,psBC,delplagBC)
+!$no-OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,psBC,delplagBC)
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
@@ -526,7 +526,7 @@ contains
    end do
    end do
    end do
-!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,psBC,delpeulBC,ak_dst,bk_dst)
+!$no-OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,psBC,delpeulBC,ak_dst,bk_dst)
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
@@ -535,7 +535,93 @@ contains
    enddo
    enddo
 
+!!! DEBUG CODE
+   !If more than a few percent difference then log the error
+   do k=1,npz
+   do j=jstart,jend
+   do i=istart,iend
+      if (delpeulBC(i,j,k) <= 0.) then
+         write(errstring,'(3I5, 3(2x, G))'), i, j, k, delplagBC(i,j,k), delpeulBC(i,j,k), psBC(i,j)
+         call mpp_error(WARNING, ' Invalid pressure BC at '//errstring)
+      else if (abs( delpeulBC(i,j,k) - delplagBC(i,j,k)) > 10.0 ) then
+         write(errstring,'(3I5, 3(2x, G))'), i, j, k, delplagBC(i,j,k), delpeulBC(i,j,k), psBC(i,j)
+         call mpp_error(WARNING, ' Remap BC: pressure deviation at '//errstring)
+      endif
+   enddo
+   enddo
+   enddo
+!!! END DEBUG CODE
+
  end subroutine setup_eul_delp_BC_k
+
+ subroutine remap_BC(pe_lag_BC, pe_eul_BC, var_lag_BC, var_eul_BC, npx, npy, npz, bd, istag, jstag, iv, kord)
+
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_lag_BC, var_lag_BC
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_eul_BC, var_eul_BC
+   integer, intent(IN) :: npx, npy, npz, istag, jstag, iv, kord
+
+   integer :: i,j,k, istart, iend
+
+   integer :: is,  ie,  js,  je
+   integer :: isd, ied, jsd, jed
+
+   is  = bd%is
+   ie  = bd%ie
+   js  = bd%js
+   je  = bd%je
+   isd = bd%isd
+   ied = bd%ied
+   jsd = bd%jsd
+   jed = bd%jed
+   
+   if (is == 1) then
+      call remap_BC_k(pe_lag_BC%west_t1, pe_eul_BC%west_t1, var_lag_BC%west_t1, var_eul_BC%west_t1, isd, 0, isd, 0, jsd, jed+jstag, npz, iv, kord)
+   end if
+
+   if (ie == npx-1) then
+      call remap_BC_k(pe_lag_BC%east_t1, pe_eul_BC%east_t1, var_lag_BC%east_t1, var_eul_BC%east_t1, npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz, iv, kord)
+   end if
+
+   if (is == 1) then
+      istart = is
+   else
+      istart = isd
+   end if
+   if (ie == npx-1) then
+      iend = ie
+   else
+      iend = ied
+   end if
+
+   if (js == 1) then
+      call remap_BC_k(pe_lag_BC%south_t1, pe_eul_BC%south_t1, var_lag_BC%south_t1, var_eul_BC%south_t1, isd, ied+istag, istart, iend+istag, jsd, 0, npz, iv, kord)
+   end if
+
+   if (je == npy-1) then
+      call remap_BC_k(pe_lag_BC%north_t1, pe_eul_BC%north_t1, var_lag_BC%north_t1, var_eul_BC%north_t1, isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz, iv, kord)
+   end if
+   
+ end subroutine remap_BC
+
+!NOTE: to ensure reproducibility we need to have the *correct* two-sided interpolated lagrangian pressure at the staggered points. How do we get this??
+ subroutine remap_BC_k(pe_lagBC, pe_eulBC, var_lagBC, var_eulBC, isd, ied, istart, iend, jstart, jend, npz, iv, kord)
+
+   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz, iv, kord
+   real, intent(INOUT) :: pe_lagBC(isd:ied,jstart:jend,npz+1), var_lagBC(isd:ied,jstart:jend,npz)
+   real, intent(INOUT) :: pe_eulBC(isd:ied,jstart:jend,npz+1), var_eulBC(isd:ied,jstart:jend,npz)
+
+   integer :: j
+   
+   do j=jstart,jend
+
+      call remap_2d(npz, pe_lagBC(istart:iend,j:j,:), var_lagBC(istart:iend,j:j,:), &
+                    npz, pe_eulBC(istart:iend,j:j,:), var_eulBC(istart:iend,j:j,:), &
+                    istart, iend, iv, kord)
+
+   enddo
+
+ end subroutine remap_BC_k
 
  subroutine setup_pt_NH_BC(pt_BC, delp_BC, delz_BC, sphum_BC, q_BC, nq, &
 #ifdef USE_COND
@@ -893,6 +979,11 @@ contains
          iend = ied
       end if
 
+#ifdef COMPILE_ME
+      call setup_pt_NH_BC_k(pt_BC%north_t1, sphum_BC%north_t1, q_con_BC%north_t1, cappa_BC%north_t1, delp_BC%north_t1, delz_BC%north_t1, &
+           liq_wat_BC%north_t1, rainwat_BC%north_t1, ice_wat_BC%north_t1, snowwat_BC%north_t1, graupel_BC%north_t1, &
+           zvir, isd, ied, istart, iend, jstart, jend, npz)
+#else
 !$OMP parallel do default(none) shared(npz,npy,jed,istart,iend,zvir, &
 !$OMP      sphumBC,liq_watBC_north,rainwatBC_north,ice_watBC_north,snowwatBC_north,graupelBC_north,qconBC,cappaBC, &
 !$OMP      rdg,cv_air,delpBC,delzBC,ptBC) &
@@ -931,11 +1022,58 @@ contains
       end do
       end do
    end if
-
+#endif
 
 
  end subroutine setup_pt_NH_BC
 
+
+#ifdef COMPILE_ME
+
+
+ subroutine setup_pt_NH_BC_k(ptBC,sphumBC,qconBC,cappaBC,delpBC,delzBC, zvir, isd, ied, istart, iend, jstart, jend, npz)
+
+   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz
+   real, intent(INOUT), dimension(isd:ied,jstart:jend,npz) :: ptBC, sphumBC, qconBC, cappaBC, delpBC, delzBC
+   real, intent(IN) :: zvir
+
+   integer :: i,j,k
+   real :: dp1, q_con, q_sol, q_liq, cvm, pkz, rdg, cv_air
+
+   rdg = -rdgas / grav
+   cv_air =  cp_air - rdgas
+
+
+   do k=1,npz
+   do j=jstart,jend
+   do i=istart,iend
+         dp1 = zvir*sphumBC(i,j,k)
+#ifdef USE_COND
+         q_liq = liq_watBC(i,j,k) + rainwatBC(i,j,k)
+         q_sol = ice_watBC(i,j,k) + snowwatBC(i,j,k) + graupelBC(i,j,k)
+         q_con = q_liq + q_sol
+         qconBC(i,j,k) = q_con
+#ifdef MOIST_CAPPA
+         cvm = (1.-(sphumBC(i,j,k)+q_con))*cv_air+sphumBC(i,j,k)*cv_vap+q_liq*c_liq+q_sol*c_ice
+         cappaBC(i,j,k) = rdgas/(rdgas + cvm/(1.+dp1))
+         pkz = exp( cappaBC(i,j,k)*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
+              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))         
+#else
+         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
+              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))
+#endif
+         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)*(1.-q_con)/pkz
+#else
+         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
+              (1.+dp1)/delzBC(i,j,k)))
+         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)/pkz
+#endif
+   end do
+   end do
+   end do
+
+ end subroutine setup_pt_NH_BC_k
+#endif
 
  subroutine set_NH_BCs_t0(neststruct)
 
