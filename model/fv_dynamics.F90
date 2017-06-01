@@ -190,7 +190,7 @@ contains
       if (gridstruct%nested .or. ANY(neststruct%child_grids)) then
                                            call timing_on('NEST_BCs')
          call setup_nested_grid_BCs(npx, npy, npz, zvir, ncnst, &
-              u, v, w, pt, delp, delz, q, uc, vc, pkz, &
+              u, v, w, pt, delp, delz, q, uc, vc, &
               neststruct%nested, flagstruct%inline_q, flagstruct%make_nh, ng, &
               gridstruct, flagstruct, neststruct, &
               neststruct%nest_timestep, neststruct%tracer_nest_timestep, &
