@@ -843,7 +843,7 @@ contains
        je_2d=   -1    
        npx_2d=   1   
        npy_2d=   1   
-       npz_2d=   0 !for ak, bk   
+       npz_2d=   npz_in !for ak, bk, which are 1D arrays and thus OK to allocate
        ndims_2d=   1 
        ncnst_2d=   1 
        nq_2d=   1 

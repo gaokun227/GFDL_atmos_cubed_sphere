@@ -38,7 +38,9 @@ module fv_restart_mod
   use fv_diagnostics_mod,  only: prt_maxmin
   use init_hydro_mod,      only: p_var
   use mpp_domains_mod,     only: mpp_update_domains, domain2d, DGRID_NE
-  use mpp_mod,             only: mpp_chksum, stdout, mpp_error, FATAL, NOTE, get_unit, mpp_sum
+  use mpp_mod,             only: mpp_chksum, stdout, mpp_error, FATAL, NOTE
+  use mpp_mod,             only: get_unit, mpp_sum, mpp_broadcast
+  use mpp_mod,             only: mpp_get_current_pelist, mpp_npes, mpp_set_current_pelist
   use test_cases_mod,      only: test_case, alpha, init_case, init_double_periodic, init_latlon
   use fv_mp_mod,           only: is_master, switch_current_Atm, mp_reduce_min, mp_reduce_max
   use fv_surf_map_mod,     only: sgh_g, oro_g
@@ -117,6 +119,7 @@ contains
     character(len=3) :: gn
 
     integer :: npts
+    integer, allocatable :: pelist(:)
     real    :: sumpertn
 
     rgrav = 1. / grav
@@ -191,7 +194,6 @@ contains
                      Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
                      Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)
              endif
-
 
           endif
 
@@ -452,7 +454,8 @@ contains
           call fv_io_register_restart_BCs_NH(Atm(n)) !needed to register nested-grid BCs not registered earlier
        endif
 
-  end do
+
+    end do
 
 
     do n = ntileMe,1,-1
@@ -462,7 +465,20 @@ contains
        endif
     end do
 
+    allocate(pelist(0:mpp_npes()-1))
+    call mpp_get_current_pelist(pelist)      
+    call mpp_set_current_pelist()
+    do n=1, ntileMe
+       !Send ptop for each grid, needed for remap BCs
+       !try mp_bcst_r4??
+       call mpp_broadcast(Atm(n)%ptop,Atm(n)%pelist(1))
+       call mpp_broadcast(Atm(n)%ak,Atm(n)%npz+1,Atm(n)%pelist(1))
+       call mpp_broadcast(Atm(n)%bk,Atm(n)%npz+1,Atm(n)%pelist(1))
+    enddo
+    call mpp_set_current_pelist(pelist)
+
     do n = 1, ntileMe
+
        if (.not. grids_on_this_pe(n)) cycle
 
        isd = Atm(n)%bd%isd
