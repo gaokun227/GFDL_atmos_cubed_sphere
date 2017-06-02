@@ -346,9 +346,8 @@ contains
           call remap_BC(pe_lag_BC, pe_eul_BC, lag_BC, neststruct%w_BC, npx, npy, npz, bd, 0, 0, -1, flagstruct%kord_wz)
           call nested_grid_BC_save_proc(neststruct%nest_domain, &
                neststruct%ind_h, neststruct%wt_h, 0, 0,  npx,  npy,  npz, bd, &
-               neststruct%delz_BC, delz_buf) !Need a negative-definite method? 
-!               lag_BC, delz_buf) !Need a negative-definite method? 
-!          call remap_delz_BC(pe_lag_BC, pe_eul_BC, delp_lag_BC, lag_BC, neststruct%delp_BC, neststruct%delz_BC, npx, npy, npz, bd, 0, 0, 1, flagstruct%kord_wz)
+               lag_BC, delz_buf) !Need a negative-definite method? 
+          call remap_delz_BC(pe_lag_BC, pe_eul_BC, delp_lag_BC, lag_BC, neststruct%delp_BC, neststruct%delz_BC, npx, npy, npz, bd, 0, 0, 1, flagstruct%kord_wz)
           
           call setup_pt_NH_BC(neststruct%pt_BC, neststruct%delp_BC, neststruct%delz_BC, &
                neststruct%q_BC(sphum), neststruct%q_BC, ncnst, &
@@ -730,11 +729,11 @@ contains
 
  end subroutine remap_BC_k
 
- subroutine remap_delz_BC(pe_lag_BC, pe_eul_BC, delp_lag_BC, var_lag_BC, delp_eul_BC, var_eul_BC, npx, npy, npz, bd, istag, jstag, iv, kord)
+ subroutine remap_delz_BC(pe_lag_BC, pe_eul_BC, delp_lag_BC, delz_lag_BC, delp_eul_BC, delz_eul_BC, npx, npy, npz, bd, istag, jstag, iv, kord)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
-   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_lag_BC, delp_lag_BC, var_lag_BC
-   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_eul_BC, delp_eul_BC, var_eul_BC
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_lag_BC, delp_lag_BC, delz_lag_BC
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_eul_BC, delp_eul_BC, delz_eul_BC
    integer, intent(IN) :: npx, npy, npz, istag, jstag, iv, kord
 
    integer :: i,j,k, istart, iend
@@ -752,15 +751,15 @@ contains
    jed = bd%jed
    
    if (is == 1) then
-      call compute_specific_volume_BC_k(delp_lag_BC%west_t1, var_lag_BC%west_t1, isd, 0, isd, 0, jsd, jed, npz)
-      call remap_BC_k(pe_lag_BC%west_t1, pe_eul_BC%west_t1, var_lag_BC%west_t1, var_eul_BC%west_t1, isd, 0, isd, 0, jsd, jed+jstag, npz, iv, kord, log_pe=.false.)
-      call compute_delz_BC_k(delp_eul_BC%west_t1, var_eul_BC%west_t1, isd, 0, isd, 0, jsd, jed, npz)
+      call compute_specific_volume_BC_k(delp_lag_BC%west_t1, delz_lag_BC%west_t1, isd, 0, isd, 0, jsd, jed, npz)
+      call remap_BC_k(pe_lag_BC%west_t1, pe_eul_BC%west_t1, delz_lag_BC%west_t1, delz_eul_BC%west_t1, isd, 0, isd, 0, jsd, jed+jstag, npz, iv, kord, log_pe=.false.)
+      call compute_delz_BC_k(delp_eul_BC%west_t1, delz_eul_BC%west_t1, isd, 0, isd, 0, jsd, jed, npz)
    end if
 
    if (ie == npx-1) then
-      call compute_specific_volume_BC_k(delp_lag_BC%east_t1, var_lag_BC%east_t1, npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz)
-      call remap_BC_k(pe_lag_BC%east_t1, pe_eul_BC%east_t1, var_lag_BC%east_t1, var_eul_BC%east_t1, npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz, iv, kord, log_pe=.false.)
-      call compute_delz_BC_k(delp_lag_BC%east_t1, var_lag_BC%east_t1, npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz)
+      call compute_specific_volume_BC_k(delp_lag_BC%east_t1, delz_lag_BC%east_t1, npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz)
+      call remap_BC_k(pe_lag_BC%east_t1, pe_eul_BC%east_t1, delz_lag_BC%east_t1, delz_eul_BC%east_t1, npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz, iv, kord, log_pe=.false.)
+      call compute_delz_BC_k(delp_eul_BC%east_t1, delz_eul_BC%east_t1, npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz)
    end if
 
    if (is == 1) then
@@ -775,15 +774,15 @@ contains
    end if
 
    if (js == 1) then
-      call compute_specific_volume_BC_k(delp_lag_BC%south_t1, var_lag_BC%south_t1, isd, ied+istag, istart, iend+istag, jsd, 0, npz)
-      call remap_BC_k(pe_lag_BC%south_t1, pe_eul_BC%south_t1, var_lag_BC%south_t1, var_eul_BC%south_t1, isd, ied+istag, istart, iend+istag, jsd, 0, npz, iv, kord, log_pe=.false.)
-      call compute_delz_BC_k(delp_lag_BC%south_t1, var_lag_BC%south_t1, isd, ied+istag, istart, iend+istag, jsd, 0, npz)
+      call compute_specific_volume_BC_k(delp_lag_BC%south_t1, delz_lag_BC%south_t1, isd, ied+istag, istart, iend+istag, jsd, 0, npz)
+      call remap_BC_k(pe_lag_BC%south_t1, pe_eul_BC%south_t1, delz_lag_BC%south_t1, delz_eul_BC%south_t1, isd, ied+istag, istart, iend+istag, jsd, 0, npz, iv, kord, log_pe=.false.)
+      call compute_delz_BC_k(delp_eul_BC%south_t1, delz_eul_BC%south_t1, isd, ied+istag, istart, iend+istag, jsd, 0, npz)
    end if
 
    if (je == npy-1) then
-      call compute_specific_volume_BC_k(delp_lag_BC%north_t1, var_lag_BC%north_t1, isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz)
-      call remap_BC_k(pe_lag_BC%north_t1, pe_eul_BC%north_t1, var_lag_BC%north_t1, var_eul_BC%north_t1, isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz, iv, kord, log_pe=.false.)
-      call compute_delz_BC_k(delp_lag_BC%north_t1, var_lag_BC%north_t1, isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz)
+      call compute_specific_volume_BC_k(delp_lag_BC%north_t1, delz_lag_BC%north_t1, isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz)
+      call remap_BC_k(pe_lag_BC%north_t1, pe_eul_BC%north_t1, delz_lag_BC%north_t1, delz_eul_BC%north_t1, isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz, iv, kord, log_pe=.false.)
+      call compute_delz_BC_k(delp_eul_BC%north_t1, delz_eul_BC%north_t1, isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz)
    end if
    
  end subroutine remap_delz_BC
@@ -794,12 +793,19 @@ contains
    real, intent(IN)    :: delpBC(isd:ied,jstart:jend,npz)
    real, intent(INOUT) :: delzBC(isd:ied,jstart:jend,npz)
 
+   character(len=120) :: errstring
    integer :: i,j,k
    
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
       delzBC(i,j,k) = -delzBC(i,j,k)/delpBC(i,j,k)
+!!$!!! DEBUG CODE 
+!!$      if (delzBC(i,j,k) <= 0. ) then
+!!$         write(errstring,'(3I5, 2(2x, G))'), i, j, k, delzBC(i,j,k), delpBC(i,j,k)
+!!$         call mpp_error(WARNING, ' Remap BC (sfc volume): invalid delz at '//errstring)               
+!!$      endif
+!!$!!! END DEBUG CODE
    end do
    end do
    end do
@@ -812,12 +818,19 @@ contains
    real, intent(IN)    :: delpBC(isd:ied,jstart:jend,npz)
    real, intent(INOUT) :: delzBC(isd:ied,jstart:jend,npz)
    
+   character(len=120) :: errstring
    integer :: i,j,k
    
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
-      delzBC(i,j,k) = -delzBC(i,j,k)*delpBC(i,j,k)
+      delzBC(i,j,k) = -delzBC(i,j,k)*delpBC(i,j,k) 
+!!$!!! DEBUG CODE
+!!$      if (delzBC(i,j,k) >=0. ) then
+!!$         write(errstring,'(3I5, 2(2x, G))'), i, j, k, delzBC(i,j,k), delpBC(i,j,k)
+!!$         call mpp_error(WARNING, ' Remap BC (compute delz): invalid delz at '//errstring)               
+!!$      endif
+!!$!!! END DEBUG CODE
    end do
    end do
    end do
