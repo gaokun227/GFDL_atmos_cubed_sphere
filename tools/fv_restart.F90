@@ -470,7 +470,6 @@ contains
     call mpp_set_current_pelist()
     do n=1, ntileMe
        !Send ptop for each grid, needed for remap BCs
-       !try mp_bcst_r4??
        call mpp_broadcast(Atm(n)%ptop,Atm(n)%pelist(1))
        call mpp_broadcast(Atm(n)%ak,Atm(n)%npz+1,Atm(n)%pelist(1))
        call mpp_broadcast(Atm(n)%bk,Atm(n)%npz+1,Atm(n)%pelist(1))
