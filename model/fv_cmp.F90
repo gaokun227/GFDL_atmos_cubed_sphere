@@ -161,12 +161,11 @@ contains
 ! Melting of cloud ice into cloud water ********
            sink = min( qi(i,j), fac_mlt*(pt1(i)-tice)/icp2(i) )
            qi(i,j) = qi(i,j) - sink
-! Maximum amount of melted ice converted to ql
-!           tmp = min( sink, dim(ql0_max, ql(i,j)) )   ! max ql amount
 ! May 17, 2017
-            tmp = min( sink, dim(ql_mlt, ql(i,j)) )   ! max ql amount
-           ql(i,j) = ql(i,j) + tmp
-           qr(i,j) = qr(i,j) + sink - tmp
+!!!        tmp = min( sink, dim(ql_mlt, ql(i,j)) )   ! max ql amount
+!!!        ql(i,j) = ql(i,j) + tmp
+!!!        qr(i,j) = qr(i,j) + sink - tmp
+           ql(i,j) = ql(i,j) + sink
            q_liq(i) = q_liq(i) + sink
            q_sol(i) = q_sol(i) - sink
             cvm(i) = mc_air(i) + qv(i,j)*c_vap + q_liq(i)*c_liq + q_sol(i)*c_ice
