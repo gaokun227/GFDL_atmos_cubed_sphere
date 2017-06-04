@@ -28,7 +28,7 @@ module fv_mapz_mod
   use fv_grid_utils_mod, only: g_sum, ptop_min
   use fv_fill_mod,       only: fillz
   use mpp_domains_mod,   only: mpp_update_domains, domain2d
-  use mpp_mod,           only: FATAL, mpp_error, get_unit, mpp_root_pe, mpp_pe
+  use mpp_mod,           only: NOTE, mpp_error, get_unit, mpp_root_pe, mpp_pe
   use fv_arrays_mod,     only: fv_grid_type
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master
@@ -194,15 +194,6 @@ contains
 ! Transform "density pt" to "density temp"
                do k=1,km
 #ifdef MOIST_CAPPA
-               if ( nwat==2 ) then
-                  do i=is,ie
-                            qv(i) = max(0., q(i,j,k,sphum)) 
-                     q_con(i,j,k) = max(0., q(i,j,k,liq_wat))
-                     cvm(i) = (1.-qv(i))*cv_air + qv(i)*cv_vap
-                     cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*qv(i)) )
-                     pt(i,j,k) = pt(i,j,k)*exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-                  enddo
-               else
                   call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
                                 ice_wat, snowwat, graupel, q, gz, cvm)
                   do i=is,ie
@@ -210,7 +201,6 @@ contains
                      cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
                      pt(i,j,k) = pt(i,j,k)*exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
                   enddo
-               endif
 #else
                   do i=is,ie
                      pt(i,j,k) = pt(i,j,k)*exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
@@ -386,15 +376,6 @@ contains
 ! Note: pt at this stage is T_v or T_m
          do k=1,km
 #ifdef MOIST_CAPPA
-         if ( nwat==2 ) then
-            do i=is,ie
-                      qv(i) = max(0., q(i,j,k,sphum)) 
-               q_con(i,j,k) = max(0., q(i,j,k,liq_wat))
-               cvm(i) = (1.-qv(i))*cv_air + qv(i)*cv_vap
-               cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*qv(i)) )
-               pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-            enddo
-         else
             call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
                           ice_wat, snowwat, graupel, q, gz, cvm)
             do i=is,ie
@@ -402,7 +383,6 @@ contains
                cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
                pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
             enddo
-         endif    ! nwat test
 #else
          if ( kord_tm < 0 ) then
            do i=is,ie
@@ -561,16 +541,8 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 
            do k=1,km
 #ifdef MOIST_CAPPA
-           if ( nwat==2 ) then
-              do i=is,ie
-                 qv(i) = max(0., q(i,j,k,sphum)) 
-                 gz(i) = max(0., q(i,j,k,liq_wat))
-                 cvm(i) = (1.-qv(i))*cv_air + qv(i)*cv_vap
-              enddo
-           else
               call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
                             ice_wat, snowwat, graupel, q, gz, cvm)
-           endif
               do i=is,ie
 ! KE using 3D winds:
               q_con(i,j,k) = gz(i)
@@ -3227,7 +3199,14 @@ endif        ! end last_step check
         qd(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat)
         cvm(i) = (1.-(qv(i)+qd(i)))*cv_air + qv(i)*cv_vap + qd(i)*c_liq
      enddo
-
+  case(5)
+     do i=is,ie 
+        qv(i) = q(i,j,k,sphum)
+        ql(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat) 
+        qs(i) = q(i,j,k,ice_wat) + q(i,j,k,snowwat)
+        qd(i) = ql(i) + qs(i)
+        cvm(i) = (1.-(qv(i)+qd(i)))*cv_air + qv(i)*cv_vap + ql(i)*c_liq + qs(i)*c_ice
+     enddo
   case(6)
      do i=is,ie 
         qv(i) = q(i,j,k,sphum)
@@ -3237,6 +3216,7 @@ endif        ! end last_step check
         cvm(i) = (1.-(qv(i)+qd(i)))*cv_air + qv(i)*cv_vap + ql(i)*c_liq + qs(i)*c_ice
      enddo
   case default
+     call mpp_error (NOTE, 'fv_mapz::moist_cv - using default cv_air')
      do i=is,ie 
          qd(i) = 0.
         cvm(i) = cv_air
@@ -3298,7 +3278,14 @@ endif        ! end last_step check
         qd(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat)
         cpm(i) = (1.-(qv(i)+qd(i)))*cp_air + qv(i)*cp_vapor + qd(i)*c_liq
      enddo
-
+  case(5)
+     do i=is,ie 
+        qv(i) = q(i,j,k,sphum)
+        ql(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat) 
+        qs(i) = q(i,j,k,ice_wat) + q(i,j,k,snowwat)
+        qd(i) = ql(i) + qs(i)
+        cpm(i) = (1.-(qv(i)+qd(i)))*cp_air + qv(i)*cp_vapor + ql(i)*c_liq + qs(i)*c_ice
+     enddo
   case(6)
      do i=is,ie 
         qv(i) = q(i,j,k,sphum)
@@ -3308,6 +3295,7 @@ endif        ! end last_step check
         cpm(i) = (1.-(qv(i)+qd(i)))*cp_air + qv(i)*cp_vapor + ql(i)*c_liq + qs(i)*c_ice
      enddo
   case default
+     call mpp_error (NOTE, 'fv_mapz::moist_cp - using default cp_air')
      do i=is,ie 
         qd(i) = 0.
         cpm(i) = cp_air
