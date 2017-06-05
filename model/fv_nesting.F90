@@ -745,7 +745,6 @@ contains
 
  end subroutine setup_eul_pe_BC_k
 
-
  subroutine remap_BC(pe_lag_BC, pe_eul_BC, var_lag_BC, var_eul_BC, npx, npy, npz, bd, istag, jstag, iv, kord, do_log_pe)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
@@ -983,7 +982,6 @@ contains
     real, parameter:: c_ice = 1972.       ! heat capacity of ice at 0C: c=c_ice+7.3*(T-Tice) 
     real, parameter:: cv_vap = cp_vapor - rvgas  ! 1384.5
 
-   real, dimension(:,:,:), pointer :: ptBC, sphumBC, qconBC, delpBC, delzBC, cappaBC
    real, dimension(:,:,:), pointer :: liq_watBC_west, ice_watBC_west, rainwatBC_west, snowwatBC_west, graupelBC_west
    real, dimension(:,:,:), pointer :: liq_watBC_east, ice_watBC_east, rainwatBC_east, snowwatBC_east, graupelBC_east
    real, dimension(:,:,:), pointer :: liq_watBC_north, ice_watBC_north, rainwatBC_north, snowwatBC_north, graupelBC_north
@@ -1127,67 +1125,20 @@ contains
    endif
 
    if (is == 1) then
-      ptBC    =>    pt_BC%west_t1
-      sphumBC => sphum_BC%west_t1
-#ifdef USE_COND
-      qconBC  => q_con_BC%west_t1
-#ifdef MOIST_CAPPA
-      cappaBC =>  cappa_BC%west_t1
-#endif
-#endif
-      delpBC  =>  delp_BC%west_t1
-      delzBC  =>  delz_BC%west_t1
 
-!$OMP parallel do default(none) shared(npz,jsd,jed,isd,zvir,sphumBC,liq_watBC_west,rainwatBC_west,ice_watBC_west,snowwatBC_west,graupelBC_west,qconBC,cappaBC, &
-!$OMP      rdg,cv_air,delpBC,delzBC,ptBC) &
-!$OMP      private(dp1,q_con,q_liq,q_sol,cvm,pkz)
-      do k=1,npz
-      do j=jsd,jed
-      do i=isd,0
-         dp1 = zvir*sphumBC(i,j,k)
+      call setup_pt_NH_BC_k(pt_BC%west_t1, sphum_BC%west_t1, delp_BC%west_t1, delz_BC%west_t1, &
+           liq_watBC_west, rainwatBC_west, ice_watBC_west, snowwatBC_west, graupelBC_west, &
 #ifdef USE_COND
-#ifdef GFS_PHYS
-         q_con = liq_watBC_west(i,j,k)
-         q_sol = q_con*max(min((tice-ptBC(i,j,k))/t_i0,1.),0.)
-         q_liq = q_con - q_sol
-#else
-         q_liq = liq_watBC_west(i,j,k) + rainwatBC_west(i,j,k)
-         q_sol = ice_watBC_west(i,j,k) + snowwatBC_west(i,j,k) + graupelBC_west(i,j,k)
-         q_con = q_liq + q_sol
-#endif 
-         qconBC(i,j,k) = q_con
+           q_con_BC%west_t1, &
 #ifdef MOIST_CAPPA
-         cvm = (1.-(sphumBC(i,j,k)+q_con))*cv_air+sphumBC(i,j,k)*cv_vap+q_liq*c_liq+q_sol*c_ice
-         cappaBC(i,j,k) = rdgas/(rdgas + cvm/(1.+dp1))
-         pkz = exp( cappaBC(i,j,k)*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))         
-#else
-         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))
+           cappa_BC%west_t1, &
 #endif
-         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)*(1.-q_con)/pkz
-#else
-         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)/delzBC(i,j,k)))
-         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)/pkz
 #endif
-      end do
-      end do
-      end do
+           zvir, isd, 0, isd, 0, jsd, jed, npz)
    end if
 
 
    if (js == 1) then
-      ptBC    =>    pt_BC%south_t1
-      sphumBC => sphum_BC%south_t1
-#ifdef USE_COND
-      qconBC  => q_con_BC%south_t1
-#ifdef MOIST_CAPPA
-      cappaBC =>  cappa_BC%south_t1
-#endif
-#endif
-      delpBC  =>  delp_BC%south_t1
-      delzBC  =>  delz_BC%south_t1
       if (is == 1) then
          istart = is
       else
@@ -1199,108 +1150,32 @@ contains
          iend = ied
       end if
 
-!$OMP parallel do default(none) shared(npz,jsd,istart,iend,zvir,sphumBC, &
-!$OMP      liq_watBC_south,rainwatBC_south,ice_watBC_south,&
-!$OMP      snowwatBC_south,graupelBC_south,qconBC,cappaBC, &
-!$OMP      rdg,cv_air,delpBC,delzBC,ptBC) &
-!$OMP      private(dp1,q_con,q_liq,q_sol,cvm,pkz)
-      do k=1,npz
-      do j=jsd,0
-      do i=istart,iend
-         dp1 = zvir*sphumBC(i,j,k)
+      call setup_pt_NH_BC_k(pt_BC%south_t1, sphum_BC%south_t1, delp_BC%south_t1, delz_BC%south_t1, &
+           liq_watBC_south, rainwatBC_south, ice_watBC_south, snowwatBC_south, graupelBC_south, &
 #ifdef USE_COND
-#ifdef GFS_PHYS
-         q_con = liq_watBC_south(i,j,k)
-         q_sol = q_con*max(min((tice-ptBC(i,j,k))/t_i0,1.),0.)
-         q_liq = q_con - q_sol
-#else
-         q_liq = liq_watBC_south(i,j,k) + rainwatBC_south(i,j,k)
-         q_sol = ice_watBC_south(i,j,k) + snowwatBC_south(i,j,k) + graupelBC_south(i,j,k)
-         q_con = q_liq + q_sol
-#endif 
-         qconBC(i,j,k) = q_con
+           q_con_BC%south_t1, &
 #ifdef MOIST_CAPPA
-         cvm = (1.-(sphumBC(i,j,k)+q_con))*cv_air+sphumBC(i,j,k)*cv_vap+q_liq*c_liq+q_sol*c_ice
-         cappaBC(i,j,k) = rdgas/(rdgas + cvm/(1.+dp1))
-         pkz = exp( cappaBC(i,j,k)*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))         
-#else
-         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))
+           cappa_BC%south_t1, &
 #endif
-         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)*(1.-q_con)/pkz
-#else
-         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)/delzBC(i,j,k)))
-         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)/pkz
 #endif
-      end do
-      end do
-      end do
+           zvir, isd, ied, istart, iend, jsd, 0, npz)
    end if
 
 
    if (ie == npx-1) then
-      ptBC    =>    pt_BC%east_t1
-      sphumBC => sphum_BC%east_t1
+
+      call setup_pt_NH_BC_k(pt_BC%east_t1, sphum_BC%east_t1, delp_BC%east_t1, delz_BC%east_t1, &
+           liq_watBC_east, rainwatBC_east, ice_watBC_east, snowwatBC_east, graupelBC_east, &
 #ifdef USE_COND
-      qconBC  => q_con_BC%east_t1
+           q_con_BC%east_t1, &
 #ifdef MOIST_CAPPA
-      cappaBC =>  cappa_BC%east_t1
+           cappa_BC%east_t1, &
 #endif
 #endif
-      delpBC  =>  delp_BC%east_t1
-      delzBC  =>  delz_BC%east_t1
-!$OMP parallel do default(none) shared(npz,jsd,jed,npx,ied,zvir,sphumBC, &
-!$OMP      liq_watBC_east,rainwatBC_east,ice_watBC_east,snowwatBC_east,graupelBC_east,qconBC,cappaBC, &
-!$OMP      rdg,cv_air,delpBC,delzBC,ptBC) &
-!$OMP      private(dp1,q_con,q_liq,q_sol,cvm,pkz)
-      do k=1,npz
-      do j=jsd,jed
-      do i=npx,ied
-         dp1 = zvir*sphumBC(i,j,k)
-#ifdef USE_COND
-#ifdef GFS_PHYS
-         q_con = liq_watBC_east(i,j,k)
-         q_sol = q_con*max(min((tice-ptBC(i,j,k))/t_i0,1.),0.)
-         q_liq = q_con - q_sol
-#else
-         q_liq = liq_watBC_east(i,j,k) + rainwatBC_east(i,j,k)
-         q_sol = ice_watBC_east(i,j,k) + snowwatBC_east(i,j,k) + graupelBC_east(i,j,k)
-         q_con = q_liq + q_sol
-#endif 
-         qconBC(i,j,k) = q_con
-#ifdef MOIST_CAPPA
-         cvm = (1.-(sphumBC(i,j,k)+q_con))*cv_air+sphumBC(i,j,k)*cv_vap+q_liq*c_liq+q_sol*c_ice
-         cappaBC(i,j,k) = rdgas/(rdgas + cvm/(1.+dp1))
-         pkz = exp( cappaBC(i,j,k)*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))         
-#else
-         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))
-#endif
-         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)*(1.-q_con)/pkz
-#else
-         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)/delzBC(i,j,k)))
-         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)/pkz
-#endif
-      end do
-      end do
-      end do
+           zvir, npx, ied, npx, ied, jsd, jed, npz)
    end if
 
    if (je == npy-1) then
-      ptBC    =>    pt_BC%north_t1
-      sphumBC => sphum_BC%north_t1
-#ifdef USE_COND
-      qconBC  => q_con_BC%north_t1
-#ifdef MOIST_CAPPA
-      cappaBC =>  cappa_BC%north_t1
-#endif
-#endif
-      delpBC  =>  delp_BC%north_t1
-      delzBC  =>  delz_BC%north_t1
       if (is == 1) then
          istart = is
       else
@@ -1312,80 +1187,69 @@ contains
          iend = ied
       end if
 
-#ifdef COMPILE_ME
-      call setup_pt_NH_BC_k(pt_BC%north_t1, sphum_BC%north_t1, q_con_BC%north_t1, cappa_BC%north_t1, delp_BC%north_t1, delz_BC%north_t1, &
-           liq_wat_BC%north_t1, rainwat_BC%north_t1, ice_wat_BC%north_t1, snowwat_BC%north_t1, graupel_BC%north_t1, &
-           zvir, isd, ied, istart, iend, jstart, jend, npz)
-#else
-!$OMP parallel do default(none) shared(npz,npy,jed,istart,iend,zvir, &
-!$OMP      sphumBC,liq_watBC_north,rainwatBC_north,ice_watBC_north,snowwatBC_north,graupelBC_north,qconBC,cappaBC, &
-!$OMP      rdg,cv_air,delpBC,delzBC,ptBC) &
-!$OMP      private(dp1,q_con,q_liq,q_sol,cvm,pkz)
-      do k=1,npz
-      do j=npy,jed
-      do i=istart,iend
-         dp1 = zvir*sphumBC(i,j,k)
+      call setup_pt_NH_BC_k(pt_BC%north_t1, sphum_BC%north_t1, delp_BC%north_t1, delz_BC%north_t1, &
+           liq_watBC_north, rainwatBC_north, ice_watBC_north, snowwatBC_north, graupelBC_north, &
 #ifdef USE_COND
-#ifdef GFS_PHYS
-         q_con = liq_watBC_north(i,j,k)
-         q_sol = q_con*max(min((tice-ptBC(i,j,k))/t_i0,1.),0.)
-         q_liq = q_con - q_sol
-#else
-         q_liq = liq_watBC_north(i,j,k) + rainwatBC_north(i,j,k)
-         q_sol = ice_watBC_north(i,j,k) + snowwatBC_north(i,j,k) + graupelBC_north(i,j,k)
-         q_con = q_liq + q_sol
-#endif 
-         qconBC(i,j,k) = q_con
+           q_con_BC%north_t1, &
 #ifdef MOIST_CAPPA
-         cvm = (1.-(sphumBC(i,j,k)+q_con))*cv_air+sphumBC(i,j,k)*cv_vap+q_liq*c_liq+q_sol*c_ice
-         cappaBC(i,j,k) = rdgas/(rdgas + cvm/(1.+dp1))
-         pkz = exp( cappaBC(i,j,k)*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))         
-#else
-         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)*(1.-q_con)/delzBC(i,j,k)))
+           cappa_BC%north_t1, &
 #endif
-         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)*(1.-q_con)/pkz
-#else
-         pkz = exp( kappa*log(rdg*delpBC(i,j,k)*ptBC(i,j,k) * &
-              (1.+dp1)/delzBC(i,j,k)))
-         ptBC(i,j,k) = ptBC(i,j,k)*(1.+dp1)/pkz
 #endif
-      end do
-      end do
-      end do
+           zvir, isd, ied, istart, iend, npy, jed, npz)
    end if
-#endif
-
 
  end subroutine setup_pt_NH_BC
 
 
-#ifdef COMPILE_ME
-
-
- subroutine setup_pt_NH_BC_k(ptBC,sphumBC,qconBC,cappaBC,delpBC,delzBC, zvir, isd, ied, istart, iend, jstart, jend, npz)
+ subroutine setup_pt_NH_BC_k(ptBC,sphumBC,delpBC,delzBC, &
+                             liq_watBC,rainwatBC,ice_watBC,snowwatBC,graupelBC, &
+#ifdef USE_COND
+                             q_conBC, &
+#ifdef MOIST_CAPPA
+                             cappaBC, &
+#endif
+#endif
+                             zvir, isd, ied, istart, iend, jstart, jend, npz)
 
    integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz
-   real, intent(INOUT), dimension(isd:ied,jstart:jend,npz) :: ptBC, sphumBC, qconBC, cappaBC, delpBC, delzBC
+   real, intent(OUT), dimension(isd:ied,jstart:jend,npz) :: ptBC
+   real, intent(IN),  dimension(isd:ied,jstart:jend,npz) :: sphumBC, delpBC, delzBC
+   real, intent(IN),  dimension(isd:ied,jstart:jend,npz) :: liq_watBC,rainwatBC,ice_watBC,snowwatBC,graupelBC
+#ifdef USE_COND
+   real, intent(OUT), dimension(isd:ied,jstart:jend,npz) ::   q_conBC
+#ifdef MOIST_CAPPA
+   real, intent(OUT), dimension(isd:ied,jstart:jend,npz) ::   cappaBC
+#endif
+#endif
    real, intent(IN) :: zvir
 
    integer :: i,j,k
    real :: dp1, q_con, q_sol, q_liq, cvm, pkz, rdg, cv_air
 
+   real, parameter:: c_liq = 4185.5      ! heat capacity of water at 0C
+   real, parameter:: c_ice = 1972.       ! heat capacity of ice at 0C: c=c_ice+7.3*(T-Tice) 
+   real, parameter:: cv_vap = cp_vapor - rvgas  ! 1384.5
+   real, parameter:: tice = 273.16 ! For GFS Partitioning
+   real, parameter:: t_i0 = 15.
+
    rdg = -rdgas / grav
    cv_air =  cp_air - rdgas
-
 
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
          dp1 = zvir*sphumBC(i,j,k)
 #ifdef USE_COND
+#ifdef GFS_PHYS
+         q_con = liq_watBC(i,j,k)
+         q_sol = q_con*max(min((tice-ptBC(i,j,k))/t_i0,1.),0.)
+         q_liq = q_con - q_sol
+#else
          q_liq = liq_watBC(i,j,k) + rainwatBC(i,j,k)
          q_sol = ice_watBC(i,j,k) + snowwatBC(i,j,k) + graupelBC(i,j,k)
          q_con = q_liq + q_sol
-         qconBC(i,j,k) = q_con
+#endif 
+         q_conBC(i,j,k) = q_con
 #ifdef MOIST_CAPPA
          cvm = (1.-(sphumBC(i,j,k)+q_con))*cv_air+sphumBC(i,j,k)*cv_vap+q_liq*c_liq+q_sol*c_ice
          cappaBC(i,j,k) = rdgas/(rdgas + cvm/(1.+dp1))
@@ -1406,7 +1270,6 @@ contains
    end do
 
  end subroutine setup_pt_NH_BC_k
-#endif
 
  subroutine set_NH_BCs_t0(neststruct)
 
