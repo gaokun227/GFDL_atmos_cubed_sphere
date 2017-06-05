@@ -586,6 +586,10 @@ module fv_arrays_mod
 #endif
 #endif
 
+     !points to same parent grid as does Atm%parent_grid
+     type(fv_atmos_type), pointer :: parent_grid _NULL
+
+
      !These are for tracer flux BCs
      logical :: do_flux_BCs, do_2way_flux_BCs !For a parent grid; determine whether there is a need to send BCs
      type(restart_file_type) :: BCfile_ne, BCfile_sw

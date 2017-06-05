@@ -30,7 +30,7 @@ module fv_nesting_mod
    use mpp_mod,             only: mpp_sync_self, mpp_sync, mpp_send, mpp_recv, mpp_error, FATAL, mpp_pe, WARNING
    use mpp_domains_mod,     only: mpp_global_sum, BITWISE_EFP_SUM, BITWISE_EXACT_SUM
    use boundary_mod,        only: update_coarse_grid
-   use boundary_mod,        only: nested_grid_BC_send, nested_grid_BC_recv, nested_grid_BC_save_proc
+   use boundary_mod,        only: nested_grid_BC_send, nested_grid_BC_recv, nested_grid_BC_save_proc, nested_grid_BC
    use fv_mp_mod,           only: is, ie, js, je, isd, ied, jsd, jed, isc, iec, jsc, jec
    use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, fv_diag_type, fv_nest_BC_type_3D
    use fv_arrays_mod,       only: allocate_fv_nest_BC_type, fv_atmos_type, fv_grid_bounds_type
@@ -62,7 +62,7 @@ implicit none
    !#endif
 
 private
-public :: twoway_nesting, setup_nested_grid_BCs
+public :: twoway_nesting, setup_nested_grid_BCs, set_physics_BCs
 
 contains
 
@@ -450,6 +450,71 @@ contains
 
  end subroutine setup_nested_grid_BCs
 
+ subroutine set_physics_BCs(ps, u_dt, v_dt, flagstruct, gridstruct, neststruct, npx, npy, npz, ng, ak, bk, bd)
+
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   type(fv_flags_type) :: flagstruct
+   type(fv_nest_type), intent(INOUT), target :: neststruct
+   type(fv_grid_type) :: gridstruct
+   integer, intent(IN) :: npx, npy, npz, ng
+   real, intent(IN), dimension(npz+1) :: ak, bk
+   real, intent(INOUT), dimension(bd%isd:bd%ied,bd%jsd:bd%jed) :: ps
+   real, intent(INOUT), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz) :: u_dt, v_dt
+   real, dimension(1,1) :: parent_ps ! dummy variable for nesting
+   type(fv_nest_BC_type_3d) :: u_dt_buf, v_dt_buf, ps_BC, pe_src_BC, pe_dst_BC, var_BC
+
+   integer :: n
+   integer :: is,  ie,  js,  je
+   integer :: isd, ied, jsd, jed
+
+   is  = bd%is
+   ie  = bd%ie
+   js  = bd%js
+   je  = bd%je
+   isd = bd%isd
+   ied = bd%ied
+   jsd = bd%jsd
+   jed = bd%jed
+
+
+   if (gridstruct%nested) then
+
+      !Both nested and coarse grids assumed on Eulerian coordinates at this point
+      !Only need to fetch ps to form pressure levels
+      !Note also u_dt and v_dt are unstaggered
+      call nested_grid_BC(ps, parent_ps, neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
+           npx, npy, bd, 1, npx-1, 1, npy-1)
+      call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz, bd, u_dt_buf) 
+      call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz, bd, v_dt_buf) 
+
+      call allocate_fv_nest_BC_type(ps_BC,     is,ie,js,je,isd,ied,jsd,jed,npx,npy,1    ,ng,0,0,0,.false.)
+      call allocate_fv_nest_BC_type(pe_src_BC, is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz+1,ng,0,0,0,.false.)
+      call allocate_fv_nest_BC_type(pe_dst_BC, is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz+1,ng,0,0,0,.false.)
+      call allocate_fv_nest_BC_type(var_BC,    is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz  ,ng,0,0,0,.false.)
+
+      call copy_ps_BC(ps, ps_BC, npx, npy, 0, 0, bd)
+      call setup_eul_pe_BC(pe_src_BC, pe_dst_BC, ak, bk, npx, npy, npz, 0, 0, bd, &
+           make_lag_in=.true., ak_src=neststruct%parent_grid%ak, bk_src=neststruct%parent_grid%bk)
+
+      call nested_grid_BC_save_proc(neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
+           npx, npy, npz, bd, var_BC, u_dt_buf)
+      call remap_BC_direct(pe_src_BC, pe_dst_BC, var_BC, u_dt, npx, npy, npz, bd, 0, 0, 0, flagstruct%kord_mt)
+      call nested_grid_BC_save_proc(neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
+           npx, npy, npz, bd, var_BC, v_dt_buf)
+      call remap_BC_direct(pe_src_BC, pe_dst_BC, var_BC, v_dt, npx, npy, npz, bd, 0, 0, 0, flagstruct%kord_mt)
+
+   endif
+   do n=1,size(neststruct%child_grids)
+      if (neststruct%child_grids(n)) then
+         call nested_grid_BC(ps, neststruct%nest_domain_all(n), 0, 0)
+         call nested_grid_BC_send(u_dt, neststruct%nest_domain_all(n), 0, 0)
+         call nested_grid_BC_send(v_dt, neststruct%nest_domain_all(n), 0, 0)
+      endif
+   enddo
+
+
+ end subroutine set_physics_BCs
+
  subroutine setup_pt_BC(pt_BC, delp_BC, pe_eul_BC, sphum_BC, npx, npy, npz, zvir, bd)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
@@ -674,12 +739,12 @@ contains
 
  end subroutine setup_eul_delp_BC_k
 
- subroutine setup_eul_pe_BC(pe_lag_BC, pe_eul_BC, ak_dst, bk_dst, npx, npy, npz, istag, jstag, bd)
+ subroutine copy_ps_BC(ps, ps_BC, npx, npy, istag, jstag, bd)
 
+   integer, intent(IN) :: npx, npy, istag, jstag
    type(fv_grid_bounds_type), intent(IN) :: bd
-   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_lag_BC, pe_eul_BC
-   integer, intent(IN) :: npx, npy, npz, istag, jstag
-   real, intent(IN), dimension(npz+1) :: ak_dst, bk_dst
+   real, intent(IN) :: ps(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag)
+   type(fv_nest_BC_type_3d), intent(INOUT) :: ps_BC
 
    integer :: i,j,k, istart, iend
 
@@ -696,11 +761,19 @@ contains
    jed = bd%jed
    
    if (is == 1) then
-      call setup_eul_pe_BC_k(pe_lag_BC%west_t1, pe_eul_BC%west_t1, ak_dst, bk_dst, isd, 0, isd, 0, jsd, jed+jstag, npz)
+      do j=jsd,jed+jstag
+      do i=isd,0
+         ps_BC%west_t1(i,j,1) = ps(i,j)
+      enddo
+      enddo
    end if
 
    if (ie == npx-1) then
-      call setup_eul_pe_BC_k(pe_lag_BC%east_t1, pe_eul_BC%east_t1, ak_dst, bk_dst, npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz)
+      do j=jsd,jed+jstag
+      do i=npx+istag,ied+istag
+         ps_BC%east_t1(i,j,1) = ps(i,j)
+      enddo
+      enddo
    end if
 
    if (is == 1) then
@@ -715,21 +788,91 @@ contains
    end if
 
    if (js == 1) then
-      call setup_eul_pe_BC_k(pe_lag_BC%south_t1, pe_eul_BC%south_t1, ak_dst, bk_dst, isd, ied+istag, istart, iend+istag, jsd, 0, npz)
+      do j=jsd,0
+      do i=isd,ied+istag
+         ps_BC%south_t1(i,j,1) = ps(i,j)
+      enddo
+      enddo
    end if
 
    if (je == npy-1) then
-      call setup_eul_pe_BC_k(pe_lag_BC%north_t1, pe_eul_BC%north_t1, ak_dst, bk_dst, isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz)
+      do j=npy+jstag,jed+jstag
+      do i=isd,ied+istag
+         ps_BC%north_t1(i,j,1) = ps(i,j)
+      enddo
+      enddo
+   end if
+
+ end subroutine copy_ps_BC
+
+ subroutine setup_eul_pe_BC(pe_lag_BC, pe_eul_BC, ak_dst, bk_dst, npx, npy, npz, istag, jstag, bd, make_lag_in, ak_src, bk_src)
+
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_lag_BC, pe_eul_BC
+   integer, intent(IN) :: npx, npy, npz, istag, jstag
+   real, intent(IN), dimension(npz+1) :: ak_dst, bk_dst
+   logical, intent(IN), OPTIONAL :: make_lag_in
+   real, intent(IN), OPTIONAL :: ak_src(npz), bk_src(npz)
+
+   logical :: make_lag
+
+   integer :: i,j,k, istart, iend
+
+   integer :: is,  ie,  js,  je
+   integer :: isd, ied, jsd, jed
+
+   is  = bd%is
+   ie  = bd%ie
+   js  = bd%js
+   je  = bd%je
+   isd = bd%isd
+   ied = bd%ied
+   jsd = bd%jsd
+   jed = bd%jed
+   
+   if (present(make_lag_in)) make_lag = make_lag_in
+
+   if (is == 1) then
+      call setup_eul_pe_BC_k(pe_lag_BC%west_t1, pe_eul_BC%west_t1, ak_dst, bk_dst, isd, 0, isd, 0, jsd, jed+jstag, npz, &
+           make_lag, ak_src, bk_src)
+   end if
+
+   if (ie == npx-1) then
+      call setup_eul_pe_BC_k(pe_lag_BC%east_t1, pe_eul_BC%east_t1, ak_dst, bk_dst, npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz, &
+           make_lag, ak_src, bk_src)
+   end if
+
+   if (is == 1) then
+      istart = is
+   else
+      istart = isd
+   end if
+   if (ie == npx-1) then
+      iend = ie
+   else
+      iend = ied
+   end if
+
+   if (js == 1) then
+      call setup_eul_pe_BC_k(pe_lag_BC%south_t1, pe_eul_BC%south_t1, ak_dst, bk_dst, isd, ied+istag, istart, iend+istag, jsd, 0, npz, &
+           make_lag, ak_src, bk_src)
+   end if
+
+   if (je == npy-1) then
+      call setup_eul_pe_BC_k(pe_lag_BC%north_t1, pe_eul_BC%north_t1, ak_dst, bk_dst, isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz, &
+           make_lag, ak_src, bk_src)
    end if
    
  end subroutine setup_eul_pe_BC
 
- subroutine setup_eul_pe_BC_k(pelagBC, peeulBC, ak_dst, bk_dst, isd, ied, istart, iend, jstart, jend, npz)
+ subroutine setup_eul_pe_BC_k(pelagBC, peeulBC, ak_dst, bk_dst, isd, ied, istart, iend, jstart, jend, npz, make_lag, ak_src, bk_src)
 
    integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz
    real, intent(INOUT) :: pelagBC(isd:ied,jstart:jend,npz+1)
    real, intent(INOUT) :: peeulBC(isd:ied,jstart:jend,npz+1)
    real, intent(IN) :: ak_dst(npz+1), bk_dst(npz+1)
+   logical, intent(IN) :: make_lag
+   real, intent(IN) :: ak_src(npz+1), bk_src(npz+1)
 
    integer :: i,j,k
 
@@ -742,6 +885,17 @@ contains
    enddo
    enddo
    enddo
+   
+   if (make_lag) then
+   do k=1,npz+1
+   do j=jstart,jend
+   do i=istart,iend
+      pelagBC(i,j,k) = ak_src(k) + pelagBC(i,j,npz+1)*bk_src(k)
+   enddo
+   enddo
+   enddo
+   endif
+
 
  end subroutine setup_eul_pe_BC_k
 
@@ -799,6 +953,62 @@ contains
    end if
    
  end subroutine remap_BC
+
+ subroutine remap_BC_direct(pe_lag_BC, pe_eul_BC, var_lag_BC, var, npx, npy, npz, bd, istag, jstag, iv, kord, do_log_pe)
+
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   integer, intent(IN) :: npx, npy, npz, istag, jstag, iv, kord
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_lag_BC, var_lag_BC
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_eul_BC
+   real, intent(INOUT) ::  var(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,npz)
+   logical, intent(IN), OPTIONAL :: do_log_pe
+
+   logical :: log_pe = .false.
+
+   integer :: i,j,k, istart, iend
+
+   integer :: is,  ie,  js,  je
+   integer :: isd, ied, jsd, jed
+
+   is  = bd%is
+   ie  = bd%ie
+   js  = bd%js
+   je  = bd%je
+   isd = bd%isd
+   ied = bd%ied
+   jsd = bd%jsd
+   jed = bd%jed
+   
+   if (present(do_log_pe)) log_pe = do_log_pe
+   
+   if (is == 1) then
+      call remap_BC_k(pe_lag_BC%west_t1, pe_eul_BC%west_t1, var_lag_BC%west_t1, var(isd,jsd,1), isd, 0, isd, 0, jsd, jed+jstag, npz, iv, kord, log_pe)
+   end if
+
+   if (ie == npx-1) then
+      call remap_BC_k(pe_lag_BC%east_t1, pe_eul_BC%east_t1, var_lag_BC%east_t1, var(npx+istag,jsd,1), npx+istag, ied+istag, npx+istag, ied+istag, jsd, jed+jstag, npz, iv, kord, log_pe)
+   end if
+
+   if (is == 1) then
+      istart = is
+   else
+      istart = isd
+   end if
+   if (ie == npx-1) then
+      iend = ie
+   else
+      iend = ied
+   end if
+
+   if (js == 1) then
+      call remap_BC_k(pe_lag_BC%south_t1, pe_eul_BC%south_t1, var_lag_BC%south_t1, var(isd,jsd,1), isd, ied+istag, istart, iend+istag, jsd, 0, npz, iv, kord, log_pe)
+   end if
+
+   if (je == npy-1) then
+      call remap_BC_k(pe_lag_BC%north_t1, pe_eul_BC%north_t1, var_lag_BC%north_t1, var(isd,npy+jstag,1), isd, ied+istag, istart, iend+istag, npy+jstag, jed+jstag, npz, iv, kord, log_pe)
+   end if
+   
+ end subroutine remap_BC_direct
 
 !NOTE: to ensure reproducibility we need to have the *correct* two-sided interpolated lagrangian pressure at the staggered points. How do we get this??
  subroutine remap_BC_k(pe_lagBC, pe_eulBC, var_lagBC, var_eulBC, isd, ied, istart, iend, jstart, jend, npz, iv, kord, log_pe)
@@ -1240,15 +1450,9 @@ contains
    do i=istart,iend
          dp1 = zvir*sphumBC(i,j,k)
 #ifdef USE_COND
-#ifdef GFS_PHYS
-         q_con = liq_watBC(i,j,k)
-         q_sol = q_con*max(min((tice-ptBC(i,j,k))/t_i0,1.),0.)
-         q_liq = q_con - q_sol
-#else
          q_liq = liq_watBC(i,j,k) + rainwatBC(i,j,k)
          q_sol = ice_watBC(i,j,k) + snowwatBC(i,j,k) + graupelBC(i,j,k)
          q_con = q_liq + q_sol
-#endif 
          q_conBC(i,j,k) = q_con
 #ifdef MOIST_CAPPA
          cvm = (1.-(sphumBC(i,j,k)+q_con))*cv_air+sphumBC(i,j,k)*cv_vap+q_liq*c_liq+q_sol*c_ice

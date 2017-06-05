@@ -748,6 +748,7 @@ module fv_control_mod
          do i=1,n-1
             if (Atm(i)%grid_number == parent_grid_num) then
                Atm(n)%parent_grid => Atm(i)
+               Atm(n)%neststruct%parent_grid => Atm(i)
                exit
             end if
          end do

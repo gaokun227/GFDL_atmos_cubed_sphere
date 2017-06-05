@@ -30,8 +30,6 @@ module fv_update_phys_mod
   use fv_mp_mod,          only: start_group_halo_update, complete_group_halo_update
   use fv_mp_mod,          only: group_halo_update_type
   use fv_arrays_mod,      only: fv_flags_type, fv_nest_type, R_GRID
-  use boundary_mod,       only: nested_grid_BC
-  use boundary_mod,       only: extrapolation_BC
   use fv_eta_mod,         only: get_eta_level
   use fv_timing_mod,      only: timing_on, timing_off
   use fv_diagnostics_mod, only: prt_maxmin
@@ -47,6 +45,7 @@ module fv_update_phys_mod
 #endif
   use fv_arrays_mod,      only: fv_grid_type, fv_nest_type, fv_grid_bounds_type
   use fv_grid_utils_mod,  only: cubed_to_latlon
+  use fv_nesting_mod,     only: set_physics_BCs
 
   implicit none
 
@@ -145,8 +144,6 @@ module fv_update_phys_mod
     integer  w_diff                             ! w-tracer for PBL diffusion
     real:: qstar, dbk, rdg, zvir, p_fac, cv_air, gama_dt
 
-    real, dimension(1,1,1) :: parent_u_dt, parent_v_dt ! dummy variables for nesting
-
 !f1p                                                                                                                                                                                                                                        
 !account for change in air molecular weight because of H2O change                                                                                                                                                                            
     logical, dimension(nq) :: conv_vmr_mmr
@@ -213,6 +210,10 @@ module fv_update_phys_mod
     endif
 
     call get_eta_level(npz, 1.0E5, pfull, phalf, ak, bk)
+
+    if (size(neststruct%child_grids) > 1) then
+       call set_physics_BCs(ps, u_dt, v_dt, flagstruct, gridstruct, neststruct, npx, npy, npz, ng, ak, bk, bd)
+    endif
 
 !$OMP parallel do default(none) &
 !$OMP             shared(is,ie,js,je,npz,flagstruct,pfull,q_dt,sphum,q,qdiag,  &
@@ -517,21 +518,6 @@ module fv_update_phys_mod
     call timing_on('COMM_TOTAL')
 
     call complete_group_halo_update(i_pack(1), domain)
-
-    if (size(neststruct%child_grids) > 1) then
-       if (gridstruct%nested) then
-          call nested_grid_BC(u_dt, parent_u_dt, neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
-               npx, npy, npz, bd, 1, npx-1, 1, npy-1)
-          call nested_grid_BC(v_dt, parent_v_dt, neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
-               npx, npy, npz, bd, 1, npx-1, 1, npy-1)
-       endif
-       do n=1,size(neststruct%child_grids)
-          if (neststruct%child_grids(n)) then
-             call nested_grid_BC(u_dt, neststruct%nest_domain_all(n), 0, 0)
-             call nested_grid_BC(v_dt, neststruct%nest_domain_all(n), 0, 0)
-          endif
-       enddo
-    endif
 
     call timing_off('COMM_TOTAL')
     call update_dwinds_phys(is, ie, js, je, isd, ied, jsd, jed, dt, u_dt, v_dt, u, v, gridstruct, npx, npy, npz, domain)

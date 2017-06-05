@@ -44,8 +44,10 @@ module boundary_mod
 
   interface nested_grid_BC
      module procedure nested_grid_BC_2d
-     module procedure nested_grid_BC_mpp
-     module procedure nested_grid_BC_mpp_send
+!     module procedure nested_grid_BC_mpp_2d
+     module procedure nested_grid_BC_mpp_3d
+     module procedure nested_grid_BC_mpp_send_2d
+     module procedure nested_grid_BC_mpp_send_3d
      module procedure nested_grid_BC_2D_mpp
      module procedure nested_grid_BC_3d
   end interface
@@ -526,8 +528,37 @@ contains
    end do
 
  end subroutine fill_nested_grid_3D
+
+!!$ subroutine nested_grid_BC_mpp_2d(var_nest, nest_domain, ind, wt, istag, jstag, &
+!!$      npx, npy, bd, isg, ieg, jsg, jeg, nstep_in, nsplit_in, proc_in)
+!!$
+!!$   type(fv_grid_bounds_type), intent(IN) :: bd
+!!$   real, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag), intent(INOUT) :: var_nest
+!!$   real, dimension(isg:ieg+istag,jsg:jeg+jstag), intent(IN) :: var_coarse
+!!$   type(nest_domain_type), intent(INOUT) :: nest_domain
+!!$   integer, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,2), intent(IN) :: ind
+!!$   real, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,4), intent(IN) :: wt
+!!$   integer, intent(IN) :: istag, jstag, npx, npy, isg, ieg, jsg, jeg
+!!$   integer, intent(IN), OPTIONAL :: nstep_in, nsplit_in
+!!$   logical, intent(IN), OPTIONAL :: proc_in
+!!$
+!!$   real, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,1) :: var_nest_3d
+!!$
+!!$   integer :: i,j
+!!$
+!!$   do j=bd%jsd,bd%jed+jstag
+!!$   do i=bd%isd,bd%ied+istag
+!!$      var_nest_3d(i,j,1) = var_nest(i,j)
+!!$   enddo
+!!$   enddo
+!!$
+!!$   call nested_grid_BC_mpp_3d(var_nest_3d, nest_domain, ind, wt, istag, jstag, &
+!!$      npx, npy, 1, bd, isg, ieg, jsg, jeg, nstep_in, nsplit_in, proc_in)
+!!$   
+!!$
+!!$ end subroutine nested_grid_BC_mpp_2d
  
- subroutine nested_grid_BC_mpp(var_nest, var_coarse, nest_domain, ind, wt, istag, jstag, &
+ subroutine nested_grid_BC_mpp_3d(var_nest, var_coarse, nest_domain, ind, wt, istag, jstag, &
       npx, npy, npz, bd, isg, ieg, jsg, jeg, nstep_in, nsplit_in, proc_in)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
@@ -733,9 +764,9 @@ contains
 
    deallocate(wbuffer, ebuffer, sbuffer, nbuffer)
 
- end subroutine nested_grid_BC_mpp
+ end subroutine nested_grid_BC_mpp_3d
 
- subroutine nested_grid_BC_mpp_send(var_coarse, nest_domain, istag, jstag)
+ subroutine nested_grid_BC_mpp_send_3d(var_coarse, nest_domain, istag, jstag)
 
    real, dimension(:,:,:), intent(IN) :: var_coarse
    type(nest_domain_type), intent(INOUT) :: nest_domain
@@ -778,7 +809,52 @@ contains
 
    deallocate(wbuffer, ebuffer, sbuffer, nbuffer)
 
- end subroutine nested_grid_BC_mpp_send
+ end subroutine nested_grid_BC_mpp_send_3d
+
+ subroutine nested_grid_BC_mpp_send_2d(var_coarse, nest_domain, istag, jstag)
+
+   real, dimension(:,:), intent(IN) :: var_coarse
+   type(nest_domain_type), intent(INOUT) :: nest_domain
+   integer, intent(IN) :: istag, jstag
+
+   real,    allocatable         :: wbuffer(:,:)
+   real,    allocatable         :: ebuffer(:,:)
+   real,    allocatable         :: sbuffer(:,:)
+   real,    allocatable         :: nbuffer(:,:)
+
+   integer :: i,j, ic, jc, istart, iend, k
+
+   integer :: position
+
+
+   if (istag == 1 .and. jstag == 1) then
+      position = CORNER
+   else if (istag == 0 .and. jstag == 1) then
+      position = NORTH
+   else if (istag == 1 .and. jstag == 0) then
+      position = EAST
+   else
+      position = CENTER
+   end if
+
+
+   allocate(wbuffer(1,1))
+   
+   allocate(ebuffer(1,1))
+      
+   allocate(sbuffer(1,1))
+
+   allocate(nbuffer(1,1))
+
+
+       call timing_on ('COMM_TOTAL')
+   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer,  position=position)
+       call timing_off('COMM_TOTAL')
+
+
+   deallocate(wbuffer, ebuffer, sbuffer, nbuffer)
+
+ end subroutine nested_grid_BC_mpp_send_2d
 
  subroutine nested_grid_BC_2D_mpp(var_nest, var_coarse, nest_domain, ind, wt, istag, jstag, &
       npx, npy, bd, isg, ieg, jsg, jeg, nstep_in, nsplit_in, proc_in)
