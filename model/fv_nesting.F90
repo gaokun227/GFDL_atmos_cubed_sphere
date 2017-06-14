@@ -33,7 +33,7 @@ module fv_nesting_mod
    use boundary_mod,        only: nested_grid_BC_send, nested_grid_BC_recv, nested_grid_BC_save_proc, nested_grid_BC
    use fv_mp_mod,           only: is, ie, js, je, isd, ied, jsd, jed, isc, iec, jsc, jec
    use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, fv_diag_type, fv_nest_BC_type_3D
-   use fv_arrays_mod,       only: allocate_fv_nest_BC_type, fv_atmos_type, fv_grid_bounds_type
+   use fv_arrays_mod,       only: allocate_fv_nest_BC_type, fv_atmos_type, fv_grid_bounds_type, deallocate_fv_nest_BC_type
    use fv_grid_utils_mod,   only: ptop_min, g_sum, cubed_to_latlon, f_p
    use init_hydro_mod,      only: p_var
    use constants_mod,       only: grav, pi=>pi_8, radius, hlv, rdgas, cp_air, rvgas, cp_vapor, kappa
@@ -373,6 +373,7 @@ contains
 #endif
                npx, npy, npz, zvir, bd)
        endif
+
 #endif
 
        !!!NOTE: The following require remapping on STAGGERED grids, which requires additional pressure data
@@ -425,6 +426,21 @@ contains
 !            neststruct%divg_BC, divg_buf)
        call remap_BC(pe_b_lag_BC, pe_b_eul_BC, lag_b_BC, neststruct%divg_BC, npx, npy, npz, bd, 1, 1, -1, flagstruct%kord_mt)
 
+       call deallocate_fv_nest_BC_type(delp_lag_BC)
+       call deallocate_fv_nest_BC_type(lag_BC)
+       call deallocate_fv_nest_BC_type(pe_lag_BC)
+       call deallocate_fv_nest_BC_type(pe_eul_BC)
+
+       call deallocate_fv_nest_BC_type(pe_u_lag_BC)
+       call deallocate_fv_nest_BC_type(pe_u_eul_BC)
+       call deallocate_fv_nest_BC_type(lag_u_BC)
+       call deallocate_fv_nest_BC_type(pe_v_lag_BC)
+       call deallocate_fv_nest_BC_type(pe_v_eul_BC)
+       call deallocate_fv_nest_BC_type(lag_v_BC)
+       call deallocate_fv_nest_BC_type(pe_b_lag_BC)
+       call deallocate_fv_nest_BC_type(pe_b_eul_BC)
+       call deallocate_fv_nest_BC_type(lag_b_BC)
+
     endif
 
     if (neststruct%first_step) then
@@ -453,7 +469,7 @@ contains
  subroutine set_physics_BCs(ps, u_dt, v_dt, flagstruct, gridstruct, neststruct, npx, npy, npz, ng, ak, bk, bd)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
-   type(fv_flags_type) :: flagstruct
+   type(fv_flags_type), intent(IN) :: flagstruct
    type(fv_nest_type), intent(INOUT), target :: neststruct
    type(fv_grid_type) :: gridstruct
    integer, intent(IN) :: npx, npy, npz, ng
@@ -461,7 +477,7 @@ contains
    real, intent(INOUT), dimension(bd%isd:bd%ied,bd%jsd:bd%jed) :: ps
    real, intent(INOUT), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz) :: u_dt, v_dt
    real, dimension(1,1) :: parent_ps ! dummy variable for nesting
-   type(fv_nest_BC_type_3d) :: u_dt_buf, v_dt_buf, pe_src_BC, pe_dst_BC, var_BC
+   type(fv_nest_BC_type_3d) :: u_dt_buf, v_dt_buf, pe_src_BC, pe_dst_BC!, var_BC
 
    integer :: n
    integer :: is,  ie,  js,  je
@@ -490,7 +506,6 @@ contains
 
       call allocate_fv_nest_BC_type(pe_src_BC, is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz+1,ng,0,0,0,.false.)
       call allocate_fv_nest_BC_type(pe_dst_BC, is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz+1,ng,0,0,0,.false.)
-      call allocate_fv_nest_BC_type(var_BC,    is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz  ,ng,0,0,0,.false.)
 
       call copy_ps_BC(ps, pe_src_BC, npx, npy, npz, 0, 0, bd)
       call setup_eul_pe_BC(pe_src_BC, pe_dst_BC, ak, bk, npx, npy, npz, 0, 0, bd, &
@@ -498,12 +513,11 @@ contains
 
       !Note that iv=-1 is used for remapping winds, which sets the lower reconstructed values to 0 if
       ! there is a 2dx signal. Is this the best for **tendencies** though?? Probably not---so iv=1 here
-      call nested_grid_BC_save_proc(neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
-           npx, npy, npz, bd, var_BC, u_dt_buf)
-      call remap_BC_direct(pe_src_BC, pe_dst_BC, var_BC, u_dt, npx, npy, npz, bd, 0, 0, 1, flagstruct%kord_mt)
-      call nested_grid_BC_save_proc(neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
-           npx, npy, npz, bd, var_BC, v_dt_buf)
-      call remap_BC_direct(pe_src_BC, pe_dst_BC, var_BC, v_dt, npx, npy, npz, bd, 0, 0, 1, flagstruct%kord_mt)
+      call set_BC_direct( pe_src_BC, pe_dst_BC, u_dt_buf, u_dt, neststruct, npx, npy, npz, ng, bd, 0, 0, 1, flagstruct%kord_mt)
+      call set_BC_direct( pe_src_BC, pe_dst_BC, v_dt_buf, v_dt, neststruct, npx, npy, npz, ng, bd, 0, 0, 1, flagstruct%kord_mt)
+
+      call deallocate_fv_nest_BC_type(pe_src_BC)
+      call deallocate_fv_nest_BC_type(pe_dst_BC)
 
    endif
    do n=1,size(neststruct%child_grids)
@@ -516,6 +530,27 @@ contains
 
 
  end subroutine set_physics_BCs
+
+ subroutine set_BC_direct( pe_src_BC, pe_dst_BC, buf, var, neststruct, npx, npy, npz, ng, bd, istag, jstag, iv, kord)
+
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   type(fv_nest_type), intent(INOUT) :: neststruct
+   integer, intent(IN) :: npx, npy, npz, ng, istag, jstag, iv, kord
+   real, intent(INOUT), dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,npz) :: var
+   type(fv_nest_BC_type_3d), intent(INOUT) :: buf, pe_src_BC, pe_dst_BC
+   type(fv_nest_BC_type_3d) :: var_BC
+   
+
+   call allocate_fv_nest_BC_type(var_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz,ng,istag,jstag,0,.false.)
+
+   call nested_grid_BC_save_proc(neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, istag, jstag, &
+        npx, npy, npz, bd, var_BC, buf)
+   call remap_BC_direct(pe_src_BC, pe_dst_BC, var_BC, var, npx, npy, npz, bd, istag, jstag, iv, kord)
+   
+   call deallocate_fv_nest_BC_type(var_BC)
+
+
+ end subroutine set_BC_direct
 
  subroutine setup_pt_BC(pt_BC, delp_BC, pe_eul_BC, sphum_BC, npx, npy, npz, zvir, bd)
 
@@ -984,6 +1019,8 @@ contains
    if (present(do_log_pe)) log_pe = do_log_pe
    
    if (is == 1) then
+      !I was unable how to do pass-by-memory referencing on parts of the 3D var array,
+      ! so instead I am doing an inefficient copy and copy-back. --- lmh 14jun17
       call remap_BC_k(pe_lag_BC%west_t1, pe_eul_BC%west_t1, var_lag_BC%west_t1, var(isd:0,jsd:jed+jstag,:), isd, 0, isd, 0, jsd, jed+jstag, npz, iv, kord, log_pe)
 !!$!!! DEBUG CODE
 !!$      write(mpp_pe()+1000,*) j, pe_lag_BC%west_t1(isd,jsd,npz+1), pe_eul_BC%west_t1(isd,jsd,npz+1), var_lag_BC%west_t1(isd,jsd,npz-2), var(isd,jsd,npz-2)
