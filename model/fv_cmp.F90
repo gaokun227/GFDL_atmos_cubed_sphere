@@ -3,10 +3,10 @@ module fv_cmp_mod
   use constants_mod,         only: pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
   use fv_mp_mod,             only: is_master
   use fv_arrays_mod,         only: R_GRID
-  use lin_cld_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql0_max, qi_lim, icloud_f
-  use lin_cld_microphys_mod, only: tau_r, tau_s, tau_i2s, tau_v2l, tau_l2v, tau_mlt
-  use lin_cld_microphys_mod, only: rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
-  use lin_cld_microphys_mod, only: sat_adj0, t_sub, cld_min, qs_mlt
+  use gfdl_cloud_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql_mlt, ql0_max, qi_lim, icloud_f
+  use gfdl_cloud_microphys_mod, only: tau_r, tau_s, tau_i2s, tau_v2l, tau_l2v, tau_mlt
+  use gfdl_cloud_microphys_mod, only: rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
+  use gfdl_cloud_microphys_mod, only: sat_adj0, t_sub, cld_min, qs_mlt
 
   implicit none
   real, parameter:: tau_l2r = 900.
@@ -161,10 +161,11 @@ contains
 ! Melting of cloud ice into cloud water ********
            sink = min( qi(i,j), fac_mlt*(pt1(i)-tice)/icp2(i) )
            qi(i,j) = qi(i,j) - sink
-! Maximum amount of melted ice converted to ql
-            tmp = min( sink, dim(ql0_max, ql(i,j)) )   ! max ql amount
-           ql(i,j) = ql(i,j) + tmp
-           qr(i,j) = qr(i,j) + sink - tmp
+! May 17, 2017
+!!!        tmp = min( sink, dim(ql_mlt, ql(i,j)) )   ! max ql amount
+!!!        ql(i,j) = ql(i,j) + tmp
+!!!        qr(i,j) = qr(i,j) + sink - tmp
+           ql(i,j) = ql(i,j) + sink
            q_liq(i) = q_liq(i) + sink
            q_sol(i) = q_sol(i) - sink
             cvm(i) = mc_air(i) + qv(i,j)*c_vap + q_liq(i)*c_liq + q_sol(i)*c_ice
@@ -549,7 +550,7 @@ if ( do_qa .and. last_step ) then
                     qa(i,j) = (q_plus-qstar)/(2.*dq*(1.-condensates))
                 endif
              else
-                qa(i,j) = 0.
+                qa(i,j) = 0. 
              endif
 ! Impose minimum cloudiness if substantial condensates exist
              if ( condensates > 1.E-6 ) qa(i,j) = max(cld_min, qa(i,j))

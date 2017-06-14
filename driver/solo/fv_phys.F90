@@ -22,7 +22,7 @@ module fv_phys_mod
 
 use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, radius, kappa, OMEGA
 use time_manager_mod,      only: time_type, get_time
-use lin_cld_microphys_mod, only: lin_cld_microphys_driver, qsmith, wet_bulb
+use gfdl_cloud_microphys_mod, only: gfdl_cloud_microphys_driver, qsmith, wet_bulb
 use hswf_mod,              only: Held_Suarez_Tend
 use fv_sg_mod,             only: fv_subgrid_z
 use fv_update_phys_mod,    only: fv_update_phys
@@ -95,7 +95,7 @@ public :: fv_phys, fv_nudge
   logical:: strat_rad        = .false.
   logical:: do_abl = .false.
   logical:: do_mon_obkv = .true.
-  logical:: do_lin_microphys = .false.
+  logical:: do_gfdl_cloud_microphys = .false.
   logical:: do_K_warm_rain = .false.
   logical:: do_strat_forcing = .true.
   logical:: prog_cloud       = .true.
@@ -141,7 +141,7 @@ public :: fv_phys, fv_nudge
   real, allocatable:: prec_total(:,:)
   real    :: missing_value = -1.e10
 
-namelist /sim_phys_nml/mixed_layer, gray_rad, strat_rad, do_lin_microphys,   &
+namelist /sim_phys_nml/mixed_layer, gray_rad, strat_rad, do_gfdl_cloud_microphys,   &
                        heating_rate, cooling_rate, uniform_sst, sst0, c0,    &
                        sw_abs, prog_cloud, low_c, diurnal_cycle, &
                        do_mon_obkv, do_t_strat, p_strat, t_strat, tau_strat, &
@@ -965,7 +965,7 @@ endif
  endif
 
 
-  if ( do_lin_microphys ) then
+  if ( do_gfdl_cloud_microphys ) then
       land(:,:) = 0.
       k_mp = 1
       do k=2, km
@@ -978,10 +978,10 @@ endif
 !     if(master .and. print_diag) write(*,*) 'k_mp=', k_mp, tmp*0.01
       k_mp = 1
 
-!!NOTE: You can do threaded Lin MP in solo core, but it **WILL** mess up your Lin MP diagnostics!!!
-                                                                                          call timing_on('lin_cld_mp')
-#ifndef LIN_MP_THREAD
-      call lin_cld_microphys_driver(q3(is:ie,js:je,1:km,sphum),   q3(is:ie,js:je,1:km,liq_wat), q3(is:ie,js:je,1:km,rainwat),  &
+!!NOTE: You can do threaded GFDL MP in solo core, but it **WILL** mess up your GFDL MP diagnostics!!!
+                                                                                          call timing_on('gfdl_mp')
+#ifndef GFDL_MP_THREAD
+      call gfdl_cloud_microphys_driver(q3(is:ie,js:je,1:km,sphum),   q3(is:ie,js:je,1:km,liq_wat), q3(is:ie,js:je,1:km,rainwat),  &
                                     q3(is:ie,js:je,1:km,ice_wat), q3(is:ie,js:je,1:km,snowwat), q3(is:ie,js:je,1:km,graupel),  &
                                     q3(is:ie,js:je,1:km,cld_amt), q3(is:ie,js:je,1:km,cld_amt),   &
                                   q_dt(is:ie,js:je,1:km,sphum), q_dt(is:ie,js:je,1:km,liq_wat), q_dt(is:ie,js:je,1:km,rainwat), &
@@ -994,7 +994,7 @@ endif
 #else
 !$omp parallel do default(shared)
    do j=js,je
-      call lin_cld_microphys_driver(q3(is:ie,j:j,1:km,sphum),     q3(is:ie,j:j,1:km,liq_wat), q3(is:ie,j:j,1:km,rainwat),  &
+      call gfdl_cloud_microphys_driver(q3(is:ie,j:j,1:km,sphum),     q3(is:ie,j:j,1:km,liq_wat), q3(is:ie,j:j,1:km,rainwat),  &
                                     q3(is:ie,j:j,1:km,ice_wat),   q3(is:ie,j:j,1:km,snowwat), q3(is:ie,j:j,1:km,graupel),  &
                                     q3(is:ie,j:j,1:km,cld_amt),   q3(is:ie,j:j,1:km,cld_amt),   &
                                   q_dt(is:ie,j:j,1:km,sphum),   q_dt(is:ie,j:j,1:km,liq_wat), q_dt(is:ie,j:j,1:km,rainwat), &
@@ -1006,7 +1006,7 @@ endif
                                   1,ie-is+1, 1,1, 1,km, k_mp,npz, seconds ) ! Time )
    enddo
 #endif
-                                                                                          call timing_off('lin_cld_mp')
+                                                                                          call timing_off('gfdl_mp')
   endif
 
   if ( mixed_layer ) then
@@ -1586,8 +1586,8 @@ endif
  10     call close_file (unit)
     endif
 
-    if (nwat /= 6 .and. do_lin_microphys) then
-       call mpp_error(FATAL, "Need nwat == 6 to run Lin Microphysics.")
+    if (nwat /= 6 .and. do_gfdl_cloud_microphys) then
+       call mpp_error(FATAL, "Need nwat == 6 to run GFDL Cloud Microphysics.")
     endif
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

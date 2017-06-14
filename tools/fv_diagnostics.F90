@@ -44,7 +44,7 @@ module fv_diagnostics_mod
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
  use fv_arrays_mod, only: max_step 
- use lin_cld_microphys_mod, only: wqs1, qsmith_init
+ use gfdl_cloud_microphys_mod, only: wqs1, qsmith_init
 
  implicit none
  private
@@ -2516,14 +2516,11 @@ contains
 !          call dbzcalc_smithxue(Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
           call dbzcalc(Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
                a3, a2, allmax, Atm(n)%bd, npz, Atm(n)%ncnst, Atm(n)%flagstruct%hydrostatic, &
-               zvir, .false., .false., .false., .true. ) ! Lin MP has constant N_0 intercept
+               zvir, .false., .false., .false., .true. ) ! GFDL MP has constant N_0 intercept
 
-          if (idiag%id_dbz > 0) then
-             used=send_data(idiag%id_dbz, a3, time)
-          endif
-          if (idiag%id_maxdbz > 0) then
-             used=send_data(idiag%id_maxdbz, a2, time)
-          endif
+          if (idiag%id_dbz > 0) used=send_data(idiag%id_dbz, a3, time)
+          if (idiag%id_maxdbz > 0) used=send_data(idiag%id_maxdbz, a2, time)
+
           if (idiag%id_basedbz > 0) then
              !interpolate to 1km dbz
              call cs_interpolator(isc, iec, jsc, jec, npz, a3, 1000., wz, a2, -20.)
@@ -4586,8 +4583,8 @@ end subroutine eqv_pot
 !     can be found in Stoelinga (2005, unpublished write-up).  Contact
 !     Mark Stoelinga (stoeling@atmos.washington.edu) for a copy.  
 
-! 22sep16: Modifying to use the Lin MP parameters. If doing so remember
-!   that the Lin MP assumes a constant intercept (in0X = .false.)
+! 22sep16: Modifying to use the GFDL MP parameters. If doing so remember
+!   that the GFDL MP assumes a constant intercept (in0X = .false.)
 !   Ferrier-Aligo has an option for fixed slope (rather than fixed intercept).
 !   Thompson presumably is an extension of Reisner MP.
 
@@ -4603,7 +4600,7 @@ end subroutine eqv_pot
    real,    intent(OUT) :: allmax
 
    !Parameters for constant intercepts (in0[rsg] = .false.)
-   !Using Lin MP values
+   !Using GFDL MP values
    real, parameter :: rn0_r = 8.e6 ! m^-4
    real, parameter :: rn0_s = 3.e6 ! m^-4
    real, parameter :: rn0_g = 4.e6 ! m^-4
@@ -4624,7 +4621,7 @@ end subroutine eqv_pot
    !Other constants
    real, parameter :: gamma_seven = 720.
 !   real, parameter :: koch_correction = 161.3
-   !The following values are also used in Lin-Lin MP
+   !The following values are also used in GFDL MP
    real, parameter :: rho_r = 1.0e3  ! LFO83
    real, parameter :: rho_s = 100.   ! kg m^-3 
    real, parameter :: rho_g = 400.   ! kg m^-3
@@ -4779,8 +4776,8 @@ end subroutine eqv_pot
 !     can be found in Stoelinga (2005, unpublished write-up).  Contact
 !     Mark Stoelinga (stoeling@atmos.washington.edu) for a copy.  
 
-! 22sep16: Modifying to use the Lin MP parameters. If doing so remember
-!   that the Lin MP assumes a constant intercept (in0X = .false.)
+! 22sep16: Modifying to use the GFDL MP parameters. If doing so remember
+!   that the GFDL MP assumes a constant intercept (in0X = .false.)
 !   Ferrier-Aligo has an option for fixed slope (rather than fixed intercept).
 !   Thompson presumably is an extension of Reisner MP.
 
@@ -4796,7 +4793,7 @@ end subroutine eqv_pot
    real,    intent(OUT) :: allmax
 
    !Parameters for constant intercepts (in0[rsg] = .false.)
-   !Using Lin MP values
+   !Using GFDL MP values
    real, parameter :: rn0_r = 8.e6 ! m^-4
    real, parameter :: rn0_s = 3.e6 ! m^-4
    real, parameter :: rn0_g = 4.e6 ! m^-4
