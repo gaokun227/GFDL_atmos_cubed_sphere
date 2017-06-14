@@ -166,10 +166,8 @@ contains
                    call nested_grid_BC(Atm(n)%ps, Atm(n)%parent_grid%ps, Atm(n)%neststruct%nest_domain, &
                         Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
                         Atm(n)%npx, Atm(n)%npy,Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)         
-                   call setup_nested_boundary_halo(Atm(n),.false.) 
                 else
                    call fill_nested_grid_topo(Atm(n), .false.)
-                   call setup_nested_boundary_halo(Atm(n),.false.) 
                    if ( Atm(n)%flagstruct%external_ic .and. grid_type < 4 ) call fill_nested_grid_data(Atm(n:n), .false.)
                 endif
              else
@@ -180,13 +178,14 @@ contains
                 else
                    if ( is_master() ) write(*,*) 'BC files not found, re-generating nested grid boundary conditions'
                    call fill_nested_grid_topo_halo(Atm(n), .false.)
-                   call setup_nested_boundary_halo(Atm(n), .false.)
                    Atm(N)%neststruct%first_step = .true.                   
                 endif
              end if
 
              if (.not. Atm(n)%flagstruct%hydrostatic .and. Atm(n)%flagstruct%make_nh .and. &
                   (.not. Atm(n)%flagstruct%nggps_ic .and. .not. Atm(n)%flagstruct%ecmwf_ic) ) then
+!!$                call nested_grid_BC_send(Atm(n)%parent_grid%delz, Atm(n)%neststruct%nest_domain, 0, 0)
+!!$                call nested_grid_BC_send(Atm(n)%parent_grid%w, Atm(n)%neststruct%nest_domain, 0, 0)
                 call nested_grid_BC(Atm(n)%delz, Atm(n)%parent_grid%delz, Atm(n)%neststruct%nest_domain, &
                      Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
                      Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)
@@ -270,7 +269,6 @@ contains
           Atm(N)%neststruct%first_step = .false.
           if (Atm(n)%neststruct%nested) then
              if ( npz_rst /= 0 .and. npz_rst /= npz ) then
-                call setup_nested_boundary_halo(Atm(n)) 
              else
                 !If BC file is found, then read them in. Otherwise we need to initialize the BCs.
                 if (is_master()) print*, 'Searching for nested grid BC files ', trim(fname_ne), ' ', trim (fname_sw)
@@ -279,7 +277,6 @@ contains
                 else
                    if ( is_master() ) write(*,*) 'BC files not found, re-generating nested grid boundary conditions'
                    call fill_nested_grid_topo_halo(Atm(n), .true.)
-                   call setup_nested_boundary_halo(Atm(n), .true.)
                    Atm(N)%neststruct%first_step = .true.
                 endif
                 !Following line to make sure u and v are consistent across processor subdomains
@@ -436,7 +433,6 @@ contains
           !if (Atm(n)%neststruct%nested) then
           ! Only fill nested-grid data if external_ic is called for the cubed-sphere grid
           if (Atm(n)%neststruct%nested) then
-             call setup_nested_boundary_halo(Atm(n), .true.) 
              if (Atm(n)%flagstruct%external_ic .and.  .not. Atm(n)%flagstruct%nggps_ic .and. grid_type < 4 ) then
                 call fill_nested_grid_data(Atm(n:n))
              endif
@@ -445,12 +441,6 @@ contains
        endif  !end cold_start check
 
        if ( (.not.Atm(n)%flagstruct%hydrostatic) .and. Atm(n)%flagstruct%make_nh .and. Atm(n)%neststruct%nested) then
-          call nested_grid_BC(Atm(n)%delz, Atm(n)%parent_grid%delz, Atm(n)%neststruct%nest_domain, &
-               Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-               Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.true.)
-          call nested_grid_BC(Atm(n)%w, Atm(n)%parent_grid%w, Atm(n)%neststruct%nest_domain, &
-               Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-               Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.true.)
           call fv_io_register_restart_BCs_NH(Atm(n)) !needed to register nested-grid BCs not registered earlier
        endif
 
@@ -621,12 +611,15 @@ contains
   end subroutine fv_restart
   ! </SUBROUTINE> NAME="fv_restart"
 
-  subroutine setup_nested_boundary_halo(Atm, proc_in)
+  subroutine OLD_setup_nested_boundary_halo(Atm, proc_in)
 
     !This routine is now taking the "easy way out" with regards
     ! to pt (virtual potential temperature), q_con, and cappa;
     ! their halo values are now set up when the BCs are set up
     ! in fv_dynamics
+
+    !!UPDATE 14jun17: The "easy" (better) way out is now
+    !!! done for all variables. This routine may no longer be needed.
 
     type(fv_atmos_type), intent(INOUT) :: Atm
     logical, INTENT(IN), OPTIONAL :: proc_in
@@ -764,7 +757,7 @@ contains
 
       call mpp_sync_self()
 
-  end subroutine setup_nested_boundary_halo
+  end subroutine OLD_setup_nested_boundary_halo
 
   subroutine fill_nested_grid_topo_halo(Atm, proc_in)
 
@@ -777,6 +770,7 @@ contains
     call mpp_get_global_domain( Atm%parent_grid%domain, &
          isg, ieg, jsg, jeg)
 
+    !This is 2D and doesn't need remapping
     if (is_master()) print*, '  FILLING NESTED GRID HALO WITH INTERPOLATED TERRAIN'
     call nested_grid_BC(Atm%phis, Atm%parent_grid%phis, Atm%neststruct%nest_domain, &
          Atm%neststruct%ind_h, Atm%neststruct%wt_h, 0, 0, &
@@ -861,6 +855,8 @@ contains
 
     integer :: p, sending_proc, gid
     logical process
+
+    call mpp_error(FATAL, " FILL_NESTED_GRID_DATA not yet updated for remap BCs")
 
     if (present(proc_in)) then
        process = proc_in
@@ -1206,6 +1202,7 @@ contains
 
   end subroutine fill_nested_grid_data
 
+  !This routine actually sets up the coarse-grid TOPOGRAPHY.
   subroutine fill_nested_grid_data_end(Atm, proc_in)
 
     type(fv_atmos_type), intent(INOUT) :: Atm  

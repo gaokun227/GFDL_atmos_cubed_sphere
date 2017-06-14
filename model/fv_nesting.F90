@@ -30,7 +30,8 @@ module fv_nesting_mod
    use mpp_mod,             only: mpp_sync_self, mpp_sync, mpp_send, mpp_recv, mpp_error, FATAL, mpp_pe, WARNING, NOTE
    use mpp_domains_mod,     only: mpp_global_sum, BITWISE_EFP_SUM, BITWISE_EXACT_SUM
    use boundary_mod,        only: update_coarse_grid
-   use boundary_mod,        only: nested_grid_BC_send, nested_grid_BC_recv, nested_grid_BC_save_proc, nested_grid_BC
+   use boundary_mod,        only: nested_grid_BC_send, nested_grid_BC_recv, nested_grid_BC_save_proc
+   use boundary_mod,        only: nested_grid_BC, nested_grid_BC_apply_intT
    use fv_mp_mod,           only: is, ie, js, je, isd, ied, jsd, jed, isc, iec, jsc, jec
    use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, fv_diag_type, fv_nest_BC_type_3D
    use fv_arrays_mod,       only: allocate_fv_nest_BC_type, fv_atmos_type, fv_grid_bounds_type, deallocate_fv_nest_BC_type
@@ -71,6 +72,12 @@ contains
 
  subroutine setup_nested_grid_BCs(npx, npy, npz, zvir, ncnst,     &
                         u, v, w, pt, delp, delz,q, uc, vc, &
+#ifdef USE_COND
+                        q_con, &
+#ifdef MOIST_CAPPA
+                        cappa, &
+#endif
+#endif
                         nested, inline_q, make_nh, ng, &
                         gridstruct, flagstruct, neststruct, &
                         nest_timestep, tracer_nest_timestep, &
@@ -94,6 +101,12 @@ contains
     real, intent(inout) :: q(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, ncnst) ! specific humidity and constituents
     real, intent(inout) :: uc(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) ! (uc,vc) mostly used as the C grid winds
     real, intent(inout) :: vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
+#ifdef USE_COND
+    real, intent(inout) :: q_con(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
+#ifdef MOIST_CAPPA
+    real, intent(inout) :: cappa(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
+#endif
+#endif
     integer, intent(INOUT) :: nest_timestep, tracer_nest_timestep
     type(fv_atmos_type), intent(INOUT) :: parent_grid
 
@@ -408,22 +421,18 @@ contains
        call nested_grid_BC_save_proc(neststruct%nest_domain, &
             neststruct%ind_u, neststruct%wt_u, 0, 1,  npx,  npy,  npz, bd, &
             lag_u_BC, vc_buf)
-!            neststruct%vc_BC, vc_buf)
        call remap_BC(pe_u_lag_BC, pe_u_eul_BC, lag_u_BC, neststruct%vc_BC, npx, npy, npz, bd, 0, 1, -1, flagstruct%kord_mt)
        call nested_grid_BC_save_proc(neststruct%nest_domain, &
             neststruct%ind_v, neststruct%wt_v, 1, 0,  npx,  npy,  npz, bd, &
             lag_v_BC, v_buf)
-!            neststruct%v_BC, v_buf)
        call remap_BC(pe_v_lag_BC, pe_v_eul_BC, lag_v_BC, neststruct%v_BC, npx, npy, npz, bd, 1, 0, -1, flagstruct%kord_mt)
        call nested_grid_BC_save_proc(neststruct%nest_domain, &
             neststruct%ind_v, neststruct%wt_v, 1, 0,  npx,  npy,  npz, bd, &
             lag_v_BC, uc_buf)
-!            neststruct%uc_BC, uc_buf)
        call remap_BC(pe_v_lag_BC, pe_v_eul_BC, lag_v_BC, neststruct%uc_BC, npx, npy, npz, bd, 1, 0, -1, flagstruct%kord_mt)
        call nested_grid_BC_save_proc(neststruct%nest_domain, &
             neststruct%ind_b, neststruct%wt_b, 1, 1,  npx,  npy,  npz, bd, &
             lag_b_BC, divg_buf)
-!            neststruct%divg_BC, divg_buf)
        call remap_BC(pe_b_lag_BC, pe_b_eul_BC, lag_b_BC, neststruct%divg_BC, npx, npy, npz, bd, 1, 1, -1, flagstruct%kord_mt)
 
        call deallocate_fv_nest_BC_type(delp_lag_BC)
@@ -440,6 +449,60 @@ contains
        call deallocate_fv_nest_BC_type(pe_b_lag_BC)
        call deallocate_fv_nest_BC_type(pe_b_eul_BC)
        call deallocate_fv_nest_BC_type(lag_b_BC)
+
+       !Correct halo values have now been set up for BCs; we can go ahead and apply them too
+       call nested_grid_BC_apply_intT(delp, &
+            0, 0, npx, npy, npz, bd, 1., 1., &
+            neststruct%delp_BC, bctype=neststruct%nestbctype  )
+       do n=1,ncnst
+          call nested_grid_BC_apply_intT(q(:,:,:,n), &
+               0, 0, npx, npy, npz, bd, 1., 1., &
+               neststruct%q_BC(n), bctype=neststruct%nestbctype  )          
+       enddo
+#ifndef SW_DYNAMICS
+       call nested_grid_BC_apply_intT(pt, &
+            0, 0, npx, npy, npz, bd, 1., 1., &
+            neststruct%pt_BC, bctype=neststruct%nestbctype  )
+       if (.not. flagstruct%hydrostatic) then
+          call nested_grid_BC_apply_intT(w, &
+               0, 0, npx, npy, npz, bd, 1., 1., &
+               neststruct%w_BC, bctype=neststruct%nestbctype  )
+          call nested_grid_BC_apply_intT(delz, &
+               0, 0, npx, npy, npz, bd, 1., 1., &
+               neststruct%delz_BC, bctype=neststruct%nestbctype  )
+       endif
+#ifdef USE_COND
+       call nested_grid_BC_apply_intT(q_con, &
+            0, 0, npx, npy, npz, bd, 1., 1., &
+            neststruct%q_con_BC, bctype=neststruct%nestbctype  )            
+#ifdef MOIST_CAPPA
+       call nested_grid_BC_apply_intT(cappa, &
+            0, 0, npx, npy, npz, bd, 1., 1., &
+            neststruct%cappa_BC, bctype=neststruct%nestbctype  )            
+#endif
+#endif
+#endif
+       call nested_grid_BC_apply_intT(u, &
+            0, 1, npx, npy, npz, bd, 1., 1., &
+            neststruct%u_BC, bctype=neststruct%nestbctype  )            
+       call nested_grid_BC_apply_intT(vc, &
+            0, 1, npx, npy, npz, bd, 1., 1., &
+            neststruct%vc_BC, bctype=neststruct%nestbctype  )            
+       call nested_grid_BC_apply_intT(v, &
+            1, 0, npx, npy, npz, bd, 1., 1., &
+            neststruct%v_BC, bctype=neststruct%nestbctype  )            
+       call nested_grid_BC_apply_intT(uc, &
+            1, 0, npx, npy, npz, bd, 1., 1., &
+            neststruct%uc_BC, bctype=neststruct%nestbctype  )            
+       !!!NOTE: Divg not available here but not needed
+       !!! until dyn_core anyway.
+!!$       call nested_grid_BC_apply_intT(divg, &
+!!$            1, 1, npx, npy, npz, bd, 1., 1., &
+!!$            neststruct%divg_BC, bctype=neststruct%nestbctype  )            
+
+       !Update domains needed for Rayleigh damping
+       call mpp_update_domains(u, v, domain, gridtype=DGRID_NE)
+       call mpp_update_domains(w, domain, complete=.true.) 
 
     endif
 
@@ -493,8 +556,6 @@ contains
    jed = bd%jed
 
    if (gridstruct%nested) then
-
-      call mpp_error(NOTE, " CALLING SET_PHYSICS_BCs") 
 
       !Both nested and coarse grids assumed on Eulerian coordinates at this point
       !Only need to fetch ps to form pressure levels

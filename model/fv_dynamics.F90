@@ -191,29 +191,17 @@ contains
                                            call timing_on('NEST_BCs')
          call setup_nested_grid_BCs(npx, npy, npz, zvir, ncnst, &
               u, v, w, pt, delp, delz, q, uc, vc, &
+#ifdef USE_COND
+              q_con, &
+#ifdef MOIST_CAPPA
+              cappa, &
+#endif
+#endif
               neststruct%nested, flagstruct%inline_q, flagstruct%make_nh, ng, &
               gridstruct, flagstruct, neststruct, &
               neststruct%nest_timestep, neststruct%tracer_nest_timestep, &
               domain, parent_grid, bd, nwat, ak, bk)
 
-#ifndef SW_DYNAMICS
-         if (gridstruct%nested) then
-          !Correct halo values have now been set up for BCs; we can go ahead and apply them too...
-            call nested_grid_BC_apply_intT(pt, &
-                 0, 0, npx, npy, npz, bd, 1., 1., &
-                 neststruct%pt_BC, bctype=neststruct%nestbctype  )
-#ifdef USE_COND
-            call nested_grid_BC_apply_intT(q_con, &
-                 0, 0, npx, npy, npz, bd, 1., 1., &
-                 neststruct%q_con_BC, bctype=neststruct%nestbctype  )            
-#ifdef MOIST_CAPPA
-            call nested_grid_BC_apply_intT(cappa, &
-                 0, 0, npx, npy, npz, bd, 1., 1., &
-                 neststruct%cappa_BC, bctype=neststruct%nestbctype  )            
-#endif
-#endif
-         endif
-#endif
                                            call timing_off('NEST_BCs')
       endif
 
