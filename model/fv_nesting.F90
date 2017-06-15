@@ -67,8 +67,8 @@ public :: twoway_nesting, setup_nested_grid_BCs, set_physics_BCs
 
 contains
 
-!!!! NOTE: Many of the routines here and in boundary.F90 have a lot of
-!!!!   redundant code, which could be cleaned up and simplified.
+!!!!NOTE: Later we can add a flag to see if remap BCs are needed
+!!!  if not we can save some code complexity and cycles by skipping it
 
  subroutine setup_nested_grid_BCs(npx, npy, npz, zvir, ncnst,     &
                         u, v, w, pt, delp, delz,q, uc, vc, &
@@ -169,7 +169,8 @@ contains
        call timing_on('COMM_TOTAL')
        !!! CLEANUP: could we make this a non-blocking operation?
        !!! Is this needed? it is on the initialization step.
-       call mpp_update_domains(u, v, &
+       call mpp_update_domains(delp, domain) !This is needed to make sure delp is updated for pe calculations
+       call mpp_update_domains(u, v, &       
             domain, gridtype=DGRID_NE, complete=.true.)
        call timing_off('COMM_TOTAL')
 !$OMP parallel do default(none) shared(isd,jsd,ied,jed,is,ie,js,je,npx,npy,npz, &
@@ -254,7 +255,6 @@ contains
           endif          
 #endif
           !Compute and send staggered pressure
-!          if (neststruct%parent_proc) then
              !u points
              do j=js,je+1
              do i=is,ie
@@ -264,7 +264,6 @@ contains
              do k=1,npz
              do j=js,je+1
              do i=is,ie
-                !NOTE: Has halo been updated yet on coarse grid??
                 pe_ustag(i,j,k+1) = pe_ustag(i,j,k) + 0.5*(delp(i,j,k)+delp(i,j-1,k)) 
              enddo
              enddo
@@ -280,7 +279,6 @@ contains
              do k=1,npz
              do j=js,je
              do i=is,ie+1
-                !NOTE: Has halo been updated yet on coarse grid??
                 pe_vstag(i,j,k+1) = pe_vstag(i,j,k) + 0.5*(delp(i,j,k)+delp(i-1,j,k)) 
              enddo
              enddo
@@ -324,9 +322,6 @@ contains
              enddo
              enddo
              call nested_grid_BC_send(pe_bstag, neststruct%nest_domain_all(p), 1, 1)
-
-
-!          endif
 
           call nested_grid_BC_send(u, neststruct%nest_domain_all(p), 0, 1)
           call nested_grid_BC_send(vc, neststruct%nest_domain_all(p), 0, 1)
@@ -602,7 +597,7 @@ contains
    type(fv_nest_BC_type_3d) :: var_BC
    
 
-   call allocate_fv_nest_BC_type(var_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz,ng,istag,jstag,0,.false.)
+   call allocate_fv_nest_BC_type(var_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz,ng,0,istag,jstag,.false.)
 
    call nested_grid_BC_save_proc(neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, istag, jstag, &
         npx, npy, npz, bd, var_BC, buf)
@@ -928,6 +923,7 @@ contains
    jsd = bd%jsd
    jed = bd%jed
    
+   make_lag = .false.
    if (present(make_lag_in)) make_lag = make_lag_in
 
    if (is == 1) then
@@ -954,6 +950,16 @@ contains
    if (js == 1) then
       call setup_eul_pe_BC_k(pe_lag_BC%south_t1, pe_eul_BC%south_t1, ak_dst, bk_dst, isd, ied+istag, istart, iend+istag, jsd, 0, npz, &
            make_lag, ak_src, bk_src)
+!!$         !!! DEBUG CODE
+!!$         i = 76
+!!$         j = 0
+!!$         if ( istart <= i .and. iend >= i ) then
+!!$            do k=1,npz+1
+!!$               write(mpp_pe()+2000,*) k, pe_lag_BC%south_t1(i,j,k), pe_eul_BC%south_t1(i,j,k)
+!!$            enddo
+!!$            write(mpp_pe()+2000,*) 
+!!$         endif
+!!$         !!! END DEBUG CODE
    end if
 
    if (je == npy-1) then
@@ -1044,6 +1050,16 @@ contains
 
    if (js == 1) then
       call remap_BC_k(pe_lag_BC%south_t1, pe_eul_BC%south_t1, var_lag_BC%south_t1, var_eul_BC%south_t1, isd, ied+istag, istart, iend+istag, jsd, 0, npz, iv, kord, log_pe)
+!!$         !!! DEBUG CODE
+!!$         i = 76
+!!$         j = 0
+!!$         if ( istart <= i .and. iend >= i ) then
+!!$            do k=1,npz
+!!$               write(mpp_pe()+1000,*) k, pe_lag_BC%south_t1(i,j,k), pe_eul_BC%south_t1(i,j,k), var_lag_BC%south_t1(i,j,k), var_eul_BC%south_t1(i,j,k)
+!!$            enddo
+!!$            write(mpp_pe()+1000,*) 
+!!$         endif
+!!$         !!! END DEBUG CODE
    end if
 
    if (je == npy-1) then
@@ -1116,7 +1132,6 @@ contains
    
  end subroutine remap_BC_direct
 
-!NOTE: to ensure reproducibility we need to have the *correct* two-sided interpolated lagrangian pressure at the staggered points. How do we get this??
  subroutine remap_BC_k(pe_lagBC, pe_eulBC, var_lagBC, var_eulBC, isd, ied, istart, iend, jstart, jend, npz, iv, kord, log_pe)
 
    integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz, iv, kord
