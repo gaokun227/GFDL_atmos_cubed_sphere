@@ -62,7 +62,7 @@ module fv_restart_mod
   implicit none
   private
 
-  public :: fv_restart_init, fv_restart_end, fv_restart, fv_write_restart, setup_nested_boundary_halo
+  public :: fv_restart_init, fv_restart_end, fv_restart, fv_write_restart
   public :: d2c_setup, d2a_setup
 
   real(kind=R_GRID), parameter :: cnst_0p20=0.20d0
