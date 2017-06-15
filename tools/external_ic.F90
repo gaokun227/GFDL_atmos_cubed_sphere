@@ -792,9 +792,7 @@ contains
           do j=js,je
             do i=is,ie
               wt = Atm(n)%delp(i,j,k)
-              if ( Atm(n)%flagstruct%nwat .eq. 2 ) then
-                 qt = wt*(1.+Atm(n)%q(i,j,k,liq_wat))
-              elseif ( Atm(n)%flagstruct%nwat .eq. 6 ) then
+              if ( Atm(n)%flagstruct%nwat .eq. 6 ) then
                  qt = wt*(1. + Atm(n)%q(i,j,k,liq_wat) + &
                                Atm(n)%q(i,j,k,ice_wat) + &
                                Atm(n)%q(i,j,k,rainwat) + &
@@ -2192,7 +2190,7 @@ contains
   endif
 
   call prt_maxmin('ZS_FV3', Atm%phis, is, ie, js, je, 3, 1, 1./grav)
-  call prt_maxmin('ZS_GFS', gzc,      is, ie, js, je, 0, 1, 1.)
+  call prt_maxmin('ZS_GFS', gzc,      is, ie, js, je, 0, 1, 1./grav)
   call prt_maxmin('PS_Data', psc, is, ie, js, je, 0, 1, 0.01)
   call prt_maxmin('T_Data', ta, is, ie, js, je, 0, km, 1.)
   call prt_maxmin('q_Data', qa(is:ie,js:je,1:km,1), is, ie, js, je, 0, km, 1.)
@@ -2225,10 +2223,10 @@ contains
           pn0(i,k) = log(pe0(i,k))
             pk0(k) = pe0(i,k)**kappa
        enddo
-! gzc is height
+! gzc is geopotential
 
 ! Note the following line, gz is actully Z (from Jeff's data).
-       gz(km+1) = gzc(i,j)*grav
+       gz(km+1) = gzc(i,j)
        do k=km,1,-1
           gz(k) = gz(k+1) + rdgas*tp(i,k)*(pn0(i,k+1)-pn0(i,k))
        enddo

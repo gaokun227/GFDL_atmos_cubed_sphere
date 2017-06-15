@@ -6,7 +6,7 @@
 ! GFDL Micro-Physics (GFDL MP).
 ! Developer: Shian-Jiann Lin
 !
-module lin_cld_microphys_mod
+module gfdl_cloud_microphys_mod
 ! use mpp_mod,           only: stdlog, mpp_pe, mpp_root_pe, mpp_clock_id, &
 !                              mpp_clock_begin, mpp_clock_end, CLOCK_ROUTINE, &
 !                              input_nml_file, mpp_max
@@ -16,31 +16,26 @@ module lin_cld_microphys_mod
 ! use fms_mod,           only: write_version_number, open_namelist_file, &
 !                              check_nml_error, file_exist, close_file,  &
 !                              error_mesg, FATAL
+ use physcons,           only: grav     => con_g,        &
+                               rdgas    => con_rd,       &
+                               rvgas    => con_rv,       &
+                               cp_air   => con_cp,       &
+                               cp_vapor => con_cvap,     &
+                               hlv      => con_hvap,     &
+                               hlf      => con_hfus,     &
+                               pi       => con_pi
 
  implicit none
  private
 
- public  lin_cld_microphys_driver, lin_cld_microphys_init, lin_cld_microphys_end, wqs1, wqs2, qs_blend
+ public  gfdl_cloud_microphys_driver, gfdl_cloud_microphys_init, gfdl_cloud_microphys_end, wqs1, wqs2, qs_blend
  public  qsmith_init, qsmith, es2_table1d, es3_table1d, esw_table1d, wqsat_moist, wqsat2_moist
  public  setup_con, wet_bulb
  public  cloud_diagnosis
  real             :: missing_value = -1.e10
  logical          :: module_is_initialized = .false.
  logical          :: qsmith_tables_initialized = .false.
- character(len=17) :: mod_name = 'lin_cld_microphys'
-
-!==== constants_mod ====
-integer, public, parameter :: R_GRID=8
-real, parameter :: grav = 9.80665_R_GRID
-real, parameter :: rdgas = 287.05_R_GRID
-real, parameter :: rvgas = 461.50_R_GRID
-real, parameter :: cp_air = 1004.6_R_GRID
-real, parameter :: cp_vapor = 4.0_R_GRID*RVGAS
-real, parameter :: hlv = 2.5e6_R_GRID
-real, parameter :: hlf = 3.3358e5_R_GRID
-real, parameter :: kappa = rdgas/cp_air
-real, parameter :: pi = 3.1415926535897931_R_GRID
-!==== constants_mod ====
+ character(len=17) :: mod_name = 'gfdl_cloud_microphys'
 
 !==== fms constants ====================
 !!! real, parameter :: latv  = hlv             ! = 2.500e6
@@ -100,6 +95,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  real :: lv00, d0_vap, c_air, c_vap
 
  integer :: icloud_f = 0       ! 
+ integer :: irain_f = 0       ! 
  logical :: de_ice = .false.     !
  logical :: sedi_transport = .true.     !
  logical :: do_sedi_w = .false.
@@ -124,7 +120,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  real, parameter :: dt_fr = 8.       ! homogeneous freezing of all cloud water at t_wfr - dt_fr
                                      ! minimum temperature water can exist (Moore & Molinero Nov. 2011, Nature)
                                      ! dt_fr can be considered as the error bar
- integer :: lin_cld_mp_clock   ! clock for timing of driver routine
+ integer :: gfdl_mp_clock   ! clock for timing of driver routine
 
  real :: t_snow_melt = 16.      ! snow melt tempearture scale factor
  real :: t_grau_melt = 32.      ! graupel melt tempearture scale factor
@@ -238,7 +234,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
  real:: tice0, t_wfr
  real:: log_10
 
- namelist /lin_cld_microphysics_nml/   &
+ namelist /gfdl_cloud_microphysics_nml/   &
         mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, &
         vi_max, vs_max, vg_max, vr_max, qs_mlt,       &
@@ -249,7 +245,7 @@ real, parameter :: pi = 3.1415926535897931_R_GRID
         c_paut, c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn,  &
         c_cracw, alin, clin, tice, rad_snow, rad_graupel, rad_rain,   &
         cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
-        do_sedi_w, de_ice, icloud_f, mp_print
+        do_sedi_w, de_ice, icloud_f, irain_f, mp_print
 
 public   &
         mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
@@ -271,13 +267,13 @@ public   &
  contains
 
 
-!  subroutine lin_cld_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn,                &
+!  subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn,                &
 !                               qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt,      &
 !                               pt_dt, pt, w, uin, vin, udt, vdt, dz, delp, area, dt_in, &
 !                               land,  rain, snow, ice, graupel,                      &
 !                               hydrostatic, phys_hydrostatic,                        &
 !                               iis,iie, jjs,jje, kks,kke, ktop, kbot, time)
-  subroutine lin_cld_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn,                &
+  subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn,                &
                                qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt,      &
                                pt_dt, pt, w, uin, vin, udt, vdt, dz, delp, area, dt_in, &
                                land,  rain, snow, ice, graupel,                      &
@@ -323,7 +319,7 @@ public   &
   je = jje-jjs+1
   ke = kke-kks+1
 
-!  call mpp_clock_begin (lin_cld_mp_clock)
+!  call mpp_clock_begin (gfdl_mp_clock)
 
   if ( phys_hydrostatic .or. hydrostatic ) then
       c_air = cp_air
@@ -501,9 +497,9 @@ public   &
 !----------------------------------------------------------------------------
 
 
-!   call mpp_clock_end (lin_cld_mp_clock)
+!   call mpp_clock_end (gfdl_mp_clock)
 
- end subroutine lin_cld_microphys_driver
+ end subroutine gfdl_cloud_microphys_driver
 
 
 
@@ -975,6 +971,31 @@ public   &
 ! Assuming linear subgrid vertical distribution of cloud water
 ! following Lin et al. 1994, MWR
 
+if ( irain_f /= 0 ) then
+!-----------------------
+! No subgrid varaibility:
+!-----------------------
+  do k=ktop,kbot
+    qc0 = fac_rc*ccn(k)
+    if ( tz(k) > t_wfr ) then
+!--------------------------------------------------------------------
+!  As in Klein's GFDL AM2 stratiform scheme (with subgrid variations)
+!--------------------------------------------------------------------
+      if ( use_ccn ) then
+!  CCN is formulted as CCN = CCN_surface * (den/den_surface)
+           qc = qc0
+      else
+           qc = qc0/den(k)
+      endif
+      dq = ql(k) - qc
+      if ( dq > 0. ) then
+            sink = min(dq, dt*c_praut(k)*den(k)*exp(so3*log(ql(k))))
+           ql(k) = ql(k) - sink
+           qr(k) = qr(k) + sink
+      endif
+    endif
+  enddo
+else
   call linear_prof( kbot-ktop+1, ql(ktop), dl(ktop), z_slope_liq, h_var )
 
   do k=ktop,kbot
@@ -1002,6 +1023,7 @@ public   &
       endif
     endif
   enddo
+endif
 
 
  end subroutine warm_rain
@@ -2625,8 +2647,8 @@ endif   ! end ice-physics
  end subroutine setupm
 
 
-! subroutine lin_cld_microphys_init(id, jd, kd, axes, time)
- subroutine lin_cld_microphys_init (me, master, nlunit, logunit, fn_nml)
+! subroutine gfdl_cloud_microphys_init(id, jd, kd, axes, time)
+ subroutine gfdl_cloud_microphys_init (me, master, nlunit, logunit, fn_nml)
     integer,           intent(in) :: me
     integer,           intent(in) :: master
     integer,           intent(in) :: nlunit
@@ -2648,20 +2670,20 @@ endif   ! end ice-physics
 !    master = (mpp_pe().eq.mpp_root_pe())
 
 !#ifdef INTERNAL_FILE_NML
-!    read( input_nml_file, nml = lin_cld_microphys_nml, iostat = io )
-!    ierr = check_nml_error(io,'lin_cld_microphys_nml')
+!    read( input_nml_file, nml = gfdl_cloud_microphys_nml, iostat = io )
+!    ierr = check_nml_error(io,'gfdl_cloud_microphys_nml')
 !#else
 !    if( file_exist( 'input.nml' ) ) then
 !       unit = open_namelist_file ()
 !       io = 1
 !       do while ( io .ne. 0 )
-!          read( unit, nml = lin_cld_microphys_nml, iostat = io, end = 10 )
-!          ierr = check_nml_error(io,'lin_cld_microphys_nml')
+!          read( unit, nml = gfdl_cloud_microphys_nml, iostat = io, end = 10 )
+!          ierr = check_nml_error(io,'gfdl_cloud_microphys_nml')
 !       end do
 !10     call close_file ( unit )
 !    end if
 !#endif
-!    call write_version_number ('LIN_CLD_MICROPHYS_MOD', version)
+!    call write_version_number ('GFDL_CLOUD_MICROPHYS_MOD', version)
 !    logunit = stdlog()
 
     inquire (file=trim(fn_nml), exist=exists)
@@ -2672,13 +2694,13 @@ endif   ! end ice-physics
       open (unit=nlunit, file=fn_nml, READONLY, status='OLD', iostat=ios)
     endif
     rewind(nlunit)
-    read (nlunit, nml=lin_cld_microphysics_nml)
+    read (nlunit, nml=gfdl_cloud_microphysics_nml)
     close (nlunit)
     !--- write version number and namelist to log file ---
     if (me == master) then
       write(logunit, *) "================================================================================"
-      write(logunit, *) "LIN_CLD_MICROPHYS_MOD"
-      write(logunit, nml=lin_cld_microphysics_nml)
+      write(logunit, *) "GFDL_CLOUD_MICROPHYS_MOD"
+      write(logunit, nml=gfdl_cloud_microphysics_nml)
    endif
 
     if ( do_setup ) then
@@ -2690,7 +2712,7 @@ endif   ! end ice-physics
     tice0 = tice - 0.01
     t_wfr = tice - 40. ! supercooled water can exist down to -48 C, which is the "absolute"
 
-!    if (master) write( logunit, nml = lin_cld_microphys_nml )
+!    if (master) write( logunit, nml = gfdl_cloud_microphys_nml )
 
 !    id_vtr = register_diag_field ( mod_name, 'vt_r', axes(1:3), time,        &
 !         'rain fall speed', 'm/sec', missing_value=missing_value )
@@ -2740,7 +2762,7 @@ endif   ! end ice-physics
 
 ! TESTING the water vapor tables
 !   if ( mp_debug .and. master ) then
-!        write(*,*) 'TESTING water vapor tables in lin_cld_microphys'
+!        write(*,*) 'TESTING water vapor tables in gfdl_cloud_microphys'
 !        tmp = tice - 90.
 !   do k=1,25
 !      q1 = wqsat_moist(tmp, 0., 1.E5)
@@ -2750,17 +2772,17 @@ endif   ! end ice-physics
 !   enddo
 !   endif
 
-!   if ( master ) write(*,*) 'lin_cld_micrphys diagnostics initialized.'
+!   if ( master ) write(*,*) 'gfdl_cloud_micrphys diagnostics initialized.'
 
-!   lin_cld_mp_clock = mpp_clock_id('Lin_cld_microphys', grain=CLOCK_ROUTINE)
+!   gfdl_mp_clock = mpp_clock_id('gfdl_cloud_microphys', grain=CLOCK_ROUTINE)
 
    module_is_initialized = .true.
 
- end subroutine lin_cld_microphys_init
+ end subroutine gfdl_cloud_microphys_init
 
 
 
- subroutine lin_cld_microphys_end
+ subroutine gfdl_cloud_microphys_end
 
    deallocate ( table  )
    deallocate ( table2 )
@@ -2773,7 +2795,7 @@ endif   ! end ice-physics
 
    tables_are_initialized = .false.
 
- end subroutine lin_cld_microphys_end
+ end subroutine gfdl_cloud_microphys_end
 
 
 
@@ -2840,7 +2862,7 @@ endif   ! end ice-physics
   if( .not. tables_are_initialized ) then
 
 !    master = (mpp_pe().eq.mpp_root_pe())
-!    if (master) print*, ' lin MP: initializing qs tables'
+!    if (master) print*, ' GFDL MP: initializing qs tables'
 !!! DEBUG CODE
 !    print*, mpp_pe(), allocated(table), allocated(table2), allocated(table3), allocated(tablew), allocated(des), allocated(des2), allocated(des3), allocated(desw)
 !!! END DEBUG CODE
@@ -3608,4 +3630,4 @@ endif   ! end ice-physics
 
  end subroutine cloud_diagnosis
 
-end module lin_cld_microphys_mod
+end module gfdl_cloud_microphys_mod

@@ -475,6 +475,7 @@ contains
        endif
                                              call timing_off('tracer_2d')
 
+#ifdef FILL2D
      if ( flagstruct%hord_tr<8 .and. flagstruct%moist_phys ) then
                                                   call timing_on('Fill2D')
        if ( liq_wat > 0 )  &
@@ -489,6 +490,7 @@ contains
         call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,graupel), delp, gridstruct%area, domain, neststruct%nested, npx, npy)
                                                   call timing_off('Fill2D')
      endif
+#endif
 
          if( last_step .and. idiag%id_divg>0 ) then
              used = send_data(idiag%id_divg, dp1, fv_time) 
