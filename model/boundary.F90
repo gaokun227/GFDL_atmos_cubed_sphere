@@ -1858,7 +1858,7 @@ contains
 
    !This routine assumes the coarse and nested grids are properly
    ! aligned, and that in particular for odd refinement ratios all
-   ! coarse-grid points coincide with nested-grid points
+   ! coarse-grid cells (faces) coincide with nested-grid cells (faces)
 
    integer, intent(IN) :: isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n
    integer, intent(IN) :: isu, ieu, jsu, jeu
