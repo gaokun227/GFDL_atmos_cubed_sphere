@@ -63,7 +63,7 @@ module fv_io_mod
 
   public :: fv_io_init, fv_io_exit, fv_io_read_restart, remap_restart, fv_io_write_restart
   public :: fv_io_read_tracers, fv_io_register_restart, fv_io_register_nudge_restart
-  public :: fv_io_register_restart_BCs, fv_io_register_restart_BCs_NH
+  public :: fv_io_register_restart_BCs
   public :: fv_io_write_BCs, fv_io_read_BCs
 
   logical                       :: module_is_initialized = .FALSE.
@@ -923,8 +923,8 @@ contains
 #ifndef SW_DYNAMICS
     call register_bcs_3d(Atm, Atm%neststruct%BCfile_ne, Atm%neststruct%BCfile_sw, &
                          fname_ne, fname_sw, 'pt', Atm%pt, Atm%neststruct%pt_BC)
-    if ((.not.Atm%flagstruct%hydrostatic) .and. (.not.Atm%flagstruct%make_nh)) then
-       if (is_master()) print*, 'fv_io_register_restart_BCs: REGISTERING NH BCs', Atm%flagstruct%hydrostatic, Atm%flagstruct%make_nh
+    if ((.not.Atm%flagstruct%hydrostatic)) then 
+       if (is_master()) print*, 'fv_io_register_restart_BCs: REGISTERING NH BCs'
       call register_bcs_3d(Atm, Atm%neststruct%BCfile_ne, Atm%neststruct%BCfile_sw, &
                            fname_ne, fname_sw, 'w', Atm%w, Atm%neststruct%w_BC, mandatory=.false.)
       call register_bcs_3d(Atm, Atm%neststruct%BCfile_ne, Atm%neststruct%BCfile_sw, &
@@ -949,34 +949,9 @@ contains
                          fname_ne, fname_sw, 'vc', var_bc=Atm%neststruct%vc_BC, jstag=1)
     call register_bcs_3d(Atm, Atm%neststruct%BCfile_ne, Atm%neststruct%BCfile_sw, &
                          fname_ne, fname_sw, 'divg', var_bc=Atm%neststruct%divg_BC, istag=1,jstag=1, mandatory=.false.)
-    Atm%neststruct%divg_BC%initialized = field_exist(fname_ne, 'divg_north_t1', Atm%domain)
-
 
     return
   end subroutine fv_io_register_restart_BCs
-
-
-  subroutine fv_io_register_restart_BCs_NH(Atm)
-    type(fv_atmos_type),        intent(inout) :: Atm
-
-    integer :: n
-    character(len=120) :: tname, fname_ne, fname_sw
-
-    fname_ne = 'fv_BC_ne.res.nc'
-    fname_sw = 'fv_BC_sw.res.nc'
-
-    call set_domain(Atm%domain)
-
-    if (is_master()) print*, 'fv_io_register_restart_BCs_NH: REGISTERING NH BCs', Atm%flagstruct%hydrostatic, Atm%flagstruct%make_nh
-#ifndef SW_DYNAMICS
-    call register_bcs_3d(Atm, Atm%neststruct%BCfile_ne, Atm%neststruct%BCfile_sw, &
-         fname_ne, fname_sw, 'w', Atm%w, Atm%neststruct%w_BC)
-    call register_bcs_3d(Atm, Atm%neststruct%BCfile_ne, Atm%neststruct%BCfile_sw, &
-         fname_ne, fname_sw, 'delz', Atm%delz, Atm%neststruct%delz_BC)
-#endif
-
-    return
-  end subroutine fv_io_register_restart_BCs_NH
 
 
   subroutine fv_io_write_BCs(Atm, timestamp)
@@ -995,6 +970,13 @@ contains
 
     call restore_state_border(Atm%neststruct%BCfile_ne)
     call restore_state_border(Atm%neststruct%BCfile_sw)
+
+    !These do not work yet
+    !need to modify register_bcs_?d to get ids for registered variables, and then use query_initialized_id
+    !Atm%neststruct%divg_BC%initialized = field_exist(fname_ne, 'divg_north_t1', Atm%domain)
+    !Atm%neststruct%w_BC%initialized    = field_exist(fname_ne, 'w_north_t1', Atm%domain)
+    !Atm%neststruct%delz_BC%initialized = field_exist(fname_ne, 'delz_north_t1', Atm%domain)
+    !if (is_master()) print*, ' BCs: ', Atm%neststruct%divg_BC%initialized, Atm%neststruct%w_BC%initialized, Atm%neststruct%delz_BC%initialized
 
     return
   end subroutine fv_io_read_BCs

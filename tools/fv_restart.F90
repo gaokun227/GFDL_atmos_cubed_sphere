@@ -32,7 +32,7 @@ module fv_restart_mod
   use fv_arrays_mod,       only: fv_atmos_type, fv_nest_type, fv_grid_bounds_type, R_GRID
   use fv_io_mod,           only: fv_io_init, fv_io_read_restart, fv_io_write_restart, &
                                  remap_restart, fv_io_register_restart, fv_io_register_nudge_restart, &
-                                 fv_io_register_restart_BCs, fv_io_register_restart_BCs_NH, fv_io_write_BCs, fv_io_read_BCs
+                                 fv_io_register_restart_BCs, fv_io_write_BCs, fv_io_read_BCs
   use fv_grid_utils_mod,   only: ptop_min, fill_ghost, g_sum, &
                                  make_eta_level, cubed_to_latlon, great_circle_dist
   use fv_diagnostics_mod,  only: prt_maxmin
@@ -439,11 +439,6 @@ contains
           end if
 
        endif  !end cold_start check
-
-       if ( (.not.Atm(n)%flagstruct%hydrostatic) .and. Atm(n)%flagstruct%make_nh .and. Atm(n)%neststruct%nested) then
-          call fv_io_register_restart_BCs_NH(Atm(n)) !needed to register nested-grid BCs not registered earlier
-       endif
-
 
     end do
 
