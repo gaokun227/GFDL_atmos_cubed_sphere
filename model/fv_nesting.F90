@@ -1828,7 +1828,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
     real :: qdp(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
     real, allocatable :: qdp_coarse(:,:,:)
     real(kind=f_p), allocatable :: q_diff(:,:,:)
-    real :: L_sum_b(npz), L_sum_a(npz)
+    real :: L_sum_b(npz), L_sum_a(npz), blend_wt(npz)
     
     integer :: upoff
     integer :: is,  ie,  js,  je
@@ -1861,6 +1861,9 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
     call mpp_get_compute_domain( parent_grid%domain, &
          isc_p,  iec_p,  jsc_p,  jec_p  )
 
+    !!!FOR NOW:: Set blend_wt to 1.
+    blend_wt(:) = 1.
+
 
    !delp/ps
 
@@ -1872,7 +1875,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
               npx, npy, npz, 0, 0, &
               neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-              neststruct%parent_proc, neststruct%child_proc, parent_grid)
+              neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
 
       call mpp_sync!self
 
@@ -1943,10 +1946,11 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
             call update_coarse_grid(qdp_coarse, qdp, neststruct%nest_domain, &
                  neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
-              isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-              npx, npy, npz, 0, 0, &
-                 neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc, parent_grid)
+                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+                 neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+                 npx, npy, npz, 0, 0, &
+                 neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+                 neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
 
                call mpp_sync!self
 
@@ -2034,7 +2038,8 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                  isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
                  neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
                  npx, npy, npz, 0, 0, &
-                 neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc, parent_grid)
+                 neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+                 neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
       else
 
             call update_coarse_grid(parent_grid%pt, &
@@ -2043,7 +2048,8 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
               npx, npy, npz, 0, 0, &
-              neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc, parent_grid)
+              neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+              neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
 
       endif !conv_theta
 
@@ -2056,8 +2062,11 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                  isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
                  neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
                  npx, npy, npz, 0, 0, &
-                 neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc, parent_grid)
-            !Updating for delz not yet implemented; may be problematic
+                 neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+                 neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
+            !Updating for delz not yet implemented; 
+            ! may need to think very carefully how one would do this!!!
+            ! consider updating specific volume instead?
 !!$            call update_coarse_grid(parent_grid%delz, delz, neststruct%nest_domain, &
 !!$                 neststruct%ind_update_h, &
 !!$                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, npz, 0, 0, &
@@ -2076,14 +2085,16 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
            isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
            neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
            npx, npy, npz, 0, 1, &
-           neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc, parent_grid)
+           neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+           neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
 
       call update_coarse_grid(parent_grid%v, v, neststruct%nest_domain, &
            neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
            isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
            neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
            npx, npy, npz, 1, 0, &
-           neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc, parent_grid)
+           neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+           neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
 
    call mpp_sync!self
 
@@ -2132,7 +2143,8 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
               npx, npy, 0, 0, &
-              neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc, parent_grid)
+              neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+              neststruct%parent_proc, neststruct%child_proc, parent_grid, 1.)
 
       !!! The mpp version of update_coarse_grid does not return a consistent value of ps
       !!! across PEs, as it does not go into the haloes of a given coarse-grid PE. This

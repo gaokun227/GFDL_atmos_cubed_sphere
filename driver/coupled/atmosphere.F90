@@ -75,7 +75,6 @@ use amip_interp_mod,    only: forecast_mode
 #endif
 
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
-use boundary_mod, only: update_coarse_grid
 
 implicit none
 private

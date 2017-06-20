@@ -72,7 +72,6 @@ use fv_update_phys_mod, only: fv_update_phys
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
 
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
-use boundary_mod, only: update_coarse_grid
 
 implicit none
 private
