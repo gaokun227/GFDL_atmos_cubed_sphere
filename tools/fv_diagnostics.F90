@@ -2527,6 +2527,7 @@ contains
              used=send_data(idiag%id_basedbz, a2, time)
              if(prt_minmax) call prt_maxmin('Base_dBz', a2, isc, iec, jsc, jec, 0, 1, 1.)
           endif
+
           if (idiag%id_dbz4km > 0) then
              !interpolate to 1km dbz
              call cs_interpolator(isc, iec, jsc, jec, npz, a3, 4000., wz, a2, -20.)
@@ -4718,14 +4719,8 @@ end subroutine eqv_pot
       end if
 
       !Total equivalent reflectivity: mm^6 m^-3
-!-----------------------------------------------------------------------
-!!!   z_e =   factor_r  * (rhoair*qr1)**1.75 / ronv**.75    & ! rain
-!!!         + factorb_s * (rhoair*qs1)**1.75 / sonv**.75    & ! snow
-!!!         + factorb_g * (rhoair*qg1)**1.75 / gonv**.75      ! graupel
       !Minimum allowed dbz is -20
-!!!   z_e = max(z_e,0.01)
-!-----------------------------------------------------------------------
-! Optimized form of the above:
+      ! Optimized form :
       t1 = rhoair*qr1
       t2 = rhoair*qs1
       t3 = rhoair*qg1
