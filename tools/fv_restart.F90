@@ -1254,7 +1254,7 @@ contains
                Atm%neststruct%isu, Atm%neststruct%ieu, Atm%neststruct%jsu, Atm%neststruct%jeu, &
                Atm%npx, Atm%npy, 0, 0, &
                Atm%neststruct%refinement, Atm%neststruct%nestupdate, 0, 0, &
-               Atm%neststruct%parent_proc, Atm%neststruct%child_proc, Atm%parent_grid, 1.)
+               Atm%neststruct%parent_proc, Atm%neststruct%child_proc, Atm%parent_grid)
           Atm%parent_grid%neststruct%parent_of_twoway = .true.
           !NOTE: mpp_update_nest_coarse (and by extension, update_coarse_grid) does **NOT** pass data
           !allowing a two-way update into the halo of the coarse grid. It only passes data so that the INTERIOR

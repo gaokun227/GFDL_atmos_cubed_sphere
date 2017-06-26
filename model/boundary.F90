@@ -1817,7 +1817,7 @@ contains
 
  subroutine update_coarse_grid_mpp_2d(var_coarse, var_nest, nest_domain, ind_update, dx, dy, area, &
       isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, isu, ieu, jsu, jeu, npx, npy, &
-      istag, jstag, r, nestupdate, upoff, nsponge, parent_proc, child_proc, parent_grid, blend_wt)
+      istag, jstag, r, nestupdate, upoff, nsponge, parent_proc, child_proc, parent_grid)
 
    integer, intent(IN) :: isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n
    integer, intent(IN) :: isu, ieu, jsu, jeu
@@ -1829,7 +1829,6 @@ contains
    real, intent(IN)    :: dx(isd:ied,jsd:jed+1)
    real, intent(IN)    :: dy(isd:ied+1,jsd:jed)
    real, intent(IN)    :: area(isd:ied,jsd:jed)
-   real, intent(IN)    :: blend_wt
    logical, intent(IN) :: parent_proc, child_proc
    type(fv_atmos_type), intent(INOUT) :: parent_grid
    type(nest_domain_type), intent(INOUT) :: nest_domain
@@ -1845,7 +1844,7 @@ contains
         isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
         isu, ieu, jsu, jeu, npx, npy, 1, &
         istag, jstag, r, nestupdate, upoff, nsponge, &
-        parent_proc, child_proc, parent_grid, (/ blend_wt /) )
+        parent_proc, child_proc, parent_grid)
 
    if (size(var_coarse) > 1 .and. parent_proc) var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag) = var_coarse_3d(isd_p:ied_p+istag,jsd_p:jed_p,1)
 
@@ -1856,7 +1855,7 @@ contains
       isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
       isu, ieu, jsu, jeu, npx, npy, npz, &
       istag, jstag, r, nestupdate, upoff, nsponge, &
-      parent_proc, child_proc, parent_grid, blend_wt)
+      parent_proc, child_proc, parent_grid)
 
    !This routine assumes the coarse and nested grids are properly
    ! aligned, and that in particular for odd refinement ratios all
@@ -1871,7 +1870,6 @@ contains
    real, intent(IN)    :: area(isd:ied,jsd:jed)
    real, intent(IN)    :: dx(isd:ied,jsd:jed+1)
    real, intent(IN)    :: dy(isd:ied+1,jsd:jed)
-   real, intent(IN)    :: blend_wt(npz)
    logical, intent(IN) :: parent_proc, child_proc
    type(fv_atmos_type), intent(INOUT) :: parent_grid
    type(nest_domain_type), intent(INOUT) :: nest_domain
@@ -1988,8 +1986,6 @@ contains
 !$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,ind_update,nest_dat,parent_grid,var_coarse,r) &
 !$NO-MP          private(in,jn,val)
          do k=1,npz
-            bw1 = blend_wt(k)
-            bw2 = 1. - bw1
          do j=jsu,jeu
          do i=isu,ieu
 
@@ -2013,7 +2009,7 @@ contains
 
             !!! CLEANUP: Couldn't rarea and rdx and rdy be built into the weight arrays?
             !!!    Two-way updates do not yet have weights, tho
-            var_coarse(i,j,k) = val*parent_grid%gridstruct%rarea(i,j)*bw1 + var_coarse(i,j,k)*bw2
+            var_coarse(i,j,k) = val*parent_grid%gridstruct%rarea(i,j)
 
          end do
          end do
@@ -2036,8 +2032,6 @@ contains
 !$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,ind_update,nest_dat,parent_grid,var_coarse,r) &
 !$NO-MP          private(in,jn,val)
          do k=1,npz
-            bw1 = blend_wt(k)
-            bw2 = 1. - bw1
          do j=jsu,jeu+1
          do i=isu,ieu
 
@@ -2056,7 +2050,7 @@ contains
                end do
 
 !            var_coarse(i,j,k) = val/r
-            var_coarse(i,j,k) = val*parent_grid%gridstruct%rdx(i,j)*bw1 + var_coarse(i,j,k)*bw2
+            var_coarse(i,j,k) = val*parent_grid%gridstruct%rdx(i,j)
 
          end do
          end do
@@ -2076,8 +2070,6 @@ contains
 !$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,ind_update,nest_dat,parent_grid,var_coarse,r) &
 !$NO-MP          private(in,jn,val)
          do k=1,npz
-            bw1 = blend_wt(k)
-            bw2 = 1. - bw1
          do j=jsu,jeu
          do i=isu,ieu+1
 
@@ -2096,7 +2088,7 @@ contains
             end do
 
 !            var_coarse(i,j,k) = val/r
-            var_coarse(i,j,k) = val*parent_grid%gridstruct%rdy(i,j)*bw1 + var_coarse(i,j,k)*bw2
+            var_coarse(i,j,k) = val*parent_grid%gridstruct%rdy(i,j)
 
          end do
          end do

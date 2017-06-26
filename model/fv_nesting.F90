@@ -1746,6 +1746,17 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
    
    if (ngrids > 1) then
 
+! Re-compute pressures on each grid
+
+      do n=1,ngrids
+         call p_var(Atm(n)%npz, Atm(n)%bd%is, Atm(n)%bd%ie, Atm(n)%bd%js, Atm(n)%bd%je, Atm(n)%ptop, ptop_min,  &
+              Atm(n)%delp, Atm(n)%delz, Atm(n)%pt, Atm(n)%ps, Atm(n)%pe, Atm(n)%peln, Atm(n)%pk, Atm(n)%pkz, kappa, &
+              Atm(n)%q, Atm(n)%ng, Atm(n)%flagstruct%ncnst,  Atm(n)%gridstruct%area_64, 0.,  &
+              .false.,  .false., & 
+              Atm(n)%flagstruct%moist_phys,  Atm(n)%flagstruct%hydrostatic, &
+              Atm(n)%flagstruct%nwat, Atm(n)%domain, .false.)
+      enddo
+
       do n=ngrids,2,-1 !loop backwards to allow information to propagate from finest to coarsest grids
 
          !two-way updating    
@@ -1753,9 +1764,9 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
             if  (grids_on_this_pe(n) .or. grids_on_this_pe(Atm(n)%parent_grid%grid_number)) then
                sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
                call twoway_nest_update(Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, zvir, &
-                    Atm(n)%ncnst, sphum, Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%omga, &
-                    Atm(n)%pt, Atm(n)%delp, Atm(n)%q, Atm(n)%uc, Atm(n)%vc, &
-                    Atm(n)%pkz, Atm(n)%delz, Atm(n)%ps, Atm(n)%ptop, &
+                    Atm(n)%ncnst, sphum, Atm(n)%u, Atm(n)%v, Atm(n)%w, &
+                    Atm(n)%pt, Atm(n)%delp, Atm(n)%q, &
+                    Atm(n)%pe, Atm(n)%pkz, Atm(n)%delz, Atm(n)%ps, Atm(n)%ptop, &
                     Atm(n)%gridstruct, Atm(n)%flagstruct, Atm(n)%neststruct, Atm(n)%parent_grid, Atm(N)%bd, .false.)
             endif
          endif
@@ -1777,16 +1788,13 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
    endif ! ngrids > 1
 
-
-
-
   end subroutine twoway_nesting
 
 !!!CLEANUP: this routine assumes that the PARENT GRID has pt = (regular) temperature,
 !!!not potential temperature; which may cause problems when updating if this is not the case.
  subroutine twoway_nest_update(npx, npy, npz, zvir, ncnst, sphum,     &
-                        u, v, w, omga, pt, delp, q,   &
-                        uc, vc, pkz, delz, ps, ptop, &
+                        u, v, w, pt, delp, q,   &
+                        pe, pkz, delz, ps, ptop, &
                         gridstruct, flagstruct, neststruct, &
                         parent_grid, bd, conv_theta_in)
 
@@ -1800,16 +1808,14 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
     real, intent(inout), dimension(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz) :: u ! D grid zonal wind (m/s)
     real, intent(inout), dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) :: v ! D grid meridional wind (m/s)
     real, intent(inout) :: w(   bd%isd:        ,bd%jsd:        ,1: )  !  W (m/s)
-    real, intent(inout) :: omga(bd%isd:bd%ied,bd%jsd:bd%jed,npz)      ! Vertical pressure velocity (pa/s)
     real, intent(inout) :: pt(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! temperature (K)
     real, intent(inout) :: delp(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! pressure thickness (pascal)
     real, intent(inout) :: q(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, ncnst) ! specific humidity and constituents
-    real, intent(inout) :: uc(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) ! (uc,vc) C grid winds
-    real, intent(inout) :: vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
 
-    real, intent(inout) :: pkz (bd%is:bd%ie,bd%js:bd%je,npz)             ! finite-volume mean pk
-    real, intent(inout) :: delz(bd%isd:      ,bd%jsd:      ,1: )   ! delta-height (m); non-hydrostatic only
-    real, intent(inout) :: ps  (bd%isd:bd%ied  ,bd%jsd:bd%jed)           ! Surface pressure (pascal)
+    real, intent(inout) :: pe  (bd%is-1:bd%ie+1,npz+1,bd%js-1:bd%je+1)  ! finite-volume mean pk ! NOTE TRANSPOSITION NEEDED
+    real, intent(inout) :: pkz (bd%is:bd%ie,bd%js:bd%je,npz)            ! finite-volume mean pk
+    real, intent(inout) :: delz(bd%isd:      ,bd%jsd:      ,1: )        ! delta-height (m); non-hydrostatic only
+    real, intent(inout) :: ps  (bd%isd:bd%ied  ,bd%jsd:bd%jed)          ! Surface pressure (pascal)
 
     type(fv_grid_type), intent(INOUT) :: gridstruct
     type(fv_flags_type), intent(INOUT) :: flagstruct
@@ -1826,7 +1832,9 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
     logical :: used, conv_theta=.true.
 
     real :: qdp(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
-    real, allocatable :: qdp_coarse(:,:,:)
+    real :: pe3( bd%isd:bd%ied, bd%jsd:bd%jed, npz+1 )
+    real, allocatable, dimension(:,:,:) :: qdp_coarse, pe_src, pe_src3, pe_src_u, pe_src_v
+    real, allocatable, dimension(:,:,:) :: pe_dst_u, pe_dst_v, var_src
     real(kind=f_p), allocatable :: q_diff(:,:,:)
     real :: L_sum_b(npz), L_sum_a(npz), blend_wt(npz)
     
@@ -1863,37 +1871,108 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
     !!!FOR NOW:: Set blend_wt to 1.
     blend_wt(:) = 1.
+    do k=1,parent_grid%npz
+!!$      do k=1,npz
+!!$         ph1 = ak(k  ) + bk(k  )*flagstruct%p_ref
+!!$         ph2 = ak(k+1) + bk(k+1)*flagstruct%p_ref
+!!$         pfull(k) = (ph2 - ph1) / log(ph2/ph1)
+!!$      enddo
+      
+    enddo
 
+    !Send pressures for remapping
+
+    if (neststruct%parent_proc) then
+       !recall npz here is CHILD grid
+       allocate(pe_src3(isd_p:ied_p,jsd_p:jed_p,npz+1))
+       allocate(pe_src (isc_p-1:iec_p+1,npz+1,jsc_p-1:jec_p+1))
+       allocate(var_src(isd_p:ied_p,jsd_p:jed_p,npz))
+    else
+       allocate(pe_src(1,1,1))
+       allocate(pe_src3(1,1,1))
+       allocate(var_src(1,1,1))
+    endif
+    !Pressure transpose for sending to other grids
+    pe3 = -1.
+    pe_src3 = -2.
+    if (neststruct%child_proc) then
+    do k=1,npz+1
+    do j=js-1,je+1
+    do i=is-1,ie+1
+       pe3(i,j,k) = pe(i,k,j)
+    enddo
+    enddo
+    enddo
+    endif
+    if (neststruct%parent_proc) then
+       !Fill in missing outermost-halo data with coarse pressure
+       ! for computing staggered u/v point pressures
+       pe_src3(i,j,k) = parent_grid%pe(i,k,j)
+    endif
+
+    call update_coarse_grid(pe_src3, pe3,  neststruct%nest_domain,&
+         neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+         isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+         neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+         npx, npy, npz+1, 0, 0, &
+         neststruct%refinement, neststruct%nestupdate, 0, 0, & ! get pressure for entire update region (upoff = 0)
+         neststruct%parent_proc, neststruct%child_proc, parent_grid) 
+
+    call mpp_sync
+    if (neststruct%parent_proc) then
+      call mpp_update_domains(pe_src3, parent_grid%domain, complete=.true.)
+      do k=1,npz+1
+      do j=jsc_p-1,jec_p+1
+      do i=isc_p-1,iec_p+1
+         pe_src(i,k,j) = pe_src3(i,j,k)
+!!$         !!! DEBUG CODE
+!!$         if (k==1) write(mpp_pe()+1000,*) i,j, pe_src(i,k,j), pe_src3(i,j,k)
+!!$         !!! END DEBUG CODE
+      enddo
+      enddo
+      enddo
+      !call mpp_update_domains(parent_grid%pe, parent_grid%domain) !necessary?? Doesn't work.
+   endif
+   call mpp_sync
+   deallocate(pe_src3)
 
    !delp/ps
+    !for remap-update updating delp no longer makes sense
+!!$
+!!$   if (neststruct%nestupdate < 3) then
+!!$
+!!$         call update_coarse_grid(var_src, delp, neststruct%nest_domain,&
+!!$              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+!!$              isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+!!$              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+!!$              npx, npy, npz, 0, 0, &
+!!$              neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+!!$              neststruct%parent_proc, neststruct%child_proc, parent_grid)
+!!$         !Remap loop
+!!$         do j=jsc_p,jec_p
+!!$            call remap_var_k(pe_src, parent_grid%pe, var_src, parent_grid%delp, &
+!!$                 isd_p, ied_p, neststruct%isu, neststruct%ieu, jsd_p, jed_p, neststruct%jsu, neststruct%jeu, &
+!!$                 npz, parent_grid%npz, 0, parent_grid%flagstruct%kord_dp, blend_wt, log_pe=.false.)
+!!$         enddo
+!!$
+!!$      call mpp_sync!self
+!!$
+!!$#ifdef SW_DYNAMICS
+!!$      if (neststruct%parent_proc) then
+!!$         do j=jsd_p,jed_p
+!!$            do i=isd_p,ied_p
+!!$
+!!$               parent_grid%ps(i,j) = &
+!!$                    parent_grid%delp(i,j,1)/grav 
+!!$
+!!$            end do
+!!$         end do
+!!$      endif
+!!$#endif
+!!$
+!!$   end if
 
-   if (neststruct%nestupdate < 3) then
-
-         call update_coarse_grid(parent_grid%delp, delp, neststruct%nest_domain,&
-              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
-              isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-              npx, npy, npz, 0, 0, &
-              neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-              neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
-
-      call mpp_sync!self
-
-#ifdef SW_DYNAMICS
-      if (neststruct%parent_proc) then
-         do j=jsd_p,jed_p
-            do i=isd_p,ied_p
-
-               parent_grid%ps(i,j) = &
-                    parent_grid%delp(i,j,1)/grav 
-
-            end do
-         end do
-      endif
-#endif
-
-   end if
-
+   !!! RENORMALIZATION UPDATE OPTION
    !if (neststruct%nestupdate /= 3 .and. neststruct%nestbctype /= 3) then
    if (neststruct%nestupdate /= 3 .and. neststruct%nestupdate /= 7 .and. neststruct%nestupdate /= 8) then
 
@@ -1944,13 +2023,16 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
             endif
          endif
 
-            call update_coarse_grid(qdp_coarse, qdp, neststruct%nest_domain, &
+            call update_coarse_grid(var_src, qdp, neststruct%nest_domain, &
                  neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
                  isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
                  neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
                  npx, npy, npz, 0, 0, &
                  neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-                 neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
+                 neststruct%parent_proc, neststruct%child_proc, parent_grid)
+            if (neststruct%parent_proc) call remap_up_k(pe_src, parent_grid%pe, var_src, qdp_coarse, &
+                 parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+                 0, 0, npz, parent_grid%npz, 0, parent_grid%flagstruct%kord_tr, blend_wt, log_pe=.false.)
 
                call mpp_sync!self
 
@@ -1996,7 +2078,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
          endif
 
          do n=1,parent_grid%flagstruct%nwat
-               do k=1,npz
+            do k=1,npz
          do j=jsu,jeu
          do i=isu,ieu
             parent_grid%q(i,j,k,n) = parent_grid%q(i,j,k,n)/parent_grid%delp(i,j,k)
@@ -2010,6 +2092,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
       if  (allocated(q_diff)) deallocate(q_diff)
 
    endif
+   !!! END RENORMALIZATION UPDATE
 
 #ifndef SW_DYNAMICS
    if (neststruct%nestupdate /= 3 .and. neststruct%nestupdate /= 8) then
@@ -2032,38 +2115,44 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
             deallocate(t_nest)
          endif
 
-            call update_coarse_grid(parent_grid%pt, &
-                 t_nest, neststruct%nest_domain, &
-                 neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
-                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-                 neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-                 npx, npy, npz, 0, 0, &
-                 neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-                 neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
+         call update_coarse_grid(var_src, &
+              t_nest, neststruct%nest_domain, &
+              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+              isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+              npx, npy, npz, 0, 0, &
+              neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+              neststruct%parent_proc, neststruct%child_proc, parent_grid)
       else
 
-            call update_coarse_grid(parent_grid%pt, &
+         call update_coarse_grid(var_src, &
               pt, neststruct%nest_domain, &
               neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
               npx, npy, npz, 0, 0, &
               neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-              neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
+              neststruct%parent_proc, neststruct%child_proc, parent_grid)
 
       endif !conv_theta
+      if (neststruct%parent_proc) call remap_up_k(pe_src, parent_grid%pe, var_src, parent_grid%pt, &
+           parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+           0, 0, npz, parent_grid%npz, 1, abs(parent_grid%flagstruct%kord_tm), blend_wt, log_pe=.true.)
 
       call mpp_sync!self
 
       if (.not. flagstruct%hydrostatic) then
 
-            call update_coarse_grid(parent_grid%w, w, neststruct%nest_domain, &
+            call update_coarse_grid(var_src, w, neststruct%nest_domain, &
                  neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
                  isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
                  neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
                  npx, npy, npz, 0, 0, &
                  neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-                 neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
+                 neststruct%parent_proc, neststruct%child_proc, parent_grid)
+            if (neststruct%parent_proc) call remap_up_k(pe_src, parent_grid%pe, var_src, parent_grid%w, &
+                 parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+                 0, 0, npz, parent_grid%npz, -1, parent_grid%flagstruct%kord_wz, blend_wt, log_pe=.false.)
             !Updating for delz not yet implemented; 
             ! may need to think very carefully how one would do this!!!
             ! consider updating specific volume instead?
@@ -2080,140 +2169,208 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
 #endif
 
-      call update_coarse_grid(parent_grid%u, u, neststruct%nest_domain, &
-           neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
-           isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-           neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-           npx, npy, npz, 0, 1, &
-           neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-           neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
+   deallocate(var_src)
 
-      call update_coarse_grid(parent_grid%v, v, neststruct%nest_domain, &
-           neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
-           isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-           neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-           npx, npy, npz, 1, 0, &
-           neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-           neststruct%parent_proc, neststruct%child_proc, parent_grid, blend_wt)
+   if (neststruct%parent_proc) then
+      !recall npz here is CHILD grid
+      allocate(var_src(isd_p:ied_p,jsd_p:jed_p+1,npz))
+   else
+      allocate(var_src(1,1,1))
+   endif
+   call update_coarse_grid(var_src, u, neststruct%nest_domain, &
+        neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+        isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+        neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+        npx, npy, npz, 0, 1, &
+        neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+        neststruct%parent_proc, neststruct%child_proc, parent_grid)
+   if (neststruct%parent_proc) then
+      allocate(pe_src_u(isc_p-1:iec_p+1,npz+1,jsc_p-1:jec_p+2))
+      allocate(pe_dst_u(isc_p-1:iec_p+1,npz+1,jsc_p-1:jec_p+2))
+      do k=1,npz+1
+      do j=neststruct%jsu,neststruct%jeu+1
+      do i=neststruct%isu,neststruct%ieu
+         pe_src_u(i,k,j) = 0.5*(pe_src(i,k,j-1)+pe_src(i,k,j))
+      enddo
+      enddo
+      enddo
+      do k=1,npz+1
+      do j=neststruct%jsu,neststruct%jeu+1
+      do i=neststruct%isu,neststruct%ieu
+         pe_dst_u(i,k,j) = 0.5*(parent_grid%pe(i,k,j-1)+parent_grid%pe(i,k,j))
+      enddo
+      enddo
+      enddo
+      call remap_up_k(pe_src_u, pe_dst_u, var_src, parent_grid%u, &
+           parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu+1, &
+           0, 1, npz, parent_grid%npz, -1, parent_grid%flagstruct%kord_mt, blend_wt, log_pe=.false.)
+      deallocate(pe_src_u)
+      deallocate(pe_dst_u)
+   endif
+   deallocate(var_src)
+
+   if (neststruct%parent_proc) then
+      allocate(var_src(isd_p:ied_p+1,jsd_p:jed_p,npz))
+   else
+      allocate(var_src(1,1,1))
+   endif
+   call update_coarse_grid(var_src, v, neststruct%nest_domain, &
+        neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+        isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+        neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+        npx, npy, npz, 1, 0, &
+        neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+        neststruct%parent_proc, neststruct%child_proc, parent_grid)
+   if (neststruct%parent_proc) then
+      allocate(pe_src_v(isc_p-1:iec_p+2,npz+1,jsc_p-1:jec_p+1))
+      allocate(pe_dst_v(isc_p-1:iec_p+2,npz+1,jsc_p-1:jec_p+1))
+      do k=1,npz+1
+      do j=neststruct%jsu,neststruct%jeu
+      do i=neststruct%isu,neststruct%ieu+1
+         pe_src_v(i,k,j) = 0.5*(pe_src(i-1,k,j)+pe_src(i,k,j))
+      enddo
+      enddo
+      enddo
+      do k=1,npz+1
+      do j=neststruct%jsu,neststruct%jeu
+      do i=neststruct%isu,neststruct%ieu+1
+         pe_dst_v(i,k,j) = 0.5*(parent_grid%pe(i-1,k,j)+parent_grid%pe(i,k,j))
+      enddo
+      enddo
+      enddo
+!!! DEBUG CODE
+      !pe_src(isu-1,:,:) is MISSING
+      j = neststruct%jeu
+      do i=neststruct%isu,neststruct%ieu+1
+         write(mpp_pe()+1000,*) i, pe_src_v(i,1,j), pe_dst_v(i,1,j), pe_src(i-1,k,j), pe_src(i,k,j)
+      enddo
+!!! END DEBUG CODE
+      call remap_up_k(pe_src_v, pe_dst_v, var_src, parent_grid%v, &
+           parent_grid%bd, neststruct%isu, neststruct%ieu+1, neststruct%jsu, neststruct%jeu, &
+           1, 0, npz, parent_grid%npz, -1, parent_grid%flagstruct%kord_mt, blend_wt, log_pe=.false.)
+      deallocate(pe_src_v)
+   endif
+
+   deallocate(pe_src)
 
    call mpp_sync!self
 
 
-#ifndef SW_DYNAMICS
-   if (neststruct%nestupdate >= 5 .and. npz > 4) then
-
-      !Use PS0 from nested grid, NOT the full delp. Also we assume the same number of levels on both grids.
-      !PS0 should be initially set to be ps so that this routine does NOTHING outside of the update region
-
-      !Re-compute nested (AND COARSE) grid ps
-
-      allocate(ps0(isd_p:ied_p,jsd_p:jed_p))
-      if (neststruct%parent_proc) then
-
-         parent_grid%ps = parent_grid%ptop
-!This loop appears to cause problems with OMP
-!$OMP parallel do default(none) shared(npz,jsd_p,jed_p,isd_p,ied_p,parent_grid)
-         do j=jsd_p,jed_p
-            do k=1,npz
-               do i=isd_p,ied_p
-                  parent_grid%ps(i,j) = parent_grid%ps(i,j) + &
-                       parent_grid%delp(i,j,k)
-               end do
-            end do
-         end do
-
-         ps0 = parent_grid%ps
-      endif
-
-      if (neststruct%child_proc) then
-
-         ps = ptop
-!$OMP parallel do default(none) shared(npz,jsd,jed,isd,ied,ps,delp)
-         do j=jsd,jed
-            do k=1,npz
-               do i=isd,ied
-                  ps(i,j) = ps(i,j) + delp(i,j,k)
-               end do
-            end do
-         end do
-      endif
-
-      call update_coarse_grid(ps0, ps, neststruct%nest_domain, &
-              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
-              isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-              npx, npy, 0, 0, &
-              neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-              neststruct%parent_proc, neststruct%child_proc, parent_grid, 1.)
-
-      !!! The mpp version of update_coarse_grid does not return a consistent value of ps
-      !!! across PEs, as it does not go into the haloes of a given coarse-grid PE. This
-      !!! update_domains call takes care of the problem.
-
-   if (neststruct%parent_proc) then
-     call mpp_update_domains(parent_grid%ps, parent_grid%domain, complete=.false.)
-     call mpp_update_domains(ps0, parent_grid%domain, complete=.true.)
-   endif
-
-
-      call mpp_sync!self
-
-      if (parent_grid%tile == neststruct%parent_tile) then 
-
-         if (neststruct%parent_proc) then
-
-         !comment out if statement to always remap theta instead of t in the remap-update.
-         !(In LtE typically we use remap_t = .true.: remapping t is better (except in
-         !idealized simulations with a background uniform theta) since near the top
-         !boundary theta is exponential, which is hard to accurately interpolate with a spline
-         if (.not. parent_grid%flagstruct%remap_t) then
-!$OMP parallel do default(none) shared(npz,jsc_p,jec_p,isc_p,iec_p,parent_grid,zvir,sphum)
-            do k=1,npz
-               do j=jsc_p,jec_p
-                  do i=isc_p,iec_p
-                     parent_grid%pt(i,j,k) = &
-                          parent_grid%pt(i,j,k)/parent_grid%pkz(i,j,k)*&
-                          (1.+zvir*parent_grid%q(i,j,k,sphum))
-                  end do
-               end do
-            end do
-         end if
-         call update_remap_tqw(npz, parent_grid%ak, parent_grid%bk, &
-              parent_grid%ps, parent_grid%delp, &
-              parent_grid%pt, parent_grid%q, parent_grid%w, &
-              parent_grid%flagstruct%hydrostatic, &
-              npz, ps0, zvir, parent_grid%ptop, ncnst, &
-              parent_grid%flagstruct%kord_tm, parent_grid%flagstruct%kord_tr, &
-              parent_grid%flagstruct%kord_wz, &
-              isc_p, iec_p, jsc_p, jec_p, isd_p, ied_p, jsd_p, jed_p, .false. ) !neststruct%nestupdate < 7)
-         if (.not. parent_grid%flagstruct%remap_t) then
-!$OMP parallel do default(none) shared(npz,jsc_p,jec_p,isc_p,iec_p,parent_grid,zvir,sphum)
-            do k=1,npz
-               do j=jsc_p,jec_p
-                  do i=isc_p,iec_p
-                     parent_grid%pt(i,j,k) = &
-                          parent_grid%pt(i,j,k)*parent_grid%pkz(i,j,k) / &
-                          (1.+zvir*parent_grid%q(i,j,k,sphum))
-                  end do
-               end do
-            end do
-         end if
-
-         call update_remap_uv(npz, parent_grid%ak, parent_grid%bk, &
-              parent_grid%ps, &
-              parent_grid%u, &
-              parent_grid%v, npz, ps0, parent_grid%flagstruct%kord_mt, &
-              isc_p, iec_p, jsc_p, jec_p, isd_p, ied_p, jsd_p, jed_p, parent_grid%ptop)
-
-         endif !neststruct%parent_proc
-
-      end if
-
-      if (allocated(ps0)) deallocate(ps0)
-
-   end if
-
-#endif
+!!$#ifndef SW_DYNAMICS
+!!$   if (neststruct%nestupdate >= 5 .and. npz > 4) then
+!!$
+!!$      !Use PS0 from nested grid, NOT the full delp. Also we assume the same number of levels on both grids.
+!!$      !PS0 should be initially set to be ps so that this routine does NOTHING outside of the update region
+!!$
+!!$      !Re-compute nested (AND COARSE) grid ps
+!!$
+!!$      allocate(ps0(isd_p:ied_p,jsd_p:jed_p))
+!!$      if (neststruct%parent_proc) then
+!!$
+!!$         parent_grid%ps = parent_grid%ptop
+!!$!This loop appears to cause problems with OMP
+!!$!$OMP parallel do default(none) shared(npz,jsd_p,jed_p,isd_p,ied_p,parent_grid)
+!!$         do j=jsd_p,jed_p
+!!$            do k=1,npz
+!!$               do i=isd_p,ied_p
+!!$                  parent_grid%ps(i,j) = parent_grid%ps(i,j) + &
+!!$                       parent_grid%delp(i,j,k)
+!!$               end do
+!!$            end do
+!!$         end do
+!!$
+!!$         ps0 = parent_grid%ps
+!!$      endif
+!!$
+!!$      if (neststruct%child_proc) then
+!!$
+!!$         ps = ptop
+!!$!$OMP parallel do default(none) shared(npz,jsd,jed,isd,ied,ps,delp)
+!!$         do j=jsd,jed
+!!$            do k=1,npz
+!!$               do i=isd,ied
+!!$                  ps(i,j) = ps(i,j) + delp(i,j,k)
+!!$               end do
+!!$            end do
+!!$         end do
+!!$      endif
+!!$
+!!$      call update_coarse_grid(ps0, ps, neststruct%nest_domain, &
+!!$              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+!!$              isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+!!$              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+!!$              npx, npy, 0, 0, &
+!!$              neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+!!$              neststruct%parent_proc, neststruct%child_proc, parent_grid, 1.)
+!!$
+!!$      !!! The mpp version of update_coarse_grid does not return a consistent value of ps
+!!$      !!! across PEs, as it does not go into the haloes of a given coarse-grid PE. This
+!!$      !!! update_domains call takes care of the problem.
+!!$
+!!$   if (neststruct%parent_proc) then
+!!$     call mpp_update_domains(parent_grid%ps, parent_grid%domain, complete=.false.)
+!!$     call mpp_update_domains(ps0, parent_grid%domain, complete=.true.)
+!!$   endif
+!!$
+!!$
+!!$      call mpp_sync!self
+!!$
+!!$      if (parent_grid%tile == neststruct%parent_tile) then 
+!!$
+!!$         if (neststruct%parent_proc) then
+!!$
+!!$         !comment out if statement to always remap theta instead of t in the remap-update.
+!!$         !(In LtE typically we use remap_t = .true.: remapping t is better (except in
+!!$         !idealized simulations with a background uniform theta) since near the top
+!!$         !boundary theta is exponential, which is hard to accurately interpolate with a spline
+!!$         if (.not. parent_grid%flagstruct%remap_t) then
+!!$!$OMP parallel do default(none) shared(npz,jsc_p,jec_p,isc_p,iec_p,parent_grid,zvir,sphum)
+!!$            do k=1,npz
+!!$               do j=jsc_p,jec_p
+!!$                  do i=isc_p,iec_p
+!!$                     parent_grid%pt(i,j,k) = &
+!!$                          parent_grid%pt(i,j,k)/parent_grid%pkz(i,j,k)*&
+!!$                          (1.+zvir*parent_grid%q(i,j,k,sphum))
+!!$                  end do
+!!$               end do
+!!$            end do
+!!$         end if
+!!$         call update_remap_tqw(npz, parent_grid%ak, parent_grid%bk, &
+!!$              parent_grid%ps, parent_grid%delp, &
+!!$              parent_grid%pt, parent_grid%q, parent_grid%w, &
+!!$              parent_grid%flagstruct%hydrostatic, &
+!!$              npz, ps0, zvir, parent_grid%ptop, ncnst, &
+!!$              parent_grid%flagstruct%kord_tm, parent_grid%flagstruct%kord_tr, &
+!!$              parent_grid%flagstruct%kord_wz, &
+!!$              isc_p, iec_p, jsc_p, jec_p, isd_p, ied_p, jsd_p, jed_p, .false. ) !neststruct%nestupdate < 7)
+!!$         if (.not. parent_grid%flagstruct%remap_t) then
+!!$!$OMP parallel do default(none) shared(npz,jsc_p,jec_p,isc_p,iec_p,parent_grid,zvir,sphum)
+!!$            do k=1,npz
+!!$               do j=jsc_p,jec_p
+!!$                  do i=isc_p,iec_p
+!!$                     parent_grid%pt(i,j,k) = &
+!!$                          parent_grid%pt(i,j,k)*parent_grid%pkz(i,j,k) / &
+!!$                          (1.+zvir*parent_grid%q(i,j,k,sphum))
+!!$                  end do
+!!$               end do
+!!$            end do
+!!$         end if
+!!$
+!!$         call update_remap_uv(npz, parent_grid%ak, parent_grid%bk, &
+!!$              parent_grid%ps, &
+!!$              parent_grid%u, &
+!!$              parent_grid%v, npz, ps0, parent_grid%flagstruct%kord_mt, &
+!!$              isc_p, iec_p, jsc_p, jec_p, isd_p, ied_p, jsd_p, jed_p, parent_grid%ptop)
+!!$
+!!$         endif !neststruct%parent_proc
+!!$
+!!$      end if
+!!$
+!!$      if (allocated(ps0)) deallocate(ps0)
+!!$
+!!$   end if
+!!$
+!!$#endif
 
  end subroutine twoway_nest_update
 
@@ -2245,6 +2402,70 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
  end subroutine level_sum
 
+![ij]start and [ij]end should already take staggering into account
+ subroutine remap_up_k(pe_src, pe_dst, var_src, var_dst, bd, istart, iend, jstart, jend, istag, jstag, npz, npz_src, iv, kord, blend_wt, log_pe)
+
+   !Note here that pe is TRANSPOSED to make loops faster
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   integer, intent(IN) :: istart, iend, jstart, jend, npz, npz_src, iv, kord, istag, jstag
+   logical, intent(IN) :: log_pe
+   real, intent(INOUT) :: pe_src(bd%is-1:bd%ie+1+istag,npz_src+1,bd%js-1:bd%je+1+jstag), var_src(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,npz_src)
+   real, intent(INOUT) :: pe_dst(bd%is-1:bd%ie+1+istag,npz+1,    bd%js-1:bd%je+1+jstag), var_dst(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,npz)
+   real, intent(IN) :: blend_wt(npz)
+
+   integer :: i, j, k
+   real peln_src(istart:iend,npz_src+1)
+   real peln_dst(istart:iend,npz+1)
+   character(120) :: errstring
+   real var_dst_unblend(istart:iend,npz)
+   real bw1, bw2
+   
+   if (iend < istart) return
+   if (jend < jstart) return
+
+   do j=jstart,jend
+
+      if (log_pe) then
+
+         do k=1,npz_src+1
+         do i=istart,iend
+            peln_src(i,k) = log(pe_src(i,k,j))
+         enddo
+         enddo
+
+         do k=1,npz+1
+         do i=istart,iend
+            peln_dst(i,k) = log(pe_dst(i,k,j))
+         enddo
+         enddo
+
+!!$         call remap_2d(npz_src, peln_src, var_src(istart:iend,j:j,:), &
+!!$                       npz,     peln_dst, var_dst_unblend, &
+!!$                       istart, iend, iv, kord)
+         !remap_2d seems to have some bugs when doing logp remapping
+         call    mappm(npz_src, peln_src, var_src(istart:iend,j:j,:), &
+                       npz,     peln_dst, var_dst_unblend, &
+                       istart, iend, iv, kord, peln_dst(istart,1))
+
+      else
+
+         call remap_2d(npz_src, pe_src(istart:iend,:,j:j), var_src(istart:iend,j:j,:), &
+                       npz,     pe_dst(istart:iend,:,j:j), var_dst_unblend, &
+                       istart, iend, iv, kord)
+
+      endif
+
+      do k=1,npz
+        bw1 = blend_wt(k)
+        bw2 = 1. - bw1
+      do i=istart,iend
+         var_dst(i,j,k) = var_dst(i,j,k)*bw2 + var_dst_unblend(i,k)*bw1
+      enddo
+      enddo
+
+   enddo
+
+ end subroutine remap_up_k
 
  subroutine after_twoway_nest_update(npx, npy, npz, ng, ncnst,   &
                         u, v, w, delz, pt, delp, q,              &
@@ -2340,198 +2561,198 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
  !Routines for remapping (interpolated) nested-grid data to the coarse-grid's vertical coordinate.
 
- !This does not yet do anything for the tracers
- subroutine update_remap_tqw( npz, ak,  bk,  ps, delp,  t,  q, w, hydrostatic, &
-                      kmd, ps0, zvir, ptop, nq, kord_tm, kord_tr, kord_wz, &
-                      is, ie, js, je, isd, ied, jsd, jed, do_q)
-  integer, intent(in):: npz, kmd, nq, kord_tm, kord_tr, kord_wz
-  real,    intent(in):: zvir, ptop
-  real,    intent(in):: ak(npz+1), bk(npz+1)
-  real,    intent(in), dimension(isd:ied,jsd:jed):: ps0
-  real,    intent(in), dimension(isd:ied,jsd:jed):: ps
-  real, intent(in), dimension(isd:ied,jsd:jed,npz):: delp
-  real,    intent(inout), dimension(isd:ied,jsd:jed,npz):: t, w
-  real,    intent(inout), dimension(isd:ied,jsd:jed,npz,nq):: q
-  integer,  intent(in) ::  is, ie, js, je, isd, ied, jsd, jed
-  logical,   intent(in) :: hydrostatic, do_q
-! local:
-  real, dimension(is:ie,kmd):: tp, qp
-  real, dimension(is:ie,kmd+1):: pe0, pn0
-  real, dimension(is:ie,npz):: qn1
-  real, dimension(is:ie,npz+1):: pe1, pn1
-  integer i,j,k,iq
-
-!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak,bk,ps0,q,npz,ptop,do_q,&
-!$OMP          t,w,ps,nq,hydrostatic,kord_tm,kord_tr,kord_wz) &
-!$OMP          private(pe0,pn0,pe1,pn1,qp,tp,qn1)
-  do 5000 j=js,je
-
-     do k=1,kmd+1
-        do i=is,ie
-           pe0(i,k) = ak(k) + bk(k)*ps0(i,j)
-           pn0(i,k) = log(pe0(i,k))
-       enddo
-     enddo 
-     do k=1,kmd+1
-        do i=is,ie
-           pe1(i,k) = ak(k) + bk(k)*ps(i,j)
-           pn1(i,k) = log(pe1(i,k))
-       enddo
-     enddo 
-     if (do_q) then
-        do iq=1,nq
-        do k=1,kmd
-        do i=is,ie
-           qp(i,k) = q(i,j,k,iq)
-        enddo
-        enddo
-        call mappm(kmd, pe0, qp, npz, pe1,  qn1, is,ie, 0, kord_tr, ptop)
-        do k=1,npz
-           do i=is,ie
-              q(i,j,k,iq) = qn1(i,k)
-           enddo
-        enddo
-        enddo
-     endif
-
-     do k=1,kmd
-        do i=is,ie
-           tp(i,k) = t(i,j,k)
-        enddo
-     enddo
-     !Remap T using logp
-     call mappm(kmd, pn0, tp, npz, pn1, qn1, is,ie, 1, abs(kord_tm), ptop)
-     
-     do k=1,npz
-        do i=is,ie
-           t(i,j,k) = qn1(i,k)
-        enddo
-     enddo
-
-     if (.not. hydrostatic) then
-        do k=1,kmd
-           do i=is,ie
-              tp(i,k) = w(i,j,k)
-           enddo
-        enddo
-        !Remap w using p
-        !Using iv == -1 instead of -2
-        call mappm(kmd, pe0, tp, npz, pe1, qn1, is,ie, -1, kord_wz, ptop)
-
-        do k=1,npz
-           do i=is,ie
-              w(i,j,k) = qn1(i,k)
-           enddo
-        enddo
-     endif
-
-5000 continue
-
- end subroutine update_remap_tqw
-
- !remap_uv as-is remaps only a-grid velocities. A new routine has been written to handle staggered grids.
- subroutine update_remap_uv(npz, ak, bk, ps, u, v, kmd, ps0, kord_mt, &
-                      is, ie, js, je, isd, ied, jsd, jed, ptop)
-  integer, intent(in):: npz
-  real,    intent(in):: ak(npz+1), bk(npz+1)
-  real,    intent(in):: ps(isd:ied,jsd:jed)
-  real,    intent(inout), dimension(isd:ied,jsd:jed+1,npz):: u
-  real,    intent(inout), dimension(isd:ied+1,jsd:jed,npz):: v
-!
-  integer, intent(in):: kmd, kord_mt
-  real,    intent(IN) :: ptop
-  real,    intent(in):: ps0(isd:ied,jsd:jed)
-  integer,  intent(in) ::  is, ie, js, je, isd, ied, jsd, jed
-!
-! local:
-  real, dimension(is:ie+1,kmd+1):: pe0
-  real, dimension(is:ie+1,npz+1):: pe1
-  real, dimension(is:ie+1,kmd):: qt
-  real, dimension(is:ie+1,npz):: qn1
-  integer i,j,k
-
-!------
-! map u
-!------
-!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak,bk,ps,ps0,npz,u,ptop,kord_mt) &
-!$OMP          private(pe0,pe1,qt,qn1)
-  do j=js,je+1
-!------
-! Data
-!------
-     do k=1,kmd+1
-       do i=is,ie
-          pe0(i,k) = ak(k) + bk(k)*0.5*(ps0(i,j)+ps0(i,j-1))
-       enddo
-     enddo
-!------
-! Model
-!------
-     do k=1,kmd+1
-        do i=is,ie
-          pe1(i,k) = ak(k) + bk(k)*0.5*(ps(i,j)+ps(i,j-1))
-       enddo
-     enddo
-!------
-!Do map
-!------
-     qt = 0.
-      do k=1,kmd
-         do i=is,ie
-            qt(i,k) = u(i,j,k)
-         enddo
-      enddo
-      qn1 = 0.
-      call mappm(kmd, pe0(is:ie,:), qt(is:ie,:), npz, pe1(is:ie,:), qn1(is:ie,:), is,ie, -1, kord_mt, ptop)
-      do k=1,npz
-         do i=is,ie
-            u(i,j,k) = qn1(i,k)
-         enddo
-      enddo
-
-   end do
-
-!------
-! map v
-!------
-!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak,bk,ps,ps0,npz,v,ptop) &
-!$OMP          private(pe0,pe1,qt,qn1)
-   do j=js,je
-!------
-! Data
-!------
-     do k=1,kmd+1
-        do i=is,ie+1
-          pe0(i,k) = ak(k) + bk(k)*0.5*(ps0(i,j)+ps0(i-1,j))
-       enddo
-     enddo
-!------
-! Model
-!------
-     do k=1,kmd+1
-        do i=is,ie+1
-          pe1(i,k) = ak(k) + bk(k)*0.5*(ps(i,j)+ps(i-1,j))
-       enddo
-     enddo
-!------
-!Do map
-!------
-     qt = 0.
-      do k=1,kmd
-         do i=is,ie+1
-            qt(i,k) = v(i,j,k)
-         enddo
-      enddo
-      qn1 = 0.
-      call mappm(kmd, pe0(is:ie+1,:), qt(is:ie+1,:), npz, pe1(is:ie+1,:), qn1(is:ie+1,:), is,ie+1, -1, 8, ptop)
-      do k=1,npz
-         do i=is,ie+1
-            v(i,j,k) = qn1(i,k)
-         enddo
-      enddo
-   end do
-
- end subroutine update_remap_uv
-
+!!$ !This does not yet do anything for the tracers
+!!$ subroutine update_remap_tqw( npz, ak,  bk,  ps, delp,  t,  q, w, hydrostatic, &
+!!$                      kmd, ps0, zvir, ptop, nq, kord_tm, kord_tr, kord_wz, &
+!!$                      is, ie, js, je, isd, ied, jsd, jed, do_q)
+!!$  integer, intent(in):: npz, kmd, nq, kord_tm, kord_tr, kord_wz
+!!$  real,    intent(in):: zvir, ptop
+!!$  real,    intent(in):: ak(npz+1), bk(npz+1)
+!!$  real,    intent(in), dimension(isd:ied,jsd:jed):: ps0
+!!$  real,    intent(in), dimension(isd:ied,jsd:jed):: ps
+!!$  real, intent(in), dimension(isd:ied,jsd:jed,npz):: delp
+!!$  real,    intent(inout), dimension(isd:ied,jsd:jed,npz):: t, w
+!!$  real,    intent(inout), dimension(isd:ied,jsd:jed,npz,nq):: q
+!!$  integer,  intent(in) ::  is, ie, js, je, isd, ied, jsd, jed
+!!$  logical,   intent(in) :: hydrostatic, do_q
+!!$! local:
+!!$  real, dimension(is:ie,kmd):: tp, qp
+!!$  real, dimension(is:ie,kmd+1):: pe0, pn0
+!!$  real, dimension(is:ie,npz):: qn1
+!!$  real, dimension(is:ie,npz+1):: pe1, pn1
+!!$  integer i,j,k,iq
+!!$
+!!$!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak,bk,ps0,q,npz,ptop,do_q,&
+!!$!$OMP          t,w,ps,nq,hydrostatic,kord_tm,kord_tr,kord_wz) &
+!!$!$OMP          private(pe0,pn0,pe1,pn1,qp,tp,qn1)
+!!$  do 5000 j=js,je
+!!$
+!!$     do k=1,kmd+1
+!!$        do i=is,ie
+!!$           pe0(i,k) = ak(k) + bk(k)*ps0(i,j)
+!!$           pn0(i,k) = log(pe0(i,k))
+!!$       enddo
+!!$     enddo 
+!!$     do k=1,kmd+1
+!!$        do i=is,ie
+!!$           pe1(i,k) = ak(k) + bk(k)*ps(i,j)
+!!$           pn1(i,k) = log(pe1(i,k))
+!!$       enddo
+!!$     enddo 
+!!$     if (do_q) then
+!!$        do iq=1,nq
+!!$        do k=1,kmd
+!!$        do i=is,ie
+!!$           qp(i,k) = q(i,j,k,iq)
+!!$        enddo
+!!$        enddo
+!!$        call mappm(kmd, pe0, qp, npz, pe1,  qn1, is,ie, 0, kord_tr, ptop)
+!!$        do k=1,npz
+!!$           do i=is,ie
+!!$              q(i,j,k,iq) = qn1(i,k)
+!!$           enddo
+!!$        enddo
+!!$        enddo
+!!$     endif
+!!$
+!!$     do k=1,kmd
+!!$        do i=is,ie
+!!$           tp(i,k) = t(i,j,k)
+!!$        enddo
+!!$     enddo
+!!$     !Remap T using logp
+!!$     call mappm(kmd, pn0, tp, npz, pn1, qn1, is,ie, 1, abs(kord_tm), ptop)
+!!$     
+!!$     do k=1,npz
+!!$        do i=is,ie
+!!$           t(i,j,k) = qn1(i,k)
+!!$        enddo
+!!$     enddo
+!!$
+!!$     if (.not. hydrostatic) then
+!!$        do k=1,kmd
+!!$           do i=is,ie
+!!$              tp(i,k) = w(i,j,k)
+!!$           enddo
+!!$        enddo
+!!$        !Remap w using p
+!!$        !Using iv == -1 instead of -2
+!!$        call mappm(kmd, pe0, tp, npz, pe1, qn1, is,ie, -1, kord_wz, ptop)
+!!$
+!!$        do k=1,npz
+!!$           do i=is,ie
+!!$              w(i,j,k) = qn1(i,k)
+!!$           enddo
+!!$        enddo
+!!$     endif
+!!$
+!!$5000 continue
+!!$
+!!$ end subroutine update_remap_tqw
+!!$
+!!$ !remap_uv as-is remaps only a-grid velocities. A new routine has been written to handle staggered grids.
+!!$ subroutine update_remap_uv(npz, ak, bk, ps, u, v, kmd, ps0, kord_mt, &
+!!$                      is, ie, js, je, isd, ied, jsd, jed, ptop)
+!!$  integer, intent(in):: npz
+!!$  real,    intent(in):: ak(npz+1), bk(npz+1)
+!!$  real,    intent(in):: ps(isd:ied,jsd:jed)
+!!$  real,    intent(inout), dimension(isd:ied,jsd:jed+1,npz):: u
+!!$  real,    intent(inout), dimension(isd:ied+1,jsd:jed,npz):: v
+!!$!
+!!$  integer, intent(in):: kmd, kord_mt
+!!$  real,    intent(IN) :: ptop
+!!$  real,    intent(in):: ps0(isd:ied,jsd:jed)
+!!$  integer,  intent(in) ::  is, ie, js, je, isd, ied, jsd, jed
+!!$!
+!!$! local:
+!!$  real, dimension(is:ie+1,kmd+1):: pe0
+!!$  real, dimension(is:ie+1,npz+1):: pe1
+!!$  real, dimension(is:ie+1,kmd):: qt
+!!$  real, dimension(is:ie+1,npz):: qn1
+!!$  integer i,j,k
+!!$
+!!$!------
+!!$! map u
+!!$!------
+!!$!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak,bk,ps,ps0,npz,u,ptop,kord_mt) &
+!!$!$OMP          private(pe0,pe1,qt,qn1)
+!!$  do j=js,je+1
+!!$!------
+!!$! Data
+!!$!------
+!!$     do k=1,kmd+1
+!!$       do i=is,ie
+!!$          pe0(i,k) = ak(k) + bk(k)*0.5*(ps0(i,j)+ps0(i,j-1))
+!!$       enddo
+!!$     enddo
+!!$!------
+!!$! Model
+!!$!------
+!!$     do k=1,kmd+1
+!!$        do i=is,ie
+!!$          pe1(i,k) = ak(k) + bk(k)*0.5*(ps(i,j)+ps(i,j-1))
+!!$       enddo
+!!$     enddo
+!!$!------
+!!$!Do map
+!!$!------
+!!$     qt = 0.
+!!$      do k=1,kmd
+!!$         do i=is,ie
+!!$            qt(i,k) = u(i,j,k)
+!!$         enddo
+!!$      enddo
+!!$      qn1 = 0.
+!!$      call mappm(kmd, pe0(is:ie,:), qt(is:ie,:), npz, pe1(is:ie,:), qn1(is:ie,:), is,ie, -1, kord_mt, ptop)
+!!$      do k=1,npz
+!!$         do i=is,ie
+!!$            u(i,j,k) = qn1(i,k)
+!!$         enddo
+!!$      enddo
+!!$
+!!$   end do
+!!$
+!!$!------
+!!$! map v
+!!$!------
+!!$!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak,bk,ps,ps0,npz,v,ptop) &
+!!$!$OMP          private(pe0,pe1,qt,qn1)
+!!$   do j=js,je
+!!$!------
+!!$! Data
+!!$!------
+!!$     do k=1,kmd+1
+!!$        do i=is,ie+1
+!!$          pe0(i,k) = ak(k) + bk(k)*0.5*(ps0(i,j)+ps0(i-1,j))
+!!$       enddo
+!!$     enddo
+!!$!------
+!!$! Model
+!!$!------
+!!$     do k=1,kmd+1
+!!$        do i=is,ie+1
+!!$          pe1(i,k) = ak(k) + bk(k)*0.5*(ps(i,j)+ps(i-1,j))
+!!$       enddo
+!!$     enddo
+!!$!------
+!!$!Do map
+!!$!------
+!!$     qt = 0.
+!!$      do k=1,kmd
+!!$         do i=is,ie+1
+!!$            qt(i,k) = v(i,j,k)
+!!$         enddo
+!!$      enddo
+!!$      qn1 = 0.
+!!$      call mappm(kmd, pe0(is:ie+1,:), qt(is:ie+1,:), npz, pe1(is:ie+1,:), qn1(is:ie+1,:), is,ie+1, -1, 8, ptop)
+!!$      do k=1,npz
+!!$         do i=is,ie+1
+!!$            v(i,j,k) = qn1(i,k)
+!!$         enddo
+!!$      enddo
+!!$   end do
+!!$
+!!$ end subroutine update_remap_uv
+!!$
 
 end module fv_nesting_mod
