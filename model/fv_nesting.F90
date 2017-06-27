@@ -1766,7 +1766,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                call twoway_nest_update(Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, zvir, &
                     Atm(n)%ncnst, sphum, Atm(n)%u, Atm(n)%v, Atm(n)%w, &
                     Atm(n)%pt, Atm(n)%delp, Atm(n)%q, &
-                    Atm(n)%pe, Atm(n)%pkz, Atm(n)%delz, Atm(n)%ps, Atm(n)%ptop, &
+                    Atm(n)%pe, Atm(n)%pkz, Atm(n)%delz, Atm(n)%ps, Atm(n)%ptop, Atm(n)%ak, Atm(n)%bk, &
                     Atm(n)%gridstruct, Atm(n)%flagstruct, Atm(n)%neststruct, Atm(n)%parent_grid, Atm(N)%bd, .false.)
             endif
          endif
@@ -1794,11 +1794,11 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 !!!not potential temperature; which may cause problems when updating if this is not the case.
  subroutine twoway_nest_update(npx, npy, npz, zvir, ncnst, sphum,     &
                         u, v, w, pt, delp, q,   &
-                        pe, pkz, delz, ps, ptop, &
+                        pe, pkz, delz, ps, ptop, ak, bk, &
                         gridstruct, flagstruct, neststruct, &
                         parent_grid, bd, conv_theta_in)
 
-    real, intent(IN) :: zvir, ptop
+    real, intent(IN) :: zvir, ptop, ak(npz+1), bk(npz+1)
 
     integer, intent(IN) :: npx, npy, npz
     integer, intent(IN) :: ncnst, sphum
@@ -1905,9 +1905,16 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
     enddo
     endif
     if (neststruct%parent_proc) then
-       !Fill in missing outermost-halo data with coarse pressure
+       !Fill in missing outermost-halo data
+       ! with coarse-grid Eulerian pressure
        ! for computing staggered u/v point pressures
-       pe_src3(i,j,k) = parent_grid%pe(i,k,j)
+       do k=1,npz+1
+       do j=jsd_p,jed_p
+       do i=isd_p,ied_p
+          pe_src3(i,j,k) = ak(k)+ bk(k)*parent_grid%pe(i,npz+1,j)
+       enddo
+       enddo
+       enddo
     endif
 
     call update_coarse_grid(pe_src3, pe3,  neststruct%nest_domain,&
