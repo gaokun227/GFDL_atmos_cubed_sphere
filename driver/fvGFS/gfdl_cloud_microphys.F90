@@ -147,10 +147,10 @@ module gfdl_cloud_microphys_mod
  real :: rh_ins = 0.25   ! rh increment for sublimation of snow
 
 ! The following 3 time scales are for melting during terminal falls
- real :: tau_r   = 900.    ! rain freezing time scale during fast_sat
- real :: tau_s   = 900.    ! snow melt
- real :: tau_g   = 600.    ! graupel melt
- real :: tau_mlt = 600.    ! ice melting time-scale
+ real :: tau_r2g = 900.    ! rain freezing time scale during fast_sat
+ real :: tau_smlt= 900.    ! snow melt
+ real :: tau_g2r = 600.    ! graupel melt
+ real :: tau_imlt= 600.    ! ice melting time-scale
 
 ! Fast MP:
  real :: tau_i2s = 1000.  ! ice2snow auto-conversion time scale (sec) 
@@ -235,26 +235,26 @@ module gfdl_cloud_microphys_mod
  real:: log_10
 
  namelist /gfdl_cloud_microphysics_nml/   &
-        mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
+        mp_time, t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean,  &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, &
         vi_max, vs_max, vg_max, vr_max, qs_mlt,       &
         qs0_crt, qi_gen, ql0_max, qi0_max, qi0_crt, qr0_crt, fast_sat_adj, &
         rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, const_vr,    &
         use_ccn, rthresh, ccn_l, ccn_o, qc_crt, tau_g2v, tau_v2g, sat_adj0,    &
-        c_piacr, tau_mlt, tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen,  &
+        c_piacr, tau_imlt, tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen,  &
         c_paut, c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn,  &
         c_cracw, alin, clin, tice, rad_snow, rad_graupel, rad_rain,   &
         cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
         do_sedi_w, de_ice, icloud_f, irain_f, mp_print
 
 public   &
-        mp_time, t_min, t_sub, tau_r, tau_s, tau_g, dw_land, dw_ocean,  &
+        mp_time, t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean,  &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, &
         vi_max, vs_max, vg_max, vr_max, qs_mlt,       &
         qs0_crt, qi_gen, ql0_max, qi0_max, qi0_crt, qr0_crt, fast_sat_adj, &
         rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, const_vr,    &
         use_ccn, rthresh, ccn_l, ccn_o, qc_crt, tau_g2v, tau_v2g, sat_adj0,    &
-        c_piacr, tau_mlt, tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen,  &
+        c_piacr, tau_imlt, tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen,  &
         c_paut, c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn,  &
         c_cracw, alin, clin, tice, rad_snow, rad_graupel, rad_rain,   &
         cld_min, use_ppm, mono_prof, do_sedi_heat, sedi_transport,   &
@@ -1157,7 +1157,7 @@ endif
  real, intent(in) :: rh_adj, rh_rain, dts, h_var
 ! local:
  real, dimension(ktop:kbot) :: lcpk, icpk, tcpk, di, lhl, lhi
- real:: rdts, fac_g2v, fac_v2g, fac_i2s, fac_mlt
+ real:: rdts, fac_g2v, fac_v2g, fac_i2s, fac_imlt
  real:: tz, qv, ql, qr, qi, qs, qg, melt
  real:: pracs, psacw, pgacw, pgmlt,    &
         psmlt, psacr, pgacr, pgfr,     &
@@ -1172,7 +1172,7 @@ endif
  fac_g2v = 1. - exp( -dts/tau_g2v )
  fac_v2g = 1. - exp( -dts/tau_v2g )
  dt5 = 0.5*dts
- fac_mlt = 1. - exp( -dt5/tau_mlt )
+ fac_imlt = 1. - exp( -dt5/tau_imlt )
 
  rdts = 1./dts
 
@@ -1192,7 +1192,7 @@ endif
 !--------------------------------------
 ! * pimlt: instant melting of cloud ice
 !--------------------------------------
-        melt = min( qik(k), fac_mlt*(tzk(k)-tice)/icpk(k) )
+        melt = min( qik(k), fac_imlt*(tzk(k)-tice)/icpk(k) )
         tmp1 = min( melt, dim(ql_mlt, qlk(k)) )   ! max ql amount
         qlk(k) = qlk(k) + tmp1
         qrk(k) = qrk(k) + melt - tmp1
@@ -1859,7 +1859,7 @@ endif   ! end ice-physics
  real, dimension(ktop:kbot):: lcpk, icpk
  real, dimension(ktop:kbot):: m1, dm
  real:: zs = 0.
- real:: cvm, fac_mlt
+ real:: cvm, fac_imlt
  integer k, k0, m
  logical no_fall
 
@@ -1872,7 +1872,7 @@ endif   ! end ice-physics
   enddo
 
   dt5 = 0.5*dtm
-  fac_mlt = 1. - exp( -dt5/tau_mlt )
+  fac_imlt = 1. - exp( -dt5/tau_imlt )
 
 
 ! Melting of cloud_ice and snow (before fall):
@@ -1893,7 +1893,7 @@ endif   ! end ice-physics
 !------
     tc = tz(k) - tice
     if( qi(k) > qcmin .and. tc>0. ) then
-        melt = min( qi(k), fac_mlt*tc/icpk(k) )
+        melt = min( qi(k), fac_imlt*tc/icpk(k) )
         tmp1 = min( melt, dim(ql_mlt, ql(k)) )
         ql(k) = ql(k) + tmp1
         qr(k) = qr(k) + melt - tmp1
@@ -1934,7 +1934,7 @@ endif   ! end ice-physics
           do m=k+1, kbot
              if ( zt(k+1)>=ze(m) ) exit
              if ( zt(k)<ze(m+1) .and. tz(m)>tice ) then
-                  dtime = min( 1.0, (ze(m)-ze(m+1))/(max(vr_min,vti(k))*tau_mlt) )
+                  dtime = min( 1.0, (ze(m)-ze(m+1))/(max(vr_min,vti(k))*tau_imlt) )
                    melt = min( qi(k)*dp(k)/dp(m), dtime*(tz(m)-tice)/icpk(m) )
                    tmp1 = min( melt, dim(ql_mlt, ql(m)) )
                   ql(m) = ql(m) + tmp1
@@ -1995,7 +1995,7 @@ endif   ! end ice-physics
              if ( zt(k+1)>=ze(m) ) exit
                   dtime = min( dtm, (ze(m)-ze(m+1))/(vr_min+vts(k)) )
              if ( zt(k)<ze(m+1) .and. tz(m)>tice ) then
-                  dtime = min(1., dtime/tau_s)
+                  dtime = min(1., dtime/tau_smlt)
                    melt = min(qs(k)*dp(k)/dp(m), dtime*(tz(m)-tice)/icpk(m))
                   tz(m) = tz(m) - melt*icpk(m)
                   qs(k) = qs(k) - melt*dp(m)/dp(k)
@@ -2059,7 +2059,7 @@ endif   ! end ice-physics
              if ( zt(k+1)>=ze(m) ) exit
              dtime = min( dtm, (ze(m)-ze(m+1))/vtg(k) )
              if ( zt(k)<ze(m+1) .and. tz(m)>tice ) then
-                  dtime = min(1., dtime/tau_g)
+                  dtime = min(1., dtime/tau_g2r)
                    melt = min(qg(k)*dp(k)/dp(m), dtime*(tz(m)-tice)/icpk(m))
                   tz(m) = tz(m) - melt*icpk(m)
                   qg(k) = qg(k) -  melt*dp(m)/dp(k)
