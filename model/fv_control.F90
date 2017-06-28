@@ -229,7 +229,7 @@ module fv_control_mod
 
   logical, pointer :: nested, twowaynest
   integer, pointer :: parent_tile, refinement, nestbctype, nestupdate, nsponge, ioffset, joffset
-  real, pointer :: s_weight
+  real, pointer :: s_weight, update_blend
 
   integer, pointer :: layout(:), io_layout(:)
 
@@ -564,7 +564,7 @@ module fv_control_mod
                             nested, twowaynest, parent_grid_num, parent_tile, nudge_qv, &
                             refinement, nestbctype, nestupdate, nsponge, s_weight, &
                             ioffset, joffset, check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
-                            do_uni_zfull, adj_mass_vmr
+                            do_uni_zfull, adj_mass_vmr, update_blend
 
       namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size
 
@@ -1238,6 +1238,7 @@ module fv_control_mod
      s_weight                      => Atm%neststruct%s_weight
      ioffset                       => Atm%neststruct%ioffset
      joffset                       => Atm%neststruct%joffset
+     update_blend                  => Atm%neststruct%update_blend
 
      layout                        => Atm%layout
      io_layout                     => Atm%io_layout

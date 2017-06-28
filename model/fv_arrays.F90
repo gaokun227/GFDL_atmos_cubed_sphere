@@ -556,6 +556,7 @@ module fv_arrays_mod
      integer :: npx_global
      integer :: upoff = 1 ! currently the same for all variables
      integer :: isu = -999, ieu = -1000, jsu = -999, jeu = -1000 ! limits of update regions on coarse grid 
+     real    :: update_blend = 1. ! option for controlling how much "blending" is done during two-way update
 
      type(nest_domain_type) :: nest_domain !Structure holding link from this grid to its parent
      type(nest_domain_type), allocatable :: nest_domain_all(:)
