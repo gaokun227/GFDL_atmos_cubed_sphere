@@ -104,7 +104,7 @@ contains
 
 
     integer :: i, j, k, n, ntileMe, nt, iq
-    integer :: isc, iec, jsc, jec, npz, npz_rst, ncnst, ntprog, ntdiag
+    integer :: isc, iec, jsc, jec, ncnst, ntprog, ntdiag
     integer :: isd, ied, jsd, jed
     integer isd_p, ied_p, jsd_p, jed_p, isc_p, iec_p, jsc_p, jec_p, isg, ieg, jsg,jeg, npx_p, npy_p
     real, allocatable :: g_dat(:,:,:)
@@ -188,10 +188,10 @@ contains
 !!$                call nested_grid_BC_send(Atm(n)%parent_grid%w, Atm(n)%neststruct%nest_domain, 0, 0)
                 call nested_grid_BC(Atm(n)%delz, Atm(n)%parent_grid%delz, Atm(n)%neststruct%nest_domain, &
                      Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-                     Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)
+                     Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)
                 call nested_grid_BC(Atm(n)%w, Atm(n)%parent_grid%w, Atm(n)%neststruct%nest_domain, &
                      Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-                     Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)
+                     Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)
              endif
 
           endif
@@ -202,21 +202,18 @@ contains
        !This call still appears to be necessary to get isd, etc. correct
        call switch_current_Atm(Atm(n))
 
-    npz     = Atm(1)%npz
-    npz_rst = Atm(1)%flagstruct%npz_rst
-
     !--- call fv_io_register_restart to register restart field to be written out in fv_io_write_restart
     call fv_io_register_restart(Atm(n)%domain,Atm(n:n))
     if (Atm(n)%neststruct%nested) call fv_io_register_restart_BCs(Atm(n))
     if( .not.cold_start_grids(n) .and. (.not. Atm(n)%flagstruct%external_ic) ) then
 
 
-        if ( npz_rst /= 0 .and. npz_rst /= npz ) then
+        if ( Atm(n)%flagstruct%npz_rst /= 0 .and. Atm(n)%flagstruct%npz_rst /= Atm(n)%npz ) then
 !            Remap vertically the prognostic variables for the chosen vertical resolution
              if( is_master() ) then
                  write(*,*) ' '
                  write(*,*) '***** Important Note from FV core ********************'
-                 write(*,*) 'Remapping dynamic IC from', npz_rst, 'levels to ', npz,'levels'
+                 write(*,*) 'Remapping dynamic IC from', Atm(n)%flagstruct%npz_rst, 'levels to ', Atm(n)%npz,'levels'
                  write(*,*) '***** End Note from FV core **************************'
                  write(*,*) ' '
              endif
@@ -268,7 +265,7 @@ contains
        if(.not.cold_start_grids(n))then
           Atm(N)%neststruct%first_step = .false.
           if (Atm(n)%neststruct%nested) then
-             if ( npz_rst /= 0 .and. npz_rst /= npz ) then
+             if ( Atm(n)%flagstruct%npz_rst /= 0 .and. Atm(n)%flagstruct%npz_rst /= Atm(n)%npz ) then
              else
                 !If BC file is found, then read them in. Otherwise we need to initialize the BCs.
                 if (is_master()) print*, 'Searching for nested grid BC files ', trim(fname_ne), ' ', trim (fname_sw)
@@ -323,7 +320,7 @@ contains
         else
            Atm(n)%ptop = Atm(n)%ak(1);  Atm(n)%ks = 0
         endif
-        call p_var(npz,         isc,         iec,       jsc,     jec,   Atm(n)%ptop,     ptop_min,  &
+        call p_var(Atm(n)%npz,         isc,         iec,       jsc,     jec,   Atm(n)%ptop,     ptop_min,  &
                    Atm(n)%delp, Atm(n)%delz, Atm(n)%pt, Atm(n)%ps, Atm(n)%pe, Atm(n)%peln,   &
                    Atm(n)%pk,   Atm(n)%pkz, kappa, Atm(n)%q, Atm(n)%ng, &
                    ncnst,  Atm(n)%gridstruct%area_64, Atm(n)%flagstruct%dry_mass,  &
@@ -376,7 +373,7 @@ contains
                            Atm(n)%phis, Atm(n)%ps,Atm(n)%pe, Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
                            Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        & 
                            Atm(n)%ak, Atm(n)%bk, Atm(n)%gridstruct, Atm(n)%flagstruct,&
-                           Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, &
+                           Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%ng, &
                            ncnst, Atm(n)%flagstruct%nwat,  &
                            Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
                            Atm(n)%flagstruct%dry_mass, &
@@ -393,7 +390,7 @@ contains
                                       Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        & 
                                       Atm(n)%ak, Atm(n)%bk, &
                                       Atm(n)%gridstruct, Atm(n)%flagstruct, &
-                                      Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, &
+                                      Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%ng, &
                                       ncnst, Atm(n)%flagstruct%nwat,  &
                                       Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
                                       Atm(n)%flagstruct%dry_mass, Atm(n)%flagstruct%mountain, &
@@ -407,7 +404,7 @@ contains
                              Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
                              Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        &
                              Atm(n)%ak, Atm(n)%bk, Atm(n)%gridstruct, &
-                             Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, ncnst, &
+                             Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%ng, ncnst, &
                              Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
                              Atm(n)%flagstruct%dry_mass, &
                              Atm(n)%flagstruct%mountain,       &
@@ -459,11 +456,21 @@ contains
        call mpp_broadcast(Atm(n)%ak,Atm(n)%npz+1,Atm(n)%pelist(1))
        call mpp_broadcast(Atm(n)%bk,Atm(n)%npz+1,Atm(n)%pelist(1))
     enddo
+    call mpp_sync()
     call mpp_set_current_pelist(pelist)
 
     do n = 1, ntileMe
-
        if (.not. grids_on_this_pe(n)) cycle
+
+       if (Atm(n)%neststruct%nested) then
+          if (is_master()) then
+             write(*,'(A, I3, A, F8.2, A)') ' Nested grid ', n, ',  ptop = ', Atm(n)%ak(1), ' Pa'
+             write(*,'(A, I3, A, F8.2, A)') ' Parent grid ', n, ',  ptop = ', Atm(n)%parent_grid%ak(1), ' Pa'
+             if (Atm(n)%ak(1) > Atm(n)%parent_Grid%ak(1)) then
+                print*, ' WARNING nested grid top above parent grid top. May have problems with remapping BCs.'
+             endif
+          endif
+       endif
 
        isd = Atm(n)%bd%isd
        ied = Atm(n)%bd%ied
@@ -474,25 +481,24 @@ contains
        ntdiag = size(Atm(n)%qdiag,4)
        isc = Atm(n)%bd%isc; iec = Atm(n)%bd%iec; jsc = Atm(n)%bd%jsc; jec = Atm(n)%bd%jec
 
-
 !---------------------------------------------------------------------------------------------
 ! Transform the (starting) Eulerian vertical coordinate from sigma-p to hybrid_z
      if ( Atm(n)%flagstruct%hybrid_z ) then
        if ( Atm(n)%flagstruct%make_hybrid_z ) then
-          allocate ( dz1(npz) )
-          if( npz==32 ) then
-              call compute_dz_L32(npz, ztop, dz1)
+          allocate ( dz1(Atm(n)%npz) )
+          if( Atm(n)%npz==32 ) then
+              call compute_dz_L32(Atm(n)%npz, ztop, dz1)
           else
               ztop = 45.E3
-              call compute_dz_var(npz, ztop, dz1)
+              call compute_dz_var(Atm(n)%npz, ztop, dz1)
           endif
-          call set_hybrid_z(isc, iec, jsc, jec, Atm(n)%ng, npz, ztop, dz1, rgrav,  &
+          call set_hybrid_z(isc, iec, jsc, jec, Atm(n)%ng, Atm(n)%npz, ztop, dz1, rgrav,  &
                             Atm(n)%phis, Atm(n)%ze0)
           deallocate ( dz1 )
-!         call prt_maxmin('ZE0', Atm(n)%ze0,  isc, iec, jsc, jec, 0, npz, 1.E-3)
-!         call prt_maxmin('DZ0', Atm(n)%delz, isc, iec, jsc, jec, 0, npz, 1.   )
+!         call prt_maxmin('ZE0', Atm(n)%ze0,  isc, iec, jsc, jec, 0, Atm(n)%npz, 1.E-3)
+!         call prt_maxmin('DZ0', Atm(n)%delz, isc, iec, jsc, jec, 0, Atm(n)%npz, 1.   )
        endif
-!      call make_eta_level(npz, Atm(n)%pe, area, Atm(n)%ks, Atm(n)%ak, Atm(n)%bk, Atm(n)%ptop)
+!      call make_eta_level(Atm(n)%npz, Atm(n)%pe, area, Atm(n)%ks, Atm(n)%ak, Atm(n)%bk, Atm(n)%ptop)
      endif
 !---------------------------------------------------------------------------------------------
 
@@ -502,7 +508,7 @@ contains
         call random_seed
         npts = 0
         sumpertn = 0.
-        do k=1,npz
+        do k=1,Atm(n)%npz
         do j=jsc,jec
         do i=isc,iec
            call random_number(pertn)
@@ -551,24 +557,24 @@ contains
 !---------------
       call pmaxmn_g('ZS', Atm(n)%phis, isc, iec, jsc, jec, 1, rgrav, Atm(n)%gridstruct%area_64, Atm(n)%domain)
       call pmaxmn_g('PS', Atm(n)%ps,   isc, iec, jsc, jec, 1, 0.01,  Atm(n)%gridstruct%area_64, Atm(n)%domain)
-      call pmaxmn_g('T ', Atm(n)%pt,   isc, iec, jsc, jec, npz, 1.,  Atm(n)%gridstruct%area_64, Atm(n)%domain)
+      call pmaxmn_g('T ', Atm(n)%pt,   isc, iec, jsc, jec, Atm(n)%npz, 1.,  Atm(n)%gridstruct%area_64, Atm(n)%domain)
 
 ! Check tracers:
       do i=1, ntprog
           call get_tracer_names ( MODEL_ATMOS, i, tname )
-          call pmaxmn_g(trim(tname), Atm(n)%q(isd:ied,jsd:jed,1:npz,i:i), isc, iec, jsc, jec, npz, &
+          call pmaxmn_g(trim(tname), Atm(n)%q(isd:ied,jsd:jed,1:Atm(n)%npz,i:i), isc, iec, jsc, jec, Atm(n)%npz, &
                         1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
       enddo
 #endif
-      call prt_maxmin('U ', Atm(n)%u(isc:iec,jsc:jec,1:npz), isc, iec, jsc, jec, 0, npz, 1.)
-      call prt_maxmin('V ', Atm(n)%v(isc:iec,jsc:jec,1:npz), isc, iec, jsc, jec, 0, npz, 1.)
+      call prt_maxmin('U ', Atm(n)%u(isc:iec,jsc:jec,1:Atm(n)%npz), isc, iec, jsc, jec, 0, Atm(n)%npz, 1.)
+      call prt_maxmin('V ', Atm(n)%v(isc:iec,jsc:jec,1:Atm(n)%npz), isc, iec, jsc, jec, 0, Atm(n)%npz, 1.)
 
       if ( (.not.Atm(n)%flagstruct%hydrostatic) .and. Atm(n)%flagstruct%make_nh ) then
          call mpp_error(NOTE, "  Initializing w to 0")
          Atm(n)%w = 0.
          if ( .not.Atm(n)%flagstruct%hybrid_z ) then
             call mpp_error(NOTE, "  Initializing delz from hydrostatic state")
-             do k=1,npz
+             do k=1,Atm(n)%npz
                 do j=jsc,jec
                    do i=isc,iec
                       Atm(n)%delz(i,j,k) = (rdgas*rgrav)*Atm(n)%pt(i,j,k)*(Atm(n)%peln(i,k,j)-Atm(n)%peln(i,k+1,j))
@@ -579,7 +585,7 @@ contains
       endif
 
       if ( .not.Atm(n)%flagstruct%hydrostatic )   &
-      call pmaxmn_g('W ', Atm(n)%w, isc, iec, jsc, jec, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+      call pmaxmn_g('W ', Atm(n)%w, isc, iec, jsc, jec, Atm(n)%npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
 
       if (is_master()) write(unit,*)
 
@@ -589,13 +595,13 @@ contains
     if ( .not. Atm(n)%flagstruct%srf_init ) then
          call cubed_to_latlon(Atm(n)%u, Atm(n)%v, Atm(n)%ua, Atm(n)%va, &
               Atm(n)%gridstruct, &
-              Atm(n)%npx, Atm(n)%npy, npz, 1, &              
+              Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, 1, &              
               Atm(n)%gridstruct%grid_type, Atm(n)%domain, &
               Atm(n)%gridstruct%nested, Atm(n)%flagstruct%c2l_ord, Atm(n)%bd)
          do j=jsc,jec
             do i=isc,iec
-               Atm(n)%u_srf(i,j) = Atm(n)%ua(i,j,npz)
-               Atm(n)%v_srf(i,j) = Atm(n)%va(i,j,npz)
+               Atm(n)%u_srf(i,j) = Atm(n)%ua(i,j,Atm(n)%npz)
+               Atm(n)%v_srf(i,j) = Atm(n)%va(i,j,Atm(n)%npz)
             enddo
          enddo
          Atm(n)%flagstruct%srf_init = .true.
@@ -641,7 +647,7 @@ contains
     ncnst = Atm%ncnst
     isc = Atm%bd%isc; iec = Atm%bd%iec; jsc = Atm%bd%jsc; jec = Atm%bd%jec
     is  = Atm%bd%is ; ie  = Atm%bd%ie ; js  = Atm%bd%js ; je  = Atm%bd%je
-    npz     = Atm%npz    
+    npz = Atm%npz    
     nwat = Atm%flagstruct%nwat
 
    if (nwat>=3 ) then
