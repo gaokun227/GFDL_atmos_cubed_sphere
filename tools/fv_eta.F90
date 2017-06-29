@@ -29,6 +29,7 @@ module fv_eta_mod
 
  contains
 
+!!!NOTE: USE_VAR_ETA not used in fvGFS
 #ifdef USE_VAR_ETA
  subroutine set_eta(km, ks, ptop, ak, bk)
 ! This is the easy to use version of the set_eta
@@ -388,6 +389,7 @@ module fv_eta_mod
  end subroutine mount_waves
 
 #else
+ !This is the version of set_eta used in fvGFS and AM4
  subroutine set_eta(km, ks, ptop, ak, bk)
 
       integer,  intent(in)::  km           ! vertical dimension
@@ -1404,7 +1406,7 @@ module fv_eta_mod
              pint = 100.E2
 !            call var_dz(km, ak, bk, ptop, ks, pint, 1.035)
              call var_hi(km, ak, bk, ptop, ks, pint, 1.035)
-#ifdef USE_GFSL63
+#ifdef USE_GFSL63 !Used for fvGFS
 ! GFS L64 equivalent setting
         case (63)
           ks = 23
@@ -1478,6 +1480,14 @@ module fv_eta_mod
       end select
       ptop = ak(1)
       pint = ak(ks+1)
+
+      if (is_master()) then
+         write(*, '(A4, A13, A13, A11)') 'klev', 'ak', 'bk', 'p_ref'
+         do k=1,km+1
+            write(*,'(I4, F13.5, F13.5, F11.2)') k, ak(k), bk(k), 1000.E2*bk(k) + ak(k)
+         enddo
+      endif
+
 
  end subroutine set_eta
 #endif
