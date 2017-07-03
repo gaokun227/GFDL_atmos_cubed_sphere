@@ -466,7 +466,7 @@ contains
           if (is_master()) then
              write(*,'(A, I3, A, F8.2, A)') ' Nested grid ', n, ',  ptop = ', Atm(n)%ak(1), ' Pa'
              write(*,'(A, I3, A, F8.2, A)') ' Parent grid ', n, ',  ptop = ', Atm(n)%parent_grid%ak(1), ' Pa'
-             if (Atm(n)%ak(1) > Atm(n)%parent_Grid%ak(1)) then
+             if (Atm(n)%ak(1) < Atm(n)%parent_Grid%ak(1)) then
                 print*, ' WARNING nested grid top above parent grid top. May have problems with remapping BCs.'
              endif
           endif
