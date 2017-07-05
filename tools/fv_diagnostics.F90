@@ -1493,59 +1493,63 @@ contains
                 idiag%id_dp300>0 .or. idiag%id_dp500>0 .or. idiag%id_dp700>0 .or. idiag%id_dp850>0 .or. &
                 idiag%id_dp925>0 .or. idiag%id_dp1000>0 ) then
 
+              if (allocated(a3)) deallocate(a3)
+              allocate(a3(isc:iec,jsc:jec,1:npz))
               !compute dew point (K)
               !using formula at https://cals.arizona.edu/azmet/dewpoint.html
               do k=1,npz
               do j=jsc,jec
               do i=isc,iec
-                 tmp = ( log(wk(i,j,k)*1.e-2) + 17.27 * ( Atm(n)%pt(i,j,k) - 273.14 )/ ( -35.84 + Atm(n)%pt(i,j,k)) ) / 17.27 
-                 wk(i,j,k) = 273.14 + 237.3*tmp/ ( 1. - tmp )
+                 tmp = ( log(max(wk(i,j,k)*1.e-2,1.e-2)) + 17.27 * ( Atm(n)%pt(i,j,k) - 273.14 )/ ( -35.84 + Atm(n)%pt(i,j,k)) ) / 17.27 
+                 a3(i,j,k) = 273.14 + 237.3*tmp/ ( 1. - tmp )
               enddo
               enddo
               enddo
 
+              if (idiag%id_dp50>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 50.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp50, a2, Time)
+              endif
+              if (idiag%id_dp100>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 100.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp100, a2, Time)
+              endif
+              if (idiag%id_dp200>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 200.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp200, a2, Time)
+              endif
+              if (idiag%id_dp250>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 250.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp250, a2, Time)
+              endif
+              if (idiag%id_dp300>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 300.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp300, a2, Time)
+              endif
+              if (idiag%id_dp500>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 500.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp500, a2, Time)
+              endif
+              if (idiag%id_dp700>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 700.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp700, a2, Time)
+              endif
+              if (idiag%id_dp850>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 850.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp850, a2, Time)
+              endif
+              if (idiag%id_dp925>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 925.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp925, a2, Time)
+              endif
+              if (idiag%id_dp1000>0) then
+                 call interpolate_vertical(isc, iec, jsc, jec, npz, 1000.e2, Atm(n)%peln, a3, a2)
+                 used=send_data(idiag%id_dp1000, a2, Time)
+              endif
+              deallocate(a3)
+
            endif
 
-           if (idiag%id_dp50>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 50.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp50, a2, Time)
-           endif
-           if (idiag%id_dp100>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 100.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp100, a2, Time)
-           endif
-           if (idiag%id_dp200>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 200.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp200, a2, Time)
-           endif
-           if (idiag%id_dp250>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 250.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp250, a2, Time)
-           endif
-           if (idiag%id_dp300>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 300.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp300, a2, Time)
-           endif
-           if (idiag%id_dp500>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 500.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp500, a2, Time)
-           endif
-           if (idiag%id_dp700>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 700.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp700, a2, Time)
-           endif
-           if (idiag%id_dp850>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 850.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp850, a2, Time)
-           endif
-           if (idiag%id_dp925>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 925.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp925, a2, Time)
-           endif
-           if (idiag%id_dp1000>0) then
-               call interpolate_vertical(isc, iec, jsc, jec, npz, 1000.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
-               used=send_data(idiag%id_dp1000, a2, Time)
-           endif
        endif
 
        ! rel hum (CMIP definition) at selected press levels  (for IPCC)
