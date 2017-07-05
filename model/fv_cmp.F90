@@ -1,3 +1,9 @@
+!=======================================================================
+! Fast saturation adjustment is part of the GFDL cloud microphysics
+! Developer: Shian-Jiann Lin
+! Revised  : Linjiong Zhou
+!=======================================================================
+
 module fv_cmp_mod
 
   use constants_mod,            only: rvgas, rdgas, grav, hlv, hlf, cp_air
@@ -620,7 +626,9 @@ subroutine fv_sat_adj(mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
 
     if (do_qa .and. last_step) then
 
+!-----------------------------------------------------------------------
 ! combine water species
+!-----------------------------------------------------------------------
 
       if (rad_snow) then
         if (rad_graupel) then
@@ -650,7 +658,9 @@ subroutine fv_sat_adj(mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         q_cond(i) = q_sol(i) + q_liq(i)
       enddo
 
+!-----------------------------------------------------------------------
 ! Use the "liquid-frozen water temperature" (tin) to compute saturated specific humidity
+!-----------------------------------------------------------------------
 
       do i = is, ie
 
@@ -658,6 +668,11 @@ subroutine fv_sat_adj(mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
 !       tin = pt1(i) - ((lv00 + d0_vap * pt1(i)) * q_cond(i) + &
 !                       (li00 + dc_ice * pt1(i)) * q_sol(i)) / &
 !                      (mc_air(i) + qpz(i) * c_vap)
+
+!-----------------------------------------------------------------------
+! determine saturated specific humidity
+!-----------------------------------------------------------------------
+
         if(tin <= t_wfr) then
 ! ice phase:
           qstar(i) = iqs1(tin, den(i))
@@ -668,7 +683,7 @@ subroutine fv_sat_adj(mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
 ! mixed phase:
           qsi = iqs1(tin, den(i))
           qsw = wqs1(tin, den(i))
-          if(q_cond(i) > 1.E-6) then
+          if (q_cond(i) > 1.E-6) then
             rqi = q_sol(i) / q_cond(i)
           else
 ! Mostly liquid water clouds at initial cloud development stage
@@ -682,15 +697,19 @@ subroutine fv_sat_adj(mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
 ! "Scale-aware" subgrid variability:  100-km as the base
         hvar(i) = min(0.2, max(0.01, dw * sqrt(sqrt(area(i,j)) / 100.E3)))
 
+!-----------------------------------------------------------------------
 ! Partial cloudiness by PDF:
 ! Assuming subgrid linear distribution in horizontal; this is effectively a smoother for the
 ! binary cloud scheme;  qa=0.5 if qstar(i)==qpz
+!-----------------------------------------------------------------------
  
         rh = qpz(i) / qstar(i)
 
+!-----------------------------------------------------------------------
 ! icloud_f = 0: bug-fxied
 ! icloud_f = 1: Old fvGFS GFDL)MP implementation
 ! icloud_f = 2: Binary cloud scheme (0/1)
+!-----------------------------------------------------------------------
 
         if (rh > 0.75 .and. qpz(i) > 1.E-6) then
             dq = hvar(i) * qpz(i)
@@ -750,8 +769,7 @@ real function wqs1(ta, den)
 
   real, intent(in) :: ta, den
 
-  real :: es, ap1
-  real :: tmin
+  real :: es, ap1, tmin
 
   integer :: it
 
@@ -777,8 +795,7 @@ real function iqs1(ta, den)
 
   real, intent(in) :: ta, den
 
-  real :: es, ap1
-  real :: tmin
+  real :: es, ap1, tmin
 
   integer :: it
 
@@ -806,8 +823,7 @@ real function wqs2(ta, den, dqdt)
 
   real, intent(out) :: dqdt
 
-  real :: es, ap1
-  real :: tmin
+  real :: es, ap1, tmin
 
   integer :: it
 
@@ -841,8 +857,7 @@ subroutine wqs2_vect(is, ie, ta, den, wqsat, dqdt)
 
   real, intent(out), dimension(is:ie) :: wqsat, dqdt
 
-  real :: es, ap1
-  real :: tmin
+  real :: es, ap1, tmin
 
   integer :: i, it
 
@@ -876,8 +891,7 @@ real function iqs2(ta, den, dqdt)
 
   real, intent(out) :: dqdt
 
-  real :: es, ap1
-  real :: tmin
+  real :: es, ap1, tmin
 
   integer :: it
 
@@ -906,7 +920,7 @@ subroutine qs_init(kmp)
 
   integer, parameter :: length = 2621
 
-  integer i
+  integer :: i
 
   if (mp_initialized) return
 
@@ -955,7 +969,9 @@ subroutine qs_table(n)
 
   tmin = tice - 160.
 
+!-----------------------------------------------------------------------
 ! compute es over ice between -160 deg C and 0 deg C.
+!-----------------------------------------------------------------------
 
   do i = 1, 1600
     tem = tmin + delt * real(i-1)
@@ -965,7 +981,9 @@ subroutine qs_table(n)
     table(i) = e00 * exp(fac2)
   enddo
 
+!-----------------------------------------------------------------------
 ! compute es over water between -20 deg C and 102 deg C.
+!-----------------------------------------------------------------------
 
   do i = 1, 1221
     tem = 253.16 + delt * real(i-1)
@@ -980,7 +998,9 @@ subroutine qs_table(n)
     endif
   enddo
 
+!-----------------------------------------------------------------------
 ! derive blended es over ice and supercooled water between -20 deg C and 0 deg C
+!-----------------------------------------------------------------------
 
   do i = 1, 200
     tem  = 253.16 + delt * real(i-1)
@@ -1003,20 +1023,21 @@ subroutine qs_tablew(n)
   integer, intent(in) :: n
 
   real(kind=R_GRID) :: delt = 0.1
-  real(kind=R_GRID) :: tmin
-  real(kind=R_GRID) :: tem0, fac0, fac1, fac2
+  real(kind=R_GRID) :: tmin, tem, fac0, fac1, fac2
 
   integer :: i
 
   tmin = tice - 160.
 
+!-----------------------------------------------------------------------
 ! compute es over water
+!-----------------------------------------------------------------------
 
   do i = 1, n
-    tem0 = tmin + delt * real(i-1)
-    fac0 = (tem0 - tice) / (tem0 * tice)
+    tem = tmin + delt * real(i-1)
+    fac0 = (tem - tice) / (tem * tice)
     fac1 = fac0 * lv0
-    fac2 = (dc_vap * log(tem0 / tice) + fac1) / rvgas
+    fac2 = (dc_vap * log(tem / tice) + fac1) / rvgas
     tablew(i) = e00 * exp(fac2)
   enddo
 
@@ -1034,8 +1055,7 @@ subroutine qs_table2(n)
   integer, intent(in) :: n
 
   real(kind=R_GRID) :: delt = 0.1
-  real(kind=R_GRID) :: tmin
-  real(kind=R_GRID) :: tem0, tem1, fac0, fac1, fac2
+  real(kind=R_GRID) :: tmin, tem0, tem1, fac0, fac1, fac2
 
   integer :: i, i0, i1
 
@@ -1045,18 +1065,24 @@ subroutine qs_table2(n)
     tem0 = tmin + delt * real(i-1)
     fac0 = (tem0 - tice) / (tem0 * tice)
     if (i <= 1600) then
+!-----------------------------------------------------------------------
 ! compute es over ice between -160 deg C and 0 deg C.
+!-----------------------------------------------------------------------
       fac1 = fac0 * li2
       fac2 = (d2ice * log(tem0 / tice) + fac1) / rvgas
     else
+!-----------------------------------------------------------------------
 ! compute es over water between 0 deg C and 102 deg C.
+!-----------------------------------------------------------------------
       fac1 = fac0 * lv0
       fac2 = (dc_vap * log(tem0 / tice) + fac1) / rvgas
     endif
     table2(i) = e00 * exp(fac2)
   enddo
 
+!-----------------------------------------------------------------------
 ! smoother around 0 deg C
+!-----------------------------------------------------------------------
 
   i0 = 1600
   i1 = 1601
