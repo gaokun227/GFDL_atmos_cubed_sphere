@@ -597,6 +597,11 @@ contains
 
         if ( Atm(n)%flagstruct%full_zs_filter) then
            allocate (oro_g(isd:ied,jsd:jed))
+           do j=jsd,jed
+           do i=isd,ied
+              oro_g(i,j) = 0.
+           enddo
+           enddo
           ! land-frac
           id_res = register_restart_field (ORO_restart, fn_oro_ics, 'land_frac', oro_g, domain=Atm(n)%domain)
           call mpp_update_domains(oro_g, Atm(n)%domain)
@@ -668,7 +673,7 @@ contains
           Atm(n)%bk(1:npz+1) = bk(itoa:levp+1)
           call set_external_eta (Atm(n)%ak, Atm(n)%bk, Atm(n)%ptop, Atm(n)%ks)
         else
-          if ( npz <= 64 ) then
+          if ( npz == 63 .or. npz == 64 ) then
              Atm(n)%ak(:) = ak_sj(:)
              Atm(n)%bk(:) = bk_sj(:)
              Atm(n)%ptop = Atm(n)%ak(1)
@@ -1334,7 +1339,7 @@ contains
 
       
 ! Set up model's ak and bk
-      if ( npz <= 64 ) then
+      if ( npz == 64 .or. npz == 63 ) then
          Atm(1)%ak(:) = ak_sj(:)
          Atm(1)%bk(:) = bk_sj(:)
          Atm(1)%ptop = Atm(1)%ak(1)
