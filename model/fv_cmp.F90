@@ -9,12 +9,16 @@ module fv_cmp_mod
   use constants_mod,            only: rvgas, rdgas, grav, hlv, hlf, cp_air
   use fv_mp_mod,                only: is_master
   use fv_arrays_mod,            only: R_GRID
-  use gfdl_cloud_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql_mlt, ql0_max, qi_lim, qs_mlt
-  use gfdl_cloud_microphys_mod, only: icloud_f, sat_adj0, t_sub, cld_min
-  use gfdl_cloud_microphys_mod, only: tau_r2g, tau_smlt, tau_i2s, tau_v2l, tau_l2v, tau_imlt, tau_l2r
-  use gfdl_cloud_microphys_mod, only: rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
+  use gfdl_cloud_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql_mlt, ql0_max, qi_lim, qs_mlt, &
+                                      icloud_f, sat_adj0, t_sub, cld_min, &
+                                      tau_r2g, tau_smlt, tau_i2s, tau_v2l, tau_l2v, tau_imlt, tau_l2r, &
+                                      rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
 
   implicit none
+
+  private
+
+  public fv_sat_adj, qs_init
 
 ! real, parameter :: cp_air = cp_air                       ! 1004.6, heat capacity of dry air at constant pressure, come from constants_mod
   real, parameter :: cp_vap = 4.0 * rvgas                  ! 1846.0, heat capacity of water vapor at constant pressure
@@ -50,17 +54,14 @@ module fv_cmp_mod
   real(kind=R_GRID), parameter :: d2ice = dc_vap + dc_ice  ! -126, isobaric heating/cooling
   real(kind=R_GRID), parameter :: li2   = lv0 + li00       ! 2.86799816e6, sublimation latent heat coefficient at 0 deg K
 
-  real, parameter :: lat2 = (hlv + hlf) ** 2
+  real, parameter :: lat2 = (hlv + hlf) ** 2               ! used in Bigg mechanism
 
-  real :: d0_vap    ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
-  real :: lv00      ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
+  real :: d0_vap                                           ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
+  real :: lv00                                             ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
+
   real, allocatable :: table(:), table2(:), tablew(:), des2(:), desw(:)
 
   logical :: mp_initialized = .false.
-
-  private
-
-  public fv_sat_adj, qs_init
 
 contains
 
@@ -71,10 +72,10 @@ contains
 !=======================================================================
 
 subroutine fv_sat_adj(mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
-                      te0, qv, ql, qi, qr, qs, qg, hs, dpln, delz, pt, dp,  &
+                      te0, qv, ql, qi, qr, qs, qg, hs, dpln, delz, pt, dp, &
                       q_con, cappa, area, dtdt, out_dt, last_step, do_qa, qa)
 
-! input / output variables
+  implicit none
 
   integer, intent(in) :: is, ie, js, je, ng
 
@@ -92,8 +93,6 @@ subroutine fv_sat_adj(mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
   real, intent(out), dimension(is-ng:ie+ng,js-ng:je+ng) :: qa, te0
 
   real(kind=R_GRID), intent(in), dimension(is-ng:ie+ng,js-ng:je+ng) :: area
-
-! local variables
 
   real, dimension(is:ie) :: wqsat, dq2dt, qpz, cvm, t0, pt1, qstar
   real, dimension(is:ie) :: icp2, lcp2, tcp2, tcp3
