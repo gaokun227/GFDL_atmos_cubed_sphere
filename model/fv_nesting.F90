@@ -1823,7 +1823,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
     type(fv_atmos_type), intent(INOUT) :: parent_grid
 
-    real, allocatable :: t_nest(:,:,:), ps0(:,:)
+    real, allocatable :: t_nest(:,:,:), ps0(:,:), ps0stag(:,:), ps1stag(:,:)
     integer :: i,j,k,n
     integer :: isd_p, ied_p, jsd_p, jed_p, isc_p, iec_p, jsc_p, jec_p
     integer :: isg, ieg, jsg,jeg, npx_p, npy_p
@@ -2113,12 +2113,12 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
               neststruct%parent_proc, neststruct%child_proc, parent_grid)
 
       endif !conv_theta
+      call mpp_sync!self
       if (neststruct%parent_proc) call remap_up_k(ps0, parent_grid%ps, &
            ak, bk, parent_grid%ak, parent_grid%bk, var_src, parent_grid%pt, &
            parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
            0, 0, npz, parent_grid%npz, 1, abs(parent_grid%flagstruct%kord_tm), blend_wt, log_pe=.true.)
 
-      call mpp_sync!self
 
       if (.not. flagstruct%hydrostatic) then
 
@@ -2129,6 +2129,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                  npx, npy, npz, 0, 0, &
                  neststruct%refinement, neststruct%nestupdate, upoff, 0, &
                  neststruct%parent_proc, neststruct%child_proc, parent_grid)
+            call mpp_sync!self
             if (neststruct%parent_proc) call remap_up_k(ps0, parent_grid%ps, &
                  ak, bk, parent_grid%ak, parent_grid%bk, var_src, parent_grid%w, &
                  parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
@@ -2140,8 +2141,6 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 !!$                 neststruct%ind_update_h, &
 !!$                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, npz, 0, 0, &
 !!$                 neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc)
-
-         call mpp_sync!self
 
       end if
       
@@ -2157,6 +2156,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
    else
       allocate(var_src(1,1,1))
    endif
+      var_src = 0.
    call update_coarse_grid(var_src, u, neststruct%nest_domain, &
         neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
         isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
@@ -2165,10 +2165,51 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
         neststruct%refinement, neststruct%nestupdate, upoff, 0, &
         neststruct%parent_proc, neststruct%child_proc, parent_grid)
    if (neststruct%parent_proc) then
-      call remap_up_k(ps0, parent_grid%ps, &
+      allocate(ps0stag(isd_p:ied_p,jsd_p:jed_p+1))
+      allocate(ps1stag(isd_p:ied_p,jsd_p:jed_p+1))
+      do j=jsc_p,jec_p+1
+      do i=isc_p,iec_p
+         ps0stag(i,j) = 0.5*(ps0(i,j-1) + ps0(i,j))
+         ps1stag(i,j) = 0.5*(parent_grid%ps(i,j-1)+parent_grid%ps(i,j))
+      enddo
+      enddo
+      call mpp_sync!self
+!!! DEBUG CODE
+      i = neststruct%isu
+      j = neststruct%jsu
+      if (i >= 1 .and. j >= 1 ) then
+      write(mpp_pe()+2000,*) ' SOURCE: i = ', i, ', j = ', j
+      write(mpp_pe()+2000,*) ps0stag(i,j), ps1stag(i,j)
+      do k=1,npz
+         write(mpp_pe()+2000,*) k, var_src(i,j,k)
+      enddo
+      write(mpp_pe()+2000,*) 
+      write(mpp_pe()+2000,*) ' PARENT: i = ', i, ', j = ', j
+      do k=1,parent_grid%npz
+         write(mpp_pe()+2000,*) k, parent_grid%u(i,j,k)
+      enddo
+      write(mpp_pe()+2000,*) 
+      endif
+!!! END DEBUG CODE
+!!!! Errors still occurring??
+!!!! IS NULL DATA BEING USED TO UPDATE THE COARSE GRID?!?
+      call remap_up_k(ps0stag, ps1stag, &
            ak, bk, parent_grid%ak, parent_grid%bk, var_src, parent_grid%u, &
            parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu+1, &
            0, 1, npz, parent_grid%npz, -1, parent_grid%flagstruct%kord_mt, blend_wt, log_pe=.false.)
+      deallocate(ps0stag)
+      deallocate(ps1stag)
+!!! DEBUG CODE
+      i = neststruct%isu
+      j = neststruct%jsu
+      if (i >=1 .and. j >= 1 ) then
+      write(mpp_pe()+2000,*) ' UPDATED: i = ', i, ', j = ', j
+      do k=1,parent_grid%npz
+         write(mpp_pe()+2000,*) k, parent_grid%u(i,j,k)
+      enddo
+      write(mpp_pe()+2000,*) 
+      endif
+!!! END DEBUG CODE
    endif
    deallocate(var_src)
 
@@ -2185,13 +2226,22 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
         neststruct%refinement, neststruct%nestupdate, upoff, 0, &
         neststruct%parent_proc, neststruct%child_proc, parent_grid)
    if (neststruct%parent_proc) then
-      call remap_up_k(ps0, parent_grid%ps, &
+      allocate(ps0stag(isd_p:ied_p+1,jsd_p:jed_p))
+      allocate(ps1stag(isd_p:ied_p+1,jsd_p:jed_p))
+      do j=jsc_p,jec_p
+      do i=isc_p,iec_p+1
+         ps0stag(i,j) = 0.5*(ps0(i-1,j) + ps0(i,j))
+         ps1stag(i,j) = 0.5*(parent_grid%ps(i-1,j)+parent_grid%ps(i,j))
+      enddo
+      enddo
+      call mpp_sync!self
+      call remap_up_k(ps0stag, ps1stag, &
            ak, bk, parent_grid%ak, parent_grid%bk, var_src, parent_grid%v, &
            parent_grid%bd, neststruct%isu, neststruct%ieu+1, neststruct%jsu, neststruct%jeu, &
            1, 0, npz, parent_grid%npz, -1, parent_grid%flagstruct%kord_mt, blend_wt, log_pe=.false.)
+      deallocate(ps0stag)
+      deallocate(ps1stag)
    endif
-
-   call mpp_sync!self
 
  end subroutine twoway_nest_update
 
@@ -2247,6 +2297,11 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
    if (iend < istart) return
    if (jend < jstart) return
 
+!!!! DEBUG CODE
+      write(mpp_pe()+1000,*) bd%isd,bd%ied,bd%jsd,bd%jed
+      write(mpp_pe()+1000,*) istart,iend,jstart,jend,istag,jstag
+      write(mpp_pe()+1000,*)
+!!! END DEBUG CODE
    do j=jstart,jend
 
       !Compute Eulerian pressures
@@ -2307,17 +2362,17 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
       else
 
-         if (istag > 0 .or. jstag > 0) then
-            write(mpp_pe()+1000,*) lbound(pe_src)
-            write(mpp_pe()+1000,*) ubound(pe_src)
-            write(mpp_pe()+1000,*) lbound(pe_dst)
-            write(mpp_pe()+1000,*) ubound(pe_dst)
-         endif
          call mappm(npz_src, pe_src, var_src(istart:iend,j:j,:), &
                     npz_dst, pe_dst, var_dst_unblend, &
                     istart, iend, iv, kord, pe_dst(istart,1))
 
       endif
+!!!! DEBUG CODE
+      do i=istart,iend
+         write(mpp_pe()+1000,*) pe_src(i,npz_src), pe_dst(i,npz_dst)
+         write(mpp_pe()+1000,*) var_src(i,j,npz_src), var_dst_unblend(i,npz_dst), var_dst(i,j,npz_dst)
+      enddo
+!!!! END DEBUG CODE
 
       do k=1,npz_dst
         bw1 = blend_wt(k)
@@ -2328,6 +2383,13 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
       enddo
 
    enddo
+
+!!!! DEBUG CODE
+      write(mpp_pe()+1000,*)
+      write(mpp_pe()+1000,*)
+      write(mpp_pe()+1000,*)
+!!!! END DEBUG CODE
+
 
  end subroutine remap_up_k
 
