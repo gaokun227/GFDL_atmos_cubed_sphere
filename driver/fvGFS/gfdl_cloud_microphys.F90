@@ -85,8 +85,8 @@ module gfdl_cloud_microphys_mod
   real, parameter :: qrmin  = 1.e-8              ! min value for ???, ljz
   real, parameter :: qvmin  = 1.e-20             ! min value for water vapor (treated as zero)
   real, parameter :: qcmin  = 1.e-12             ! min value for cloud condensates
-  real, parameter :: vr_min = 1.e-3              ! minimum fall speed for rain
-  real, parameter :: vf_min = 1.e-5              ! minimum fall speed for cloud ice, snow, graupel
+  real, parameter :: vr_min = 1.e-3              ! min fall speed for rain
+  real, parameter :: vf_min = 1.e-5              ! min fall speed for cloud ice, snow, graupel
   real, parameter :: dz_min = 1.e-2              ! ???, ljz
 
   real, parameter :: sfcrho = 1.2                ! surface air density
@@ -104,6 +104,8 @@ module gfdl_cloud_microphys_mod
 
   real :: d0_vap                                 ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
   real :: lv00                                   ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
+
+! cloud microphysics switchers
 
   integer :: icloud_f = 0                        ! cloud scheme
   integer :: irain_f  = 0                        ! cloud water to rain auto conversion scheme
@@ -150,113 +152,115 @@ module gfdl_cloud_microphys_mod
   real :: cld_min  = 0.05    ! minimum cloud fraction
   real :: tice     = 273.16  ! set tice = 165. to trun off ice-phase phys (Kessler emulator)
  
-  real :: qc_crt   = 5.0e-8  ! minimum condensate mixing ratio to allow partial cloudiness
-  real :: t_min    = 178.    ! Min temp to freeze-dry all water vapor
-  real :: t_sub    = 184.    ! Min temp for sublimation of cloud ice
+  real :: t_min    = 178.    ! min temp to freeze-dry all water vapor
+  real :: t_sub    = 184.    ! min temp for sublimation of cloud ice
   real :: mp_time  = 150.    ! maximum micro-physics time step (sec)
+
+! relative humidity increment
  
-  real :: rh_inc   = 0.25    ! rh increment for complete evap of ql and qi
-  real :: rh_inr   = 0.25
+  real :: rh_inc   = 0.25    ! rh increment for complete evaporation of cloud water and cloud ice
+  real :: rh_inr   = 0.25    ! rh increment for minimum evaporation of rain
   real :: rh_ins   = 0.25    ! rh increment for sublimation of snow
 
-! The following 3 time scales are for melting during terminal falls
+! conversion time scale
 
-  real :: tau_r2g  = 900.    ! rain freezing time scale during fast_sat
-  real :: tau_smlt = 900.    ! snow melt
-  real :: tau_g2r  = 600.    ! graupel melt
-  real :: tau_imlt = 600.    ! ice melting time-scale
+  real :: tau_r2g  = 900.    ! rain freezing during fast_sat
+  real :: tau_smlt = 900.    ! snow melting
+  real :: tau_g2r  = 600.    ! graupel melting to rain
+  real :: tau_imlt = 600.    ! cloud ice melting
+  real :: tau_i2s  = 1000.   ! cloud ice to snow auto-conversion
+  real :: tau_l2r  = 900.    ! cloud water to rain auto-conversion
+  real :: tau_v2l  = 150.    ! water vapor to cloud water (condensation)
+  real :: tau_l2v  = 300.    ! cloud water to water vapor (evaporation)
+  real :: tau_g2v  = 900.    ! grapuel sublimation
+  real :: tau_v2g  = 21600.  ! grapuel deposition -- make it a slow process
 
-! Fast MP:
-
-  real :: tau_i2s  = 1000.   ! ice2snow auto-conversion time scale (sec) 
-  real :: tau_l2r  = 900.
-
-! cloud water
-
-  real :: tau_v2l  = 150.    ! vapor --> cloud water (condensation)  time scale
-  real :: tau_l2v  = 300.    ! cloud water --> vapor (evaporation)  time scale
-
-! Graupel
-
-  real :: tau_g2v  = 900.    ! Grapuel sublimation time scale
-  real :: tau_v2g  = 21600.  ! Grapuel deposition -- make it a slow process
+! horizontal subgrid variability
  
   real :: dw_land  = 0.20    ! base value for subgrid deviation/variability over land
   real :: dw_ocean = 0.10    ! base value for ocean
-  real :: ccn_o    = 90.
-  real :: ccn_l    = 270.
+
+! prescribed ccn
+
+  real :: ccn_o    = 90.     ! ccn over ocean (cm^-3)
+  real :: ccn_l    = 270.    ! ccn over land (cm^-3)
+
   real :: rthresh  = 10.0e-6 ! critical cloud drop radius (micro m)
 
-!-------------------------------------------------------------
-! WRF/WSM6 scheme: qi_gen = 4.92e-11 * (1.e3*exp(0.1*tmp))**1.33
-!  optimized:      qi_gen = 4.92e-11 * exp( 1.33*log(1.e3*exp(0.1*tmp)) )
+!-----------------------------------------------------------------------
+! WRF/WSM6 scheme: qi_gen = 4.92e-11 * (1.e3 * exp(0.1 * tmp)) ** 1.33
+! optimized:       qi_gen = 4.92e-11 * exp(1.33 * log(1.e3 * exp(0.1 * tmp)))
 ! qi_gen ~ 4.808e-7 at 0 C; 1.818e-6 at -10 C, 9.82679e-5 at -40C
 ! the following value is constructed such that qc_crt = 0 at zero C and @ -10C matches
 ! WRF/WSM6 ice initiation scheme; qi_crt = qi_gen*min(qi_lim, 0.1*tmp) / den
+!-----------------------------------------------------------------------
 
-  real :: qi_gen   = 1.82E-6
-  real :: qi_lim   = 1.
-  real :: ql_mlt   = 2.0e-3   ! max value of cloud water allowed from melted cloud ice
-  real :: qs_mlt   = 1.0e-6   ! 
-  real :: ql_gen   = 1.0e-3   ! max ql generation during remapping step if fast_sat_adj = .T.
-  real :: sat_adj0 = 0.90     ! adjustment factor (0: no, 1: full) during fast_sat_adj
+  real :: sat_adj0 = 0.90    ! adjustment factor (0: no, 1: full) during fast_sat_adj
+
+  real :: qc_crt   = 5.0e-8  ! mini condensate mixing ratio to allow partial cloudiness
+  real :: qi_gen   = 1.82E-6 ! max cloud ice generation during remapping step
+  real :: qi_lim   = 1.      ! cloud ice limiter to prevent large ice build up
+  real :: ql_mlt   = 2.0e-3  ! max value of cloud water allowed from melted cloud ice
+  real :: qs_mlt   = 1.0e-6  ! max cloud water due to snow melt
+  real :: ql_gen   = 1.0e-3  ! max cloud water generation during remapping step if fast_sat_adj = .T.
 
 ! Cloud condensate upper bounds: "safety valves" for ql & qi
 
-  real :: ql0_max = 2.0e-3    ! max ql value (auto converted to rain)
-  real :: qi0_max = 1.0e-4    ! max qi value (by other sources)
-  real :: qi0_crt = 1.0e-4    ! ice  --> snow autocon threshold (was 1.E-4)
-                              ! qi0_crt is highly dependent on horizontal resolution
-  real :: qr0_crt = 1.0e-4    ! rain --> snow or graupel/hail threshold
-                              ! LFO used *mixing ratio* = 1.E-4 (hail in LFO)
-  real :: c_paut  = 0.55      ! autoconversion ql --> qr  (use 0.5 to reduce autoconversion)
-  real :: c_psaci = 0.02      ! accretion: cloud ice --> snow (was 0.1 in Zetac)
-  real :: c_piacr = 5.0       ! accretion: rain --> ice:
-  real :: c_cracw = 0.9       ! rain accretion efficiency
+  real :: ql0_max  = 2.0e-3  ! max cloud water value (auto converted to rain)
+  real :: qi0_max  = 1.0e-4  ! max cloud ice value (by other sources)
+  real :: qi0_crt  = 1.0e-4  ! cloud ice to snow autoconversion threshold (was 1.E-4)
+                             ! qi0_crt is highly dependent on horizontal resolution
+  real :: qr0_crt  = 1.0e-4  ! rain to snow or graupel/hail threshold
+                             ! LFO used *mixing ratio* = 1.E-4 (hail in LFO)
+  real :: c_paut   = 0.55    ! autoconversion cloud water to rain  (use 0.5 to reduce autoconversion)
+  real :: c_psaci  = 0.02    ! accretion: cloud ice to snow (was 0.1 in Zetac)
+  real :: c_piacr  = 5.0     ! accretion: rain to ice:
+  real :: c_cracw  = 0.9     ! rain accretion efficiency
 
-! Decreasing  clin to reduce csacw (so as to reduce cloud water ---> snow)
+! Decreasing clin to reduce csacw (so as to reduce cloud water ---> snow)
 
-  real :: alin = 842.0
-  real :: clin = 4.8         ! 4.8 --> 6. (to ehance ql--> qs)
+  real :: alin     = 842.0   ! "a" in lin1983
+  real :: clin     = 4.8     ! "c" in lin 1983, 4.8 --> 6. (to ehance ql--> qs)
 
 ! Graupel control:
 
-  real :: qs0_crt = 1.0e-3   ! snow --> graupel density threshold (0.6e-3 in Purdue Lin scheme)
-  real :: c_pgacs = 2.0e-3   ! snow --> graupel "accretion" eff. (was 0.1 in Zetac)
+  real :: qs0_crt  = 1.0e-3  ! snow to graupel density threshold (0.6e-3 in Purdue Lin scheme)
+  real :: c_pgacs  = 2.0e-3  ! snow to graupel "accretion" eff. (was 0.1 in Zetac)
 
 ! fall velocity tuning constants:
 
   logical :: const_vi = .false.    ! If .T. the constants are specified by v*_fac
-  logical :: const_vs = .false.
-  logical :: const_vg = .false.
-  logical :: const_vr = .false.
+  logical :: const_vs = .false.    ! If .T. the constants are specified by v*_fac
+  logical :: const_vg = .false.    ! If .T. the constants are specified by v*_fac
+  logical :: const_vr = .false.    ! If .T. the constants are specified by v*_fac
 
 ! Good values:
 
-  real :: vi_fac = 1.    ! If const_vi: 1/3
-  real :: vs_fac = 1.    ! If const_vs: 1.
-  real :: vg_fac = 1.    ! If const_vg: 2.
-  real :: vr_fac = 1.    ! If const_vr: 4.
+  real :: vi_fac = 1.        ! If const_vi: 1/3
+  real :: vs_fac = 1.        ! If const_vs: 1.
+  real :: vg_fac = 1.        ! If const_vg: 2.
+  real :: vr_fac = 1.        ! If const_vr: 4.
 
 ! Upper bounds of fall speed (with variable speed option)
 
-  real :: vi_max = 0.5   !  max fall speed for ice
-  real :: vs_max = 5.0   !  max fall speed for snow
-  real :: vg_max = 8.0   !  max fall speed for graupel
-  real :: vr_max = 12.   !  max fall speed for rain
+  real :: vi_max = 0.5       ! max fall speed for ice
+  real :: vs_max = 5.0       ! max fall speed for snow
+  real :: vg_max = 8.0       ! max fall speed for graupel
+  real :: vr_max = 12.       ! max fall speed for rain
 
-  logical :: fast_sat_adj = .false.
-  logical :: z_slope_liq  = .true.          ! use linear mono slope for autocconversions
-  logical :: z_slope_ice  = .false.         ! use linear mono slope for autocconversions
-  logical :: use_ccn      = .false.
-  logical :: use_ppm      = .false.
-  logical :: mono_prof    = .true.          ! perform terminal fall with mono ppm scheme
-  logical :: mp_print     = .false.
+! cloud microphysics switchers
 
-  real :: global_area = -1.
+  logical :: fast_sat_adj = .false.  ! has fast saturation adjustments
+  logical :: z_slope_liq  = .true.   ! use linear mono slope for autocconversions
+  logical :: z_slope_ice  = .false.  ! use linear mono slope for autocconversions
+  logical :: use_ccn      = .false.  ! must be true when prog_ccn is false
+  logical :: use_ppm      = .false.  ! use ppm fall scheme
+  logical :: mono_prof    = .true.   ! perform terminal fall with mono ppm scheme
+  logical :: mp_print     = .false.  ! cloud microphysics debugging printout
 
-  real :: tice0, t_wfr
-  real :: log_10
+! real :: global_area = -1.
+
+  real :: log_10, tice0, t_wfr
 
   namelist /gfdl_cloud_microphysics_nml/ &
     mp_time, t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
@@ -352,6 +356,10 @@ subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
 
 ! call mpp_clock_begin(gfdl_mp_clock)
 
+!-----------------------------------------------------------------------
+! Define heat capacity of dry air and water vapor based on hydrostatical property
+!-----------------------------------------------------------------------
+
   if (phys_hydrostatic .or. hydrostatic) then
     c_air = cp_air
     c_vap = cp_vap
@@ -366,6 +374,10 @@ subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
 
   if (hydrostatic) do_sedi_w = .false.
 
+!-----------------------------------------------------------------------
+! Define latent heat coefficient used in wet bulb and Bigg mechanism
+!-----------------------------------------------------------------------
+
   latv = hlv
   lati = hlf
   lats = latv + lati
@@ -376,6 +388,11 @@ subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
   tcp = (latv + lati) / cp_air
 
 ! tendency zero out for am moist processes should be done outside the driver
+
+!-----------------------------------------------------------------------
+! Define cloud microphysics sub time step
+!-----------------------------------------------------------------------
+
   mpdt = min(dt_in, mp_time)
   rdt = 1. / dt_in
   ntimes = nint(dt_in / mpdt)
@@ -384,6 +401,10 @@ subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
   dts = dt_in / real(ntimes)
 
 ! call get_time(time, seconds, days)
+
+!-----------------------------------------------------------------------
+! Initialize precipitation
+!-----------------------------------------------------------------------
 
   do j = js, je
     do i = is, ie
@@ -395,6 +416,10 @@ subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
     enddo
   enddo
 
+!-----------------------------------------------------------------------
+! Major cloud microphysics
+!-----------------------------------------------------------------------
+
   do j = js, je
     call mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa, qn, dz, &
                is, ie, js, je, ks, ke, ktop, kbot, j, dt_in, &
@@ -405,7 +430,9 @@ subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
                w_var, vt_r, vt_s, vt_g, vt_i, qn2)
   enddo
 
-! no clouds allowed above ktop
+!-----------------------------------------------------------------------
+! No clouds allowed above ktop
+!-----------------------------------------------------------------------
 
   if (ks < ktop) then
     do k = ks, ktop
@@ -425,6 +452,10 @@ subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
       endif
     enddo
   endif
+
+!-----------------------------------------------------------------------
+! Diagnostic output
+!-----------------------------------------------------------------------
 
 !  if (id_vtr > 0) then
 !    used = send_data(id_vtr, vt_r, time, is_in=iis, js_in=jjs)
@@ -519,15 +550,15 @@ subroutine gfdl_cloud_microphys_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
 !    used=send_data(id_prec, prec_mp, time, is_in=iis, js_in=jjs)
 !  endif
 
-  if (mp_print) then
-    prec1(:,:) = prec1(:,:) + prec_mp(:,:)
-    if (seconds == 0) then
-      prec1(:,:) = prec1(:,:) * dt_in / 86400.
-!     tot_prec = g_sum(prec1, is, ie, js, je, area, 1)
-!     if(master) write(*,*) 'Daily prec_mp=', tot_prec
-      prec1(:,:) = 0.
-    endif
-  endif
+!  if (mp_print) then
+!    prec1(:,:) = prec1(:,:) + prec_mp(:,:)
+!    if (seconds == 0) then
+!      prec1(:,:) = prec1(:,:) * dt_in / 86400.
+!      tot_prec = g_sum(prec1, is, ie, js, je, area, 1)
+!      if(master) write(*,*) 'Daily prec_mp=', tot_prec
+!      prec1(:,:) = 0.
+!    endif
+!  endif
 
 ! call mpp_clock_end (gfdl_mp_clock)
 
@@ -598,7 +629,9 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
   dt_rain = dts * 0.5
   rdt = 1. / dt_in
 
-  cpaut = c_paut * 0.104 * grav / 1.717e-5
+!-----------------------------------------------------------------------
+! Use local variables
+!-----------------------------------------------------------------------
 
   do i = is, ie
 
@@ -692,8 +725,11 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
     endif
 
 !-----------------------------------------------------------------------
+! Calculate cloud condensation nuclei (CCN)
 ! The following is based on Klein Eq. 15
 !-----------------------------------------------------------------------
+
+    cpaut = c_paut * 0.104 * grav / 1.717e-5
 
     if (prog_ccn) then
       do k = ktop, kbot
@@ -716,6 +752,7 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
     endif
 
 !-----------------------------------------------------------------------
+! Calculate horizontal subgrid variability
 ! Total water subgrid deviation in horizontal direction
 ! default area dependent form: use dx ~ 100 km as the base
 !-----------------------------------------------------------------------
@@ -724,14 +761,18 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
     t_land = dw_land * s_leng
     t_ocean = dw_ocean * s_leng
     h_var = t_land * land(i) + t_ocean * (1. - land(i))
-    h_var = min(0.20, max(0.01, h_var))            ! cap:
+    h_var = min(0.20, max(0.01, h_var))
 !   if (id_var > 0) w_var(i,j) = h_var
+
+!-----------------------------------------------------------------------
+! Relative humidity increment
+!-----------------------------------------------------------------------
 
     rh_adj = 1. - h_var - rh_inc
     rh_rain = max(0.35, rh_adj - rh_inr)  ! rh_inr = 0.25
 
 !-----------------------------------------------------------------------
-! fix all negatives
+! Fix all negative water species
 !-----------------------------------------------------------------------
 
     if (fix_negative)  &
@@ -741,6 +782,10 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
     m2_sol(:,:) = 0.
 
     do n = 1, ntimes
+
+!-----------------------------------------------------------------------
+! Define air density based on hydrostatical property
+!-----------------------------------------------------------------------
 
       if (p_nonhydro) then
         do k = ktop, kbot
@@ -757,7 +802,7 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
       endif
 
 !-----------------------------------------------------------------------
-! Time-split warm rain processes: first pass
+! Time-split warm rain processes: 1st pass
 !-----------------------------------------------------------------------
 
       call warm_rain(dt_rain, ktop, kbot, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, qgz, &
@@ -771,7 +816,7 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
       enddo
 
 !-----------------------------------------------------------------------
-! sedimentation of cloud ice, snow, and graupel
+! Sedimentation of cloud ice, snow, and graupel
 !-----------------------------------------------------------------------
 
       call fall_speed(ktop, kbot, den, qsz, qiz, qgz, qlz, tz, vtsz, vtiz, vtgz)
@@ -783,6 +828,10 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
       snow(i) = snow(i) + s1
       graupel(i) = graupel(i) + g1
       ice(i) = ice(i) + i1
+
+!-----------------------------------------------------------------------
+! Heat transportation during sedimentation
+!-----------------------------------------------------------------------
 
       if (do_sedi_heat)  &
         call sedi_heat(ktop, kbot, dp1, m1_sol, dz1, tz, qvz, qlz, qrz, qiz, qsz, qgz, c_ice)
@@ -803,7 +852,7 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
       enddo
 
 !-----------------------------------------------------------------------
-! ice-phase microphysics
+! Ice-phase microphysics
 !-----------------------------------------------------------------------
 
       call icloud(ktop, kbot, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, &
@@ -811,7 +860,10 @@ subroutine mpdrv(hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, qa,
 
     enddo  ! sub-cycle
 
+!-----------------------------------------------------------------------
+! momentum transportation during sedimentation
 ! Note: dp1 is dry mass; dp0 is the old moist (total) mass
+!-----------------------------------------------------------------------
 
     if (sedi_transport) then
       do k = ktop+1, kbot
@@ -1433,7 +1485,7 @@ subroutine icloud(ktop, kbot, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
 ! pracs: accretion of snow by rain
 
         if (qr > qrmin) then
-          psacr = min(acr3d(vts(k), vtr(k), qr, qs, csacr, acco(1,2), den(k)), qr*rdts)
+          psacr = min(acr3d(vts(k), vtr(k), qr, qs, csacr, acco(1,2), den(k)), qr * rdts)
           pracs = acr3d(vtr(k), vts(k), qs, qr, cracs, acco(1,1), den(k))
         else
           psacr = 0.
