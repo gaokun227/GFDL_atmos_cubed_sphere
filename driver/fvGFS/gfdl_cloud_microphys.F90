@@ -2863,9 +2863,6 @@ endif   ! end ice-physics
 
 !    master = (mpp_pe().eq.mpp_root_pe())
 !    if (master) print*, ' GFDL MP: initializing qs tables'
-!!! DEBUG CODE
-!    print*, mpp_pe(), allocated(table), allocated(table2), allocated(table3), allocated(tablew), allocated(des), allocated(des2), allocated(des3), allocated(desw)
-!!! END DEBUG CODE
 
 !                            generate es table (dt = 0.1 deg. c)
        allocate ( table( length) )

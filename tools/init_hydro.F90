@@ -29,9 +29,6 @@ module init_hydro_mod
       use mpp_domains_mod,    only: domain2d
       use fv_arrays_mod,      only: R_GRID
 !     use fv_diagnostics_mod, only: prt_maxmin
-!!! DEBUG CODE
-      use mpp_mod,            only: mpp_pe
-!!! END DEBUG CODE
 
       implicit none
       private

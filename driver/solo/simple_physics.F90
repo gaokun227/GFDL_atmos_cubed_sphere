@@ -1,4 +1,4 @@
-subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel, rpdel, ps, precl, TSurf, rh, cond_only, dqdt, dTdt, dudt, dvdt)
+Gsubroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel, rpdel, ps, precl, TSurf, rh, cond_only, dqdt, dTdt, dudt, dvdt)
 !----------------------------------------------------------------------- 
 ! 
 ! Purpose: Simple Physics Package
@@ -354,11 +354,6 @@ if (.not. cond_only) then
 !!$        dqdt(i,pver) = dqdt(i,pver) +((qup(i,pver)+C*wind(i)*qsats(i,1)*dtime/za(i)) &
 !!$                            /(1.+C*wind(i)*dtime/za(i))-qup(i,pver))/dtime
 !!$        qup(i,pver) = (qup(i,pver)+C*wind(i)*qsats(i,1)*dtime/za(i))/(1.+C*wind(i)*dtime/za(i))
-!!$!!! DEBUG CODE
-!!$        !if (wind(i) > 10.) print*, 'dudt 1:', dudt(i,pver), dvdt(i,pver)
-!!$        !rh(i,pver) = q(i,pver)/qsats*100.
-!!$        rh(i,pver) = q(i,pver)/qsats(i,1)*100.
-!!$!!! END DEBUG CODE
      end do
 !===============================================================================
 
