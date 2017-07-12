@@ -1823,7 +1823,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
     type(fv_atmos_type), intent(INOUT) :: parent_grid
 
-    real, allocatable :: t_nest(:,:,:), ps0(:,:), ps0stag(:,:), ps1stag(:,:)
+    real, allocatable :: t_nest(:,:,:), ps0(:,:)
     integer :: i,j,k,n
     integer :: isd_p, ied_p, jsd_p, jed_p, isc_p, iec_p, jsc_p, jec_p
     integer :: isg, ieg, jsg,jeg, npx_p, npy_p
@@ -1832,9 +1832,9 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
     logical :: used, conv_theta=.true.
 
     real :: qdp(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
-    real :: pe3( bd%isd:bd%ied, bd%jsd:bd%jed, npz+1 )
     real, allocatable, dimension(:,:,:) :: qdp_coarse
     real, allocatable, dimension(:,:,:) :: var_src
+    real, allocatable, dimension(:,:,:) :: pt_src, w_src, u_src, v_src
     real(kind=f_p), allocatable :: q_diff(:,:,:)
     real :: L_sum_b(npz), L_sum_a(npz), blend_wt(parent_grid%npz)
     real :: pfull, ph1, ph2
@@ -1886,6 +1886,14 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
           blend_wt(k) = neststruct%update_blend
        endif
     enddo
+!!$       !!! DEBUG CODE
+!!$    if (first_timestep) then
+!!$       write(mpp_pe()+2000,*) ' NESTED DOMAIN'
+!!$       write(mpp_pe()+2000,*) ' compute: ', isc_p, iec_p, jsc_p, jec_p
+!!$       write(mpp_pe()+2000,*) ' data   : ', isd_p, ied_p, jsd_p, jed_p
+!!$       write(mpp_pe()+2000,*) ' update : ', neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu
+!!$    endif
+!!$       !!! END DEBUG CODE
     if (neststruct%parent_proc .and. is_master() .and. first_timestep) then
        print*, ' TWO-WAY BLENDING WEIGHTS'
        do k=1,parent_grid%npz
@@ -1894,186 +1902,134 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
        first_timestep = .false.
     endif
 
-      allocate(ps0(isd_p:ied_p,jsd_p:jed_p))
-      if (neststruct%parent_proc) then
-
-         parent_grid%ps = parent_grid%ptop
-!This loop appears to cause problems with OMP
-!$NO-OMP parallel do default(none) shared(npz,jsd_p,jed_p,isd_p,ied_p,parent_grid)
-         do j=jsd_p,jed_p
-            do k=1,parent_grid%npz
-               do i=isd_p,ied_p
-                  parent_grid%ps(i,j) = parent_grid%ps(i,j) + &
-                       parent_grid%delp(i,j,k)
-               end do
-            end do
-         end do
-
-         ps0 = parent_grid%ps
-      endif
-
-      if (neststruct%child_proc) then
-
-         ps = ptop
-!$NO-MP parallel do default(none) shared(npz,jsd,jed,isd,ied,ps,delp)
-         do j=jsd,jed
-            do k=1,npz
-               do i=isd,ied
-                  ps(i,j) = ps(i,j) + delp(i,j,k)
-               end do
-            end do
-         end do
-      endif
-
-      call update_coarse_grid(ps0, ps, neststruct%nest_domain, &
-              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
-              isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-              npx, npy, 0, 0, &
-              neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-              neststruct%parent_proc, neststruct%child_proc, parent_grid)
-
-      !!! The mpp version of update_coarse_grid does not return a consistent value of ps
-      !!! across PEs, as it does not go into the haloes of a given coarse-grid PE. This
-      !!! update_domains call takes care of the problem.
-
-   if (neststruct%parent_proc) then
-     call mpp_update_domains(parent_grid%ps, parent_grid%domain, complete=.false.)
-     call mpp_update_domains(ps0, parent_grid%domain, complete=.true.)
-   endif
-    !Send pressures for remapping
-
-    if (neststruct%parent_proc) then
-       !recall npz here is CHILD grid
-       allocate(var_src(isd_p:ied_p,jsd_p:jed_p,npz))
-    else
-       allocate(var_src(1,1,1))
-    endif
 
    !!! RENORMALIZATION UPDATE OPTION
    if (neststruct%nestupdate /= 3 .and. neststruct%nestupdate /= 7 .and. neststruct%nestupdate /= 8) then
 
-      allocate(qdp_coarse(isd_p:ied_p,jsd_p:jed_p,npz))
-      if (parent_grid%flagstruct%nwat > 0) then
-         allocate(q_diff(isd_p:ied_p,jsd_p:jed_p,npz))
-         q_diff = 0.
-      endif
-
-      do n=1,parent_grid%flagstruct%nwat
-
-         qdp_coarse = 0.
-         if (neststruct%child_proc) then
-            do k=1,npz
-            do j=jsd,jed
-            do i=isd,ied
-               qdp(i,j,k) = q(i,j,k,n)*delp(i,j,k)
-            enddo
-            enddo
-            enddo
-         else
-            qdp = 0.
-         endif
-
-         if (neststruct%parent_proc) then
-            !Add up ONLY region being replaced by nested grid
-            do k=1,npz
-            do j=jsu,jeu
-            do i=isu,ieu
-               qdp_coarse(i,j,k) = parent_grid%q(i,j,k,n)*parent_grid%delp(i,j,k)
-            enddo
-            enddo
-            enddo
-            call level_sum(qdp_coarse, parent_grid%gridstruct%area, parent_grid%domain, &
-                 parent_grid%bd, npz, L_sum_b)
-         else
-            qdp_coarse = 0.
-         endif
-         if (neststruct%parent_proc) then
-            if (n <= parent_grid%flagstruct%nwat) then
-            do k=1,npz
-            do j=jsu,jeu
-            do i=isu,ieu
-               q_diff(i,j,k) = q_diff(i,j,k) - qdp_coarse(i,j,k)
-            enddo
-            enddo
-            enddo
-            endif
-         endif
-
-            call update_coarse_grid(var_src, qdp, neststruct%nest_domain, &
-                 neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
-                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-                 neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-                 npx, npy, npz, 0, 0, &
-                 neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-                 neststruct%parent_proc, neststruct%child_proc, parent_grid)
-            if (neststruct%parent_proc) call remap_up_k(ps0, parent_grid%ps, &
-                 ak, bk, parent_grid%ak, parent_grid%bk, var_src, qdp_coarse, &
-                 parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-                 0, 0, npz, parent_grid%npz, 0, parent_grid%flagstruct%kord_tr, blend_wt, log_pe=.false.)
-
-               call mpp_sync!self
-
-         if (neststruct%parent_proc) then
-            call level_sum(qdp_coarse, parent_grid%gridstruct%area, parent_grid%domain, &
-                 parent_grid%bd, npz, L_sum_a)
-            do k=1,npz
-               if (L_sum_a(k) > 0.) then
-                  fix = L_sum_b(k)/L_sum_a(k)
-               do j=jsu,jeu
-               do i=isu,ieu
-                  !Normalization mass fixer
-                  parent_grid%q(i,j,k,n) = qdp_coarse(i,j,k)*fix
-            enddo
-            enddo
-               endif
-            enddo
-               if (n == 1) sphum_ll_fix = 1. - fix
-         endif
-         if (neststruct%parent_proc) then
-            if (n <= parent_grid%flagstruct%nwat) then
-            do k=1,npz
-            do j=jsu,jeu
-            do i=isu,ieu
-               q_diff(i,j,k) = q_diff(i,j,k) + parent_grid%q(i,j,k,n)
-            enddo
-            enddo
-            enddo
-            endif
-         endif
-
-      end do
-
-         if (neststruct%parent_proc) then
-            if (parent_grid%flagstruct%nwat > 0) then
-               do k=1,npz
-            do j=jsu,jeu
-            do i=isu,ieu
-               parent_grid%delp(i,j,k) = parent_grid%delp(i,j,k) + q_diff(i,j,k)
-            enddo
-            enddo
-            enddo
-         endif
-
-         do n=1,parent_grid%flagstruct%nwat
-            do k=1,npz
-         do j=jsu,jeu
-         do i=isu,ieu
-            parent_grid%q(i,j,k,n) = parent_grid%q(i,j,k,n)/parent_grid%delp(i,j,k)
-         enddo
-         enddo
-         enddo               
-         enddo
-         endif
-
-      deallocate(qdp_coarse)
-      if  (allocated(q_diff)) deallocate(q_diff)
+!!$      allocate(qdp_coarse(isd_p:ied_p,jsd_p:jed_p,npz))
+!!$      if (parent_grid%flagstruct%nwat > 0) then
+!!$         allocate(q_diff(isd_p:ied_p,jsd_p:jed_p,npz))
+!!$         q_diff = 0.
+!!$      endif
+!!$
+!!$      do n=1,parent_grid%flagstruct%nwat
+!!$
+!!$         qdp_coarse = 0.
+!!$         if (neststruct%child_proc) then
+!!$            do k=1,npz
+!!$            do j=jsd,jed
+!!$            do i=isd,ied
+!!$               qdp(i,j,k) = q(i,j,k,n)*delp(i,j,k)
+!!$            enddo
+!!$            enddo
+!!$            enddo
+!!$         else
+!!$            qdp = 0.
+!!$         endif
+!!$
+!!$         if (neststruct%parent_proc) then
+!!$            !Add up ONLY region being replaced by nested grid
+!!$            do k=1,npz
+!!$            do j=jsu,jeu
+!!$            do i=isu,ieu
+!!$               qdp_coarse(i,j,k) = parent_grid%q(i,j,k,n)*parent_grid%delp(i,j,k)
+!!$            enddo
+!!$            enddo
+!!$            enddo
+!!$            call level_sum(qdp_coarse, parent_grid%gridstruct%area, parent_grid%domain, &
+!!$                 parent_grid%bd, npz, L_sum_b)
+!!$         else
+!!$            qdp_coarse = 0.
+!!$         endif
+!!$         if (neststruct%parent_proc) then
+!!$            if (n <= parent_grid%flagstruct%nwat) then
+!!$            do k=1,npz
+!!$            do j=jsu,jeu
+!!$            do i=isu,ieu
+!!$               q_diff(i,j,k) = q_diff(i,j,k) - qdp_coarse(i,j,k)
+!!$            enddo
+!!$            enddo
+!!$            enddo
+!!$            endif
+!!$         endif
+!!$
+!!$            call update_coarse_grid(var_src, qdp, neststruct%nest_domain, &
+!!$                 neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+!!$                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+!!$                 neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+!!$                 npx, npy, npz, 0, 0, &
+!!$                 neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+!!$                 neststruct%parent_proc, neststruct%child_proc, parent_grid)
+!!$            if (neststruct%parent_proc) call remap_up_k(ps0, parent_grid%ps, &
+!!$                 ak, bk, parent_grid%ak, parent_grid%bk, var_src, qdp_coarse, &
+!!$                 parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+!!$                 0, 0, npz, parent_grid%npz, 0, parent_grid%flagstruct%kord_tr, blend_wt, log_pe=.false.)
+!!$
+!!$               call mpp_sync!self
+!!$
+!!$         if (neststruct%parent_proc) then
+!!$            call level_sum(qdp_coarse, parent_grid%gridstruct%area, parent_grid%domain, &
+!!$                 parent_grid%bd, npz, L_sum_a)
+!!$            do k=1,npz
+!!$               if (L_sum_a(k) > 0.) then
+!!$                  fix = L_sum_b(k)/L_sum_a(k)
+!!$               do j=jsu,jeu
+!!$               do i=isu,ieu
+!!$                  !Normalization mass fixer
+!!$                  parent_grid%q(i,j,k,n) = qdp_coarse(i,j,k)*fix
+!!$            enddo
+!!$            enddo
+!!$               endif
+!!$            enddo
+!!$               if (n == 1) sphum_ll_fix = 1. - fix
+!!$         endif
+!!$         if (neststruct%parent_proc) then
+!!$            if (n <= parent_grid%flagstruct%nwat) then
+!!$            do k=1,npz
+!!$            do j=jsu,jeu
+!!$            do i=isu,ieu
+!!$               q_diff(i,j,k) = q_diff(i,j,k) + parent_grid%q(i,j,k,n)
+!!$            enddo
+!!$            enddo
+!!$            enddo
+!!$            endif
+!!$         endif
+!!$
+!!$      end do
+!!$
+!!$         if (neststruct%parent_proc) then
+!!$            if (parent_grid%flagstruct%nwat > 0) then
+!!$               do k=1,npz
+!!$            do j=jsu,jeu
+!!$            do i=isu,ieu
+!!$               parent_grid%delp(i,j,k) = parent_grid%delp(i,j,k) + q_diff(i,j,k)
+!!$            enddo
+!!$            enddo
+!!$            enddo
+!!$         endif
+!!$
+!!$         do n=1,parent_grid%flagstruct%nwat
+!!$            do k=1,npz
+!!$         do j=jsu,jeu
+!!$         do i=isu,ieu
+!!$            parent_grid%q(i,j,k,n) = parent_grid%q(i,j,k,n)/parent_grid%delp(i,j,k)
+!!$         enddo
+!!$         enddo
+!!$         enddo               
+!!$         enddo
+!!$         endif
+!!$
+!!$      deallocate(qdp_coarse)
+!!$      if  (allocated(q_diff)) deallocate(q_diff)
 
    endif
    !!! END RENORMALIZATION UPDATE
 
 #ifndef SW_DYNAMICS
    if (neststruct%nestupdate /= 3 .and. neststruct%nestupdate /= 8) then
+
+      allocate(pt_src(isd_p:ied_p,jsd_p:jed_p,npz))
+      pt_src = -999.
 
       if (conv_theta) then
 
@@ -2093,7 +2049,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
             deallocate(t_nest)
          endif
 
-         call update_coarse_grid(var_src, &
+         call update_coarse_grid(pt_src, &
               t_nest, neststruct%nest_domain, &
               neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
@@ -2103,7 +2059,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
               neststruct%parent_proc, neststruct%child_proc, parent_grid)
       else
 
-         call update_coarse_grid(var_src, &
+         call update_coarse_grid(pt_src, &
               pt, neststruct%nest_domain, &
               neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
@@ -2113,27 +2069,23 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
               neststruct%parent_proc, neststruct%child_proc, parent_grid)
 
       endif !conv_theta
+
       call mpp_sync!self
-      if (neststruct%parent_proc) call remap_up_k(ps0, parent_grid%ps, &
-           ak, bk, parent_grid%ak, parent_grid%bk, var_src, parent_grid%pt, &
-           parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-           0, 0, npz, parent_grid%npz, 1, abs(parent_grid%flagstruct%kord_tm), blend_wt, log_pe=.true.)
 
 
       if (.not. flagstruct%hydrostatic) then
 
-            call update_coarse_grid(var_src, w, neststruct%nest_domain, &
-                 neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
-                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-                 neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-                 npx, npy, npz, 0, 0, &
-                 neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-                 neststruct%parent_proc, neststruct%child_proc, parent_grid)
-            call mpp_sync!self
-            if (neststruct%parent_proc) call remap_up_k(ps0, parent_grid%ps, &
-                 ak, bk, parent_grid%ak, parent_grid%bk, var_src, parent_grid%w, &
-                 parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-                 0, 0, npz, parent_grid%npz, -1, parent_grid%flagstruct%kord_wz, blend_wt, log_pe=.false.)
+         allocate(w_src(isd_p:ied_p,jsd_p:jed_p,npz))
+         w_src = -999.
+         call update_coarse_grid(w_src, w, neststruct%nest_domain, &
+              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+              isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+              npx, npy, npz, 0, 0, &
+              neststruct%refinement, neststruct%nestupdate, upoff, 0, &
+              neststruct%parent_proc, neststruct%child_proc, parent_grid)
+         call mpp_sync!self
+
             !Updating for delz not yet implemented; 
             ! may need to think very carefully how one would do this!!!
             ! consider updating specific volume instead?
@@ -2148,100 +2100,151 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
 #endif
 
-   deallocate(var_src)
-
-   if (neststruct%parent_proc) then
-      !recall npz here is CHILD grid
-      allocate(var_src(isd_p:ied_p,jsd_p:jed_p+1,npz))
-   else
-      allocate(var_src(1,1,1))
-   endif
-      var_src = 0.
-   call update_coarse_grid(var_src, u, neststruct%nest_domain, &
+   allocate(u_src(isd_p:ied_p,  jsd_p:jed_p+1,npz))
+   allocate(v_src(isd_p:ied_p+1,jsd_p:jed_p,npz))
+   u_src = -999.
+   v_src = -999.
+   call update_coarse_grid(u_src, u, neststruct%nest_domain, &
         neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
         isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
         neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
         npx, npy, npz, 0, 1, &
         neststruct%refinement, neststruct%nestupdate, upoff, 0, &
         neststruct%parent_proc, neststruct%child_proc, parent_grid)
-   if (neststruct%parent_proc) then
-      allocate(ps0stag(isd_p:ied_p,jsd_p:jed_p+1))
-      allocate(ps1stag(isd_p:ied_p,jsd_p:jed_p+1))
-      do j=jsc_p,jec_p+1
-      do i=isc_p,iec_p
-         ps0stag(i,j) = 0.5*(ps0(i,j-1) + ps0(i,j))
-         ps1stag(i,j) = 0.5*(parent_grid%ps(i,j-1)+parent_grid%ps(i,j))
-      enddo
-      enddo
-      call mpp_sync!self
-!!! DEBUG CODE
-      i = neststruct%isu
-      j = neststruct%jsu
-      if (i >= 1 .and. j >= 1 ) then
-      write(mpp_pe()+2000,*) ' SOURCE: i = ', i, ', j = ', j
-      write(mpp_pe()+2000,*) ps0stag(i,j), ps1stag(i,j)
-      do k=1,npz
-         write(mpp_pe()+2000,*) k, var_src(i,j,k)
-      enddo
-      write(mpp_pe()+2000,*) 
-      write(mpp_pe()+2000,*) ' PARENT: i = ', i, ', j = ', j
-      do k=1,parent_grid%npz
-         write(mpp_pe()+2000,*) k, parent_grid%u(i,j,k)
-      enddo
-      write(mpp_pe()+2000,*) 
-      endif
-!!! END DEBUG CODE
-!!!! Errors still occurring??
-!!!! IS NULL DATA BEING USED TO UPDATE THE COARSE GRID?!?
-      call remap_up_k(ps0stag, ps1stag, &
-           ak, bk, parent_grid%ak, parent_grid%bk, var_src, parent_grid%u, &
-           parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu+1, &
-           0, 1, npz, parent_grid%npz, -1, parent_grid%flagstruct%kord_mt, blend_wt, log_pe=.false.)
-      deallocate(ps0stag)
-      deallocate(ps1stag)
-!!! DEBUG CODE
-      i = neststruct%isu
-      j = neststruct%jsu
-      if (i >=1 .and. j >= 1 ) then
-      write(mpp_pe()+2000,*) ' UPDATED: i = ', i, ', j = ', j
-      do k=1,parent_grid%npz
-         write(mpp_pe()+2000,*) k, parent_grid%u(i,j,k)
-      enddo
-      write(mpp_pe()+2000,*) 
-      endif
-!!! END DEBUG CODE
-   endif
-   deallocate(var_src)
-
-   if (neststruct%parent_proc) then
-      allocate(var_src(isd_p:ied_p+1,jsd_p:jed_p,npz))
-   else
-      allocate(var_src(1,1,1))
-   endif
-   call update_coarse_grid(var_src, v, neststruct%nest_domain, &
+   call update_coarse_grid(v_src, v, neststruct%nest_domain, &
         neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
         isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
         neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
         npx, npy, npz, 1, 0, &
         neststruct%refinement, neststruct%nestupdate, upoff, 0, &
         neststruct%parent_proc, neststruct%child_proc, parent_grid)
-   if (neststruct%parent_proc) then
-      allocate(ps0stag(isd_p:ied_p+1,jsd_p:jed_p))
-      allocate(ps1stag(isd_p:ied_p+1,jsd_p:jed_p))
-      do j=jsc_p,jec_p
-      do i=isc_p,iec_p+1
-         ps0stag(i,j) = 0.5*(ps0(i-1,j) + ps0(i,j))
-         ps1stag(i,j) = 0.5*(parent_grid%ps(i-1,j)+parent_grid%ps(i,j))
-      enddo
-      enddo
+
+   call mpp_sync
+
+#ifndef SW_DYNAMICS
+   if (neststruct%nestupdate >= 5 .and. npz > 4) then
+
+      !Use PS0 from nested grid, NOT the full delp. Also we assume the same number of levels on both grids.
+      !PS0 should be initially set to be ps so that this routine does NOTHING outside of the update region
+
+      !Re-compute nested (AND COARSE) grid ps
+
+      allocate(ps0(isd_p:ied_p,jsd_p:jed_p))
+      if (neststruct%parent_proc) then
+
+         parent_grid%ps = parent_grid%ptop
+!This loop appears to cause problems with OMP
+!$OMP parallel do default(none) shared(jsd_p,jed_p,isd_p,ied_p,parent_grid)
+         do j=jsd_p,jed_p
+            do k=1,parent_grid%npz
+               do i=isd_p,ied_p
+                  parent_grid%ps(i,j) = parent_grid%ps(i,j) + &
+                       parent_grid%delp(i,j,k)
+               end do
+            end do
+         end do
+
+         ps0 = parent_grid%ps
+      endif
+
+      if (neststruct%child_proc) then
+
+         ps = ptop
+!$OMP parallel do default(none) shared(npz,jsd,jed,isd,ied,ps,delp)
+         do j=jsd,jed
+            do k=1,npz
+               do i=isd,ied
+                  ps(i,j) = ps(i,j) + delp(i,j,k)
+               end do
+            end do
+         end do
+      endif
+
+      call update_coarse_grid(ps0, ps, neststruct%nest_domain, &
+              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+              isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
+              npx, npy, 0, 0, &
+              neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc, parent_grid)
+
+      !!! The mpp version of update_coarse_grid does not return a consistent value of ps
+      !!! across PEs, as it does not go into the haloes of a given coarse-grid PE. This
+      !!! update_domains call takes care of the problem.
+
+      if (neststruct%parent_proc) then
+         call mpp_update_domains(parent_grid%ps, parent_grid%domain, complete=.false.)
+         call mpp_update_domains(ps0, parent_grid%domain, complete=.true.)
+      endif
+
       call mpp_sync!self
-      call remap_up_k(ps0stag, ps1stag, &
-           ak, bk, parent_grid%ak, parent_grid%bk, var_src, parent_grid%v, &
-           parent_grid%bd, neststruct%isu, neststruct%ieu+1, neststruct%jsu, neststruct%jeu, &
-           1, 0, npz, parent_grid%npz, -1, parent_grid%flagstruct%kord_mt, blend_wt, log_pe=.false.)
-      deallocate(ps0stag)
-      deallocate(ps1stag)
-   endif
+
+      if (parent_grid%tile == neststruct%parent_tile) then 
+
+         if (neststruct%parent_proc) then
+
+         !comment out if statement to always remap theta instead of t in the remap-update.
+         !(In LtE typically we use remap_t = .true.: remapping t is better (except in
+         !idealized simulations with a background uniform theta) since near the top
+         !boundary theta is exponential, which is hard to accurately interpolate with a spline
+         if (.not. parent_grid%flagstruct%remap_t) then
+!$OMP parallel do default(none) shared(jsc_p,jec_p,isc_p,iec_p,parent_grid,zvir,sphum)
+            do k=1,parent_grid%npz
+               do j=jsc_p,jec_p
+                  do i=isc_p,iec_p
+                     parent_grid%pt(i,j,k) = &
+                          parent_grid%pt(i,j,k)/parent_grid%pkz(i,j,k)*&
+                          (1.+zvir*parent_grid%q(i,j,k,sphum))
+                  end do
+               end do
+            end do
+         end if
+         call update_remap_tqw(parent_grid%npz, parent_grid%ak, parent_grid%bk, &
+              parent_grid%ps, &
+              parent_grid%pt, parent_grid%q, parent_grid%w, &
+              parent_grid%flagstruct%hydrostatic, &
+              npz, ps0, ak, bk, pt_src, w_src, &
+              zvir, parent_grid%ptop, ncnst, &
+              parent_grid%flagstruct%kord_tm, parent_grid%flagstruct%kord_tr, &
+              parent_grid%flagstruct%kord_wz, &
+              isc_p, iec_p, jsc_p, jec_p, isd_p, ied_p, jsd_p, jed_p, .false., &
+              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, blend_wt) !neststruct%nestupdate < 7)
+         if (.not. parent_grid%flagstruct%remap_t) then
+!$OMP parallel do default(none) shared(jsc_p,jec_p,isc_p,iec_p,parent_grid,zvir,sphum)
+            do k=1,parent_grid%npz
+               do j=jsc_p,jec_p
+                  do i=isc_p,iec_p
+                     parent_grid%pt(i,j,k) = &
+                          parent_grid%pt(i,j,k)*parent_grid%pkz(i,j,k) / &
+                          (1.+zvir*parent_grid%q(i,j,k,sphum))
+                  end do
+               end do
+            end do
+         end if
+
+         call update_remap_uv(parent_grid%npz, parent_grid%ak, parent_grid%bk, &
+              parent_grid%ps, parent_grid%u, parent_grid%v, &
+              npz, ak, bk, ps0, u_src, v_src, &
+              parent_grid%flagstruct%kord_mt, &
+              isc_p, iec_p, jsc_p, jec_p, isd_p, ied_p, jsd_p, jed_p, parent_grid%ptop, &
+              neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, blend_wt)
+
+         endif !neststruct%parent_proc
+
+      end if
+
+      if (allocated(ps0)) deallocate(ps0)
+
+   end if
+
+#endif
+
+
+
+   deallocate(pt_src)
+   deallocate(w_src)
+   deallocate(u_src)
+   deallocate(v_src)
+
 
  end subroutine twoway_nest_update
 
@@ -2274,6 +2277,8 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
  end subroutine level_sum
 
 ![ij]start and [ij]end should already take staggering into account
+!!! CHECK ARRAY BOUNDS!!
+!! Make sure data is in the correct place.
  subroutine remap_up_k(ps_src, ps_dst, ak_src, bk_src, ak_dst, bk_dst, var_src, var_dst, &
       bd, istart, iend, jstart, jend, istag, jstag, npz_src, npz_dst, iv, kord, blend_wt, log_pe)
 
@@ -2297,11 +2302,11 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
    if (iend < istart) return
    if (jend < jstart) return
 
-!!!! DEBUG CODE
-      write(mpp_pe()+1000,*) bd%isd,bd%ied,bd%jsd,bd%jed
-      write(mpp_pe()+1000,*) istart,iend,jstart,jend,istag,jstag
-      write(mpp_pe()+1000,*)
-!!! END DEBUG CODE
+!!$!!!! DEBUG CODE
+!!$      write(mpp_pe()+1000,*) bd%isd,bd%ied,bd%jsd,bd%jed
+!!$      write(mpp_pe()+1000,*) istart,iend,jstart,jend,istag,jstag
+!!$      write(mpp_pe()+1000,*)
+!!$!!! END DEBUG CODE
    do j=jstart,jend
 
       !Compute Eulerian pressures
@@ -2367,12 +2372,12 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                     istart, iend, iv, kord, pe_dst(istart,1))
 
       endif
-!!!! DEBUG CODE
-      do i=istart,iend
-         write(mpp_pe()+1000,*) pe_src(i,npz_src), pe_dst(i,npz_dst)
-         write(mpp_pe()+1000,*) var_src(i,j,npz_src), var_dst_unblend(i,npz_dst), var_dst(i,j,npz_dst)
-      enddo
-!!!! END DEBUG CODE
+!!$!!!! DEBUG CODE
+!!$      do i=istart,iend
+!!$         write(mpp_pe()+1000,*) pe_src(i,npz_src), pe_dst(i,npz_dst)
+!!$         write(mpp_pe()+1000,*) var_src(i,j,npz_src), var_dst_unblend(i,npz_dst), var_dst(i,j,npz_dst)
+!!$      enddo
+!!$!!!! END DEBUG CODE
 
       do k=1,npz_dst
         bw1 = blend_wt(k)
@@ -2384,11 +2389,11 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
    enddo
 
-!!!! DEBUG CODE
-      write(mpp_pe()+1000,*)
-      write(mpp_pe()+1000,*)
-      write(mpp_pe()+1000,*)
-!!!! END DEBUG CODE
+!!$!!!! DEBUG CODE
+!!$      write(mpp_pe()+1000,*)
+!!$      write(mpp_pe()+1000,*)
+!!$      write(mpp_pe()+1000,*)
+!!$!!!! END DEBUG CODE
 
 
  end subroutine remap_up_k
@@ -2484,5 +2489,254 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
 
  end subroutine after_twoway_nest_update
+
+
+ !Routines for remapping (interpolated) nested-grid data to the coarse-grid's vertical coordinate.
+
+ subroutine update_remap_tqw( npz, ak_dst,  bk_dst,  ps_dst, t_dst, q_dst, w_dst, &
+                      hydrostatic, &
+                      kmd, ps_src, ak_src, bk_src, t_src, w_src, &
+                      zvir, ptop, nq, kord_tm, kord_tr, kord_wz, &
+                      is, ie, js, je, isd, ied, jsd, jed, do_q, &
+                      istart, iend, jstart, jend, blend_wt)
+  integer, intent(in):: npz, kmd, nq, kord_tm, kord_tr, kord_wz
+  real,    intent(in):: zvir, ptop
+  real,    intent(in):: ak_src(kmd+1), bk_src(kmd+1)
+  real,    intent(in):: ak_dst(npz+1), bk_dst(npz+1), blend_wt(npz)
+  real,    intent(in), dimension(isd:ied,jsd:jed):: ps_src
+  real,    intent(in), dimension(isd:ied,jsd:jed):: ps_dst
+  real,    intent(inout), dimension(isd:ied,jsd:jed,npz):: t_dst, w_dst
+  real,    intent(inout), dimension(isd:ied,jsd:jed,npz,nq):: q_dst
+  real,    intent(in), dimension(isd:ied,jsd:jed,kmd):: t_src, w_src
+  integer,  intent(in) ::  is, ie, js, je, isd, ied, jsd, jed, istart, iend, jstart, jend
+  logical,   intent(in) :: hydrostatic, do_q
+! local:
+  real, dimension(is:ie,kmd):: tp, qp
+  real, dimension(is:ie,kmd+1):: pe0, pn0
+  real, dimension(is:ie,npz):: qn1
+  real, dimension(is:ie,npz+1):: pe1, pn1
+  integer i,j,k,iq
+  real :: wt1, wt2
+
+  if (do_q) call mpp_error(FATAL, ' update_remap_tqw: q remapping not yet supported') 
+
+  !This line to check if the update region is correctly defined or not is
+  ! IMPORTANT. Sometimes one or the other pair of limits will give a
+  ! non-empty loop, even though no data was transferred! This is why
+  ! I was having so much trouble getting the remap-update to work --- lmh 11jul17
+  if (istart > iend .or. jstart > jend) return
+
+!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak_dst,bk_dst,ps_dst,q_dst,npz,ptop,do_q,&
+!$OMP          t_dst,w_dst,t_src,w_src,ak_src,bk_src,ps_src,nq,hydrostatic,kord_tm,kord_tr,kord_wz,istart,iend,jstart,jend,blend_wt) &
+!$OMP          private(pe0,pn0,pe1,pn1,qp,tp,qn1,wt1,wt2)
+  do 5000 j=jstart,jend
+
+     do k=1,kmd+1
+        do i=istart,iend
+           pe0(i,k) = ak_src(k) + bk_src(k)*ps_src(i,j)
+           pn0(i,k) = log(pe0(i,k))
+       enddo
+     enddo 
+     do k=1,npz+1
+        do i=istart,iend
+           pe1(i,k) = ak_dst(k) + bk_dst(k)*ps_dst(i,j)
+           pn1(i,k) = log(pe1(i,k))
+       enddo
+     enddo 
+     if (do_q) then
+        do iq=1,nq
+        do k=1,kmd
+        do i=istart,iend
+           qp(i,k) = q_dst(i,j,k,iq)
+        enddo
+        enddo
+        call mappm(kmd, pe0, qp, npz, pe1,  qn1, is,ie, 0, kord_tr, ptop) !not sure about indices
+        do k=1,npz
+           do i=istart,iend
+              q_dst(i,j,k,iq) = qn1(i,k)
+           enddo
+        enddo
+        enddo
+     endif
+
+     do k=1,kmd
+        do i=istart,iend
+           tp(i,k) = t_src(i,j,k)
+        enddo
+     enddo
+     !Remap T using logp
+     call mappm(kmd, pn0(istart:iend,:), tp(istart:iend,:), npz, pn1(istart:iend,:), qn1(istart:iend,:), istart,iend, 1, abs(kord_tm), ptop)
+     
+     do k=1,npz
+        wt1 = blend_wt(k)
+        wt2 = 1. - wt1
+        do i=istart,iend
+           t_dst(i,j,k) = qn1(i,k)*wt1 + t_dst(i,j,k)*wt2
+        enddo
+     enddo
+
+     if (.not. hydrostatic) then
+        do k=1,kmd
+           do i=istart,iend
+              tp(i,k) = w_src(i,j,k)
+           enddo
+        enddo
+        !Remap w using p
+        !Using iv == -1 instead of -2
+        call mappm(kmd, pe0(istart:iend,:), tp(istart:iend,:), npz, pe1(istart:iend,:), qn1(istart:iend,:), istart,iend, -1, kord_wz, ptop)
+
+        do k=1,npz
+           wt1 = blend_wt(k)
+           wt2 = 1. - wt1
+           do i=istart,iend
+              w_dst(i,j,k) = qn1(i,k)*wt1 + w_dst(i,j,k)*wt2
+           enddo
+        enddo
+     endif
+
+5000 continue
+
+ end subroutine update_remap_tqw
+
+ !remap_uv as-is remaps only a-grid velocities. A new routine has been written to handle staggered grids.
+ subroutine update_remap_uv(npz, ak_dst, bk_dst, ps_dst, u_dst, v_dst, &
+                            kmd, ak_src, bk_src, ps_src, u_src, v_src, &
+                            kord_mt, &
+                            is, ie, js, je, isd, ied, jsd, jed, ptop, &
+                            istart, iend, jstart, jend, blend_wt)
+  integer, intent(in):: npz
+  real,    intent(in):: ak_dst(npz+1), bk_dst(npz+1), blend_wt(npz)
+  real,    intent(in):: ps_dst(isd:ied,jsd:jed)
+  real,    intent(inout), dimension(isd:ied,jsd:jed+1,npz):: u_dst
+  real,    intent(inout), dimension(isd:ied+1,jsd:jed,npz):: v_dst
+  integer, intent(in):: kmd
+  real,    intent(in):: ak_src(kmd+1), bk_src(kmd+1)
+  real,    intent(in):: ps_src(isd:ied,jsd:jed)
+  real,    intent(inout), dimension(isd:ied,jsd:jed+1,kmd):: u_src
+  real,    intent(inout), dimension(isd:ied+1,jsd:jed,kmd):: v_src
+!
+  integer, intent(in):: kord_mt
+  real,    intent(IN) :: ptop
+  integer,  intent(in) ::  is, ie, js, je, isd, ied, jsd, jed
+  integer,  intent(IN) :: istart, iend, jstart, jend
+!
+! local:
+  real, dimension(is:ie+1,kmd+1):: pe0
+  real, dimension(is:ie+1,npz+1):: pe1
+  real, dimension(is:ie+1,kmd):: qt
+  real, dimension(is:ie+1,npz):: qn1
+  integer i,j,k
+  real :: wt1, wt2
+
+  !This line to check if the update region is correctly defined or not is
+  ! IMPORTANT. Sometimes one or the other pair of limits will give a
+  ! non-empty loop, even though no data was transferred!
+  if (istart > iend .or. jstart > jend) return
+
+!------
+! map u
+!------
+!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak_dst,bk_dst,ps_dst,u_dst,v_dst,npz,ak_src,bk_src,ps_src,u_src,v_src,ptop,kord_mt,istart,iend,jstart,jend,blend_wt) &
+!$OMP          private(pe0,pe1,qt,qn1,wt1,wt2)
+  do j=jstart,jend+1
+!------
+! Data
+!------
+     do k=1,kmd+1
+       do i=istart,iend
+          pe0(i,k) = ak_src(k) + bk_src(k)*0.5*(ps_src(i,j)+ps_src(i,j-1))
+       enddo
+     enddo
+!------
+! Model
+!------
+     do k=1,npz+1
+        do i=istart,iend
+          pe1(i,k) = ak_dst(k) + bk_dst(k)*0.5*(ps_dst(i,j)+ps_dst(i,j-1))
+       enddo
+     enddo
+!------
+!Do map
+!------
+     qt = 0.
+      do k=1,kmd
+         do i=istart,iend
+            qt(i,k) = u_src(i,j,k)
+         enddo
+      enddo
+      qn1 = 0. 
+!!$        !!! DEBUG CODE
+!!$        if (j == jstart+1) then
+!!$           i = istart+1
+!!$           do k=1,kmd
+!!$              write(mpp_pe()+1000,*) k, qt(i,k), pe0(i,k)
+!!$           enddo
+!!$           write(mpp_pe()+1000,*) 
+!!$        endif
+!!$        !!! END DEBUG CODE
+      call mappm(kmd, pe0(istart:iend,:), qt(istart:iend,:), npz, pe1(istart:iend,:), qn1(istart:iend,:), istart,iend, -1, kord_mt, ptop)
+!!$        !!! DEBUG CODE
+!!$        if (j == jstart+1) then
+!!$           i = istart+1
+!!$           do k=1,npz
+!!$              write(mpp_pe()+1000,*) k, qn1(i,k), u_dst(i,j,k), pe1(i,k), blend_wt(k)
+!!$           enddo
+!!$        endif
+!!$        !!! END DEBUG CODE
+      do k=1,npz
+         wt1 = blend_wt(k)
+         wt2 = 1. - wt1
+         do i=istart,iend
+            u_dst(i,j,k) = qn1(i,k)*wt1 + u_dst(i,j,k)*wt2
+         enddo
+      enddo
+
+   end do
+
+!------
+! map v
+!------
+!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak_dst,bk_dst,ps_dst,u_dst,v_dst,ak_src,bk_src,ps_src,npz,u_src,v_src,ptop,istart,iend,jstart,jend,blend_wt) &
+!$OMP          private(pe0,pe1,qt,qn1,wt1,wt2)
+   do j=jstart,jend
+!------
+! Data
+!------
+     do k=1,kmd+1
+        do i=istart,iend+1
+          pe0(i,k) = ak_src(k) + bk_src(k)*0.5*(ps_src(i,j)+ps_src(i-1,j))
+       enddo
+     enddo
+!------
+! Model
+!------
+     do k=1,npz+1
+        do i=istart,iend+1
+          pe1(i,k) = ak_dst(k) + bk_dst(k)*0.5*(ps_dst(i,j)+ps_dst(i-1,j))
+       enddo
+     enddo
+!------
+!Do map
+!------
+     qt = 0.
+      do k=1,kmd
+         do i=istart,iend+1
+            qt(i,k) = v_src(i,j,k)
+         enddo
+      enddo
+      qn1 = 0.
+      call mappm(kmd, pe0(istart:iend+1,:), qt(istart:iend+1,:), npz, pe1(istart:iend+1,:), qn1(istart:iend+1,:), istart,iend+1, -1, 8, ptop)
+      do k=1,npz
+         wt1 = blend_wt(k)
+         wt2 = 1. - wt1
+         do i=istart,iend+1
+            v_dst(i,j,k) = qn1(i,k)*wt1 + v_dst(i,j,k)*wt2  !Does this kill OMP???
+         enddo
+      enddo
+   end do
+
+ end subroutine update_remap_uv
+
+
 
 end module fv_nesting_mod
