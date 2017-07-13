@@ -678,7 +678,7 @@ contains
              Atm(n)%bk(:) = bk_sj(:)
              Atm(n)%ptop = Atm(n)%ak(1)
           else
-             call set_eta(npz, ks, Atm(n)%ptop, Atm(n)%ak, Atm(n)%bk)
+             call set_eta(npz, ks, Atm(n)%ptop, Atm(n)%ak, Atm(n)%bk, Atm(n)%flagstruct%npz_type)
           endif
         endif
         ! call vertical remapping algorithms
@@ -1344,7 +1344,7 @@ contains
          Atm(1)%bk(:) = bk_sj(:)
          Atm(1)%ptop = Atm(1)%ak(1)
       else
-         call set_eta(npz, ks, Atm(1)%ptop, Atm(1)%ak, Atm(1)%bk)
+         call set_eta(npz, ks, Atm(1)%ptop, Atm(1)%ak, Atm(1)%bk, Atm(n)%flagstruct%npz_type)
       endif
 
 !! Read in model terrain from oro_data.tile?.nc

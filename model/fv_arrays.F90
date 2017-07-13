@@ -389,6 +389,7 @@ module fv_arrays_mod
    integer :: npx                     ! Number of Grid Points in X- dir
    integer :: npy                     ! Number of Grid Points in Y- dir
    integer :: npz                     ! Number of Vertical Levels
+   character(24) :: npz_type = ''     ! Option for selecting vertical level setup (empty by default)
    integer :: npz_rst = 0             ! Original Vertical Levels (in the restart)
                                       ! 0: no change (default)
    integer :: ncnst = 0               ! Number of advected consituents

@@ -143,7 +143,8 @@ module fv_control_mod
 
    integer , pointer :: npx           
    integer , pointer :: npy           
-   integer , pointer :: npz           
+   integer , pointer :: npz     
+   character(len=24), pointer :: npz_type
    integer , pointer :: npz_rst 
                                       
    integer , pointer :: ncnst 
@@ -472,7 +473,7 @@ module fv_control_mod
 
 !     if ( reset_eta ) then
 !         do n=1, ntilesMe
-!            call set_eta(npz, Atm(n)%ks, ptop, Atm(n)%ak, Atm(n)%bk)
+!            call set_eta(npz, Atm(n)%ks, ptop, Atm(n)%ak, Atm(n)%bk, Atm(n)%flagstruct%npz_type)
 !         enddo
 !         if(is_master()) write(*,*) "Hybrid sigma-p coordinate has been reset"
 !     endif
@@ -544,7 +545,7 @@ module fv_control_mod
       character(len=120) :: grid_file = ''
 
       namelist /fv_grid_nml/ grid_name, grid_file
-      namelist /fv_core_nml/npx, npy, ntiles, npz, npz_rst, layout, io_layout, ncnst, nwat,  &
+      namelist /fv_core_nml/npx, npy, ntiles, npz, npz_type, npz_rst, layout, io_layout, ncnst, nwat,  &
                             use_logp, p_fac, a_imp, k_split, n_split, m_split, q_split, print_freq, write_3d_diags, do_schmidt,  &
                             hord_mt, hord_vt, hord_tm, hord_dp, hord_tr, shift_fac, stretch_fac, target_lat, target_lon, &
                             kord_mt, kord_wz, kord_tm, kord_tr, fv_debug, fv_land, nudge, do_sat_adj, do_f3d, &
@@ -1149,6 +1150,7 @@ module fv_control_mod
      npx                           => Atm%flagstruct%npx
      npy                           => Atm%flagstruct%npy
      npz                           => Atm%flagstruct%npz
+     npz_type                      => Atm%flagstruct%npz_type
      npz_rst                       => Atm%flagstruct%npz_rst
      ncnst                         => Atm%flagstruct%ncnst
      pnats                         => Atm%flagstruct%pnats

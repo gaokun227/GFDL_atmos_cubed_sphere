@@ -31,7 +31,7 @@ module fv_eta_mod
 
 !!!NOTE: USE_VAR_ETA not used in fvGFS
 #ifdef USE_VAR_ETA
- subroutine set_eta(km, ks, ptop, ak, bk)
+ subroutine set_eta(km, ks, ptop, ak, bk, npz_type)
 ! This is the easy to use version of the set_eta
       integer,  intent(in)::  km           ! vertical dimension
       integer,  intent(out):: ks           ! number of pure p layers
@@ -82,6 +82,7 @@ module fv_eta_mod
       real, intent(out):: ak(km+1)
       real, intent(out):: bk(km+1)
       real, intent(out):: ptop         ! model top (Pa)
+      character(24), intent(IN) :: npz_type
       real pint, stretch_fac
       integer  k
       real :: s_rate = -1.0 ! dummy value to not use var_les
@@ -390,13 +391,14 @@ module fv_eta_mod
 
 #else
  !This is the version of set_eta used in fvGFS and AM4
- subroutine set_eta(km, ks, ptop, ak, bk)
+ subroutine set_eta(km, ks, ptop, ak, bk, npz_type)
 
       integer,  intent(in)::  km           ! vertical dimension
       integer,  intent(out):: ks           ! number of pure p layers
       real, intent(out):: ak(km+1)
       real, intent(out):: bk(km+1)
       real, intent(out):: ptop         ! model top (Pa)
+      character(24), intent(IN) :: npz_type
 ! local
       real a24(25),b24(25)            ! GFDL AM2L24
       real a26(27),b26(27)            ! Jablonowski & Williamson 26-level
@@ -1397,9 +1399,15 @@ module fv_eta_mod
              call var_hi(km, ak, bk, ptop, ks, pint, 1.035)
 #endif
         case (51)
+           if (trim(npz_type) == 'meso') then
+             ptop = 20.E2
+             pint = 100.E2
+             call var_hi(km, ak, bk, ptop, ks, pint, 1.05)
+           else
              ptop = 100.
              pint = 100.E2
              call var_hi(km, ak, bk, ptop, ks, pint, 1.035)
+          endif
 ! Mid-top:
         case (55)
              ptop = 10.
