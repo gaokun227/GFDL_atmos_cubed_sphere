@@ -536,14 +536,9 @@ contains
                  1, 0, npx, npy, npz, bd, split_timestep_bc+0.5, real(n_split*flagstruct%k_split), &
             neststruct%uc_BC, bctype=neststruct%nestbctype )
 
-       !QUESTION: What to do with divgd in nested halo?
             call nested_grid_BC_apply_intT(divgd, &
                  1, 1, npx, npy, npz, bd, split_timestep_bc, real(n_split*flagstruct%k_split), &
             neststruct%divg_BC, bctype=neststruct%nestbctype )
-!!$            if (is == 1 .and. js == 1) then
-!!$               do j=jsd,5
-!!$                  write(mpp_pe()+2000,*) j, divg(isd:5,j,1)
-!!$            endif
 
       end if
 
