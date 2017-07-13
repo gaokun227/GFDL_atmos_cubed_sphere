@@ -67,7 +67,7 @@ module fv_diagnostics_mod
  logical :: m_calendar
  integer  sphum, liq_wat, ice_wat, cld_amt    ! GFDL physics
  integer  rainwat, snowwat, graupel
- integer :: istep
+ integer :: istep, mp_top
  real    :: ptop
  real, parameter    ::     rad2deg = 180./pi
 
@@ -165,6 +165,15 @@ contains
 
     allocate ( idiag%phalf(npz+1) )
     call get_eta_level(Atm(1)%npz, p_ref, pfull, idiag%phalf, Atm(1)%ak, Atm(1)%bk, 0.01)
+
+    mp_top = 1
+    do k=1,npz
+       if ( pfull(k) > 30.e2 ) then
+            mp_top = k
+            exit
+       endif 
+    enddo
+    if ( is_master() ) write(*,*) 'mp_top=', mp_top, 'pfull=', pfull(mp_top)
 
 !   allocate(grid_xt(npx-1), grid_yt(npy-1), grid_xe(npx), grid_ye(npy-1), grid_xn(npx-1), grid_yn(npy))
     allocate(grid_xt(npx-1), grid_yt(npy-1))
@@ -4609,9 +4618,15 @@ end subroutine eqv_pot
 
    !Parameters for constant intercepts (in0[rsg] = .false.)
    !Using GFDL MP values
-   real, parameter :: rn0_r = 8.e6 ! m^-4
-   real, parameter :: rn0_s = 3.e6 ! m^-4
-   real, parameter :: rn0_g = 4.e6 ! m^-4
+   real(kind=R_GRID), parameter:: rn0_r = 8.e6 ! m^-4
+   real(kind=R_GRID), parameter:: rn0_s = 3.e6 ! m^-4
+   real(kind=R_GRID), parameter:: rn0_g = 4.e6 ! m^-4
+   real(kind=R_GRID), parameter:: vconr = 2503.23638966667
+   real(kind=R_GRID), parameter:: vcong =   87.2382675
+   real(kind=R_GRID), parameter:: vcons =    6.6280504
+   real(kind=R_GRID), parameter:: normr = 25132741228.7183
+   real(kind=R_GRID), parameter:: normg =  5026548245.74367
+   real(kind=R_GRID), parameter:: norms =   942477796.076938
 
    !Constants for variable intercepts
    !Will need to be changed based on MP scheme
@@ -4628,308 +4643,89 @@ end subroutine eqv_pot
 
    !Other constants
    real, parameter :: gamma_seven = 720.
-!   real, parameter :: koch_correction = 161.3
    !The following values are also used in GFDL MP
    real, parameter :: rho_r = 1.0e3  ! LFO83
    real, parameter :: rho_s = 100.   ! kg m^-3 
-   real, parameter :: rho_g = 400.   ! kg m^-3
+   real, parameter :: rho_g0 = 400.   ! kg m^-3
+   real, parameter :: rho_g = 500.   ! graupel-hail mix
+!  real, parameter :: rho_g = 900.   ! hail/frozen rain
    real, parameter :: alpha = 0.224
-   real, parameter :: factor_r = gamma_seven * 1.e18 * (1./(pi*rho_r))**1.75
-!   real, parameter :: factor_s = koch_correction * 1.e18 * (1./(pi*rho_s))**1.75 &
-!        * (rho_s/rho_r)**2 * alpha
-!   real, parameter :: factor_g = koch_correction * 1.e18 * (1./(pi*rho_g))**1.75 &
-!        * (rho_g/rho_r)**2 * alpha
-   real, parameter :: factor_s = gamma_seven * 1.e18 * (1./(pi*rho_s))**1.75 &
+   real(kind=R_GRID), parameter :: factor_r = gamma_seven * 1.e18 * (1./(pi*rho_r))**1.75
+   real(kind=R_GRID), parameter :: factor_s = gamma_seven * 1.e18 * (1./(pi*rho_s))**1.75 &
         * (rho_s/rho_r)**2 * alpha
-   real, parameter :: factor_g = gamma_seven * 1.e18 * (1./(pi*rho_g))**1.75 &
+   real(kind=R_GRID), parameter :: factor_g = gamma_seven * 1.e18 * (1./(pi*rho_g))**1.75 &
         * (rho_g/rho_r)**2 * alpha
    real, parameter :: qmin = 1.E-12
    real, parameter :: tice = 273.16
 
-   integer :: i,j,k
-   real :: factorb_s, factorb_g, rhoair
-   real :: temp_c, pres, sonv, gonv, ronv, z_e
-   real :: qr1, qs1, qg1, t1, t2, t3
+! Double precision
+   real(kind=R_GRID):: rhoair(bd%is:bd%ie)
+   real(kind=R_GRID):: qr1, qs1, qg1, t1, t2, t3, rwat, denfac, vtr, vtg, vts
+   real(kind=R_GRID):: factorb_s, factorb_g
+   real(kind=R_GRID):: temp_c, pres, sonv, gonv, ronv, z_e
 
+   integer :: i,j,k
    integer :: is, ie, js, je
 
    is = bd%is
    ie = bd%ie
    js = bd%js
    je = bd%je
+   if (rainwat < 1) return
 
+   dbz(:,:,1:mp_top) = -20.
    maxdbz(:,:) = -20. !Minimum value
    allmax = -20.
 
-   if (rainwat < 1) return
 
-   do k=1, npz
+!$OMP parallel do default(shared) private(rhoair,t1,t2,t3,denfac,vtr,vtg,vts,z_e)
+   do k=mp_top+1, npz
    do j=js, je
-   do i=is, ie
-      
       if (hydrostatic) then
-         rhoair = delp(i,j,k)/( (peln(i,k+1,j)-peln(i,k,j)) * rdgas * pt(i,j,k) * ( 1. + zvir*q(i,j,k,sphum) ) )
+         do i=is, ie
+            rhoair(i) = delp(i,j,k)/( (peln(i,k+1,j)-peln(i,k,j)) * rdgas * pt(i,j,k) * ( 1. + zvir*q(i,j,k,sphum) ) )
+         enddo
       else
-         rhoair = -delp(i,j,k)/(grav*delz(i,j,k)) ! air density
+         do i=is, ie
+            rhoair(i) = -delp(i,j,k)/(grav*delz(i,j,k)) ! moist air density
+         enddo
       endif
-      
-      !      Adjust factor for brightband, where snow or graupel particle
-      !      scatters like liquid water (alpha=1.0) because it is assumed to
-      !      have a liquid skin.
-      
-      !lmh: celkel in dbzcalc.f presumably freezing temperature
-      if (iliqskin .and. pt(i,j,k) .gt. tice) then
-         factorb_s=factor_s/alpha
-         factorb_g=factor_g/alpha
-      else
-         factorb_s=factor_s
-         factorb_g=factor_g
-      endif
-
-      !Calculate variable intercept parameters if necessary
-      !  using definitions from Thompson et al
-      if (in0s) then
-         temp_c = min(-0.001, pt(i,j,k) - tice)
-         sonv = min(2.0e8, 2.0e6*exp(-0.12*temp_c))
-      else
-         sonv = rn0_s
-      end if
-
-      qr1 = max(qmin, q(i,j,k,rainwat))
-      if (graupel > 0) then
-         qg1 = max(qmin, q(i,j,k,graupel))
-      else
-         qg1 = 0.
-      endif
-      if (snowwat > 0) then
-         qs1 = max(qmin, q(i,j,k,snowwat))
-      else
-         qs1 = 0.
-      endif
-
-      if (in0g) then
-         gonv = gon
-         if ( qg1 > r1) then
-            gonv = 2.38 * (pi * rho_g / (rhoair*qg1))**0.92
-            gonv = max(1.e4, min(gonv,gon))
-         end if
-      else
-         gonv = rn0_g
-      end if
-
-      if (in0r) then
-         ronv = ron2
-         if (qr1 > r1 ) then
-            ronv = ron_const1r * tanh((ron_qr0-qr1)/ron_delqr0) + ron_const2r
-         end if
-      else
-         ronv = rn0_r
-      end if
-
-      !Total equivalent reflectivity: mm^6 m^-3
-      !Minimum allowed dbz is -20
-      ! Optimized form :
-      t1 = rhoair*qr1
-      t2 = rhoair*qs1
-      t3 = rhoair*qg1
-      z_e = max(0.01,factor_r*t1*(t1/ronv)**.75 + factorb_s*t2*(t2/sonv)**.75 + factorb_g*t3*(t3/gonv)**.75)
-      dbz(i,j,k) = 10.*log10(z_e)
-      maxdbz(i,j) = max(dbz(i,j,k), maxdbz(i,j))
-      allmax      = max(dbz(i,j,k), allmax)
+      do i=is, ie
+! The following form vectorizes better & more consistent with GFDL_MP
+! SJL notes: Marshall-Palmer, dBZ = 200*precip**1.6, precip = 3.6e6*t1/rho_r*vtr  ! [mm/hr]
+! GFDL_MP terminal fall speeds are used
+! Date modified 20170701
+! Account for excessively high cloud water -> autoconvert (diag only) excess cloud water
+         t1 = rhoair(i)*max(qmin, q(i,j,k,rainwat)+dim(q(i,j,k,liq_wat), 1.0e-3))
+         t2 = rhoair(i)*max(qmin, q(i,j,k,snowwat))
+         t3 = rhoair(i)*max(qmin, q(i,j,k,graupel))
+         denfac = sqrt(min(10., 1.2/rhoair(i)))
+         vtr = max(1.e-3, vconr*denfac*exp(0.2   *log(t1/normr)))
+         vtg = max(1.e-3, vcong*denfac*exp(0.125 *log(t3/normg)))
+!     vts = max(1.e-3, vcons*denfac*exp(0.0625*log(t2/norms)))
+         z_e = 200.*(exp(1.6*log(3.6e6*t1/rho_r*vtr)) + exp(1.6*log(3.6e6*t3/rho_g0*vtg))) + (factor_s/alpha)*t2*exp(0.75*log(t2/rn0_s))
+!     z_e = 200.*(exp(1.6*log(3.6e6*t1/rho_r*vtr)) + exp(1.6*log(3.6e6*t3/rho_g*vtg)) + exp(1.6*log(3.6e6*t2/rho_s*vts)))
+         dbz(i,j,k) = 10.*log10( max(0.01, z_e) )
+      enddo
    enddo
    enddo
+
+!$OMP parallel do default(shared)
+   do j=js, je
+      do k=mp_top+1, npz
+         do i=is, ie
+            maxdbz(i,j) = max(dbz(i,j,k), maxdbz(i,j))
+         enddo
+      enddo
+   enddo
+
+   do j=js, je
+      do i=is, ie
+         allmax = max(maxdbz(i,j), allmax)
+      enddo
    enddo
 
  end subroutine dbzcalc
-
- subroutine dbzcalc_smithxue(q, pt, delp, peln, delz, &
-      dbz, maxdbz, allmax, bd, npz, ncnst, &
-      hydrostatic, zvir, in0r, in0s, in0g, iliqskin)
-
-   ! 4apr2017 lmh:
-   !Code from Mark Stoelinga's dbzcalc.f from the RIP package. 
-   !Modified to use parameters from P.L. Smith (1975, JAM) and modified
-   ! by Tong and Xue (2005, MWR), albeit without the modified
-   ! parameters for the graupel reflectivity.
-
-!     This routine computes equivalent reflectivity factor (in dBZ) at
-!     each model grid point.  In calculating Ze, the RIP algorithm makes
-!     assumptions consistent with those made in an early version
-!     (ca. 1996) of the bulk mixed-phase microphysical scheme in the MM5
-!     model (i.e., the scheme known as "Resiner-2").  For each species:
-!
-!     1. Particles are assumed to be spheres of constant density.  The
-!     densities of rain drops, snow particles, and graupel particles are
-!     taken to be rho_r = rho_l = 1000 kg m^-3, rho_s = 100 kg m^-3, and
-!     rho_g = 400 kg m^-3, respectively. (l refers to the density of
-!     liquid water.)
-!
-!     2. The size distribution (in terms of the actual diameter of the
-!     particles, rather than the melted diameter or the equivalent solid
-!     ice sphere diameter) is assumed to follow an exponential
-!     distribution of the form N(D) = N_0 * exp( lambda*D ).
-!
-!     3. If in0X=0, the intercept parameter is assumed constant (as in
-!     early Reisner-2), with values of 8x10^6, 2x10^7, and 4x10^6 m^-4,
-!     for rain, snow, and graupel, respectively.  Various choices of
-!     in0X are available (or can be added).  Currently, in0X=1 gives the
-!     variable intercept for each species that is consistent with
-!     Thompson, Rasmussen, and Manning (2004, Monthly Weather Review,
-!     Vol. 132, No. 2, pp. 519-542.)
-!
-!     4. If iliqskin=1, frozen particles that are at a temperature above
-!     freezing are assumed to scatter as a liquid particle.
-!
-!     More information on the derivation of simulated reflectivity in RIP
-!     can be found in Stoelinga (2005, unpublished write-up).  Contact
-!     Mark Stoelinga (stoeling@atmos.washington.edu) for a copy.  
-
-! 22sep16: Modifying to use the GFDL MP parameters. If doing so remember
-!   that the GFDL MP assumes a constant intercept (in0X = .false.)
-!   Ferrier-Aligo has an option for fixed slope (rather than fixed intercept).
-!   Thompson presumably is an extension of Reisner MP.
-
-   type(fv_grid_bounds_type), intent(IN) :: bd
-   integer, intent(IN) :: npz, ncnst
-   real,    intent(IN),  dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz) :: pt, delp, delz
-   real,    intent(IN),  dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst) :: q
-   real,    intent(IN),  dimension(bd%is :bd%ie,  npz+1, bd%js:bd%je) :: peln
-   real,    intent(OUT), dimension(bd%is :bd%ie,  bd%js :bd%je , npz) :: dbz
-   real,    intent(OUT), dimension(bd%is :bd%ie,  bd%js :bd%je)      :: maxdbz
-   logical, intent(IN) :: hydrostatic, in0r, in0s, in0g, iliqskin
-   real,    intent(IN) :: zvir
-   real,    intent(OUT) :: allmax
-
-   !Parameters for constant intercepts (in0[rsg] = .false.)
-   !Using GFDL MP values
-   real, parameter :: rn0_r = 8.e6 ! m^-4
-   real, parameter :: rn0_s = 3.e6 ! m^-4
-   real, parameter :: rn0_g = 4.e6 ! m^-4
-
-   !Constants for variable intercepts
-   !Will need to be changed based on MP scheme
-   real, parameter :: r1=1.e-15
-   real, parameter :: ron=8.e6
-   real, parameter :: ron2=1.e10
-   real, parameter :: son=2.e7
-   real, parameter :: gon=5.e7
-   real, parameter :: ron_min = 8.e6
-   real, parameter :: ron_qr0 = 0.00010
-   real, parameter :: ron_delqr0 = 0.25*ron_qr0
-   real, parameter :: ron_const1r = (ron2-ron_min)*0.5
-   real, parameter :: ron_const2r = (ron2+ron_min)*0.5
-
-   !Other constants
-   real, parameter :: gamma_seven = 720.
-   real, parameter :: koch_correction = 161.3
-   !The following values are also used in GFDL MP
-   real, parameter :: rho_r = 1.0e3  ! LFO83
-   real, parameter :: rho_s = 100.   ! kg m^-3 
-   real, parameter :: rho_g = 400.   ! kg m^-3
-   real, parameter :: rho_i = 917.   ! kg m^-3
-   real, parameter :: alpha = 0.176/0.93 ! K_i**2 / K_r**2
-   real, parameter :: factor_r = gamma_seven * 1.e18 * (1./(pi*rho_r))**1.75
-   real, parameter :: factor_sw = gamma_seven * 1.e18 * (1./(pi*rho_s))**1.75
-   real, parameter :: factor_sd = gamma_seven * 1.e18 & ! * (1./(pi*rho_s))**1.75 &
-         * alpha * rho_s ** 0.25 / ( pi**1.75  * rho_i ** 2)
-   real, parameter :: factor_g = gamma_seven * 1.e18 * (1./(pi*rho_g))**1.75 
-   real, parameter :: tice = 273.16
-
-   integer :: i,j,k
-   real :: factorb_s, factorb_g, rhoair
-   real :: temp_c, pres, sonv, gonv, ronv, z_e
-   real :: qr1, qs1, qg1
-
-   integer :: is, ie, js, je
-
-   is = bd%is
-   ie = bd%ie
-   js = bd%js
-   je = bd%je
-
-   maxdbz(:,:) = -20. !Minimum value
-   allmax = -20. 
-
-   if (rainwat < 1) return
-
-   do k=1, npz
-   do j=js, je
-   do i=is, ie
-      
-      if (hydrostatic) then
-         rhoair = delp(i,j,k)/( (peln(i,k+1,j)-peln(i,k,j)) * rdgas * pt(i,j,k) * ( 1. + zvir*q(i,j,k,sphum) ) )
-      else
-         rhoair = -delp(i,j,k)/(grav*delz(i,j,k)) ! air density
-      endif
-      
-      !      Adjust factor for brightband, where snow or graupel particle
-      !      scatters like liquid water (alpha=1.0) because it is assumed to
-      !      have a liquid skin.
-      
-      !lmh: celkel in dbzcalc.f presumably freezing temperature
-      if (pt(i,j,k) .gt. tice) then
-         factorb_s=factor_sw
-      else
-         factorb_s=factor_sd
-      endif
-
-      !Calculate variable intercept parameters if necessary
-      !  using definitions from Thompson et al
-      if (in0s) then
-         temp_c = min(-0.001, pt(i,j,k) - tice)
-         sonv = min(2.0e8, 2.0e6*exp(-0.12*temp_c))
-      else
-         sonv = rn0_s
-      end if
-
-      qr1 = max(0., q(i,j,k,rainwat))
-      if (graupel > 0) then
-         qg1 = max(0., q(i,j,k,graupel))
-      else
-         qg1 = 0.
-      endif
-      if (snowwat > 0) then
-         qs1 = max(0., q(i,j,k,snowwat))
-      else
-         qs1 = 0.
-      endif
-
-      if (in0g) then
-         gonv = gon
-         if ( qg1 > r1) then
-            gonv = 2.38 * (pi * rho_g / (rhoair*qg1))**0.92
-            gonv = max(1.e4, min(gonv,gon))
-         end if
-      else
-         gonv = rn0_g
-      end if
-
-      if (in0r) then
-         ronv = ron2
-         if (qr1 > r1 ) then
-            ronv = ron_const1r * tanh((ron_qr0-qr1)/ron_delqr0) + ron_const2r
-         end if
-      else
-         ronv = rn0_r
-      end if
-
-      !Total equivalent reflectivity: mm^6 m^-3
-      z_e =   factor_r  * (rhoair*qr1)**1.75 / ronv**.75    & ! rain
-            + factorb_s * (rhoair*qs1)**1.75 / sonv**.75    & ! snow
-            + factor_g  * (rhoair*qg1)**1.75 / gonv**.75      ! graupel
-      
-      !Minimum allowed dbz is -20
-      z_e = max(z_e,0.01)
-      dbz(i,j,k) = 10. * log10(z_e)
-
-      maxdbz(i,j) = max(dbz(i,j,k), maxdbz(i,j))
-      allmax      = max(dbz(i,j,k), allmax)
-
-   enddo
-   enddo
-   enddo
-
- end subroutine dbzcalc_smithxue
 
 !#######################################################################
 
