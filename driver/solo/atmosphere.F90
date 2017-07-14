@@ -99,6 +99,9 @@ contains
     real:: zvir
     integer :: n, theta_d
 
+    integer :: nlunit = 9999
+    character (len = 64) :: fn_nml = 'input.nml'
+
                                            call timing_on('ATMOS_INIT')
   !----- write version and namelist to log file -----
 
@@ -156,7 +159,7 @@ contains
            Atm(n)%flagstruct%moist_phys = .true.
            if ( grids_on_this_pe(n)) then
               call fv_phys_init(isc,iec,jsc,jec,Atm(n)%flagstruct%nwat, Atm(n)%ts, Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
-              if ( Atm(n)%flagstruct%nwat==6) call gfdl_cloud_microphys_init
+              if ( Atm(n)%flagstruct%nwat==6) call gfdl_cloud_microphys_init (mpp_pe(), mpp_root_pe(), nlunit, stdlog(), fn_nml) 
            endif
         endif
 

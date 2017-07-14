@@ -4,8 +4,7 @@
 ! key elements have been simplified / improved. this code at this stage
 ! bears little to no similarity to the original lin mp in zetac.
 ! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
-! developer: shian - jiann lin
-! revised : linjiong zhou
+! developer: shian-jiann lin, linjiong zhou
 ! =======================================================================
 
 module gfdl_cloud_microphys_mod
@@ -84,12 +83,12 @@ module gfdl_cloud_microphys_mod
     real, parameter :: d2ice = dc_vap + dc_ice ! - 126, isobaric heating / cooling
     real, parameter :: li2 = lv0 + li00 ! 2.86799816e6, sublimation latent heat coefficient at 0 deg k
     
-    real, parameter :: qrmin = 1.e-8 ! min value for ???, (ljz, definition not clear)
-    real, parameter :: qvmin = 1.e-20 ! min value for water vapor (treated as zero), (ljz, definition not clear)
-    real, parameter :: qcmin = 1.e-12 ! min value for cloud condensates, (ljz, definition not clear)
+    real, parameter :: qrmin = 1.e-8 ! min value for ???
+    real, parameter :: qvmin = 1.e-20 ! min value for water vapor (treated as zero)
+    real, parameter :: qcmin = 1.e-12 ! min value for cloud condensates
     
-    real, parameter :: vr_min = 1.e-3 ! min fall speed for rain, (ljz, usage is confused)
-    real, parameter :: vf_min = 1.e-5 ! min fall speed for cloud ice, snow, graupel, (ljz, usage is confused)
+    real, parameter :: vr_min = 1.e-3 ! min fall speed for rain
+    real, parameter :: vf_min = 1.e-5 ! min fall speed for cloud ice, snow, graupel
     
     real, parameter :: dz_min = 1.e-2 ! use for correcting flipped height
     
@@ -998,7 +997,7 @@ subroutine sedi_heat (ktop, kbot, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
     enddo
     
     ! -----------------------------------------------------------------------
-    ! sjl july 2014
+    ! sjl, july 2014
     ! assumption: the ke in the falling condensates is negligible compared to the potential energy
     ! that was unaccounted for. local thermal equilibrium is assumed, and the loss in pe is transformed
     ! into internal energy (to heat the whole grid box)
@@ -1588,12 +1587,12 @@ subroutine icloud (ktop, kbot, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                     den (k), denfac (k)))
                 sink = min (qs, dts * (psmlt + pracs), tc / icpk (k))
                 qs = qs - sink
-                ! sjl 20170321:
+                ! sjl, 20170321:
                 tmp = min (sink, dim (qs_mlt, ql)) ! max ql due to snow melt
                 ql = ql + tmp
                 qr = qr + sink - tmp
                 ! qr = qr + sink
-                ! sjl 20170321:
+                ! sjl, 20170321:
                 q_liq (k) = q_liq (k) + sink
                 q_sol (k) = q_sol (k) - sink
                 cvm (k) = c_air + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
@@ -1606,10 +1605,10 @@ subroutine icloud (ktop, kbot, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             ! update capacity heat and latend heat coefficient
             ! -----------------------------------------------------------------------
             
-            ! ljz, consider it as a potential bug
+            ! ljz, tuning point
             lhi (k) = li00 + dc_ice * tz
             ! icpk (k) = lhi (k) / cvm (k)
-            ! ljz, consider it as a potential bug
+            ! ljz, tuning point
             
             ! -----------------------------------------------------------------------
             ! melting of graupel
@@ -1791,10 +1790,10 @@ subroutine icloud (ktop, kbot, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             ! update capacity heat and latend heat coefficient
             ! -----------------------------------------------------------------------
             
-            ! ljz, consider it as a potential bug
+            ! ljz, tuning point
             lhi (k) = li00 + dc_ice * tz
             ! icpk (k) = lhi (k) / cvm (k)
-            ! ljz, consider it as a potential bug
+            ! ljz, tuning point
             
             ! -----------------------------------------------------------------------
             ! graupel production terms:
@@ -1981,18 +1980,17 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update heat capacity and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         ! lhl (k) = lv00 + d0_vap * tz (k)
         ! lhi (k) = li00 + dc_ice * tz (k)
         ! lcpk (k) = lhl (k) / cvm (k)
         ! icpk (k) = lhi (k) / cvm (k)
         ! tcpk (k) = lcpk (k) + icpk (k)
         ! tcp3 (k) = lcpk (k) + icpk (k) * min (1., dim (tice, tz (k)) / (tice - t_wfr))
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         
         ! -----------------------------------------------------------------------
         ! instant evaporation / sublimation of all clouds if rh < rh_adj -- > cloud free
-        ! ljz, not energy conserved and not latent heat releases
         ! -----------------------------------------------------------------------
         
         qpz = qv (k) + ql (k) + qi (k)
@@ -2016,6 +2014,8 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         qsw = wqs2 (tz (k), den (k), dwsdt)
         dq0 = qsw - qv (k)
         if (dq0 > 0.) then
+            ! SJL 20170703 added ql factor to prevent the situation of high ql and low RH
+            ! factor = min (1., fac_l2v * sqrt (max (0., ql (k)) / 1.e-5) * 10. * dq0 / qsw)
             factor = min (1., fac_l2v * (10. * dq0 / qsw)) ! the rh dependent factor = 1 at 90%
             evap = min (ql (k), factor * dq0 / (1. + tcp3 (k) * dwsdt))
         else ! condensate all excess vapor into cloud water
@@ -2035,10 +2035,10 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update heat capacity and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         lhi (k) = li00 + dc_ice * tz (k)
         ! icpk (k) = lhi (k) / cvm (k)
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         
         ! -----------------------------------------------------------------------
         ! enforce complete freezing below - 48 c
@@ -2059,10 +2059,10 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update heat capacity and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         lhi (k) = li00 + dc_ice * tz (k)
         ! icpk (k) = lhi (k) / cvm (k)
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         
         ! -----------------------------------------------------------------------
         ! bigg mechanism
@@ -2132,13 +2132,13 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         lhl (k) = lv00 + d0_vap * tz (k)
         lhi (k) = li00 + dc_ice * tz (k)
         ! lcpk (k) = lhl (k) / cvm (k)
         ! icpk (k) = lhi (k) / cvm (k)
         ! tcpk (k) = lcpk (k) + icpk (k)
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         
         ! -----------------------------------------------------------------------
         ! sublimation / deposition of snow
@@ -2174,13 +2174,13 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         lhl (k) = lv00 + d0_vap * tz (k)
         lhi (k) = li00 + dc_ice * tz (k)
         ! lcpk (k) = lhl (k) / cvm (k)
         ! icpk (k) = lhi (k) / cvm (k)
         ! tcpk (k) = lcpk (k) + icpk (k)
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         
         ! -----------------------------------------------------------------------
         ! simplified 2 - way grapuel sublimation - deposition mechanism
@@ -2212,10 +2212,10 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         lhl (k) = lv00 + d0_vap * tz (k)
         ! lcpk (k) = lhl (k) / cvm (k)
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         
         ! -----------------------------------------------------------------------
         ! * minimum evap of rain in dry environmental air
@@ -2236,10 +2236,10 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         ! lhl (k) = lv00 + d0_vap * tz (k)
         ! lcpk (k) = lhl (k) / cvm (k)
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         
         ! -----------------------------------------------------------------------
         ! compute cloud fraction
@@ -2353,11 +2353,11 @@ subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den,
         lhl (i) = lv00 + d0_vap * tz (i)
         q_liq (i) = ql (i) + qr (i)
         q_sol (i) = qi (i) + qs (i) + qg (i)
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         cvm (i) = (1. - (qv (i) + q_liq (i) + q_sol (i))) * c_air + &
             qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
         ! cvm (i) = c_air + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         lcp2 (i) = lhl (i) / cvm (i)
         ! denfac (i) = sqrt (sfcrho / den (i))
     enddo
@@ -2396,13 +2396,13 @@ subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den,
                 evap = min (qr (i), dt * evap, dqv / (1. + lcp2 (i) * dqsdt))
                 qr (i) = qr (i) - evap
                 qv (i) = qv (i) + evap
-                ! ljz, not exact energy conservation
+                ! ljz, tuning point
                 ! q_liq (i) = q_liq (i) - evap
                 ! cvm (i) = (1. - (qv (i) + q_liq (i) + q_sol (i))) * c_air + &
                 ! qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
                 ! tz (i) = tz (i) - evap * lhl (i) / cvm (i)
                 tz (i) = tz (i) - evap * lcp2 (i)
-                ! ljz, not exact energy conservation
+                ! ljz, tuning point
             endif
             
             ! -----------------------------------------------------------------------
@@ -2499,13 +2499,13 @@ subroutine terminal_fall (dtm, ktop, kbot, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             ql (k) = ql (k) + tmp
             qr (k) = qr (k) + sink - tmp
             qi (k) = qi (k) - sink
-            ! ljz, not exact energy conservation
+            ! ljz, tuning point
             ! q_liq (k) = q_liq (k) + sink
             ! q_sol (k) = q_sol (k) - sink
             ! cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             ! tz (k) = tz (k) - sink * lhi (k) / cvm (k)
             tz (k) = tz (k) - sink * icpk (k)
-            ! ljz, not exact energy conservation
+            ! ljz, tuning point
             tc = tz (k) - tice
         endif
     enddo
@@ -2531,10 +2531,10 @@ subroutine terminal_fall (dtm, ktop, kbot, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     ! update capacity heat and latend heat coefficient
     ! -----------------------------------------------------------------------
     
-    ! ljz, consider it as a potential bug
+    ! ljz, tuning point
     ! lhi (k) = li00 + dc_ice * tz (k)
     ! icpk (k) = lhi (k) / cvm (k)
-    ! ljz, consider it as a potential bug
+    ! ljz, tuning point
     
     ! -----------------------------------------------------------------------
     ! melting of falling cloud ice into rain
@@ -4376,7 +4376,6 @@ end subroutine qsmith
 ! =======================================================================
 ! fix negative water species
 ! this is designed for 6 - class micro - physics schemes
-! ljz, not exact energy conserved
 ! =======================================================================
 
 subroutine neg_adj (ktop, kbot, pt, dp, qv, ql, qr, qi, qs, qg)

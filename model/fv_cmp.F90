@@ -1,7 +1,6 @@
 ! =======================================================================
 ! fast saturation adjustment is part of the gfdl cloud microphysics
-! developer: shian - jiann lin
-! revised : linjiong zhou
+! developer: shian-jiann lin, linjiong zhou
 ! =======================================================================
 
 module fv_cmp_mod
@@ -242,9 +241,9 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         
         do i = is, ie
             lhi (i) = li00 + dc_ice * pt1 (i)
-            ! ljz, consider it as a potential bug
+            ! ljz, tuning point
             ! icp2 (i) = lhi (i) / cvm (i)
-            ! ljz, consider it as a potential bug
+            ! ljz, tuning point
         enddo
         
         ! -----------------------------------------------------------------------
@@ -321,6 +320,8 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
             if (dq0 > 0.) then ! whole grid - box saturated
                 src (i) = min (adj_fac * dq0, max (ql_gen - ql (i, j), fac_v2l * dq0))
             else ! evaporation of ql
+                ! sjl 20170703 added ql factor to prevent the situation of high ql and rh<1
+                ! factor = - min (1., fac_l2v * sqrt (max (0., ql (i, j)) / 1.e-5) * 10. * (1. - qv (i, j) / wqsat (i)))
                 factor = - min (1., fac_l2v * 10. * (1. - qv (i, j) / wqsat (i))) ! the rh dependent factor = 1 at 90%
                 src (i) = - min (ql (i, j), factor * dq0)
             endif
@@ -358,6 +359,7 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
                 if (dq0 > 0.) then ! remove super - saturation, prevent super saturation over water
                     src (i) = dq0
                 else ! evaporation of ql
+                    ! factor = - min (1., fac_l2v * sqrt (max (0., ql (i, j)) / 1.e-5) * 10. * (1. - qv (i, j) / wqsat (i))) ! the rh dependent factor = 1 at 90%
                     factor = - min (1., fac_l2v * 10. * (1. - qv (i, j) / wqsat (i))) ! the rh dependent factor = 1 at 90%
                     src (i) = - min (ql (i, j), factor * dq0)
                 endif
@@ -545,14 +547,14 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! update latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         ! do i = is, ie
         ! lhi (i) = li00 + dc_ice * pt1 (i)
         ! lhl (i) = lv00 + d0_vap * pt1 (i)
         ! lcp2 (i) = lhl (i) / cvm (i)
         ! icp2 (i) = lhi (i) / cvm (i)
         ! enddo
-        ! ljz, consider it as a potential bug
+        ! ljz, tuning point
         
         ! -----------------------------------------------------------------------
         ! virtual temp updated
