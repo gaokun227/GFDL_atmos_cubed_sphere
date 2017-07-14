@@ -456,7 +456,7 @@ contains
 
 
 #ifdef SW_DYNAMICS
-!$OMP parallel do default(none) shared(is,ie,js,je,delp,agrav)
+!!$OMP parallel do default(none) shared(is,ie,js,je,delp,agrav)
       do j=js,je
          do i=is,ie
             ps(i,j) = delp(i,j,1) * agrav
