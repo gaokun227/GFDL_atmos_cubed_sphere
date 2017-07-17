@@ -241,9 +241,7 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         
         do i = is, ie
             lhi (i) = li00 + dc_ice * pt1 (i)
-            ! ljz, tuning point
-            ! icp2 (i) = lhi (i) / cvm (i)
-            ! ljz, tuning point
+            icp2 (i) = lhi (i) / cvm (i)
         enddo
         
         ! -----------------------------------------------------------------------
@@ -544,19 +542,6 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! update latend heat coefficient
-        ! -----------------------------------------------------------------------
-        
-        ! ljz, tuning point
-        ! do i = is, ie
-        ! lhi (i) = li00 + dc_ice * pt1 (i)
-        ! lhl (i) = lv00 + d0_vap * pt1 (i)
-        ! lcp2 (i) = lhl (i) / cvm (i)
-        ! icp2 (i) = lhi (i) / cvm (i)
-        ! enddo
-        ! ljz, tuning point
-        
-        ! -----------------------------------------------------------------------
         ! virtual temp updated
         ! -----------------------------------------------------------------------
         
@@ -620,6 +605,18 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
                 endif
             enddo
         endif
+        
+        ! -----------------------------------------------------------------------
+        ! update latend heat coefficient
+        ! -----------------------------------------------------------------------
+        
+        do i = is, ie
+            lhi (i) = li00 + dc_ice * pt1 (i)
+            lhl (i) = lv00 + d0_vap * pt1 (i)
+            cvm (i) = mc_air (i) + (qv (i, j) + q_liq (i) + q_sol (i)) * c_vap
+            lcp2 (i) = lhl (i) / cvm (i)
+            icp2 (i) = lhi (i) / cvm (i)
+        enddo
         
         ! -----------------------------------------------------------------------
         ! compute cloud fraction

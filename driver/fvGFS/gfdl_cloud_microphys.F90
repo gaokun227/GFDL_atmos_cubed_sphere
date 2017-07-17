@@ -1605,10 +1605,8 @@ subroutine icloud (ktop, kbot, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             ! update capacity heat and latend heat coefficient
             ! -----------------------------------------------------------------------
             
-            ! ljz, tuning point
             lhi (k) = li00 + dc_ice * tz
-            ! icpk (k) = lhi (k) / cvm (k)
-            ! ljz, tuning point
+            icpk (k) = lhi (k) / cvm (k)
             
             ! -----------------------------------------------------------------------
             ! melting of graupel
@@ -1790,10 +1788,8 @@ subroutine icloud (ktop, kbot, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             ! update capacity heat and latend heat coefficient
             ! -----------------------------------------------------------------------
             
-            ! ljz, tuning point
             lhi (k) = li00 + dc_ice * tz
-            ! icpk (k) = lhi (k) / cvm (k)
-            ! ljz, tuning point
+            icpk (k) = lhi (k) / cvm (k)
             
             ! -----------------------------------------------------------------------
             ! graupel production terms:
@@ -1980,14 +1976,12 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update heat capacity and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, tuning point
-        ! lhl (k) = lv00 + d0_vap * tz (k)
-        ! lhi (k) = li00 + dc_ice * tz (k)
-        ! lcpk (k) = lhl (k) / cvm (k)
-        ! icpk (k) = lhi (k) / cvm (k)
-        ! tcpk (k) = lcpk (k) + icpk (k)
-        ! tcp3 (k) = lcpk (k) + icpk (k) * min (1., dim (tice, tz (k)) / (tice - t_wfr))
-        ! ljz, tuning point
+        lhl (k) = lv00 + d0_vap * tz (k)
+        lhi (k) = li00 + dc_ice * tz (k)
+        lcpk (k) = lhl (k) / cvm (k)
+        icpk (k) = lhi (k) / cvm (k)
+        tcpk (k) = lcpk (k) + icpk (k)
+        tcp3 (k) = lcpk (k) + icpk (k) * min (1., dim (tice, tz (k)) / (tice - t_wfr))
         
         ! -----------------------------------------------------------------------
         ! instant evaporation / sublimation of all clouds if rh < rh_adj -- > cloud free
@@ -2035,10 +2029,8 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update heat capacity and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, tuning point
         lhi (k) = li00 + dc_ice * tz (k)
-        ! icpk (k) = lhi (k) / cvm (k)
-        ! ljz, tuning point
+        icpk (k) = lhi (k) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! enforce complete freezing below - 48 c
@@ -2059,10 +2051,8 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update heat capacity and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, tuning point
         lhi (k) = li00 + dc_ice * tz (k)
-        ! icpk (k) = lhi (k) / cvm (k)
-        ! ljz, tuning point
+        icpk (k) = lhi (k) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! bigg mechanism
@@ -2132,13 +2122,11 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, tuning point
         lhl (k) = lv00 + d0_vap * tz (k)
         lhi (k) = li00 + dc_ice * tz (k)
-        ! lcpk (k) = lhl (k) / cvm (k)
-        ! icpk (k) = lhi (k) / cvm (k)
-        ! tcpk (k) = lcpk (k) + icpk (k)
-        ! ljz, tuning point
+        lcpk (k) = lhl (k) / cvm (k)
+        icpk (k) = lhi (k) / cvm (k)
+        tcpk (k) = lcpk (k) + icpk (k)
         
         ! -----------------------------------------------------------------------
         ! sublimation / deposition of snow
@@ -2174,13 +2162,11 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, tuning point
         lhl (k) = lv00 + d0_vap * tz (k)
         lhi (k) = li00 + dc_ice * tz (k)
-        ! lcpk (k) = lhl (k) / cvm (k)
-        ! icpk (k) = lhi (k) / cvm (k)
-        ! tcpk (k) = lcpk (k) + icpk (k)
-        ! ljz, tuning point
+        lcpk (k) = lhl (k) / cvm (k)
+        icpk (k) = lhi (k) / cvm (k)
+        tcpk (k) = lcpk (k) + icpk (k)
         
         ! -----------------------------------------------------------------------
         ! simplified 2 - way grapuel sublimation - deposition mechanism
@@ -2212,10 +2198,8 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, tuning point
         lhl (k) = lv00 + d0_vap * tz (k)
-        ! lcpk (k) = lhl (k) / cvm (k)
-        ! ljz, tuning point
+        lcpk (k) = lhl (k) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! * minimum evap of rain in dry environmental air
@@ -2236,10 +2220,9 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        ! ljz, tuning point
-        ! lhl (k) = lv00 + d0_vap * tz (k)
-        ! lcpk (k) = lhl (k) / cvm (k)
-        ! ljz, tuning point
+        lhl (k) = lv00 + d0_vap * tz (k)
+        cvm (k) = c_air + (qv (k) + q_liq (k) + q_sol (k)) * c_vap
+        lcpk (k) = lhl (k) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! compute cloud fraction
@@ -2353,11 +2336,7 @@ subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den,
         lhl (i) = lv00 + d0_vap * tz (i)
         q_liq (i) = ql (i) + qr (i)
         q_sol (i) = qi (i) + qs (i) + qg (i)
-        ! ljz, tuning point
-        cvm (i) = (1. - (qv (i) + q_liq (i) + q_sol (i))) * c_air + &
-            qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
-        ! cvm (i) = c_air + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
-        ! ljz, tuning point
+        cvm (i) = c_air + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
         lcp2 (i) = lhl (i) / cvm (i)
         ! denfac (i) = sqrt (sfcrho / den (i))
     enddo
@@ -2396,13 +2375,9 @@ subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den,
                 evap = min (qr (i), dt * evap, dqv / (1. + lcp2 (i) * dqsdt))
                 qr (i) = qr (i) - evap
                 qv (i) = qv (i) + evap
-                ! ljz, tuning point
-                ! q_liq (i) = q_liq (i) - evap
-                ! cvm (i) = (1. - (qv (i) + q_liq (i) + q_sol (i))) * c_air + &
-                ! qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
-                ! tz (i) = tz (i) - evap * lhl (i) / cvm (i)
-                tz (i) = tz (i) - evap * lcp2 (i)
-                ! ljz, tuning point
+                q_liq (i) = q_liq (i) - evap
+                cvm (i) = c_air + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
+                tz (i) = tz (i) - evap * lhl (i) / cvm (i)
             endif
             
             ! -----------------------------------------------------------------------
@@ -2499,13 +2474,10 @@ subroutine terminal_fall (dtm, ktop, kbot, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             ql (k) = ql (k) + tmp
             qr (k) = qr (k) + sink - tmp
             qi (k) = qi (k) - sink
-            ! ljz, tuning point
-            ! q_liq (k) = q_liq (k) + sink
-            ! q_sol (k) = q_sol (k) - sink
-            ! cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            ! tz (k) = tz (k) - sink * lhi (k) / cvm (k)
-            tz (k) = tz (k) - sink * icpk (k)
-            ! ljz, tuning point
+            q_liq (k) = q_liq (k) + sink
+            q_sol (k) = q_sol (k) - sink
+            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            tz (k) = tz (k) - sink * lhi (k) / cvm (k)
             tc = tz (k) - tice
         endif
     enddo
@@ -2531,10 +2503,10 @@ subroutine terminal_fall (dtm, ktop, kbot, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     ! update capacity heat and latend heat coefficient
     ! -----------------------------------------------------------------------
     
-    ! ljz, tuning point
-    ! lhi (k) = li00 + dc_ice * tz (k)
-    ! icpk (k) = lhi (k) / cvm (k)
-    ! ljz, tuning point
+    do k = k0, kbot
+        lhi (k) = li00 + dc_ice * tz (k)
+        icpk (k) = lhi (k) / cvm (k)
+    enddo
     
     ! -----------------------------------------------------------------------
     ! melting of falling cloud ice into rain
