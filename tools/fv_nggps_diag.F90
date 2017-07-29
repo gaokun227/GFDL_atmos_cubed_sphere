@@ -211,7 +211,7 @@ contains
        do k=1,npz
          do j=jsc,jec
            do i=isc,iec         
-             wk(i,j,k) = Atm(n)%delp(i,j,k)*(1.-Atm(n)%q(i,j,k,liq_wat))
+             wk(i,j,k) = Atm(n)%delp(i,j,k)*(1.-sum(Atm(n)%q(i,j,k,2:Atm(n)%flagstruct%nwat)))
            enddo
          enddo
        enddo
