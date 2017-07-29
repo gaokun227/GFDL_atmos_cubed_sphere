@@ -817,7 +817,7 @@ contains
 !--- local variables ---
    integer :: i, j, ix, k, k1, n, w_diff, nt_dyn, iq
    integer :: nb, blen, nwat, dnats, nq_adv
-   real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
+   real(kind=kind_phys):: rcp, q0, qwat(nq), rdt
 
    Time_prev = Time
    Time_next = Time + Time_step_atmos
@@ -838,7 +838,7 @@ contains
 !$OMP              shared (rdt, n, nq, dnats, npz, ncnst, nwat, mytile, u_dt, v_dt, t_dt,&
 !$OMP                      Atm, IPD_Data, Atm_block, sphum, liq_wat, rainwat, ice_wat,   &
 !$OMP                      snowwat, graupel, nq_adv)   &
-!$OMP             private (nb, blen, i, j, k, k1, ix, q0, qwat, qt)
+!$OMP             private (nb, blen, i, j, k, k1, ix, q0, qwat)
    do nb = 1,Atm_block%nblks
 
 !SJL: perform vertical filling to fix the negative humidity if the SAS convection scheme is used
@@ -860,18 +860,13 @@ contains
 ! GFS mixing ratios  = tracer_mass / (air_mass + vapor_mass)
 ! FV3 total air mass = dry_mass + [water_vapor + condensate ]
 ! FV3 mixing ratios  = tracer_mass / (dry_mass+vapor_mass+cond_mass)
-         q0 = IPD_Data(nb)%Statein%prsi(ix,k) - IPD_Data(nb)%Statein%prsi(ix,k+1)
-         qwat(1:nq_adv) = q0*IPD_Data(nb)%Stateout%gq0(ix,k,1:nq_adv)
-! **********************************************************************************************************
-! Dry mass: the following way of updating delp is key to mass conservation with hybrid 32-64 bit computation
-! **********************************************************************************************************
-! The following example is for 2 water species. 
-!        q0 = Atm(n)%delp(i,j,k1)*(1.-(Atm(n)%q(i,j,k1,1)+Atm(n)%q(i,j,k1,2))) + q1 + q2
-         qt = sum(qwat(1:nwat))
-         q0 = Atm(n)%delp(i,j,k1)*(1.-sum(Atm(n)%q(i,j,k1,1:nwat))) + qt 
+         q0 = IPD_Data(nb)%Statein%prsi(ix,k) - IPD_Data(nb)%Statein%prsi(ix,k+1) ! dry_mass + water_vapor
+         qwat(1:nq_adv) = q0*IPD_Data(nb)%Stateout%gq0(ix,k,1:nq_adv)             ! tracer mass
+! The following way of updating delp is key to mass conservation with hybrid 32-64 bit computation
+         q0 = Atm(n)%delp(i,j,k1)*(1.-sum(Atm(n)%q(i,j,k1,1:nwat))) + sum(qwat(1:nwat))
          Atm(n)%delp(i,j,k1) = q0
          Atm(n)%q(i,j,k1,1:nq_adv) = qwat(1:nq_adv) / q0
-         if (dnats .gt. 0) Atm(n)%q(i,j,k1,nq_adv+1:nq) = IPD_Data(nb)%Stateout%gq0(ix,k,nq_adv+1:nq)
+!        if (dnats .gt. 0) Atm(n)%q(i,j,k1,nq_adv+1:nq) = IPD_Data(nb)%Stateout%gq0(ix,k,nq_adv+1:nq)
        enddo
      enddo
 
@@ -1312,12 +1307,12 @@ contains
              IPD_Data(nb)%Statein%qgrs(ix,k,nq+1:ncnst) = _DBL_(_RL_(Atm(mytile)%qdiag(i,j,k1,nq+1:ncnst)))
 ! Remove the contribution of condensates to delp (mass):
          if ( Atm(mytile)%flagstruct%nwat .eq. 6 ) then
-            IPD_Data(nb)%Statein%prsl(ix,k) = IPD_Data(nb)%Statein%prsl(ix,k) &
-                                            - IPD_Data(nb)%Statein%qgrs(ix,k,liq_wat)   &
-                                            - IPD_Data(nb)%Statein%qgrs(ix,k,ice_wat)   &
-                                            - IPD_Data(nb)%Statein%qgrs(ix,k,rainwat)   &
-                                            - IPD_Data(nb)%Statein%qgrs(ix,k,snowwat)   &
-                                            - IPD_Data(nb)%Statein%qgrs(ix,k,graupel)
+            IPD_Data(nb)%Statein%prsl(ix,k) = IPD_Data(nb)%Statein%prsl(ix,k) -    &
+                                            ( IPD_Data(nb)%Statein%qgrs(ix,k,liq_wat) + &
+                                              IPD_Data(nb)%Statein%qgrs(ix,k,ice_wat) + &
+                                              IPD_Data(nb)%Statein%qgrs(ix,k,rainwat) + &
+                                              IPD_Data(nb)%Statein%qgrs(ix,k,snowwat) + &
+                                              IPD_Data(nb)%Statein%qgrs(ix,k,graupel) )
          else !variable condensate numbers
             IPD_Data(nb)%Statein%prsl(ix,k) = IPD_Data(nb)%Statein%prsl(ix,k) &
                                             - sum(IPD_Data(nb)%Statein%qgrs(ix,k,2:Atm(mytile)%flagstruct%nwat))   

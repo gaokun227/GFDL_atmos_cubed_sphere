@@ -320,6 +320,8 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
             else ! evaporation of ql
                 ! sjl 20170703 added ql factor to prevent the situation of high ql and rh<1
                 ! factor = - min (1., fac_l2v * sqrt (max (0., ql (i, j)) / 1.e-5) * 10. * (1. - qv (i, j) / wqsat (i)))
+                ! factor = - fac_l2v
+                ! factor = - 1
                 factor = - min (1., fac_l2v * 10. * (1. - qv (i, j) / wqsat (i))) ! the rh dependent factor = 1 at 90%
                 src (i) = - min (ql (i, j), factor * dq0)
             endif
@@ -358,6 +360,8 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
                     src (i) = dq0
                 else ! evaporation of ql
                     ! factor = - min (1., fac_l2v * sqrt (max (0., ql (i, j)) / 1.e-5) * 10. * (1. - qv (i, j) / wqsat (i))) ! the rh dependent factor = 1 at 90%
+                    ! factor = - fac_l2v
+                    ! factor = - 1
                     factor = - min (1., fac_l2v * 10. * (1. - qv (i, j) / wqsat (i))) ! the rh dependent factor = 1 at 90%
                     src (i) = - min (ql (i, j), factor * dq0)
                 endif
