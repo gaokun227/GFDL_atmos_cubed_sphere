@@ -1403,6 +1403,10 @@ module fv_eta_mod
              ptop = 20.E2
              pint = 100.E2
              call var_hi(km, ak, bk, ptop, ks, pint, 1.05)
+           elseif (trim(npz_type) == 'meso2') then
+             ptop = 1.E2
+             pint = 100.E2
+             call var_gfs(km, ak, bk, ptop, ks, pint, 1.05)
            else
              ptop = 100.
              pint = 100.E2
