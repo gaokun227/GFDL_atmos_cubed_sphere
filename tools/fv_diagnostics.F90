@@ -52,6 +52,7 @@ module fv_diagnostics_mod
 
  real, parameter:: missing_value = -1.e10
  real, parameter:: missing_value2 = -1.e3 ! for variables with many missing values
+ real, parameter:: missing_value3 = 1.e10 ! for variables where we look for smallest values
  real :: ginv
  real :: pk0
  logical master
@@ -652,9 +653,9 @@ contains
        idiag%id_tb = register_diag_field ( trim(field), 'tb', axes(1:2), Time,  &
                                         'lowest layer temperature', 'K' )
        idiag%id_ctt = register_diag_field( trim(field), 'ctt', axes(1:2), Time,  &
-                                        'cloud_top temperature', 'K', missing_value=missing_value2 )
+                                        'cloud_top temperature', 'K', missing_value=missing_value3 )
        idiag%id_ctp = register_diag_field( trim(field), 'ctp', axes(1:2), Time,  &
-                                        'cloud_top pressure', 'hPa' , missing_value=missing_value2 )
+                                        'cloud_top pressure', 'hPa' , missing_value=missing_value3 )
        idiag%id_ctz = register_diag_field( trim(field), 'ctz', axes(1:2), Time,  &
                                         'cloud_top height', 'hPa' , missing_value=missing_value2 )
        idiag%id_cape = register_diag_field( trim(field), 'cape', axes(1:2), Time,  &
