@@ -23,9 +23,7 @@ module fv_eta_mod
  use mpp_mod,        only: FATAL, mpp_error
  implicit none
  private
- public set_eta, set_external_eta, get_eta_level, compute_dz_var,  &
-        compute_dz_L32, compute_dz_L101, set_hybrid_z, compute_dz, &
-        gw_1d, sm1_edge, hybrid_z_dz
+ public set_eta, get_eta_level, compute_dz_var, compute_dz_L32, compute_dz_L101, set_hybrid_z, compute_dz, gw_1d, sm1_edge, hybrid_z_dz
 
  contains
 
@@ -1424,7 +1422,8 @@ module fv_eta_mod
         case (91)
              pint = 100.E2
              ptop = 40.
-             call var_gfs(km, ak, bk, ptop, ks, pint, 1.029)
+! 20170804!  call var_gfs(km, ak, bk, ptop, ks, pint, 1.029)
+             call var_gfs(km, ak, bk, ptop, ks, pint, 1.03)
         case (95)
 ! Mid-top settings:
              pint = 100.E2
@@ -1481,29 +1480,6 @@ module fv_eta_mod
 
  end subroutine set_eta
 #endif
-
-
- subroutine set_external_eta(ak, bk, ptop, ks)
-   implicit none
-   real,    intent(in)  :: ak(:)
-   real,    intent(in)  :: bk(:)
-   real,    intent(out) :: ptop         ! model top (Pa)
-   integer, intent(out) :: ks           ! number of pure p layers
-   !--- local variables
-   integer :: k
-   real :: eps = 1.d-7
-
-   ptop = ak(1)
-   ks = 1
-   do k = 1, size(bk(:))
-     if (bk(k).lt.eps) ks = k 
-   enddo
-   !--- change ks to layers from levels
-   ks = ks - 1
-   if (is_master()) write(6,*) ' ptop & ks ', ptop, ks
-  
- end subroutine set_external_eta
-
 
  subroutine var_les(km, ak, bk, ptop, ks, pint, s_rate)
  implicit none

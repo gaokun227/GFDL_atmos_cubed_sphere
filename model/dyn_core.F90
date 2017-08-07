@@ -835,7 +835,7 @@ contains
            call timing_on('COMM_TOTAL')
         call complete_group_halo_update(i_pack(5), domain)
                                        call timing_off('COMM_TOTAL')
-	    endif
+        endif
 #endif SW_DYNAMICS
      endif    ! end hydro check
 
@@ -1434,13 +1434,14 @@ real, intent(inout) ::    pk(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)  ! p**kappa
 real, intent(inout) ::    gz(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)  ! g * h
 real, intent(inout) ::     u(bd%isd:bd%ied,  bd%jsd:bd%jed+1,npz) 
 real, intent(inout) ::     v(bd%isd:bd%ied+1,bd%jsd:bd%jed,  npz)
-    type(fv_grid_type), intent(INOUT), target :: gridstruct
+type(fv_grid_type), intent(INOUT), target :: gridstruct
 ! Local:
-real wk1(bd%isd:bd%ied, bd%jsd:bd%jed)
-real  wk(bd%is: bd%ie+1,bd%js: bd%je+1)
-real du1, dv1, top_value
-integer i,j,k
-integer :: is,  ie,  js,  je
+real:: wk1(bd%isd:bd%ied, bd%jsd:bd%jed)
+! SJL 20170806: enhance the floating precision:
+real(kind=R_GRID):: wk(bd%is:bd%ie+1,bd%js:bd%je+1)
+real(kind=R_GRID):: du1, dv1, dt8
+real:: top_value
+integer :: i,j,k, is,  ie,  js,  je
 integer :: isd, ied, jsd, jed
 
       is  = bd%is
@@ -1451,6 +1452,8 @@ integer :: isd, ied, jsd, jed
       ied = bd%ied
       jsd = bd%jsd
       jed = bd%jed
+
+      dt8 = dt
       
 if ( use_logp ) then
    top_value = peln1
@@ -1458,19 +1461,17 @@ else
    top_value = ptk
 endif
 
-!Remember that not all compilers set pp to zero by default
-!$OMP parallel do default(none) shared(is,ie,js,je,pp,pk,top_value)
-do j=js,je+1
-   do i=is,ie+1
-      pp(i,j,1) = 0.
-      pk(i,j,1) = top_value
-   enddo
-enddo
-
-!$OMP parallel do default(none) shared(isd,jsd,npz,pp,gridstruct,npx,npy,is,ie,js,je,ng,pk,gz) &
+!$OMP parallel do default(none) shared(top_value,isd,jsd,npz,pp,gridstruct,npx,npy,is,ie,js,je,ng,pk,gz) &
 !$OMP                          private(wk1)
 do k=1,npz+1
-   if ( k/=1 ) then
+   if ( k==1 ) then
+      do j=js,je+1
+         do i=is,ie+1
+            pp(i,j,1) = 0.
+            pk(i,j,1) = top_value
+         enddo
+      enddo
+   else
       call a2b_ord4(pp(isd,jsd,k), wk1, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
       call a2b_ord4(pk(isd,jsd,k), wk1, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
    endif
@@ -1478,7 +1479,7 @@ do k=1,npz+1
 enddo
 
 !$OMP parallel do default(none) shared(is,ie,js,je,npz,delp,gridstruct,npx,npy,ng,isd,jsd, &
-!$OMP                                  pk,dt,gz,u,pp,v) &
+!$OMP                                  pk,dt8,gz,u,pp,v) &
 !$OMP                          private(wk1, wk, du1, dv1)
 do k=1,npz
    call a2b_ord4(delp(isd,jsd,k), wk1, gridstruct, npx, npy, is, ie, js, je, ng)
@@ -1490,36 +1491,27 @@ do k=1,npz
    do j=js,je+1
       do i=is,ie
          ! hydrostatic contributions from past time-step already added in the "beta" part
-         ! Current gradient from "hydrostatic" components:
-         du1 = dt / (wk(i,j)+wk(i+1,j)) *   &
-               ( (gz(i,j,k+1)-gz(i+1,j,k))*(pk(i+1,j,k+1)-pk(i,j,k)) +  &
-                 (gz(i,j,k)-gz(i+1,j,k+1))*(pk(i,j,k+1)-pk(i+1,j,k)) )
-#ifdef GAS_HYDRO_P
-         dul = (1.-0.5*(q_con(i,j-1,k)+q_con(i,j,k)))*du
-#endif
-         ! Non-hydrostatic contribution
-         u(i,j,k) = (u(i,j,k) + du1 + dt/(wk1(i,j)+wk1(i+1,j)) *  &
-                    ((gz(i,j,k+1)-gz(i+1,j,k))*(pp(i+1,j,k+1)-pp(i,j,k))    &
-              + (gz(i,j,k)-gz(i+1,j,k+1))*(pp(i,j,k+1)-pp(i+1,j,k))))*gridstruct%rdx(i,j)
+         du1 = ( (gz(i,j,k+1)-gz(i+1,j,k  ))*(pk(i+1,j,k+1)-pk(i  ,j,k)) +   &
+                 (gz(i,j,k  )-gz(i+1,j,k+1))*(pk(i  ,j,k+1)-pk(i+1,j,k)))/(wk(i,j)+wk(i+1,j))
+         du1 = dt8 * ( du1 +      &
+               ((gz(i,j,k+1)-gz(i+1,j,k  ))*(pp(i+1,j,k+1)-pp(i  ,j,k)) +   &
+                (gz(i,j,k  )-gz(i+1,j,k+1))*(pp(i  ,j,k+1)-pp(i+1,j,k)))/(wk1(i,j)+wk1(i+1,j)) )
+         u(i,j,k) = (u(i,j,k) + du1) * gridstruct%rdx(i,j)
       enddo
    enddo
    do j=js,je
       do i=is,ie+1
-         ! Current gradient from "hydrostatic" components:
-         dv1 = dt / (wk(i,j)+wk(i,j+1)) *   &
-              ((gz(i,j,k+1)-gz(i,j+1,k))*(pk(i,j+1,k+1)-pk(i,j,k)) +  &
-              (gz(i,j,k)-gz(i,j+1,k+1))*(pk(i,j,k+1)-pk(i,j+1,k)))
-#ifdef GAS_HYDRO_P
-         dvl = (1.-0.5*(q_con(i-1,j,k)+q_con(i,j,k)))*dv
-#endif
-         ! Non-hydrostatic contribution
-         v(i,j,k) = (v(i,j,k) + dv1 + dt/(wk1(i,j)+wk1(i,j+1)) *  &
-                    ((gz(i,j,k+1)-gz(i,j+1,k))*(pp(i,j+1,k+1)-pp(i,j,k))   &
-              + (gz(i,j,k)-gz(i,j+1,k+1))*(pp(i,j,k+1)-pp(i,j+1,k))))*gridstruct%rdy(i,j)
+         dv1 = ((gz(i,j,k+1)-gz(i,j+1,k  ))*(pk(i,j+1,k+1)-pk(i,j  ,k)) +   &
+                (gz(i,j,k  )-gz(i,j+1,k+1))*(pk(i,j  ,k+1)-pk(i,j+1,k)))/(wk(i,j)+wk(i,j+1)) 
+         dv1 = dt8 * ( dv1 +      &
+               ((gz(i,j,k+1)-gz(i,j+1,k  ))*(pp(i,j+1,k+1)-pp(i,j  ,k)) +   &
+                (gz(i,j,k  )-gz(i,j+1,k+1))*(pp(i,j  ,k+1)-pp(i,j+1,k)))/(wk1(i,j)+wk1(i,j+1)) )
+         v(i,j,k) = (v(i,j,k) + dv1) * gridstruct%rdy(i,j)
       enddo
    enddo
 
 enddo    ! end k-loop
+
 end subroutine nh_p_grad
 
 
