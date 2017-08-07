@@ -2956,15 +2956,21 @@ subroutine cs_profile (a4, del, km, do_mono)
         q (k) = q (k) - gam (k) * q (k + 1)
     enddo
     
+    ! -----------------------------------------------------------------------
     ! apply constraints
+    ! -----------------------------------------------------------------------
     
     do k = 2, km
         gam (k) = a4 (1, k) - a4 (1, k - 1)
     enddo
     
+    ! -----------------------------------------------------------------------
     ! apply large - scale constraints to all fields if not local max / min
+    ! -----------------------------------------------------------------------
     
+    ! -----------------------------------------------------------------------
     ! top:
+    ! -----------------------------------------------------------------------
     
     q (1) = max (q (1), 0.)
     q (2) = min (q (2), max (a4 (1, 1), a4 (1, 2)))
@@ -2989,6 +2995,10 @@ subroutine cs_profile (a4, del, km, do_mono)
             endif
         endif
     enddo
+    
+    ! -----------------------------------------------------------------------
+    ! bottom :
+    ! -----------------------------------------------------------------------
     
     q (km) = min (q (km), max (a4 (1, km - 1), a4 (1, km)))
     q (km) = max (q (km), min (a4 (1, km - 1), a4 (1, km)), 0.)
@@ -3036,9 +3046,11 @@ subroutine cs_profile (a4, del, km, do_mono)
         enddo
     else
         do k = 3, km - 2
-            if (extm (k) .and. (extm (k - 1) .or. extm (k + 1) .or. a4 (1, k) < qp_min)) then
-                a4 (2, k) = a4 (1, k)
-                a4 (3, k) = a4 (1, k)
+            if (extm (k)) then
+                if (a4 (1, k) < qp_min .or. extm (k - 1) .or. extm (k + 1)) then
+                    a4 (2, k) = a4 (1, k)
+                    a4 (3, k) = a4 (1, k)
+                endif
             endif
         enddo
     endif
