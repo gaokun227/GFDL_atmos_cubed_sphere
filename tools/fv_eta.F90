@@ -1424,8 +1424,8 @@ module fv_eta_mod
         case (91)
              pint = 100.E2
              ptop = 40.
-! 20170804!  call var_gfs(km, ak, bk, ptop, ks, pint, 1.029)
-             call var_gfs(km, ak, bk, ptop, ks, pint, 1.03)
+             call var_gfs(km, ak, bk, ptop, ks, pint, 1.029)
+!            call var_gfs(km, ak, bk, ptop, ks, pint, 1.03)
         case (95)
 ! Mid-top settings:
              pint = 100.E2
