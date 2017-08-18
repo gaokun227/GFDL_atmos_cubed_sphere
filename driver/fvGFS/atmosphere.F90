@@ -45,7 +45,7 @@ use mpp_mod,                only: mpp_error, stdout, FATAL, NOTE, &
                                   input_nml_file, mpp_root_pe,    &
                                   mpp_npes, mpp_pe, mpp_chksum,   &
                                   mpp_get_current_pelist,         &
-                                  mpp_set_current_pelist, mpp_sync
+                                  mpp_set_current_pelist
 use mpp_parameter_mod,      only: EUPDATE, WUPDATE, SUPDATE, NUPDATE
 use mpp_domains_mod,        only: domain2d, mpp_update_domains
 use xgrid_mod,              only: grid_box_type
@@ -103,7 +103,7 @@ character(len=7)   :: mod_name = 'fvGFS/atmosphere_mod'
 
 !---- private data ----
   type (time_type) :: Time_step_atmos
-  public Atm
+  public Atm, mytile
 
   !These are convenience variables for local use only, and are set to values in Atm%
   real    :: dt_atmos
@@ -139,11 +139,10 @@ contains
 
 
 
- subroutine atmosphere_init (Time_init, Time, Time_step, Grid_box, dx, dy, area)
+ subroutine atmosphere_init (Time_init, Time, Time_step, Grid_box, area)
    type (time_type),    intent(in)    :: Time_init, Time, Time_step
    type(grid_box_type), intent(inout) :: Grid_box
-   real(kind=kind_phys), pointer, dimension(:,:), intent(inout) :: dx, dy, area
-
+   real(kind=kind_phys), pointer, dimension(:,:), intent(inout) :: area
 !--- local variables ---
    integer :: i, n
    integer :: itrac
@@ -237,11 +236,7 @@ contains
      Grid_box%vlon  (i, isc:iec  , jsc:jec  ) = Atm(mytile)%gridstruct%vlon  (isc:iec ,  jsc:jec, i )
      Grid_box%vlat  (i, isc:iec  , jsc:jec  ) = Atm(mytile)%gridstruct%vlat  (isc:iec ,  jsc:jec, i )
    enddo
-   allocate (dx  (isc:iec  , jsc:jec+1))
-   allocate (dy  (isc:iec+1, jsc:jec  ))
    allocate (area(isc:iec  , jsc:jec  ))
-   dx(isc:iec,jsc:jec+1) = Atm(mytile)%gridstruct%dx_64(isc:iec,jsc:jec+1)
-   dy(isc:iec+1,jsc:jec) = Atm(mytile)%gridstruct%dy_64(isc:iec+1,jsc:jec)
    area(isc:iec,jsc:jec) = Atm(mytile)%gridstruct%area_64(isc:iec,jsc:jec)
 
 !----- allocate and zero out the dynamics (and accumulated) tendencies
@@ -249,7 +244,7 @@ contains
              v_dt(isd:ied,jsd:jed,npz), &
              t_dt(isc:iec,jsc:jec,npz) )
 !--- allocate pref
-    allocate(pref(npz+1,2), dum1d(npz+1))
+   allocate(pref(npz+1,2), dum1d(npz+1))
 
    call set_domain ( Atm(mytile)%domain )
    call fv_restart(Atm(mytile)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mytile)%gridstruct%grid_type, grids_on_this_pe)
@@ -572,12 +567,14 @@ contains
  end subroutine set_atmosphere_pelist
 
 
- subroutine atmosphere_domain ( fv_domain )
+ subroutine atmosphere_domain ( fv_domain, layout )
    type(domain2d), intent(out) :: fv_domain
+   integer, intent(out) :: layout(2)
 !  returns the domain2d variable associated with the coupling grid
 !  note: coupling is done using the mass/temperature grid with no halos
 
    fv_domain = Atm(mytile)%domain_for_coupler
+   layout(1:2) =  Atm(mytile)%layout(1:2)
 
  end subroutine atmosphere_domain
 
