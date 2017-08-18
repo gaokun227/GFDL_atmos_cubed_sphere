@@ -89,6 +89,7 @@ public :: atmosphere_resolution, atmosphere_grid_bdry, &
           atmosphere_diag_axes, atmosphere_etalvls, &
           atmosphere_hgt, atmosphere_scalar_field_halo, &
           atmosphere_tracer_postinit, &
+! atmosphere_diss_est, &
           get_bottom_mass, get_bottom_wind,   &
           get_stock_pe, set_atmosphere_pelist
 
@@ -968,7 +969,7 @@ contains
 ! SJL notes:
 ! ---- DO not touch the code below; dry mass conservation may change due to 64bit <-> 32bit conversion
 ! GFS total air mass = dry_mass + water_vapor (condensate excluded)
-! GFS mixing ratios  = tracer_mass / (air_mass + vapor_mass)
+! GFS mixing ratios  = tracer_mass / (dry_mass + vapor_mass)
 ! FV3 total air mass = dry_mass + [water_vapor + condensate ]
 ! FV3 mixing ratios  = tracer_mass / (dry_mass+vapor_mass+cond_mass)
          q0 = IPD_Data(nb)%Statein%prsi(ix,k) - IPD_Data(nb)%Statein%prsi(ix,k+1)
