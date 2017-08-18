@@ -833,9 +833,9 @@ contains
         enddo
         if ( gridstruct%square_domain ) then
            call timing_on('COMM_TOTAL')
-        call complete_group_halo_update(i_pack(5), domain)
+           call complete_group_halo_update(i_pack(5), domain)
                                        call timing_off('COMM_TOTAL')
-	    endif
+        endif
 #endif SW_DYNAMICS
      endif    ! end hydro check
 
@@ -1434,7 +1434,7 @@ real, intent(inout) ::    pk(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)  ! p**kappa
 real, intent(inout) ::    gz(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)  ! g * h
 real, intent(inout) ::     u(bd%isd:bd%ied,  bd%jsd:bd%jed+1,npz) 
 real, intent(inout) ::     v(bd%isd:bd%ied+1,bd%jsd:bd%jed,  npz)
-    type(fv_grid_type), intent(INOUT), target :: gridstruct
+type(fv_grid_type), intent(INOUT), target :: gridstruct
 ! Local:
 real wk1(bd%isd:bd%ied, bd%jsd:bd%jed)
 real  wk(bd%is: bd%ie+1,bd%js: bd%je+1)
