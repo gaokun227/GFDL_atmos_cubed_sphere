@@ -203,6 +203,7 @@ module fv_control_mod
    logical , pointer :: fv_diag_ic 
    logical , pointer :: external_ic 
    logical , pointer :: external_eta
+   logical , pointer :: read_increment
    character(len=128) , pointer :: res_latlon_dynamics
    character(len=128) , pointer :: res_latlon_tracers 
    logical , pointer :: hydrostatic 
@@ -1203,6 +1204,7 @@ module fv_control_mod
      fv_diag_ic                    => Atm%flagstruct%fv_diag_ic
      external_ic                   => Atm%flagstruct%external_ic
      external_eta                  => Atm%flagstruct%external_eta
+     read_increment                => Atm%flagstruct%read_increment
 
      hydrostatic                   => Atm%flagstruct%hydrostatic
      phys_hydrostatic              => Atm%flagstruct%phys_hydrostatic
