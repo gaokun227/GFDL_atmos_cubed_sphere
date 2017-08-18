@@ -154,7 +154,7 @@ contains
             fast_mp_consv = (.not.do_adiabatic_init) .and. consv>consv_min
             do k=1,km
                kmp = k
-               if ( pfull(k) > 15.E2 ) exit
+               if ( pfull(k) > 10.E2 ) exit
             enddo
             call qs_init(kmp)
        endif
