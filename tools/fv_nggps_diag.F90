@@ -19,7 +19,7 @@
 !***********************************************************************
 module fv_nggps_diags_mod
 
-use mpp_mod, only: mpp_pe, mpp_root_pe
+ use mpp_mod,            only: mpp_pe, mpp_root_pe
  use constants_mod,      only: grav, rdgas
  use fms_io_mod,         only: set_domain, nullify_domain
  use time_manager_mod,   only: time_type
@@ -40,7 +40,12 @@ use mpp_mod, only: mpp_pe, mpp_root_pe
  logical :: module_is_initialized=.false.
  integer :: sphum, liq_wat, ice_wat       ! GFDL physics
  integer :: rainwat, snowwat, graupel
- real :: vrange(2), wrange(2), trange(2)
+ real :: vrange(2) = (/ -330.,  330. /)  ! winds
+ real :: wrange(2) = (/ -100.,  100. /)  ! vertical wind
+ real :: trange(2) = (/  100.,  350. /)  ! temperature
+
+! file name
+ character(len=64) :: field = 'gfs_dyn'
 
 ! tracers
  character(len=128)   :: tname
@@ -53,15 +58,10 @@ contains
 
  subroutine fv_nggps_diag_init(Atm, axes, Time)
     type(fv_atmos_type), intent(inout), target :: Atm(:)
-    integer, intent(in) :: axes(4)
+    integer, intent(in)         :: axes(4)
     type(time_type), intent(in) :: Time
 
-    character(len=64) :: field
     integer :: n, ncnst, i
-
-    vrange = (/ -330.,  330. /)  ! winds
-    wrange = (/ -100.,  100. /)  ! vertical wind
-    trange = (/  100.,  350. /)  ! temperature
 
     n = 1
     ncnst = Atm(1)%ncnst
@@ -81,8 +81,6 @@ contains
 !--------------------------------------------------------------
     allocate(id_tracer(ncnst))
     id_tracer(:) = 0
-
-    field= 'gfs_dyn'
 
     if (Atm(n)%flagstruct%write_3d_diags) then
 !-------------------
@@ -152,11 +150,11 @@ contains
          call range_check('DELP', Atm(n)%delp, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,    &
                            0.01*ptop, 200.E2, bad_range)
          call range_check('UA', Atm(n)%ua, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           -220., 250., bad_range)
+                           -250., 250., bad_range)
          call range_check('VA', Atm(n)%va, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           -220., 220., bad_range)
+                           -250., 250., bad_range)
          call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           130., 350., bad_range) !DCMIP ICs have very low temperatures
+                           150., 350., bad_range) !DCMIP ICs have very low temperatures
     endif
 
     !--- A-GRID WINDS
@@ -169,7 +167,7 @@ contains
     endif
 
     !--- TEMPERATURE
-    if(id_pt   > 0) used=send_data(id_pt  , Atm(n)%pt  (isc:iec,jsc:jec,:), Time)
+    if(id_pt   > 0) used=send_data(id_pt, Atm(n)%pt(isc:iec,jsc:jec,:), Time)
 
     !--- TRACERS
     do itrac=1, Atm(n)%ncnst

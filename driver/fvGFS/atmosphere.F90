@@ -88,7 +88,7 @@ public :: atmosphere_resolution, atmosphere_grid_bdry, &
           atmosphere_control_data, atmosphere_pref, &
           atmosphere_diag_axes, atmosphere_etalvls, &
           atmosphere_hgt, atmosphere_scalar_field_halo, &
-          atmosphere_tracer_postinit, &
+!rab          atmosphere_tracer_postinit, &
 ! atmosphere_diss_est, &
           get_bottom_mass, get_bottom_wind,   &
           get_stock_pe, set_atmosphere_pelist
@@ -752,41 +752,43 @@ contains
  end subroutine atmosphere_scalar_field_halo
 
 
- subroutine atmosphere_tracer_postinit (IPD_Data, Atm_block)
-   !--- interface variables ---
-   type(IPD_data_type),       intent(in) :: IPD_Data(:)
-   type(block_control_type),  intent(in) :: Atm_block
-   !--- local variables ---
-   integer :: i, j, ix, k, k1, n, nwat, nb, blen
-   real(kind=kind_phys) :: qwat
-
-   if( nq<3 ) call mpp_error(FATAL, 'GFS phys must have 3 interactive tracers')
-
-   n = mytile
-   nwat = Atm(n)%flagstruct%nwat
-
-!$OMP parallel do default (none) &
-!$OMP              shared (Atm_block, Atm, IPD_Data, npz, nq, ncnst, n, nwat) &
-!$OMP             private (nb, k, k1, ix, i, j, qwat)
-   do nb = 1,Atm_block%nblks
-     do k = 1, npz
-       k1 = npz+1-k !reverse the k direction
-       do ix = 1, Atm_block%blksz(nb)
-         i = Atm_block%index(nb)%ii(ix)
-         j = Atm_block%index(nb)%jj(ix)
-         qwat = sum(Atm(n)%q(i,j,k1,1:nwat))
-         Atm(n)%q(i,j,k1,1:nq) = Atm(n)%q(i,j,k1,1:nq) + IPD_Data(nb)%Stateout%gq0(ix,k,1:nq) * (1.0 - qwat)
-         if (nq .gt. ncnst) then
-           Atm(n)%qdiag(i,j,k1,nq+1:ncnst) = Atm(n)%qdiag(i,j,k1,nq+1:ncnst) + IPD_Data(nb)%Stateout%gq0(ix,k,nq+1:ncnst)
-         endif
-       enddo
-     enddo
-   enddo
-
-   call mpp_update_domains (Atm(n)%q, Atm(n)%domain, complete=.true.)
-
-   return
- end subroutine atmosphere_tracer_postinit
+!--- Need to know the formulation of the mixing ratio being imported into FV3
+!--- in order to adjust it in a consistent manner for advection
+!rab subroutine atmosphere_tracer_postinit (IPD_Data, Atm_block)
+!rab   !--- interface variables ---
+!rab   type(IPD_data_type),       intent(in) :: IPD_Data(:)
+!rab   type(block_control_type),  intent(in) :: Atm_block
+!rab   !--- local variables ---
+!rab   integer :: i, j, ix, k, k1, n, nwat, nb, blen
+!rab   real(kind=kind_phys) :: qwat
+!rab
+!rab   if( nq<3 ) call mpp_error(FATAL, 'GFS phys must have 3 interactive tracers')
+!rab
+!rab   n = mytile
+!rab   nwat = Atm(n)%flagstruct%nwat
+!rab
+!rab!$OMP parallel do default (none) &
+!rab!$OMP              shared (Atm_block, Atm, IPD_Data, npz, nq, ncnst, n, nwat) &
+!rab!$OMP             private (nb, k, k1, ix, i, j, qwat)
+!rab   do nb = 1,Atm_block%nblks
+!rab     do k = 1, npz
+!rab       k1 = npz+1-k !reverse the k direction
+!rab       do ix = 1, Atm_block%blksz(nb)
+!rab         i = Atm_block%index(nb)%ii(ix)
+!rab         j = Atm_block%index(nb)%jj(ix)
+!rab         qwat = sum(Atm(n)%q(i,j,k1,1:nwat))
+!rab         Atm(n)%q(i,j,k1,1:nq) = Atm(n)%q(i,j,k1,1:nq) + IPD_Data(nb)%Stateout%gq0(ix,k,1:nq) * (1.0 - qwat)
+!rab         if (nq .gt. ncnst) then
+!rab           Atm(n)%qdiag(i,j,k1,nq+1:ncnst) = Atm(n)%qdiag(i,j,k1,nq+1:ncnst) + IPD_Data(nb)%Stateout%gq0(ix,k,nq+1:ncnst)
+!rab         endif
+!rab       enddo
+!rab     enddo
+!rab   enddo
+!rab
+!rab   call mpp_update_domains (Atm(n)%q, Atm(n)%domain, complete=.true.)
+!rab
+!rab   return
+!rab end subroutine atmosphere_tracer_postinit
 
 
  subroutine get_bottom_mass ( t_bot, tr_bot, p_bot, z_bot, p_surf, slp )
