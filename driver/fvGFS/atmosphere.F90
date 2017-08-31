@@ -46,7 +46,8 @@ use mpp_mod,                only: mpp_error, stdout, FATAL, NOTE, &
                                   mpp_npes, mpp_pe, mpp_chksum,   &
                                   mpp_get_current_pelist,         &
                                   mpp_set_current_pelist
-use mpp_domains_mod,        only: domain2d
+use mpp_parameter_mod,      only: EUPDATE, WUPDATE, SUPDATE, NUPDATE
+use mpp_domains_mod,        only: domain2d, mpp_update_domains
 use xgrid_mod,              only: grid_box_type
 use field_manager_mod,      only: MODEL_ATMOS
 use tracer_manager_mod,     only: get_tracer_index, get_number_tracers, &
@@ -82,10 +83,12 @@ public :: atmosphere_init, atmosphere_end, atmosphere_restart, &
 
 !--- utility routines
 public :: atmosphere_resolution, atmosphere_grid_bdry, &
-          atmosphere_grid_ctr,   atmosphere_domain, &
+          atmosphere_grid_ctr, atmosphere_domain, &
           atmosphere_control_data, atmosphere_pref, &
           atmosphere_diag_axes, atmosphere_etalvls, &
-          atmosphere_hgt,                           &
+          atmosphere_hgt, atmosphere_scalar_field_halo, &
+!rab          atmosphere_tracer_postinit, &
+! atmosphere_diss_est, &
           get_bottom_mass, get_bottom_wind,   &
           get_stock_pe, set_atmosphere_pelist
 
@@ -100,7 +103,7 @@ character(len=7)   :: mod_name = 'fvGFS/atmosphere_mod'
 
 !---- private data ----
   type (time_type) :: Time_step_atmos
-  public Atm
+  public Atm, mytile
 
   !These are convenience variables for local use only, and are set to values in Atm%
   real    :: dt_atmos
@@ -136,11 +139,10 @@ contains
 
 
 
- subroutine atmosphere_init (Time_init, Time, Time_step, Grid_box, dx, dy, area)
+ subroutine atmosphere_init (Time_init, Time, Time_step, Grid_box, area)
    type (time_type),    intent(in)    :: Time_init, Time, Time_step
    type(grid_box_type), intent(inout) :: Grid_box
-   real(kind=kind_phys), pointer, dimension(:,:), intent(inout) :: dx, dy, area
-
+   real(kind=kind_phys), pointer, dimension(:,:), intent(inout) :: area
 !--- local variables ---
    integer :: i, n
    integer :: itrac
@@ -234,11 +236,7 @@ contains
      Grid_box%vlon  (i, isc:iec  , jsc:jec  ) = Atm(mytile)%gridstruct%vlon  (isc:iec ,  jsc:jec, i )
      Grid_box%vlat  (i, isc:iec  , jsc:jec  ) = Atm(mytile)%gridstruct%vlat  (isc:iec ,  jsc:jec, i )
    enddo
-   allocate (dx  (isc:iec  , jsc:jec+1))
-   allocate (dy  (isc:iec+1, jsc:jec  ))
    allocate (area(isc:iec  , jsc:jec  ))
-   dx(isc:iec,jsc:jec+1) = Atm(mytile)%gridstruct%dx_64(isc:iec,jsc:jec+1)
-   dy(isc:iec+1,jsc:jec) = Atm(mytile)%gridstruct%dy_64(isc:iec+1,jsc:jec)
    area(isc:iec,jsc:jec) = Atm(mytile)%gridstruct%area_64(isc:iec,jsc:jec)
 
 !----- allocate and zero out the dynamics (and accumulated) tendencies
@@ -246,7 +244,7 @@ contains
              v_dt(isd:ied,jsd:jed,npz), &
              t_dt(isc:iec,jsc:jec,npz) )
 !--- allocate pref
-    allocate(pref(npz+1,2), dum1d(npz+1))
+   allocate(pref(npz+1,2), dum1d(npz+1))
 
    call set_domain ( Atm(mytile)%domain )
    call fv_restart(Atm(mytile)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mytile)%gridstruct%grid_type, grids_on_this_pe)
@@ -569,12 +567,14 @@ contains
  end subroutine set_atmosphere_pelist
 
 
- subroutine atmosphere_domain ( fv_domain )
+ subroutine atmosphere_domain ( fv_domain, layout )
    type(domain2d), intent(out) :: fv_domain
+   integer, intent(out) :: layout(2)
 !  returns the domain2d variable associated with the coupling grid
 !  note: coupling is done using the mass/temperature grid with no halos
 
    fv_domain = Atm(mytile)%domain_for_coupler
+   layout(1:2) =  Atm(mytile)%layout(1:2)
 
  end subroutine atmosphere_domain
 
@@ -614,7 +614,7 @@ contains
    character(len=5), intent(in) :: position
    logical, intent(in) :: relative
    logical, intent(in) :: flip
-   !--- local variables
+   !--- local variables ---
    integer:: lev, k, j, i
    real(kind=kind_phys), allocatable, dimension(:,:,:) :: z, dz
 
@@ -675,6 +675,119 @@ contains
    deallocate (dz)
 
  end subroutine atmosphere_hgt
+
+
+ subroutine atmosphere_scalar_field_halo (data, halo, isize, jsize, ksize, data_p)
+   !--------------------------------------------------------------------
+   ! data   - output array to return the field with halo (i,j,k)
+   !          optionally input for field already in (i,j,k) form
+   !          sized to include the halo of the field (+ 2*halo)
+   ! halo   - size of the halo (must be less than 3)
+   ! ied    - horizontal resolution in i-dir with haloes
+   ! jed    - horizontal resolution in j-dir with haloes
+   ! ksize  - vertical resolution
+   ! data_p - optional input field in packed format (ix,k)  
+   !--------------------------------------------------------------------
+   !--- interface variables ---
+   real(kind=kind_phys), dimension(1:isize,1:jsize,ksize), intent(inout) :: data
+   integer, intent(in) :: halo
+   integer, intent(in) :: isize
+   integer, intent(in) :: jsize
+   integer, intent(in) :: ksize
+   real(kind=kind_phys), dimension(:,:), optional, intent(in) :: data_p
+   !--- local variables ---
+   integer :: i, j, k
+   integer :: ic, jc
+   character(len=44) :: modname = 'atmosphere_mod::atmosphere_scalar_field_halo'
+   integer :: mpp_flags
+
+   !--- perform error checking
+   if (halo .gt. 3) call mpp_error(FATAL, modname//' - halo.gt.3 requires extending the MPP domain to support')
+   ic = isize - 2 * halo
+   jc = jsize - 2 * halo
+
+   !--- if packed data is present, unpack it into the two-dimensional data array
+   if (present(data_p)) then
+     if (ic*jc .ne. size(data_p,1)) call mpp_error(FATAL, modname//' - incorrect sizes for incoming &
+                                                  &variables data and data_p')
+     data = 0.
+!$OMP parallel do default (none) &
+!$OMP              shared (data, data_p, halo, ic, jc, ksize) &
+!$OMP             private (i, j, k)
+     do k = 1, ksize
+       do j = 1, jc
+         do i = 1, ic
+           data(i+halo, j+halo, k) = data_p(i + (j-1)*ic, k)
+         enddo
+       enddo
+     enddo
+   endif
+
+   mpp_flags = EUPDATE + WUPDATE + SUPDATE + NUPDATE
+   if (halo == 1) then
+     call mpp_update_domains(data, Atm(mytile)%domain_for_coupler, flags=mpp_flags, complete=.true.)
+   elseif (halo == 3) then
+     call mpp_update_domains(data, Atm(mytile)%domain, flags=mpp_flags, complete=.true.)
+   else
+     call mpp_error(FATAL, modname//' - unsupported halo size')
+   endif
+
+   !--- fill the halo points when at a corner of the cubed-sphere tile 
+   !--- interior domain corners are handled correctly
+   if ( (isc==1) .or. (jsc==1) .or. (iec==npx-1) .or. (jec==npy-1) ) then
+     do k = 1, ksize
+       do j=1,halo
+         do i=1,halo
+           if ((isc==    1) .and. (jsc==    1)) data(halo+1-j ,halo+1-i ,k) = data(halo+i     ,halo+1-j ,k)  !SW Corner
+           if ((isc==    1) .and. (jec==npy-1)) data(halo+1-j ,halo+jc+i,k) = data(halo+i     ,halo+jc+j,k)  !NW Corner
+           if ((iec==npx-1) .and. (jsc==    1)) data(halo+ic+j,halo+1-i ,k) = data(halo+ic-i+1,halo+1-j ,k)  !SE Corner
+           if ((iec==npx-1) .and. (jec==npy-1)) data(halo+ic+j,halo+jc+i,k) = data(halo+ic-i+1,halo+jc+j,k)  !NE Corner
+         enddo
+       enddo
+     enddo
+   endif
+
+   return
+ end subroutine atmosphere_scalar_field_halo
+
+
+!--- Need to know the formulation of the mixing ratio being imported into FV3
+!--- in order to adjust it in a consistent manner for advection
+!rab subroutine atmosphere_tracer_postinit (IPD_Data, Atm_block)
+!rab   !--- interface variables ---
+!rab   type(IPD_data_type),       intent(in) :: IPD_Data(:)
+!rab   type(block_control_type),  intent(in) :: Atm_block
+!rab   !--- local variables ---
+!rab   integer :: i, j, ix, k, k1, n, nwat, nb, blen
+!rab   real(kind=kind_phys) :: qwat
+!rab
+!rab   if( nq<3 ) call mpp_error(FATAL, 'GFS phys must have 3 interactive tracers')
+!rab
+!rab   n = mytile
+!rab   nwat = Atm(n)%flagstruct%nwat
+!rab
+!rab!$OMP parallel do default (none) &
+!rab!$OMP              shared (Atm_block, Atm, IPD_Data, npz, nq, ncnst, n, nwat) &
+!rab!$OMP             private (nb, k, k1, ix, i, j, qwat)
+!rab   do nb = 1,Atm_block%nblks
+!rab     do k = 1, npz
+!rab       k1 = npz+1-k !reverse the k direction
+!rab       do ix = 1, Atm_block%blksz(nb)
+!rab         i = Atm_block%index(nb)%ii(ix)
+!rab         j = Atm_block%index(nb)%jj(ix)
+!rab         qwat = sum(Atm(n)%q(i,j,k1,1:nwat))
+!rab         Atm(n)%q(i,j,k1,1:nq) = Atm(n)%q(i,j,k1,1:nq) + IPD_Data(nb)%Stateout%gq0(ix,k,1:nq) * (1.0 - qwat)
+!rab         if (nq .gt. ncnst) then
+!rab           Atm(n)%qdiag(i,j,k1,nq+1:ncnst) = Atm(n)%qdiag(i,j,k1,nq+1:ncnst) + IPD_Data(nb)%Stateout%gq0(ix,k,nq+1:ncnst)
+!rab         endif
+!rab       enddo
+!rab     enddo
+!rab   enddo
+!rab
+!rab   call mpp_update_domains (Atm(n)%q, Atm(n)%domain, complete=.true.)
+!rab
+!rab   return
+!rab end subroutine atmosphere_tracer_postinit
 
 
  subroutine get_bottom_mass ( t_bot, tr_bot, p_bot, z_bot, p_surf, slp )
@@ -809,11 +922,12 @@ contains
 
 
  subroutine atmosphere_state_update (Time, IPD_Data, Atm_block)
+   !--- interface variables ---
    type(time_type),           intent(in) :: Time
    type(IPD_data_type),       intent(in) :: IPD_Data(:)
    type(block_control_type),  intent(in) :: Atm_block
+   !--- local variables ---
    type(time_type) :: Time_prev, Time_next
-!--- local variables ---
    integer :: i, j, ix, k, k1, n, w_diff, nt_dyn, iq
    integer :: nb, blen, nwat, dnats, nq_adv
    real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
@@ -856,7 +970,7 @@ contains
 ! SJL notes:
 ! ---- DO not touch the code below; dry mass conservation may change due to 64bit <-> 32bit conversion
 ! GFS total air mass = dry_mass + water_vapor (condensate excluded)
-! GFS mixing ratios  = tracer_mass / (air_mass + vapor_mass)
+! GFS mixing ratios  = tracer_mass / (dry_mass + vapor_mass)
 ! FV3 total air mass = dry_mass + [water_vapor + condensate ]
 ! FV3 mixing ratios  = tracer_mass / (dry_mass+vapor_mass+cond_mass)
          q0 = IPD_Data(nb)%Statein%prsi(ix,k) - IPD_Data(nb)%Statein%prsi(ix,k+1)
@@ -870,7 +984,7 @@ contains
          q0 = Atm(n)%delp(i,j,k1)*(1.-sum(Atm(n)%q(i,j,k1,1:nwat))) + qt 
          Atm(n)%delp(i,j,k1) = q0
          Atm(n)%q(i,j,k1,1:nq_adv) = qwat(1:nq_adv) / q0
-         if (dnats .gt. 0) Atm(n)%q(i,j,k1,nq_adv+1:nq) = IPD_Data(nb)%Stateout%gq0(ix,k,nq_adv+1:nq)
+!        if (dnats .gt. 0) Atm(n)%q(i,j,k1,nq_adv+1:nq) = IPD_Data(nb)%Stateout%gq0(ix,k,nq_adv+1:nq)
        enddo
      enddo
 

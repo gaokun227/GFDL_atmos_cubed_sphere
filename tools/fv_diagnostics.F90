@@ -2322,15 +2322,7 @@ contains
           do k=1,npz
             do j=jsc,jec
             do i=isc,iec         
-                if ( Atm(n)%flagstruct%nwat .eq. 2) then
-                   wk(i,j,k) = Atm(n)%delp(i,j,k)*(1.-Atm(n)%q(i,j,k,liq_wat))
-                elseif ( Atm(n)%flagstruct%nwat .eq. 6) then
-                   wk(i,j,k) = Atm(n)%delp(i,j,k)*(1.-Atm(n)%q(i,j,k,liq_wat)-&
-                                                      Atm(n)%q(i,j,k,ice_wat)-&
-                                                      Atm(n)%q(i,j,k,rainwat)-&
-                                                      Atm(n)%q(i,j,k,snowwat)-&
-                                                      Atm(n)%q(i,j,k,graupel))
-                endif
+              wk(i,j,k) = Atm(n)%delp(i,j,k)*(1.-sum(Atm(n)%q(i,j,k,2:Atm(n)%flagstruct%nwat)))
             enddo
             enddo
           enddo
@@ -3512,6 +3504,7 @@ contains
      call mp_reduce_sum(   t_sh)
      call mp_reduce_sum(area_eq)
      call mp_reduce_sum(   t_eq)
+     !Bugfix for non-global domains
      if (area_gb <= 1.) area_gb = -1.0
      if (area_nh <= 1.) area_nh = -1.0
      if (area_sh <= 1.) area_sh = -1.0

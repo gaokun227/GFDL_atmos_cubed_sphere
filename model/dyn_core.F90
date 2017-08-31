@@ -828,9 +828,9 @@ contains
         enddo
         if ( gridstruct%square_domain ) then
            call timing_on('COMM_TOTAL')
-        call complete_group_halo_update(i_pack(5), domain)
+           call complete_group_halo_update(i_pack(5), domain)
                                        call timing_off('COMM_TOTAL')
-	    endif
+        endif
 #endif SW_DYNAMICS
      endif    ! end hydro check
 
@@ -1071,8 +1071,8 @@ contains
        do k=1,n_con
           delt = abs(bdt*flagstruct%delt_max)
 ! Sponge layers:
-!         if ( k == 1 ) delt = 2.0*delt
-!         if ( k == 2 ) delt = 1.5*delt
+          if ( k == 1 ) delt = 0.1*delt
+          if ( k == 2 ) delt = 0.5*delt
           do j=js,je
              do i=is,ie
 #ifdef MOIST_CAPPA
@@ -1429,7 +1429,7 @@ real, intent(inout) ::    pk(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)  ! p**kappa
 real, intent(inout) ::    gz(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)  ! g * h
 real, intent(inout) ::     u(bd%isd:bd%ied,  bd%jsd:bd%jed+1,npz) 
 real, intent(inout) ::     v(bd%isd:bd%ied+1,bd%jsd:bd%jed,  npz)
-    type(fv_grid_type), intent(INOUT), target :: gridstruct
+type(fv_grid_type), intent(INOUT), target :: gridstruct
 ! Local:
 real wk1(bd%isd:bd%ied, bd%jsd:bd%jed)
 real  wk(bd%is: bd%ie+1,bd%js: bd%je+1)
@@ -1453,19 +1453,17 @@ else
    top_value = ptk
 endif
 
-!Remember that not all compilers set pp to zero by default
-!$OMP parallel do default(none) shared(is,ie,js,je,pp,pk,top_value)
-do j=js,je+1
-   do i=is,ie+1
-      pp(i,j,1) = 0.
-      pk(i,j,1) = top_value
-   enddo
-enddo
-
-!$OMP parallel do default(none) shared(isd,jsd,npz,pp,gridstruct,npx,npy,is,ie,js,je,ng,pk,gz) &
+!$OMP parallel do default(none) shared(top_value,isd,jsd,npz,pp,gridstruct,npx,npy,is,ie,js,je,ng,pk,gz) &
 !$OMP                          private(wk1)
 do k=1,npz+1
-   if ( k/=1 ) then
+   if ( k==1 ) then
+      do j=js,je+1
+         do i=is,ie+1
+            pp(i,j,1) = 0.
+            pk(i,j,1) = top_value
+         enddo
+      enddo
+   else
       call a2b_ord4(pp(isd,jsd,k), wk1, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
       call a2b_ord4(pk(isd,jsd,k), wk1, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
    endif

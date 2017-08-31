@@ -2120,8 +2120,8 @@ end subroutine divergence_corner_nest
           do i=is-1, ie+1
              x0 = abs(b0(i))
              x1 = abs(bl(i)-br(i))
-             smt5(i) = lim_fac*x0 < x1
-             smt6(i) =      3.*x0 < x1
+             smt5(i) =    x0 < x1
+             smt6(i) = 3.*x0 < x1
           enddo
           do i=is, ie+1
              hi5(i) = smt5(i-1) .and. smt5(i)
@@ -2505,8 +2505,8 @@ end subroutine divergence_corner_nest
           do i=is,ie+1
              x0 = abs(b0(i,j))
              x1 = abs(bl(i,j)-br(i,j))
-             smt5(i,j) = lim_fac*x0 < x1
-             smt6(i,j) =      3.*x0 < x1
+             smt5(i,j) =    x0 < x1
+             smt6(i,j) = 3.*x0 < x1
           enddo
        enddo
        do j=js,je+1

@@ -309,7 +309,7 @@ contains
 ! top layer unphysically warm
                ri = 0.
             elseif ( tv2<t_min ) then
-               ri = min(ri, 0.2)
+               ri = min(ri, 0.1)
             endif
 ! Adjustment for K-H instability:
 ! Compute equivalent mass flux: mc

@@ -440,8 +440,8 @@ contains
            b0(i) = bl(i) + br(i)
               x0 = abs(b0(i))
               xt = abs(bl(i)-br(i))
-           smt5(i) = lim_fac*x0 < xt
-           smt6(i) =      3.*x0 < xt
+           smt5(i) =    x0 < xt
+           smt6(i) = 3.*x0 < xt
         enddo
         do i=is,ie+1
            xt1(i) = c(i,j)
@@ -759,8 +759,8 @@ if ( jord < 8 ) then
               b0(i,j) = bl(i,j) + br(i,j)
                    x0 = abs(b0(i,j)) 
                    xt = abs(bl(i,j)-br(i,j))
-              smt5(i,j) = lim_fac*x0 < xt
-              smt6(i,j) =      3.*x0 < xt
+              smt5(i,j) =    x0 < xt
+              smt6(i,j) = 3.*x0 < xt
            enddo
         enddo
         do j=js,je+1
