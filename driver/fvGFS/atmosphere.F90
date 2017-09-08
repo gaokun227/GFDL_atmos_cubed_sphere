@@ -252,7 +252,9 @@ contains
 
    call set_domain ( Atm(mytile)%domain )
 
-   call unif_gfdlmp_init(mpp_pe(), mpp_root_pe(), nlunit, stdlog(), fn_nml)
+   if (Atm(mytile)%flagstruct%do_unif_gfdlmp) then
+     call unif_gfdlmp_init(mpp_pe(), mpp_root_pe(), nlunit, stdlog(), fn_nml)
+   endif
 
    call fv_restart(Atm(mytile)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mytile)%gridstruct%grid_type, grids_on_this_pe)
 
@@ -452,7 +454,9 @@ contains
   ! initialize domains for writing global physics data
    call set_domain ( Atm(mytile)%domain )
 
-   call unif_gfdlmp_end ( )
+   if (Atm(mytile)%flagstruct%do_unif_gfdlmp) then
+     call unif_gfdlmp_end ( )
+   endif
 
    call nullify_domain ( )
    if (first_diag) then
