@@ -33,6 +33,7 @@ module fv_mapz_mod
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master
   use fv_cmp_mod,        only: qs_init, fv_sat_adj
+  use unified_gfdlmp_mod,only: unif_gfdlmp_driver
 
   implicit none
   real, parameter:: consv_min= 0.001   ! below which no correction applies
@@ -636,7 +637,11 @@ endif        ! end last_step check
                  enddo
               enddo
               if (do_unif_gfdlmp) then
-              !call unif_gfdl()
+              !call unif_gfdlmp_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
+              !               qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, pt_dt, pt, w, &
+              !               uin, vin, udt, vdt, dz, delp, area, dt_in, land, rain, snow, ice, &
+              !               graupel, hydrostatic, phys_hydrostatic, iis, iie, jjs, jje, kks, &
+              !               kke, ktop, kbot, seconds)
               else
               call fv_sat_adj(abs(mdt), r_vir, is, ie, js, je, ng, hydrostatic, fast_mp_consv, &
                              te(isd,jsd,k), q(isd,jsd,k,sphum), q(isd,jsd,k,liq_wat),   &

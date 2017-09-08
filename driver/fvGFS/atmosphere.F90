@@ -73,6 +73,7 @@ use fv_update_phys_mod, only: fv_update_phys
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
 
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
+use unified_gfdlmp_mod, only: unif_gfdlmp_init, unif_gfdlmp_end
 
 implicit none
 private
@@ -149,6 +150,9 @@ contains
    logical :: do_atmos_nudge
    character(len=32) :: tracer_name, tracer_units
    real :: ps1, ps2
+
+   integer :: nlunit = 9999
+   character (len = 64) :: fn_nml = 'input.nml'
 
                     call timing_on('ATMOS_INIT')
    allocate(pelist(mpp_npes()))
@@ -247,6 +251,9 @@ contains
    allocate(pref(npz+1,2), dum1d(npz+1))
 
    call set_domain ( Atm(mytile)%domain )
+
+   call unif_gfdlmp_init(mpp_pe(), mpp_root_pe(), nlunit, stdlog(), fn_nml)
+
    call fv_restart(Atm(mytile)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mytile)%gridstruct%grid_type, grids_on_this_pe)
 
    fv_time = Time
@@ -444,6 +451,8 @@ contains
 
   ! initialize domains for writing global physics data
    call set_domain ( Atm(mytile)%domain )
+
+   call unif_gfdlmp_end ( )
 
    call nullify_domain ( )
    if (first_diag) then

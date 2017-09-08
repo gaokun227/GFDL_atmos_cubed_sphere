@@ -6,7 +6,7 @@
 module fv_cmp_mod
     
     use constants_mod, only: rvgas, rdgas, grav, hlv, hlf, cp_air
-    use fv_mp_mod, only: is_master
+    !use fv_mp_mod, only: is_master
     use fv_arrays_mod, only: r_grid
     use gfdl_cloud_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql_mlt, ql0_max, qi_lim, qs_mlt
     use gfdl_cloud_microphys_mod, only: icloud_f, sat_adj0, t_sub, cld_min
@@ -925,7 +925,7 @@ subroutine qs_init (kmp)
     
     if (mp_initialized) return
     
-    if (is_master ()) write (*, *) 'top layer for gfdl_mp = ', kmp
+    !if (is_master ()) write (*, *) 'top layer for gfdl_mp = ', kmp
     
     ! generate es table (dt = 0.1 deg c)
     
