@@ -572,7 +572,8 @@ module fv_control_mod
 
 #ifdef GFS_PHYS
       real, dimension(2048) :: fdiag = 0.
-      namelist /nggps_diag_nml/ fdiag
+      logical :: first_time_step = .true.
+      namelist /nggps_diag_nml/ fdiag, first_time_step
 #endif
 
       pe_counter = mpp_root_pe()
@@ -643,6 +644,7 @@ module fv_control_mod
       else
         atm(n)%fdiag = fdiag
       endif
+      atm(n)%first_time_step = first_time_step
 #endif
 #else
       if (size(Atm) == 1) then
@@ -676,6 +678,7 @@ module fv_control_mod
       else
         atm(n)%fdiag = fdiag
       endif
+      atm(n)%first_time_step = first_time_step
 #endif
       call close_file(f_unit)
 #endif         

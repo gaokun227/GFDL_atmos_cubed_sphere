@@ -631,6 +631,7 @@ module fv_arrays_mod
 #ifdef GFS_PHYS
      !--- used for GFS PHYSICS only
      real, dimension(2048) :: fdiag = 0.
+     logical :: first_time_step = .true.
 #endif
 
      logical :: grid_active = .true. !Always active for now
