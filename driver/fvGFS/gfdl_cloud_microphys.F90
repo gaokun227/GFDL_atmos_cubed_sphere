@@ -351,7 +351,7 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     
     real, dimension (iie - iis + 1, kke - kks + 1) :: vt_r, vt_s, vt_g, vt_i, qn2
     
-    real, dimension (size (pt, 1), size (pt, 2)) :: m2_rain, m2_sol
+    real, dimension (iie - iis + 1, kke - kks + 1) :: m2_rain, m2_sol
     
     real :: allmax
     

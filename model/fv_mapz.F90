@@ -672,7 +672,7 @@ endif        ! end last_step check
 !     call unif_gfdlmp_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
 !                    qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, pt_dt, pt, w, &
 !                    uin, vin, udt, vdt, dz, delp, area, dt_in, land, rain, snow, ice, &
-!                    graupel, hydrostatic, phys_hydrostatic, iis, iie, jjs, jje, kks, &
+!                    graupel, hydrostatic, phys_hydrostatic, iis, iie, kks, &
 !                    kke, ktop, kbot, seconds)
   endif
 
