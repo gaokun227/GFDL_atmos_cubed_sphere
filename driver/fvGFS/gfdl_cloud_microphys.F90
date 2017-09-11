@@ -307,59 +307,57 @@ contains
 ! pt_dt, pt, w, uin, vin, udt, vdt, dz, delp, area, dt_in, &
 ! land, rain, snow, ice, graupel, &
 ! hydrostatic, phys_hydrostatic, &
-! iis, iie, jjs, jje, kks, kke, ktop, kbot, time)
+! iis, iie, kks, kke, ktop, kbot, time)
 
 subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, pt_dt, pt, w, &
         uin, vin, udt, vdt, dz, delp, area, dt_in, land, rain, snow, ice, &
-        graupel, hydrostatic, phys_hydrostatic, iis, iie, jjs, jje, kks, &
+        graupel, hydrostatic, phys_hydrostatic, iis, iie, kks, &
         kke, ktop, kbot, seconds)
     
     implicit none
     
     logical, intent (in) :: hydrostatic, phys_hydrostatic
-    integer, intent (in) :: iis, iie, jjs, jje ! physics window
+    integer, intent (in) :: iis, iie ! physics window
     integer, intent (in) :: kks, kke ! vertical dimension
     integer, intent (in) :: ktop, kbot ! vertical compute domain
     integer, intent (in) :: seconds
     
     real, intent (in) :: dt_in ! physics time step
     
-    real, intent (in), dimension (:, :) :: area ! cell area
-    real, intent (in), dimension (:, :) :: land ! land fraction
+    real, intent (in), dimension (:) :: area ! cell area
+    real, intent (in), dimension (:) :: land ! land fraction
     
-    real, intent (in), dimension (:, :, :) :: delp, dz, uin, vin
-    real, intent (in), dimension (:, :, :) :: pt, qv, ql, qr, qg, qa, qn
+    real, intent (in), dimension (:, :) :: delp, dz, uin, vin
+    real, intent (in), dimension (:, :) :: pt, qv, ql, qr, qg, qa, qn
     
-    real, intent (inout), dimension (:, :, :) :: qi, qs
-    real, intent (inout), dimension (:, :, :) :: pt_dt, qa_dt, udt, vdt, w
-    real, intent (inout), dimension (:, :, :) :: qv_dt, ql_dt, qr_dt
-    real, intent (inout), dimension (:, :, :) :: qi_dt, qs_dt, qg_dt
+    real, intent (inout), dimension (:, :) :: qi, qs
+    real, intent (inout), dimension (:, :) :: pt_dt, qa_dt, udt, vdt, w
+    real, intent (inout), dimension (:, :) :: qv_dt, ql_dt, qr_dt
+    real, intent (inout), dimension (:, :) :: qi_dt, qs_dt, qg_dt
     
-    real, intent (out), dimension (:, :) :: rain, snow, ice, graupel
+    real, intent (out), dimension (:) :: rain, snow, ice, graupel
     
     ! logical :: used
     
     real :: mpdt, rdt, dts, convt, tot_prec
     
-    integer :: i, j, k
-    integer :: is, ie, js, je ! physics window
+    integer :: i, k
+    integer :: is, ie ! physics window
     integer :: ks, ke ! vertical dimension
     integer :: days, ntimes
     
-    real, dimension (iie - iis + 1, jje - jjs + 1) :: prec_mp, prec1, cond, w_var, rh0
+    real, dimension (iie - iis + 1) :: prec_mp, prec1, cond, w_var, rh0
     
-    real, dimension (iie - iis + 1, jje - jjs + 1, kke - kks + 1) :: vt_r, vt_s, vt_g, vt_i, qn2
+    real, dimension (iie - iis + 1, kke - kks + 1) :: vt_r, vt_s, vt_g, vt_i, qn2
     
-    real, dimension (size (pt, 1), size (pt, 3)) :: m2_rain, m2_sol
+    real, dimension (size (pt, 1), size (pt, 2)) :: m2_rain, m2_sol
     
     real :: allmax
     
     is = 1
-    js = 1
     ks = 1
     ie = iie - iis + 1
-    je = jje - jjs + 1
     ke = kke - kks + 1
     
     ! call mpp_clock_begin (gfdl_mp_clock)
@@ -414,28 +412,24 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     ! initialize precipitation
     ! -----------------------------------------------------------------------
     
-    do j = js, je
-        do i = is, ie
-            graupel (i, j) = 0.
-            rain (i, j) = 0.
-            snow (i, j) = 0.
-            ice (i, j) = 0.
-            cond (i, j) = 0.
-        enddo
+    do i = is, ie
+        graupel (i) = 0.
+        rain (i) = 0.
+        snow (i) = 0.
+        ice (i) = 0.
+        cond (i) = 0.
     enddo
     
     ! -----------------------------------------------------------------------
     ! major cloud microphysics
     ! -----------------------------------------------------------------------
     
-    do j = js, je
-        call mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, &
-            qa, qn, dz, is, ie, js, je, ks, ke, ktop, kbot, j, dt_in, ntimes, &
-            rain (:, j), snow (:, j), graupel (:, j), ice (:, j), m2_rain, &
-            m2_sol, cond (:, j), area (:, j), land (:, j), udt, vdt, pt_dt, &
-            qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, w_var, vt_r, &
-            vt_s, vt_g, vt_i, qn2)
-    enddo
+    call mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, qg, &
+        qa, qn, dz, is, ie, ks, ke, ktop, kbot, dt_in, ntimes, &
+        rain, snow, graupel, ice, m2_rain, &
+        m2_sol, cond, area, land, udt, vdt, pt_dt, &
+        qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, w_var, vt_r, &
+        vt_s, vt_g, vt_i, qn2)
     
     ! -----------------------------------------------------------------------
     ! no clouds allowed above ktop
@@ -444,128 +438,28 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     if (ks < ktop) then
         do k = ks, ktop
             if (do_qa) then
-                do j = js, je
-                    do i = is, ie
-                        qa_dt (i, j, k) = 0.
-                    enddo
+                do i = is, ie
+                    qa_dt (i, k) = 0.
                 enddo
             else
-                do j = js, je
-                    do i = is, ie
-                        ! qa_dt (i, j, k) = - qa (i, j, k) * rdt
-                        qa_dt (i, j, k) = 0. ! gfs
-                    enddo
+                do i = is, ie
+                    ! qa_dt (i, k) = - qa (i, k) * rdt
+                    qa_dt (i, k) = 0. ! gfs
                 enddo
             endif
         enddo
     endif
     
-    ! -----------------------------------------------------------------------
-    ! diagnostic output
-    ! -----------------------------------------------------------------------
-    
-    ! if (id_vtr > 0) then
-    ! used = send_data (id_vtr, vt_r, time, is_in = iis, js_in = jjs)
-    ! endif
-    
-    ! if (id_vts > 0) then
-    ! used = send_data (id_vts, vt_s, time, is_in = iis, js_in = jjs)
-    ! endif
-    
-    ! if (id_vtg > 0) then
-    ! used = send_data (id_vtg, vt_g, time, is_in = iis, js_in = jjs)
-    ! endif
-    
-    ! if (id_vti > 0) then
-    ! used = send_data (id_vti, vt_i, time, is_in = iis, js_in = jjs)
-    ! endif
-    
-    ! if (id_droplets > 0) then
-    ! used = send_data (id_droplets, qn2, time, is_in = iis, js_in = jjs)
-    ! endif
-    
-    ! if (id_var > 0) then
-    ! used = send_data (id_var, w_var, time, is_in = iis, js_in = jjs)
-    ! endif
-    
     ! convert to mm / day
     
     convt = 86400. * rdt * rgrav
-    do j = js, je
-        do i = is, ie
-            rain (i, j) = rain (i, j) * convt
-            snow (i, j) = snow (i, j) * convt
-            ice (i, j) = ice (i, j) * convt
-            graupel (i, j) = graupel (i, j) * convt
-            prec_mp (i, j) = rain (i, j) + snow (i, j) + ice (i, j) + graupel (i, j)
-        enddo
+    do i = is, ie
+        rain (i) = rain (i) * convt
+        snow (i) = snow (i) * convt
+        ice (i) = ice (i) * convt
+        graupel (i) = graupel (i) * convt
+        prec_mp (i) = rain (i) + snow (i) + ice (i) + graupel (i)
     enddo
-    
-    ! if (id_cond > 0) then
-    ! do j = js, je
-    ! do i = is, ie
-    ! cond (i, j) = cond (i, j) * rgrav
-    ! enddo
-    ! enddo
-    ! used = send_data (id_cond, cond, time, is_in = iis, js_in = jjs)
-    ! endif
-    
-    ! if (id_snow > 0) then
-    ! used = send_data (id_snow, snow, time, iis, jjs)
-    ! used = send_data (id_snow, snow, time, is_in = iis, js_in = jjs)
-    ! if (mp_print .and. seconds == 0) then
-    ! tot_prec = g_sum (snow, is, ie, js, je, area, 1)
-    ! if (master) write (*, *) 'mean snow = ', tot_prec
-    ! endif
-    ! endif
-    !
-    ! if (id_graupel > 0) then
-    ! used = send_data (id_graupel, graupel, time, iis, jjs)
-    ! used = send_data (id_graupel, graupel, time, is_in = iis, js_in = jjs)
-    ! if (mp_print .and. seconds == 0) then
-    ! tot_prec = g_sum (graupel, is, ie, js, je, area, 1)
-    ! if (master) write (*, *) 'mean graupel = ', tot_prec
-    ! endif
-    ! endif
-    !
-    ! if (id_ice > 0) then
-    ! used = send_data (id_ice, ice, time, iis, jjs)
-    ! used = send_data (id_ice, ice, time, is_in = iis, js_in = jjs)
-    ! if (mp_print .and. seconds == 0) then
-    ! tot_prec = g_sum (ice, is, ie, js, je, area, 1)
-    ! if (master) write (*, *) 'mean ice_mp = ', tot_prec
-    ! endif
-    ! endif
-    !
-    ! if (id_rain > 0) then
-    ! used = send_data (id_rain, rain, time, iis, jjs)
-    ! used = send_data (id_rain, rain, time, is_in = iis, js_in = jjs)
-    ! if (mp_print .and. seconds == 0) then
-    ! tot_prec = g_sum (rain, is, ie, js, je, area, 1)
-    ! if (master) write (*, *) 'mean rain = ', tot_prec
-    ! endif
-    ! endif
-    !
-    ! if (id_rh > 0) then !not used?
-    ! used = send_data (id_rh, rh0, time, iis, jjs)
-    ! used = send_data (id_rh, rh0, time, is_in = iis, js_in = jjs)
-    ! endif
-    !
-    !
-    ! if (id_prec > 0) then
-    ! used = send_data (id_prec, prec_mp, time, iis, jjs)
-    ! used = send_data (id_prec, prec_mp, time, is_in = iis, js_in = jjs)
-    ! endif
-    
-    ! if (mp_print) then
-    ! prec1 (:, :) = prec1 (:, :) + prec_mp (:, :)
-    ! if (seconds == 0) then
-    ! prec1 (:, :) = prec1 (:, :) * dt_in / 86400.
-    ! tot_prec = g_sum (prec1, is, ie, js, je, area, 1)
-    ! if (master) write (*, *) 'daily prec_mp = ', tot_prec
-    ! prec1 (:, :) = 0.
-    ! endif
-    ! endif
     
     ! call mpp_clock_end (gfdl_mp_clock)
     
@@ -587,7 +481,7 @@ end subroutine gfdl_cloud_microphys_driver
 ! -----------------------------------------------------------------------
 
 subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
-        qg, qa, qn, dz, is, ie, js, je, ks, ke, ktop, kbot, j, dt_in, ntimes, &
+        qg, qa, qn, dz, is, ie, ks, ke, ktop, kbot, dt_in, ntimes, &
         rain, snow, graupel, ice, m2_rain, m2_sol, cond, area1, land, &
         u_dt, v_dt, pt_dt, qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, &
         w_var, vt_r, vt_s, vt_g, vt_i, qn2)
@@ -596,25 +490,25 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
     
     logical, intent (in) :: hydrostatic
     
-    integer, intent (in) :: j, is, ie, js, je, ks, ke
+    integer, intent (in) :: is, ie, ks, ke
     integer, intent (in) :: ntimes, ktop, kbot
     
     real, intent (in) :: dt_in
     
     real, intent (in), dimension (is:) :: area1, land
     
-    real, intent (in), dimension (is:, js:, ks:) :: uin, vin, delp, pt, dz
-    real, intent (in), dimension (is:, js:, ks:) :: qv, ql, qr, qg, qa, qn
+    real, intent (in), dimension (is:, ks:) :: uin, vin, delp, pt, dz
+    real, intent (in), dimension (is:, ks:) :: qv, ql, qr, qg, qa, qn
     
-    real, intent (inout), dimension (is:, js:, ks:) :: qi, qs
-    real, intent (inout), dimension (is:, js:, ks:) :: u_dt, v_dt, w, pt_dt, qa_dt
-    real, intent (inout), dimension (is:, js:, ks:) :: qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt
+    real, intent (inout), dimension (is:, ks:) :: qi, qs
+    real, intent (inout), dimension (is:, ks:) :: u_dt, v_dt, w, pt_dt, qa_dt
+    real, intent (inout), dimension (is:, ks:) :: qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt
     
     real, intent (inout), dimension (is:) :: rain, snow, ice, graupel, cond
     
-    real, intent (out), dimension (is:, js:) :: w_var
+    real, intent (out), dimension (is:) :: w_var
     
-    real, intent (out), dimension (is:, js:, ks:) :: vt_r, vt_s, vt_g, vt_i, qn2
+    real, intent (out), dimension (is:, ks:) :: vt_r, vt_s, vt_g, vt_i, qn2
     
     real, intent (out), dimension (is:, ks:) :: m2_rain, m2_sol
     
@@ -646,8 +540,8 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
     do i = is, ie
         
         do k = ktop, kbot
-            qiz (k) = qi (i, j, k)
-            qsz (k) = qs (i, j, k)
+            qiz (k) = qi (i, k)
+            qsz (k) = qs (i, k)
         enddo
         
         ! -----------------------------------------------------------------------
@@ -656,35 +550,35 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         
         if (de_ice) then
             do k = ktop, kbot
-                qio = qiz (k) - dt_in * qi_dt (i, j, k) ! original qi before phys
+                qio = qiz (k) - dt_in * qi_dt (i, k) ! original qi before phys
                 qin = max (qio, qi0_max) ! adjusted value
                 if (qiz (k) > qin) then
                     qsz (k) = qsz (k) + qiz (k) - qin
                     qiz (k) = qin
                     dqi = (qin - qio) * rdt ! modified qi tendency
-                    qs_dt (i, j, k) = qs_dt (i, j, k) + qi_dt (i, j, k) - dqi
-                    qi_dt (i, j, k) = dqi
-                    qi (i, j, k) = qiz (k)
-                    qs (i, j, k) = qsz (k)
+                    qs_dt (i, k) = qs_dt (i, k) + qi_dt (i, k) - dqi
+                    qi_dt (i, k) = dqi
+                    qi (i, k) = qiz (k)
+                    qs (i, k) = qsz (k)
                 endif
             enddo
         endif
         
         do k = ktop, kbot
             
-            t0 (k) = pt (i, j, k)
+            t0 (k) = pt (i, k)
             tz (k) = t0 (k)
-            dp1 (k) = delp (i, j, k)
+            dp1 (k) = delp (i, k)
             dp0 (k) = dp1 (k) ! moist air mass * grav
             
             ! -----------------------------------------------------------------------
             ! convert moist mixing ratios to dry mixing ratios
             ! -----------------------------------------------------------------------
             
-            qvz (k) = qv (i, j, k)
-            qlz (k) = ql (i, j, k)
-            qrz (k) = qr (i, j, k)
-            qgz (k) = qg (i, j, k)
+            qvz (k) = qv (i, k)
+            qlz (k) = ql (i, k)
+            qrz (k) = qr (i, k)
+            qgz (k) = qg (i, k)
             
             ! dp1: dry air_mass
             ! dp1 (k) = dp1 (k) * (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)))
@@ -698,9 +592,9 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
             qsz (k) = qsz (k) * omq
             qgz (k) = qgz (k) * omq
             
-            qa0 (k) = qa (i, j, k)
+            qa0 (k) = qa (i, k)
             qaz (k) = 0.
-            dz0 (k) = dz (i, j, k)
+            dz0 (k) = dz (i, k)
             
             den0 (k) = - dp1 (k) / (grav * dz0 (k)) ! density of dry air
             p1 (k) = den0 (k) * rdgas * t0 (k) ! dry air pressure
@@ -721,8 +615,8 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             m1 (k) = 0.
-            u0 (k) = uin (i, j, k)
-            v0 (k) = vin (i, j, k)
+            u0 (k) = uin (i, k)
+            v0 (k) = vin (i, k)
             u1 (k) = u0 (k)
             v1 (k) = v0 (k)
             
@@ -730,7 +624,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         
         if (do_sedi_w) then
             do k = ktop, kbot
-                w1 (k) = w (i, j, k)
+                w1 (k) = w (i, k)
             enddo
         endif
         
@@ -744,7 +638,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         if (prog_ccn) then
             do k = ktop, kbot
                 ! convert # / cc to # / m^3
-                ccn (k) = qn (i, j, k) * 1.e6
+                ccn (k) = qn (i, k) * 1.e6
                 c_praut (k) = cpaut * (ccn (k) * rhor) ** (- 1. / 3.)
             enddo
             use_ccn = .false.
@@ -774,7 +668,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         t_ocean = dw_ocean * s_leng
         h_var = t_land * land (i) + t_ocean * (1. - land (i))
         h_var = min (0.20, max (0.01, h_var))
-        ! if (id_var > 0) w_var (i, j) = h_var
+        ! if (id_var > 0) w_var (i) = h_var
         
         ! -----------------------------------------------------------------------
         ! relative humidity increment
@@ -882,14 +776,14 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
             do k = ktop + 1, kbot
                 u1 (k) = (dp0 (k) * u1 (k) + m1 (k - 1) * u1 (k - 1)) / (dp0 (k) + m1 (k - 1))
                 v1 (k) = (dp0 (k) * v1 (k) + m1 (k - 1) * v1 (k - 1)) / (dp0 (k) + m1 (k - 1))
-                u_dt (i, j, k) = u_dt (i, j, k) + (u1 (k) - u0 (k)) * rdt
-                v_dt (i, j, k) = v_dt (i, j, k) + (v1 (k) - v0 (k)) * rdt
+                u_dt (i, k) = u_dt (i, k) + (u1 (k) - u0 (k)) * rdt
+                v_dt (i, k) = v_dt (i, k) + (v1 (k) - v0 (k)) * rdt
             enddo
         endif
         
         if (do_sedi_w) then
             do k = ktop, kbot
-                w (i, j, k) = w1 (k)
+                w (i, k) = w1 (k)
             enddo
         endif
         
@@ -900,14 +794,14 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         
         do k = ktop, kbot
             omq = dp1 (k) / dp0 (k)
-            qv_dt (i, j, k) = qv_dt (i, j, k) + rdt * (qvz (k) - qv0 (k)) * omq
-            ql_dt (i, j, k) = ql_dt (i, j, k) + rdt * (qlz (k) - ql0 (k)) * omq
-            qr_dt (i, j, k) = qr_dt (i, j, k) + rdt * (qrz (k) - qr0 (k)) * omq
-            qi_dt (i, j, k) = qi_dt (i, j, k) + rdt * (qiz (k) - qi0 (k)) * omq
-            qs_dt (i, j, k) = qs_dt (i, j, k) + rdt * (qsz (k) - qs0 (k)) * omq
-            qg_dt (i, j, k) = qg_dt (i, j, k) + rdt * (qgz (k) - qg0 (k)) * omq
+            qv_dt (i, k) = qv_dt (i, k) + rdt * (qvz (k) - qv0 (k)) * omq
+            ql_dt (i, k) = ql_dt (i, k) + rdt * (qlz (k) - ql0 (k)) * omq
+            qr_dt (i, k) = qr_dt (i, k) + rdt * (qrz (k) - qr0 (k)) * omq
+            qi_dt (i, k) = qi_dt (i, k) + rdt * (qiz (k) - qi0 (k)) * omq
+            qs_dt (i, k) = qs_dt (i, k) + rdt * (qsz (k) - qs0 (k)) * omq
+            qg_dt (i, k) = qg_dt (i, k) + rdt * (qgz (k) - qg0 (k)) * omq
             cvm = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
-            pt_dt (i, j, k) = pt_dt (i, j, k) + rdt * (tz (k) - t0 (k)) * cvm / cp_air
+            pt_dt (i, k) = pt_dt (i, k) + rdt * (tz (k) - t0 (k)) * cvm / cp_air
         enddo
         
         ! -----------------------------------------------------------------------
@@ -916,9 +810,9 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         
         do k = ktop, kbot
             if (do_qa) then
-                qa_dt (i, j, k) = 0.
+                qa_dt (i, k) = 0.
             else
-                qa_dt (i, j, k) = qa_dt (i, j, k) + rdt * (qaz (k) / real (ntimes) - qa0 (k))
+                qa_dt (i, k) = qa_dt (i, k) + rdt * (qaz (k) / real (ntimes) - qa0 (k))
             endif
         enddo
         
@@ -934,31 +828,31 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         !
         ! if (id_vtr > 0) then
         ! do k = ktop, kbot
-        ! vt_r (i, j, k) = vtrz (k)
+        ! vt_r (i, k) = vtrz (k)
         ! enddo
         ! endif
         !
         ! if (id_vts > 0) then
         ! do k = ktop, kbot
-        ! vt_s (i, j, k) = vtsz (k)
+        ! vt_s (i, k) = vtsz (k)
         ! enddo
         ! endif
         !
         ! if (id_vtg > 0) then
         ! do k = ktop, kbot
-        ! vt_g (i, j, k) = vtgz (k)
+        ! vt_g (i, k) = vtgz (k)
         ! enddo
         ! endif
         !
         ! if (id_vts > 0) then
         ! do k = ktop, kbot
-        ! vt_i (i, j, k) = vtiz (k)
+        ! vt_i (i, k) = vtiz (k)
         ! enddo
         ! endif
         !
         ! if (id_droplets > 0) then
         ! do k = ktop, kbot
-        ! qn2 (i, j, k) = ccn (k)
+        ! qn2 (i, k) = ccn (k)
         ! enddo
         ! endif
         
@@ -4504,44 +4398,42 @@ end subroutine neg_adj
 ! interpolate to a prescribed height
 ! =======================================================================
 
-subroutine interpolate_z (is, ie, js, je, km, zl, hgt, a3, a2)
+subroutine interpolate_z (is, ie, km, zl, hgt, a3, a2)
     
     implicit none
     
-    integer, intent (in) :: is, ie, js, je, km
+    integer, intent (in) :: is, ie, km
     
-    real, intent (in), dimension (is:ie, js:je, km) :: a3
+    real, intent (in), dimension (is:ie, km) :: a3
     
-    real, intent (in), dimension (is:ie, js:je, km + 1) :: hgt ! hgt (k) > hgt (k + 1)
+    real, intent (in), dimension (is:ie, km + 1) :: hgt ! hgt (k) > hgt (k + 1)
     
     real, intent (in) :: zl
     
-    real, intent (out), dimension (is:ie, js:je) :: a2
+    real, intent (out), dimension (is:ie) :: a2
     
     real, dimension (km) :: zm ! middle layer height
     
-    integer :: i, j, k
+    integer :: i, k
     
-    !$omp parallel do default (none) shared (is, ie, js, je, km, hgt, zl, a2, a3) private (zm)
+    !$omp parallel do default (none) shared (is, ie, km, hgt, zl, a2, a3) private (zm)
     
-    do j = js, je
-        do i = is, ie
-            do k = 1, km
-                zm (k) = 0.5 * (hgt (i, j, k) + hgt (i, j, k + 1))
-            enddo
-            if (zl >= zm (1)) then
-                a2 (i, j) = a3 (i, j, 1)
-            elseif (zl <= zm (km)) then
-                a2 (i, j) = a3 (i, j, km)
-            else
-                do k = 1, km - 1
-                    if (zl <= zm (k) .and. zl >= zm (k + 1)) then
-                        a2 (i, j) = a3 (i, j, k) + (a3 (i, j, k + 1) - a3 (i, j, k)) * (zm (k) - zl) / (zm (k) - zm (k + 1))
-                        exit
-                    endif
-                enddo
-            endif
+    do i = is, ie
+        do k = 1, km
+            zm (k) = 0.5 * (hgt (i, k) + hgt (i, k + 1))
         enddo
+        if (zl >= zm (1)) then
+            a2 (i) = a3 (i, 1)
+        elseif (zl <= zm (km)) then
+            a2 (i) = a3 (i, km)
+        else
+            do k = 1, km - 1
+                if (zl <= zm (k) .and. zl >= zm (k + 1)) then
+                    a2 (i) = a3 (i, k) + (a3 (i, k + 1) - a3 (i, k)) * (zm (k) - zl) / (zm (k) - zm (k + 1))
+                    exit
+                endif
+            enddo
+        endif
     enddo
     
 end subroutine interpolate_z
@@ -4550,20 +4442,20 @@ end subroutine interpolate_z
 ! radius of cloud species diagnosis
 ! =======================================================================
 
-subroutine cloud_diagnosis (is, ie, js, je, den, qw, qi, qr, qs, qg, t, &
+subroutine cloud_diagnosis (is, ie, den, qw, qi, qr, qs, qg, t, &
         qcw, qci, qcr, qcs, qcg, rew, rei, rer, res, reg)
     
     implicit none
     
-    integer, intent (in) :: is, ie, js, je
+    integer, intent (in) :: is, ie
     
-    real, intent (in), dimension (is:ie, js:je) :: den, t
-    real, intent (in), dimension (is:ie, js:je) :: qw, qi, qr, qs, qg ! units: kg / kg
+    real, intent (in), dimension (is:ie) :: den, t
+    real, intent (in), dimension (is:ie) :: qw, qi, qr, qs, qg ! units: kg / kg
     
-    real, intent (out), dimension (is:ie, js:je) :: qcw, qci, qcr, qcs, qcg ! units: kg / m^3
-    real, intent (out), dimension (is:ie, js:je) :: rew, rei, rer, res, reg ! units: micron
+    real, intent (out), dimension (is:ie) :: qcw, qci, qcr, qcs, qcg ! units: kg / m^3
+    real, intent (out), dimension (is:ie) :: rew, rei, rer, res, reg ! units: micron
     
-    integer :: i, j
+    integer :: i
     
     real :: lambdar, lambdas, lambdag
     
@@ -4584,86 +4476,84 @@ subroutine cloud_diagnosis (is, ie, js, je, den, qw, qi, qr, qs, qg, t, &
     real :: resmin = 0.0, resmax = 10000.0
     real :: regmin = 0.0, regmax = 10000.0
     
-    do j = js, je
-        do i = is, ie
-            
-            ! -----------------------------------------------------------------------
-            ! cloud water (martin et al., 1994)
-            ! -----------------------------------------------------------------------
-            
-            if (qw (i, j) .gt. qmin) then
-                qcw (i, j) = den (i, j) * qw (i, j)
-                rew (i, j) = exp (1.0 / 3.0 * log ((3 * qcw (i, j)) / (4 * pi * rhow * ccn))) * 1.0e6
-                rew (i, j) = max (rewmin, min (rewmax, rew (i, j)))
+    do i = is, ie
+        
+        ! -----------------------------------------------------------------------
+        ! cloud water (martin et al., 1994)
+        ! -----------------------------------------------------------------------
+        
+        if (qw (i) .gt. qmin) then
+            qcw (i) = den (i) * qw (i)
+            rew (i) = exp (1.0 / 3.0 * log ((3 * qcw (i)) / (4 * pi * rhow * ccn))) * 1.0e6
+            rew (i) = max (rewmin, min (rewmax, rew (i)))
+        else
+            qcw (i) = 0.0
+            rew (i) = rewmin
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! cloud ice (heymsfield and mcfarquhar, 1996)
+        ! -----------------------------------------------------------------------
+        
+        if (qi (i) .gt. qmin) then
+            qci (i) = den (i) * qi (i)
+            if (t (i) - tice .lt. - 50) then
+                rei (i) = beta / 9.917 * exp ((1 - 0.891) * log (1.0e3 * qci (i))) * 1.0e3
+            elseif (t (i) - tice .lt. - 40) then
+                rei (i) = beta / 9.337 * exp ((1 - 0.920) * log (1.0e3 * qci (i))) * 1.0e3
+            elseif (t (i) - tice .lt. - 30) then
+                rei (i) = beta / 9.208 * exp ((1 - 0.945) * log (1.0e3 * qci (i))) * 1.0e3
             else
-                qcw (i, j) = 0.0
-                rew (i, j) = rewmin
+                rei (i) = beta / 9.387 * exp ((1 - 0.969) * log (1.0e3 * qci (i))) * 1.0e3
             endif
-            
-            ! -----------------------------------------------------------------------
-            ! cloud ice (heymsfield and mcfarquhar, 1996)
-            ! -----------------------------------------------------------------------
-            
-            if (qi (i, j) .gt. qmin) then
-                qci (i, j) = den (i, j) * qi (i, j)
-                if (t (i, j) - tice .lt. - 50) then
-                    rei (i, j) = beta / 9.917 * exp ((1 - 0.891) * log (1.0e3 * qci (i, j))) * 1.0e3
-                elseif (t (i, j) - tice .lt. - 40) then
-                    rei (i, j) = beta / 9.337 * exp ((1 - 0.920) * log (1.0e3 * qci (i, j))) * 1.0e3
-                elseif (t (i, j) - tice .lt. - 30) then
-                    rei (i, j) = beta / 9.208 * exp ((1 - 0.945) * log (1.0e3 * qci (i, j))) * 1.0e3
-                else
-                    rei (i, j) = beta / 9.387 * exp ((1 - 0.969) * log (1.0e3 * qci (i, j))) * 1.0e3
-                endif
-                rei (i, j) = max (reimin, min (reimax, rei (i, j)))
-            else
-                qci (i, j) = 0.0
-                rei (i, j) = reimin
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! rain (lin et al., 1983)
-            ! -----------------------------------------------------------------------
-            
-            if (qr (i, j) .gt. qmin) then
-                qcr (i, j) = den (i, j) * qr (i, j)
-                lambdar = exp (0.25 * log (pi * rhor * n0r / qcr (i, j)))
-                rer (i, j) = 0.5 * exp (log (gammar / 6) / alphar) / lambdar * 1.0e6
-                rer (i, j) = max (rermin, min (rermax, rer (i, j)))
-            else
-                qcr (i, j) = 0.0
-                rer (i, j) = rermin
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! snow (lin et al., 1983)
-            ! -----------------------------------------------------------------------
-            
-            if (qs (i, j) .gt. qmin) then
-                qcs (i, j) = den (i, j) * qs (i, j)
-                lambdas = exp (0.25 * log (pi * rhos * n0s / qcs (i, j)))
-                res (i, j) = 0.5 * exp (log (gammas / 6) / alphas) / lambdas * 1.0e6
-                res (i, j) = max (resmin, min (resmax, res (i, j)))
-            else
-                qcs (i, j) = 0.0
-                res (i, j) = resmin
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! graupel (lin et al., 1983)
-            ! -----------------------------------------------------------------------
-            
-            if (qg (i, j) .gt. qmin) then
-                qcg (i, j) = den (i, j) * qg (i, j)
-                lambdag = exp (0.25 * log (pi * rhog * n0g / qcg (i, j)))
-                reg (i, j) = 0.5 * exp (log (gammag / 6) / alphag) / lambdag * 1.0e6
-                reg (i, j) = max (regmin, min (regmax, reg (i, j)))
-            else
-                qcg (i, j) = 0.0
-                reg (i, j) = regmin
-            endif
-            
-        enddo
+            rei (i) = max (reimin, min (reimax, rei (i)))
+        else
+            qci (i) = 0.0
+            rei (i) = reimin
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! rain (lin et al., 1983)
+        ! -----------------------------------------------------------------------
+        
+        if (qr (i) .gt. qmin) then
+            qcr (i) = den (i) * qr (i)
+            lambdar = exp (0.25 * log (pi * rhor * n0r / qcr (i)))
+            rer (i) = 0.5 * exp (log (gammar / 6) / alphar) / lambdar * 1.0e6
+            rer (i) = max (rermin, min (rermax, rer (i)))
+        else
+            qcr (i) = 0.0
+            rer (i) = rermin
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! snow (lin et al., 1983)
+        ! -----------------------------------------------------------------------
+        
+        if (qs (i) .gt. qmin) then
+            qcs (i) = den (i) * qs (i)
+            lambdas = exp (0.25 * log (pi * rhos * n0s / qcs (i)))
+            res (i) = 0.5 * exp (log (gammas / 6) / alphas) / lambdas * 1.0e6
+            res (i) = max (resmin, min (resmax, res (i)))
+        else
+            qcs (i) = 0.0
+            res (i) = resmin
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! graupel (lin et al., 1983)
+        ! -----------------------------------------------------------------------
+        
+        if (qg (i) .gt. qmin) then
+            qcg (i) = den (i) * qg (i)
+            lambdag = exp (0.25 * log (pi * rhog * n0g / qcg (i)))
+            reg (i) = 0.5 * exp (log (gammag / 6) / alphag) / lambdag * 1.0e6
+            reg (i) = max (regmin, min (regmax, reg (i)))
+        else
+            qcg (i) = 0.0
+            reg (i) = regmin
+        endif
+        
     enddo
     
 end subroutine cloud_diagnosis
