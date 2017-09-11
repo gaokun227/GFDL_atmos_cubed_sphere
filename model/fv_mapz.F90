@@ -153,7 +153,7 @@ contains
        graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
        cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
 
-       if ( do_sat_adj .or. do_unif_gfdlmp ) then
+       if ( do_sat_adj ) then
             fast_mp_consv = (.not.do_adiabatic_init) .and. consv>consv_min
             do k=1,km
                kmp = k
@@ -626,8 +626,8 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 endif        ! end last_step check
 
 ! Note: pt at this stage is T_v
-! if ( (.not.do_adiabatic_init) .and. (do_sat_adj .or. do_unif_gfdlmp) ) then
-  if ( do_sat_adj .or. do_unif_gfdlmp ) then
+! if ( (.not.do_adiabatic_init) .and. do_sat_adj ) then
+  if ( do_sat_adj ) then
                                            call timing_on('sat_adj2')
 !$OMP do
            do k=kmp,km
@@ -636,20 +636,12 @@ endif        ! end last_step check
                     dpln(i,j) = peln(i,k+1,j) - peln(i,k,j)
                  enddo
               enddo
-              if (do_unif_gfdlmp) then
-              !call unif_gfdlmp_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
-              !               qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, pt_dt, pt, w, &
-              !               uin, vin, udt, vdt, dz, delp, area, dt_in, land, rain, snow, ice, &
-              !               graupel, hydrostatic, phys_hydrostatic, iis, iie, jjs, jje, kks, &
-              !               kke, ktop, kbot, seconds)
-              else
               call fv_sat_adj(abs(mdt), r_vir, is, ie, js, je, ng, hydrostatic, fast_mp_consv, &
                              te(isd,jsd,k), q(isd,jsd,k,sphum), q(isd,jsd,k,liq_wat),   &
                              q(isd,jsd,k,ice_wat), q(isd,jsd,k,rainwat),    &
                              q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel),    &
                              hs ,dpln, delz(isd:,jsd:,k), pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), &
               cappa(isd:,jsd:,k), gridstruct%area_64, dtdt(is,js,k), out_dt, last_step, cld_amt>0, q(isd,jsd,k,cld_amt))
-              endif
               if ( .not. hydrostatic  ) then
                  do j=js,je
                     do i=is,ie
@@ -676,6 +668,13 @@ endif        ! end last_step check
                                            call timing_off('sat_adj2')
   endif   ! do_sat_adj
 
+  if (do_unif_gfdlmp) then
+!     call unif_gfdlmp_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
+!                    qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, pt_dt, pt, w, &
+!                    uin, vin, udt, vdt, dz, delp, area, dt_in, land, rain, snow, ice, &
+!                    graupel, hydrostatic, phys_hydrostatic, iis, iie, jjs, jje, kks, &
+!                    kke, ktop, kbot, seconds)
+  endif
 
   if ( last_step ) then
        ! Output temperature if last_step
