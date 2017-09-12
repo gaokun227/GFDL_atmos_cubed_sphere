@@ -420,7 +420,8 @@ contains
                       Atm(n)%flagstruct%hybrid_z,                          &
                       Atm(n)%gridstruct, Atm(n)%flagstruct,                &
                       Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
-                      Atm(n)%parent_grid, Atm(n)%domain)
+                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%prer,      &
+                      Atm(n)%prei, Atm(n)%pres, Atm(n)%preg)
 
      call timing_off('fv_dynamics')
 
@@ -1016,7 +1017,8 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,                      &
-                     Atm(n)%parent_grid, Atm(n)%domain)
+                     Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%prer, Atm(n)%prei,     &
+                     Atm(n)%pres, Atm(n)%preg)
 
 ! No large-scale nudging at "Time_prev"
     if ( do_nudge ) then

@@ -384,6 +384,11 @@ module fv_control_mod
             Atm(n)%ua = too_big
             Atm(n)%va = too_big
 
+            Atm(n)%prer = too_big
+            Atm(n)%prei = too_big
+            Atm(n)%pres = too_big
+            Atm(n)%preg = too_big
+
          else !this grid is NOT defined on this pe
 
             !Allocate dummy arrays

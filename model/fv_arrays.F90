@@ -699,6 +699,11 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: uc(:,:,:)     _NULL  ! (uc, vc) are mostly used as the C grid winds
     real, _ALLOCATABLE :: vc(:,:,:)     _NULL
 
+    real, _ALLOCATABLE :: prer(:,:)     _NULL
+    real, _ALLOCATABLE :: prei(:,:)     _NULL
+    real, _ALLOCATABLE :: pres(:,:)     _NULL
+    real, _ALLOCATABLE :: preg(:,:)     _NULL
+
     real, _ALLOCATABLE :: ak(:)  _NULL
     real, _ALLOCATABLE :: bk(:)  _NULL
 

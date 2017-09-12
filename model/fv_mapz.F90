@@ -63,7 +63,7 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
-                      do_unif_gfdlmp)
+                      do_unif_gfdlmp, prer, prei, pres, preg)
   logical, intent(in):: last_step
   real,    intent(in):: mdt                   ! remap time step
   real,    intent(in):: pdt                   ! phys time step
@@ -124,6 +124,10 @@ contains
   real, intent(inout)::   dtdt(is:ie,js:je,km)
   real, intent(out)::    pkz(is:ie,js:je,km)       ! layer-mean pk for converting t to pt
   real, intent(out)::     te(isd:ied,jsd:jed,km)
+  real, intent(out)::   prer(is:ie,js:je)
+  real, intent(out)::   prei(is:ie,js:je)
+  real, intent(out)::   pres(is:ie,js:je)
+  real, intent(out)::   preg(is:ie,js:je)
 
 ! !DESCRIPTION:
 !
@@ -136,10 +140,12 @@ contains
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gz, cvm, qv
+  real, dimension(is:ie,js:je,km):: qn
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
   integer:: i,j,k 
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
+  integer:: ccn_cm3
 
        k1k = rdgas/cv_air   ! akap / (1.-akap) = rg/Cv=0.4
         rg = rdgas
@@ -493,8 +499,9 @@ contains
 !$OMP                               do_adiabatic_init,zsum1,zsum0,te0_2d,domain,        &
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
+!$OMP                               ccn_cm3,prer,pres,prei,preg,                        &
 !$OMP                               do_unif_gfdlmp,fast_mp_consv,kord_tm) &
-!$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
+!$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln,qn)
 
 !$OMP do
   do k=2,km
@@ -669,11 +676,22 @@ endif        ! end last_step check
   endif   ! do_sat_adj
 
   if (do_unif_gfdlmp) then
-!     call unif_gfdlmp_driver(qv, ql, qr, qi, qs, qg, qa, qn, &
-!                    qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, pt_dt, pt, w, &
-!                    uin, vin, udt, vdt, dz, delp, area, dt_in, land, rain, snow, ice, &
-!                    graupel, hydrostatic, phys_hydrostatic, iis, iie, kks, &
-!                    kke, ktop, kbot, seconds)
+      ccn_cm3 = get_tracer_index (MODEL_ATMOS, 'ccn_cm3')
+      if (ccn_cm3 .gt. 0) then
+        qn(is:ie,js:je,:) = q(is:ie,js:je,:,ccn_cm3)
+      else
+        qn(is:ie,js:je,:) = 0.0
+      endif
+      do j = js, je
+          ! v --> va, u --> ua
+          call unif_gfdlmp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
+                         q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
+                         q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,j,:), &
+                         pt(is:ie,j,:), w(is:ie,j,:), u(is:ie,j,:), v(is:ie,j,:), &
+                         delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area(is:ie,j), abs(mdt), &
+                         hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
+                         preg(is:ie,j), hydrostatic, is, ie, 1, km)
+      enddo
   endif
 
   if ( last_step ) then

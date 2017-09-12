@@ -67,7 +67,7 @@ contains
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
-                        parent_grid, domain, time_total)
+                        parent_grid, domain, prer, prei, pres, preg, time_total)
 
     real, intent(IN) :: bdt  ! Large time-step
     real, intent(IN) :: consv_te
@@ -122,6 +122,8 @@ contains
 
     real, intent(inout), dimension(bd%isd:bd%ied ,bd%jsd:bd%jed ,npz):: ua, va
     real, intent(in),    dimension(npz+1):: ak, bk
+
+    real, intent(out), dimension(bd%is:, bd%js:) :: prer, prei, pres, preg
 
 ! Accumulated Mass flux arrays: the "Flux Capacitor"
     real, intent(inout) ::  mfx(bd%is:bd%ie+1, bd%js:bd%je,   npz)
@@ -525,7 +527,8 @@ contains
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
                      idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, hybrid_z, do_omega,     &
-                     flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_unif_gfdlmp)
+                     flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_unif_gfdlmp, &
+                     prer, prei, pres, preg)
 
 #ifdef AVEC_TIMERS
                                                   call avec_timer_stop(6)
