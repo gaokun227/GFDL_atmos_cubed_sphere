@@ -1411,6 +1411,17 @@ contains
      IPD_Data(nb)%Statein%phii(:,1) = 0.0_kind_phys
      IPD_Data(nb)%Statein%prsik(:,:) = 1.e25_kind_phys
 
+     if (Atm(mytile)%flagstruct%do_unif_gfdlmp) then
+         do ix = 1, blen
+           i = Atm_block%index(nb)%ii(ix)
+           j = Atm_block%index(nb)%jj(ix)
+           IPD_Data(nb)%Statein%prer(ix) = _DBL_(_RL_(Atm(mytile)%prer(i,j)))
+           IPD_Data(nb)%Statein%prei(ix) = _DBL_(_RL_(Atm(mytile)%prei(i,j)))
+           IPD_Data(nb)%Statein%pres(ix) = _DBL_(_RL_(Atm(mytile)%pres(i,j)))
+           IPD_Data(nb)%Statein%preg(ix) = _DBL_(_RL_(Atm(mytile)%preg(i,j)))
+         enddo
+     endif
+
      do k = 1, npz
        do ix = 1, blen
          i = Atm_block%index(nb)%ii(ix)
