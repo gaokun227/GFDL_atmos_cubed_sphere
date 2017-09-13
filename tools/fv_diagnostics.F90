@@ -5079,19 +5079,15 @@ end subroutine eqv_pot
 
           if(i.gt.90) print *,i,th2,thlast,th2-thlast
           if(i.gt.100)then
-            print *
-            print *,'  Error:  lack of convergence'
-            print *
-            print *,'  ... stopping iteration '
-            print *
-            stop 1001
+            print *,'  getcape() error:  lack of convergence, stopping iteration'
+            not_converged = .false.
           endif
           if( abs(th2-thlast).gt.converge )then
             thlast=thlast+0.3*(th2-thlast)
           else
             not_converged = .false.
           endif
-        enddo
+       enddo
 
         ! Latest pressure increment is complete.  Calculate some
         ! important stuff:
@@ -5104,9 +5100,7 @@ end subroutine eqv_pot
           ql2 = 0.0
           qi2 = 0.0
         ELSEIF(adiabat.le.0.or.adiabat.ge.5)THEN
-          print *
-          print *,'  Undefined adiabat'
-          print *
+          print *,'  getcape(): Undefined adiabat'
           stop 10000
         ENDIF
 
