@@ -937,6 +937,11 @@ contains
     allocate (  Atm%ak(npz_2d+1) )
     allocate (  Atm%bk(npz_2d+1) )
 
+    allocate ( Atm%prer(is:ie,js:je) )
+    allocate ( Atm%prei(is:ie,js:je) )
+    allocate ( Atm%pres(is:ie,js:je) )
+    allocate ( Atm%preg(is:ie,js:je) )
+
     !--------------------------
     ! Non-hydrostatic dynamics:
     !--------------------------
@@ -966,7 +971,7 @@ contains
 ! Notes by SJL
 ! Place the memory in the optimal shared mem space
 ! This will help the scaling with OpenMP
-!$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,Atm,nq,ncnst)
+!$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,Atm,nq,ncnst)
      do k=1, npz
         do j=jsd, jed
            do i=isd, ied
@@ -986,6 +991,14 @@ contains
            do i=isd, ied+1
                Atm%v(i,j,k) = real_big
               Atm%uc(i,j,k) = real_big
+           enddo
+        enddo
+        do j=js, je
+           do i=is, ie
+              Atm%prer(i,j) = real_big
+              Atm%prei(i,j) = real_big
+              Atm%pres(i,j) = real_big
+              Atm%preg(i,j) = real_big
            enddo
         enddo
         if ( .not. Atm%flagstruct%hydrostatic ) then
@@ -1246,6 +1259,11 @@ contains
     deallocate (  Atm%cy )
     deallocate (  Atm%ak )
     deallocate (  Atm%bk )
+
+    deallocate ( Atm%prer )
+    deallocate ( Atm%prei )
+    deallocate ( Atm%pres )
+    deallocate ( Atm%preg )
 
     deallocate ( Atm%u_srf )
     deallocate ( Atm%v_srf )

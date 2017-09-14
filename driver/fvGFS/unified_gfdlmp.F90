@@ -718,14 +718,14 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         do k = ks, ke
             omq = dp1 (k) / dp0 (k)
-            qv (i, k) = qvz (k) * omq
-            ql (i, k) = qlz (k) * omq
-            qr (i, k) = qrz (k) * omq
-            qi (i, k) = qiz (k) * omq
-            qs (i, k) = qsz (k) * omq
-            qg (i, k) = qgz (k) * omq
+            qv (i, k) = qv0 (k) + (qvz (k) - qv0 (k)) * omq
+            ql (i, k) = ql0 (k) + (qlz (k) - ql0 (k)) * omq
+            qr (i, k) = qr0 (k) + (qrz (k) - qr0 (k)) * omq
+            qi (i, k) = qi0 (k) + (qiz (k) - qi0 (k)) * omq
+            qs (i, k) = qs0 (k) + (qsz (k) - qs0 (k)) * omq
+            qg (i, k) = qg0 (k) + (qgz (k) - qg0 (k)) * omq
             cvm = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
-            pt (i, k) = tz (k) * cvm / cp_air
+            pt (i, k) = t0 (k) + (tz (k) - t0 (k)) * cvm / cp_air
         enddo
         
         ! -----------------------------------------------------------------------
