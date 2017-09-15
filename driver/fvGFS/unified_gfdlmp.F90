@@ -327,6 +327,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     
     ! logical :: used
     
+    logical :: phys_hydrostatic = .true.
     real :: rdt, convt, tot_prec
     
     integer :: i, k
@@ -346,7 +347,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     ! define heat capacity of dry air and water vapor based on hydrostatical property
     ! -----------------------------------------------------------------------
     
-    if (hydrostatic) then
+    if (phys_hydrostatic .or. hydrostatic) then
         c_air = cp_air
         c_vap = cp_vap
         p_nonhydro = .false.
@@ -1794,7 +1795,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             q_sol (k) = q_sol (k) + sink
             cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tz (k) = tz (k) + sink * (lhl (k) + lhi (k)) / cvm (k)
-            if (do_qa) qa (k) = qa (k) + 1. ! air fully saturated; 100 % cloud cover
+            if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
             cycle
         endif
         
@@ -2120,10 +2121,10 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             q_plus = qpz + dq ! cloud free if qstar > q_plus
             q_minus = qpz - dq
             if (qstar < q_minus) then
-                qa (k) = qa (k) + 1. ! air fully saturated; 100 % cloud cover
+                qa (k) = 1. ! air fully saturated; 100 % cloud cover
             elseif (qstar < q_plus .and. q_cond (k) > qc_crt) then
-                qa (k) = qa (k) + (q_plus - qstar) / (dq + dq) ! partial cloud cover
-                ! qa (k) = sqrt (qa (k) + (q_plus - qstar) / (dq + dq))
+                qa (k) = (q_plus - qstar) / (dq + dq) ! partial cloud cover
+                ! qa (k) = sqrt ((q_plus - qstar) / (dq + dq))
             endif
         endif
         

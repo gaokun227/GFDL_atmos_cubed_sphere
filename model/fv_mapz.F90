@@ -531,6 +531,8 @@ contains
 !print*,"===pi",maxval(prei(is:ie,js:je)),minval(prei(is:ie,js:je))
 !print*,"===ps",maxval(pres(is:ie,js:je)),minval(pres(is:ie,js:je))
 !print*,"===pg",maxval(preg(is:ie,js:je)),minval(preg(is:ie,js:je))
+!print*,"===dz",maxval(delz(is:ie,js:je,:)),minval(delz(is:ie,js:je,:))
+!print*,"===dp",maxval(delp(is:ie,js:je,:)),minval(delp(is:ie,js:je,:))
 
 !$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,isd,ied,jsd,jed,kord_mt, &
 !$OMP                               te_2d,te,delp,hydrostatic,hs,rg,pt,peln, adiabatic, &
