@@ -494,7 +494,11 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         do k = ks, ke
             
-            t0 (k) = pt (i, k)
+#ifdef USE_COND
+            t0 (k) = pt (i, k) / (1 + zvir * qv (i, k)) / (1 - (qv (i, k) + ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
+#else
+            t0 (k) = pt (i, k) / (1 + zvir * qv (i, k))
+#endif
             tz (k) = t0 (k)
             dp1 (k) = delp (i, k)
             dp0 (k) = dp1 (k) ! moist air mass * grav
@@ -509,8 +513,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qgz (k) = qg (i, k)
             
             ! dp1: dry air_mass
-            ! dp1 (k) = dp1 (k) * (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)))
-            dp1 (k) = dp1 (k) * (1. - qvz (k)) ! gfs
+            dp1 (k) = dp1 (k) * (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)))
+            ! dp1 (k) = dp1 (k) * (1. - qvz (k)) ! gfs
             omq = dp0 (k) / dp1 (k)
             
             qvz (k) = qvz (k) * omq
@@ -725,7 +729,11 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qs (i, k) = qs0 (k) + (qsz (k) - qs0 (k)) * omq
             qg (i, k) = qg0 (k) + (qgz (k) - qg0 (k)) * omq
             cvm = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
-            pt (i, k) = t0 (k) + (tz (k) - t0 (k)) * cvm / cp_air
+#ifdef USE_COND
+            pt (i, k) = (t0 (k) + (tz (k) - t0 (k)) * cvm / cp_air) * (1. + zvir * qv (i, k)) * (1. - (qv (i, k) + ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
+#else
+            pt (i, k) = (t0 (k) + (tz (k) - t0 (k)) * cvm / cp_air) * (1. + zvir * qv (i, k))
+#endif
         enddo
         
         ! -----------------------------------------------------------------------

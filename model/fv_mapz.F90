@@ -507,6 +507,13 @@ contains
                           delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area(is:ie,j), abs(mdt), &
                           hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
                           preg(is:ie,j), hydrostatic, is, ie, 1, km)
+           if ( .not. hydrostatic ) then
+#ifdef MOIST_CAPPA
+               pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
+#else
+               pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
+#endif
+           endif
        endif
    endif
 
