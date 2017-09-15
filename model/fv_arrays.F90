@@ -96,6 +96,7 @@ module fv_arrays_mod
      real, allocatable :: zxg(:,:)
      real, allocatable :: pt1(:)
 
+     integer :: id_prer, id_prei, id_pres, id_preg
 
      logical :: initialized = .false.
      real  sphum, liq_wat, ice_wat       ! GFDL physics

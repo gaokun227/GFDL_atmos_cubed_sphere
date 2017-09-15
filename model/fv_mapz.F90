@@ -507,10 +507,6 @@ contains
                           delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area(is:ie,j), abs(mdt), &
                           hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
                           preg(is:ie,j), hydrostatic, is, ie, 1, km)
-           prer(is:ie,j) = prer(is:ie,j) * abs(mdt)
-           prei(is:ie,j) = prei(is:ie,j) * abs(mdt)
-           pres(is:ie,j) = pres(is:ie,j) * abs(mdt)
-           preg(is:ie,j) = preg(is:ie,j) * abs(mdt)
        endif
    endif
 

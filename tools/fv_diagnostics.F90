@@ -454,6 +454,18 @@ contains
        idiag%id_amdt = register_diag_field ( trim(field), 'amdt', axes(1:2), Time,           &
             'angular momentum error', 'kg*m^2/s^2', missing_value=missing_value )
 
+!-------------------
+! Precipitation from GFDL MP
+!-------------------
+       idiag%id_prer = register_diag_field ( trim(field), 'prer', axes(1:2), Time,           &
+            'rain precipitation', 'mm/day', missing_value=missing_value )
+       idiag%id_prei = register_diag_field ( trim(field), 'prei', axes(1:2), Time,           &
+            'ice precipitation', 'mm/day', missing_value=missing_value )
+       idiag%id_pres = register_diag_field ( trim(field), 'pres', axes(1:2), Time,           &
+            'snow precipitation', 'mm/day', missing_value=missing_value )
+       idiag%id_preg = register_diag_field ( trim(field), 'preg', axes(1:2), Time,           &
+            'graupel precipitation', 'mm/day', missing_value=missing_value )
+
 !
       do i=1,nplev
         write(plev,'(I5)') levs(i)
@@ -1205,6 +1217,11 @@ contains
        if(idiag%id_zsurf > 0)  used=send_data(idiag%id_zsurf, idiag%zsurf, Time)
 #endif
        if(idiag%id_ps > 0) used=send_data(idiag%id_ps, Atm(n)%ps(isc:iec,jsc:jec), Time)
+
+       if(idiag%id_prer > 0) used=send_data(idiag%id_prer, Atm(n)%prer(isc:iec,jsc:jec), Time)
+       if(idiag%id_prei > 0) used=send_data(idiag%id_prei, Atm(n)%prei(isc:iec,jsc:jec), Time)
+       if(idiag%id_pres > 0) used=send_data(idiag%id_pres, Atm(n)%pres(isc:iec,jsc:jec), Time)
+       if(idiag%id_preg > 0) used=send_data(idiag%id_preg, Atm(n)%preg(isc:iec,jsc:jec), Time)
 
        if(idiag%id_c15>0 .or. idiag%id_c25>0 .or. idiag%id_c35>0 .or. idiag%id_c45>0) then
           call wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, Atm(n)%ua(isc:iec,jsc:jec,npz),   &
