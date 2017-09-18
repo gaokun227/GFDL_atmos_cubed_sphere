@@ -323,17 +323,17 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
     
-    real, intent (out), dimension (is:ie) :: rain, snow, ice, graupel
+    real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     ! logical :: used
     
     logical :: phys_hydrostatic = .true.
-    real :: rdt, convt, tot_prec
+    real :: tot_prec
     
     integer :: i, k
     integer :: days
     
-    real, dimension (is:ie) :: prec_mp, prec1, cond, w_var, rh0
+    real, dimension (is:ie) :: prec1, w_var, rh0
     
     real, dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
     
@@ -377,42 +377,13 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     ! tendency zero out for am moist processes should be done outside the driver
     
     ! -----------------------------------------------------------------------
-    ! define cloud microphysics sub time step
-    ! -----------------------------------------------------------------------
-    
-    rdt = 1. / dts
-    
-    ! -----------------------------------------------------------------------
-    ! initialize precipitation
-    ! -----------------------------------------------------------------------
-    
-    do i = is, ie
-        graupel (i) = 0.
-        rain (i) = 0.
-        snow (i) = 0.
-        ice (i) = 0.
-        cond (i) = 0.
-    enddo
-    
-    ! -----------------------------------------------------------------------
     ! major cloud microphysics
     ! -----------------------------------------------------------------------
     
     call mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, qg, &
         qa, qn, dz, is, ie, ks, ke, dts, &
-        rain, snow, graupel, ice, m2_rain, m2_sol, cond, area, hs, &
+        rain, snow, graupel, ice, m2_rain, m2_sol, area, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, qn2)
-    
-    ! convert to mm / day
-    
-    convt = 86400. * rdt * rgrav
-    do i = is, ie
-        rain (i) = rain (i) * convt
-        snow (i) = snow (i) * convt
-        ice (i) = ice (i) * convt
-        graupel (i) = graupel (i) * convt
-        prec_mp (i) = rain (i) + snow (i) + ice (i) + graupel (i)
-    enddo
     
     ! call mpp_clock_end (gfdl_mp_clock)
     
@@ -435,7 +406,7 @@ end subroutine unif_gfdlmp_driver
 
 subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qn, dz, is, ie, ks, ke, dts, &
-        rain, snow, graupel, ice, m2_rain, m2_sol, cond, area1, hs, &
+        rain, snow, graupel, ice, m2_rain, m2_sol, area1, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, qn2)
     
     implicit none
@@ -454,7 +425,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
     
-    real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel, cond
+    real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     real, intent (out), dimension (is:ie) :: w_var
     
@@ -476,11 +447,15 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real :: s_leng, t_land, t_ocean, h_var
     real :: cvm, tmp, omq
     real :: dqi, qio, qin
+    real :: convt
     
     integer :: i, k, n
     
     dt_rain = dts * 0.5
     rdt = 1. / dts
+
+    ! convert to mm / day
+    convt = 86400. * rdt * rgrav
     
     ! -----------------------------------------------------------------------
     ! use local variables
@@ -645,7 +620,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
             qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var)
         
-        rain (i) = rain (i) + r1
+        rain (i) = rain (i) + r1 * convt
         
         do k = ks, ke
             m2_rain (i, k) = m2_rain (i, k) + m1_rain (k)
@@ -661,10 +636,10 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
             dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1)
         
-        rain (i) = rain (i) + r1 ! from melted snow & ice that reached the ground
-        snow (i) = snow (i) + s1
-        graupel (i) = graupel (i) + g1
-        ice (i) = ice (i) + i1
+        rain (i) = rain (i) + r1 * convt ! from melted snow & ice that reached the ground
+        snow (i) = snow (i) + s1 * convt
+        graupel (i) = graupel (i) + g1 * convt
+        ice (i) = ice (i) + i1 * convt
         
         ! -----------------------------------------------------------------------
         ! heat transportation during sedimentation
@@ -681,7 +656,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
             qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var)
         
-        rain (i) = rain (i) + r1
+        rain (i) = rain (i) + r1 * convt
         
         do k = ks, ke
             m2_rain (i, k) = m2_rain (i, k) + m1_rain (k)
@@ -753,12 +728,6 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! fms diagnostics:
         ! -----------------------------------------------------------------------
         
-        ! if (id_cond > 0) then
-        ! do k = ks, ke ! total condensate
-        ! cond (i) = cond (i) + dp1 (k) * (qlz (k) + qrz (k) + qsz (k) + qiz (k) + qgz (k))
-        ! enddo
-        ! endif
-        !
         ! if (id_vtr > 0) then
         ! do k = ks, ke
         ! vt_r (i, k) = vtrz (k)

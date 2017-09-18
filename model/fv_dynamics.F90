@@ -400,6 +400,13 @@ contains
        enddo
   endif
 
+  ! Initialize rain, ice, snow and graupel precipitaiton
+  if (flagstruct%do_unif_gfdlmp) then
+      prer = 0.0
+      prei = 0.0
+      pres = 0.0
+      preg = 0.0
+  endif
 
                                                   call timing_on('FV_DYN_LOOP')
   do n_map=1, k_split   ! first level of time-split
