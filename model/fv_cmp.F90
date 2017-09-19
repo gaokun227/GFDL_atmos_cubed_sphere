@@ -318,7 +318,7 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
             if (dq0 > 0.) then ! whole grid - box saturated
                 src (i) = min (adj_fac * dq0, max (ql_gen - ql (i, j), fac_v2l * dq0))
             else ! evaporation of ql
-                ! sjl 20170703 added ql factor to prevent the situation of high ql and rh<1
+                ! sjl 20170703 added ql factor to prevent the situation of high ql and rh < 1
                 ! factor = - min (1., fac_l2v * sqrt (max (0., ql (i, j)) / 1.e-5) * 10. * (1. - qv (i, j) / wqsat (i)))
                 ! factor = - fac_l2v
                 ! factor = - 1

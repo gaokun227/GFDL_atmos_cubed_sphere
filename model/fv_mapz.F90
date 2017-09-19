@@ -493,13 +493,25 @@ contains
      enddo
 
    if (do_unif_gfdlmp) then
+
        if (j .ne. je+1) then
+
            if (ccn_cm3 .gt. 0) then
              qn(is:ie,j,:) = q(is:ie,j,:,ccn_cm3)
            else
              qn(is:ie,j,:) = 0.0
            endif
+
+           ! note: u and v are not A-grid variables, sedi_transport = .F.
            ! v --> va, u --> ua
+           ! note: pt is virtual temperature at this point
+           ! note: w is vertical velocity (m/s)
+           ! note: delz is negative, delp is positive
+           ! note: hs is geopotential height (m^2/s^2)
+           ! note: the unit of qn is #/cc
+           ! note: the unit of area is m^2
+           ! note: the unit of prer, prei, pres, preg is mm/day
+
            call unif_gfdlmp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                           q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
                           q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,j,:), &
@@ -507,14 +519,17 @@ contains
                           delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area(is:ie,j), abs(mdt), &
                           hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
                           preg(is:ie,j), hydrostatic, is, ie, 1, km)
-           if ( .not. hydrostatic ) then
+
+           if (.not. hydrostatic) then
 #ifdef MOIST_CAPPA
                pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
 #else
                pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
 #endif
            endif
+
        endif
+
    endif
 
 1000  continue

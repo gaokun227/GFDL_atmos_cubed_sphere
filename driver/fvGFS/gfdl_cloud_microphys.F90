@@ -741,7 +741,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
             
             if (do_sedi_heat) &
                 call sedi_heat (ktop, kbot, dp1, m1_sol, dz1, tz, qvz, qlz, qrz, qiz, &
-                    qsz, qgz, c_ice)
+                qsz, qgz, c_ice)
             
             ! -----------------------------------------------------------------------
             ! time - split warm rain processes: 2nd pass
@@ -1514,7 +1514,7 @@ subroutine icloud (ktop, kbot, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 
                 if (qr > qrmin) &
                     pgacr = min (acr3d (vtg (k), vtr (k), qr, qg, cgacr, acco (1, 3), &
-                        den (k)), rdts * qr)
+                    den (k)), rdts * qr)
                 
                 ! -----------------------------------------------------------------------
                 ! pgacw: accretion of cloud water by graupel
@@ -1783,7 +1783,7 @@ end subroutine icloud
 ! =======================================================================
 
 subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
-    ql, qr, qi, qs, qg, qa, h_var, rh_rain)
+        ql, qr, qi, qs, qg, qa, h_var, rh_rain)
     
     implicit none
     
@@ -1902,7 +1902,7 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
         qsw = wqs2 (tz (k), den (k), dwsdt)
         dq0 = qsw - qv (k)
         if (dq0 > 0.) then
-            ! SJL 20170703 added ql factor to prevent the situation of high ql and low RH
+            ! sjl 20170703 added ql factor to prevent the situation of high ql and low rh
             ! factor = min (1., fac_l2v * sqrt (max (0., ql (k)) / 1.e-5) * 10. * dq0 / qsw)
             ! factor = fac_l2v
             ! factor = 1
@@ -2077,7 +2077,7 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
                     pgsub = 0. ! no deposition
                 else
                     pgsub = min (fac_v2g * pgsub, 0.2 * dq, ql (k) + qr (k), &
-                        (tice - tz (k)) / tcpk (k))
+                         (tice - tz (k)) / tcpk (k))
                 endif
             else ! submilation
                 pgsub = max (fac_g2v * pgsub, dq) * min (1., dim (tz (k), t_sub) * 0.1)

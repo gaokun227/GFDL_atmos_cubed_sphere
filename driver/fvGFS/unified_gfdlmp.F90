@@ -5,7 +5,7 @@
 ! bears little to no similarity to the original lin mp in zetac.
 ! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
 ! developer: shian-jiann lin, linjiong zhou
-! Revision: Unified GFDL Cloud Microphysics, 9/8/2017
+! revision: unified gfdl cloud microphysics, 9/8/2017
 ! =======================================================================
 
 module unified_gfdlmp_mod
@@ -13,8 +13,7 @@ module unified_gfdlmp_mod
     ! use mpp_mod, only: stdlog, mpp_pe, mpp_root_pe, mpp_clock_id, &
     ! mpp_clock_begin, mpp_clock_end, clock_routine, &
     ! input_nml_file
-    ! use diag_manager_mod, only: register_diag_field, send_data
-    ! use time_manager_mod, only: time_type, get_time
+    ! use time_manager_mod, only: time_type
     ! use constants_mod, only: grav, rdgas, rvgas, cp_air, hlv, hlf, pi => pi_8
     ! use fms_mod, only: write_version_number, open_namelist_file, &
     ! check_nml_error, file_exist, close_file
@@ -24,10 +23,6 @@ module unified_gfdlmp_mod
     private
     
     public unif_gfdlmp_driver, unif_gfdlmp_init, unif_gfdlmp_end
-    !public wqs1, wqs2, qs_blend, wqsat_moist, wqsat2_moist
-    !public qsmith_init, qsmith, es2_table1d, es3_table1d, esw_table1d
-    !public setup_con, wet_bulb
-    !public cloud_diagnosis
     
     real :: missing_value = - 1.e10
     
@@ -284,18 +279,6 @@ module unified_gfdlmp_mod
         rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print
     
-    !public &
-    !    t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
-    !    vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
-    !    vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
-    !    qi0_crt, qr0_crt, fast_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
-    !    const_vs, const_vg, const_vr, use_ccn, rthresh, ccn_l, ccn_o, qc_crt, &
-    !    tau_g2v, tau_v2g, sat_adj0, c_piacr, tau_imlt, tau_v2l, tau_l2v, &
-    !    tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
-    !    z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
-    !    rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
-    !    do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print
-    
 contains
 
 ! -----------------------------------------------------------------------
@@ -452,7 +435,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     dt_rain = dts * 0.5
     rdt = 1. / dts
-
+    
     ! convert to mm / day
     convt = 86400. * rdt * rgrav
     
@@ -538,7 +521,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             enddo
             use_ccn = .false.
         else
-            ccn0 = (ccn_l * nint (max (min (1.0, hs(i)), 0.0)) + ccn_o * (1. - nint (max (min (1.0, hs(i)), 0.0)))) * 1.e6
+            ccn0 = (ccn_l * nint (max (min (1.0, hs (i)), 0.0)) + ccn_o * (1. - nint (max (min (1.0, hs (i)), 0.0)))) * 1.e6
             if (use_ccn) then
                 ! -----------------------------------------------------------------------
                 ! ccn is formulted as ccn = ccn_surface * (den / den_surface)
@@ -561,7 +544,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         s_leng = sqrt (sqrt (area1 (i) / 1.e10))
         t_land = dw_land * s_leng
         t_ocean = dw_ocean * s_leng
-        h_var = t_land * nint (max (min (1.0, hs(i)), 0.0)) + t_ocean * (1. - nint (max (min (1.0, hs(i)), 0.0)))
+        h_var = t_land * nint (max (min (1.0, hs (i)), 0.0)) + t_ocean * (1. - nint (max (min (1.0, hs (i)), 0.0)))
         h_var = min (0.20, max (0.01, h_var))
         ! if (id_var > 0) w_var (i) = h_var
         
@@ -634,7 +617,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         if (do_sedi_heat) &
             call sedi_heat (ks, ke, dp1, m1_sol, dz1, tz, qvz, qlz, qrz, qiz, &
-                qsz, qgz, c_ice)
+            qsz, qgz, c_ice)
         
         ! -----------------------------------------------------------------------
         ! time - split warm rain processes: 2nd pass
@@ -657,7 +640,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, &
             denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var)
-            
+        
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
         ! note: dp1 is dry mass; dp0 is the old moist (total) mass
@@ -1402,7 +1385,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 
                 if (qr > qrmin) &
                     pgacr = min (acr3d (vtg (k), vtr (k), qr, qg, cgacr, acco (1, 3), &
-                        den (k)), rdts * qr)
+                    den (k)), rdts * qr)
                 
                 ! -----------------------------------------------------------------------
                 ! pgacw: accretion of cloud water by graupel
@@ -1671,7 +1654,7 @@ end subroutine icloud
 ! =======================================================================
 
 subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
-    ql, qr, qi, qs, qg, qa, h_var, rh_rain)
+        ql, qr, qi, qs, qg, qa, h_var, rh_rain)
     
     implicit none
     
@@ -1790,7 +1773,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         qsw = wqs2 (tz (k), den (k), dwsdt)
         dq0 = qsw - qv (k)
         if (dq0 > 0.) then
-            ! SJL 20170703 added ql factor to prevent the situation of high ql and low RH
+            ! sjl 20170703 added ql factor to prevent the situation of high ql and low rh
             ! factor = min (1., fac_l2v * sqrt (max (0., ql (k)) / 1.e-5) * 10. * dq0 / qsw)
             ! factor = fac_l2v
             ! factor = 1
@@ -1965,7 +1948,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
                     pgsub = 0. ! no deposition
                 else
                     pgsub = min (fac_v2g * pgsub, 0.2 * dq, ql (k) + qr (k), &
-                        (tice - tz (k)) / tcpk (k))
+                         (tice - tz (k)) / tcpk (k))
                 endif
             else ! submilation
                 pgsub = max (fac_g2v * pgsub, dq) * min (1., dim (tz (k), t_sub) * 0.1)
@@ -3242,38 +3225,8 @@ subroutine unif_gfdlmp_init (me, master, nlunit, logunit, fn_nml)
     t_wfr = tice - 40.0 ! supercooled water can exist down to - 48 c, which is the "absolute"
     
     ! if (master) write (logunit, nml = unif_gfdlmp_nml)
-    !
-    ! id_vtr = register_diag_field (mod_name, 'vt_r', axes (1:3), time, &
-    ! 'rain fall speed', 'm / s', missing_value = missing_value)
-    ! id_vts = register_diag_field (mod_name, 'vt_s', axes (1:3), time, &
-    ! 'snow fall speed', 'm / s', missing_value = missing_value)
-    ! id_vtg = register_diag_field (mod_name, 'vt_g', axes (1:3), time, &
-    ! 'graupel fall speed', 'm / s', missing_value = missing_value)
-    ! id_vti = register_diag_field (mod_name, 'vt_i', axes (1:3), time, &
-    ! 'ice fall speed', 'm / s', missing_value = missing_value)
-    
-    ! id_droplets = register_diag_field (mod_name, 'droplets', axes (1:3), time, &
-    ! 'droplet number concentration', '# / m3', missing_value = missing_value)
-    ! id_rh = register_diag_field (mod_name, 'rh_lin', axes (1:2), time, &
-    ! 'relative humidity', 'n / a', missing_value = missing_value)
-    
-    ! id_rain = register_diag_field (mod_name, 'rain_lin', axes (1:2), time, &
-    ! 'rain_lin', 'mm / day', missing_value = missing_value)
-    ! id_snow = register_diag_field (mod_name, 'snow_lin', axes (1:2), time, &
-    ! 'snow_lin', 'mm / day', missing_value = missing_value)
-    ! id_graupel = register_diag_field (mod_name, 'graupel_lin', axes (1:2), time, &
-    ! 'graupel_lin', 'mm / day', missing_value = missing_value)
-    ! id_ice = register_diag_field (mod_name, 'ice_lin', axes (1:2), time, &
-    ! 'ice_lin', 'mm / day', missing_value = missing_value)
-    ! id_prec = register_diag_field (mod_name, 'prec_lin', axes (1:2), time, &
-    ! 'prec_lin', 'mm / day', missing_value = missing_value)
     
     ! if (master) write (*, *) 'prec_lin diagnostics initialized.', id_prec
-    
-    ! id_cond = register_diag_field (mod_name, 'cond_lin', axes (1:2), time, &
-    ! 'total condensate', 'kg / m ** 2', missing_value = missing_value)
-    ! id_var = register_diag_field (mod_name, 'var_lin', axes (1:2), time, &
-    ! 'subgrid variance', 'n / a', missing_value = missing_value)
     
     ! call qsmith_init
     
