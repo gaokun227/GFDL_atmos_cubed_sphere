@@ -327,7 +327,6 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     
     ! logical :: used
     
-    logical :: phys_hydrostatic = .true.
     real :: tot_prec
     
     integer :: i, k
@@ -347,7 +346,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     ! define heat capacity of dry air and water vapor based on hydrostatical property
     ! -----------------------------------------------------------------------
     
-    if (phys_hydrostatic .or. hydrostatic) then
+    if (hydrostatic) then
         c_air = cp_air
         c_vap = cp_vap
         p_nonhydro = .false.
@@ -445,7 +444,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real :: r1, s1, i1, g1, rdt, ccn0
     real :: dt_rain
     real :: s_leng, t_land, t_ocean, h_var
-    real :: cvm, tmp, omq
+    real :: cvm, tmp
     real :: dqi, qio, qin
     real :: convt
     
@@ -487,18 +486,6 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qlz (k) = ql (i, k)
             qrz (k) = qr (i, k)
             qgz (k) = qg (i, k)
-            
-            ! dp1: dry air_mass
-            dp1 (k) = dp1 (k) * (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)))
-            ! dp1 (k) = dp1 (k) * (1. - qvz (k)) ! gfs
-            omq = dp0 (k) / dp1 (k)
-            
-            qvz (k) = qvz (k) * omq
-            qlz (k) = qlz (k) * omq
-            qrz (k) = qrz (k) * omq
-            qiz (k) = qiz (k) * omq
-            qsz (k) = qsz (k) * omq
-            qgz (k) = qgz (k) * omq
             
             qa0 (k) = qa (i, k)
             qaz (k) = 0.
@@ -697,18 +684,17 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         do k = ks, ke
-            omq = dp1 (k) / dp0 (k)
-            qv (i, k) = qv0 (k) + (qvz (k) - qv0 (k)) * omq
-            ql (i, k) = ql0 (k) + (qlz (k) - ql0 (k)) * omq
-            qr (i, k) = qr0 (k) + (qrz (k) - qr0 (k)) * omq
-            qi (i, k) = qi0 (k) + (qiz (k) - qi0 (k)) * omq
-            qs (i, k) = qs0 (k) + (qsz (k) - qs0 (k)) * omq
-            qg (i, k) = qg0 (k) + (qgz (k) - qg0 (k)) * omq
+            qv (i, k) = qvz (k)
+            ql (i, k) = qlz (k)
+            qr (i, k) = qrz (k)
+            qi (i, k) = qiz (k)
+            qs (i, k) = qsz (k)
+            qg (i, k) = qgz (k)
             cvm = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
 #ifdef USE_COND
-            pt (i, k) = (t0 (k) + (tz (k) - t0 (k)) * cvm / cp_air) * (1. + zvir * qv (i, k)) * (1. - (qv (i, k) + ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
+            pt (i, k) = tz (k) * (1. + zvir * qv (i, k)) * (1. - (qv (i, k) + ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
 #else
-            pt (i, k) = (t0 (k) + (tz (k) - t0 (k)) * cvm / cp_air) * (1. + zvir * qv (i, k))
+            pt (i, k) = tz (k) * (1. + zvir * qv (i, k))
 #endif
         enddo
         

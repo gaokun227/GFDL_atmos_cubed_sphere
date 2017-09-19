@@ -519,21 +519,6 @@ contains
 
 1000  continue
 
-!print*,"===qv",maxval(q(is:ie,js:je,:,sphum)),minval(q(is:ie,js:je,:,sphum))
-!print*,"===ql",maxval(q(is:ie,js:je,:,liq_wat)),minval(q(is:ie,js:je,:,liq_wat))
-!print*,"===qi",maxval(q(is:ie,js:je,:,ice_wat)),minval(q(is:ie,js:je,:,ice_wat))
-!print*,"===qr",maxval(q(is:ie,js:je,:,rainwat)),minval(q(is:ie,js:je,:,rainwat))
-!print*,"===qs",maxval(q(is:ie,js:je,:,snowwat)),minval(q(is:ie,js:je,:,snowwat))
-!print*,"===qg",maxval(q(is:ie,js:je,:,graupel)),minval(q(is:ie,js:je,:,graupel))
-!print*,"===qa",maxval(q(is:ie,js:je,:,cld_amt)),minval(q(is:ie,js:je,:,cld_amt))
-!print*,"===pt",maxval(pt(is:ie,js:je,:)),minval(pt(is:ie,js:je,:))
-!print*,"===pr",maxval(prer(is:ie,js:je)),minval(prer(is:ie,js:je))
-!print*,"===pi",maxval(prei(is:ie,js:je)),minval(prei(is:ie,js:je))
-!print*,"===ps",maxval(pres(is:ie,js:je)),minval(pres(is:ie,js:je))
-!print*,"===pg",maxval(preg(is:ie,js:je)),minval(preg(is:ie,js:je))
-!print*,"===dz",maxval(delz(is:ie,js:je,:)),minval(delz(is:ie,js:je,:))
-!print*,"===dp",maxval(delp(is:ie,js:je,:)),minval(delp(is:ie,js:je,:))
-
 !$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,isd,ied,jsd,jed,kord_mt, &
 !$OMP                               te_2d,te,delp,hydrostatic,hs,rg,pt,peln, adiabatic, &
 !$OMP                               cp,delz,nwat,rainwat,liq_wat,ice_wat,snowwat,       &
