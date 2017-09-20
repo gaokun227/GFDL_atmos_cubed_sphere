@@ -400,7 +400,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     real, intent (in) :: dts
     
-    real, intent (in), dimension (is:ie) :: area1, hs
+    real (kind = r_grid), intent (in), dimension (is:ie) :: area1
+    real, intent (in), dimension (is:ie) :: hs
     
     real, intent (in), dimension (is:ie, ks:ke) :: delp, dz
     real, intent (in), dimension (is:ie, ks:ke) :: qn
@@ -2003,7 +2004,11 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         if (.not. do_qa) cycle
         
         if (rad_snow) then
-            q_sol (k) = qi (k) + qs (k)
+            if (rad_graupel) then
+                q_sol (k) = qi (k) + qs (k) + qg (k)
+            else
+                q_sol (k) = qi (k) + qs (k)
+            endif
         else
             q_sol (k) = qi (k)
         endif
@@ -2054,19 +2059,72 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! binary cloud scheme
         ! -----------------------------------------------------------------------
         
-        if (qpz > qrmin) then
-            ! partial cloudiness by pdf:
-            dq = max (qcmin, h_var * qpz)
-            q_plus = qpz + dq ! cloud free if qstar > q_plus
-            q_minus = qpz - dq
-            if (qstar < q_minus) then
-                qa (k) = 1. ! air fully saturated; 100 % cloud cover
-            elseif (qstar < q_plus .and. q_cond (k) > qc_crt) then
-                qa (k) = (q_plus - qstar) / (dq + dq) ! partial cloud cover
-                ! qa (k) = sqrt ((q_plus - qstar) / (dq + dq))
-            endif
-        endif
+        ! lz: old cloud scheme
+        ! if (qpz > qrmin) then
+        !     ! partial cloudiness by pdf:
+        !     dq = max (qcmin, h_var * qpz)
+        !     q_plus = qpz + dq ! cloud free if qstar > q_plus
+        !     q_minus = qpz - dq
+        !     if (qstar < q_minus) then
+        !         qa (k) = 1. ! air fully saturated; 100 % cloud cover
+        !     elseif (qstar < q_plus .and. q_cond (k) > qc_crt) then
+        !         qa (k) = (q_plus - qstar) / (dq + dq) ! partial cloud cover
+        !         ! qa (k) = sqrt ((q_plus - qstar) / (dq + dq))
+        !     endif
+        ! endif
+        ! lz: old cloud scheme
         
+        ! -----------------------------------------------------------------------
+        ! partial cloudiness by pdf:
+        ! assuming subgrid linear distribution in horizontal; this is effectively a smoother for the
+        ! binary cloud scheme; qa = 0.5 if qstar == qpz
+        ! -----------------------------------------------------------------------
+        
+        rh = qpz / qstar
+        
+        ! -----------------------------------------------------------------------
+        ! icloud_f = 0: bug - fxied
+        ! icloud_f = 1: old fvgfs gfdl) mp implementation
+        ! icloud_f = 2: binary cloud scheme (0 / 1)
+        ! -----------------------------------------------------------------------
+        
+        if (rh > 0.75 .and. qpz > 1.e-6) then
+            dq = h_var * qpz
+            q_plus = qpz + dq
+            q_minus = qpz - dq
+            if (icloud_f == 2) then
+                if (qpz > qstar) then
+                    qa (k) = 1.
+                elseif (qstar < q_plus .and. q_cond (k) > 1.e-6) then
+                    qa (k) = ((q_plus - qstar) / dq) ** 2
+                    qa (k) = min (1., qa (k))
+                else
+                    qa (k) = 0.
+                endif
+            else
+                if (qstar < q_minus) then
+                    qa (k) = 1.
+                else
+                    if (qstar < q_plus) then
+                        if (icloud_f == 0) then
+                            qa (k) = (q_plus - qstar) / (dq + dq)
+                        else
+                            qa (k) = (q_plus - qstar) / (2. * dq * (1. - q_cond (k)))
+                        endif
+                    else
+                        qa (k) = 0.
+                    endif
+                    ! impose minimum cloudiness if substantial q_cond (k) exist
+                    if (q_cond (k) > 1.e-6) then
+                        qa (k) = max (cld_min, qa (k))
+                    endif
+                    qa (k) = min (1., qa (k))
+                endif
+            endif
+        else
+            qa (k) = 0.
+        endif
+                
     enddo
     
 end subroutine subgrid_z_proc
@@ -3925,9 +3983,9 @@ subroutine qs_table3 (n)
             ! see smithsonian meteorological tables page 350.
             ! -----------------------------------------------------------------------
             aa = - 9.09718 * (table_ice / tem - 1.)
-            b = - 3.56654 * alog10 (table_ice / tem)
+            b = - 3.56654 * log10 (table_ice / tem)
             c = 0.876793 * (1. - tem / table_ice)
-            e = alog10 (esbasi)
+            e = log10 (esbasi)
             table3 (i) = 0.1 * 10 ** (aa + b + c + e)
         else
             ! -----------------------------------------------------------------------
@@ -3935,10 +3993,10 @@ subroutine qs_table3 (n)
             ! see smithsonian meteorological tables page 350.
             ! -----------------------------------------------------------------------
             aa = - 7.90298 * (tbasw / tem - 1.)
-            b = 5.02808 * alog10 (tbasw / tem)
+            b = 5.02808 * log10 (tbasw / tem)
             c = - 1.3816e-7 * (10 ** ((1. - tem / tbasw) * 11.344) - 1.)
             d = 8.1328e-3 * (10 ** ((tbasw / tem - 1.) * (- 3.49149)) - 1.)
-            e = alog10 (esbasw)
+            e = log10 (esbasw)
             table3 (i) = 0.1 * 10 ** (aa + b + c + d + e)
         endif
     enddo
