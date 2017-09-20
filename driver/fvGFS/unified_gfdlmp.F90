@@ -17,6 +17,7 @@ module unified_gfdlmp_mod
     ! use constants_mod, only: grav, rdgas, rvgas, cp_air, hlv, hlf, pi => pi_8
     ! use fms_mod, only: write_version_number, open_namelist_file, &
     ! check_nml_error, file_exist, close_file
+    use fv_arrays_mod, only: r_grid
     
     implicit none
     
@@ -63,7 +64,7 @@ module unified_gfdlmp_mod
     real, parameter :: table_ice = 273.16 ! freezing point for qs table
     
     ! real, parameter :: e00 = 610.71 ! gfdl: saturation vapor pressure at 0 deg c
-    real, parameter :: e00 = 611.21 ! ifs: saturation vapor pressure at 0 deg c
+    real (kind = r_grid), parameter :: e00 = 611.21 ! ifs: saturation vapor pressure at 0 deg c
     
     real, parameter :: dc_vap = cp_vap - c_liq ! - 2339.5, isobaric heating / cooling
     real, parameter :: dc_ice = c_liq - c_ice ! 2213.5, isobaric heating / colling
@@ -76,8 +77,8 @@ module unified_gfdlmp_mod
     real, parameter :: lv0 = hlv0 - dc_vap * t_ice! 3.13905782e6, evaporation latent heat coefficient at 0 deg k
     real, parameter :: li00 = hlf0 - dc_ice * t_ice! - 2.7105966e5, fussion latend heat coefficient at 0 deg k
     
-    real, parameter :: d2ice = dc_vap + dc_ice ! - 126, isobaric heating / cooling
-    real, parameter :: li2 = lv0 + li00 ! 2.86799816e6, sublimation latent heat coefficient at 0 deg k
+    real (kind = r_grid), parameter :: d2ice = dc_vap + dc_ice ! - 126, isobaric heating / cooling
+    real (kind = r_grid), parameter :: li2 = lv0 + li00 ! 2.86799816e6, sublimation latent heat coefficient at 0 deg k
     
     real, parameter :: qrmin = 1.e-8 ! min value for ???
     real, parameter :: qvmin = 1.e-20 ! min value for water vapor (treated as zero)
@@ -297,7 +298,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     
     real, intent (in) :: dts ! physics time step
     
-    real, intent (in), dimension (is:ie) :: area ! cell area
+    real (kind = r_grid), intent (in), dimension (is:ie) :: area ! cell area
     real, intent (in), dimension (is:ie) :: hs
     
     real, intent (in), dimension (is:ie, ks:ke) :: delp, dz
@@ -474,7 +475,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qaz (k) = 0.
             dz0 (k) = dz (i, k)
             
-            den0 (k) = - dp1 (k) / (grav * dz0 (k)) ! density of dry air
+            den0 (k) = - dp1 (k) / (grav * dz0 (k)) ! density of moist air
             p1 (k) = den0 (k) * rdgas * t0 (k) ! dry air pressure
             
             ! -----------------------------------------------------------------------
@@ -521,7 +522,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             enddo
             use_ccn = .false.
         else
-            ccn0 = (ccn_l * nint (max (min (1.0, hs (i)), 0.0)) + ccn_o * (1. - nint (max (min (1.0, hs (i)), 0.0)))) * 1.e6
+            ccn0 = (ccn_l * min (1., abs (hs (i)) / (10. * grav)) + ccn_o * (1. - min (1., abs (hs (i)) / (10. * grav)))) * 1.e6
             if (use_ccn) then
                 ! -----------------------------------------------------------------------
                 ! ccn is formulted as ccn = ccn_surface * (den / den_surface)
@@ -544,7 +545,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         s_leng = sqrt (sqrt (area1 (i) / 1.e10))
         t_land = dw_land * s_leng
         t_ocean = dw_ocean * s_leng
-        h_var = t_land * nint (max (min (1.0, hs (i)), 0.0)) + t_ocean * (1. - nint (max (min (1.0, hs (i)), 0.0)))
+        h_var = t_land * min (1., abs (hs (i)) / (10. * grav)) + t_ocean * (1. - min (1., abs (hs (i)) / (10. * grav)))
         h_var = min (0.20, max (0.01, h_var))
         ! if (id_var > 0) w_var (i) = h_var
         
@@ -3822,8 +3823,8 @@ subroutine qs_tablew (n)
     
     integer, intent (in) :: n
     
-    real :: delt = 0.1
-    real :: tmin, tem, fac0, fac1, fac2
+    real (kind = r_grid) :: delt = 0.1
+    real (kind = r_grid) :: tmin, tem, fac0, fac1, fac2
     
     integer :: i
     
@@ -3854,8 +3855,8 @@ subroutine qs_table2 (n)
     
     integer, intent (in) :: n
     
-    real :: delt = 0.1
-    real :: tmin, tem0, tem1, fac0, fac1, fac2
+    real (kind = r_grid) :: delt = 0.1
+    real (kind = r_grid) :: tmin, tem0, tem1, fac0, fac1, fac2
     
     integer :: i, i0, i1
     
@@ -3904,9 +3905,9 @@ subroutine qs_table3 (n)
     
     integer, intent (in) :: n
     
-    real :: delt = 0.1
-    real :: esbasw, tbasw, esbasi, tmin, tem, aa, b, c, d, e
-    real :: tem0, tem1
+    real (kind = r_grid) :: delt = 0.1
+    real (kind = r_grid) :: esbasw, tbasw, esbasi, tmin, tem, aa, b, c, d, e
+    real (kind = r_grid) :: tem0, tem1
     
     integer :: i, i0, i1
     
@@ -3990,10 +3991,10 @@ subroutine qs_table (n)
     
     integer, intent (in) :: n
     
-    real :: delt = 0.1
-    real :: tmin, tem, esh20
-    real :: wice, wh2o, fac0, fac1, fac2
-    real :: esupc (200)
+    real (kind = r_grid) :: delt = 0.1
+    real (kind = r_grid) :: tmin, tem, esh20
+    real (kind = r_grid) :: wice, wh2o, fac0, fac1, fac2
+    real (kind = r_grid) :: esupc (200)
     
     integer :: i
     

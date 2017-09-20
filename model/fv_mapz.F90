@@ -516,7 +516,7 @@ contains
                           q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
                           q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,j,:), &
                           pt(is:ie,j,:), w(is:ie,j,:), u(is:ie,j,:), v(is:ie,j,:), &
-                          delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area(is:ie,j), abs(mdt), &
+                          delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
                           hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
                           preg(is:ie,j), hydrostatic, is, ie, 1, km)
 
