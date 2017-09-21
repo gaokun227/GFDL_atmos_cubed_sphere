@@ -417,6 +417,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     real, intent (out), dimension (is:ie, ks:ke) :: m2_rain, m2_sol
     
+    real, dimension (ks:ke) :: mc_air
+    
     real, dimension (ks:ke) :: qvz, qlz, qrz, qiz, qsz, qgz, qaz
     real, dimension (ks:ke) :: vtiz, vtsz, vtgz, vtrz
     real, dimension (ks:ke) :: dp0, dp1, dz0, dz1
@@ -489,6 +491,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qi0 (k) = qiz (k)
             qs0 (k) = qsz (k)
             qg0 (k) = qgz (k)
+
+            mc_air (k) = (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k))) * c_air
             
             ! -----------------------------------------------------------------------
             ! for sedi_momentum
@@ -562,7 +566,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         if (fix_negative) &
-            call neg_adj (ks, ke, tz, dp1, qvz, qlz, qrz, qiz, qsz, qgz)
+            call neg_adj (ks, ke, tz, dp1, qvz, qlz, qrz, qiz, qsz, qgz, mc_air)
         
         m2_rain (i, :) = 0.
         m2_sol (i, :) = 0.
@@ -590,7 +594,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-            qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var)
+            qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, mc_air)
         
         rain (i) = rain (i) + r1 * convt
         
@@ -606,7 +610,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         call fall_speed (ks, ke, den, qsz, qiz, qgz, qlz, tz, vtsz, vtiz, vtgz)
         
         call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
-            dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1)
+            dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, mc_air)
         
         rain (i) = rain (i) + r1 * convt ! from melted snow & ice that reached the ground
         snow (i) = snow (i) + s1 * convt
@@ -626,7 +630,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-            qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var)
+            qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, mc_air)
         
         rain (i) = rain (i) + r1 * convt
         
@@ -641,7 +645,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, &
-            denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var)
+            denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, mc_air)
         
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
@@ -675,7 +679,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qi (i, k) = qiz (k)
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
-            cvm = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
+            cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
 #ifdef USE_COND
             pt (i, k) = tz (k) * (1. + zvir * qv (i, k)) * (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
 #else
@@ -793,7 +797,7 @@ end subroutine sedi_heat
 ! -----------------------------------------------------------------------
 
 subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
-        den, denfac, ccn, c_praut, rh_rain, vtr, r1, m1_rain, w1, h_var)
+        den, denfac, ccn, c_praut, rh_rain, vtr, r1, m1_rain, w1, h_var, mc_air)
     
     implicit none
     
@@ -804,6 +808,8 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     
     real, intent (in), dimension (ks:ke) :: dp, dz, den
     real, intent (in), dimension (ks:ke) :: denfac, ccn, c_praut
+    
+    real, intent (in), dimension (ks:ke) :: mc_air
     
     real, intent (inout), dimension (ks:ke) :: tz, vtr
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
@@ -875,7 +881,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         ! -----------------------------------------------------------------------
         
         ! if (.not. fast_sat_adj) &
-        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var)
+        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, mc_air)
         
         if (do_sedi_w) then
             do k = ks, ke
@@ -925,7 +931,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         ! evaporation and accretion of rain for the remaing 1 / 2 time step
         ! -----------------------------------------------------------------------
         
-        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var)
+        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, mc_air)
         
     endif
     
@@ -1007,7 +1013,7 @@ end subroutine warm_rain
 ! evaporation of rain
 ! -----------------------------------------------------------------------
 
-subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var)
+subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, mc_air)
     
     implicit none
     
@@ -1017,6 +1023,8 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
     real, intent (in) :: rh_rain, h_var
     
     real, intent (in), dimension (ks:ke) :: den, denfac
+    
+    real, intent (in), dimension (ks:ke) :: mc_air
     
     real, intent (inout), dimension (ks:ke) :: tz, qv, qr, ql, qi, qs, qg
     
@@ -1038,7 +1046,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             lhl (k) = lv00 + d0_vap * tz (k)
             q_liq (k) = ql (k) + qr (k)
             q_sol (k) = qi (k) + qs (k) + qg (k)
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             lcpk (k) = lhl (k) / cvm (k)
             
             tin = tz (k) - lcpk (k) * ql (k) ! presence of clouds suppresses the rain evap
@@ -1082,7 +1090,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
                 qr (k) = qr (k) - evap
                 qv (k) = qv (k) + evap
                 q_liq (k) = q_liq (k) - evap
-                cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 tz (k) = tz (k) - evap * lhl (k) / cvm (k)
             endif
             
@@ -1172,13 +1180,15 @@ end subroutine linear_prof
 ! =======================================================================
 
 subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
-        den, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var)
+        den, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, mc_air)
     
     implicit none
     
     integer, intent (in) :: ks, ke
     
     real, intent (in), dimension (ks:ke) :: p1, dp1, den, denfac, vts, vtg, vtr
+    
+    real, intent (in), dimension (ks:ke) :: mc_air
     
     real, intent (inout), dimension (ks:ke) :: tzk, qvk, qlk, qrk, qik, qsk, qgk, qak
     
@@ -1220,7 +1230,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
         lhi (k) = li00 + dc_ice * tzk (k)
         q_liq (k) = qlk (k) + qrk (k)
         q_sol (k) = qik (k) + qsk (k) + qgk (k)
-        cvm (k) = c_air + qvk (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+        cvm (k) = mc_air (k) + qvk (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
         icpk (k) = lhi (k) / cvm (k)
     enddo
     
@@ -1245,7 +1255,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             qik (k) = qik (k) - melt
             q_liq (k) = q_liq (k) + melt
             q_sol (k) = q_sol (k) - melt
-            cvm (k) = c_air + qvk (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qvk (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tzk (k) = tzk (k) - melt * lhi (k) / cvm (k)
             
         elseif (tzk (k) < t_wfr .and. qlk (k) > qcmin) then
@@ -1265,7 +1275,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             qik (k) = qik (k) + tmp
             q_liq (k) = q_liq (k) - sink
             q_sol (k) = q_sol (k) + sink
-            cvm (k) = c_air + qvk (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qvk (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tzk (k) = tzk (k) + sink * lhi (k) / cvm (k)
             
         endif
@@ -1362,7 +1372,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 ! sjl, 20170321:
                 q_liq (k) = q_liq (k) + sink
                 q_sol (k) = q_sol (k) - sink
-                cvm (k) = c_air + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                cvm (k) = mc_air (k) + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 tz = tz - sink * lhi (k) / cvm (k)
                 tc = tz - tice
                 
@@ -1409,7 +1419,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 qr = qr + pgmlt
                 q_liq (k) = q_liq (k) + pgmlt
                 q_sol (k) = q_sol (k) - pgmlt
-                cvm (k) = c_air + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                cvm (k) = mc_air (k) + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 tz = tz - pgmlt * lhi (k) / cvm (k)
                 
             endif
@@ -1546,7 +1556,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 qg = qg + pgfr
                 q_liq (k) = q_liq (k) - sink
                 q_sol (k) = q_sol (k) + sink
-                cvm (k) = c_air + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                cvm (k) = mc_air (k) + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 tz = tz + sink * lhi (k) / cvm (k)
                 
             endif
@@ -1625,7 +1635,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 ql = ql - pgacw
                 q_liq (k) = q_liq (k) - sink
                 q_sol (k) = q_sol (k) + sink
-                cvm (k) = c_air + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                cvm (k) = mc_air (k) + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 tz = tz + sink * lhi (k) / cvm (k)
                 
             endif
@@ -1647,7 +1657,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     ! -----------------------------------------------------------------------
     
     call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tzk, qvk, &
-        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain)
+        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, mc_air)
     
 end subroutine icloud
 
@@ -1656,13 +1666,15 @@ end subroutine icloud
 ! =======================================================================
 
 subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
-        ql, qr, qi, qs, qg, qa, h_var, rh_rain)
+        ql, qr, qi, qs, qg, qa, h_var, rh_rain, mc_air)
     
     implicit none
     
     integer, intent (in) :: ks, ke
     
     real, intent (in), dimension (ks:ke) :: p1, den, denfac
+    
+    real, intent (in), dimension (ks:ke) :: mc_air
     
     real, intent (in) :: dts, rh_adj, h_var, rh_rain
     
@@ -1713,7 +1725,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         lhi (k) = li00 + dc_ice * tz (k)
         q_liq (k) = ql (k) + qr (k)
         q_sol (k) = qi (k) + qs (k) + qg (k)
-        cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+        cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
         lcpk (k) = lhl (k) / cvm (k)
         icpk (k) = lhi (k) / cvm (k)
         tcpk (k) = lcpk (k) + icpk (k)
@@ -1733,7 +1745,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qv (k) = qv (k) - sink
             qi (k) = qi (k) + sink
             q_sol (k) = q_sol (k) + sink
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tz (k) = tz (k) + sink * (lhl (k) + lhi (k)) / cvm (k)
             if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
             cycle
@@ -1755,7 +1767,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! -----------------------------------------------------------------------
         
         qpz = qv (k) + ql (k) + qi (k)
-        tin = tz (k) - (lhl (k) * (ql (k) + qi (k)) + lhi (k) * qi (k)) / (c_air + &
+        tin = tz (k) - (lhl (k) * (ql (k) + qi (k)) + lhi (k) * qi (k)) / (mc_air (k) + &
             qpz * c_vap + qr (k) * c_liq + (qs (k) + qg (k)) * c_ice)
         if (tin > t_sub + 6.) then
             rh = qpz / iqs1 (tin, den (k))
@@ -1791,7 +1803,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         qv (k) = qv (k) + evap
         ql (k) = ql (k) - evap
         q_liq (k) = q_liq (k) - evap
-        cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+        cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
         tz (k) = tz (k) - evap * lhl (k) / cvm (k)
         
         ! -----------------------------------------------------------------------
@@ -1812,7 +1824,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qi (k) = qi (k) + sink
             q_liq (k) = q_liq (k) - sink
             q_sol (k) = q_sol (k) + sink
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tz (k) = tz (k) + sink * lhi (k) / cvm (k)
         endif
         
@@ -1839,7 +1851,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
                 qi (k) = qi (k) + sink
                 q_liq (k) = q_liq (k) - sink
                 q_sol (k) = q_sol (k) + sink
-                cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 tz (k) = tz (k) + sink * lhi (k) / cvm (k)
             endif ! significant ql existed
         endif
@@ -1883,7 +1895,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qv (k) = qv (k) - sink
             qi (k) = qi (k) + sink
             q_sol (k) = q_sol (k) + sink
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tz (k) = tz (k) + sink * (lhl (k) + lhi (k)) / cvm (k)
         endif
         
@@ -1923,7 +1935,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qs (k) = qs (k) - pssub
             qv (k) = qv (k) + pssub
             q_sol (k) = q_sol (k) - pssub
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tz (k) = tz (k) - pssub * (lhl (k) + lhi (k)) / cvm (k)
         endif
         
@@ -1958,7 +1970,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qg (k) = qg (k) + pgsub
             qv (k) = qv (k) - pgsub
             q_sol (k) = q_sol (k) + pgsub
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tz (k) = tz (k) + pgsub * (lhl (k) + lhi (k)) / cvm (k)
         endif
         
@@ -1980,7 +1992,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qv (k) = qv (k) + sink
             qr (k) = qr (k) - sink
             q_liq (k) = q_liq (k) - sink
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tz (k) = tz (k) - sink * lhl (k) / cvm (k)
         endif
 #endif
@@ -1990,7 +2002,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! -----------------------------------------------------------------------
         
         lhl (k) = lv00 + d0_vap * tz (k)
-        cvm (k) = c_air + (qv (k) + q_liq (k) + q_sol (k)) * c_vap
+        cvm (k) = mc_air (k) + (qv (k) + q_liq (k) + q_sol (k)) * c_vap
         lcpk (k) = lhl (k) / cvm (k)
         
         ! -----------------------------------------------------------------------
@@ -2133,7 +2145,7 @@ end subroutine subgrid_z_proc
 ! rain evaporation
 ! =======================================================================
 
-subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den, hvar)
+subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den, hvar, mc_air)
     
     implicit none
     
@@ -2144,6 +2156,8 @@ subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den,
     real, intent (in) :: dt ! time step (s)
     
     real, intent (in), dimension (is:ie) :: den, hvar, qi, qs, qg
+    
+    real, intent (in), dimension (is:ie) :: mc_air
     
     real, intent (inout), dimension (is:ie) :: tz, qv, qr, ql
     
@@ -2162,7 +2176,7 @@ subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den,
         lhl (i) = lv00 + d0_vap * tz (i)
         q_liq (i) = ql (i) + qr (i)
         q_sol (i) = qi (i) + qs (i) + qg (i)
-        cvm (i) = c_air + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
+        cvm (i) = mc_air (i) + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
         lcp2 (i) = lhl (i) / cvm (i)
         ! denfac (i) = sqrt (sfcrho / den (i))
     enddo
@@ -2202,7 +2216,7 @@ subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den,
                 qr (i) = qr (i) - evap
                 qv (i) = qv (i) + evap
                 q_liq (i) = q_liq (i) - evap
-                cvm (i) = c_air + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
+                cvm (i) = mc_air (i) + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
                 tz (i) = tz (i) - evap * lhl (i) / cvm (i)
             endif
             
@@ -2228,7 +2242,7 @@ end subroutine revap_rac1
 ! =======================================================================
 
 subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
-        den, vtg, vts, vti, r1, g1, s1, i1, m1_sol, w1)
+        den, vtg, vts, vti, r1, g1, s1, i1, m1_sol, w1, mc_air)
     
     implicit none
     
@@ -2237,6 +2251,8 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     real, intent (in) :: dtm ! time step (s)
     
     real, intent (in), dimension (ks:ke) :: vtg, vts, vti, den, dp, dz
+    
+    real, intent (in), dimension (ks:ke) :: mc_air
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, tz, m1_sol, w1
     
@@ -2271,7 +2287,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         lhi (k) = li00 + dc_ice * tz (k)
         q_liq (k) = ql (k) + qr (k)
         q_sol (k) = qi (k) + qs (k) + qg (k)
-        cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+        cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
         lcpk (k) = lhl (k) / cvm (k)
         icpk (k) = lhi (k) / cvm (k)
     enddo
@@ -2302,7 +2318,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             qi (k) = qi (k) - sink
             q_liq (k) = q_liq (k) + sink
             q_sol (k) = q_sol (k) - sink
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tz (k) = tz (k) - sink * lhi (k) / cvm (k)
             tc = tz (k) - tice
         endif
@@ -4158,13 +4174,15 @@ end subroutine qsmith
 ! this is designed for 6 - class micro - physics schemes
 ! =======================================================================
 
-subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg)
+subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, mc_air)
     
     implicit none
     
     integer, intent (in) :: ks, ke
     
     real, intent (in), dimension (ks:ke) :: dp
+    
+    real, intent (in), dimension (ks:ke) :: mc_air
     
     real, intent (inout), dimension (ks:ke) :: pt, qv, ql, qr, qi, qs, qg
     
@@ -4179,7 +4197,7 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg)
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        cvm = c_air + qv (k) * c_vap + (qr (k) + ql (k)) * c_liq + (qi (k) + qs (k) + qg (k)) * c_ice
+        cvm = mc_air (k) + qv (k) * c_vap + (qr (k) + ql (k)) * c_liq + (qi (k) + qs (k) + qg (k)) * c_ice
         lcpk (k) = (lv00 + d0_vap * pt (k)) / cvm
         icpk (k) = (li00 + dc_ice * pt (k)) / cvm
     enddo
