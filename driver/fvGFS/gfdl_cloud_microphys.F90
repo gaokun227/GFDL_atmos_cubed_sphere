@@ -684,8 +684,8 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         if (fix_negative) &
             call neg_adj (ktop, kbot, tz, dp1, qvz, qlz, qrz, qiz, qsz, qgz)
         
-        m2_rain (:, :) = 0.
-        m2_sol (:, :) = 0.
+        m2_rain (i, :) = 0.
+        m2_sol (i, :) = 0.
         
         do n = 1, ntimes
             

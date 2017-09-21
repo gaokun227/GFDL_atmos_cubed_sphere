@@ -455,7 +455,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         do k = ks, ke
             
 #ifdef USE_COND
-            t0 (k) = pt (i, k) / (1 + zvir * qv (i, k)) / (1 - (qv (i, k) + ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
+            t0 (k) = pt (i, k) / (1 + zvir * qv (i, k)) / (1 - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
 #else
             t0 (k) = pt (i, k) / (1 + zvir * qv (i, k))
 #endif
@@ -677,7 +677,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qg (i, k) = qgz (k)
             cvm = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
 #ifdef USE_COND
-            pt (i, k) = tz (k) * (1. + zvir * qv (i, k)) * (1. - (qv (i, k) + ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
+            pt (i, k) = tz (k) * (1. + zvir * qv (i, k)) * (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
 #else
             pt (i, k) = tz (k) * (1. + zvir * qv (i, k))
 #endif
