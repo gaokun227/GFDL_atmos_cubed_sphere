@@ -174,8 +174,7 @@ contains
 !$OMP                                  graupel,q_con,sphum,cappa,r_vir,rcp,k1k,delp, &
 !$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
-!$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,ua,    &
-!$OMP                                  mdt,cld_amt,qn,ccn_cm3,prer,pres,prei,preg,do_unif_gfdlmp) &
+!$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,ua)    &
 !$OMP                          private(qv,gz,cvm,kp,k_next,bkh,dp2,   &
 !$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2)
   do 1000 j=js,je+1
@@ -492,46 +491,6 @@ contains
         enddo
      enddo
 
-   if (do_unif_gfdlmp) then
-
-       if (j .ne. je+1) then
-
-           if (ccn_cm3 .gt. 0) then
-             qn(is:ie,j,:) = q(is:ie,j,:,ccn_cm3)
-           else
-             qn(is:ie,j,:) = 0.0
-           endif
-
-           ! note: u and v are not A-grid variables, sedi_transport = .F.
-           ! v --> va, u --> ua
-           ! note: pt is virtual temperature at this point
-           ! note: w is vertical velocity (m/s)
-           ! note: delz is negative, delp is positive
-           ! note: hs is geopotential height (m^2/s^2)
-           ! note: the unit of qn is #/cc
-           ! note: the unit of area is m^2
-           ! note: the unit of prer, prei, pres, preg is mm/day
-
-           call unif_gfdlmp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
-                          q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
-                          q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,j,:), &
-                          pt(is:ie,j,:), w(is:ie,j,:), u(is:ie,j,:), v(is:ie,j,:), &
-                          delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
-                          hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
-                          preg(is:ie,j), hydrostatic, is, ie, 1, km)
-
-           if (.not. hydrostatic) then
-#ifdef MOIST_CAPPA
-               pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
-#else
-               pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
-#endif
-           endif
-
-       endif
-
-   endif
-
 1000  continue
 
 !$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,isd,ied,jsd,jed,kord_mt, &
@@ -541,7 +500,8 @@ contains
 !$OMP                               do_adiabatic_init,zsum1,zsum0,te0_2d,domain,        &
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
-!$OMP                               fast_mp_consv,kord_tm) &
+!$OMP                               fast_mp_consv,kord_tm, &
+!$OMP                               qn,ccn_cm3,prer,pres,prei,preg,do_unif_gfdlmp) &
 !$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
 !$OMP do
@@ -715,6 +675,46 @@ endif        ! end last_step check
            endif
                                            call timing_off('sat_adj2')
   endif   ! do_sat_adj
+
+  if (do_unif_gfdlmp) then
+ 
+    do j = js, je
+
+        if (ccn_cm3 .gt. 0) then
+          qn(is:ie,j,:) = q(is:ie,j,:,ccn_cm3)
+        else
+          qn(is:ie,j,:) = 0.0
+        endif
+ 
+        ! note: u and v are not A-grid variables, sedi_transport = .F.
+        ! v --> va, u --> ua
+        ! note: pt is virtual temperature at this point
+        ! note: w is vertical velocity (m/s)
+        ! note: delz is negative, delp is positive
+        ! note: hs is geopotential height (m^2/s^2)
+        ! note: the unit of qn is #/cc
+        ! note: the unit of area is m^2
+        ! note: the unit of prer, prei, pres, preg is mm/day
+ 
+        call unif_gfdlmp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
+                       q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
+                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,j,:), &
+                       pt(is:ie,j,:), w(is:ie,j,:), u(is:ie,j,:), v(is:ie,j,:), &
+                       delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
+                       hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
+                       preg(is:ie,j), hydrostatic, is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:))
+ 
+        if (.not. hydrostatic) then
+#ifdef MOIST_CAPPA
+            pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
+#else
+            pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
+#endif
+        endif
+ 
+    enddo
+
+  endif
 
   if ( last_step ) then
        ! Output temperature if last_step

@@ -288,7 +288,7 @@ contains
 
 subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         pt, w, ua, va, dz, delp, area, dts, hs, rain, snow, ice, &
-        graupel, hydrostatic, is, ie, ks, ke)
+        graupel, hydrostatic, is, ie, ks, ke, q_con, cappa)
     
     implicit none
     
@@ -307,6 +307,8 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
     
+    real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
+i
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     ! logical :: used
@@ -315,7 +317,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     
     integer :: i, k
     integer :: days
-    
+
     real, dimension (is:ie) :: prec1, w_var, rh0
     
     real, dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
@@ -432,7 +434,6 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real :: dt_rain
     real :: s_leng, t_land, t_ocean, h_var
     real :: cvm, tmp
-    real :: dqi, qio, qin
     real :: convt
     
     integer :: i, k, n
@@ -448,11 +449,6 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     ! -----------------------------------------------------------------------
     
     do i = is, ie
-        
-        do k = ks, ke
-            qiz (k) = qi (i, k)
-            qsz (k) = qs (i, k)
-        enddo
         
         do k = ks, ke
             
@@ -472,6 +468,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qvz (k) = qv (i, k)
             qlz (k) = ql (i, k)
             qrz (k) = qr (i, k)
+            qiz (k) = qi (i, k)
+            qsz (k) = qs (i, k)
             qgz (k) = qg (i, k)
             
             qa0 (k) = qa (i, k)
@@ -679,11 +677,15 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qi (i, k) = qiz (k)
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
-            cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
 #ifdef USE_COND
-            pt (i, k) = tz (k) * (1. + zvir * qv (i, k)) * (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
+            cvm = mc_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
+            q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
+            tmp = 1. + zvir * qvz (k)
+            pt (i, k) = tz (k) * tmp * (1. - q_con (i, k))
+            tmp = rdgas * tmp
+            cappa (i, k) = tmp / (tmp + cvm)
 #else
-            pt (i, k) = tz (k) * (1. + zvir * qv (i, k))
+            pt (i, k) = tz (k) * (1. + zvir * qvz (k))
 #endif
         enddo
         
