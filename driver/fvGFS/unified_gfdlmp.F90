@@ -368,7 +368,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     call mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, qg, &
         qa, qn, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, area, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2)
+        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa)
     
     ! call mpp_clock_end (gfdl_mp_clock)
     
@@ -680,7 +680,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
 #ifdef USE_COND
-            cvm = mc_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
+            cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
             q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
             tmp = 1. + zvir * qvz (k)
             pt (i, k) = tz (k) * tmp * (1. - q_con (i, k))
