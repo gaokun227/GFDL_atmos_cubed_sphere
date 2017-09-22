@@ -308,7 +308,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
     
     real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
-i
+
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     ! logical :: used
@@ -392,7 +392,7 @@ end subroutine unif_gfdlmp_driver
 subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qn, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, area1, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2)
+        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa)
     
     implicit none
     
@@ -411,6 +411,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
     
+    real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
+
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     real, intent (out), dimension (is:ie) :: w_var
