@@ -678,6 +678,7 @@ endif        ! end last_step check
 
   if (do_unif_gfdlmp) then
  
+!$OMP do
     do j = js, je
 
         if (ccn_cm3 .gt. 0) then
