@@ -122,6 +122,7 @@ module unified_gfdlmp_mod
     logical :: fix_negative = .false. ! fix negative water species
     logical :: do_setup = .true. ! setup constants and parameters
     logical :: p_nonhydro = .false. ! perform hydrosatic adjustment on air density
+    logical :: dry_mp = .true. ! use dry mass mixing ratio in gfdl mp
     
     real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
     real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
@@ -278,7 +279,8 @@ module unified_gfdlmp_mod
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
-        do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print
+        do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, &
+        mp_print, dry_mp
     
 contains
 
@@ -301,9 +303,10 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real (kind = r_grid), intent (in), dimension (is:ie) :: area ! cell area
     real, intent (in), dimension (is:ie) :: hs
     
-    real, intent (in), dimension (is:ie, ks:ke) :: delp, dz
+    real, intent (in), dimension (is:ie, ks:ke) :: dz
     real, intent (in), dimension (is:ie, ks:ke) :: qn
     
+    real, intent (inout), dimension (is:ie, ks:ke) :: delp
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
     
@@ -405,9 +408,10 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real (kind = r_grid), intent (in), dimension (is:ie) :: area1
     real, intent (in), dimension (is:ie) :: hs
     
-    real, intent (in), dimension (is:ie, ks:ke) :: delp, dz
+    real, intent (in), dimension (is:ie, ks:ke) :: dz
     real, intent (in), dimension (is:ie, ks:ke) :: qn
     
+    real, intent (inout), dimension (is:ie, ks:ke) :: delp
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
     
@@ -430,6 +434,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, dimension (ks:ke) :: t0, den, den0, tz, p1, denfac
     real, dimension (ks:ke) :: ccn, c_praut, m1_rain, m1_sol, m1
     real, dimension (ks:ke) :: u0, v0, u1, v1, w1
+    real, dimension (ks:ke) :: omq
     
     real :: cpaut, rh_adj, rh_rain
     real :: r1, s1, i1, g1, rdt, ccn0
@@ -478,13 +483,10 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qaz (k) = 0.
             dz0 (k) = dz (i, k)
             
-            den0 (k) = - dp1 (k) / (grav * dz0 (k)) ! density of moist air
-            p1 (k) = den0 (k) * rdgas * t0 (k) ! dry air pressure
-            
             ! -----------------------------------------------------------------------
             ! save a copy of old value for computing tendencies
             ! -----------------------------------------------------------------------
-            
+
             qv0 (k) = qvz (k)
             ql0 (k) = qlz (k)
             qr0 (k) = qrz (k)
@@ -492,7 +494,24 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qs0 (k) = qsz (k)
             qg0 (k) = qgz (k)
 
-            mc_air (k) = (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k))) * c_air
+            if (dry_mp) then
+                mc_air (k) = c_air
+                dp1 (k) = dp1 (k) * (1 - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
+                omq (k) = dp0 (k) / dp1 (k)
+            else
+                mc_air (k) = (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k))) * c_air
+                omq (k) = 1.0
+            end if
+
+            qvz (k) = qvz (k) * omq (k)
+            qlz (k) = qlz (k) * omq (k)
+            qrz (k) = qrz (k) * omq (k)
+            qiz (k) = qiz (k) * omq (k)
+            qsz (k) = qsz (k) * omq (k)
+            qgz (k) = qgz (k) * omq (k)
+            
+            den0 (k) = - dp1 (k) / (grav * dz0 (k)) ! density of moist air
+            p1 (k) = den0 (k) * rdgas * t0 (k) ! dry air pressure
             
             ! -----------------------------------------------------------------------
             ! for sedi_momentum
@@ -673,12 +692,25 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         do k = ks, ke
+
+            qvz (k) = qvz (k) / omq (k)
+            qlz (k) = qlz (k) / omq (k)
+            qrz (k) = qrz (k) / omq (k)
+            qiz (k) = qiz (k) / omq (k)
+            qsz (k) = qsz (k) / omq (k)
+            qgz (k) = qgz (k) / omq (k)
+
             qv (i, k) = qvz (k)
             ql (i, k) = qlz (k)
             qr (i, k) = qrz (k)
             qi (i, k) = qiz (k)
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
+
+            delp (i, k) = dp0 (k) * \
+                          (1 - qv0 (k) - ql0 (k) - qr0 (k) - qi0 (k) - qs0 (k) - qg0 (k)) / \
+                          (1 - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
+
 #ifdef USE_COND
             cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
             q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
@@ -689,6 +721,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
 #else
             pt (i, k) = tz (k) * (1. + zvir * qvz (k))
 #endif
+
         enddo
         
         ! -----------------------------------------------------------------------
