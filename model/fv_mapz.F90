@@ -637,6 +637,15 @@ endif        ! end last_step check
 ! if ( (.not.do_adiabatic_init) .and. do_sat_adj ) then
   if ( do_sat_adj ) then
                                            call timing_on('sat_adj2')
+
+    !print*,"===before===qv",maxval(q(is:ie,js:je,1:km,sphum  )),minval(q(is:ie,js:je,1:km,sphum  ))
+    !print*,"===before===ql",maxval(q(is:ie,js:je,1:km,liq_wat)),minval(q(is:ie,js:je,1:km,liq_wat))
+    !print*,"===before===qi",maxval(q(is:ie,js:je,1:km,ice_wat)),minval(q(is:ie,js:je,1:km,ice_wat))
+    !print*,"===before===qr",maxval(q(is:ie,js:je,1:km,rainwat)),minval(q(is:ie,js:je,1:km,rainwat))
+    !print*,"===before===qs",maxval(q(is:ie,js:je,1:km,snowwat)),minval(q(is:ie,js:je,1:km,snowwat))
+    !print*,"===before===qg",maxval(q(is:ie,js:je,1:km,graupel)),minval(q(is:ie,js:je,1:km,graupel))
+    !print*,"===before===qa",maxval(q(is:ie,js:je,1:km,cld_amt)),minval(q(is:ie,js:je,1:km,cld_amt))
+ 
 !$OMP do
            do k=kmp,km
               do j=js,je
@@ -673,10 +682,27 @@ endif        ! end last_step check
                    enddo
                 enddo
            endif
+
+    !print*,"===after===qv",maxval(q(is:ie,js:je,1:km,sphum  )),minval(q(is:ie,js:je,1:km,sphum  ))
+    !print*,"===after===ql",maxval(q(is:ie,js:je,1:km,liq_wat)),minval(q(is:ie,js:je,1:km,liq_wat))
+    !print*,"===after===qi",maxval(q(is:ie,js:je,1:km,ice_wat)),minval(q(is:ie,js:je,1:km,ice_wat))
+    !print*,"===after===qr",maxval(q(is:ie,js:je,1:km,rainwat)),minval(q(is:ie,js:je,1:km,rainwat))
+    !print*,"===after===qs",maxval(q(is:ie,js:je,1:km,snowwat)),minval(q(is:ie,js:je,1:km,snowwat))
+    !print*,"===after===qg",maxval(q(is:ie,js:je,1:km,graupel)),minval(q(is:ie,js:je,1:km,graupel))
+    !print*,"===after===qa",maxval(q(is:ie,js:je,1:km,cld_amt)),minval(q(is:ie,js:je,1:km,cld_amt))
+ 
                                            call timing_off('sat_adj2')
   endif   ! do_sat_adj
 
   if (do_unif_gfdlmp) then
+
+    !print*,"===before===qv",maxval(q(is:ie,js:je,1:km,sphum  )),minval(q(is:ie,js:je,1:km,sphum  ))
+    !print*,"===before===ql",maxval(q(is:ie,js:je,1:km,liq_wat)),minval(q(is:ie,js:je,1:km,liq_wat))
+    !print*,"===before===qi",maxval(q(is:ie,js:je,1:km,ice_wat)),minval(q(is:ie,js:je,1:km,ice_wat))
+    !print*,"===before===qr",maxval(q(is:ie,js:je,1:km,rainwat)),minval(q(is:ie,js:je,1:km,rainwat))
+    !print*,"===before===qs",maxval(q(is:ie,js:je,1:km,snowwat)),minval(q(is:ie,js:je,1:km,snowwat))
+    !print*,"===before===qg",maxval(q(is:ie,js:je,1:km,graupel)),minval(q(is:ie,js:je,1:km,graupel))
+    !print*,"===before===qa",maxval(q(is:ie,js:je,1:km,cld_amt)),minval(q(is:ie,js:je,1:km,cld_amt))
  
 !$OMP do
     do j = js, je
@@ -715,6 +741,15 @@ endif        ! end last_step check
  
     enddo
 
+    !print*,"===after===qv",maxval(q(is:ie,js:je,1:km,sphum  )),minval(q(is:ie,js:je,1:km,sphum  ))
+    !print*,"===after===ql",maxval(q(is:ie,js:je,1:km,liq_wat)),minval(q(is:ie,js:je,1:km,liq_wat))
+    !print*,"===after===qi",maxval(q(is:ie,js:je,1:km,ice_wat)),minval(q(is:ie,js:je,1:km,ice_wat))
+    !print*,"===after===qr",maxval(q(is:ie,js:je,1:km,rainwat)),minval(q(is:ie,js:je,1:km,rainwat))
+    !print*,"===after===qs",maxval(q(is:ie,js:je,1:km,snowwat)),minval(q(is:ie,js:je,1:km,snowwat))
+    !print*,"===after===qg",maxval(q(is:ie,js:je,1:km,graupel)),minval(q(is:ie,js:je,1:km,graupel))
+    !print*,"===after===qa",maxval(q(is:ie,js:je,1:km,cld_amt)),minval(q(is:ie,js:je,1:km,cld_amt))
+ 
+ 
   endif
 
   if ( last_step ) then
