@@ -4599,6 +4599,9 @@ end subroutine eqv_pot
 !   Ferrier-Aligo has an option for fixed slope (rather than fixed intercept).
 !   Thompson presumably is an extension of Reisner MP.
 
+   use gfdl_cloud_microphys_mod, only : do_hail, rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh
+   implicit none
+
    type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: npz, ncnst
    real,    intent(IN),  dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz) :: pt, delp, delz
@@ -4612,14 +4615,13 @@ end subroutine eqv_pot
 
    !Parameters for constant intercepts (in0[rsg] = .false.)
    !Using GFDL MP values
-   real(kind=R_GRID), parameter:: rn0_r = 8.e6 ! m^-4
-   real(kind=R_GRID), parameter:: rn0_s = 3.e6 ! m^-4
-   real(kind=R_GRID), parameter:: rn0_g = 4.e6 ! m^-4
    real(kind=R_GRID), parameter:: vconr = 2503.23638966667
    real(kind=R_GRID), parameter:: vcong =   87.2382675
    real(kind=R_GRID), parameter:: vcons =    6.6280504
+   real(kind=R_GRID), parameter:: vconh =   vcong
    real(kind=R_GRID), parameter:: normr = 25132741228.7183
    real(kind=R_GRID), parameter:: normg =  5026548245.74367
+   real(kind=R_GRID), parameter:: normh =  pi*rhoh*rnzh
    real(kind=R_GRID), parameter:: norms =   942477796.076938
 
    !Constants for variable intercepts
@@ -4637,18 +4639,9 @@ end subroutine eqv_pot
 
    !Other constants
    real, parameter :: gamma_seven = 720.
-   !The following values are also used in GFDL MP
-   real, parameter :: rho_r = 1.0e3  ! LFO83
-   real, parameter :: rho_s = 100.   ! kg m^-3 
-   real, parameter :: rho_g0 = 400.   ! kg m^-3
-   real, parameter :: rho_g = 500.   ! graupel-hail mix
-!  real, parameter :: rho_g = 900.   ! hail/frozen rain
    real, parameter :: alpha = 0.224
-   real(kind=R_GRID), parameter :: factor_r = gamma_seven * 1.e18 * (1./(pi*rho_r))**1.75
-   real(kind=R_GRID), parameter :: factor_s = gamma_seven * 1.e18 * (1./(pi*rho_s))**1.75 &
-        * (rho_s/rho_r)**2 * alpha
-   real(kind=R_GRID), parameter :: factor_g = gamma_seven * 1.e18 * (1./(pi*rho_g))**1.75 &
-        * (rho_g/rho_r)**2 * alpha
+   real(kind=R_GRID), parameter :: factor_s = gamma_seven * 1.e18 * (1./(pi*rhos))**1.75 &
+        * (rhos/rhor)**2 * alpha
    real, parameter :: qmin = 1.E-12
    real, parameter :: tice = 273.16
 
@@ -4657,6 +4650,8 @@ end subroutine eqv_pot
    real(kind=R_GRID):: qr1, qs1, qg1, t1, t2, t3, rwat, denfac, vtr, vtg, vts
    real(kind=R_GRID):: factorb_s, factorb_g
    real(kind=R_GRID):: temp_c, pres, sonv, gonv, ronv, z_e
+
+   real :: rhogh, vcongh, normgh
 
    integer :: i,j,k
    integer :: is, ie, js, je
@@ -4671,6 +4666,15 @@ end subroutine eqv_pot
    maxdbz(:,:) = -20. !Minimum value
    allmax = -20.
 
+   if (do_hail) then
+      rhogh = rhoh
+      vcongh = vconh
+      normgh = normh
+   else
+      rhogh = rhog
+      vcongh = vcong
+      normgh = normg
+   endif
 
 !$OMP parallel do default(shared) private(rhoair,t1,t2,t3,denfac,vtr,vtg,vts,z_e)
    do k=mp_top+1, npz
@@ -4686,7 +4690,7 @@ end subroutine eqv_pot
       endif
       do i=is, ie
 ! The following form vectorizes better & more consistent with GFDL_MP
-! SJL notes: Marshall-Palmer, dBZ = 200*precip**1.6, precip = 3.6e6*t1/rho_r*vtr  ! [mm/hr]
+! SJL notes: Marshall-Palmer, dBZ = 200*precip**1.6, precip = 3.6e6*t1/rhor*vtr  ! [mm/hr]
 ! GFDL_MP terminal fall speeds are used
 ! Date modified 20170701
 ! Account for excessively high cloud water -> autoconvert (diag only) excess cloud water
@@ -4695,10 +4699,10 @@ end subroutine eqv_pot
          t3 = rhoair(i)*max(qmin, q(i,j,k,graupel))
          denfac = sqrt(min(10., 1.2/rhoair(i)))
          vtr = max(1.e-3, vconr*denfac*exp(0.2   *log(t1/normr)))
-         vtg = max(1.e-3, vcong*denfac*exp(0.125 *log(t3/normg)))
+         vtg = max(1.e-3, vcongh*denfac*exp(0.125 *log(t3/normgh)))
 !     vts = max(1.e-3, vcons*denfac*exp(0.0625*log(t2/norms)))
-         z_e = 200.*(exp(1.6*log(3.6e6*t1/rho_r*vtr)) + exp(1.6*log(3.6e6*t3/rho_g0*vtg))) + (factor_s/alpha)*t2*exp(0.75*log(t2/rn0_s))
-!     z_e = 200.*(exp(1.6*log(3.6e6*t1/rho_r*vtr)) + exp(1.6*log(3.6e6*t3/rho_g*vtg)) + exp(1.6*log(3.6e6*t2/rho_s*vts)))
+         z_e = 200.*(exp(1.6*log(3.6e6*t1/rhor*vtr)) + exp(1.6*log(3.6e6*t3/rhogh*vtg))) + (factor_s/alpha)*t2*exp(0.75*log(t2/rnzs))
+!     z_e = 200.*(exp(1.6*log(3.6e6*t1/rhor*vtr)) + exp(1.6*log(3.6e6*t3/rhogh*vtg)) + exp(1.6*log(3.6e6*t2/rhos*vts)))
          dbz(i,j,k) = 10.*log10( max(0.01, z_e) )
       enddo
    enddo
