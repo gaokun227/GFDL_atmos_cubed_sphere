@@ -1,4 +1,4 @@
-Gsubroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel, rpdel, ps, precl, TSurf, rh, cond_only, dqdt, dTdt, dudt, dvdt)
+subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel, rpdel, ps, precl, TSurf, rh, cond_only, dqdt, dTdt, dudt, dvdt)
 !----------------------------------------------------------------------- 
 ! 
 ! Purpose: Simple Physics Package
