@@ -723,7 +723,8 @@ endif        ! end last_step check
                        pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
                        delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
                        hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
-                       preg(is:ie,j), hydrostatic, is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:))
+                       preg(is:ie,j), hydrostatic, is, ie, 1, km, q_con(is:ie,j,:), &
+                       cappa(is:ie,j,:), last_step)
  
         u_dt(is:ie,j,:) = (ua(is:ie,j,:) - u0(is:ie,j,:)) / abs(mdt)
         v_dt(is:ie,j,:) = (va(is:ie,j,:) - v0(is:ie,j,:)) / abs(mdt)

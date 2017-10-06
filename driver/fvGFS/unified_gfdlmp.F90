@@ -290,11 +290,13 @@ contains
 
 subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         pt, w, ua, va, dz, delp, area, dts, hs, rain, snow, ice, &
-        graupel, hydrostatic, is, ie, ks, ke, q_con, cappa)
+        graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, last_step)
     
     implicit none
     
     logical, intent (in) :: hydrostatic
+    logical, intent (in) :: last_step
+
     integer, intent (in) :: is, ie ! physics window
     integer, intent (in) :: ks, ke ! vertical dimension
     
@@ -371,7 +373,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     call mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, qg, &
         qa, qn, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, area, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa)
+        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, last_step)
     
     ! call mpp_clock_end (gfdl_mp_clock)
     
@@ -395,11 +397,13 @@ end subroutine unif_gfdlmp_driver
 subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qn, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, area1, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa)
+        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, last_step)
     
     implicit none
     
     logical, intent (in) :: hydrostatic
+    
+    logical, intent (in) :: last_step
     
     integer, intent (in) :: is, ie, ks, ke
     
@@ -664,7 +668,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, &
-            denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, mc_air)
+            denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, mc_air, last_step)
         
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
@@ -1217,9 +1221,11 @@ end subroutine linear_prof
 ! =======================================================================
 
 subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
-        den, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, mc_air)
+        den, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, mc_air, last_step)
     
     implicit none
+
+    logical, intent (in) :: last_step
     
     integer, intent (in) :: ks, ke
     
@@ -1694,7 +1700,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     ! -----------------------------------------------------------------------
     
     call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tzk, qvk, &
-        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, mc_air)
+        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, mc_air, last_step)
     
 end subroutine icloud
 
@@ -1703,9 +1709,11 @@ end subroutine icloud
 ! =======================================================================
 
 subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
-        ql, qr, qi, qs, qg, qa, h_var, rh_rain, mc_air)
+        ql, qr, qi, qs, qg, qa, h_var, rh_rain, mc_air, last_step)
     
     implicit none
+
+    logical, intent (in) :: last_step
     
     integer, intent (in) :: ks, ke
     
@@ -2050,7 +2058,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! combine water species
         ! -----------------------------------------------------------------------
         
-        if (.not. do_qa) cycle
+        if (.not. (do_qa .and. last_step)) cycle
         
         if (rad_snow) then
             if (rad_graupel) then
