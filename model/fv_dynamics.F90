@@ -123,7 +123,7 @@ contains
     real, intent(inout), dimension(bd%isd:bd%ied ,bd%jsd:bd%jed ,npz):: ua, va
     real, intent(in),    dimension(npz+1):: ak, bk
 
-    real, intent(out), dimension(bd%is:, bd%js:) :: prer, prei, pres, preg
+    real, intent(inout), dimension(bd%is:, bd%js:) :: prer, prei, pres, preg
 
 ! Accumulated Mass flux arrays: the "Flux Capacitor"
     real, intent(inout) ::  mfx(bd%is:bd%ie+1, bd%js:bd%je,   npz)
@@ -569,6 +569,15 @@ contains
       end if
 #endif
   enddo    ! n_map loop
+
+  ! Initialize rain, ice, snow and graupel precipitaiton
+  if (flagstruct%do_unif_gfdlmp) then
+      prer = prer / k_split
+      prei = prei / k_split
+      pres = pres / k_split
+      preg = preg / k_split
+  endif
+
                                                   call timing_off('FV_DYN_LOOP')
   if ( idiag%id_mdt > 0 .and. (.not.do_adiabatic_init) ) then
 ! Output temperature tendency due to inline moist physics:

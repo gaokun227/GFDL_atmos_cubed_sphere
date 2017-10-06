@@ -127,7 +127,7 @@ contains
   real, intent(inout)::   dtdt(is:ie,js:je,km)
   real, intent(out)::    pkz(is:ie,js:je,km)       ! layer-mean pk for converting t to pt
   real, intent(out)::     te(isd:ied,jsd:jed,km)
-  real, intent(out)::   prer(is:ie,js:je)
+  real, intent(inout)::   prer(is:ie,js:je)
   real, intent(out)::   prei(is:ie,js:je)
   real, intent(out)::   pres(is:ie,js:je)
   real, intent(out)::   preg(is:ie,js:je)
@@ -708,7 +708,7 @@ endif        ! end last_step check
         ! note: ua and va are A-grid variables
         ! note: pt is virtual temperature at this point
         ! note: w is vertical velocity (m/s)
-        ! note: delz is negative, delp is positive
+        ! note: delz is negative, delp is positive, delz doesn't change in constant volume situation
         ! note: hs is geopotential height (m^2/s^2)
         ! note: the unit of qn is #/cc
         ! note: the unit of area is m^2
