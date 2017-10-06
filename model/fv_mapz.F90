@@ -25,11 +25,11 @@ module fv_mapz_mod
   use constants_mod,     only: radius, pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
   use tracer_manager_mod,only: get_tracer_index
   use field_manager_mod, only: MODEL_ATMOS
-  use fv_grid_utils_mod, only: g_sum, ptop_min
+  use fv_grid_utils_mod, only: g_sum, ptop_min, cubed_to_latlon
   use fv_fill_mod,       only: fillz
   use mpp_domains_mod,   only: mpp_update_domains, domain2d
   use mpp_mod,           only: NOTE, mpp_error, get_unit, mpp_root_pe, mpp_pe
-  use fv_arrays_mod,     only: fv_grid_type
+  use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master
   use fv_cmp_mod,        only: qs_init, fv_sat_adj
@@ -57,16 +57,17 @@ module fv_mapz_mod
 contains
 
  subroutine Lagrangian_to_Eulerian(last_step, consv, ps, pe, delp, pkz, pk,   &
-                                   mdt, pdt, km, is,ie,js,je, isd,ied,jsd,jed,       &
+                                   mdt, pdt, npx, npy, km, is,ie,js,je, isd,ied,jsd,jed,       &
                       nq, nwat, sphum, q_con, u, v, w, delz, pt, q, hs, r_vir, cp,  &
                       akap, cappa, kord_mt, kord_wz, kord_tr, kord_tm,  peln, te0_2d,        &
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
-                      do_unif_gfdlmp, prer, prei, pres, preg)
+                      do_unif_gfdlmp, prer, prei, pres, preg, c2l_ord, bd)
   logical, intent(in):: last_step
   real,    intent(in):: mdt                   ! remap time step
   real,    intent(in):: pdt                   ! phys time step
+  integer, intent(in):: npx, npy
   integer, intent(in):: km
   integer, intent(in):: nq                    ! number of tracers (including h2o)
   integer, intent(in):: nwat
@@ -78,6 +79,7 @@ contains
   integer, intent(in):: kord_wz               ! Mapping order/option for w
   integer, intent(in):: kord_tr(nq)           ! Mapping order for tracers
   integer, intent(in):: kord_tm               ! Mapping order for thermodynamics
+  integer, intent(in):: c2l_ord
 
   real, intent(in):: consv                 ! factor for TE conservation
   real, intent(in):: r_vir
@@ -98,6 +100,7 @@ contains
   real, intent(in):: pfull(km)
   type(fv_grid_type), intent(IN), target :: gridstruct
   type(domain2d), intent(INOUT) :: domain
+  type(fv_grid_bounds_type), intent(IN) :: bd
 
 ! !INPUT/OUTPUT
   real, intent(inout):: pk(is:ie,js:je,km+1) ! pe to the kappa
@@ -135,9 +138,11 @@ contains
 ! SJL 03.11.04: Initial version for partial remapping
 !
 !-----------------------------------------------------------------------
+  real, dimension(isd:ied,jsd:jed,km):: u0, v0, u_dt, v_dt
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
   real, dimension(is:ie,km)  :: q2, dp2
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
+  real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gz, cvm, qv
   real, dimension(is:ie,js:je,km):: qn
@@ -160,7 +165,7 @@ contains
        cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
        ccn_cm3 = get_tracer_index (MODEL_ATMOS, 'ccn_cm3')
 
-       if ( do_sat_adj ) then
+       if ( do_adiabatic_init .or. do_sat_adj ) then
             fast_mp_consv = (.not.do_adiabatic_init) .and. consv>consv_min
             do k=1,km
                kmp = k
@@ -174,7 +179,7 @@ contains
 !$OMP                                  graupel,q_con,sphum,cappa,r_vir,rcp,k1k,delp, &
 !$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
-!$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,ua)    &
+!$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,pe4)    &
 !$OMP                          private(qv,gz,cvm,kp,k_next,bkh,dp2,   &
 !$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2)
   do 1000 j=js,je+1
@@ -487,28 +492,36 @@ contains
 
      do k=1,km
         do i=is,ie
-           ua(i,j,k) = pe2(i,k+1)
+           pe4(i,j,k) = pe2(i,k+1)
         enddo
      enddo
 
 1000  continue
 
-!$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,isd,ied,jsd,jed,kord_mt, &
+  if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
+
+    call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
+             domain, gridstruct%nested, c2l_ord, bd)
+
+  endif
+
+!$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,va,isd,ied,jsd,jed,kord_mt, &
 !$OMP                               te_2d,te,delp,hydrostatic,hs,rg,pt,peln, adiabatic, &
 !$OMP                               cp,delz,nwat,rainwat,liq_wat,ice_wat,snowwat,       &
 !$OMP                               graupel,q_con,r_vir,sphum,w,pk,pkz,last_step,consv, &
 !$OMP                               do_adiabatic_init,zsum1,zsum0,te0_2d,domain,        &
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
-!$OMP                               fast_mp_consv,kord_tm, &
-!$OMP                               qn,ccn_cm3,prer,pres,prei,preg,do_unif_gfdlmp) &
-!$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
+!$OMP                               fast_mp_consv,kord_tm,pe4, &
+!$OMP                               npx,npy,qn,ccn_cm3,prer,pres,prei,preg,u_dt,v_dt,   &
+!$OMP                               do_unif_gfdlmp,c2l_ord,bd) &
+!$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln,u0,v0)
 
 !$OMP do
   do k=2,km
      do j=js,je
         do i=is,ie
-           pe(i,k,j) = ua(i,j,k-1)
+           pe(i,k,j) = pe4(i,j,k-1)
         enddo
      enddo
   enddo
@@ -680,6 +693,9 @@ endif        ! end last_step check
 
   if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
 
+    u_dt = 0.0
+    v_dt = 0.0
+
 !$OMP do
     do j = js, je
 
@@ -689,8 +705,7 @@ endif        ! end last_step check
           qn(is:ie,j,:) = 0.0
         endif
  
-        ! note: u and v are not A-grid variables, sedi_transport = .F.
-        ! v --> va, u --> ua
+        ! note: ua and va are A-grid variables
         ! note: pt is virtual temperature at this point
         ! note: w is vertical velocity (m/s)
         ! note: delz is negative, delp is positive
@@ -698,15 +713,21 @@ endif        ! end last_step check
         ! note: the unit of qn is #/cc
         ! note: the unit of area is m^2
         ! note: the unit of prer, prei, pres, preg is mm/day
- 
+
+        u0(is:ie,j,:) = ua(is:ie,j,:)
+        v0(is:ie,j,:) = va(is:ie,j,:)
+
         call unif_gfdlmp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
                        q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,j,:), &
-                       pt(is:ie,j,:), w(is:ie,j,:), u(is:ie,j,:), v(is:ie,j,:), &
+                       pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
                        delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
                        hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
                        preg(is:ie,j), hydrostatic, is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:))
  
+        u_dt(is:ie,j,:) = (ua(is:ie,j,:) - u0(is:ie,j,:)) / abs(mdt)
+        v_dt(is:ie,j,:) = (va(is:ie,j,:) - v0(is:ie,j,:)) / abs(mdt)
+
         if (.not. hydrostatic) then
 #ifdef MOIST_CAPPA
             pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
@@ -766,6 +787,15 @@ endif        ! end last_step check
     endif
   endif
 !$OMP end parallel
+
+  if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
+
+    call mpp_update_domains(u_dt, v_dt, domain)
+
+    call update_dwinds_phys(is, ie, js, je, isd, ied, jsd, jed, abs(mdt), u_dt, v_dt, u, v, &
+             gridstruct, npx, npy, km, domain)
+
+  endif
 
  end subroutine Lagrangian_to_Eulerian
 
@@ -3394,5 +3424,191 @@ endif        ! end last_step check
   end select
 
  end subroutine moist_cp
+
+  subroutine update_dwinds_phys(is, ie, js, je, isd, ied, jsd, jed, dt, u_dt, v_dt, u, v, gridstruct, npx, npy, npz, domain)
+
+! Purpose; Transform wind tendencies on A grid to D grid for the final update
+ 
+  integer, intent(in):: is,  ie,  js,  je
+  integer, intent(in):: isd, ied, jsd, jed
+  integer, intent(IN) :: npx,npy, npz
+  real,    intent(in):: dt
+  real, intent(inout):: u(isd:ied,  jsd:jed+1,npz)
+  real, intent(inout):: v(isd:ied+1,jsd:jed  ,npz)
+  real, intent(inout), dimension(isd:ied,jsd:jed,npz):: u_dt, v_dt
+  type(fv_grid_type), intent(IN), target :: gridstruct
+  type(domain2d), intent(INOUT) :: domain
+
+! local:
+  real v3(is-1:ie+1,js-1:je+1,3)
+  real ue(is-1:ie+1,js:je+1,3)    ! 3D winds at edges
+  real ve(is:ie+1,js-1:je+1,  3)    ! 3D winds at edges
+  real, dimension(is:ie):: ut1, ut2, ut3
+  real, dimension(js:je):: vt1, vt2, vt3
+  real dt5, gratio
+  integer i, j, k, m, im2, jm2
+
+  real(kind=R_GRID), pointer, dimension(:,:,:) :: vlon, vlat
+  real(kind=R_GRID), pointer, dimension(:,:,:,:) :: es, ew
+  real(kind=R_GRID), pointer, dimension(:) :: edge_vect_w, edge_vect_e, edge_vect_s, edge_vect_n
+
+  es   => gridstruct%es
+  ew   => gridstruct%ew
+  vlon => gridstruct%vlon
+  vlat => gridstruct%vlat
+
+  edge_vect_w => gridstruct%edge_vect_w
+  edge_vect_e => gridstruct%edge_vect_e
+  edge_vect_s => gridstruct%edge_vect_s
+  edge_vect_n => gridstruct%edge_vect_n
+
+    dt5 = 0.5 * dt
+    im2 = (npx-1)/2
+    jm2 = (npy-1)/2
+
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,gridstruct,u,dt5,u_dt,v,v_dt,  &
+!$OMP                                  vlon,vlat,jm2,edge_vect_w,npx,edge_vect_e,im2, &
+!$OMP                                  edge_vect_s,npy,edge_vect_n,es,ew)             &
+!$OMP                          private(ut1, ut2, ut3, vt1, vt2, vt3, ue, ve, v3)
+    do k=1, npz
+
+     if ( gridstruct%grid_type > 3 ) then    ! Local & one tile configurations
+
+       do j=js,je+1
+          do i=is,ie
+             u(i,j,k) = u(i,j,k) + dt5*(u_dt(i,j-1,k) + u_dt(i,j,k))
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie+1
+             v(i,j,k) = v(i,j,k) + dt5*(v_dt(i-1,j,k) + v_dt(i,j,k))
+          enddo
+       enddo
+
+     else
+! Compute 3D wind tendency on A grid
+       do j=js-1,je+1
+          do i=is-1,ie+1
+             v3(i,j,1) = u_dt(i,j,k)*vlon(i,j,1) + v_dt(i,j,k)*vlat(i,j,1)
+             v3(i,j,2) = u_dt(i,j,k)*vlon(i,j,2) + v_dt(i,j,k)*vlat(i,j,2)
+             v3(i,j,3) = u_dt(i,j,k)*vlon(i,j,3) + v_dt(i,j,k)*vlat(i,j,3)
+          enddo
+       enddo
+
+! Interpolate to cell edges
+       do j=js,je+1
+          do i=is-1,ie+1
+             ue(i,j,1) = v3(i,j-1,1) + v3(i,j,1)
+             ue(i,j,2) = v3(i,j-1,2) + v3(i,j,2)
+             ue(i,j,3) = v3(i,j-1,3) + v3(i,j,3)
+          enddo
+       enddo
+
+       do j=js-1,je+1
+          do i=is,ie+1
+             ve(i,j,1) = v3(i-1,j,1) + v3(i,j,1)
+             ve(i,j,2) = v3(i-1,j,2) + v3(i,j,2)
+             ve(i,j,3) = v3(i-1,j,3) + v3(i,j,3)
+          enddo
+       enddo
+
+! --- E_W edges (for v-wind):
+     if ( is==1 .and. .not. gridstruct%nested ) then
+       i = 1
+       do j=js,je
+        if ( j>jm2 ) then
+             vt1(j) = edge_vect_w(j)*ve(i,j-1,1)+(1.-edge_vect_w(j))*ve(i,j,1)
+             vt2(j) = edge_vect_w(j)*ve(i,j-1,2)+(1.-edge_vect_w(j))*ve(i,j,2)
+             vt3(j) = edge_vect_w(j)*ve(i,j-1,3)+(1.-edge_vect_w(j))*ve(i,j,3)
+        else
+             vt1(j) = edge_vect_w(j)*ve(i,j+1,1)+(1.-edge_vect_w(j))*ve(i,j,1)
+             vt2(j) = edge_vect_w(j)*ve(i,j+1,2)+(1.-edge_vect_w(j))*ve(i,j,2)
+             vt3(j) = edge_vect_w(j)*ve(i,j+1,3)+(1.-edge_vect_w(j))*ve(i,j,3)
+        endif
+       enddo
+       do j=js,je
+          ve(i,j,1) = vt1(j)
+          ve(i,j,2) = vt2(j)
+          ve(i,j,3) = vt3(j)
+       enddo
+     endif
+     if ( (ie+1)==npx .and. .not. gridstruct%nested ) then
+       i = npx
+       do j=js,je
+        if ( j>jm2 ) then
+             vt1(j) = edge_vect_e(j)*ve(i,j-1,1)+(1.-edge_vect_e(j))*ve(i,j,1)
+             vt2(j) = edge_vect_e(j)*ve(i,j-1,2)+(1.-edge_vect_e(j))*ve(i,j,2)
+             vt3(j) = edge_vect_e(j)*ve(i,j-1,3)+(1.-edge_vect_e(j))*ve(i,j,3)
+        else
+             vt1(j) = edge_vect_e(j)*ve(i,j+1,1)+(1.-edge_vect_e(j))*ve(i,j,1)
+             vt2(j) = edge_vect_e(j)*ve(i,j+1,2)+(1.-edge_vect_e(j))*ve(i,j,2)
+             vt3(j) = edge_vect_e(j)*ve(i,j+1,3)+(1.-edge_vect_e(j))*ve(i,j,3)
+        endif
+       enddo
+       do j=js,je
+          ve(i,j,1) = vt1(j)
+          ve(i,j,2) = vt2(j)
+          ve(i,j,3) = vt3(j)
+       enddo
+     endif
+! N-S edges (for u-wind):
+     if ( js==1  .and. .not. gridstruct%nested) then
+       j = 1
+       do i=is,ie
+        if ( i>im2 ) then
+             ut1(i) = edge_vect_s(i)*ue(i-1,j,1)+(1.-edge_vect_s(i))*ue(i,j,1)
+             ut2(i) = edge_vect_s(i)*ue(i-1,j,2)+(1.-edge_vect_s(i))*ue(i,j,2)
+             ut3(i) = edge_vect_s(i)*ue(i-1,j,3)+(1.-edge_vect_s(i))*ue(i,j,3)
+        else
+             ut1(i) = edge_vect_s(i)*ue(i+1,j,1)+(1.-edge_vect_s(i))*ue(i,j,1)
+             ut2(i) = edge_vect_s(i)*ue(i+1,j,2)+(1.-edge_vect_s(i))*ue(i,j,2)
+             ut3(i) = edge_vect_s(i)*ue(i+1,j,3)+(1.-edge_vect_s(i))*ue(i,j,3)
+        endif
+       enddo
+       do i=is,ie
+          ue(i,j,1) = ut1(i)
+          ue(i,j,2) = ut2(i)
+          ue(i,j,3) = ut3(i)
+       enddo
+     endif
+     if ( (je+1)==npy  .and. .not. gridstruct%nested) then
+       j = npy
+       do i=is,ie
+        if ( i>im2 ) then
+             ut1(i) = edge_vect_n(i)*ue(i-1,j,1)+(1.-edge_vect_n(i))*ue(i,j,1)
+             ut2(i) = edge_vect_n(i)*ue(i-1,j,2)+(1.-edge_vect_n(i))*ue(i,j,2)
+             ut3(i) = edge_vect_n(i)*ue(i-1,j,3)+(1.-edge_vect_n(i))*ue(i,j,3)
+        else
+             ut1(i) = edge_vect_n(i)*ue(i+1,j,1)+(1.-edge_vect_n(i))*ue(i,j,1)
+             ut2(i) = edge_vect_n(i)*ue(i+1,j,2)+(1.-edge_vect_n(i))*ue(i,j,2)
+             ut3(i) = edge_vect_n(i)*ue(i+1,j,3)+(1.-edge_vect_n(i))*ue(i,j,3)
+        endif
+       enddo
+       do i=is,ie
+          ue(i,j,1) = ut1(i)
+          ue(i,j,2) = ut2(i)
+          ue(i,j,3) = ut3(i)
+       enddo
+     endif
+       do j=js,je+1
+          do i=is,ie
+             u(i,j,k) = u(i,j,k) + dt5*( ue(i,j,1)*es(1,i,j,1) +  &
+                                         ue(i,j,2)*es(2,i,j,1) +  &
+                                         ue(i,j,3)*es(3,i,j,1) )
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie+1
+             v(i,j,k) = v(i,j,k) + dt5*( ve(i,j,1)*ew(1,i,j,2) +  &
+                                         ve(i,j,2)*ew(2,i,j,2) +  &
+                                         ve(i,j,3)*ew(3,i,j,2) )
+          enddo
+       enddo
+! Update:
+      endif   ! end grid_type
+ 
+    enddo         ! k-loop
+
+  end subroutine update_dwinds_phys 
 
 end module fv_mapz_mod

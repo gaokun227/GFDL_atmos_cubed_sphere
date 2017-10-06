@@ -527,7 +527,7 @@ contains
 #endif
 
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
-                     pkz, pk, mdt, bdt, npz, is,ie,js,je, isd,ied,jsd,jed,       &
+                     pkz, pk, mdt, bdt, npx, npy, npz, is,ie,js,je, isd,ied,jsd,jed,       &
                      nq, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
                      zvir, cp_air, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
                      kord_tracer, flagstruct%kord_tm, peln, te_2d,               &
@@ -535,7 +535,7 @@ contains
                      idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, hybrid_z, do_omega,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_unif_gfdlmp, &
-                     prer, prei, pres, preg)
+                     prer, prei, pres, preg, flagstruct%c2l_ord, bd)
 
 #ifdef AVEC_TIMERS
                                                   call avec_timer_stop(6)
