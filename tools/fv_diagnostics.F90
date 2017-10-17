@@ -2159,8 +2159,8 @@ contains
                          var2(i,j) = wz(i,j,k) - wz(i,j,npz+1) ! height AGL
                          exit
                      elseif( k==npz ) then
-                        a2(i,j) = missing_value2
-                        var1(i,j) = missing_value2
+                        a2(i,j) = missing_value3
+                        var1(i,j) = missing_value3
                         var2(i,j) = missing_value2
 !!$                           a2(i,j) = Atm(n)%pt(i,j,k)
 !!$                         var1(i,j) = 0.01*Atm(n)%pe(i,k+1,j)   ! surface pressure
@@ -4646,10 +4646,10 @@ end subroutine eqv_pot
    real, parameter :: tice = 273.16
 
 ! Double precision
-   real(kind=R_GRID):: rhoair(bd%is:bd%ie)
-   real(kind=R_GRID):: qr1, qs1, qg1, t1, t2, t3, rwat, denfac, vtr, vtg, vts
+   real(kind=R_GRID), dimension(bd%is:bd%ie) :: rhoair, denfac, z_e
+   real(kind=R_GRID):: qr1, qs1, qg1, t1, t2, t3, rwat, vtr, vtg, vts
    real(kind=R_GRID):: factorb_s, factorb_g
-   real(kind=R_GRID):: temp_c, pres, sonv, gonv, ronv, z_e
+   real(kind=R_GRID):: temp_c, pres, sonv, gonv, ronv
 
    real :: rhogh, vcongh, normgh
 
@@ -4682,12 +4682,17 @@ end subroutine eqv_pot
       if (hydrostatic) then
          do i=is, ie
             rhoair(i) = delp(i,j,k)/( (peln(i,k+1,j)-peln(i,k,j)) * rdgas * pt(i,j,k) * ( 1. + zvir*q(i,j,k,sphum) ) )
+            denfac(i) = sqrt(min(10., 1.2/rhoair(i)))
+            z_e(i) = 0.
          enddo
       else
          do i=is, ie
             rhoair(i) = -delp(i,j,k)/(grav*delz(i,j,k)) ! moist air density
+            denfac(i) = sqrt(min(10., 1.2/rhoair(i)))
+            z_e(i) = 0.
          enddo
       endif
+      if (rainwat > 0) then
       do i=is, ie
 ! The following form vectorizes better & more consistent with GFDL_MP
 ! SJL notes: Marshall-Palmer, dBZ = 200*precip**1.6, precip = 3.6e6*t1/rhor*vtr  ! [mm/hr]
@@ -4695,15 +4700,28 @@ end subroutine eqv_pot
 ! Date modified 20170701
 ! Account for excessively high cloud water -> autoconvert (diag only) excess cloud water
          t1 = rhoair(i)*max(qmin, q(i,j,k,rainwat)+dim(q(i,j,k,liq_wat), 1.0e-3))
-         t2 = rhoair(i)*max(qmin, q(i,j,k,snowwat))
+            vtr = max(1.e-3, vconr*denfac(i)*exp(0.2   *log(t1/normr)))
+            z_e(i) = 200.*exp(1.6*log(3.6e6*t1/rhor*vtr))
+            !     z_e = 200.*(exp(1.6*log(3.6e6*t1/rhor*vtr)) + exp(1.6*log(3.6e6*t3/rhogh*vtg)) + exp(1.6*log(3.6e6*t2/rhos*vts)))
+         enddo
+      endif
+      if (graupel > 0) then
+         do i=is, ie
          t3 = rhoair(i)*max(qmin, q(i,j,k,graupel))
-         denfac = sqrt(min(10., 1.2/rhoair(i)))
-         vtr = max(1.e-3, vconr*denfac*exp(0.2   *log(t1/normr)))
-         vtg = max(1.e-3, vcongh*denfac*exp(0.125 *log(t3/normgh)))
-!     vts = max(1.e-3, vcons*denfac*exp(0.0625*log(t2/norms)))
-         z_e = 200.*(exp(1.6*log(3.6e6*t1/rhor*vtr)) + exp(1.6*log(3.6e6*t3/rhogh*vtg))) + (factor_s/alpha)*t2*exp(0.75*log(t2/rnzs))
-!     z_e = 200.*(exp(1.6*log(3.6e6*t1/rhor*vtr)) + exp(1.6*log(3.6e6*t3/rhogh*vtg)) + exp(1.6*log(3.6e6*t2/rhos*vts)))
-         dbz(i,j,k) = 10.*log10( max(0.01, z_e) )
+            vtg = max(1.e-3, vcongh*denfac(i)*exp(0.125 *log(t3/normgh)))
+            z_e(i) = z_e(i) + 200.*exp(1.6*log(3.6e6*t3/rhogh*vtg))
+         enddo
+      endif
+      if (snowwat > 0) then
+         do i=is, ie
+            t2 = rhoair(i)*max(qmin, q(i,j,k,snowwat))
+            !     vts = max(1.e-3, vcons*denfac*exp(0.0625*log(t2/norms)))
+            z_e(i) = z_e(i) + (factor_s/alpha)*t2*exp(0.75*log(t2/rnzs))
+            !     z_e = 200.*(exp(1.6*log(3.6e6*t1/rhor*vtr)) + exp(1.6*log(3.6e6*t3/rhogh*vtg)) + exp(1.6*log(3.6e6*t2/rhos*vts)))
+         enddo
+      endif
+      do i=is,ie
+         dbz(i,j,k) = 10.*log10( max(0.01, z_e(i)) )
       enddo
    enddo
    enddo
