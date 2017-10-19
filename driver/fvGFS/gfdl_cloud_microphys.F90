@@ -131,7 +131,7 @@ module gfdl_cloud_microphys_mod
     logical :: de_ice = .false. ! to prevent excessive build - up of cloud ice from external sources
     logical :: sedi_transport = .true. ! transport of momentum in sedimentation
     logical :: do_sedi_w = .false. ! transport of vertical motion in sedimentation
-    logical :: do_sedi_heat = .true. ! transport of heat in sedimentation
+    logical :: do_sedi_heat = .false. ! transport of heat in sedimentation ! default changed to false 19oct17 lmh
     logical :: prog_ccn = .false. ! do prognostic ccn (yi ming's method)
     logical :: do_qa = .true. ! do inline cloud fraction
     logical :: rad_snow = .true. ! consider snow in cloud fraciton calculation
