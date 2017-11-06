@@ -122,7 +122,7 @@ module unified_gfdlmp_mod
     logical :: fix_negative = .false. ! fix negative water species
     logical :: do_setup = .true. ! setup constants and parameters
     logical :: p_nonhydro = .false. ! perform hydrosatic adjustment on air density
-    logical :: dry_mp = .true. ! use dry mass mixing ratio in gfdl mp
+    logical :: dry_mp = .false. ! use dry mass mixing ratio in gfdl mp
     
     real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
     real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
@@ -290,12 +290,14 @@ contains
 
 subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         pt, w, ua, va, dz, delp, area, dts, hs, rain, snow, ice, &
-        graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, last_step)
+        graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
+        te, last_step)
     
     implicit none
     
     logical, intent (in) :: hydrostatic
     logical, intent (in) :: last_step
+    logical, intent (in) :: consv_te
 
     integer, intent (in) :: is, ie ! physics window
     integer, intent (in) :: ks, ke ! vertical dimension
@@ -316,20 +318,15 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
 
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
+    real, intent (out), dimension (is:ie, ks:ke) :: te
+
     ! logical :: used
     
-    real :: tot_prec
-    
-    integer :: i, k
-    integer :: days
-
-    real, dimension (is:ie) :: prec1, w_var, rh0
+    real, dimension (is:ie) :: w_var
     
     real, dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
     
     real, dimension (is:ie, ks:ke) :: m2_rain, m2_sol
-    
-    real :: allmax
     
     ! call mpp_clock_begin (gfdl_mp_clock)
     
@@ -373,7 +370,8 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     call mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, qg, &
         qa, qn, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, area, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, last_step)
+        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, consv_te, te, &
+        last_step)
     
     ! call mpp_clock_end (gfdl_mp_clock)
     
@@ -397,7 +395,8 @@ end subroutine unif_gfdlmp_driver
 subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qn, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, area1, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, last_step)
+        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, consv_te, te, &
+        last_step)
     
     implicit none
     
@@ -405,6 +404,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     logical, intent (in) :: last_step
     
+    logical, intent (in) :: consv_te
+
     integer, intent (in) :: is, ie, ks, ke
     
     real, intent (in) :: dts
@@ -428,6 +429,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (out), dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
     
     real, intent (out), dimension (is:ie, ks:ke) :: m2_rain, m2_sol
+    
+    real, intent (out), dimension (is:ie, ks:ke) :: te
     
     real, dimension (ks:ke) :: mc_air
     
@@ -535,6 +538,27 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             enddo
         endif
         
+        ! -----------------------------------------------------------------------
+        ! fix energy conservation
+        ! -----------------------------------------------------------------------
+
+        if (consv_te) then
+            if (hydrostatic) then
+                do k = ks, ke
+                    te (i, k) = - c_air * t0 (k) * delp (i, k)
+                enddo
+            else
+                do k = ks, ke
+#ifdef USE_COND
+                    cvm = mc_air (k) + qv0 (k) * c_vap + (qr0 (k) + ql0 (k)) * c_liq + (qi0 (k) + qs0 (k) + qg0 (k)) * c_ice
+                    te (i, k) = - cvm * t0 (k) * delp (i, k)
+#else
+                    te (i, k) = - c_air * t0 (k) * delp (i, k)
+#endif
+                enddo
+            endif
+        endif
+
         ! -----------------------------------------------------------------------
         ! calculate cloud condensation nuclei (ccn)
         ! the following is based on klein eq. 15
@@ -727,7 +751,28 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
 #endif
 
         enddo
-        
+
+        ! -----------------------------------------------------------------------
+        ! fix energy conservation
+        ! -----------------------------------------------------------------------
+
+        if (consv_te) then
+            if (hydrostatic) then
+                do k = ks, ke
+                    te (i, k) = te (i, k) + c_air * tz (k) * delp (i, k)
+                enddo
+            else
+                do k = ks, ke
+#ifdef USE_COND
+                    cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
+                    te (i, k) = te (i, k) + cvm * tz (k) * delp (i, k)
+#else
+                    te (i, k) = te (i, k) + c_air * tz (k) * delp (i, k)
+#endif
+                enddo
+            endif
+        endif
+
         ! -----------------------------------------------------------------------
         ! update cloud fraction tendency
         ! -----------------------------------------------------------------------

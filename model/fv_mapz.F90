@@ -31,7 +31,7 @@ module fv_mapz_mod
   use mpp_mod,           only: NOTE, mpp_error, get_unit, mpp_root_pe, mpp_pe
   use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID
   use fv_timing_mod,     only: timing_on, timing_off
-  use fv_mp_mod,         only: is_master
+  use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
   use fv_cmp_mod,        only: qs_init, fv_sat_adj
   use unified_gfdlmp_mod,only: unif_gfdlmp_driver
 
@@ -63,8 +63,9 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
-                      do_unif_gfdlmp, prer, prei, pres, preg, c2l_ord, bd)
+                      do_unif_gfdlmp, prer, prei, pres, preg, c2l_ord, bd, fv_debug)
   logical, intent(in):: last_step
+  logical, intent(in):: fv_debug
   real,    intent(in):: mdt                   ! remap time step
   real,    intent(in):: pdt                   ! phys time step
   integer, intent(in):: npx, npy
@@ -128,9 +129,9 @@ contains
   real, intent(out)::    pkz(is:ie,js:je,km)       ! layer-mean pk for converting t to pt
   real, intent(out)::     te(isd:ied,jsd:jed,km)
   real, intent(inout)::   prer(is:ie,js:je)
-  real, intent(out)::   prei(is:ie,js:je)
-  real, intent(out)::   pres(is:ie,js:je)
-  real, intent(out)::   preg(is:ie,js:je)
+  real, intent(inout)::   prei(is:ie,js:je)
+  real, intent(inout)::   pres(is:ie,js:je)
+  real, intent(inout)::   preg(is:ie,js:je)
 
 ! !DESCRIPTION:
 !
@@ -151,6 +152,8 @@ contains
   integer:: i,j,k 
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
   integer:: ccn_cm3
+
+  real, allocatable :: dp0(:,:,:)
 
        k1k = rdgas/cv_air   ! akap / (1.-akap) = rg/Cv=0.4
         rg = rdgas
@@ -498,10 +501,25 @@ contains
 
 1000  continue
 
+!-----------------------------------------------------------------------
+! Unified GFDL MP
+!-----------------------------------------------------------------------
+
+  if (fv_debug) then
+    call prt_mxm('LZ_pkz_1',     pkz, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_cappa_1', cappa, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_delp_1',   delp, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_delz_1',   delz, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_pt_1',       pt, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+  endif
+
   if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
 
+    ! D grid wind to A grid wind remap
     call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
              domain, gridstruct%nested, c2l_ord, bd)
+
+    allocate(dp0(isd:ied,jsd:jed,km))
 
   endif
 
@@ -514,7 +532,7 @@ contains
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
 !$OMP                               npx,npy,qn,ccn_cm3,prer,pres,prei,preg,u_dt,v_dt,   &
-!$OMP                               do_unif_gfdlmp,c2l_ord,bd) &
+!$OMP                               do_unif_gfdlmp,c2l_ord,bd,dp0,ps) &
 !$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln,u0,v0)
 
 !$OMP do
@@ -691,6 +709,10 @@ endif        ! end last_step check
                                            call timing_off('sat_adj2')
   endif   ! do_sat_adj
 
+!-----------------------------------------------------------------------
+! Unified GFDL MP
+!-----------------------------------------------------------------------
+
   if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
 
     u_dt = 0.0
@@ -714,8 +736,12 @@ endif        ! end last_step check
         ! note: the unit of area is m^2
         ! note: the unit of prer, prei, pres, preg is mm/day
 
+        ! save ua, va for wind tendency calculation
         u0(is:ie,j,:) = ua(is:ie,j,:)
         v0(is:ie,j,:) = va(is:ie,j,:)
+
+        ! save delp for dry total energy update
+        dp0(is:ie,j,:) = delp(is:ie,j,:)
 
         call unif_gfdlmp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
@@ -724,11 +750,22 @@ endif        ! end last_step check
                        delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
                        hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
                        preg(is:ie,j), hydrostatic, is, ie, 1, km, q_con(is:ie,j,:), &
-                       cappa(is:ie,j,:), last_step)
+                       cappa(is:ie,j,:), consv>consv_min, te(is:ie,j,:), last_step)
  
+        ! compute wind tendency at A grid fori D grid wind update
         u_dt(is:ie,j,:) = (ua(is:ie,j,:) - u0(is:ie,j,:)) / abs(mdt)
         v_dt(is:ie,j,:) = (va(is:ie,j,:) - v0(is:ie,j,:)) / abs(mdt)
 
+        ! update pe, peln, pk, ps
+        do k=2,km+1
+            pe(is:ie,k,j) = pe(is:ie,k-1,j)+delp(is:ie,j,k-1)
+            peln(is:ie,k,j) = log(pe(is:ie,k,j))
+            pk(is:ie,j,k) = exp(akap*peln(is:ie,k,j))
+        enddo
+        
+        ps(is:ie,j) = pe(is:ie,km+1,j)
+
+        ! update pkz
         if (.not. hydrostatic) then
 #ifdef MOIST_CAPPA
             pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
@@ -789,12 +826,65 @@ endif        ! end last_step check
   endif
 !$OMP end parallel
 
+  if (fv_debug) then
+    call prt_mxm('LZ_pkz_2',     pkz, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_cappa_2', cappa, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_delp_2',   delp, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_delz_2',   delz, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    if (.not. last_step) then
+      call prt_mxm('LZ_pt_2',     pt(is:ie,js:je,:)*pkz(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    else
+      call prt_mxm('LZ_pt_2',       pt, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    endif
+  endif
+
+!-----------------------------------------------------------------------
+! Unified GFDL MP
+!-----------------------------------------------------------------------
+
   if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
 
+    ! update u_dt and v_dt in halo
     call mpp_update_domains(u_dt, v_dt, domain)
 
+    ! update D grid wind
     call update_dwinds_phys(is, ie, js, je, isd, ied, jsd, jed, abs(mdt), u_dt, v_dt, u, v, &
              gridstruct, npx, npy, km, domain)
+
+    ! update dry total energy
+    if (consv .gt. consv_min) then
+      do j=js,je
+        if (hydrostatic) then
+          do k = 1, km
+            do i=is,ie
+              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + (delp(i,j,k)-dp0(i,j,k)) * &
+                           (0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
+                                                        v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                           (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)))
+            enddo
+          enddo
+        else
+          do i=is,ie
+             phis(i,km+1) = hs(i,j)
+          enddo
+          do k=km,1,-1
+             do i=is,ie
+                phis(i,k) = phis(i,k+1) - grav*delz(i,j,k)
+             enddo
+          enddo
+          do k = 1, km
+            do i=is,ie
+              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + (delp(i,j,k)-dp0(i,j,k)) * &
+                             (0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
+                              u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                             (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))))
+            enddo
+          enddo
+        endif
+      enddo
+    end if
+
+    deallocate(dp0)
 
   endif
 
@@ -3611,5 +3701,50 @@ endif        ! end last_step check
     enddo         ! k-loop
 
   end subroutine update_dwinds_phys 
+
+ subroutine prt_mxm(qname, q, is, ie, js, je, n_g, km, fac, area, domain)
+      character(len=*), intent(in)::  qname
+      integer, intent(in):: is, ie, js, je
+      integer, intent(in):: n_g, km
+      real, intent(in)::    q(is-n_g:ie+n_g, js-n_g:je+n_g, km)
+      real, intent(in)::    fac
+! BUG !!!
+!     real, intent(IN)::    area(is-n_g:ie+n_g, js-n_g:je+n_g, km)
+      real(kind=R_GRID), intent(IN)::    area(is-3:ie+3, js-3:je+3)
+      type(domain2d), intent(INOUT) :: domain
+!
+      real qmin, qmax, gmean
+      integer i,j,k
+      character(len=3) :: gn = ''
+
+      !mpp_root_pe doesn't appear to recognize nested grid
+      qmin = q(is,js,1)
+      qmax = qmin
+      gmean = 0.
+
+      do k=1,km
+      do j=js,je
+         do i=is,ie
+!           qmin = min(qmin, q(i,j,k))
+!           qmax = max(qmax, q(i,j,k))
+            if( q(i,j,k) < qmin ) then
+                qmin = q(i,j,k)
+            elseif( q(i,j,k) > qmax ) then
+                qmax = q(i,j,k)
+            endif
+          enddo
+      enddo
+      enddo
+
+      call mp_reduce_min(qmin)
+      call mp_reduce_max(qmax)
+
+! SJL: BUG!!!
+!     gmean = g_sum(domain, q(is,js,km), is, ie, js, je, 3, area, 1) 
+      gmean = g_sum(domain, q(is:ie,js:je,km), is, ie, js, je, 3, area, 1) 
+
+      if(is_master()) write(6,*) qname, gn, qmax*fac, qmin*fac, gmean*fac
+
+ end subroutine prt_mxm
 
 end module fv_mapz_mod

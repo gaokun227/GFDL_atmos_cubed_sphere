@@ -535,7 +535,7 @@ contains
                      idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, hybrid_z, do_omega,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_unif_gfdlmp, &
-                     prer, prei, pres, preg, flagstruct%c2l_ord, bd)
+                     prer, prei, pres, preg, flagstruct%c2l_ord, bd, flagstruct%fv_debug)
 
 #ifdef AVEC_TIMERS
                                                   call avec_timer_stop(6)

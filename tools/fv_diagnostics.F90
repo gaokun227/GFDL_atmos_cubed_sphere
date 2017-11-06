@@ -674,6 +674,22 @@ contains
                                         'Convective available potential energy (surface-based)', 'J/kg' , missing_value=missing_value )
        idiag%id_cin = register_diag_field( trim(field), 'cin', axes(1:2), Time,  &
                                         'Convective inhibition (surface-based)', 'J/kg' , missing_value=missing_value )
+!--------------------------
+! Vertically integrated tracers for GFDL MP
+!--------------------------
+       idiag%id_intqv = register_diag_field ( trim(field), 'intqv', axes(1:2), Time,        &
+            'Vertically Integrated Water Vapor', 'kg/m**2', missing_value=missing_value )
+       idiag%id_intql = register_diag_field ( trim(field), 'intql', axes(1:2), Time,        &
+            'Vertically Integrated Cloud Water', 'kg/m**2', missing_value=missing_value )
+       idiag%id_intqi = register_diag_field ( trim(field), 'intqi', axes(1:2), Time,        &
+            'Vertically Integrated Cloud Ice', 'kg/m**2', missing_value=missing_value )
+       idiag%id_intqr = register_diag_field ( trim(field), 'intqr', axes(1:2), Time,        &
+            'Vertically Integrated Rain', 'kg/m**2', missing_value=missing_value )
+       idiag%id_intqs = register_diag_field ( trim(field), 'intqs', axes(1:2), Time,        &
+            'Vertically Integrated Snow', 'kg/m**2', missing_value=missing_value )
+       idiag%id_intqg = register_diag_field ( trim(field), 'intqg', axes(1:2), Time,        &
+            'Vertically Integrated Graupel', 'kg/m**2', missing_value=missing_value )
+
 #ifdef HIWPP
        idiag%id_acl = register_diag_field ( trim(field), 'acl', axes(1:2), Time,        &
             'Column-averaged Cl mixing ratio', 'kg/kg', missing_value=missing_value )
@@ -2158,6 +2174,88 @@ contains
              enddo
           endif
           used = send_data(idiag%id_lw, a2*ginv, Time)
+       endif
+
+!--------------------------
+! Vertically integrated tracers for GFDL MP
+!--------------------------
+       if ( idiag%id_intqv>0 ) then
+          a2 = 0.
+          if (sphum > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) = a2(i,j) + Atm(n)%q(i,j,k,sphum)*Atm(n)%delp(i,j,k)
+             enddo
+             enddo
+             enddo
+          endif
+          used = send_data(idiag%id_intqv, a2*ginv, Time)
+       endif
+       if ( idiag%id_intql>0 ) then
+          a2 = 0.
+          if (liq_wat > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) = a2(i,j) + Atm(n)%q(i,j,k,liq_wat)*Atm(n)%delp(i,j,k)
+             enddo
+             enddo
+             enddo
+          endif
+          used = send_data(idiag%id_intql, a2*ginv, Time)
+       endif
+       if ( idiag%id_intqi>0 ) then
+          a2 = 0.
+          if (ice_wat > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) = a2(i,j) + Atm(n)%q(i,j,k,ice_wat)*Atm(n)%delp(i,j,k)
+             enddo
+             enddo
+             enddo
+          endif
+          used = send_data(idiag%id_intqi, a2*ginv, Time)
+       endif
+       if ( idiag%id_intqr>0 ) then
+          a2 = 0.
+          if (rainwat > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) = a2(i,j) + Atm(n)%q(i,j,k,rainwat)*Atm(n)%delp(i,j,k)
+             enddo
+             enddo
+             enddo
+          endif
+          used = send_data(idiag%id_intqr, a2*ginv, Time)
+       endif
+       if ( idiag%id_intqs>0 ) then
+          a2 = 0.
+          if (snowwat > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) = a2(i,j) + Atm(n)%q(i,j,k,snowwat)*Atm(n)%delp(i,j,k)
+             enddo
+             enddo
+             enddo
+          endif
+          used = send_data(idiag%id_intqs, a2*ginv, Time)
+       endif
+       if ( idiag%id_intqg>0 ) then
+          a2 = 0.
+          if (graupel > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) = a2(i,j) + Atm(n)%q(i,j,k,graupel)*Atm(n)%delp(i,j,k)
+             enddo
+             enddo
+             enddo
+          endif
+          used = send_data(idiag%id_intqg, a2*ginv, Time)
        endif
 
 ! Cloud top temperature & cloud top press:

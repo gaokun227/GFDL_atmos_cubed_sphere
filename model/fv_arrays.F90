@@ -57,6 +57,7 @@ module fv_arrays_mod
            id_qn, id_qn200, id_qn500, id_qn850, id_qp, id_mdt,    &
            id_qdt, id_aam, id_amdt,                               &
            id_acly, id_acl, id_acl2,                              &
+           id_intqv,id_intql,id_intqi,id_intqr,id_intqs,id_intqg, &
            id_dbz, id_maxdbz, id_basedbz, id_dbz4km, id_dbztop, id_dbz_m10C, &
            id_ctz, id_w1km, id_wmaxup, id_wmaxdn, id_cape, id_cin
 
