@@ -343,7 +343,7 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         uin, vin, udt, vdt, dz, delp, area, dt_in, land, rain, snow, ice, &
         graupel, hydrostatic, phys_hydrostatic, iis, iie, kks, &
         kke, ktop, kbot, seconds, elvmax, sigma, delt, delqv, delql, delqi, &
-        delqr, delqs)
+        delqr, delqs, vvm)
     
     implicit none
     
@@ -375,6 +375,7 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (out), dimension (:, :) :: delqi
     real, intent (out), dimension (:, :) :: delqr
     real, intent (out), dimension (:, :) :: delqs
+    real, intent (out), dimension (:, :) :: vvm 
 
     ! logical :: used
     
@@ -468,7 +469,7 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         m2_sol, cond, area, land, udt, vdt, pt_dt, &
         qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, w_var, vt_r, &
         vt_s, vt_g, vt_i, qn2, elvmax, sigma, delt, delqv, delql, delqi, &
-        delqr, delqs)
+        delqr, delqs, vvm)
     
     ! -----------------------------------------------------------------------
     ! no clouds allowed above ktop
@@ -524,7 +525,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         rain, snow, graupel, ice, m2_rain, m2_sol, cond, area1, land, &
         u_dt, v_dt, pt_dt, qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, &
         w_var, vt_r, vt_s, vt_g, vt_i, qn2, elvmax, sigma, delt, delqv, delql, &
-        delqi, delqr, delqs)
+        delqi, delqr, delqs, vvm)
     
     implicit none
     
@@ -559,6 +560,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (out), dimension (is:, ks:) :: delqi
     real, intent (out), dimension (is:, ks:) :: delqr
     real, intent (out), dimension (is:, ks:) :: delqs
+    real, intent (out), dimension (is:, ks:) :: vvm
     
     real, dimension (ktop:kbot) :: qvz, qlz, qrz, qiz, qsz, qgz, qaz
     real, dimension (ktop:kbot) :: vtiz, vtsz, vtgz, vtrz
@@ -567,7 +569,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
     real, dimension (ktop:kbot) :: t0, den, den0, tz, p1, denfac
     real, dimension (ktop:kbot) :: ccn, c_praut, m1_rain, m1_sol, m1
     real, dimension (ktop:kbot) :: u0, v0, u1, v1, w1
-    real, dimension (ktop:kbot) :: tout, qvout, qlout, qiout, qrout, qsout
+    real, dimension (ktop:kbot) :: tout, qvout, qlout, qiout, qrout, qsout, vout
     
     real :: cpaut, rh_adj, rh_rain
     real :: r1, s1, i1, g1, rdt, ccn0
@@ -742,6 +744,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         delqi (i, :) = 0.0
         delqr (i, :) = 0.0
         delqs (i, :) = 0.0
+        vvm (i, :) = 0.0
         
         do n = 1, ntimes
             
@@ -829,7 +832,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
             
                 call terrain_effect (ktop, kbot, dts, tz, p1, u1, v1, qvz, qlz, qrz, qiz, &
                     qsz, qgz, elvmax (i), sigma (i), dp1, dz1, den, tout, qvout, qlout, qiout, &
-                    qrout, qsout)
+                    qrout, qsout, vout)
 
                 delt (i, :) = delt (i, :) + tout
                 delqv (i, :) = delqv (i, :) + qvout
@@ -837,6 +840,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
                 delqi (i, :) = delqi (i, :) + qiout
                 delqr (i, :) = delqr (i, :) + qrout
                 delqs (i, :) = delqs (i, :) + qsout
+                vvm (i, :) = vvm (i, :) + vout
 
             endif
 
@@ -848,6 +852,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         delqi (i, :) = delqi (i, :) / ntimes
         delqr (i, :) = delqr (i, :) / ntimes
         delqs (i, :) = delqs (i, :) / ntimes
+        vvm (i, :) = vvm (i, :) / ntimes
         
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
@@ -2287,7 +2292,7 @@ end subroutine subgrid_z_proc
 
 subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
         qs, qg, elvmax, sigma, delp, delz, den, delt, delqv, delql, delqi, &
-        delqr, delqs)
+        delqr, delqs, vvm)
 
     implicit none
 
@@ -2307,6 +2312,7 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     real, intent (inout), dimension (ktop:kbot) :: qv, ql, qr, qi, qs, qg ! mass mixing ratio (kg/kg)
     
     real, intent (out), dimension (ktop:kbot) :: delt ! temperature change due to terrain induced lifting (K)
+    real, intent (out), dimension (ktop:kbot) :: vvm ! vertical velocity due to terrain induced lifting (K)
 
     real, intent (inout), dimension (ktop:kbot) :: delqv, delql, delqi, delqr, delqs ! mass mixing ratio change (kg/kg)
 
@@ -2317,7 +2323,7 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     real :: alpha  = 1.0  ! updraught adjustment
     real :: hc_max = 1.0  ! tuning parameter
 
-    real :: b2, bf, hn, vv, u2, eta
+    real :: b2, bf, hn, u2, eta
 
     real :: qsw, dwsdt, dq0, qim
     real :: fac_v2l, fac_l2v, fac_l2r, fac_i2s, factor
@@ -2336,6 +2342,7 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
 
     tt = tz
     delt = 0.0
+    vvm = 0.0
 
     delqv = qv
     delql = ql
@@ -2365,16 +2372,18 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     enddo
 
     ! -----------------------------------------------------------------------
-    ! determine the terrain effective level
+    ! compute potential temperature and determine the terrain effective level
     ! -----------------------------------------------------------------------
 
     kt = kbot + 1
     zi (kbot + 1) = 0.0
+
     do k = kbot, ktop, -1
+
         zm (k) = zi (k + 1) - delz (k) / 2.0
         cappa = rdgas / (rdgas + cvm (k) / (1. + zvir * qv (k)))
         q_con = ql (k) + qr (k) + qi (k) + qs (k) + qg (k)
-        pkz = exp (cappa * log(rdgas / grav * delp (k) * tz (k) * &
+        pkz = exp (cappa * log(- rdgas / grav * delp (k) * tz (k) * &
               (1. + zvir * qv (k)) * (1. - q_con) / delz (k)))
         pt (k) = tz (k) * (1. + zvir * qv (k)) * (1. - q_con) / pkz
         if (elvmax .le. zi (k + 1)) then
@@ -2384,6 +2393,7 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
         zi (k) = zi (k + 1) - delz (k)
         ! cap kt at ktop no matter elvmax is higher than zi(ktop) or not.
         if (k .eq. ktop) kt = ktop
+
     enddo
     
     if (kt .ne. kbot + 1) then
@@ -2402,6 +2412,7 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
             ! dtdz = (tz (kt - 1) - tz (kbot)) / (zm (kt - 1) - zm (kbot))
 
             do k = kbot, kt, -1
+
                 pti (k) = 0.5 * (pt (k - 1) + pt (k))
                 b2 = - 2. * grav * dim (pti (k), pti (k + 1)) / ((pti (k) + pti (k + 1)) * delz (k))
                 b2 = - sqrt (b2) * delz (k)
@@ -2411,10 +2422,11 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
                 hn = dim (hn, hc_max) ** 2
                 hn = hn / (1.0 + hn)
                 eta = (zm (k) - elvmax) / (zm (kbot) - elvmax)
-                vv = alpha * (eta + hn * (1 - eta)) * u2 * sigma * dts * eta
+                vvm (k) = alpha * (eta + (1 - hn) * (1 - eta)) * u2 * sigma * dts * eta
                 dtdz = (tz (k - 1) - tz (k)) / (zm (k - 1) - zm (k))
-                delt (k) = dtdz * vv
+                delt (k) = dtdz * vvm (k)
                 tt (k) = tz (k) + delt (k)
+
             enddo
 
         endif
