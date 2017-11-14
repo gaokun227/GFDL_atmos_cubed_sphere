@@ -828,7 +828,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
             if (do_terrain_effect) then
             
                 call terrain_effect (ktop, kbot, dts, tz, p1, u1, v1, qvz, qlz, qrz, qiz, &
-                    qsz, qgz, elvmax (i), sigma (i), dz1, den, tout, qvout, qlout, qiout, &
+                    qsz, qgz, elvmax (i), sigma (i), dp1, dz1, den, tout, qvout, qlout, qiout, &
                     qrout, qsout)
 
                 delt (i, :) = delt (i, :) + tout
@@ -2286,50 +2286,53 @@ end subroutine subgrid_z_proc
 ! =======================================================================
 
 subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
-        qs, qg, elvmax, sigma, delz, den, delt, delqv, delql, delqi, delqr, &
-        delqs)
+        qs, qg, elvmax, sigma, delp, delz, den, delt, delqv, delql, delqi, &
+        delqr, delqs)
 
     implicit none
 
     integer, intent (in) :: ktop, kbot
     
-    real, intent (in) :: dts     ! time step (s)
+    real, intent (in) :: dts  ! time step (s)
     real, intent (in) :: elvmax  ! sub-grid maximum height w.r.t. grid-scale mean height (m)
-    real, intent (in) :: sigma   ! grid-scale mountain slope
+    real, intent (in) :: sigma  ! grid-scale mountain slope
     
+    real, intent (in), dimension (ktop:kbot) :: delp  ! positive values (Pa)
     real, intent (in), dimension (ktop:kbot) :: delz  ! negative values (m)
     real, intent (in), dimension (ktop:kbot) :: u, v  ! orthogonal lat-lon wind (m/s)
-    real, intent (in), dimension (ktop:kbot) :: p     ! layer-mean air pressure (pa)
-    real, intent (in), dimension (ktop:kbot) :: den   ! air density (kg/m^3)
+    real, intent (in), dimension (ktop:kbot) :: p  ! layer-mean air pressure (pa)
+    real, intent (in), dimension (ktop:kbot) :: den  ! air density (kg/m^3)
     
-    real, intent (inout), dimension (ktop:kbot) :: tz
-    real, intent (inout), dimension (ktop:kbot) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ktop:kbot) :: tz ! air temperature (K)
+    real, intent (inout), dimension (ktop:kbot) :: qv, ql, qr, qi, qs, qg ! mass mixing ratio (kg/kg)
     
-    real, intent (out), dimension (ktop:kbot) :: delt
+    real, intent (out), dimension (ktop:kbot) :: delt ! temperature change due to terrain induced lifting (K)
 
-    real, intent (inout), dimension (ktop:kbot) :: delqv
-    real, intent (inout), dimension (ktop:kbot) :: delql
-    real, intent (inout), dimension (ktop:kbot) :: delqi
-    real, intent (inout), dimension (ktop:kbot) :: delqr
-    real, intent (inout), dimension (ktop:kbot) :: delqs
+    real, intent (inout), dimension (ktop:kbot) :: delqv, delql, delqi, delqr, delqs ! mass mixing ratio change (kg/kg)
+
+    ! local variables
     
     integer :: k, kt
 
-    real :: alpha = 1.0  ! updraught adjustment
-    real :: vv, wm
+    real :: alpha  = 1.0  ! updraught adjustment
+    real :: hc_max = 1.0  ! tuning parameter
+
+    real :: b2, bf, hn, vv, u2, eta
 
     real :: qsw, dwsdt, dq0, qim
     real :: fac_v2l, fac_l2v, fac_l2r, fac_i2s, factor
     real :: sink, evap
     real :: tc, dtdz
+    real :: cappa, pkz, q_con
 
-    real, dimension (ktop:kbot) :: tt
+    real, dimension (ktop:kbot) :: tt, pt
     real, dimension (ktop:kbot) :: cvm
     real, dimension (ktop:kbot) :: q_liq, q_sol
     real, dimension (ktop:kbot) :: lhl, lhi, lcpk, icpk, tcpk, tcp3
 
     real, dimension (ktop:kbot    ) :: zm
     real, dimension (ktop:kbot + 1) :: zi
+    real, dimension (ktop:kbot + 1) :: pti
 
     tt = tz
     delt = 0.0
@@ -2350,6 +2353,18 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     fac_i2s = 1. - exp (- dts / tau_i2s)
     
     ! -----------------------------------------------------------------------
+    ! define moist heat capacity
+    ! -----------------------------------------------------------------------
+    
+    do k = ktop, kbot
+
+        q_liq (k) = ql (k) + qr (k)
+        q_sol (k) = qi (k) + qs (k) + qg (k)
+        cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+
+    enddo
+
+    ! -----------------------------------------------------------------------
     ! determine the terrain effective level
     ! -----------------------------------------------------------------------
 
@@ -2357,6 +2372,11 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     zi (kbot + 1) = 0.0
     do k = kbot, ktop, -1
         zm (k) = zi (k + 1) - delz (k) / 2.0
+        cappa = rdgas / (rdgas + cvm (k) / (1. + zvir * qv (k)))
+        q_con = ql (k) + qr (k) + qi (k) + qs (k) + qg (k)
+        pkz = exp (cappa * log(rdgas / grav * delp (k) * tz (k) * &
+              (1. + zvir * qv (k)) * (1. - q_con) / delz (k)))
+        pt (k) = tz (k) * (1. + zvir * qv (k)) * (1. - q_con) / pkz
         if (elvmax .le. zi (k + 1)) then
             kt = k + 1
             exit
@@ -2374,11 +2394,25 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
             ! compute temperature change due to terrain induced lifting
             ! -----------------------------------------------------------------------
 
-            dtdz = (tz (kt - 1) - tz (kbot)) / (zm (kt - 1) - zm (kbot))
+            bf = 0
+            hn = 0
+            pti (kbot + 1) = pt (kbot)
+
+            ! assume a linear profile from bottom to mountain top
+            ! dtdz = (tz (kt - 1) - tz (kbot)) / (zm (kt - 1) - zm (kbot))
 
             do k = kbot, kt, -1
-                wm = sqrt(0.5 * (u (k) ** 2 + v (k) ** 2))
-                vv = alpha * wm * sigma * dts * (p (k) - p (kt - 1)) / (p (kbot) - p (kt - 1))
+                pti (k) = 0.5 * (pt (k - 1) + pt (k))
+                b2 = - 2. * grav * dim (pti (k), pti (k + 1)) / ((pti (k) + pti (k + 1)) * delz (k))
+                b2 = - sqrt (b2) * delz (k)
+                bf = bf + b2
+                u2 = sqrt (u (k) ** 2 + v (k) ** 2)
+                hn = hn + b2 / max (0.01, u2)
+                hn = dim (hn, hc_max) ** 2
+                hn = hn / (1.0 + hn)
+                eta = (zm (k) - elvmax) / (zm (kbot) - elvmax)
+                vv = alpha * (eta + hn * (1 - eta)) * u2 * sigma * dts * eta
+                dtdz = (tz (k - 1) - tz (k)) / (zm (k - 1) - zm (k))
                 delt (k) = dtdz * vv
                 tt (k) = tz (k) + delt (k)
             enddo
@@ -2393,9 +2427,6 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
 
             lhl (k) = lv00 + d0_vap * tt (k)
             lhi (k) = li00 + dc_ice * tt (k)
-            q_liq (k) = ql (k) + qr (k)
-            q_sol (k) = qi (k) + qs (k) + qg (k)
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             lcpk (k) = lhl (k) / cvm (k)
             icpk (k) = lhi (k) / cvm (k)
             tcpk (k) = lcpk (k) + icpk (k)
