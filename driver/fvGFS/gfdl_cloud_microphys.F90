@@ -2317,6 +2317,8 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     real, intent (inout), dimension (ktop:kbot) :: delqv, delql, delqi, delqr, delqs ! mass mixing ratio change (kg/kg)
 
     ! local variables
+
+    logical :: adiabatic_lr = .true.
     
     integer :: k, kt
 
@@ -2423,7 +2425,11 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
                 hn = hn / (1.0 + hn)
                 eta = (zm (k) - elvmax) / (zm (kbot) - elvmax)
                 vvm (k) = alpha * (eta + (1 - hn) * (1 - eta)) * u2 * sigma * eta
-                dtdz = (tz (k - 1) - tz (k)) / (zm (k - 1) - zm (k))
+                if (adiabatic_lr) then
+                    dtdz = grav / (rdgas + cvm (k) / (1. + zvir * qv (k)))
+                else
+                    dtdz = (tz (k - 1) - tz (k)) / (zm (k - 1) - zm (k))
+                endif
                 delt (k) = dtdz * max (- delz (k) / 2, min (delz (k) / 2, vvm (k) * dts))
                 tt (k) = tz (k) + delt (k)
 
