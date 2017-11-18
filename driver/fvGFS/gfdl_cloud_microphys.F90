@@ -2422,9 +2422,9 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
                 hn = dim (hn, hc_max) ** 2
                 hn = hn / (1.0 + hn)
                 eta = (zm (k) - elvmax) / (zm (kbot) - elvmax)
-                vvm (k) = alpha * (eta + (1 - hn) * (1 - eta)) * u2 * sigma * dts * eta
+                vvm (k) = alpha * (eta + (1 - hn) * (1 - eta)) * u2 * sigma * eta
                 dtdz = (tz (k - 1) - tz (k)) / (zm (k - 1) - zm (k))
-                delt (k) = dtdz * vvm (k)
+                delt (k) = dtdz * max (- delz (k) / 2, min (delz (k) / 2, vvm (k) * dts))
                 tt (k) = tz (k) + delt (k)
 
             enddo
