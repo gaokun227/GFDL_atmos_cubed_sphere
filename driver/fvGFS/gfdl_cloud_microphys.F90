@@ -2426,11 +2426,11 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
                 eta = (zm (k) - elvmax) / (zm (kbot) - elvmax)
                 vvm (k) = alpha * (eta + (1 - hn) * (1 - eta)) * u2 * sigma * eta
                 if (adiabatic_lr) then
-                    dtdz = grav / (rdgas + cvm (k) / (1. + zvir * qv (k)))
+                    dtdz = - grav / (rdgas + cvm (k) / (1. + zvir * qv (k)))
                 else
                     dtdz = (tz (k - 1) - tz (k)) / (zm (k - 1) - zm (k))
                 endif
-                delt (k) = dtdz * max (- delz (k) / 2, min (delz (k) / 2, vvm (k) * dts))
+                delt (k) = dtdz * max (delz (k) / 2, min (- delz (k) / 2, vvm (k) * dts))
                 tt (k) = tz (k) + delt (k)
 
             enddo
