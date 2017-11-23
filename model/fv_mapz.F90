@@ -532,8 +532,8 @@ contains
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
 !$OMP                               npx,npy,qn,ccn_cm3,prer,pres,prei,preg,u_dt,v_dt,   &
-!$OMP                               do_unif_gfdlmp,c2l_ord,bd,dp0,ps) &
-!$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln,u0,v0)
+!$OMP                               do_unif_gfdlmp,c2l_ord,bd,dp0,ps,u0,v0) &
+!$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
 !$OMP do
   do k=2,km
@@ -715,11 +715,11 @@ endif        ! end last_step check
 
   if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
 
-    u_dt = 0.0
-    v_dt = 0.0
-
 !$OMP do
     do j = js, je
+
+        u_dt(is:ie,j,:) = 0.0
+        v_dt(is:ie,j,:) = 0.0
 
         if (ccn_cm3 .gt. 0) then
           qn(is:ie,j,:) = q(is:ie,j,:,ccn_cm3)
