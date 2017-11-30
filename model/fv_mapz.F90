@@ -63,7 +63,8 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
-                      do_unif_gfdlmp, prer, prei, pres, preg, c2l_ord, bd, fv_debug)
+                      do_unif_gfdlmp, prer, prei, pres, preg, c2l_ord, bd, fv_debug, &
+                      moist_phys)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
   real,    intent(in):: mdt                   ! remap time step
@@ -120,6 +121,7 @@ contains
   logical, intent(in):: hydrostatic
   logical, intent(in):: hybrid_z
   logical, intent(in):: out_dt
+  logical, intent(in):: moist_phys
 
   real, intent(inout)::   ua(isd:ied,jsd:jed,km)   ! u-wind (m/s) on physics grid
   real, intent(inout)::   va(isd:ied,jsd:jed,km)   ! v-wind (m/s) on physics grid
@@ -139,7 +141,9 @@ contains
 ! SJL 03.11.04: Initial version for partial remapping
 !
 !-----------------------------------------------------------------------
-  real, dimension(isd:ied,jsd:jed,km):: u0, v0, u_dt, v_dt
+  real, dimension(isd:ied,jsd:jed+1,km):: u0
+  real, dimension(isd:ied+1,jsd:jed,km):: v0
+  real, dimension(isd:ied,jsd:jed,km):: ua0, va0, u_dt, v_dt
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
   real, dimension(is:ie,km)  :: q2, dp2
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
@@ -147,6 +151,7 @@ contains
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gz, cvm, qv
   real, dimension(is:ie,js:je,km):: qn
+  real, dimension(is:ie,js:je,km):: pt0
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
   integer:: i,j,k 
@@ -506,14 +511,17 @@ contains
 !-----------------------------------------------------------------------
 
   if (fv_debug) then
-    call prt_mxm('LZ_pkz_1',     pkz, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
-    call prt_mxm('LZ_cappa_1', cappa, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
-    call prt_mxm('LZ_delp_1',   delp, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
-    call prt_mxm('LZ_delz_1',   delz, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
-    call prt_mxm('LZ_pt_1',       pt, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_pkz_1',     pkz(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_cappa_1', cappa(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_delp_1',   delp(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_delz_1',   delz(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_pt_1',       pt(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
   endif
 
   if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
+
+    u0 = u
+    v0 = v
 
     ! D grid wind to A grid wind remap
     call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
@@ -532,7 +540,7 @@ contains
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
 !$OMP                               npx,npy,qn,ccn_cm3,prer,pres,prei,preg,u_dt,v_dt,   &
-!$OMP                               do_unif_gfdlmp,c2l_ord,bd,dp0,ps,u0,v0) &
+!$OMP                               do_unif_gfdlmp,c2l_ord,bd,dp0,ps,ua0,va0,fv_debug) &
 !$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
 !$OMP do
@@ -664,6 +672,10 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
   endif        ! end consv check
 endif        ! end last_step check
 
+  if (fv_debug) then
+    te_2d = te0_2d
+  endif
+
 ! Note: pt at this stage is T_v
 ! if ( (.not.do_adiabatic_init) .and. do_sat_adj ) then
   if (do_adiabatic_init .or. do_sat_adj) then
@@ -737,8 +749,8 @@ endif        ! end last_step check
         ! note: the unit of prer, prei, pres, preg is mm/day
 
         ! save ua, va for wind tendency calculation
-        u0(is:ie,j,:) = ua(is:ie,j,:)
-        v0(is:ie,j,:) = va(is:ie,j,:)
+        ua0(is:ie,j,:) = ua(is:ie,j,:)
+        va0(is:ie,j,:) = va(is:ie,j,:)
 
         ! save delp for dry total energy update
         dp0(is:ie,j,:) = delp(is:ie,j,:)
@@ -753,8 +765,8 @@ endif        ! end last_step check
                        cappa(is:ie,j,:), consv>consv_min, te(is:ie,j,:), last_step)
  
         ! compute wind tendency at A grid fori D grid wind update
-        u_dt(is:ie,j,:) = (ua(is:ie,j,:) - u0(is:ie,j,:)) / abs(mdt)
-        v_dt(is:ie,j,:) = (va(is:ie,j,:) - v0(is:ie,j,:)) / abs(mdt)
+        u_dt(is:ie,j,:) = (ua(is:ie,j,:) - ua0(is:ie,j,:)) / abs(mdt)
+        v_dt(is:ie,j,:) = (va(is:ie,j,:) - va0(is:ie,j,:)) / abs(mdt)
 
         ! update pe, peln, pk, ps
         do k=2,km+1
@@ -827,14 +839,14 @@ endif        ! end last_step check
 !$OMP end parallel
 
   if (fv_debug) then
-    call prt_mxm('LZ_pkz_2',     pkz, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
-    call prt_mxm('LZ_cappa_2', cappa, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
-    call prt_mxm('LZ_delp_2',   delp, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
-    call prt_mxm('LZ_delz_2',   delz, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_pkz_2',     pkz(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_cappa_2', cappa(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_delp_2',   delp(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    call prt_mxm('LZ_delz_2',   delz(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
     if (.not. last_step) then
       call prt_mxm('LZ_pt_2',     pt(is:ie,js:je,:)*pkz(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
     else
-      call prt_mxm('LZ_pt_2',       pt, is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+      call prt_mxm('LZ_pt_2',       pt(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
     endif
   endif
 
@@ -843,6 +855,10 @@ endif        ! end last_step check
 !-----------------------------------------------------------------------
 
   if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
+
+    if (fv_debug) then
+      call prt_mxm('LZ_delp_diff',   delp(is:ie,js:je,:)-dp0(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+    endif
 
     ! update u_dt and v_dt in halo
     call mpp_update_domains(u_dt, v_dt, domain)
@@ -857,10 +873,14 @@ endif        ! end last_step check
         if (hydrostatic) then
           do k = 1, km
             do i=is,ie
-              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + (delp(i,j,k)-dp0(i,j,k)) * &
+              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + delp(i,j,k) * &
                            (0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
                                                         v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                           (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)))
+                           (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))) &
+                                                    - dp0(i,j,k) * &
+                           (0.25*gridstruct%rsin2(i,j)*(u0(i,j,k)**2+u0(i,j+1,k)**2 +  &
+                                                        v0(i,j,k)**2+v0(i+1,j,k)**2 -  &
+                           (u0(i,j,k)+u0(i,j+1,k))*(v0(i,j,k)+v0(i+1,j,k))*gridstruct%cosa_s(i,j)))
             enddo
           enddo
         else
@@ -874,10 +894,14 @@ endif        ! end last_step check
           enddo
           do k = 1, km
             do i=is,ie
-              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + (delp(i,j,k)-dp0(i,j,k)) * &
+              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + delp(i,j,k) * &
                              (0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
                               u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                             (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))))
+                             (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)))) &
+                                                    - dp0(i,j,k) * &
+                             (0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
+                              u0(i,j,k)**2+u0(i,j+1,k)**2 + v0(i,j,k)**2+v0(i+1,j,k)**2 -  &
+                             (u0(i,j,k)+u0(i,j+1,k))*(v0(i,j,k)+v0(i+1,j,k))*gridstruct%cosa_s(i,j))))
             enddo
           enddo
         endif
@@ -887,6 +911,30 @@ endif        ! end last_step check
     deallocate(dp0)
 
   endif
+
+  if (fv_debug) then
+    te_2d = te0_2d - te_2d
+    if (last_step) then
+      call prt_mxm('LZ_te_2d1_diff', te_2d(is:ie,js:je), is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
+      call prt_mxm('LZ_te_3d1_diff', sum(te(is:ie,js:je,:),dim=3), is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
+    else
+      call prt_mxm('LZ_te_2d0_diff', te_2d(is:ie,js:je), is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
+      call prt_mxm('LZ_te_3d0_diff', sum(te(is:ie,js:je,:),dim=3), is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
+    endif
+  endif
+
+  if ( last_step ) then
+    pt0 = pt(is:ie,js:je,:)
+  else
+    pt0 = pt(is:ie,js:je,:)*pkz(is:ie,js:je,:) &
+            /((1.+r_vir*q(is:ie,js:je,:,sphum)) &
+            *(1.-(q(is:ie,js:je,:,liq_wat)+q(is:ie,js:je,:,rainwat)+q(is:ie,js:je,:,ice_wat)+q(is:ie,js:je,:,snowwat)+q(is:ie,js:je,:,graupel))))
+  endif
+
+  call nh_total_energy(is, ie, js, je, isd, ied, jsd, jed, km, &
+                       w, delz, pt0, delp, q, hs, gridstruct%area_64, domain, &
+                       sphum, liq_wat, rainwat, ice_wat, snowwat, graupel, nwat, &
+                       ua, va, moist_phys)
 
  end subroutine Lagrangian_to_Eulerian
 
@@ -3746,5 +3794,77 @@ endif        ! end last_step check
       if(is_master()) write(6,*) qname, gn, qmax*fac, qmin*fac, gmean*fac
 
  end subroutine prt_mxm
+
+ subroutine nh_total_energy(is, ie, js, je, isd, ied, jsd, jed, km,  &
+                            w, delz, pt, delp, q, hs, area, domain,  &
+                            sphum, liq_wat, rainwat, ice_wat,        &
+                            snowwat, graupel, nwat, ua, va, moist_phys)
+!------------------------------------------------------
+! Compute vertically integrated total energy per column
+!------------------------------------------------------
+! !INPUT PARAMETERS:
+   integer,  intent(in):: km, is, ie, js, je, isd, ied, jsd, jed
+   integer,  intent(in):: nwat, sphum, liq_wat, rainwat, ice_wat, snowwat, graupel
+   real, intent(in), dimension(isd:ied,jsd:jed,km):: ua, va, delp, w, delz
+   real, intent(in), dimension(isd:ied,jsd:jed,km,nwat):: q
+   real, intent(in), dimension(is:ie,js:je,km):: pt
+   real, intent(in):: hs(isd:ied,jsd:jed)  ! surface geopotential
+   real(kind=R_Grid), intent(in):: area(isd:ied, jsd:jed)
+   logical, intent(in):: moist_phys
+   type(domain2d), intent(INOUT) :: domain
+! Local
+   real:: te(is:ie,js:je)   ! vertically integrated TE
+   real, parameter:: c_liq = 4190.       ! heat capacity of water at 0C
+   real, parameter:: cv_vap = cp_vapor - rvgas  ! 1384.5
+   real  phiz(is:ie,km+1)
+   real, dimension(is:ie):: cvm, qc
+   real cv_air, psm
+   integer i, j, k
+
+   cv_air =  cp_air - rdgas
+
+!$OMP parallel do default(none) shared(te,nwat,is,ie,js,je,isd,ied,jsd,jed,km,ua,va,   &
+!$OMP          w,q,pt,delp,delz,hs,cv_air,moist_phys,sphum,liq_wat,rainwat,ice_wat,snowwat,graupel) &
+!$OMP          private(phiz,cvm, qc)
+  do j=js,je
+
+     do i=is,ie
+        te(i,j) = 0.
+        phiz(i,km+1) = hs(i,j)
+     enddo
+
+     do i=is,ie
+        do k=km,1,-1
+           phiz(i,k) = phiz(i,k+1) - grav*delz(i,j,k)
+        enddo
+     enddo
+
+     if ( moist_phys ) then
+        do k=1,km
+           call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                         ice_wat, snowwat, graupel, q, qc, cvm)
+           do i=is,ie
+              te(i,j) = te(i,j) + delp(i,j,k)*( cvm(i)*pt(i,j,k) + hlv*q(i,j,k,sphum) +  &
+                      0.5*(phiz(i,k)+phiz(i,k+1)+ua(i,j,k)**2+va(i,j,k)**2+w(i,j,k)**2) )
+           enddo
+        enddo
+     else
+       do k=1,km
+          do i=is,ie
+             te(i,j) = te(i,j) + delp(i,j,k)*( cv_air*pt(i,j,k) +  &
+                     0.5*(phiz(i,k)+phiz(i,k+1)+ua(i,j,k)**2+va(i,j,k)**2+w(i,j,k)**2) )
+          enddo
+       enddo
+     endif
+! Unit: kg*(m/s)^2/m^2 = Joule/m^2
+     do i=is,ie
+        te(i,j) = te(i,j)/grav
+     enddo
+  enddo
+
+  psm = g_sum(domain, te, is, ie, js, je, 3, area, 1) 
+  if( is_master() ) write(*,*) 'TE Remap ( Joule/m^2 * E9) =',  psm * 1.E-9
+
+  end subroutine nh_total_energy
 
 end module fv_mapz_mod

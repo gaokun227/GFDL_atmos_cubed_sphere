@@ -14,7 +14,7 @@ module unified_gfdlmp_mod
     ! mpp_clock_begin, mpp_clock_end, clock_routine, &
     ! input_nml_file
     ! use time_manager_mod, only: time_type
-    ! use constants_mod, only: grav, rdgas, rvgas, cp_air, hlv, hlf, pi => pi_8
+    use constants_mod, only: grav, rdgas, rvgas, cp_air, hlv, hlf, pi => pi_8
     ! use fms_mod, only: write_version_number, open_namelist_file, &
     ! check_nml_error, file_exist, close_file
     use fv_arrays_mod, only: r_grid
@@ -33,13 +33,13 @@ module unified_gfdlmp_mod
     
     character (len = 17) :: mod_name = 'unif_gfdlmp'
     
-    real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
-    real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
-    real, parameter :: rvgas = 461.50 ! gfs: gas constant for water vapor
-    real, parameter :: cp_air = 1004.6 ! gfs: heat capacity of dry air at constant pressure
-    real, parameter :: hlv = 2.5e6 ! gfs: latent heat of evaporation
-    real, parameter :: hlf = 3.3358e5 ! gfs: latent heat of fusion
-    real, parameter :: pi = 3.1415926535897931 ! gfs: ratio of circle circumference to diameter
+    ! real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
+    ! real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
+    ! real, parameter :: rvgas = 461.50 ! gfs: gas constant for water vapor
+    ! real, parameter :: cp_air = 1004.6 ! gfs: heat capacity of dry air at constant pressure
+    ! real, parameter :: hlv = 2.5e6 ! gfs: latent heat of evaporation
+    ! real, parameter :: hlf = 3.3358e5 ! gfs: latent heat of fusion
+    ! real, parameter :: pi = 3.1415926535897931 ! gfs: ratio of circle circumference to diameter
     
     ! real, parameter :: rdgas = 287.04 ! gfdl: gas constant for dry air
     
@@ -762,13 +762,18 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
 
-            delp (i, k) = dp0 (k) * \
-                          (1 - qv0 (k) - ql0 (k) - qr0 (k) - qi0 (k) - qs0 (k) - qg0 (k)) / \
+            delp (i, k) = dp0 (k) * &
+                          (1 - qv0 (k) - ql0 (k) - qr0 (k) - qi0 (k) - qs0 (k) - qg0 (k)) / &
                           (1 - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
 
 #ifdef USE_COND
-            cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
             q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
+            if (dry_mp) then
+                mc_air (k) = c_air
+            else
+                mc_air (k) = (1. - (qvz (k) + q_con (i, k))) * c_air
+            end if
+            cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
             tmp = 1. + zvir * qvz (k)
             pt (i, k) = tz (k) * tmp * (1. - q_con (i, k))
             tmp = rdgas * tmp
@@ -1770,10 +1775,10 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     ! -----------------------------------------------------------------------
     ! subgrid cloud microphysics
     ! -----------------------------------------------------------------------
-    
+
     call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tzk, qvk, &
         qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, mc_air, last_step)
-    
+
 end subroutine icloud
 
 ! =======================================================================
@@ -1786,7 +1791,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
     implicit none
 
     logical, intent (in) :: last_step
-    
+
     integer, intent (in) :: ks, ke
     
     real, intent (in), dimension (ks:ke) :: p1, den, denfac
@@ -2445,9 +2450,8 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     ! turn off melting when cloud microphysics time step is small
     ! -----------------------------------------------------------------------
     
-    if (dtm < 60.) k0 = ke
-    
     ! sjl, turn off melting of falling cloud ice, snow and graupel
+    ! if (dtm < 60.) k0 = ke
     k0 = ke
     ! sjl, turn off melting of falling cloud ice, snow and graupel
     
@@ -4569,7 +4573,7 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
             ! cloud water (martin et al., 1994)
             ! -----------------------------------------------------------------------
             
-            ccnw = 0.80 * (-1.15e-3 * (ccn_o ** 2) + 0.963 * ccn_o + 5.30) * abs(mask - 1.0) + \
+            ccnw = 0.80 * (-1.15e-3 * (ccn_o ** 2) + 0.963 * ccn_o + 5.30) * abs(mask - 1.0) + &
                    0.67 * (-2.10e-4 * (ccn_l ** 2) + 0.568 * ccn_l - 27.9) * (1.0 - abs(mask - 1.0))
         
             if (qmw (i, k) .gt. qmin) then
