@@ -141,24 +141,18 @@ contains
 ! SJL 03.11.04: Initial version for partial remapping
 !
 !-----------------------------------------------------------------------
-  real, dimension(isd:ied,jsd:jed+1,km):: u0
-  real, dimension(isd:ied+1,jsd:jed,km):: v0
-  real, dimension(isd:ied,jsd:jed,km):: ua0, va0, u_dt, v_dt
+  real, allocatable, dimension(:,:,:) :: dp0, u0, v0, ua0, va0, u_dt, v_dt, qn
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
   real, dimension(is:ie,km)  :: q2, dp2
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
   real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gz, cvm, qv
-  real, dimension(is:ie,js:je,km):: qn
-  real, dimension(is:ie,js:je,km):: pt0
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
   integer:: i,j,k 
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
   integer:: ccn_cm3
-
-  real, allocatable :: dp0(:,:,:)
 
        k1k = rdgas/cv_air   ! akap / (1.-akap) = rg/Cv=0.4
         rg = rdgas
@@ -520,6 +514,15 @@ contains
 
   if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
 
+    allocate(ua0(isd:ied,jsd:jed,km))
+    allocate(va0(isd:ied,jsd:jed,km))
+    allocate(u0(isd:ied,jsd:jed+1,km))
+    allocate(v0(isd:ied+1,jsd:jed,km))
+    allocate(u_dt(isd:ied,jsd:jed,km))
+    allocate(v_dt(isd:ied,jsd:jed,km))
+    allocate(qn(is:ie,js:je,km))
+
+    ! save D grid u and v
     u0 = u
     v0 = v
 
@@ -672,10 +675,6 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
   endif        ! end consv check
 endif        ! end last_step check
 
-  if (fv_debug) then
-    te_2d = te0_2d
-  endif
-
 ! Note: pt at this stage is T_v
 ! if ( (.not.do_adiabatic_init) .and. do_sat_adj ) then
   if (do_adiabatic_init .or. do_sat_adj) then
@@ -788,6 +787,10 @@ endif        ! end last_step check
  
     enddo
 
+    deallocate(ua0)
+    deallocate(va0)
+    deallocate(qn)
+
   endif
 
   if ( last_step ) then
@@ -844,7 +847,9 @@ endif        ! end last_step check
     call prt_mxm('LZ_delp_2',   delp(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
     call prt_mxm('LZ_delz_2',   delz(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
     if (.not. last_step) then
-      call prt_mxm('LZ_pt_2',     pt(is:ie,js:je,:)*pkz(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
+      call prt_mxm('LZ_pt_2',     pt(is:ie,js:je,:)*pkz(is:ie,js:je,:)/((1.+r_vir*q(is:ie,js:je,:,sphum))*\
+                                  (1.-(q(is:ie,js:je,:,liq_wat)+q(is:ie,js:je,:,ice_wat)+q(is:ie,js:je,:,rainwat)+\
+                                  q(is:ie,js:je,:,snowwat)+q(is:ie,js:je,:,graupel)))), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
     else
       call prt_mxm('LZ_pt_2',       pt(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
     endif
@@ -855,10 +860,6 @@ endif        ! end last_step check
 !-----------------------------------------------------------------------
 
   if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
-
-    if (fv_debug) then
-      call prt_mxm('LZ_delp_diff',   delp(is:ie,js:je,:)-dp0(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
-    endif
 
     ! update u_dt and v_dt in halo
     call mpp_update_domains(u_dt, v_dt, domain)
@@ -909,32 +910,13 @@ endif        ! end last_step check
     end if
 
     deallocate(dp0)
+    deallocate(u0)
+    deallocate(v0)
+    deallocate(u_dt)
+    deallocate(v_dt)
+
 
   endif
-
-  if (fv_debug) then
-    te_2d = te0_2d - te_2d
-    if (last_step) then
-      call prt_mxm('LZ_te_2d1_diff', te_2d(is:ie,js:je), is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
-      call prt_mxm('LZ_te_3d1_diff', sum(te(is:ie,js:je,:),dim=3), is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
-    else
-      call prt_mxm('LZ_te_2d0_diff', te_2d(is:ie,js:je), is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
-      call prt_mxm('LZ_te_3d0_diff', sum(te(is:ie,js:je,:),dim=3), is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
-    endif
-  endif
-
-  if ( last_step ) then
-    pt0 = pt(is:ie,js:je,:)
-  else
-    pt0 = pt(is:ie,js:je,:)*pkz(is:ie,js:je,:) &
-            /((1.+r_vir*q(is:ie,js:je,:,sphum)) &
-            *(1.-(q(is:ie,js:je,:,liq_wat)+q(is:ie,js:je,:,rainwat)+q(is:ie,js:je,:,ice_wat)+q(is:ie,js:je,:,snowwat)+q(is:ie,js:je,:,graupel))))
-  endif
-
-  call nh_total_energy(is, ie, js, je, isd, ied, jsd, jed, km, &
-                       w, delz, pt0, delp, q, hs, gridstruct%area_64, domain, &
-                       sphum, liq_wat, rainwat, ice_wat, snowwat, graupel, nwat, &
-                       ua, va, moist_phys)
 
  end subroutine Lagrangian_to_Eulerian
 
@@ -3794,77 +3776,5 @@ endif        ! end last_step check
       if(is_master()) write(6,*) qname, gn, qmax*fac, qmin*fac, gmean*fac
 
  end subroutine prt_mxm
-
- subroutine nh_total_energy(is, ie, js, je, isd, ied, jsd, jed, km,  &
-                            w, delz, pt, delp, q, hs, area, domain,  &
-                            sphum, liq_wat, rainwat, ice_wat,        &
-                            snowwat, graupel, nwat, ua, va, moist_phys)
-!------------------------------------------------------
-! Compute vertically integrated total energy per column
-!------------------------------------------------------
-! !INPUT PARAMETERS:
-   integer,  intent(in):: km, is, ie, js, je, isd, ied, jsd, jed
-   integer,  intent(in):: nwat, sphum, liq_wat, rainwat, ice_wat, snowwat, graupel
-   real, intent(in), dimension(isd:ied,jsd:jed,km):: ua, va, delp, w, delz
-   real, intent(in), dimension(isd:ied,jsd:jed,km,nwat):: q
-   real, intent(in), dimension(is:ie,js:je,km):: pt
-   real, intent(in):: hs(isd:ied,jsd:jed)  ! surface geopotential
-   real(kind=R_Grid), intent(in):: area(isd:ied, jsd:jed)
-   logical, intent(in):: moist_phys
-   type(domain2d), intent(INOUT) :: domain
-! Local
-   real:: te(is:ie,js:je)   ! vertically integrated TE
-   real, parameter:: c_liq = 4190.       ! heat capacity of water at 0C
-   real, parameter:: cv_vap = cp_vapor - rvgas  ! 1384.5
-   real  phiz(is:ie,km+1)
-   real, dimension(is:ie):: cvm, qc
-   real cv_air, psm
-   integer i, j, k
-
-   cv_air =  cp_air - rdgas
-
-!$OMP parallel do default(none) shared(te,nwat,is,ie,js,je,isd,ied,jsd,jed,km,ua,va,   &
-!$OMP          w,q,pt,delp,delz,hs,cv_air,moist_phys,sphum,liq_wat,rainwat,ice_wat,snowwat,graupel) &
-!$OMP          private(phiz,cvm, qc)
-  do j=js,je
-
-     do i=is,ie
-        te(i,j) = 0.
-        phiz(i,km+1) = hs(i,j)
-     enddo
-
-     do i=is,ie
-        do k=km,1,-1
-           phiz(i,k) = phiz(i,k+1) - grav*delz(i,j,k)
-        enddo
-     enddo
-
-     if ( moist_phys ) then
-        do k=1,km
-           call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
-                         ice_wat, snowwat, graupel, q, qc, cvm)
-           do i=is,ie
-              te(i,j) = te(i,j) + delp(i,j,k)*( cvm(i)*pt(i,j,k) + hlv*q(i,j,k,sphum) +  &
-                      0.5*(phiz(i,k)+phiz(i,k+1)+ua(i,j,k)**2+va(i,j,k)**2+w(i,j,k)**2) )
-           enddo
-        enddo
-     else
-       do k=1,km
-          do i=is,ie
-             te(i,j) = te(i,j) + delp(i,j,k)*( cv_air*pt(i,j,k) +  &
-                     0.5*(phiz(i,k)+phiz(i,k+1)+ua(i,j,k)**2+va(i,j,k)**2+w(i,j,k)**2) )
-          enddo
-       enddo
-     endif
-! Unit: kg*(m/s)^2/m^2 = Joule/m^2
-     do i=is,ie
-        te(i,j) = te(i,j)/grav
-     enddo
-  enddo
-
-  psm = g_sum(domain, te, is, ie, js, je, 3, area, 1) 
-  if( is_master() ) write(*,*) 'TE Remap ( Joule/m^2 * E9) =',  psm * 1.E-9
-
-  end subroutine nh_total_energy
 
 end module fv_mapz_mod
