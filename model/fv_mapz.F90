@@ -787,10 +787,6 @@ endif        ! end last_step check
  
     enddo
 
-    deallocate(ua0)
-    deallocate(va0)
-    deallocate(qn)
-
   endif
 
   if ( last_step ) then
@@ -914,7 +910,9 @@ endif        ! end last_step check
     deallocate(v0)
     deallocate(u_dt)
     deallocate(v_dt)
-
+    deallocate(ua0)
+    deallocate(va0)
+    deallocate(qn)
 
   endif
 
