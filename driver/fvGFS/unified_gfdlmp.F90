@@ -5,7 +5,7 @@
 ! bears little to no similarity to the original lin mp in zetac.
 ! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
 ! developer: shian-jiann lin, linjiong zhou
-! revision: unified gfdl cloud microphysics, 9/8/2017
+! revision: unified gfdl cloud microphysics, 9 / 8 / 2017
 ! =======================================================================
 
 module unified_gfdlmp_mod
@@ -265,7 +265,7 @@ module unified_gfdlmp_mod
     ! real :: global_area = - 1.
     
     real :: log_10, tice0, t_wfr
-
+    
     ! cloud diagnosis
     
     real :: qmin = 1.0e-12 ! minimum mass mixing ratio (kg / kg)
@@ -281,15 +281,15 @@ module unified_gfdlmp_mod
     real :: rermin = 0.0, rermax = 10000.0
     real :: resmin = 0.0, resmax = 10000.0
     real :: regmin = 0.0, regmax = 10000.0
-
+    
     real :: betaw = 1.0
     real :: betai = 1.0
     real :: betar = 1.0
     real :: betas = 1.0
     real :: betag = 1.0
-
+    
     logical :: liq_ice_combine = .true.
-
+    
     ! -----------------------------------------------------------------------
     ! namelist
     ! -----------------------------------------------------------------------
@@ -325,7 +325,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     logical, intent (in) :: hydrostatic
     logical, intent (in) :: last_step
     logical, intent (in) :: consv_te
-
+    
     integer, intent (in) :: is, ie ! physics window
     integer, intent (in) :: ks, ke ! vertical dimension
     
@@ -342,11 +342,11 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
     
     real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
-
+    
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     real, intent (out), dimension (is:ie, ks:ke) :: te
-
+    
     ! logical :: used
     
     real, dimension (is:ie) :: w_var
@@ -432,7 +432,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     logical, intent (in) :: last_step
     
     logical, intent (in) :: consv_te
-
+    
     integer, intent (in) :: is, ie, ks, ke
     
     real, intent (in) :: dts
@@ -448,7 +448,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
     
     real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
-
+    
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     real, intent (out), dimension (is:ie) :: w_var
@@ -520,14 +520,14 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             ! save a copy of old value for computing tendencies
             ! -----------------------------------------------------------------------
-
+            
             qv0 (k) = qvz (k)
             ql0 (k) = qlz (k)
             qr0 (k) = qrz (k)
             qi0 (k) = qiz (k)
             qs0 (k) = qsz (k)
             qg0 (k) = qgz (k)
-
+            
             if (dry_mp) then
                 mc_air (k) = c_air
                 dp1 (k) = dp1 (k) * (1 - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
@@ -535,8 +535,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             else
                 mc_air (k) = (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k))) * c_air
                 omq (k) = 1.0
-            end if
-
+            endif
+            
             qvz (k) = qvz (k) * omq (k)
             qlz (k) = qlz (k) * omq (k)
             qrz (k) = qrz (k) * omq (k)
@@ -568,7 +568,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         ! fix energy conservation
         ! -----------------------------------------------------------------------
-
+        
         if (consv_te) then
             if (hydrostatic) then
                 do k = ks, ke
@@ -585,7 +585,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 enddo
             endif
         endif
-
+        
         ! -----------------------------------------------------------------------
         ! calculate cloud condensation nuclei (ccn)
         ! the following is based on klein eq. 15
@@ -747,32 +747,32 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         do k = ks, ke
-
+            
             qvz (k) = qvz (k) / omq (k)
             qlz (k) = qlz (k) / omq (k)
             qrz (k) = qrz (k) / omq (k)
             qiz (k) = qiz (k) / omq (k)
             qsz (k) = qsz (k) / omq (k)
             qgz (k) = qgz (k) / omq (k)
-
+            
             qv (i, k) = qvz (k)
             ql (i, k) = qlz (k)
             qr (i, k) = qrz (k)
             qi (i, k) = qiz (k)
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
-
+            
             delp (i, k) = dp0 (k) * &
-                          (1 - qv0 (k) - ql0 (k) - qr0 (k) - qi0 (k) - qs0 (k) - qg0 (k)) / &
-                          (1 - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
-
+                 (1 - qv0 (k) - ql0 (k) - qr0 (k) - qi0 (k) - qs0 (k) - qg0 (k)) / &
+                 (1 - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
+            
 #ifdef USE_COND
             q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
             if (dry_mp) then
                 mc_air (k) = c_air
             else
                 mc_air (k) = (1. - (qvz (k) + q_con (i, k))) * c_air
-            end if
+            endif
             cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
             tmp = 1. + zvir * qvz (k)
             pt (i, k) = tz (k) * tmp * (1. - q_con (i, k))
@@ -781,13 +781,13 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
 #else
             pt (i, k) = tz (k) * (1. + zvir * qvz (k))
 #endif
-
+            
         enddo
-
+        
         ! -----------------------------------------------------------------------
         ! fix energy conservation
         ! -----------------------------------------------------------------------
-
+        
         if (consv_te) then
             if (hydrostatic) then
                 do k = ks, ke
@@ -804,7 +804,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 enddo
             endif
         endif
-
+        
         ! -----------------------------------------------------------------------
         ! update cloud fraction tendency
         ! -----------------------------------------------------------------------
@@ -1301,7 +1301,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
         den, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, mc_air, last_step)
     
     implicit none
-
+    
     logical, intent (in) :: last_step
     
     integer, intent (in) :: ks, ke
@@ -1775,10 +1775,10 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     ! -----------------------------------------------------------------------
     ! subgrid cloud microphysics
     ! -----------------------------------------------------------------------
-
+    
     call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tzk, qvk, &
         qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, mc_air, last_step)
-
+    
 end subroutine icloud
 
 ! =======================================================================
@@ -1789,9 +1789,9 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ql, qr, qi, qs, qg, qa, h_var, rh_rain, mc_air, last_step)
     
     implicit none
-
+    
     logical, intent (in) :: last_step
-
+    
     integer, intent (in) :: ks, ke
     
     real, intent (in), dimension (ks:ke) :: p1, den, denfac
@@ -2195,16 +2195,16 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         
         ! lz: old cloud scheme
         ! if (qpz > qrmin) then
-        !     ! partial cloudiness by pdf:
-        !     dq = max (qcmin, h_var * qpz)
-        !     q_plus = qpz + dq ! cloud free if qstar > q_plus
-        !     q_minus = qpz - dq
-        !     if (qstar < q_minus) then
-        !         qa (k) = 1. ! air fully saturated; 100 % cloud cover
-        !     elseif (qstar < q_plus .and. q_cond (k) > qc_crt) then
-        !         qa (k) = (q_plus - qstar) / (dq + dq) ! partial cloud cover
-        !         ! qa (k) = sqrt ((q_plus - qstar) / (dq + dq))
-        !     endif
+        ! ! partial cloudiness by pdf:
+        ! dq = max (qcmin, h_var * qpz)
+        ! q_plus = qpz + dq ! cloud free if qstar > q_plus
+        ! q_minus = qpz - dq
+        ! if (qstar < q_minus) then
+        ! qa (k) = 1. ! air fully saturated; 100 % cloud cover
+        ! elseif (qstar < q_plus .and. q_cond (k) > qc_crt) then
+        ! qa (k) = (q_plus - qstar) / (dq + dq) ! partial cloud cover
+        ! ! qa (k) = sqrt ((q_plus - qstar) / (dq + dq))
+        ! endif
         ! endif
         ! lz: old cloud scheme
         
@@ -2258,7 +2258,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         else
             qa (k) = 0.
         endif
-                
+        
     enddo
     
 end subroutine subgrid_z_proc
@@ -4482,8 +4482,8 @@ end subroutine interpolate_z
 ! =======================================================================
 
 subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
-                            qcw, qci, qcr, qcs, qcg, rew, rei, rer, res, reg, &
-                            cld, cloud, cnvw, cnvi, cnvc)
+        qcw, qci, qcr, qcs, qcg, rew, rei, rer, res, reg, &
+        cld, cloud, cnvw, cnvi, cnvc)
     
     implicit none
     
@@ -4491,59 +4491,59 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
     integer, intent (in) :: ks, ke
     
     real, intent (in), dimension (is:ie) :: lsm ! land sea mask, 0: ocean, 1: land, 2: sea ice
-
+    
     real, intent (in), dimension (is:ie, ks:ke) :: delp, t, p
     real, intent (in), dimension (is:ie, ks:ke) :: cloud ! cloud fraction
     real, intent (in), dimension (is:ie, ks:ke) :: qw, qi, qr, qs, qg ! mass mixing ratio (kg / kg)
-
+    
     real, intent (in), dimension (is:ie, ks:ke), optional :: cnvw, cnvi ! convective cloud water, cloud ice mass mixing ratio (kg / kg)
     real, intent (in), dimension (is:ie, ks:ke), optional :: cnvc ! convective cloud fraction
     
     real, intent (out), dimension (is:ie, ks:ke) :: qcw, qci, qcr, qcs, qcg ! units: g / m^2
     real, intent (out), dimension (is:ie, ks:ke) :: rew, rei, rer, res, reg ! radii (micron)
     real, intent (out), dimension (is:ie, ks:ke) :: cld ! total cloud fraction
-
+    
     ! local variables
     
     integer :: i, k
-
+    
     real, allocatable, dimension (:, :) :: qmw, qmi, qmr, qms, qmg ! mass mixing ratio (kg / kg)
-
+    
     real :: dpg ! dp / g
     real :: rho ! density (kg / m^3)
-    real :: ccnw ! cloud condensate nuclei for cloud water (cm^-3)
+    real :: ccnw ! cloud condensate nuclei for cloud water (cm^ - 3)
     real :: mask
     
     real :: lambdar, lambdas, lambdag
     
     real :: rhow = 1.0e3, rhor = 1.0e3, rhos = 1.0e2, rhog = 4.0e2 ! density (kg / m^3)
-    real :: n0r = 8.0e6, n0s = 3.0e6, n0g = 4.0e6 ! intercept parameters (m^-4)
+    real :: n0r = 8.0e6, n0s = 3.0e6, n0g = 4.0e6 ! intercept parameters (m^ - 4)
     real :: alphar = 0.8, alphas = 0.25, alphag = 0.5 ! parameters in terminal equation in lin et al., 1983
     real :: gammar = 17.837789, gammas = 8.2850630, gammag = 11.631769 ! gamma values as a result of different alpha
-
-    allocate(qmw(is:ie, ks:ke))
-    allocate(qmi(is:ie, ks:ke))
-    allocate(qmr(is:ie, ks:ke))
-    allocate(qms(is:ie, ks:ke))
-    allocate(qmg(is:ie, ks:ke))
-
+    
+    allocate (qmw (is:ie, ks:ke))
+    allocate (qmi (is:ie, ks:ke))
+    allocate (qmr (is:ie, ks:ke))
+    allocate (qms (is:ie, ks:ke))
+    allocate (qmg (is:ie, ks:ke))
+    
     qmw = qw
     qmi = qi
     qmr = qr
     qms = qs
     qmg = qg
     cld = cloud
-
-    if (present(cnvw)) then
+    
+    if (present (cnvw)) then
         qmw = qmw + cnvw
     endif
-    if (present(cnvi)) then
+    if (present (cnvi)) then
         qmi = qmi + cnvi
     endif
-    if (present(cnvc)) then
+    if (present (cnvc)) then
         cld = cnvc + (1 - cnvc) * cld
     endif
-
+    
     if (liq_ice_combine) then
         qmw = qmw + qmr
         qmr = 0.0
@@ -4551,31 +4551,31 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
         qms = 0.0
         qmg = 0.0
     endif
-
+    
     do i = is, ie
-
+        
         do k = ks, ke
-
-            qmw (i, k) = max(qmw (i, k), 0.0)
-            qmi (i, k) = max(qmi (i, k), 0.0)
-            qmr (i, k) = max(qmr (i, k), 0.0)
-            qms (i, k) = max(qms (i, k), 0.0)
-            qmg (i, k) = max(qmg (i, k), 0.0)
-
+            
+            qmw (i, k) = max (qmw (i, k), 0.0)
+            qmi (i, k) = max (qmi (i, k), 0.0)
+            qmr (i, k) = max (qmr (i, k), 0.0)
+            qms (i, k) = max (qms (i, k), 0.0)
+            qmg (i, k) = max (qmg (i, k), 0.0)
+            
             cld (i, k) = min (max (cld (i, k), 0.0), 1.0)
-
+            
             mask = min (max (lsm (i), 0.0), 2.0)
-
-            dpg = abs(delp (i, k)) / grav
+            
+            dpg = abs (delp (i, k)) / grav
             rho = p (i, k) / rdgas / t (i, k)
-
+            
             ! -----------------------------------------------------------------------
             ! cloud water (martin et al., 1994)
             ! -----------------------------------------------------------------------
             
-            ccnw = 0.80 * (-1.15e-3 * (ccn_o ** 2) + 0.963 * ccn_o + 5.30) * abs(mask - 1.0) + &
-                   0.67 * (-2.10e-4 * (ccn_l ** 2) + 0.568 * ccn_l - 27.9) * (1.0 - abs(mask - 1.0))
-        
+            ccnw = 0.80 * (- 1.15e-3 * (ccn_o ** 2) + 0.963 * ccn_o + 5.30) * abs (mask - 1.0) + &
+                0.67 * (- 2.10e-4 * (ccn_l ** 2) + 0.568 * ccn_l - 27.9) * (1.0 - abs (mask - 1.0))
+            
             if (qmw (i, k) .gt. qmin) then
                 qcw (i, k) = betaw * dpg * qmw (i, k) * 1.0e3
                 rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / (4.0 * pi * rhow * ccnw))) * 1.0e4
@@ -4647,17 +4647,17 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
                 qcg (i, k) = 0.0
                 reg (i, k) = regmin
             endif
-
+            
         enddo
         
     enddo
     
-    deallocate(qmw)
-    deallocate(qmi)
-    deallocate(qmr)
-    deallocate(qms)
-    deallocate(qmg)
-
+    deallocate (qmw)
+    deallocate (qmi)
+    deallocate (qmr)
+    deallocate (qms)
+    deallocate (qmg)
+    
 end subroutine cloud_diagnosis
 
 end module unified_gfdlmp_mod
