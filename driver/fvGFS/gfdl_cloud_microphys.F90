@@ -2314,7 +2314,7 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     real, intent (out), dimension (ktop:kbot) :: delt ! temperature change due to terrain induced lifting (k)
     real, intent (out), dimension (ktop:kbot) :: vvm ! vertical velocity due to terrain induced lifting (k)
     
-    real, intent (inout), dimension (ktop:kbot) :: delqv, delql, delqi, delqr, delqs ! mass mixing ratio change (kg / kg)
+    real, intent (out), dimension (ktop:kbot) :: delqv, delql, delqi, delqr, delqs ! mass mixing ratio change (kg / kg)
     
     ! local variables
     
@@ -2329,9 +2329,11 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     
     real :: qsw, dwsdt, dq0, qim
     real :: fac_v2l, fac_l2v, fac_l2r, fac_i2s, factor
+    real :: fac_imlt, fac_smlt
     real :: sink, evap
     real :: tc, dtdz
     real :: cappa, pkz, q_con
+    real :: tmp, melt
     
     real, dimension (ktop:kbot) :: tt, pt
     real, dimension (ktop:kbot) :: cvm
@@ -2341,7 +2343,7 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     real, dimension (ktop:kbot) :: zm
     real, dimension (ktop:kbot + 1) :: zi
     real, dimension (ktop:kbot + 1) :: pti
-    
+
     tt = tz
     delt = 0.0
     vvm = 0.0
@@ -2361,6 +2363,9 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     fac_l2r = 1. - exp (- dts / tau_l2r)
     fac_i2s = 1. - exp (- dts / tau_i2s)
     
+    fac_imlt = 1. - exp (- 0.5 * dts / tau_imlt)
+    fac_smlt = 1. - exp (- dts / tau_smlt)
+
     ! -----------------------------------------------------------------------
     ! define moist heat capacity
     ! -----------------------------------------------------------------------
@@ -2399,6 +2404,7 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
     enddo
     
     if (kt .ne. kbot + 1) then
+
         ! if kt = ktop, assume isothermal condition
         if (kt .gt. ktop) then
             
@@ -2409,9 +2415,6 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
             bf = 0
             hn = 0
             pti (kbot + 1) = pt (kbot)
-            
-            ! assume a linear profile from bottom to mountain top
-            ! dtdz = (tz (kt - 1) - tz (kbot)) / (zm (kt - 1) - zm (kbot))
             
             do k = kbot, kt, - 1
                 
@@ -2424,12 +2427,12 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
                 hn = dim (hn, hc_max) ** 2
                 hn = hn / (1.0 + hn)
                 eta = (zm (k) - elvmax) / (zm (kbot) - elvmax)
-                vvm (k) = alpha * (eta + (1 - hn) * (1 - eta)) * u2 * sigma * eta
                 if (adiabatic_lr) then
                     dtdz = - grav / (rdgas + cvm (k) / (1. + zvir * qv (k)))
                 else
                     dtdz = (tz (k - 1) - tz (k)) / (zm (k - 1) - zm (k))
                 endif
+                vvm (k) = alpha * (eta + (1 - hn) * (1 - eta)) * u2 * sigma
                 delt (k) = dtdz * max (delz (k) / 2, min (- delz (k) / 2, vvm (k) * dts))
                 tt (k) = tz (k) + delt (k)
                 
@@ -2502,8 +2505,18 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
                 q_sol (k) = q_sol (k) + sink
                 cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 tz (k) = tz (k) + sink * lhi (k) / cvm (k)
-            endif ! significant ql existed
-            
+            else if (tc < 0. .and. qi (k) > qcmin) then
+                melt = min (qi (k), fac_imlt * (tz (k) - tice) / icpk (k))
+                tmp = min (melt, dim (ql_mlt, ql (k))) ! max ql amount
+                ql (k) = ql (k) + tmp
+                qr (k) = qr (k) + melt - tmp
+                qi (k) = qi (k) - melt
+                q_liq (k) = q_liq (k) + melt
+                q_sol (k) = q_sol (k) - melt
+                cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                tz (k) = tz (k) - melt * lhi (k) / cvm (k)
+            endif
+
             ! -----------------------------------------------------------------------
             ! autoconversion
             ! -----------------------------------------------------------------------
@@ -2520,7 +2533,33 @@ subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
                 qi (k) = qi (k) - sink
                 qs (k) = qs (k) + sink
             endif
+
+            ! -----------------------------------------------------------------------
+            ! update heat capacity and latend heat coefficient
+            ! -----------------------------------------------------------------------
             
+            lhi (k) = li00 + dc_ice * tz (k)
+            icpk (k) = lhi (k) / cvm (k)
+
+            ! -----------------------------------------------------------------------
+            ! melting of snow to rain or cloud water
+            ! -----------------------------------------------------------------------
+            
+            tc = tz (k) - (tice + 0.1)
+            if (qs (k) > 1.e-7 .and. tc > 0.) then
+                tmp = min (1., (tc * 0.1) ** 2) * qs (k) ! no limter on melting above 10 deg c
+                sink = min (tmp, fac_smlt * tc / icpk (k))
+                tmp = min (sink, dim (qs_mlt, ql (k))) ! max ql due to snow melt
+                qs (k) = qs (k) - sink
+                ql (k) = ql (k) + tmp
+                qr (k) = qr (k) + sink - tmp
+                ! qr (k) = qr (k) + sink
+                q_liq (k) = q_liq (k) + sink
+                q_sol (k) = q_sol (k) - sink
+                cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                tz (k) = tz (k) - sink * lhi (k) / cvm (k)
+            endif
+    
         enddo
         
     endif
