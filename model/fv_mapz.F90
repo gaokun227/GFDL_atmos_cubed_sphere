@@ -63,7 +63,7 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
-                      do_unif_gfdlmp, prer, prei, pres, preg, c2l_ord, bd, fv_debug, &
+                      do_inline_mp, prer, prei, pres, preg, c2l_ord, bd, fv_debug, &
                       moist_phys)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
@@ -92,7 +92,7 @@ contains
   real, intent(in):: ws(is:ie,js:je)
 
   logical, intent(in):: do_sat_adj
-  logical, intent(in):: do_unif_gfdlmp
+  logical, intent(in):: do_inline_mp
   logical, intent(in):: fill                  ! fill negative tracers
   logical, intent(in):: reproduce_sum
   logical, intent(in):: do_omega, adiabatic, do_adiabatic_init
@@ -512,7 +512,7 @@ contains
     call prt_mxm('LZ_pt_1',       pt(is:ie,js:je,:), is, ie, js, je, 0, km, 1., gridstruct%area_64, domain)
   endif
 
-  if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
+  if ((.not. do_adiabatic_init) .and. do_inline_mp) then
 
     allocate(ua0(isd:ied,jsd:jed,km))
     allocate(va0(isd:ied,jsd:jed,km))
@@ -543,7 +543,7 @@ contains
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
 !$OMP                               npx,npy,qn,ccn_cm3,prer,pres,prei,preg,u_dt,v_dt,   &
-!$OMP                               do_unif_gfdlmp,c2l_ord,bd,dp0,ps,ua0,va0,fv_debug) &
+!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,ua0,va0,fv_debug) &
 !$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
 !$OMP do
@@ -724,7 +724,7 @@ endif        ! end last_step check
 ! Unified GFDL MP
 !-----------------------------------------------------------------------
 
-  if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
+  if ((.not. do_adiabatic_init) .and. do_inline_mp) then
 
 !$OMP do
     do j = js, je
@@ -855,7 +855,7 @@ endif        ! end last_step check
 ! Unified GFDL MP
 !-----------------------------------------------------------------------
 
-  if ((.not. do_adiabatic_init) .and. do_unif_gfdlmp) then
+  if ((.not. do_adiabatic_init) .and. do_inline_mp) then
 
     ! update u_dt and v_dt in halo
     call mpp_update_domains(u_dt, v_dt, domain)

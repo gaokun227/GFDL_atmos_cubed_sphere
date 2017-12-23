@@ -401,7 +401,7 @@ contains
   endif
 
   ! Initialize rain, ice, snow and graupel precipitaiton
-  if (flagstruct%do_unif_gfdlmp) then
+  if (flagstruct%do_inline_mp) then
       prer = 0.0
       prei = 0.0
       pres = 0.0
@@ -534,7 +534,7 @@ contains
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
                      idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, hybrid_z, do_omega,     &
-                     flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_unif_gfdlmp, &
+                     flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      prer, prei, pres, preg, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
                      flagstruct%moist_phys)
 
@@ -572,7 +572,7 @@ contains
   enddo    ! n_map loop
 
   ! Initialize rain, ice, snow and graupel precipitaiton
-  if (flagstruct%do_unif_gfdlmp) then
+  if (flagstruct%do_inline_mp) then
       prer = prer / k_split
       prei = prei / k_split
       pres = pres / k_split

@@ -252,7 +252,7 @@ contains
 
    call set_domain ( Atm(mytile)%domain )
 
-   if (Atm(mytile)%flagstruct%do_unif_gfdlmp) then
+   if (Atm(mytile)%flagstruct%do_inline_mp) then
      call unif_gfdlmp_init(mpp_pe(), mpp_root_pe(), nlunit, stdlog(), fn_nml)
    endif
 
@@ -455,7 +455,7 @@ contains
   ! initialize domains for writing global physics data
    call set_domain ( Atm(mytile)%domain )
 
-   if (Atm(mytile)%flagstruct%do_unif_gfdlmp) then
+   if (Atm(mytile)%flagstruct%do_inline_mp) then
      call unif_gfdlmp_end ( )
    endif
 
@@ -1411,7 +1411,7 @@ contains
      IPD_Data(nb)%Statein%phii(:,1) = 0.0_kind_phys
      IPD_Data(nb)%Statein%prsik(:,:) = 1.e25_kind_phys
 
-     if (Atm(mytile)%flagstruct%do_unif_gfdlmp) then
+     if (Atm(mytile)%flagstruct%do_inline_mp) then
          do ix = 1, blen
            i = Atm_block%index(nb)%ii(ix)
            j = Atm_block%index(nb)%jj(ix)

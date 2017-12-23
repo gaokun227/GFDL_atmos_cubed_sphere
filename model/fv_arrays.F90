@@ -309,7 +309,7 @@ module fv_arrays_mod
    logical :: RF_fast =.false.      !  Fast inline Rayleigh Friction
    logical :: consv_am  = .false.   ! Apply Angular Momentum Correction (to zonal wind component)
    logical :: do_sat_adj= .false.   ! 
-   logical :: do_unif_gfdlmp = .false. ! unified gfdl mp
+   logical :: do_inline_mp = .false. ! inline cloud microphysics
    logical :: do_f3d    = .false.   ! 
    logical :: no_dycore = .false.   ! skip the dycore
    logical :: convert_ke = .false. 
