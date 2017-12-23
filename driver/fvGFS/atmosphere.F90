@@ -73,7 +73,7 @@ use fv_update_phys_mod, only: fv_update_phys
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
 
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
-use unified_gfdlmp_mod, only: unif_gfdlmp_init, unif_gfdlmp_end
+use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
 
 implicit none
 private
@@ -253,7 +253,7 @@ contains
    call set_domain ( Atm(mytile)%domain )
 
    if (Atm(mytile)%flagstruct%do_inline_mp) then
-     call unif_gfdlmp_init(mpp_pe(), mpp_root_pe(), nlunit, stdlog(), fn_nml)
+     call gfdl_mp_init(mpp_pe(), mpp_root_pe(), nlunit, stdlog(), fn_nml)
    endif
 
    call fv_restart(Atm(mytile)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mytile)%gridstruct%grid_type, grids_on_this_pe)
@@ -392,8 +392,7 @@ contains
                       Atm(n)%flagstruct%hybrid_z,                          &
                       Atm(n)%gridstruct, Atm(n)%flagstruct,                &
                       Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
-                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%prer,      &
-                      Atm(n)%prei, Atm(n)%pres, Atm(n)%preg)
+                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp)
 
      call timing_off('fv_dynamics')
 
@@ -456,7 +455,7 @@ contains
    call set_domain ( Atm(mytile)%domain )
 
    if (Atm(mytile)%flagstruct%do_inline_mp) then
-     call unif_gfdlmp_end ( )
+     call gfdl_mp_end ( )
    endif
 
    call nullify_domain ( )
@@ -1213,7 +1212,7 @@ contains
                      Atm(mytile)%cx, Atm(mytile)%cy, Atm(mytile)%ze0, Atm(mytile)%flagstruct%hybrid_z,    &
                      Atm(mytile)%gridstruct, Atm(mytile)%flagstruct,                            &
                      Atm(mytile)%neststruct, Atm(mytile)%idiag, Atm(mytile)%bd, Atm(mytile)%parent_grid,  &
-                     Atm(mytile)%domain, Atm(mytile)%prer, Atm(mytile)%prei, Atm(mytile)%pres, Atm(mytile)%preg)
+                     Atm(mytile)%domain, Atm(mytile)%inline_mp)
 ! Backward
     call fv_dynamics(Atm(mytile)%npx, Atm(mytile)%npy, npz,  nq, Atm(mytile)%ng, -dt_atmos, 0.,      &
                      Atm(mytile)%flagstruct%fill, Atm(mytile)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1227,7 +1226,7 @@ contains
                      Atm(mytile)%cx, Atm(mytile)%cy, Atm(mytile)%ze0, Atm(mytile)%flagstruct%hybrid_z,    &
                      Atm(mytile)%gridstruct, Atm(mytile)%flagstruct,                            &
                      Atm(mytile)%neststruct, Atm(mytile)%idiag, Atm(mytile)%bd, Atm(mytile)%parent_grid,  &
-                     Atm(mytile)%domain, Atm(mytile)%prer, Atm(mytile)%prei, Atm(mytile)%pres, Atm(mytile)%preg)
+                     Atm(mytile)%domain, Atm(mytile)%inline_mp)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mytile, nudge_dz, dz0) &
@@ -1299,7 +1298,7 @@ contains
                      Atm(mytile)%cx, Atm(mytile)%cy, Atm(mytile)%ze0, Atm(mytile)%flagstruct%hybrid_z,    &
                      Atm(mytile)%gridstruct, Atm(mytile)%flagstruct,                            &
                      Atm(mytile)%neststruct, Atm(mytile)%idiag, Atm(mytile)%bd, Atm(mytile)%parent_grid,  &
-                     Atm(mytile)%domain, Atm(mytile)%prer, Atm(mytile)%prei, Atm(mytile)%pres, Atm(mytile)%preg)
+                     Atm(mytile)%domain, Atm(mytile)%inline_mp)
 ! Forward call
     call fv_dynamics(Atm(mytile)%npx, Atm(mytile)%npy, npz,  nq, Atm(mytile)%ng, dt_atmos, 0.,      &
                      Atm(mytile)%flagstruct%fill, Atm(mytile)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1313,7 +1312,7 @@ contains
                      Atm(mytile)%cx, Atm(mytile)%cy, Atm(mytile)%ze0, Atm(mytile)%flagstruct%hybrid_z,    &
                      Atm(mytile)%gridstruct, Atm(mytile)%flagstruct,                            &
                      Atm(mytile)%neststruct, Atm(mytile)%idiag, Atm(mytile)%bd, Atm(mytile)%parent_grid,  &
-                     Atm(mytile)%domain, Atm(mytile)%prer, Atm(mytile)%prei, Atm(mytile)%pres, Atm(mytile)%preg)
+                     Atm(mytile)%domain, Atm(mytile)%inline_mp)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mytile) &
@@ -1415,10 +1414,10 @@ contains
          do ix = 1, blen
            i = Atm_block%index(nb)%ii(ix)
            j = Atm_block%index(nb)%jj(ix)
-           IPD_Data(nb)%Statein%prer(ix) = _DBL_(_RL_(Atm(mytile)%prer(i,j)))
-           IPD_Data(nb)%Statein%prei(ix) = _DBL_(_RL_(Atm(mytile)%prei(i,j)))
-           IPD_Data(nb)%Statein%pres(ix) = _DBL_(_RL_(Atm(mytile)%pres(i,j)))
-           IPD_Data(nb)%Statein%preg(ix) = _DBL_(_RL_(Atm(mytile)%preg(i,j)))
+           IPD_Data(nb)%Statein%prer(ix) = _DBL_(_RL_(Atm(mytile)%inline_mp%prer(i,j)))
+           IPD_Data(nb)%Statein%prei(ix) = _DBL_(_RL_(Atm(mytile)%inline_mp%prei(i,j)))
+           IPD_Data(nb)%Statein%pres(ix) = _DBL_(_RL_(Atm(mytile)%inline_mp%pres(i,j)))
+           IPD_Data(nb)%Statein%preg(ix) = _DBL_(_RL_(Atm(mytile)%inline_mp%preg(i,j)))
          enddo
      endif
 

@@ -1234,10 +1234,10 @@ contains
 #endif
        if(idiag%id_ps > 0) used=send_data(idiag%id_ps, Atm(n)%ps(isc:iec,jsc:jec), Time)
 
-       if(idiag%id_prer > 0) used=send_data(idiag%id_prer, Atm(n)%prer(isc:iec,jsc:jec), Time)
-       if(idiag%id_prei > 0) used=send_data(idiag%id_prei, Atm(n)%prei(isc:iec,jsc:jec), Time)
-       if(idiag%id_pres > 0) used=send_data(idiag%id_pres, Atm(n)%pres(isc:iec,jsc:jec), Time)
-       if(idiag%id_preg > 0) used=send_data(idiag%id_preg, Atm(n)%preg(isc:iec,jsc:jec), Time)
+       if(idiag%id_prer > 0) used=send_data(idiag%id_prer, Atm(n)%inline_mp%prer(isc:iec,jsc:jec), Time)
+       if(idiag%id_prei > 0) used=send_data(idiag%id_prei, Atm(n)%inline_mp%prei(isc:iec,jsc:jec), Time)
+       if(idiag%id_pres > 0) used=send_data(idiag%id_pres, Atm(n)%inline_mp%pres(isc:iec,jsc:jec), Time)
+       if(idiag%id_preg > 0) used=send_data(idiag%id_preg, Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
 
        if(idiag%id_c15>0 .or. idiag%id_c25>0 .or. idiag%id_c35>0 .or. idiag%id_c45>0) then
           call wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, Atm(n)%ua(isc:iec,jsc:jec,npz),   &

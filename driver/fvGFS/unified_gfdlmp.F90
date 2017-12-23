@@ -8,7 +8,7 @@
 ! revision: unified gfdl cloud microphysics, 9 / 8 / 2017
 ! =======================================================================
 
-module unified_gfdlmp_mod
+module gfdl_mp_mod
     
     ! use mpp_mod, only: stdlog, mpp_pe, mpp_root_pe, mpp_clock_id, &
     ! mpp_clock_begin, mpp_clock_end, clock_routine, &
@@ -23,7 +23,7 @@ module unified_gfdlmp_mod
     
     private
     
-    public unif_gfdlmp_driver, unif_gfdlmp_init, unif_gfdlmp_end
+    public gfdl_mp_driver, gfdl_mp_init, gfdl_mp_end
     public cloud_diagnosis
     
     real :: missing_value = - 1.e10
@@ -31,7 +31,7 @@ module unified_gfdlmp_mod
     logical :: module_is_initialized = .false.
     logical :: qsmith_tables_initialized = .false.
     
-    character (len = 17) :: mod_name = 'unif_gfdlmp'
+    character (len = 17) :: mod_name = 'gfdl_mp'
     
     ! real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
     ! real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
@@ -295,7 +295,7 @@ module unified_gfdlmp_mod
     ! namelist
     ! -----------------------------------------------------------------------
     
-    namelist / unif_gfdlmp_nml / &
+    namelist / gfdl_mp_nml / &
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
         vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
@@ -316,7 +316,7 @@ contains
 ! the driver of the gfdl cloud microphysics
 ! -----------------------------------------------------------------------
 
-subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
+subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         pt, w, ua, va, dz, delp, area, dts, hs, rain, snow, ice, &
         graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
         te, last_step)
@@ -403,7 +403,7 @@ subroutine unif_gfdlmp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     
     ! call mpp_clock_end (gfdl_mp_clock)
     
-end subroutine unif_gfdlmp_driver
+end subroutine gfdl_mp_driver
 
 ! -----------------------------------------------------------------------
 ! gfdl cloud microphysics, major program
@@ -3662,8 +3662,8 @@ end subroutine setupm
 ! initialization of gfdl cloud microphysics
 ! =======================================================================
 
-!subroutine unif_gfdlmp_init (id, jd, kd, axes, time)
-subroutine unif_gfdlmp_init (me, master, nlunit, logunit, fn_nml)
+!subroutine gfdl_mp_init (id, jd, kd, axes, time)
+subroutine gfdl_mp_init (me, master, nlunit, logunit, fn_nml)
     
     implicit none
     
@@ -3688,20 +3688,20 @@ subroutine unif_gfdlmp_init (me, master, nlunit, logunit, fn_nml)
     ! master = (mpp_pe () .eq.mpp_root_pe ())
     
     !#ifdef internal_file_nml
-    ! read (input_nml_file, nml = unif_gfdlmp_nml, iostat = io)
-    ! ierr = check_nml_error (io, 'unif_gfdlmp_nml')
+    ! read (input_nml_file, nml = gfdl_mp_nml, iostat = io)
+    ! ierr = check_nml_error (io, 'gfdl_mp_nml')
     !#else
     ! if (file_exist ('input.nml')) then
     ! unit = open_namelist_file ()
     ! io = 1
     ! do while (io .ne. 0)
-    ! read (unit, nml = unif_gfdlmp_nml, iostat = io, end = 10)
-    ! ierr = check_nml_error (io, 'unif_gfdlmp_nml')
+    ! read (unit, nml = gfdl_mp_nml, iostat = io, end = 10)
+    ! ierr = check_nml_error (io, 'gfdl_mp_nml')
     ! enddo
     !10 call close_file (unit)
     ! endif
     !#endif
-    ! call write_version_number ('unified_gfdlmp_mod', version)
+    ! call write_version_number ('gfdl_mp_mod', version)
     ! logunit = stdlog ()
     
     inquire (file = trim (fn_nml), exist = exists)
@@ -3712,15 +3712,15 @@ subroutine unif_gfdlmp_init (me, master, nlunit, logunit, fn_nml)
         open (unit = nlunit, file = fn_nml, readonly, status = 'old', iostat = ios)
     endif
     rewind (nlunit)
-    read (nlunit, nml = unif_gfdlmp_nml)
+    read (nlunit, nml = gfdl_mp_nml)
     close (nlunit)
     
     ! write version number and namelist to log file
     
     if (me == master) then
         write (logunit, *) " ================================================================== "
-        write (logunit, *) "unified_gfdlmp_mod"
-        write (logunit, nml = unif_gfdlmp_nml)
+        write (logunit, *) "gfdl_mp_mod"
+        write (logunit, nml = gfdl_mp_nml)
     endif
     
     if (do_setup) then
@@ -3734,7 +3734,7 @@ subroutine unif_gfdlmp_init (me, master, nlunit, logunit, fn_nml)
     tice0 = tice - 0.01
     t_wfr = tice - 40.0 ! supercooled water can exist down to - 48 c, which is the "absolute"
     
-    ! if (master) write (logunit, nml = unif_gfdlmp_nml)
+    ! if (master) write (logunit, nml = gfdl_mp_nml)
     
     ! if (master) write (*, *) 'prec_lin diagnostics initialized.', id_prec
     
@@ -3743,7 +3743,7 @@ subroutine unif_gfdlmp_init (me, master, nlunit, logunit, fn_nml)
     ! testing the water vapor tables
     
     ! if (mp_debug .and. master) then
-    ! write (*, *) 'testing water vapor tables in unif_gfdlmp'
+    ! write (*, *) 'testing water vapor tables in gfdl_mp'
     ! tmp = tice - 90.
     ! do k = 1, 25
     ! q1 = wqsat_moist (tmp, 0., 1.e5)
@@ -3755,17 +3755,17 @@ subroutine unif_gfdlmp_init (me, master, nlunit, logunit, fn_nml)
     
     ! if (master) write (*, *) 'gfdl_cloud_micrphys diagnostics initialized.'
     
-    ! gfdl_mp_clock = mpp_clock_id ('unif_gfdlmp', grain = clock_routine)
+    ! gfdl_mp_clock = mpp_clock_id ('gfdl_mp', grain = clock_routine)
     
     module_is_initialized = .true.
     
-end subroutine unif_gfdlmp_init
+end subroutine gfdl_mp_init
 
 ! =======================================================================
 ! end of gfdl cloud microphysics
 ! =======================================================================
 
-subroutine unif_gfdlmp_end
+subroutine gfdl_mp_end
     
     implicit none
     
@@ -3780,7 +3780,7 @@ subroutine unif_gfdlmp_end
     
     tables_are_initialized = .false.
     
-end subroutine unif_gfdlmp_end
+end subroutine gfdl_mp_end
 
 ! =======================================================================
 ! qsmith table initialization
@@ -4974,4 +4974,4 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
     
 end subroutine cloud_diagnosis
 
-end module unified_gfdlmp_mod
+end module gfdl_mp_mod

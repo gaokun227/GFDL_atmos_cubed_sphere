@@ -37,7 +37,7 @@ module fv_dynamics_mod
    use fv_sg_mod,           only: neg_adj3
    use fv_nesting_mod,      only: setup_nested_grid_BCs
    use boundary_mod,        only: nested_grid_BC_apply_intT
-   use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, fv_diag_type, fv_grid_bounds_type
+   use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, fv_diag_type, fv_grid_bounds_type, inline_mp_type
    use fv_nwp_nudge_mod,    only: do_adiabatic_init
 
 implicit none
@@ -67,7 +67,7 @@ contains
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
-                        parent_grid, domain, prer, prei, pres, preg, time_total)
+                        parent_grid, domain, inline_mp, time_total)
 
     real, intent(IN) :: bdt  ! Large time-step
     real, intent(IN) :: consv_te
@@ -123,7 +123,7 @@ contains
     real, intent(inout), dimension(bd%isd:bd%ied ,bd%jsd:bd%jed ,npz):: ua, va
     real, intent(in),    dimension(npz+1):: ak, bk
 
-    real, intent(inout), dimension(bd%is:, bd%js:) :: prer, prei, pres, preg
+    type(inline_mp_type), intent(inout) :: inline_mp
 
 ! Accumulated Mass flux arrays: the "Flux Capacitor"
     real, intent(inout) ::  mfx(bd%is:bd%ie+1, bd%js:bd%je,   npz)
@@ -402,10 +402,10 @@ contains
 
   ! Initialize rain, ice, snow and graupel precipitaiton
   if (flagstruct%do_inline_mp) then
-      prer = 0.0
-      prei = 0.0
-      pres = 0.0
-      preg = 0.0
+      inline_mp%prer = 0.0
+      inline_mp%prei = 0.0
+      inline_mp%pres = 0.0
+      inline_mp%preg = 0.0
   endif
 
                                                   call timing_on('FV_DYN_LOOP')
@@ -535,7 +535,7 @@ contains
                      idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, hybrid_z, do_omega,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
-                     prer, prei, pres, preg, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
+                     inline_mp, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
                      flagstruct%moist_phys)
 
 #ifdef AVEC_TIMERS
@@ -573,10 +573,10 @@ contains
 
   ! Initialize rain, ice, snow and graupel precipitaiton
   if (flagstruct%do_inline_mp) then
-      prer = prer / k_split
-      prei = prei / k_split
-      pres = pres / k_split
-      preg = preg / k_split
+      inline_mp%prer = inline_mp%prer / k_split
+      inline_mp%prei = inline_mp%prei / k_split
+      inline_mp%pres = inline_mp%pres / k_split
+      inline_mp%preg = inline_mp%preg / k_split
   endif
 
                                                   call timing_off('FV_DYN_LOOP')

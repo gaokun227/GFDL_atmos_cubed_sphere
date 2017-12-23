@@ -33,7 +33,7 @@ module fv_mapz_mod
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
   use fv_cmp_mod,        only: qs_init, fv_sat_adj
-  use unified_gfdlmp_mod,only: unif_gfdlmp_driver
+  use gfdl_mp_mod,       only: gfdl_mp_driver
 
   implicit none
   real, parameter:: consv_min= 0.001   ! below which no correction applies
@@ -63,7 +63,7 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
-                      do_inline_mp, prer, prei, pres, preg, c2l_ord, bd, fv_debug, &
+                      do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
                       moist_phys)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
@@ -130,10 +130,8 @@ contains
   real, intent(inout)::   dtdt(is:ie,js:je,km)
   real, intent(out)::    pkz(is:ie,js:je,km)       ! layer-mean pk for converting t to pt
   real, intent(out)::     te(isd:ied,jsd:jed,km)
-  real, intent(inout)::   prer(is:ie,js:je)
-  real, intent(inout)::   prei(is:ie,js:je)
-  real, intent(inout)::   pres(is:ie,js:je)
-  real, intent(inout)::   preg(is:ie,js:je)
+
+  type(inline_mp_type), intent(inout)::   inline_mp
 
 ! !DESCRIPTION:
 !
@@ -542,7 +540,7 @@ contains
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
-!$OMP                               npx,npy,qn,ccn_cm3,prer,pres,prei,preg,u_dt,v_dt,   &
+!$OMP                               npx,npy,qn,ccn_cm3,inline_mp,u_dt,v_dt,   &
 !$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,ua0,va0,fv_debug) &
 !$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
@@ -754,14 +752,15 @@ endif        ! end last_step check
         ! save delp for dry total energy update
         dp0(is:ie,j,:) = delp(is:ie,j,:)
 
-        call unif_gfdlmp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
+        call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
                        q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,j,:), &
                        pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
                        delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
-                       hs(is:ie,j), prer(is:ie,j), pres(is:ie,j), prei(is:ie,j), &
-                       preg(is:ie,j), hydrostatic, is, ie, 1, km, q_con(is:ie,j,:), &
-                       cappa(is:ie,j,:), consv>consv_min, te(is:ie,j,:), last_step)
+                       hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
+                       inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), hydrostatic, &
+                       is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:), consv>consv_min, &
+                       te(is:ie,j,:), last_step)
  
         ! compute wind tendency at A grid fori D grid wind update
         u_dt(is:ie,j,:) = (ua(is:ie,j,:) - ua0(is:ie,j,:)) / abs(mdt)

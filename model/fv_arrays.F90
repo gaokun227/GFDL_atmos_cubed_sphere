@@ -57,7 +57,6 @@ module fv_arrays_mod
            id_qn, id_qn200, id_qn500, id_qn850, id_qp, id_mdt,    &
            id_qdt, id_aam, id_amdt,                               &
            id_acly, id_acl, id_acl2,                              &
-           id_intqv,id_intql,id_intqi,id_intqr,id_intqs,id_intqg, &
            id_dbz, id_maxdbz, id_basedbz, id_dbz4km, id_dbztop, id_dbz_m10C, &
            id_ctz, id_w1km, id_wmaxup, id_wmaxdn, id_cape, id_cin
 
@@ -98,6 +97,7 @@ module fv_arrays_mod
      real, allocatable :: pt1(:)
 
      integer :: id_prer, id_prei, id_pres, id_preg
+     integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
 
      logical :: initialized = .false.
      real  sphum, liq_wat, ice_wat       ! GFDL physics
@@ -602,6 +602,13 @@ module fv_arrays_mod
 
   end type fv_nest_type
 
+  type inline_mp_type
+    real, _ALLOCATABLE :: prer(:,:)     _NULL
+    real, _ALLOCATABLE :: prei(:,:)     _NULL
+    real, _ALLOCATABLE :: pres(:,:)     _NULL
+    real, _ALLOCATABLE :: preg(:,:)     _NULL
+  end type inline_mp_type
+
   interface allocate_fv_nest_BC_type
      module procedure allocate_fv_nest_BC_type_3D
      module procedure allocate_fv_nest_BC_type_3D_Atm
@@ -701,11 +708,6 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: uc(:,:,:)     _NULL  ! (uc, vc) are mostly used as the C grid winds
     real, _ALLOCATABLE :: vc(:,:,:)     _NULL
 
-    real, _ALLOCATABLE :: prer(:,:)     _NULL
-    real, _ALLOCATABLE :: prei(:,:)     _NULL
-    real, _ALLOCATABLE :: pres(:,:)     _NULL
-    real, _ALLOCATABLE :: preg(:,:)     _NULL
-
     real, _ALLOCATABLE :: ak(:)  _NULL
     real, _ALLOCATABLE :: bk(:)  _NULL
 
@@ -768,6 +770,8 @@ module fv_arrays_mod
      real(kind=R_GRID), allocatable, dimension(:,:,:,:) :: grid_global
 
   integer :: atmos_axes(4)
+
+     type(inline_mp_type) :: inline_mp
 
 
   end type fv_atmos_type
@@ -939,10 +943,10 @@ contains
     allocate (  Atm%ak(npz_2d+1) )
     allocate (  Atm%bk(npz_2d+1) )
 
-    allocate ( Atm%prer(is:ie,js:je) )
-    allocate ( Atm%prei(is:ie,js:je) )
-    allocate ( Atm%pres(is:ie,js:je) )
-    allocate ( Atm%preg(is:ie,js:je) )
+    allocate ( Atm%inline_mp%prer(is:ie,js:je) )
+    allocate ( Atm%inline_mp%prei(is:ie,js:je) )
+    allocate ( Atm%inline_mp%pres(is:ie,js:je) )
+    allocate ( Atm%inline_mp%preg(is:ie,js:je) )
 
     !--------------------------
     ! Non-hydrostatic dynamics:
@@ -997,10 +1001,10 @@ contains
         enddo
         do j=js, je
            do i=is, ie
-              Atm%prer(i,j) = real_big
-              Atm%prei(i,j) = real_big
-              Atm%pres(i,j) = real_big
-              Atm%preg(i,j) = real_big
+              Atm%inline_mp%prer(i,j) = real_big
+              Atm%inline_mp%prei(i,j) = real_big
+              Atm%inline_mp%pres(i,j) = real_big
+              Atm%inline_mp%preg(i,j) = real_big
            enddo
         enddo
         if ( .not. Atm%flagstruct%hydrostatic ) then
@@ -1262,10 +1266,10 @@ contains
     deallocate (  Atm%ak )
     deallocate (  Atm%bk )
 
-    deallocate ( Atm%prer )
-    deallocate ( Atm%prei )
-    deallocate ( Atm%pres )
-    deallocate ( Atm%preg )
+    deallocate ( Atm%inline_mp%prer )
+    deallocate ( Atm%inline_mp%prei )
+    deallocate ( Atm%inline_mp%pres )
+    deallocate ( Atm%inline_mp%preg )
 
     deallocate ( Atm%u_srf )
     deallocate ( Atm%v_srf )
