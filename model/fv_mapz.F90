@@ -499,7 +499,7 @@ contains
 1000  continue
 
 !-----------------------------------------------------------------------
-! Unified GFDL MP
+! Inline GFDL MP
 !-----------------------------------------------------------------------
 
   if (fv_debug) then
@@ -719,7 +719,7 @@ endif        ! end last_step check
   endif   ! do_sat_adj
 
 !-----------------------------------------------------------------------
-! Unified GFDL MP
+! Inline GFDL MP
 !-----------------------------------------------------------------------
 
   if ((.not. do_adiabatic_init) .and. do_inline_mp) then
@@ -851,7 +851,7 @@ endif        ! end last_step check
   endif
 
 !-----------------------------------------------------------------------
-! Unified GFDL MP
+! Inline GFDL MP
 !-----------------------------------------------------------------------
 
   if ((.not. do_adiabatic_init) .and. do_inline_mp) then

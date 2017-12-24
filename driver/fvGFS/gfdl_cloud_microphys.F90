@@ -716,14 +716,6 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         m2_rain (i, :) = 0.
         m2_sol (i, :) = 0.
         
-        delt (i, :) = 0.0
-        delqv (i, :) = 0.0
-        delql (i, :) = 0.0
-        delqi (i, :) = 0.0
-        delqr (i, :) = 0.0
-        delqs (i, :) = 0.0
-        vvm (i, :) = 0.0
-        
         do n = 1, ntimes
             
             ! -----------------------------------------------------------------------

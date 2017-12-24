@@ -5,7 +5,7 @@
 ! bears little to no similarity to the original lin mp in zetac.
 ! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
 ! developer: shian-jiann lin, linjiong zhou
-! revision: unified gfdl cloud microphysics, 9 / 8 / 2017
+! revision: inline gfdl cloud microphysics, 9 / 8 / 2017
 ! =======================================================================
 
 module gfdl_mp_mod
