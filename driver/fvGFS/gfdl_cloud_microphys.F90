@@ -263,7 +263,6 @@ module gfdl_cloud_microphys_mod
     logical :: use_ppm = .false. ! use ppm fall scheme
     logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
     logical :: mp_print = .false. ! cloud microphysics debugging printout
-    logical :: do_terrain_effect = .false. ! perform terrain induced cloud microphysics processes
     
     ! real :: global_area = - 1.
     
@@ -309,7 +308,7 @@ module gfdl_cloud_microphys_mod
         rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
         qmin, beta, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
-        regmin, regmax, betaw, betai, betar, betas, betag, liq_ice_combine, do_terrain_effect
+        regmin, regmax, betaw, betai, betar, betas, betag, liq_ice_combine
     
     public &
         mp_time, t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
@@ -323,7 +322,7 @@ module gfdl_cloud_microphys_mod
         rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
         qmin, beta, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
-        regmin, regmax, betaw, betai, betar, betas, betag, liq_ice_combine, do_terrain_effect
+        regmin, regmax, betaw, betai, betar, betas, betag, liq_ice_combine
     
 contains
 
