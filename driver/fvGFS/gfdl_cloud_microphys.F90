@@ -342,8 +342,7 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, pt_dt, pt, w, &
         uin, vin, udt, vdt, dz, delp, area, dt_in, land, rain, snow, ice, &
         graupel, hydrostatic, phys_hydrostatic, iis, iie, kks, &
-        kke, ktop, kbot, seconds, elvmax, sigma, delt, delqv, delql, delqi, &
-        delqr, delqs, vvm)
+        kke, ktop, kbot, seconds)
     
     implicit none
     
@@ -357,7 +356,6 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     
     real, intent (in), dimension (:) :: area ! cell area
     real, intent (in), dimension (:) :: land ! land fraction
-    real, intent (in), dimension (:) :: elvmax, sigma
     
     real, intent (in), dimension (:, :) :: delp, dz, uin, vin
     real, intent (in), dimension (:, :) :: pt, qv, ql, qr, qg, qa, qn
@@ -368,14 +366,6 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (inout), dimension (:, :) :: qi_dt, qs_dt, qg_dt
     
     real, intent (out), dimension (:) :: rain, snow, ice, graupel
-    
-    real, intent (out), dimension (:, :) :: delt
-    real, intent (out), dimension (:, :) :: delqv
-    real, intent (out), dimension (:, :) :: delql
-    real, intent (out), dimension (:, :) :: delqi
-    real, intent (out), dimension (:, :) :: delqr
-    real, intent (out), dimension (:, :) :: delqs
-    real, intent (out), dimension (:, :) :: vvm
     
     ! logical :: used
     
@@ -468,8 +458,7 @@ subroutine gfdl_cloud_microphys_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         rain, snow, graupel, ice, m2_rain, &
         m2_sol, cond, area, land, udt, vdt, pt_dt, &
         qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, w_var, vt_r, &
-        vt_s, vt_g, vt_i, qn2, elvmax, sigma, delt, delqv, delql, delqi, &
-        delqr, delqs, vvm)
+        vt_s, vt_g, vt_i, qn2)
     
     ! -----------------------------------------------------------------------
     ! no clouds allowed above ktop
@@ -524,8 +513,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qn, dz, is, ie, ks, ke, ktop, kbot, dt_in, ntimes, &
         rain, snow, graupel, ice, m2_rain, m2_sol, cond, area1, land, &
         u_dt, v_dt, pt_dt, qv_dt, ql_dt, qr_dt, qi_dt, qs_dt, qg_dt, qa_dt, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2, elvmax, sigma, delt, delqv, delql, &
-        delqi, delqr, delqs, vvm)
+        w_var, vt_r, vt_s, vt_g, vt_i, qn2)
     
     implicit none
     
@@ -537,7 +525,6 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (in) :: dt_in
     
     real, intent (in), dimension (is:) :: area1, land
-    real, intent (in), dimension (is:) :: elvmax, sigma
     
     real, intent (in), dimension (is:, ks:) :: uin, vin, delp, pt, dz
     real, intent (in), dimension (is:, ks:) :: qv, ql, qr, qg, qa, qn
@@ -553,14 +540,6 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (out), dimension (is:, ks:) :: vt_r, vt_s, vt_g, vt_i, qn2
     
     real, intent (out), dimension (is:, ks:) :: m2_rain, m2_sol
-    
-    real, intent (out), dimension (is:, ks:) :: delt
-    real, intent (out), dimension (is:, ks:) :: delqv
-    real, intent (out), dimension (is:, ks:) :: delql
-    real, intent (out), dimension (is:, ks:) :: delqi
-    real, intent (out), dimension (is:, ks:) :: delqr
-    real, intent (out), dimension (is:, ks:) :: delqs
-    real, intent (out), dimension (is:, ks:) :: vvm
     
     real, dimension (ktop:kbot) :: qvz, qlz, qrz, qiz, qsz, qgz, qaz
     real, dimension (ktop:kbot) :: vtiz, vtsz, vtgz, vtrz
@@ -824,35 +803,7 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
             call icloud (ktop, kbot, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, &
                 denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var)
             
-            ! -----------------------------------------------------------------------
-            ! terrain effect
-            ! -----------------------------------------------------------------------
-            
-            if (do_terrain_effect) then
-                
-                call terrain_effect (ktop, kbot, dts, tz, p1, u1, v1, qvz, qlz, qrz, qiz, &
-                    qsz, qgz, elvmax (i), sigma (i), dp1, dz1, den, tout, qvout, qlout, qiout, &
-                    qrout, qsout, vout)
-                
-                delt (i, :) = delt (i, :) + tout
-                delqv (i, :) = delqv (i, :) + qvout
-                delql (i, :) = delql (i, :) + qlout
-                delqi (i, :) = delqi (i, :) + qiout
-                delqr (i, :) = delqr (i, :) + qrout
-                delqs (i, :) = delqs (i, :) + qsout
-                vvm (i, :) = vvm (i, :) + vout
-                
-            endif
-            
         enddo
-        
-        delt (i, :) = delt (i, :) / ntimes
-        delqv (i, :) = delqv (i, :) / ntimes
-        delql (i, :) = delql (i, :) / ntimes
-        delqi (i, :) = delqi (i, :) / ntimes
-        delqr (i, :) = delqr (i, :) / ntimes
-        delqs (i, :) = delqs (i, :) / ntimes
-        vvm (i, :) = vvm (i, :) / ntimes
         
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
@@ -2285,292 +2236,6 @@ subroutine subgrid_z_proc (ktop, kbot, p1, den, denfac, dts, rh_adj, tz, qv, &
     enddo
     
 end subroutine subgrid_z_proc
-
-! =======================================================================
-! terrain effect
-! =======================================================================
-
-subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
-        qs, qg, elvmax, sigma, delp, delz, den, delt, delqv, delql, delqi, &
-        delqr, delqs, vvm)
-    
-    implicit none
-    
-    integer, intent (in) :: ktop, kbot
-    
-    real, intent (in) :: dts ! time step (s)
-    real, intent (in) :: elvmax ! sub - grid maximum height w.r.t. grid - scale mean height (m)
-    real, intent (in) :: sigma ! grid - scale mountain slope
-    
-    real, intent (in), dimension (ktop:kbot) :: delp ! positive values (pa)
-    real, intent (in), dimension (ktop:kbot) :: delz ! negative values (m)
-    real, intent (in), dimension (ktop:kbot) :: u, v ! orthogonal lat - lon wind (m / s)
-    real, intent (in), dimension (ktop:kbot) :: p ! layer - mean air pressure (pa)
-    real, intent (in), dimension (ktop:kbot) :: den ! air density (kg / m^3)
-    
-    real, intent (inout), dimension (ktop:kbot) :: tz ! air temperature (k)
-    real, intent (inout), dimension (ktop:kbot) :: qv, ql, qr, qi, qs, qg ! mass mixing ratio (kg / kg)
-    
-    real, intent (out), dimension (ktop:kbot) :: delt ! temperature change due to terrain induced lifting (k)
-    real, intent (out), dimension (ktop:kbot) :: vvm ! vertical velocity due to terrain induced lifting (k)
-    
-    real, intent (out), dimension (ktop:kbot) :: delqv, delql, delqi, delqr, delqs ! mass mixing ratio change (kg / kg)
-    
-    ! local variables
-    
-    logical :: adiabatic_lr = .true.
-    
-    integer :: k, kt
-    
-    real :: alpha = 1.0 ! updraught adjustment
-    real :: hc_max = 1.0 ! tuning parameter
-    
-    real :: b2, bf, hn, u2, eta
-    
-    real :: qsw, dwsdt, dq0, qim
-    real :: fac_v2l, fac_l2v, fac_l2r, fac_i2s, factor
-    real :: fac_imlt, fac_smlt
-    real :: sink, evap
-    real :: tc, dtdz
-    real :: cappa, pkz, q_con
-    real :: tmp, melt
-    
-    real, dimension (ktop:kbot) :: tt, pt
-    real, dimension (ktop:kbot) :: cvm
-    real, dimension (ktop:kbot) :: q_liq, q_sol
-    real, dimension (ktop:kbot) :: lhl, lhi, lcpk, icpk, tcpk, tcp3
-    
-    real, dimension (ktop:kbot) :: zm
-    real, dimension (ktop:kbot + 1) :: zi
-    real, dimension (ktop:kbot + 1) :: pti
-
-    tt = tz
-    delt = 0.0
-    vvm = 0.0
-    
-    delqv = qv
-    delql = ql
-    delqi = qi
-    delqr = qr
-    delqs = qs
-    
-    ! -----------------------------------------------------------------------
-    ! define conversion scalar / factor
-    ! -----------------------------------------------------------------------
-    
-    fac_v2l = 1. - exp (- dts / tau_v2l)
-    fac_l2v = 1. - exp (- dts / tau_l2v)
-    fac_l2r = 1. - exp (- dts / tau_l2r)
-    fac_i2s = 1. - exp (- dts / tau_i2s)
-    
-    fac_imlt = 1. - exp (- 0.5 * dts / tau_imlt)
-    fac_smlt = 1. - exp (- dts / tau_smlt)
-
-    ! -----------------------------------------------------------------------
-    ! define moist heat capacity
-    ! -----------------------------------------------------------------------
-    
-    do k = ktop, kbot
-        
-        q_liq (k) = ql (k) + qr (k)
-        q_sol (k) = qi (k) + qs (k) + qg (k)
-        cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-        
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! compute potential temperature and determine the terrain effective level
-    ! -----------------------------------------------------------------------
-    
-    kt = kbot + 1
-    zi (kbot + 1) = 0.0
-    
-    do k = kbot, ktop, - 1
-        
-        zm (k) = zi (k + 1) - delz (k) / 2.0
-        cappa = rdgas / (rdgas + cvm (k) / (1. + zvir * qv (k)))
-        q_con = ql (k) + qr (k) + qi (k) + qs (k) + qg (k)
-        pkz = exp (cappa * log (- rdgas / grav * delp (k) * tz (k) * &
-             (1. + zvir * qv (k)) * (1. - q_con) / delz (k)))
-        pt (k) = tz (k) * (1. + zvir * qv (k)) * (1. - q_con) / pkz
-        if (elvmax .le. zi (k + 1)) then
-            kt = k + 1
-            exit
-        endif
-        zi (k) = zi (k + 1) - delz (k)
-        ! cap kt at ktop no matter elvmax is higher than zi (ktop) or not.
-        if (k .eq. ktop) kt = ktop
-        
-    enddo
-    
-    if (kt .ne. kbot + 1) then
-
-        ! if kt = ktop, assume isothermal condition
-        if (kt .gt. ktop) then
-            
-            ! -----------------------------------------------------------------------
-            ! compute temperature change due to terrain induced lifting
-            ! -----------------------------------------------------------------------
-            
-            bf = 0
-            hn = 0
-            pti (kbot + 1) = pt (kbot)
-            
-            do k = kbot, kt, - 1
-                
-                pti (k) = 0.5 * (pt (k - 1) + pt (k))
-                b2 = - 2. * grav * dim (pti (k), pti (k + 1)) / ((pti (k) + pti (k + 1)) * delz (k))
-                b2 = - sqrt (b2) * delz (k)
-                bf = bf + b2
-                u2 = sqrt (u (k) ** 2 + v (k) ** 2)
-                hn = hn + b2 / max (0.01, u2)
-                hn = dim (hn, hc_max) ** 2
-                hn = hn / (1.0 + hn)
-                eta = (zm (k) - elvmax) / (zm (kbot) - elvmax)
-                if (adiabatic_lr) then
-                    dtdz = - grav / (rdgas + cvm (k) / (1. + zvir * qv (k)))
-                else
-                    dtdz = (tz (k - 1) - tz (k)) / (zm (k - 1) - zm (k))
-                endif
-                vvm (k) = alpha * (eta + (1 - hn) * (1 - eta)) * u2 * sigma
-                delt (k) = dtdz * max (delz (k) / 2, min (- delz (k) / 2, vvm (k) * dts))
-                tt (k) = tz (k) + delt (k)
-                
-            enddo
-            
-        endif
-        
-        ! -----------------------------------------------------------------------
-        ! define heat capacity and latend heat coefficient
-        ! -----------------------------------------------------------------------
-        
-        do k = ktop, kbot
-            
-            lhl (k) = lv00 + d0_vap * tt (k)
-            lhi (k) = li00 + dc_ice * tt (k)
-            lcpk (k) = lhl (k) / cvm (k)
-            icpk (k) = lhi (k) / cvm (k)
-            tcpk (k) = lcpk (k) + icpk (k)
-            tcp3 (k) = lcpk (k) + icpk (k) * min (1., dim (tice, tt (k)) / (tice - t_wfr))
-            
-        enddo
-        
-        ! -----------------------------------------------------------------------
-        ! condensation / evaporation
-        ! -----------------------------------------------------------------------
-        
-        do k = ktop, kbot
-            
-            qsw = wqs2 (tt (k), den (k), dwsdt)
-            dq0 = qsw - qv (k)
-            if (dq0 > 0.) then
-                ! sjl 20170703 added ql factor to prevent the situation of high ql and low rh
-                ! factor = min (1., fac_l2v * sqrt (max (0., ql (k)) / 1.e-5) * 10. * dq0 / qsw)
-                ! factor = fac_l2v
-                ! factor = 1
-                factor = min (1., fac_l2v * (10. * dq0 / qsw)) ! the rh dependent factor = 1 at 90%
-                evap = min (ql (k), factor * dq0 / (1. + tcp3 (k) * dwsdt))
-            else ! condensate all excess vapor into cloud water
-                ! -----------------------------------------------------------------------
-                ! evap = fac_v2l * dq0 / (1. + tcp3 (k) * dwsdt)
-                ! sjl, 20161108
-                ! -----------------------------------------------------------------------
-                evap = dq0 / (1. + tcp3 (k) * dwsdt)
-            endif
-            qv (k) = qv (k) + evap
-            ql (k) = ql (k) - evap
-            q_liq (k) = q_liq (k) - evap
-            cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tz (k) = tz (k) - evap * lhl (k) / cvm (k)
-            
-            ! -----------------------------------------------------------------------
-            ! update heat capacity and latend heat coefficient
-            ! -----------------------------------------------------------------------
-            
-            lhi (k) = li00 + dc_ice * tz (k)
-            icpk (k) = lhi (k) / cvm (k)
-            
-            ! -----------------------------------------------------------------------
-            ! freezing / melting
-            ! bigg mechanism
-            ! -----------------------------------------------------------------------
-            
-            tc = tice - tz (k)
-            if (ql (k) > qrmin .and. tc > 0.) then
-                sink = 3.3333e-10 * dts * (exp (0.66 * tc) - 1.) * den (k) * ql (k) * ql (k)
-                sink = min (ql (k), tc / icpk (k), sink)
-                ql (k) = ql (k) - sink
-                qi (k) = qi (k) + sink
-                q_liq (k) = q_liq (k) - sink
-                q_sol (k) = q_sol (k) + sink
-                cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz (k) = tz (k) + sink * lhi (k) / cvm (k)
-            else if (tc < 0. .and. qi (k) > qcmin) then
-                melt = min (qi (k), fac_imlt * (tz (k) - tice) / icpk (k))
-                tmp = min (melt, dim (ql_mlt, ql (k))) ! max ql amount
-                ql (k) = ql (k) + tmp
-                qr (k) = qr (k) + melt - tmp
-                qi (k) = qi (k) - melt
-                q_liq (k) = q_liq (k) + melt
-                q_sol (k) = q_sol (k) - melt
-                cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz (k) = tz (k) - melt * lhi (k) / cvm (k)
-            endif
-
-            ! -----------------------------------------------------------------------
-            ! autoconversion
-            ! -----------------------------------------------------------------------
-            
-            if (ql (k) > ql0_max) then
-                sink = fac_l2r * (ql (k) - ql0_max)
-                qr (k) = qr (k) + sink
-                ql (k) = ql (k) - sink
-            endif
-            
-            qim = qi0_max / den (k)
-            if (qi (k) > qim) then
-                sink = fac_i2s * (qi (k) - qim)
-                qi (k) = qi (k) - sink
-                qs (k) = qs (k) + sink
-            endif
-
-            ! -----------------------------------------------------------------------
-            ! update heat capacity and latend heat coefficient
-            ! -----------------------------------------------------------------------
-            
-            lhi (k) = li00 + dc_ice * tz (k)
-            icpk (k) = lhi (k) / cvm (k)
-
-            ! -----------------------------------------------------------------------
-            ! melting of snow to rain or cloud water
-            ! -----------------------------------------------------------------------
-            
-            tc = tz (k) - (tice + 0.1)
-            if (qs (k) > 1.e-7 .and. tc > 0.) then
-                tmp = min (1., (tc * 0.1) ** 2) * qs (k) ! no limter on melting above 10 deg c
-                sink = min (tmp, fac_smlt * tc / icpk (k))
-                tmp = min (sink, dim (qs_mlt, ql (k))) ! max ql due to snow melt
-                qs (k) = qs (k) - sink
-                ql (k) = ql (k) + tmp
-                qr (k) = qr (k) + sink - tmp
-                ! qr (k) = qr (k) + sink
-                q_liq (k) = q_liq (k) + sink
-                q_sol (k) = q_sol (k) - sink
-                cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz (k) = tz (k) - sink * lhi (k) / cvm (k)
-            endif
-    
-        enddo
-        
-    endif
-    
-    delqv = qv - delqv
-    delql = ql - delql
-    delqi = qi - delqi
-    delqr = qr - delqr
-    delqs = qs - delqs
-    
-end subroutine terrain_effect
 
 ! =======================================================================
 ! rain evaporation
