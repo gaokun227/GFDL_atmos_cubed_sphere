@@ -33,7 +33,9 @@ module fv_mapz_mod
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
   use fv_cmp_mod,        only: qs_init, fv_sat_adj
+#ifndef DYCORE_SOLO
   use gfdl_mp_mod,       only: gfdl_mp_driver
+#endif
 
   implicit none
   real, parameter:: consv_min= 0.001   ! below which no correction applies
@@ -139,7 +141,9 @@ contains
 ! SJL 03.11.04: Initial version for partial remapping
 !
 !-----------------------------------------------------------------------
-  real, allocatable, dimension(:,:,:) :: dp0, u0, v0, ua0, va0, u_dt, v_dt, qn
+  real, allocatable, dimension(:,:,:) :: dp0, u0, v0
+  real, allocatable, dimension(:,:,:) :: u_dt, v_dt
+  real, allocatable, dimension(:,:) :: qn
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
   real, dimension(is:ie,km)  :: q2, dp2
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
@@ -512,23 +516,27 @@ contains
 
   if ((.not. do_adiabatic_init) .and. do_inline_mp) then
 
-    allocate(ua0(isd:ied,jsd:jed,km))
-    allocate(va0(isd:ied,jsd:jed,km))
-    allocate(u0(isd:ied,jsd:jed+1,km))
-    allocate(v0(isd:ied+1,jsd:jed,km))
     allocate(u_dt(isd:ied,jsd:jed,km))
     allocate(v_dt(isd:ied,jsd:jed,km))
-    allocate(qn(is:ie,js:je,km))
+    allocate(qn(is:ie,km))
 
     ! save D grid u and v
-    u0 = u
-    v0 = v
+    if (consv .gt. consv_min) then
+      allocate(u0(isd:ied,jsd:jed+1,km))
+      allocate(v0(isd:ied+1,jsd:jed,km))
+      u0 = u
+      v0 = v
+    endif
 
     ! D grid wind to A grid wind remap
     call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
              domain, gridstruct%nested, c2l_ord, bd)
 
-    allocate(dp0(isd:ied,jsd:jed,km))
+    ! save delp
+    if (consv .gt. consv_min) then
+      allocate(dp0(isd:ied,jsd:jed,km))
+      dp0 = delp
+    endif
 
   endif
 
@@ -541,7 +549,7 @@ contains
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
 !$OMP                               npx,npy,qn,ccn_cm3,inline_mp,u_dt,v_dt,   &
-!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,ua0,va0,fv_debug) &
+!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,fv_debug) &
 !$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
 !$OMP do
@@ -727,13 +735,10 @@ endif        ! end last_step check
 !$OMP do
     do j = js, je
 
-        u_dt(is:ie,j,:) = 0.0
-        v_dt(is:ie,j,:) = 0.0
-
         if (ccn_cm3 .gt. 0) then
-          qn(is:ie,j,:) = q(is:ie,j,:,ccn_cm3)
+          qn(is:ie,:) = q(is:ie,j,:,ccn_cm3)
         else
-          qn(is:ie,j,:) = 0.0
+          qn(is:ie,:) = 0.0
         endif
  
         ! note: ua and va are A-grid variables
@@ -746,25 +751,24 @@ endif        ! end last_step check
         ! note: the unit of prer, prei, pres, preg is mm/day
 
         ! save ua, va for wind tendency calculation
-        ua0(is:ie,j,:) = ua(is:ie,j,:)
-        va0(is:ie,j,:) = va(is:ie,j,:)
+        u_dt(is:ie,j,:) = ua(is:ie,j,:)
+        v_dt(is:ie,j,:) = va(is:ie,j,:)
 
-        ! save delp for dry total energy update
-        dp0(is:ie,j,:) = delp(is:ie,j,:)
-
+#ifndef DYCORE_SOLO
         call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
-                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,j,:), &
+                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,:), &
                        pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
                        delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
                        hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
                        inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), hydrostatic, &
                        is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:), consv>consv_min, &
                        te(is:ie,j,:), last_step)
+#endif
  
         ! compute wind tendency at A grid fori D grid wind update
-        u_dt(is:ie,j,:) = (ua(is:ie,j,:) - ua0(is:ie,j,:)) / abs(mdt)
-        v_dt(is:ie,j,:) = (va(is:ie,j,:) - va0(is:ie,j,:)) / abs(mdt)
+        u_dt(is:ie,j,:) = (ua(is:ie,j,:) - u_dt(is:ie,j,:)) / abs(mdt)
+        v_dt(is:ie,j,:) = (va(is:ie,j,:) - v_dt(is:ie,j,:)) / abs(mdt)
 
         ! update pe, peln, pk, ps
         do k=2,km+1
@@ -904,14 +908,14 @@ endif        ! end last_step check
       enddo
     end if
 
-    deallocate(dp0)
-    deallocate(u0)
-    deallocate(v0)
     deallocate(u_dt)
     deallocate(v_dt)
-    deallocate(ua0)
-    deallocate(va0)
     deallocate(qn)
+    if (consv .gt. consv_min) then
+      deallocate(u0)
+      deallocate(v0)
+      deallocate(dp0)
+    endif
 
   endif
 
