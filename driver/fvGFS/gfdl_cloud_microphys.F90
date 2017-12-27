@@ -4,7 +4,7 @@
 ! key elements have been simplified / improved. this code at this stage
 ! bears little to no similarity to the original lin mp in zetac.
 ! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
-! developer: shian-jiann lin, linjiong zhou
+! developer: shian - jiann lin, linjiong zhou
 ! =======================================================================
 
 module gfdl_cloud_microphys_mod

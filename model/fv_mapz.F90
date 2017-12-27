@@ -143,7 +143,6 @@ contains
 !-----------------------------------------------------------------------
   real, allocatable, dimension(:,:,:) :: dp0, u0, v0
   real, allocatable, dimension(:,:,:) :: u_dt, v_dt
-  real, allocatable, dimension(:,:) :: qn
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
   real, dimension(is:ie,km)  :: q2, dp2
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
@@ -518,7 +517,6 @@ contains
 
     allocate(u_dt(isd:ied,jsd:jed,km))
     allocate(v_dt(isd:ied,jsd:jed,km))
-    allocate(qn(is:ie,km))
 
     ! save D grid u and v
     if (consv .gt. consv_min) then
@@ -548,7 +546,7 @@ contains
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
-!$OMP                               npx,npy,qn,ccn_cm3,inline_mp,u_dt,v_dt,   &
+!$OMP                               npx,npy,ccn_cm3,inline_mp,u_dt,v_dt,   &
 !$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,fv_debug) &
 !$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
@@ -736,9 +734,9 @@ endif        ! end last_step check
     do j = js, je
 
         if (ccn_cm3 .gt. 0) then
-          qn(is:ie,:) = q(is:ie,j,:,ccn_cm3)
+          q2(is:ie,:) = q(is:ie,j,:,ccn_cm3)
         else
-          qn(is:ie,:) = 0.0
+          q2(is:ie,:) = 0.0
         endif
  
         ! note: ua and va are A-grid variables
@@ -746,7 +744,7 @@ endif        ! end last_step check
         ! note: w is vertical velocity (m/s)
         ! note: delz is negative, delp is positive, delz doesn't change in constant volume situation
         ! note: hs is geopotential height (m^2/s^2)
-        ! note: the unit of qn is #/cc
+        ! note: the unit of q2 is #/cc
         ! note: the unit of area is m^2
         ! note: the unit of prer, prei, pres, preg is mm/day
 
@@ -757,7 +755,7 @@ endif        ! end last_step check
 #ifndef DYCORE_SOLO
         call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
-                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), qn(is:ie,:), &
+                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), &
                        pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
                        delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
                        hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
@@ -910,7 +908,6 @@ endif        ! end last_step check
 
     deallocate(u_dt)
     deallocate(v_dt)
-    deallocate(qn)
     if (consv .gt. consv_min) then
       deallocate(u0)
       deallocate(v0)
