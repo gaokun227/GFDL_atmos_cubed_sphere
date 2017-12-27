@@ -4,7 +4,7 @@
 ! key elements have been simplified / improved. this code at this stage
 ! bears little to no similarity to the original lin mp in zetac.
 ! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
-! developer: shian-jiann lin, linjiong zhou
+! developer: shian - jiann lin, linjiong zhou
 ! revision: inline gfdl cloud microphysics, 9 / 8 / 2017
 ! =======================================================================
 
@@ -14,7 +14,7 @@ module gfdl_mp_mod
     ! mpp_clock_begin, mpp_clock_end, clock_routine, &
     ! input_nml_file
     ! use time_manager_mod, only: time_type
-    use constants_mod, only: grav, rdgas, rvgas, cp_air, hlv, hlf, pi => pi_8
+    ! use constants_mod, only: grav, rdgas, rvgas, cp_air, hlv, hlf, pi => pi_8
     ! use fms_mod, only: write_version_number, open_namelist_file, &
     ! check_nml_error, file_exist, close_file
     use fv_arrays_mod, only: r_grid
@@ -33,13 +33,13 @@ module gfdl_mp_mod
     
     character (len = 17) :: mod_name = 'gfdl_mp'
     
-    ! real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
-    ! real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
-    ! real, parameter :: rvgas = 461.50 ! gfs: gas constant for water vapor
-    ! real, parameter :: cp_air = 1004.6 ! gfs: heat capacity of dry air at constant pressure
-    ! real, parameter :: hlv = 2.5e6 ! gfs: latent heat of evaporation
-    ! real, parameter :: hlf = 3.3358e5 ! gfs: latent heat of fusion
-    ! real, parameter :: pi = 3.1415926535897931 ! gfs: ratio of circle circumference to diameter
+    real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
+    real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
+    real, parameter :: rvgas = 461.50 ! gfs: gas constant for water vapor
+    real, parameter :: cp_air = 1004.6 ! gfs: heat capacity of dry air at constant pressure
+    real, parameter :: hlv = 2.5e6 ! gfs: latent heat of evaporation
+    real, parameter :: hlf = 3.3358e5 ! gfs: latent heat of fusion
+    real, parameter :: pi = 3.1415926535897931 ! gfs: ratio of circle circumference to diameter
     
     ! real, parameter :: rdgas = 287.04 ! gfdl: gas constant for dry air
     
@@ -105,6 +105,8 @@ module gfdl_mp_mod
     
     real :: d0_vap ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
     real :: lv00 ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
+
+    integer :: ntimes = 1 ! cloud microphysics sub cycles
     
     ! cloud microphysics switchers
     
@@ -261,7 +263,6 @@ module gfdl_mp_mod
     logical :: use_ppm = .false. ! use ppm fall scheme
     logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
     logical :: mp_print = .false. ! cloud microphysics debugging printout
-    logical :: do_terrain_effect = .false. ! perform terrain induced cloud microphysics processes
     
     ! real :: global_area = - 1.
     
@@ -299,16 +300,16 @@ module gfdl_mp_mod
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
         vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
-        qi0_crt, qr0_crt, fast_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
+        qi0_crt, fast_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
         const_vs, const_vg, const_vr, use_ccn, rthresh, ccn_l, ccn_o, qc_crt, &
-        tau_g2v, tau_v2g, sat_adj0, c_piacr, tau_imlt, tau_v2l, tau_l2v, &
+        tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, &
         mp_print, dry_mp, qmin, beta, rewmin, rewmax, reimin, reimax, rermin, &
         rermax, resmin, resmax, regmin, regmax, betaw, betai, betar, betas, &
-        betag, liq_ice_combine, do_terrain_effect
+        betag, liq_ice_combine, ntimes
     
 contains
 
@@ -421,7 +422,7 @@ end subroutine gfdl_mp_driver
 ! -----------------------------------------------------------------------
 
 subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
-        qg, qa, qn, dz, is, ie, ks, ke, dts, &
+        qg, qa, qn, dz, is, ie, ks, ke, dt_in, &
         rain, snow, graupel, ice, m2_rain, m2_sol, area1, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, consv_te, te, &
         last_step)
@@ -436,7 +437,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     integer, intent (in) :: is, ie, ks, ke
     
-    real, intent (in) :: dts
+    real, intent (in) :: dt_in
     
     real (kind = r_grid), intent (in), dimension (is:ie) :: area1
     real, intent (in), dimension (is:ie) :: hs
@@ -477,8 +478,11 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real :: s_leng, t_land, t_ocean, h_var
     real :: cvm, tmp
     real :: convt
+    real :: dts
     
     integer :: i, k, n
+
+    dts = dt_in / real (ntimes)
     
     dt_rain = dts * 0.5
     rdt = 1. / dts
@@ -645,82 +649,86 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         m2_rain (i, :) = 0.
         m2_sol (i, :) = 0.
+
+        do n = 1, ntimes
         
-        ! -----------------------------------------------------------------------
-        ! define air density based on hydrostatical property
-        ! -----------------------------------------------------------------------
-        
-        if (p_nonhydro) then
+            ! -----------------------------------------------------------------------
+            ! define air density based on hydrostatical property
+            ! -----------------------------------------------------------------------
+            
+            if (p_nonhydro) then
+                do k = ks, ke
+                    dz1 (k) = dz0 (k)
+                    den (k) = den0 (k) ! dry air density remains the same
+                    denfac (k) = sqrt (sfcrho / den (k))
+                enddo
+            else
+                do k = ks, ke
+                    dz1 (k) = dz0 (k) * tz (k) / t0 (k) ! hydrostatic balance
+                    den (k) = den0 (k) * dz0 (k) / dz1 (k)
+                    denfac (k) = sqrt (sfcrho / den (k))
+                enddo
+            endif
+            
+            ! -----------------------------------------------------------------------
+            ! time - split warm rain processes: 1st pass
+            ! -----------------------------------------------------------------------
+            
+            call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
+                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, mc_air)
+            
+            rain (i) = rain (i) + r1 * convt
+            
             do k = ks, ke
-                dz1 (k) = dz0 (k)
-                den (k) = den0 (k) ! dry air density remains the same
-                denfac (k) = sqrt (sfcrho / den (k))
+                m2_rain (i, k) = m2_rain (i, k) + m1_rain (k)
+                m1 (k) = m1 (k) + m1_rain (k)
             enddo
-        else
+            
+            ! -----------------------------------------------------------------------
+            ! sedimentation of cloud ice, snow, and graupel
+            ! -----------------------------------------------------------------------
+            
+            call fall_speed (ks, ke, den, qsz, qiz, qgz, qlz, tz, vtsz, vtiz, vtgz)
+            
+            call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
+                dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, mc_air)
+            
+            rain (i) = rain (i) + r1 * convt ! from melted snow & ice that reached the ground
+            snow (i) = snow (i) + s1 * convt
+            graupel (i) = graupel (i) + g1 * convt
+            ice (i) = ice (i) + i1 * convt
+            
+            ! -----------------------------------------------------------------------
+            ! heat transportation during sedimentation
+            ! -----------------------------------------------------------------------
+            
+            if (do_sedi_heat) &
+                call sedi_heat (ks, ke, dp1, m1_sol, dz1, tz, qvz, qlz, qrz, qiz, &
+                qsz, qgz, c_ice)
+            
+            ! -----------------------------------------------------------------------
+            ! time - split warm rain processes: 2nd pass
+            ! -----------------------------------------------------------------------
+            
+            call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
+                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, mc_air)
+            
+            rain (i) = rain (i) + r1 * convt
+            
             do k = ks, ke
-                dz1 (k) = dz0 (k) * tz (k) / t0 (k) ! hydrostatic balance
-                den (k) = den0 (k) * dz0 (k) / dz1 (k)
-                denfac (k) = sqrt (sfcrho / den (k))
+                m2_rain (i, k) = m2_rain (i, k) + m1_rain (k)
+                m2_sol (i, k) = m2_sol (i, k) + m1_sol (k)
+                m1 (k) = m1 (k) + m1_rain (k) + m1_sol (k)
             enddo
-        endif
-        
-        ! -----------------------------------------------------------------------
-        ! time - split warm rain processes: 1st pass
-        ! -----------------------------------------------------------------------
-        
-        call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-            qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, mc_air)
-        
-        rain (i) = rain (i) + r1 * convt
-        
-        do k = ks, ke
-            m2_rain (i, k) = m2_rain (i, k) + m1_rain (k)
-            m1 (k) = m1 (k) + m1_rain (k)
+            
+            ! -----------------------------------------------------------------------
+            ! ice - phase microphysics
+            ! -----------------------------------------------------------------------
+            
+            call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, &
+                denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, mc_air, last_step)
+
         enddo
-        
-        ! -----------------------------------------------------------------------
-        ! sedimentation of cloud ice, snow, and graupel
-        ! -----------------------------------------------------------------------
-        
-        call fall_speed (ks, ke, den, qsz, qiz, qgz, qlz, tz, vtsz, vtiz, vtgz)
-        
-        call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
-            dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, mc_air)
-        
-        rain (i) = rain (i) + r1 * convt ! from melted snow & ice that reached the ground
-        snow (i) = snow (i) + s1 * convt
-        graupel (i) = graupel (i) + g1 * convt
-        ice (i) = ice (i) + i1 * convt
-        
-        ! -----------------------------------------------------------------------
-        ! heat transportation during sedimentation
-        ! -----------------------------------------------------------------------
-        
-        if (do_sedi_heat) &
-            call sedi_heat (ks, ke, dp1, m1_sol, dz1, tz, qvz, qlz, qrz, qiz, &
-            qsz, qgz, c_ice)
-        
-        ! -----------------------------------------------------------------------
-        ! time - split warm rain processes: 2nd pass
-        ! -----------------------------------------------------------------------
-        
-        call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-            qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, mc_air)
-        
-        rain (i) = rain (i) + r1 * convt
-        
-        do k = ks, ke
-            m2_rain (i, k) = m2_rain (i, k) + m1_rain (k)
-            m2_sol (i, k) = m2_sol (i, k) + m1_sol (k)
-            m1 (k) = m1 (k) + m1_rain (k) + m1_sol (k)
-        enddo
-        
-        ! -----------------------------------------------------------------------
-        ! ice - phase microphysics
-        ! -----------------------------------------------------------------------
-        
-        call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, &
-            denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, mc_air, last_step)
         
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
@@ -2263,319 +2271,6 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
     enddo
     
 end subroutine subgrid_z_proc
-
-! =======================================================================
-! terrain effect
-! =======================================================================
-
-subroutine terrain_effect (ktop, kbot, dts, tz, p, u, v, qv, ql, qr, qi, &
-        qs, qg, elvmax, sigma, delp, delz, den, delt, delqv, delql, delqi, &
-        delqr, delqs, vvm)
-    
-    implicit none
-    
-    integer, intent (in) :: ktop, kbot
-    
-    real, intent (in) :: dts ! time step (s)
-    real, intent (in) :: elvmax ! sub - grid maximum height w.r.t. grid - scale mean height (m)
-    real, intent (in) :: sigma(4) ! grid - scale mountain slope, x+, x-, y+, y-
-    
-    real, intent (in), dimension (ktop:kbot) :: delp ! positive values (pa)
-    real, intent (in), dimension (ktop:kbot) :: delz ! negative values (m)
-    real, intent (in), dimension (ktop:kbot) :: u, v ! orthogonal lat - lon wind (m / s)
-    real, intent (in), dimension (ktop:kbot) :: p ! layer - mean air pressure (pa)
-    real, intent (in), dimension (ktop:kbot) :: den ! air density (kg / m^3)
-    
-    real, intent (inout), dimension (ktop:kbot) :: tz ! air temperature (k)
-    real, intent (inout), dimension (ktop:kbot) :: qv, ql, qr, qi, qs, qg ! mass mixing ratio (kg / kg)
-    
-    real, intent (out), dimension (ktop:kbot) :: delt ! temperature change due to terrain induced lifting (k)
-    real, intent (out), dimension (ktop:kbot) :: vvm ! vertical velocity due to terrain induced lifting (k)
-    
-    real, intent (out), dimension (ktop:kbot) :: delqv, delql, delqi, delqr, delqs ! mass mixing ratio change (kg / kg)
-    
-    ! local variables
-    
-    logical :: adiabatic_lr = .true.
-    logical :: do_up = .true.
-    
-    integer :: k, kt, n
-    integer :: ntimes2 = 2
-    
-    real :: alpha = 1.0 ! updraught adjustment
-    real :: hc_max = 1.0 ! tuning parameter
-    
-    real :: b2, bf, hn, u2, eta
-    
-    real :: qsw, dwsdt, dq0, qim
-    real :: fac_v2l, fac_l2v, fac_l2r, fac_i2s, factor
-    real :: fac_imlt, fac_smlt
-    real :: sink, evap
-    real :: tc, dtdz
-    real :: cappa, pkz, q_con
-    real :: tmp, melt
-    
-    real, dimension (ktop:kbot) :: tt, pt
-    real, dimension (ktop:kbot) :: cvm, mc_air
-    real, dimension (ktop:kbot) :: q_liq, q_sol
-    real, dimension (ktop:kbot) :: lhl, lhi, lcpk, icpk, tcpk, tcp3
-    
-    real, dimension (ktop:kbot) :: zm
-    real, dimension (ktop:kbot + 1) :: zi
-    real, dimension (ktop:kbot + 1) :: pti
-    
-    real, dimension (ktop:kbot) :: usigma
-    
-    tt = tz
-    delt = 0.0
-    vvm = 0.0
-    
-    delqv = qv
-    delql = ql
-    delqi = qi
-    delqr = qr
-    delqs = qs
-    
-    ! -----------------------------------------------------------------------
-    ! define conversion scalar / factor
-    ! -----------------------------------------------------------------------
-    
-    fac_v2l = 1. - exp (- dts / tau_v2l)
-    fac_l2v = 1. - exp (- dts / tau_l2v)
-    fac_l2r = 1. - exp (- dts / tau_l2r)
-    fac_i2s = 1. - exp (- dts / tau_i2s)
-    
-    fac_imlt = 1. - exp (- 0.5 * dts / tau_imlt)
-    fac_smlt = 1. - exp (- dts / tau_smlt)
-
-    do n = 1, ntimes2 ! odd: up, even: down
-
-        ! -----------------------------------------------------------------------
-        ! define u * sigma
-        ! -----------------------------------------------------------------------
-        
-        if (do_up) then
-            do k = ktop, kbot
-                usigma (k) = max (0., u (k)) * sigma (1) + min (0., u (k)) * sigma (2) + \
-                             max (0., v (k)) * sigma (3) + min (0., v (k)) * sigma (4)
-            enddo
-        else
-            do k = ktop, kbot
-                usigma (k) = max (0., u (k)) * sigma (2) + min (0., u (k)) * sigma (1) + \
-                             max (0., v (k)) * sigma (4) + min (0., v (k)) * sigma (3)
-            enddo
-        endif
-        
-        ! -----------------------------------------------------------------------
-        ! define moist heat capacity
-        ! -----------------------------------------------------------------------
-        
-        do k = ktop, kbot
-            
-            q_liq (k) = ql (k) + qr (k)
-            q_sol (k) = qi (k) + qs (k) + qg (k)
-            mc_air (k) = (1. - (qv (k) + ql (k) + qr (k) + qi (k) + qs (k) + qg (k))) * c_air
-            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            
-        enddo
-        
-        ! -----------------------------------------------------------------------
-        ! compute potential temperature and determine the terrain effective level
-        ! -----------------------------------------------------------------------
-        
-        kt = kbot + 1
-        zi (kbot + 1) = 0.0
-        
-        do k = kbot, ktop, - 1
-            
-            zm (k) = zi (k + 1) - delz (k) / 2.0
-            cappa = rdgas / (rdgas + cvm (k) / (1. + zvir * qv (k)))
-            q_con = ql (k) + qr (k) + qi (k) + qs (k) + qg (k)
-            pkz = exp (cappa * log (- rdgas / grav * delp (k) * tz (k) * &
-                 (1. + zvir * qv (k)) * (1. - q_con) / delz (k)))
-            pt (k) = tz (k) * (1. + zvir * qv (k)) * (1. - q_con) / pkz
-            if (elvmax .le. zi (k + 1)) then
-                kt = k + 1
-                exit
-            endif
-            zi (k) = zi (k + 1) - delz (k)
-            ! cap kt at ktop no matter elvmax is higher than zi (ktop) or not.
-            if (k .eq. ktop) kt = ktop
-            
-        enddo
-        
-        if (kt .ne. kbot + 1) then
- 
-            ! if kt = ktop, assume isothermal condition
-            if (kt .gt. ktop) then
-                
-                ! -----------------------------------------------------------------------
-                ! compute temperature change due to terrain induced lifting
-                ! -----------------------------------------------------------------------
-                
-                bf = 0
-                hn = 0
-                pti (kbot + 1) = pt (kbot)
-                
-                do k = kbot, kt, - 1
-                    
-                    pti (k) = 0.5 * (pt (k - 1) + pt (k))
-                    b2 = - 2. * grav * dim (pti (k), pti (k + 1)) / ((pti (k) + pti (k + 1)) * delz (k))
-                    b2 = - sqrt (b2) * delz (k)
-                    bf = bf + b2
-                    u2 = sqrt (u (k) ** 2 + v (k) ** 2)
-                    hn = hn + b2 / max (0.01, u2)
-                    hn = dim (hn, hc_max) ** 2
-                    hn = hn / (1.0 + hn)
-                    eta = (zm (k) - elvmax) / (zm (kbot) - elvmax)
-                    if (adiabatic_lr) then
-                        dtdz = - grav / (rdgas + cvm (k) / (1. + zvir * qv (k)))
-                    else
-                        dtdz = (tz (k - 1) - tz (k)) / (zm (k - 1) - zm (k))
-                    endif
-                    vvm (k) = alpha * (eta + (1 - hn) * (1 - eta)) * usigma (k)
-                    delt (k) = dtdz * max (delz (k) / 2, min (- delz (k) / 2, vvm (k) * dts))
-                    tt (k) = tz (k) + delt (k)
-                    
-                enddo
-                
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! define heat capacity and latend heat coefficient
-            ! -----------------------------------------------------------------------
-            
-            do k = ktop, kbot
-                
-                lhl (k) = lv00 + d0_vap * tt (k)
-                lhi (k) = li00 + dc_ice * tt (k)
-                lcpk (k) = lhl (k) / cvm (k)
-                icpk (k) = lhi (k) / cvm (k)
-                tcpk (k) = lcpk (k) + icpk (k)
-                tcp3 (k) = lcpk (k) + icpk (k) * min (1., dim (tice, tt (k)) / (tice - t_wfr))
-                
-            enddo
-            
-            ! -----------------------------------------------------------------------
-            ! condensation / evaporation
-            ! -----------------------------------------------------------------------
-            
-            do k = ktop, kbot
-                
-                qsw = wqs2 (tt (k), den (k), dwsdt)
-                dq0 = qsw - qv (k)
-                if (dq0 > 0.) then
-                    ! sjl 20170703 added ql factor to prevent the situation of high ql and low rh
-                    ! factor = min (1., fac_l2v * sqrt (max (0., ql (k)) / 1.e-5) * 10. * dq0 / qsw)
-                    ! factor = fac_l2v
-                    ! factor = 1
-                    factor = min (1., fac_l2v * (10. * dq0 / qsw)) ! the rh dependent factor = 1 at 90%
-                    evap = min (ql (k), factor * dq0 / (1. + tcp3 (k) * dwsdt))
-                else ! condensate all excess vapor into cloud water
-                    ! -----------------------------------------------------------------------
-                    ! evap = fac_v2l * dq0 / (1. + tcp3 (k) * dwsdt)
-                    ! sjl, 20161108
-                    ! -----------------------------------------------------------------------
-                    evap = dq0 / (1. + tcp3 (k) * dwsdt)
-                endif
-                qv (k) = qv (k) + evap
-                ql (k) = ql (k) - evap
-                q_liq (k) = q_liq (k) - evap
-                cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz (k) = tz (k) - evap * lhl (k) / cvm (k)
-                
-                ! -----------------------------------------------------------------------
-                ! update heat capacity and latend heat coefficient
-                ! -----------------------------------------------------------------------
-                
-                lhi (k) = li00 + dc_ice * tz (k)
-                icpk (k) = lhi (k) / cvm (k)
-                
-                ! -----------------------------------------------------------------------
-                ! freezing / melting
-                ! bigg mechanism
-                ! -----------------------------------------------------------------------
-                
-                tc = tice - tz (k)
-                if (ql (k) > qrmin .and. tc > 0.) then
-                    sink = 3.3333e-10 * dts * (exp (0.66 * tc) - 1.) * den (k) * ql (k) * ql (k)
-                    sink = min (ql (k), tc / icpk (k), sink)
-                    ql (k) = ql (k) - sink
-                    qi (k) = qi (k) + sink
-                    q_liq (k) = q_liq (k) - sink
-                    q_sol (k) = q_sol (k) + sink
-                    cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                    tz (k) = tz (k) + sink * lhi (k) / cvm (k)
-                else if (tc < 0. .and. qi (k) > qcmin) then
-                    melt = min (qi (k), fac_imlt * (tz (k) - tice) / icpk (k))
-                    tmp = min (melt, dim (ql_mlt, ql (k))) ! max ql amount
-                    ql (k) = ql (k) + tmp
-                    qr (k) = qr (k) + melt - tmp
-                    qi (k) = qi (k) - melt
-                    q_liq (k) = q_liq (k) + melt
-                    q_sol (k) = q_sol (k) - melt
-                    cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                    tz (k) = tz (k) - melt * lhi (k) / cvm (k)
-                endif
- 
-                ! -----------------------------------------------------------------------
-                ! autoconversion
-                ! -----------------------------------------------------------------------
-                
-                if (ql (k) > ql0_max) then
-                    sink = fac_l2r * (ql (k) - ql0_max)
-                    qr (k) = qr (k) + sink
-                    ql (k) = ql (k) - sink
-                endif
-                
-                qim = qi0_max / den (k)
-                if (qi (k) > qim) then
-                    sink = fac_i2s * (qi (k) - qim)
-                    qi (k) = qi (k) - sink
-                    qs (k) = qs (k) + sink
-                endif
- 
-                ! -----------------------------------------------------------------------
-                ! update heat capacity and latend heat coefficient
-                ! -----------------------------------------------------------------------
-                
-                lhi (k) = li00 + dc_ice * tz (k)
-                icpk (k) = lhi (k) / cvm (k)
- 
-                ! -----------------------------------------------------------------------
-                ! melting of snow to rain or cloud water
-                ! -----------------------------------------------------------------------
-                
-                tc = tz (k) - (tice + 0.1)
-                if (qs (k) > 1.e-7 .and. tc > 0.) then
-                    tmp = min (1., (tc * 0.1) ** 2) * qs (k) ! no limter on melting above 10 deg c
-                    sink = min (tmp, fac_smlt * tc / icpk (k))
-                    tmp = min (sink, dim (qs_mlt, ql (k))) ! max ql due to snow melt
-                    qs (k) = qs (k) - sink
-                    ql (k) = ql (k) + tmp
-                    qr (k) = qr (k) + sink - tmp
-                    ! qr (k) = qr (k) + sink
-                    q_liq (k) = q_liq (k) + sink
-                    q_sol (k) = q_sol (k) - sink
-                    cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                    tz (k) = tz (k) - sink * lhi (k) / cvm (k)
-                endif
-        
-            enddo
-            
-        endif
- 
-        do_up = .not. do_up
-
-    enddo
-    
-    delqv = qv - delqv
-    delql = ql - delql
-    delqi = qi - delqi
-    delqr = qr - delqr
-    delqs = qs - delqs
-    
-end subroutine terrain_effect
 
 ! =======================================================================
 ! rain evaporation
