@@ -546,7 +546,7 @@ contains
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
-!$OMP                               npx,npy,ccn_cm3,inline_mp,u_dt,v_dt,   &
+!$OMP                               npx,npy,q2,ccn_cm3,inline_mp,u_dt,v_dt,   &
 !$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,fv_debug) &
 !$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
