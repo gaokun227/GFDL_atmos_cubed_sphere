@@ -306,10 +306,9 @@ module gfdl_mp_mod
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
-        do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, &
-        mp_print, dry_mp, qmin, beta, rewmin, rewmax, reimin, reimax, rermin, &
-        rermax, resmin, resmax, regmin, regmax, betaw, betai, betar, betas, &
-        betag, liq_ice_combine, ntimes
+        do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
+        dry_mp, qmin, beta, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
+        regmin, regmax, betaw, betai, betar, betas, betag, liq_ice_combine, ntimes
     
 contains
 
