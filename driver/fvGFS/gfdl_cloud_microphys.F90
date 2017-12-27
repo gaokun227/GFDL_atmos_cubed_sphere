@@ -547,7 +547,6 @@ subroutine mpdrv (hydrostatic, uin, vin, w, delp, pt, qv, ql, qr, qi, qs, &
     real, dimension (ktop:kbot) :: t0, den, den0, tz, p1, denfac
     real, dimension (ktop:kbot) :: ccn, c_praut, m1_rain, m1_sol, m1
     real, dimension (ktop:kbot) :: u0, v0, u1, v1, w1
-    real, dimension (ktop:kbot) :: tout, qvout, qlout, qiout, qrout, qsout, vout
     
     real :: cpaut, rh_adj, rh_rain
     real :: r1, s1, i1, g1, rdt, ccn0
