@@ -999,14 +999,6 @@ contains
               Atm%uc(i,j,k) = real_big
            enddo
         enddo
-        do j=js, je
-           do i=is, ie
-              Atm%inline_mp%prer(i,j) = real_big
-              Atm%inline_mp%prei(i,j) = real_big
-              Atm%inline_mp%pres(i,j) = real_big
-              Atm%inline_mp%preg(i,j) = real_big
-           enddo
-        enddo
         if ( .not. Atm%flagstruct%hydrostatic ) then
            do j=jsd, jed
               do i=isd, ied
@@ -1028,6 +1020,14 @@ contains
               Atm%qdiag(i,j,k,n) = real_big
            enddo
         enddo
+        enddo
+     enddo
+     do j=js, je
+        do i=is, ie
+           Atm%inline_mp%prer(i,j) = real_big
+           Atm%inline_mp%prei(i,j) = real_big
+           Atm%inline_mp%pres(i,j) = real_big
+           Atm%inline_mp%preg(i,j) = real_big
         enddo
      enddo
 #endif
