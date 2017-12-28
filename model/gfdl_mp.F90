@@ -498,9 +498,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         do k = ks, ke
             
 #ifdef MOIST_CAPPA
-            t0 (k) = pt (i, k) / (1 + zvir * qv (i, k)) / (1 - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
+            t0 (k) = pt (i, k) / ((1. + zvir * qv (i, k)) * (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k))))
 #else
-            t0 (k) = pt (i, k) / (1 + zvir * qv (i, k))
+            t0 (k) = pt (i, k) / (1. + zvir * qv (i, k))
 #endif
             tz (k) = t0 (k)
             dp1 (k) = delp (i, k)
@@ -534,7 +534,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             
             if (dry_mp) then
                 mc_air (k) = c_air
-                dp1 (k) = dp1 (k) * (1 - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
+                dp1 (k) = dp1 (k) * (1. - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
                 omq (k) = dp0 (k) / dp1 (k)
             else
                 mc_air (k) = (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k))) * c_air
@@ -771,8 +771,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qg (i, k) = qgz (k)
             
             delp (i, k) = dp0 (k) * &
-                 (1 - qv0 (k) - ql0 (k) - qr0 (k) - qi0 (k) - qs0 (k) - qg0 (k)) / &
-                 (1 - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
+                 (1. - qv0 (k) - ql0 (k) - qr0 (k) - qi0 (k) - qs0 (k) - qg0 (k)) / &
+                 (1. - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
             
 #ifdef MOIST_CAPPA
             q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
@@ -4549,7 +4549,7 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
         qmi = qmi + cnvi
     endif
     if (present (cnvc)) then
-        cld = cnvc + (1 - cnvc) * cld
+        cld = cnvc + (1. - cnvc) * cld
     endif
     
     if (liq_ice_combine) then
