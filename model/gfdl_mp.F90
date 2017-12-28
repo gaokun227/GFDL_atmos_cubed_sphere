@@ -497,7 +497,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         do k = ks, ke
             
-#ifdef USE_COND
+#ifdef MOIST_CAPPA
             t0 (k) = pt (i, k) / (1 + zvir * qv (i, k)) / (1 - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)))
 #else
             t0 (k) = pt (i, k) / (1 + zvir * qv (i, k))
@@ -580,7 +580,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 enddo
             else
                 do k = ks, ke
-#ifdef USE_COND
+#ifdef MOIST_CAPPA
                     cvm = mc_air (k) + qv0 (k) * c_vap + (qr0 (k) + ql0 (k)) * c_liq + (qi0 (k) + qs0 (k) + qg0 (k)) * c_ice
                     te (i, k) = - cvm * t0 (k) * delp (i, k)
 #else
@@ -774,7 +774,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                  (1 - qv0 (k) - ql0 (k) - qr0 (k) - qi0 (k) - qs0 (k) - qg0 (k)) / &
                  (1 - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
             
-#ifdef USE_COND
+#ifdef MOIST_CAPPA
             q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
             if (dry_mp) then
                 mc_air (k) = c_air
@@ -803,7 +803,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 enddo
             else
                 do k = ks, ke
-#ifdef USE_COND
+#ifdef MOIST_CAPPA
                     cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
                     te (i, k) = te (i, k) + cvm * tz (k) * delp (i, k)
 #else
