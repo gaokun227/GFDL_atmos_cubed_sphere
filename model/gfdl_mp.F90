@@ -4,7 +4,7 @@
 ! key elements have been simplified / improved. this code at this stage
 ! bears little to no similarity to the original lin mp in zetac.
 ! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
-! developer: shian - jiann lin, linjiong zhou
+! developer: shian-jiann lin, linjiong zhou
 ! revision: inline gfdl cloud microphysics, 9 / 8 / 2017
 ! =======================================================================
 
@@ -534,7 +534,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             
             if (dry_mp) then
                 mc_air (k) = c_air
-                dp1 (k) = dp1 (k) * (1. - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
+                dp1 (k) = dp1 (k) * (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)))
                 omq (k) = dp0 (k) / dp1 (k)
             else
                 mc_air (k) = (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k))) * c_air
@@ -741,6 +741,16 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 ua (i, k) = u1 (k)
                 va (i, k) = v1 (k)
             enddo
+            ! sjl modify tz due to ke loss:
+            ! seperate loop (vectorize better with no k-dependency)
+            do k = ks + 1, ke
+#ifdef MOIST_CAPPA
+                cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
+                tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / cvm
+#else
+                tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / c_air
+#endif
+            enddo
         endif
         
         if (do_sedi_w) then
@@ -770,12 +780,12 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
             
+            q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
             delp (i, k) = dp0 (k) * &
-                 (1. - qv0 (k) - ql0 (k) - qr0 (k) - qi0 (k) - qs0 (k) - qg0 (k)) / &
-                 (1. - qvz (k) - qlz (k) - qrz (k) - qiz (k) - qsz (k) - qgz (k))
+                 (1. - (qv0 (k) + ql0 (k) + qr0 (k) + qi0 (k) + qs0 (k) + qg0 (k))) / &
+                 (1. - (qvz (k) + q_con (i, k)))
             
 #ifdef MOIST_CAPPA
-            q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
             if (dry_mp) then
                 mc_air (k) = c_air
             else
@@ -2237,7 +2247,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             if (icloud_f == 2) then
                 if (qpz > qstar) then
                     qa (k) = 1.
-                elseif (qstar < q_plus .and. q_cond (k) > 1.e-6) then
+                elseif (q_plus > qstar .and. q_cond (k) > 1.e-6) then
                     qa (k) = ((q_plus - qstar) / dq) ** 2
                     qa (k) = min (1., qa (k))
                 else
