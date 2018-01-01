@@ -315,7 +315,7 @@ contains
       real, dimension(:,:,:), allocatable:: zh(:,:,:)  ! 3D height at 65 edges
       real, dimension(:,:,:,:), allocatable:: q
       real, dimension(:,:), allocatable :: phis_coarse ! lmh
-      real rdg, wt, qt, m_fac
+      real rdg, wt, qt, m_fac, pe1
       integer:: n, npx, npy, npz, itoa, nt, ntprog, ntdiag, ntracers, ntrac, iq
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
@@ -336,7 +336,7 @@ contains
       real(kind=R_GRID), dimension(2):: p1, p2, p3
       real(kind=R_GRID), dimension(3):: e1, e2, ex, ey
       integer:: i,j,k,nts, ks
-      integer:: liq_wat, ice_wat, rainwat, snowwat, graupel
+      integer:: liq_wat, ice_wat, rainwat, snowwat, graupel, tke
       namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds, &
                                  checker_tr, nt_checker
 
@@ -676,6 +676,18 @@ contains
             enddo
           enddo
         enddo
+
+        tke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+        if (tke > 0) then
+           do k=1,npz
+           do j=js,je
+           do i=is,ie
+              !pe1 = Atm(n)%ak(k+1) + Atm(n)%bk(k+1)*Atm(n)%ps(i,j)
+              Atm(n)%q(i,j,k,tke) = 0.02 ! 1.*exp(-(Atm(n)%ps(i,j) - pe1)**2)
+           enddo
+           enddo
+           enddo
+        endif
 
 !--- reset the tracers beyond condensate to a checkerboard pattern 
         if (checker_tr) then
