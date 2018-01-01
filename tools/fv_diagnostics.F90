@@ -2542,7 +2542,7 @@ contains
           if (idiag%id_dbztop > 0) then
              do j=jsc,jec
              do i=isc,iec
-                a2(i,j) = missing_value
+                a2(i,j) = missing_value2
              do k=2,npz
                 if (wz(i,j,k) >= 25000. ) continue ! nothing above 25 km
                 if (a3(i,j,k) >= 18.5 ) then
