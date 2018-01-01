@@ -123,7 +123,7 @@ module fv_control_mod
    logical , pointer :: warm_start 
    logical , pointer :: inline_q 
    real , pointer :: shift_fac   
-   logical , pointer :: do_schmidt 
+   logical , pointer :: do_schmidt, do_cube_transform 
    real(kind=R_GRID) , pointer :: stretch_fac 
    real(kind=R_GRID) , pointer :: target_lat  
    real(kind=R_GRID) , pointer :: target_lon  
@@ -547,7 +547,8 @@ module fv_control_mod
 
       namelist /fv_grid_nml/ grid_name, grid_file
       namelist /fv_core_nml/npx, npy, ntiles, npz, npz_type, npz_rst, layout, io_layout, ncnst, nwat,  &
-                            use_logp, p_fac, a_imp, k_split, n_split, m_split, q_split, print_freq, write_3d_diags, do_schmidt,  &
+                            use_logp, p_fac, a_imp, k_split, n_split, m_split, q_split, print_freq, write_3d_diags, &
+                            do_schmidt,  do_cube_transform, &
                             hord_mt, hord_vt, hord_tm, hord_dp, hord_tr, shift_fac, stretch_fac, target_lat, target_lon, &
                             kord_mt, kord_wz, kord_tm, kord_tr, fv_debug, fv_land, nudge, do_sat_adj, do_f3d, &
                             external_ic, read_increment, ncep_ic, nggps_ic, ecmwf_ic, use_new_ncep, use_ncep_phy, fv_diag_ic, &
@@ -1135,6 +1136,7 @@ module fv_control_mod
      inline_q                      => Atm%flagstruct%inline_q
      shift_fac                     => Atm%flagstruct%shift_fac
      do_schmidt                    => Atm%flagstruct%do_schmidt
+     do_cube_transform             => Atm%flagstruct%do_cube_transform
      stretch_fac                   => Atm%flagstruct%stretch_fac
      target_lat                    => Atm%flagstruct%target_lat
      target_lon                    => Atm%flagstruct%target_lon

@@ -24,7 +24,7 @@ module fv_grid_tools_mod
   use fv_grid_utils_mod, only: gnomonic_grids, great_circle_dist,  &
                            mid_pt_sphere, spherical_angle,     &
                                cell_center2, get_area, inner_prod, fill_ghost, &
-                           direct_transform, dist2side_latlon, &
+                           direct_transform, cube_transform, dist2side_latlon, &
                            spherical_linear_interpolation, big_number
   use fv_timing_mod,  only: timing_on, timing_off
   use fv_mp_mod,      only: ng, is_master, fill_corners, XDir, YDir
@@ -542,7 +542,7 @@ contains
     latlon = .false.
     cubed_sphere = .false.
 
-    if ( Atm%flagstruct%do_schmidt .and. abs(atm%flagstruct%stretch_fac-1.) > 1.E-5 ) stretched_grid = .true.
+    if ( (Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) .and. abs(atm%flagstruct%stretch_fac-1.) > 1.E-5 ) stretched_grid = .true.
 
     if (Atm%flagstruct%grid_type>3) then
        if (Atm%flagstruct%grid_type == 4) then
@@ -582,7 +582,7 @@ contains
 ! Shift the corner away from Japan
 !---------------------------------
 !--------------------- This will result in the corner close to east coast of China ------------------
-                         if ( .not.Atm%flagstruct%do_schmidt .and. (Atm%flagstruct%shift_fac)>1.E-4 )   &
+                         if ( .not. ( Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) .and. (Atm%flagstruct%shift_fac)>1.E-4 )   &
                               grid_global(i,j,1,n) = grid_global(i,j,1,n) - pi/Atm%flagstruct%shift_fac
 !----------------------------------------------------------------------------------------------------
                          if ( grid_global(i,j,1,n) < 0. )              &
@@ -620,6 +620,12 @@ contains
              if ( Atm%flagstruct%do_schmidt ) then
              do n=1,nregions
                 call direct_transform(Atm%flagstruct%stretch_fac, 1, npx, 1, npy, &
+                                      Atm%flagstruct%target_lon, Atm%flagstruct%target_lat, &
+                                      n, grid_global(1:npx,1:npy,1,n), grid_global(1:npx,1:npy,2,n))
+             enddo
+             else
+             do n=1,nregions
+                call cube_transform(Atm%flagstruct%stretch_fac, 1, npx, 1, npy, &
                                       Atm%flagstruct%target_lon, Atm%flagstruct%target_lat, &
                                       n, grid_global(1:npx,1:npy,1,n), grid_global(1:npx,1:npy,2,n))
              enddo

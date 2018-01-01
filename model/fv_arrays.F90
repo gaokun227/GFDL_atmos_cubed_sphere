@@ -277,9 +277,9 @@ module fv_arrays_mod
                              !    positive definite (Lin & Rood 1996); slower
                              !>12: positive definite only (Lin & Rood 1996); fastest
    integer :: kord_tr = 8    ! 
-   real    :: scale_z = 0.   ! diff_z = scale_z**2 * 0.25
-   real    :: w_max = 75.    ! max w (m/s) threshold for hydostatiic adjustment 
-   real    :: z_min = 0.05   ! min ratio of dz_nonhydrostatic/dz_hydrostatic
+   real    :: scale_z = 0.   ! diff_z = scale_z**2 * 0.25 (only used for Riemann solver)
+   real    :: w_max = 75.    ! max w (m/s) threshold for hydostatiic adjustment  (not used)
+   real    :: z_min = 0.05   ! min ratio of dz_nonhydrostatic/dz_hydrostatic (not used?)
    real    :: lim_fac = 1.0  ! linear scheme limiting factor, 1: hord = 5, 3: hord = 6
 
    integer :: nord=1         ! 0: del-2, 1: del-4, 2: del-6, 3: del-8 divergence damping
@@ -331,11 +331,12 @@ module fv_arrays_mod
    logical :: adiabatic = .false.     ! Run without physics (full or idealized).
 #endif
 !-----------------------------------------------------------
-! Grid shifting, rotation, and the Schmidt transformation:
+! Grid shifting, rotation, and cube transformations:
 !-----------------------------------------------------------
    real :: shift_fac   =  18.   ! shift west by 180/shift_fac = 10 degrees
-! Defaults for Schmidt transformation:
+! Defaults for Schmidt/cube transformation:
    logical :: do_schmidt = .false. 
+   logical :: do_cube_transform = .false. 
    real(kind=R_GRID) :: stretch_fac =   1.   ! No stretching
    real(kind=R_GRID) :: target_lat  = -90.   ! -90: no grid rotation 
    real(kind=R_GRID) :: target_lon  =   0.   ! 
@@ -463,10 +464,10 @@ module fv_arrays_mod
    logical :: ncep_ic = .false.       ! use NCEP ICs 
    logical :: nggps_ic = .false.      ! use NGGPS ICs 
    logical :: ecmwf_ic = .false.      ! use ECMWF ICs 
-   logical :: gfs_phil = .false.      ! if .T., compute geopotential inside of GFS physics
+   logical :: gfs_phil = .false.      ! if .T., compute geopotential inside of GFS physics (not used?)
    logical :: agrid_vel_rst = .false. ! if .T., include ua/va (agrid winds) in the restarts
-   logical :: use_new_ncep = .false.  ! use the NCEP ICs created after 2014/10/22, if want to read CWAT
-   logical :: use_ncep_phy = .false.  ! if .T., separate CWAT by weights of liq_wat and liq_ice in FV_IC
+   logical :: use_new_ncep = .false.  ! use the NCEP ICs created after 2014/10/22, if want to read CWAT (not used??)
+   logical :: use_ncep_phy = .false.  ! if .T., separate CWAT by weights of liq_wat and liq_ice in FV_IC (not used??)
    logical :: fv_diag_ic = .false.    ! reconstruct IC from fv_diagnostics on lat-lon grid
    logical :: external_ic = .false.   ! use ICs from external sources; e.g. lat-lon FV core
                                       ! or NCEP re-analysis; both vertical remapping & horizontal

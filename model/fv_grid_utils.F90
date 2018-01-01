@@ -61,7 +61,8 @@
         cubed_to_latlon, c2l_ord2, g_sum, global_qsum, great_circle_dist,  &
         v_prod, get_unit_vect2, project_sphere_v
  public mid_pt_sphere,  mid_pt_cart, vect_cross, grid_utils_init, grid_utils_end, &
-        spherical_angle, cell_center2, get_area, inner_prod, fill_ghost, direct_transform,  &
+        spherical_angle, cell_center2, get_area, inner_prod, fill_ghost, &
+        direct_transform, cube_transform, &
         make_eta_level, expand_cell, cart_to_latlon, intp_great_circle, normalize_vect, &
         dist2side_latlon, spherical_linear_interpolation, get_latlon_vector
  public symm_grid
@@ -172,7 +173,7 @@
       ne_corner                     => Atm%gridstruct%ne_corner
       nw_corner                     => Atm%gridstruct%nw_corner
 
-      if ( Atm%flagstruct%do_schmidt .and. abs(Atm%flagstruct%stretch_fac-1.) > 1.E-5 ) then
+      if ( (Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) .and. abs(Atm%flagstruct%stretch_fac-1.) > 1.E-5 ) then
            Atm%gridstruct%stretched_grid = .true.
            symm_grid = .false.
       else
@@ -908,6 +909,70 @@
     enddo
 
   end subroutine direct_transform
+
+
+  subroutine cube_transform(c, i1, i2, j1, j2, lon_p, lat_p, n, lon, lat)
+!
+! This is a direct transformation of the standard (symmetrical) cubic grid
+! to a locally enhanced high-res grid on the sphere; it is an application
+! of the Schmidt transformation at the **north** pole followed by a 
+! pole_shift_to_target (rotation) operation
+!
+    real(kind=R_GRID),    intent(in):: c              ! Stretching factor
+    real(kind=R_GRID),    intent(in):: lon_p, lat_p   ! center location of the target face, radian
+    integer, intent(in):: n              ! grid face number
+    integer, intent(in):: i1, i2, j1, j2
+!  0 <= lon <= 2*pi ;    -pi/2 <= lat <= pi/2
+    real(kind=R_GRID), intent(inout), dimension(i1:i2,j1:j2):: lon, lat
+!
+    real(f_p):: lat_t, sin_p, cos_p, sin_lat, cos_lat, sin_o, p2, two_pi
+    real(f_p):: c2p1, c2m1
+    integer:: i, j
+
+    p2 = 0.5d0*pi
+    two_pi = 2.d0*pi
+
+    if( is_master() .and. n==1 ) then
+        write(*,*) n, 'Cube transformation (revised Schmidt): stretching factor=', c, ' center=', lon_p, lat_p
+    endif
+
+    c2p1 = 1.d0 + c*c
+    c2m1 = 1.d0 - c*c
+
+    sin_p = sin(lat_p)
+    cos_p = cos(lat_p)
+
+    !Try rotating pole around before doing the regular rotation??
+
+    do j=j1,j2
+       do i=i1,i2
+          if ( abs(c2m1) > 1.d-7 ) then
+               sin_lat = sin(lat(i,j)) 
+               lat_t = asin( (c2m1+c2p1*sin_lat)/(c2p1+c2m1*sin_lat) ) 
+          else         ! no stretching
+               lat_t = lat(i,j)
+          endif
+          sin_lat = sin(lat_t) 
+          cos_lat = cos(lat_t) 
+               lon(i,j) = lon(i,j) + pi ! rotate around first to get final orientation correct
+            sin_o = -(sin_p*sin_lat + cos_p*cos_lat*cos(lon(i,j)))
+          if ( (1.-abs(sin_o)) < 1.d-7 ) then    ! poles
+               lon(i,j) = 0.d0
+               lat(i,j) = sign( p2, sin_o )
+          else
+               lat(i,j) = asin( sin_o )
+               lon(i,j) = lon_p + atan2( -cos_lat*sin(lon(i,j)),   &
+                          -sin_lat*cos_p+cos_lat*sin_p*cos(lon(i,j)))
+               if ( lon(i,j) < 0.d0 ) then
+                    lon(i,j) = lon(i,j) + two_pi
+               elseif( lon(i,j) >= two_pi ) then
+                    lon(i,j) = lon(i,j) - two_pi
+               endif
+          endif
+       enddo
+    enddo
+
+  end subroutine cube_transform
 
 
   real function inner_prod(v1, v2)
