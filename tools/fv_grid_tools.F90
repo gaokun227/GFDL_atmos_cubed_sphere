@@ -542,7 +542,12 @@ contains
     latlon = .false.
     cubed_sphere = .false.
 
-    if ( (Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) .and. abs(atm%flagstruct%stretch_fac-1.) > 1.E-5 ) stretched_grid = .true.
+    if ( (Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) .and. abs(atm%flagstruct%stretch_fac-1.) > 1.E-5 ) then
+       stretched_grid = .true.
+       if (Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) then
+          call mpp_error(FATAL, ' Cannot set both do_schmidt and do_cube_transform to .true.')
+       endif
+    endif
 
     if (Atm%flagstruct%grid_type>3) then
        if (Atm%flagstruct%grid_type == 4) then
