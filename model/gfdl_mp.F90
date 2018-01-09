@@ -3367,7 +3367,7 @@ end subroutine setupm
 ! =======================================================================
 
 !subroutine gfdl_mp_init (id, jd, kd, axes, time)
-subroutine gfdl_mp_init (me, master, nlunit, logunit, fn_nml)
+subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
     
     implicit none
     
@@ -3377,6 +3377,7 @@ subroutine gfdl_mp_init (me, master, nlunit, logunit, fn_nml)
     integer, intent (in) :: logunit
     
     character (len = 64), intent (in) :: fn_nml
+    character (len = *),  intent (in) :: input_nml_file(:)
     
     integer :: ios
     logical :: exists
@@ -3408,6 +3409,9 @@ subroutine gfdl_mp_init (me, master, nlunit, logunit, fn_nml)
     ! call write_version_number ('gfdl_mp_mod', version)
     ! logunit = stdlog ()
     
+#ifdef INTERNAL_FILE_NML
+    read (input_nml_file, nml = gfdl_mp__nml)
+#else
     inquire (file = trim (fn_nml), exist = exists)
     if (.not. exists) then
         write (6, *) 'gfdl - mp :: namelist file: ', trim (fn_nml), ' does not exist'
@@ -3418,6 +3422,7 @@ subroutine gfdl_mp_init (me, master, nlunit, logunit, fn_nml)
     rewind (nlunit)
     read (nlunit, nml = gfdl_mp_nml)
     close (nlunit)
+#endif
     
     ! write version number and namelist to log file
     

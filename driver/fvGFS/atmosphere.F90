@@ -254,7 +254,7 @@ contains
    call set_domain ( Atm(mytile)%domain )
 
    if (Atm(mytile)%flagstruct%do_inline_mp) then
-     call gfdl_mp_init(mpp_pe(), mpp_root_pe(), nlunit, stdlog(), fn_nml)
+     call gfdl_mp_init(mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
    endif
 
    call fv_restart(Atm(mytile)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mytile)%gridstruct%grid_type, grids_on_this_pe)
