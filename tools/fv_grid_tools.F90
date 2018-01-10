@@ -544,7 +544,7 @@ contains
 
     if ( (Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) .and. abs(atm%flagstruct%stretch_fac-1.) > 1.E-5 ) then
        stretched_grid = .true.
-       if (Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) then
+       if (Atm%flagstruct%do_schmidt .and. Atm%flagstruct%do_cube_transform) then
           call mpp_error(FATAL, ' Cannot set both do_schmidt and do_cube_transform to .true.')
        endif
     endif
