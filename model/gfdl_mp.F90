@@ -3410,7 +3410,7 @@ subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
     ! logunit = stdlog ()
     
 #ifdef INTERNAL_FILE_NML
-    read (input_nml_file, nml = gfdl_mp__nml)
+    read (input_nml_file, nml = gfdl_mp_nml)
 #else
     inquire (file = trim (fn_nml), exist = exists)
     if (.not. exists) then
