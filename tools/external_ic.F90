@@ -387,7 +387,6 @@ contains
       call get_number_tracers(MODEL_ATMOS, num_tracers=ntracers, num_prog=ntprog)
       ntdiag = ntracers-ntprog
 
-
 !--- test for existence of the GFS control file
       if (.not. file_exist('INPUT/'//trim(fn_gfs_ctl), no_domain=.TRUE.)) then
         call mpp_error(FATAL,'==> Error in External_ic::get_nggps_ic: file '//trim(fn_gfs_ctl)//' for NGGPS IC does not exist')
@@ -457,11 +456,7 @@ contains
 
         if ( Atm(n)%flagstruct%full_zs_filter) then
            allocate (oro_g(isd:ied,jsd:jed))
-           do j=jsd,jed
-           do i=isd,ied
-              oro_g(i,j) = 0.
-           enddo
-           enddo
+           oro_g = 0.
           ! land-frac
           id_res = register_restart_field (ORO_restart, fn_oro_ics, 'land_frac', oro_g, domain=Atm(n)%domain)
           call mpp_update_domains(oro_g, Atm(n)%domain)
