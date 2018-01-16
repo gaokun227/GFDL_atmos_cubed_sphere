@@ -183,18 +183,6 @@ contains
                 endif
              end if
 
-             if (.not. Atm(n)%flagstruct%hydrostatic .and. Atm(n)%flagstruct%make_nh .and. &
-                  (.not. Atm(n)%flagstruct%nggps_ic .and. .not. Atm(n)%flagstruct%ecmwf_ic) ) then
-!!$                call nested_grid_BC_send(Atm(n)%parent_grid%delz, Atm(n)%neststruct%nest_domain, 0, 0)
-!!$                call nested_grid_BC_send(Atm(n)%parent_grid%w, Atm(n)%neststruct%nest_domain, 0, 0)
-                call nested_grid_BC(Atm(n)%delz, Atm(n)%parent_grid%delz, Atm(n)%neststruct%nest_domain, &
-                     Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-                     Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)
-                call nested_grid_BC(Atm(n)%w, Atm(n)%parent_grid%w, Atm(n)%neststruct%nest_domain, &
-                     Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-                     Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)
-             endif
-
           endif
 
           cycle
