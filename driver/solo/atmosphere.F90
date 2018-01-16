@@ -37,6 +37,7 @@ use fms_mod,       only: file_exist, open_namelist_file,   &
 use time_manager_mod, only: time_type, get_time, set_time, operator(+)
 use mpp_domains_mod,  only: domain2d
 use mpp_io_mod,       only: mpp_close
+use mpp_mod,          only: input_nml_file
 !------------------
 ! FV specific codes:
 !------------------
@@ -159,7 +160,7 @@ contains
            Atm(n)%flagstruct%moist_phys = .true.
            if ( grids_on_this_pe(n)) then
               call fv_phys_init(isc,iec,jsc,jec,Atm(n)%flagstruct%nwat, Atm(n)%ts, Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
-              if ( Atm(n)%flagstruct%nwat==6) call gfdl_cloud_microphys_init (mpp_pe(), mpp_root_pe(), nlunit, stdlog(), fn_nml) 
+              if ( Atm(n)%flagstruct%nwat==6) call gfdl_cloud_microphys_init (mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml) 
            endif
         endif
 
