@@ -1154,7 +1154,7 @@ contains
       real(kind=R_GRID), dimension(2) :: q1, q2
 
       integer, pointer :: parent_tile, refinement, ioffset, joffset
-      integer, pointer, dimension(:,:,:) :: ind_h, ind_u, ind_v, ind_update_h
+      integer, pointer, dimension(:,:,:) :: ind_h, ind_u, ind_v
       real,    pointer, dimension(:,:,:) :: wt_h, wt_u, wt_v
 
       integer, pointer, dimension(:,:,:) :: ind_b
@@ -1182,8 +1182,6 @@ contains
       ind_h => Atm%neststruct%ind_h
       ind_u => Atm%neststruct%ind_u
       ind_v => Atm%neststruct%ind_v
-
-      ind_update_h => Atm%neststruct%ind_update_h
 
       wt_h => Atm%neststruct%wt_h
       wt_u => Atm%neststruct%wt_u

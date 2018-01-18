@@ -1254,7 +1254,6 @@ contains
        if (ANY(Atm%parent_grid%pelist == mpp_pe()) .or. Atm%neststruct%child_proc) then
           call update_coarse_grid(Atm%parent_grid%phis, &
                Atm%phis, Atm%neststruct%nest_domain, &
-               Atm%neststruct%ind_update_h(isd_p:ied_p+1,jsd_p:jed_p+1,:), &
                Atm%gridstruct%dx, Atm%gridstruct%dy, Atm%gridstruct%area, &
                isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
                Atm%neststruct%isu, Atm%neststruct%ieu, Atm%neststruct%jsu, Atm%neststruct%jeu, &

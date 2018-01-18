@@ -1962,7 +1962,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 !!$         endif
 !!$
 !!$            call update_coarse_grid(var_src, qdp, neststruct%nest_domain, &
-!!$                 neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+!!$                 gridstruct%dx, gridstruct%dy, gridstruct%area, &
 !!$                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
 !!$                 neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
 !!$                 npx, npy, npz, 0, 0, &
@@ -2059,7 +2059,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
          call update_coarse_grid(pt_src, &
               t_nest, neststruct%nest_domain, &
-              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+              gridstruct%dx, gridstruct%dy, gridstruct%area, &
               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
               npx, npy, npz, 0, 0, &
@@ -2069,7 +2069,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
          call update_coarse_grid(pt_src, &
               pt, neststruct%nest_domain, &
-              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+              gridstruct%dx, gridstruct%dy, gridstruct%area, &
               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
               npx, npy, npz, 0, 0, &
@@ -2086,7 +2086,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
          allocate(w_src(isd_p:ied_p,jsd_p:jed_p,npz))
          w_src = -999.
          call update_coarse_grid(w_src, w, neststruct%nest_domain, &
-              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+              gridstruct%dx, gridstruct%dy, gridstruct%area, &
               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
               npx, npy, npz, 0, 0, &
@@ -2098,7 +2098,6 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
             ! may need to think very carefully how one would do this!!!
             ! consider updating specific volume instead?
 !!$            call update_coarse_grid(parent_grid%delz, delz, neststruct%nest_domain, &
-!!$                 neststruct%ind_update_h, &
 !!$                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, npz, 0, 0, &
 !!$                 neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc)
 
@@ -2113,14 +2112,14 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
    u_src = -999.
    v_src = -999.
    call update_coarse_grid(u_src, u, neststruct%nest_domain, &
-        neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+        gridstruct%dx, gridstruct%dy, gridstruct%area, &
         isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
         neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
         npx, npy, npz, 0, 1, &
         neststruct%refinement, neststruct%nestupdate, upoff, 0, &
         neststruct%parent_proc, neststruct%child_proc, parent_grid)
    call update_coarse_grid(v_src, v, neststruct%nest_domain, &
-        neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+        gridstruct%dx, gridstruct%dy, gridstruct%area, &
         isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
         neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
         npx, npy, npz, 1, 0, &
@@ -2169,7 +2168,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
       endif
 
       call update_coarse_grid(ps0, ps, neststruct%nest_domain, &
-              neststruct%ind_update_h, gridstruct%dx, gridstruct%dy, gridstruct%area, &
+              gridstruct%dx, gridstruct%dy, gridstruct%area, &
               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
               npx, npy, 0, 0, &

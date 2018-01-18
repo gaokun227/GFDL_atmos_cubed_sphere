@@ -384,11 +384,15 @@ module fv_control_mod
             Atm(n)%va = too_big
 
          else !this grid is NOT defined on this pe
-
             !Allocate dummy arrays
             call allocate_fv_atmos_type(Atm(n),  Atm(n)%bd%isd, Atm(n)%bd%ied, Atm(n)%bd%jsd, Atm(n)%bd%jed, &
                  Atm(n)%bd%isc, Atm(n)%bd%iec, Atm(n)%bd%jsc, Atm(n)%bd%jec, &
                  npx, npy, npz, ndims, ncnst, ncnst-pnats, ng, .true., .false., ngrids)
+
+            !!! This whole section needs cleaning up. 
+            !!! 1. ind_update_h should be computed on the NEST not the coarse grid. (done)
+            !!! 2. CALCULATE global grid, Don't SEND around
+            !!! 3. Move calculations to fv_nesting or fv_grid tools; do NOT do this here!!
 
             !Need to SEND grid_global to any child grids; this is received in setup_aligned_nest in fv_grid_tools
             if (Atm(n)%neststruct%nested) then
@@ -404,66 +408,6 @@ module fv_control_mod
                        Atm(n)%pelist(1)) !send to p_ind in setup_aligned_nest
                   call mpp_sync_self()
                endif
-
-               if (Atm(n)%neststruct%twowaynest) then
-
-                  !This in reality should be very simple. With the
-                  ! restriction that only the compute domain data is
-                  ! sent from the coarse grid, we can compute
-                  ! exactly which coarse grid cells should use
-                  ! which nested-grid data. We then don't need to send around p_ind.
-
-                  Atm(n)%neststruct%ind_update_h = -99999
-
-                  if (Atm(n)%parent_grid%tile == Atm(n)%neststruct%parent_tile) then
-
-                     isc_p = Atm(n)%parent_grid%bd%isc
-                     iec_p = Atm(n)%parent_grid%bd%iec
-                     jsc_p = Atm(n)%parent_grid%bd%jsc
-                     jec_p = Atm(n)%parent_grid%bd%jec
-                     upoff = Atm(n)%neststruct%upoff
-
-                     Atm(n)%neststruct%jsu = jsc_p
-                     Atm(n)%neststruct%jeu = jsc_p-1
-                     do j=jsc_p,jec_p+1
-                        if (j < joffset+upoff) then
-                           do i=isc_p,iec_p+1
-                              Atm(n)%neststruct%ind_update_h(i,j,2) = -9999
-                           enddo
-                           Atm(n)%neststruct%jsu = Atm(n)%neststruct%jsu + 1
-                        elseif (j > joffset + (npy-1)/refinement - upoff) then
-                           do i=isc_p,iec_p+1
-                              Atm(n)%neststruct%ind_update_h(i,j,2) = -9999
-                           enddo
-                        else
-                           jind = (j - joffset)*refinement + 1
-                           do i=isc_p,iec_p+1
-                              Atm(n)%neststruct%ind_update_h(i,j,2) = jind
-                           enddo
-                           if ( (j < joffset + (npy-1)/refinement - upoff) .and. j <= jec_p)  Atm(n)%neststruct%jeu = j
-                        endif
-                        !write(mpp_pe()+4000,*) j, joffset, upoff, Atm(n)%neststruct%ind_update_h(isc_p,j,2)
-                     enddo
-
-                     Atm(n)%neststruct%isu = isc_p
-                     Atm(n)%neststruct%ieu = isc_p-1
-                     do i=isc_p,iec_p+1
-                        if (i < ioffset+upoff) then
-                           Atm(n)%neststruct%ind_update_h(i,:,1) = -9999
-                           Atm(n)%neststruct%isu = Atm(n)%neststruct%isu + 1
-                        elseif (i > ioffset + (npx-1)/refinement - upoff) then
-                           Atm(n)%neststruct%ind_update_h(i,:,1) = -9999
-                        else
-                           Atm(n)%neststruct%ind_update_h(i,:,1) = (i-ioffset)*refinement + 1
-                           if ( (i < ioffset + (npx-1)/refinement - upoff) .and. i <= iec_p) Atm(n)%neststruct%ieu = i
-                           end if
-                        !write(mpp_pe()+5000,*) i, ioffset, upoff, Atm(n)%neststruct%ind_update_h(i,jsc_p,1)
-                     enddo
-
-                  end if
-
-
-               end if
 
             endif
          endif
@@ -857,19 +801,26 @@ module fv_control_mod
          
          !Pelist needs to be set to ALL (which should have been done
          !in broadcast_domains) to get this to work
-         call mpp_define_nest_domains(Atm(n)%neststruct%nest_domain, Atm(n)%domain, Atm(parent_grid_num)%domain, &
-              7, parent_tile, &
-              1, npx-1, 1, npy-1,                  & !Grid cells, not points
-              ioffset, ioffset + (npx-1)/refinement - 1, &
-              joffset, joffset + (npy-1)/refinement - 1,         &
-              (/ (i,i=0,mpp_npes()-1)  /), extra_halo = 0, name="nest_domain") !What pelist to use?
-         call mpp_define_nest_domains(Atm(n)%neststruct%nest_domain, Atm(n)%domain, Atm(parent_grid_num)%domain, &
-              7, parent_tile, &
-              1, npx-1, 1, npy-1,                  & !Grid cells, not points
-              ioffset, ioffset + (npx-1)/refinement - 1, &
-              joffset, joffset + (npy-1)/refinement - 1,         &
-              (/ (i,i=0,mpp_npes()-1)  /), extra_halo = 0, name="nest_domain") !What pelist to use?
-!              (/ (i,i=0,mpp_npes()-1)  /), extra_halo = 2, name="nest_domain_for_BC") !What pelist to use?
+         ! Zhi has updated these calls so that they support multiple nests
+         ! Currently assuming one nested grid; additional nest support to be added later
+!!! DEBUG CODE
+         print*, mpp_pe(), ioffset, joffset, (npx-1)/refinement - 1, (npy-1)/refinement - 1
+!!! END DEBUG CODE
+         call mpp_define_nest_domains(nest_domain=Atm(n)%neststruct%nest_domain, domain_fine=Atm(n)%domain, &
+              domain_coarse=Atm(parent_grid_num)%domain, &
+              num_nest=1, tile_fine=(/ 7 /), tile_coarse=(/ parent_tile /), &
+              !(/1/), (/npx-1/), (/1/), (/npy-1/),                  & !Grid cells, not points
+              istart_coarse=(/ioffset/), icount_coarse=(/ (npx-1)/refinement /), &
+              jstart_coarse=(/joffset/), jcount_coarse=(/ (npy-1)/refinement /),         &
+              x_refine=refinement, y_refine=refinement, &
+              pelist=(/ (i,i=0,mpp_npes()-1)  /), extra_halo = 0, name="nest_domain") !What pelist to use?
+!!$         call mpp_define_nest_domains(Atm(n)%neststruct%nest_domain, Atm(n)%domain, Atm(parent_grid_num)%domain, &
+!!$              7, parent_tile, &
+!!$              1, npx-1, 1, npy-1,                  & !Grid cells, not points
+!!$              ioffset, ioffset + (npx-1)/refinement - 1, &
+!!$              joffset, joffset + (npy-1)/refinement - 1,         &
+!!$              (/ (i,i=0,mpp_npes()-1)  /), extra_halo = 0, name="nest_domain") !What pelist to use?
+!!$!              (/ (i,i=0,mpp_npes()-1)  /), extra_halo = 2, name="nest_domain_for_BC") !What pelist to use?
 
          Atm(parent_grid_num)%neststruct%child_grids(n) = .true.
 

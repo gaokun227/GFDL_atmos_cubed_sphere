@@ -571,7 +571,6 @@ module fv_arrays_mod
      !Interpolation arrays for grid nesting
      integer, allocatable, dimension(:,:,:) :: ind_h, ind_u, ind_v, ind_b
      real, allocatable, dimension(:,:,:) :: wt_h, wt_u, wt_v, wt_b
-     integer, allocatable, dimension(:,:,:) :: ind_update_h
 
      !These arrays are not allocated by allocate_fv_atmos_type; but instead
      !allocated for all grids, regardless of whether the grid is
@@ -1184,11 +1183,6 @@ contains
 
 #endif
 
-       if (Atm%neststruct%twowaynest) allocate(&
-            Atm%neststruct%ind_update_h( &
-              Atm%parent_grid%bd%isd:Atm%parent_grid%bd%ied+1, &
-              Atm%parent_grid%bd%jsd:Atm%parent_grid%bd%jed+1,2))
-
     end if
 
     !--- Do the memory allocation only for nested model
@@ -1406,9 +1400,6 @@ contains
           call deallocate_fv_nest_BC_type(Atm%neststruct%delz_BC)
        endif
 #endif
-
-
-       if (Atm%neststruct%twowaynest) deallocate(Atm%neststruct%ind_update_h)
 
     end if
 
