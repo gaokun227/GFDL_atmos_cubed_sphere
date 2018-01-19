@@ -1877,7 +1877,6 @@ contains
    integer :: istart, istop, jstart, jstop, ishift, jshift, j, i, k
    real :: val
    real, allocatable, dimension(:,:,:) :: nest_dat, coarse_dat_send
-!   real ::  var_nest_send(is_n:ie_n+istag,js_n:je_n+jstag,npz)
    real, allocatable ::  coarse_dat_recv(:,:,:)
    integer :: position
 
@@ -1892,32 +1891,11 @@ contains
    end if
 
    call mpp_get_F2C_index(nest_domain, is_c, ie_c, js_c, je_c, is_f, ie_f, js_f, je_f, position=position)
-!!! DEBUG CODE
-   write(mpp_pe()+3000,*) 'coarse: ', is_c, ie_c, js_c, je_c
-   write(mpp_pe()+3000,*) 'fine: ', is_f, ie_f, js_f, je_f
-   if (child_proc) then
-      write(mpp_pe()+3000,*) ' Nest domain:', is_n, ie_n, js_n, je_n
-   else
-      write(mpp_pe()+3000,*) ' Coarse domain:', isd_p, ied_p, jsd_p, jed_p
-   endif
-!!! END DEBUG CODE
    if (child_proc) then
       allocate(coarse_dat_send(is_c:ie_c, js_c:je_c,npz))
       coarse_dat_send = -1200.
-!!! DEBUG CODE
-      write(mpp_pe()+3000,*) 'COARSE_DAT_SEND: '
-      write(mpp_pe()+3000,*) lbound(coarse_dat_send)
-      write(mpp_pe()+3000,*) ubound(coarse_dat_send)
-      write(mpp_pe()+3000,*) size(coarse_dat_send)
-!!! END DEBUG CODE
    endif
    allocate(coarse_dat_recv(isd_p:ied_p+istag, jsd_p:jed_p+jstag, npz))
-!!! DEBUG CODE
-      write(mpp_pe()+3000,*) 'COARSE_DAT_RECV: '
-      write(mpp_pe()+3000,*) lbound(coarse_dat_recv)
-      write(mpp_pe()+3000,*) ubound(coarse_dat_recv)
-      write(mpp_pe()+3000,*) size(coarse_dat_recv)
-!!! END DEBUG CODE
 
    if (child_proc) then
    if (istag == 0 .and. jstag == 0) then
@@ -2016,7 +1994,6 @@ contains
    call mpp_update_nest_coarse(field_in=coarse_dat_send, nest_domain=nest_domain, field_out=coarse_dat_recv, position=position)
 
    if (allocated(coarse_dat_send)) then
-      !write(mpp_pe()+3000,*) size(coarse_dat_send), '.true.'
       deallocate(coarse_dat_send)
    end if
 
@@ -2034,12 +2011,8 @@ contains
 !$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,nest_dat,parent_grid,var_coarse,r) &
 !$NO-MP          private(in,jn,val)
          do k=1,npz
-!!$            bw1 = blend_wt(k)
-!!$            bw2 = 1. - bw1
          do j=jsu,jeu
          do i=isu,ieu
-!            var_coarse(i,j,k) = coarse_dat(i,j,k)*parent_grid%gridstruct%rarea(i,j)*bw1 + var_coarse(i,j,k)*bw2
-            !Do we want to implement the blending here ?
             var_coarse(i,j,k) = coarse_dat_recv(i,j,k)*parent_grid%gridstruct%rarea(i,j)
          end do
          end do
