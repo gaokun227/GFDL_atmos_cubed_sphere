@@ -54,11 +54,11 @@ module cloud_diagnosis_mod
     logical :: liq_ice_combine = .true.
     logical :: snow_grauple_combine = .false.
     
-    integer :: rewflag = 2
+    integer :: rewflag = 1
     ! 1: martin et al., 1994
     ! 2: martin et al., 1994, gfdl revision
     ! 3: kiehl et al., 1994
-    integer :: reiflag = 2
+    integer :: reiflag = 1
     ! 1: heymsfield and mcfarquhar, 1996
     ! 2: donner et al., 1997
     ! 3: fu, 2007
