@@ -1815,14 +1815,13 @@ contains
 
  end subroutine nested_grid_BC_apply_intT
 
- subroutine update_coarse_grid_mpp_2d(var_coarse, var_nest, nest_domain, ind_update, dx, dy, area, &
+ subroutine update_coarse_grid_mpp_2d(var_coarse, var_nest, nest_domain, dx, dy, area, &
       isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, isu, ieu, jsu, jeu, npx, npy, &
       istag, jstag, r, nestupdate, upoff, nsponge, parent_proc, child_proc, parent_grid)
 
    integer, intent(IN) :: isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n
    integer, intent(IN) :: isu, ieu, jsu, jeu
    integer, intent(IN) :: istag, jstag, r, nestupdate, upoff, nsponge
-   integer, intent(IN) :: ind_update(isd_p:ied_p+1,jsd_p:jed_p+1,2)
    integer, intent(IN) :: npx, npy
    real, intent(IN)    :: var_nest(is_n:ie_n+istag,js_n:je_n+jstag)
    real, intent(INOUT) :: var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag)
@@ -1840,18 +1839,18 @@ contains
    if (parent_proc .and. size(var_coarse) > 1) var_coarse_3d(isd_p:ied_p+istag,jsd_p:jed_p,1) = var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag)
 
    call update_coarse_grid_mpp(var_coarse_3d, var_nest_3d, &
-        nest_domain, ind_update, dx, dy, area, &
+        nest_domain, dx, dy, area, &
         isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
         isu, ieu, jsu, jeu, npx, npy, 1, &
         istag, jstag, r, nestupdate, upoff, nsponge, &
-        parent_proc, child_proc, parent_grid)
+        parent_proc, child_proc, parent_grid )
 
    if (size(var_coarse) > 1 .and. parent_proc) var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag) = var_coarse_3d(isd_p:ied_p+istag,jsd_p:jed_p,1)
 
  end subroutine update_coarse_grid_mpp_2d
 
 
-  subroutine update_coarse_grid_mpp(var_coarse, var_nest, nest_domain, ind_update, dx, dy, area, &
+  subroutine update_coarse_grid_mpp(var_coarse, var_nest, nest_domain, dx, dy, area, &
       isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
       isu, ieu, jsu, jeu, npx, npy, npz, &
       istag, jstag, r, nestupdate, upoff, nsponge, &
@@ -1864,7 +1863,6 @@ contains
    integer, intent(IN) :: isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n
    integer, intent(IN) :: isu, ieu, jsu, jeu
    integer, intent(IN) :: istag, jstag, npx, npy, npz, r, nestupdate, upoff, nsponge
-   integer, intent(IN) :: ind_update(isd_p:ied_p+1,jsd_p:jed_p+1,2)
    real, intent(IN)    :: var_nest(is_n:ie_n+istag,js_n:je_n+jstag,npz)
    real, intent(INOUT) :: var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag,npz)
    real, intent(IN)    :: area(isd:ied,jsd:jed)
@@ -1877,9 +1875,9 @@ contains
    integer :: in, jn, ini, jnj, s, qr
    integer :: is_c, ie_c, js_c, je_c, is_f, ie_f, js_f, je_f
    integer :: istart, istop, jstart, jstop, ishift, jshift, j, i, k
-   real :: val, bw1, bw2
-   real, allocatable, dimension(:,:,:) :: nest_dat
-   real ::  var_nest_send(is_n:ie_n+istag,js_n:je_n+jstag,npz)
+   real :: val
+   real, allocatable, dimension(:,:,:) :: nest_dat, coarse_dat_send
+   real, allocatable ::  coarse_dat_recv(:,:,:)
    integer :: position
 
    if (istag == 1 .and. jstag == 1) then
@@ -1893,27 +1891,34 @@ contains
    end if
 
    call mpp_get_F2C_index(nest_domain, is_c, ie_c, js_c, je_c, is_f, ie_f, js_f, je_f, position=position)
-   if (ie_f > is_f .and. je_f > js_f) then
-      allocate(nest_dat (is_f:ie_f, js_f:je_f,npz))
-   else
-      allocate(nest_dat(1,1,1))
+   if (child_proc) then
+      allocate(coarse_dat_send(is_c:ie_c, js_c:je_c,npz))
+      coarse_dat_send = -1200.
    endif
-   nest_dat = -600
+   allocate(coarse_dat_recv(isd_p:ied_p+istag, jsd_p:jed_p+jstag, npz))
 
    if (child_proc) then
-!! IF an area average (for istag == jstag == 0) or a linear average then multiply in the areas before sending data
    if (istag == 0 .and. jstag == 0) then
       select case (nestupdate)
       case (1,2,6,7,8)
          
-!$NO-MP parallel do default(none) shared(npz,js_n,je_n,is_n,ie_n,var_nest_send,var_nest,area)
          do k=1,npz
-         do j=js_n,je_n
-         do i=is_n,ie_n
+            jn = js_f
+         do j=js_c,je_c
+            in = is_f
+         do i=is_c,ie_c
 
-            var_nest_send(i,j,k) = var_nest(i,j,k)*area(i,j)
+            val = 0.
+            do jnj=jn,jn+r-1
+               do ini=in,in+r-1
+                  val = val + var_nest(ini,jnj,k)*area(ini,jnj)
+               end do
+            end do            
+            coarse_dat_send(i,j,k) = val !divide area on coarse grid
 
+            in = in + r
          end do
+            jn = jn + r
          end do
          end do
 
@@ -1925,13 +1930,20 @@ contains
 
 !$NO-MP parallel do default(none) shared(npz,js_n,je_n,is_n,ie_n,var_nest_send,var_nest,dx)
          do k=1,npz
-         do j=js_n,je_n+1
-         do i=is_n,ie_n
+            jn = js_f
+         do j=js_c,je_c!+1
+            in = is_f
+         do i=is_c,ie_c
 
-
-            var_nest_send(i,j,k) = var_nest(i,j,k)*dx(i,j)
+            val = 0.
+            do ini=in,in+r-1
+               val = val + var_nest(ini,jn,k)*dx(ini,jn)
+            end do
+            coarse_dat_send(i,j,k) = val
             
+            in = in + r
          end do
+            jn = jn + r
          end do
          end do
 
@@ -1948,12 +1960,20 @@ contains
 
 !$NO-MP parallel do default(none) shared(npz,js_n,je_n,is_n,ie_n,var_nest_send,var_nest,dy)
          do k=1,npz
-         do j=js_n,je_n
-         do i=is_n,ie_n+1
+            jn = js_n
+         do j=js_c,je_c
+            in = is_n
+         do i=is_c,ie_c!+1
 
-            var_nest_send(i,j,k) = var_nest(i,j,k)*dy(i,j)
+            val = 0.
+            do jnj=jn,jn+r-1
+                  val = val + var_nest(in,jnj,k)*dy(in,jnj)
+            end do
+            coarse_dat_send(i,j,k) = val
 
+            in = in + r
          end do
+            jn = jn + r
          end do
          end do
 
@@ -1971,7 +1991,12 @@ contains
    endif
 
       call timing_on('COMM_TOTAL')
-   call mpp_update_nest_coarse(var_nest_send, nest_domain, nest_dat, position=position)
+   call mpp_update_nest_coarse(field_in=coarse_dat_send, nest_domain=nest_domain, field_out=coarse_dat_recv, position=position)
+
+   if (allocated(coarse_dat_send)) then
+      deallocate(coarse_dat_send)
+   end if
+
       call timing_off('COMM_TOTAL')
 
    s = r/2 !rounds down (since r > 0)
@@ -1983,34 +2008,12 @@ contains
       select case (nestupdate) 
       case (1,2,6,7,8) ! 1 = Conserving update on all variables; 2 = conserving update for cell-centered values; 6 = conserving remap-update
 
-!$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,ind_update,nest_dat,parent_grid,var_coarse,r) &
+!$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,nest_dat,parent_grid,var_coarse,r) &
 !$NO-MP          private(in,jn,val)
          do k=1,npz
          do j=jsu,jeu
          do i=isu,ieu
-
-            in = ind_update(i,j,1)
-            jn = ind_update(i,j,2)
-
-!!$            if (in < max(1+qr,is_f) .or. in > min(npx-1-qr-r+1,ie_f) .or. &
-!!$                 jn < max(1+qr,js_f) .or. jn > min(npy-1-qr-r+1,je_f)) then
-!!$               write(mpp_pe()+3000,'(A, 14I6)') 'SKIP: ', i, j, in, jn, 1+qr, is_f, ie_f, js_f, je_f, npy-1-qr-r+1, isu, ieu, jsu, jeu
-!!$               cycle
-!!$            endif
-
-            val = 0.
-            do jnj=jn,jn+r-1
-               do ini=in,in+r-1
-                  val = val + nest_dat(ini,jnj,k)
-               end do
-            end do            
-
-            !var_coarse(i,j,k) = val/r**2.
-
-            !!! CLEANUP: Couldn't rarea and rdx and rdy be built into the weight arrays?
-            !!!    Two-way updates do not yet have weights, tho
-            var_coarse(i,j,k) = val*parent_grid%gridstruct%rarea(i,j)
-
+            var_coarse(i,j,k) = coarse_dat_recv(i,j,k)*parent_grid%gridstruct%rarea(i,j)
          end do
          end do
          end do
@@ -2029,29 +2032,12 @@ contains
       select case (nestupdate) 
       case (1,6,7,8)
 
-!$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,ind_update,nest_dat,parent_grid,var_coarse,r) &
+!$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,nest_dat,parent_grid,var_coarse,r) &
 !$NO-MP          private(in,jn,val)
          do k=1,npz
          do j=jsu,jeu+1
          do i=isu,ieu
-
-            in = ind_update(i,j,1)
-            jn = ind_update(i,j,2)
-
-!!$            if (in < max(1+qr,is_f) .or. in > min(npx-1-qr-r+1,ie_f) .or. &
-!!$                 jn < max(1+qr+s,js_f) .or. jn > min(npy-1-qr-s+1,je_f)) then
-!!$               write(mpp_pe()+3000,'(A, 14I)') 'SKIP u: ', i, j, in, jn, 1+qr, is_f, ie_f, js_f, je_f, npy-1-qr-s+1, isu, ieu, jsu, jeu
-!!$               cycle
-!!$            endif
-
-            val = 0.
-               do ini=in,in+r-1
-                  val = val + nest_dat(ini,jn,k)
-               end do
-
-!            var_coarse(i,j,k) = val/r
-            var_coarse(i,j,k) = val*parent_grid%gridstruct%rdx(i,j)
-
+            var_coarse(i,j,k) = coarse_dat_recv(i,j,k)*parent_grid%gridstruct%rdx(i,j)
          end do
          end do
          end do
@@ -2067,29 +2053,12 @@ contains
       select case (nestupdate) 
       case (1,6,7,8)   !averaging update; in-line average for face-averaged values instead of areal average
 
-!$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,ind_update,nest_dat,parent_grid,var_coarse,r) &
+!$NO-MP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,nest_dat,parent_grid,var_coarse,r) &
 !$NO-MP          private(in,jn,val)
          do k=1,npz
          do j=jsu,jeu
          do i=isu,ieu+1
-
-            in = ind_update(i,j,1)
-            jn = ind_update(i,j,2)
-
-!!$            if (in < max(1+qr+s,is_f) .or. in > min(npx-1-qr-s+1,ie_f) .or. &
-!!$                 jn < max(1+qr,js_f) .or. jn > min(npy-1-qr-r+1,je_f)) then
-!!$               write(mpp_pe()+3000,'(A, 14I6)') 'SKIP v: ', i, j, in, jn, 1+qr, is_f, ie_f, js_f, je_f, npx-1-qr-s+1, isu, ieu, jsu, jeu
-!!$               cycle
-!!$            endif
-
-            val = 0.
-            do jnj=jn,jn+r-1
-                  val = val + nest_dat(in,jnj,k)
-            end do
-
-!            var_coarse(i,j,k) = val/r
-            var_coarse(i,j,k) = val*parent_grid%gridstruct%rdy(i,j)
-
+            var_coarse(i,j,k) = coarse_dat_recv(i,j,k)*parent_grid%gridstruct%rdy(i,j)
          end do
          end do
          end do
@@ -2104,7 +2073,8 @@ contains
 
 
    endif
-   deallocate(nest_dat)
+
+   if (allocated(coarse_dat_recv)) deallocate(coarse_dat_recv)
    
  end subroutine update_coarse_grid_mpp
 
