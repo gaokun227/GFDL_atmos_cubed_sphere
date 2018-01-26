@@ -1960,9 +1960,9 @@ contains
 
 !$NO-MP parallel do default(none) shared(npz,js_n,je_n,is_n,ie_n,var_nest_send,var_nest,dy)
          do k=1,npz
-            jn = js_n
+            jn = js_f
          do j=js_c,je_c
-            in = is_n
+            in = is_f
          do i=is_c,ie_c!+1
 
             val = 0.
