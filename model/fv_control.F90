@@ -409,6 +409,50 @@ module fv_control_mod
                   call mpp_sync_self()
                endif
 
+               if (Atm(n)%neststruct%twowaynest) then
+
+                  !This in reality should be very simple. With the
+                  ! restriction that only the compute domain data is
+                  ! sent from the coarse grid, we can compute
+                  ! exactly which coarse grid cells should use
+                  ! which nested-grid data. We then don't need to send around p_ind.
+
+                  if (Atm(n)%parent_grid%tile == Atm(n)%neststruct%parent_tile) then
+
+                     isc_p = Atm(n)%parent_grid%bd%isc
+                     iec_p = Atm(n)%parent_grid%bd%iec
+                     jsc_p = Atm(n)%parent_grid%bd%jsc
+                     jec_p = Atm(n)%parent_grid%bd%jec
+                     upoff = Atm(n)%neststruct%upoff
+
+                     Atm(n)%neststruct%jsu = jsc_p
+                     Atm(n)%neststruct%jeu = jsc_p-1
+                     do j=jsc_p,jec_p+1
+                        if (j < joffset+upoff) then
+                           Atm(n)%neststruct%jsu = Atm(n)%neststruct%jsu + 1
+                        elseif (j > joffset + (npy-1)/refinement - upoff) then
+                        else
+                           jind = (j - joffset)*refinement + 1
+                           if ( (j < joffset + (npy-1)/refinement - upoff) .and. j <= jec_p)  Atm(n)%neststruct%jeu = j
+                        endif
+                     enddo
+
+                     Atm(n)%neststruct%isu = isc_p
+                     Atm(n)%neststruct%ieu = isc_p-1
+                     do i=isc_p,iec_p+1
+                        if (i < ioffset+upoff) then
+                           Atm(n)%neststruct%isu = Atm(n)%neststruct%isu + 1
+                        elseif (i > ioffset + (npx-1)/refinement - upoff) then
+                        else
+                           if ( (i < ioffset + (npx-1)/refinement - upoff) .and. i <= iec_p) Atm(n)%neststruct%ieu = i
+                        end if
+                     enddo
+
+                  end if
+
+
+               end if
+
             endif
          endif
       end do
@@ -803,9 +847,6 @@ module fv_control_mod
          !in broadcast_domains) to get this to work
          ! Zhi has updated these calls so that they support multiple nests
          ! Currently assuming one nested grid; additional nest support to be added later
-!!! DEBUG CODE
-         print*, mpp_pe(), ioffset, joffset, (npx-1)/refinement - 1, (npy-1)/refinement - 1
-!!! END DEBUG CODE
          call mpp_define_nest_domains(nest_domain=Atm(n)%neststruct%nest_domain, domain_fine=Atm(n)%domain, &
               domain_coarse=Atm(parent_grid_num)%domain, &
               num_nest=1, tile_fine=(/ 7 /), tile_coarse=(/ parent_tile /), &
@@ -814,13 +855,6 @@ module fv_control_mod
               jstart_coarse=(/joffset/), jcount_coarse=(/ (npy-1)/refinement /),         &
               x_refine=refinement, y_refine=refinement, &
               pelist=(/ (i,i=0,mpp_npes()-1)  /), extra_halo = 0, name="nest_domain") !What pelist to use?
-!!$         call mpp_define_nest_domains(Atm(n)%neststruct%nest_domain, Atm(n)%domain, Atm(parent_grid_num)%domain, &
-!!$              7, parent_tile, &
-!!$              1, npx-1, 1, npy-1,                  & !Grid cells, not points
-!!$              ioffset, ioffset + (npx-1)/refinement - 1, &
-!!$              joffset, joffset + (npy-1)/refinement - 1,         &
-!!$              (/ (i,i=0,mpp_npes()-1)  /), extra_halo = 0, name="nest_domain") !What pelist to use?
-!!$!              (/ (i,i=0,mpp_npes()-1)  /), extra_halo = 2, name="nest_domain_for_BC") !What pelist to use?
 
          Atm(parent_grid_num)%neststruct%child_grids(n) = .true.
 
@@ -828,18 +862,6 @@ module fv_control_mod
 
             call mpp_error(FATAL, 'nestbctype > 1 not yet implemented')
 
-            !This check is due to a bug which has not yet been identified. Beware.
-!            if (Atm(n)%parent_grid%flagstruct%hord_tr == 7) &
-!                 call mpp_error(FATAL, "Flux-form nested  BCs (nestbctype > 1) should not use hord_tr == 7 (on parent grid), since there is no guarantee of tracer mass conservation with this option.")
-
-!!$            if (Atm(n)%flagstruct%q_split > 0 .and. Atm(n)%parent_grid%flagstruct%q_split > 0) then
-!!$               if (mod(Atm(n)%flagstruct%q_split,Atm(n)%parent_grid%flagstruct%q_split) /= 0) call mpp_error(FATAL, &
-!!$                    "Flux-form nested BCs (nestbctype > 1) require q_split on the nested grid to be evenly divisible by that on the coarse grid.")
-!!$            endif
-!!$            if (mod((Atm(n)%npx-1),Atm(n)%neststruct%refinement) /= 0 .or. mod((Atm(n)%npy-1),Atm(n)%neststruct%refinement) /= 0) call mpp_error(FATAL, &
-!!$                 "Flux-form nested BCs (nestbctype > 1) requires npx and npy to be one more than a multiple of the refinement ratio.")
-!!$            Atm(n)%parent_grid%neststruct%do_flux_BCs = .true.
-!!$            if (Atm(n)%neststruct%nestbctype == 3 .or. Atm(n)%neststruct%nestbctype == 4) Atm(n)%parent_grid%neststruct%do_2way_flux_BCs = .true.
             Atm(n)%neststruct%upoff = 0
          endif
 
