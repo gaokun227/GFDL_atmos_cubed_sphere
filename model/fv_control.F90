@@ -153,6 +153,7 @@ module fv_control_mod
    integer , pointer :: ntiles        
    integer , pointer :: nf_omega  
    integer , pointer :: fv_sg_adj 
+   real    , pointer :: sg_cutoff
                                       
    integer , pointer :: na_init 
    logical , pointer :: nudge_dz
@@ -547,7 +548,7 @@ module fv_control_mod
                          dry_mass, grid_type, do_Held_Suarez, do_reed_physics, reed_cond_only, &
                          consv_te, fill, filter_phys, fill_dp, fill_wz, consv_am, RF_fast, &
                          range_warn, dwind_2d, inline_q, z_tracer, reproduce_sum, adiabatic, do_vort_damp, no_dycore,   &
-                         tau, tau_h2o, rf_cutoff, nf_omega, hydrostatic, fv_sg_adj, breed_vortex_inline,  &
+                         tau, tau_h2o, rf_cutoff, nf_omega, hydrostatic, fv_sg_adj, sg_cutoff, breed_vortex_inline,  &
                          na_init, nudge_dz, hybrid_z, Make_NH, n_zs_filter, nord_zs_filter, full_zs_filter, reset_eta,         &
                          pnats, dnats, a2b_ord, remap_t, p_ref, d2_bg_k1, d2_bg_k2,  &
                          c2l_ord, dx_const, dy_const, umax, deglat,      &
@@ -691,7 +692,7 @@ module fv_control_mod
       if (is_master() .and. n == 1 .and. abs(p_split) > 1) then
          write(*,199) 'Using p_split = ', p_split
       endif
-
+      
       if (Atm(n)%neststruct%nested) then
          do i=1,n-1
             if (Atm(i)%grid_number == parent_grid_num) then
@@ -1086,6 +1087,7 @@ module fv_control_mod
      ntiles                        => Atm%flagstruct%ntiles
      nf_omega                      => Atm%flagstruct%nf_omega
      fv_sg_adj                     => Atm%flagstruct%fv_sg_adj
+     sg_cutoff                     => Atm%flagstruct%sg_cutoff
      na_init                       => Atm%flagstruct%na_init
      nudge_dz                      => Atm%flagstruct%nudge_dz
      p_ref                         => Atm%flagstruct%p_ref
