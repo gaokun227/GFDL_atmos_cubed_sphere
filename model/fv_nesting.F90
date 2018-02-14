@@ -384,8 +384,7 @@ contains
 
        sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
        if (flagstruct%hydrostatic) then
-          call mpp_error(FATAL, " Hydrostatic nesting temporarily disabled during code refactoring")
-          call setup_pt_BC(neststruct%pt_BC, neststruct%delp_BC, pe_eul_BC, neststruct%q_BC(sphum), npx, npy, npz, zvir, bd)
+          call setup_pt_BC(neststruct%pt_BC, pe_eul_BC, neststruct%q_BC(sphum), npx, npy, npz, zvir, bd)
        else
           call nested_grid_BC_save_proc(neststruct%nest_domain, &
                neststruct%ind_h, neststruct%wt_h, 0, 0,  npx,  npy,  npz_coarse, bd, &
@@ -521,8 +520,8 @@ contains
 !!$            neststruct%divg_BC, bctype=neststruct%nestbctype  )            
 
        !Update domains needed for Rayleigh damping
-       call mpp_update_domains(u, v, domain, gridtype=DGRID_NE)
-       call mpp_update_domains(w, domain, complete=.true.) 
+       if (.not. flagstruct%hydrostatic) call mpp_update_domains(w, domain) 
+       call mpp_update_domains(u, v, domain, gridtype=DGRID_NE, complete=.true.)
 
     endif
 
@@ -639,19 +638,15 @@ contains
 
  end subroutine set_BC_direct
 
- subroutine setup_pt_BC(pt_BC, delp_BC, pe_eul_BC, sphum_BC, npx, npy, npz, zvir, bd)
+ subroutine setup_pt_BC(pt_BC, pe_eul_BC, sphum_BC, npx, npy, npz, zvir, bd)
 
-   type(fv_grid_bounds_type), intent(IN) :: bd
-   type(fv_nest_BC_type_3d), intent(IN), target    :: delp_BC, pe_eul_BC, sphum_BC
-   type(fv_nest_BC_type_3d), intent(INOUT), target :: pt_BC
+   type(fv_grid_bounds_type), intent(IN)   :: bd
+   type(fv_nest_BC_type_3d), intent(IN)    :: pe_eul_BC, sphum_BC
+   type(fv_nest_BC_type_3d), intent(INOUT) :: pt_BC
    integer, intent(IN) :: npx, npy, npz
    real, intent(IN) :: zvir
 
-   real, dimension(:,:,:), pointer :: ptBC, sphumBC
-
-   real :: peln, pkz
-
-   integer :: i,j,k, istart, iend
+   integer :: istart, iend
 
    integer :: is,  ie,  js,  je
    integer :: isd, ied, jsd, jed
@@ -666,21 +661,10 @@ contains
    jed = bd%jed
    
    if (is == 1) then
-      ptBC    =>    pt_BC%west_t1
-      sphumBC => sphum_BC%west_t1
-!$OMP parallel do default(none) shared(npz,isd,jsd,jed,ptBC,zvir,sphumBC) private(pkz)
-      do k=1,npz
-      do j=jsd,jed
-      do i=isd,0
-         ptBC(i,j,k) = ptBC(i,j,k)/pkz*(1.+zvir*sphumBC(i,j,k))
-      end do
-      end do
-      end do
+      call setup_pt_BC_k(pt_BC%west_t1, sphum_BC%west_t1, pe_eul_BC%west_t1, zvir, isd, ied, isd, 0, jsd, jed, npz)
    end if
 
    if (js == 1) then
-      ptBC    =>    pt_BC%south_t1
-      sphumBC => sphum_BC%south_t1
       if (is == 1) then
          istart = is
       else
@@ -692,35 +676,15 @@ contains
          iend = ied
       end if
 
-!$OMP parallel do default(none) shared(npz,jsd,istart,iend,ptBC,zvir,sphumBC) private(pkz)
-      do k=1,npz
-      do j=jsd,0
-      do i=istart,iend
-         ptBC(i,j,k) = ptBC(i,j,k)/pkz * &
-              (1.+zvir*sphumBC(i,j,k))
-      end do
-      end do
-      end do
+      call setup_pt_BC_k(pt_BC%south_t1, sphum_BC%south_t1, pe_eul_BC%south_t1, zvir, isd, ied, istart, iend, jsd, 0, npz)
    end if
 
 
    if (ie == npx-1) then
-      ptBC    =>    pt_BC%east_t1
-      sphumBC => sphum_BC%east_t1
-!$OMP parallel do default(none) shared(npz,jsd,jed,npx,ied,ptBC,zvir,sphumBC) private(pkz)
-      do k=1,npz
-      do j=jsd,jed
-      do i=npx,ied
-         ptBC(i,j,k) = ptBC(i,j,k)/pkz * &
-              (1.+zvir*sphumBC(i,j,k))
-      end do
-      end do
-      end do
+      call setup_pt_BC_k(pt_BC%east_t1, sphum_BC%east_t1, pe_eul_BC%east_t1, zvir, isd, ied, npx, ied, jsd, jed, npz)
    end if
 
    if (je == npy-1) then
-      ptBC    =>    pt_BC%north_t1
-      sphumBC => sphum_BC%north_t1
       if (is == 1) then
          istart = is
       else
@@ -732,22 +696,37 @@ contains
          iend = ied
       end if
 
-!$OMP parallel do default(none) shared(npz,npy,jed,npx,istart,iend,ptBC,zvir,sphumBC) private(pkz)
-      do k=1,npz
-      do j=npy,jed
-      do i=istart,iend
-         ptBC(i,j,k) = ptBC(i,j,k)/pkz * &
-              (1.+zvir*sphumBC(i,j,k))
-      end do
-      end do
-      end do
+      call setup_pt_BC_k(pt_BC%north_t1, sphum_BC%north_t1, pe_eul_BC%north_t1, zvir, isd, ied, istart, iend, npy, jed, npz)
    end if
    
  end subroutine setup_pt_BC
 
 
- subroutine setup_pt_BC_k
+ subroutine setup_pt_BC_k(ptBC, sphumBC, peBC, zvir, isd, ied, istart, iend, jstart, jend, npz)
 
+   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz
+   real,    intent(IN) :: zvir
+   real, intent(INOUT), dimension(isd:ied,jstart:jend,npz) :: ptBC
+   real, intent(IN),    dimension(isd:ied,jstart:jend,npz) :: sphumBC
+   real, intent(IN),    dimension(isd:ied,jstart:jend,npz+1) :: peBC
+
+   integer :: i,j,k
+   real :: pealn, pebln, rpkz
+
+!Assumes dry kappa
+   do k=1,npz
+   do j=jstart,jend
+   do i=istart,iend
+      pealn = log(peBC(i,j,k))
+      pebln = log(peBC(i,j,k+1))
+
+      rpkz =  kappa*(pebln - pealn)/(exp(kappa*pebln)-exp(kappa*pealn) )
+
+      ptBC(i,j,k) = ptBC(i,j,k)*rpkz * &
+           (1.+zvir*sphumBC(i,j,k))
+   enddo
+   enddo
+   enddo
 
  end subroutine setup_pt_BC_k
 
@@ -2262,7 +2241,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
     real, allocatable, dimension(:,:,:) :: pt_src, w_src, u_src, v_src
     real(kind=f_p), allocatable :: q_diff(:,:,:)
     real :: L_sum_b(npz), L_sum_a(npz), blend_wt(parent_grid%npz)
-    real :: pfull, ph1, ph2, rfcut
+    real :: pfull, ph1, ph2, rfcut, sgcut
     
     integer :: upoff
     integer :: is,  ie,  js,  je
@@ -2298,6 +2277,9 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 
     ph2 = parent_grid%ak(1)
     rfcut = max(flagstruct%rf_cutoff, parent_grid%flagstruct%rf_cutoff)
+    sgcut = ak(flagstruct%n_sponge+1) + bk(flagstruct%n_sponge+1)*flagstruct%p_ref
+    sgcut = max(sgcut, parent_grid%ak(parent_grid%flagstruct%n_sponge+1) + parent_grid%bk(parent_grid%flagstruct%n_sponge+1)*parent_grid%flagstruct%p_ref)
+    rfcut = max(rfcut, sgcut)
     do k=1,parent_grid%npz
        ph1 = ph2
        ph2 = parent_grid%ak(k+1) + parent_grid%bk(k+1)*parent_grid%flagstruct%p_ref
@@ -2306,12 +2288,15 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
        if ( pfull <= ak(3) .or. k <= 2 ) then
           blend_wt(k) = 0.
        !Partial blend of nested-grid's Rayleigh damping region
+       !ALSO do not blend n_sponge areas??
        elseif (pfull <= rfcut) then
-          blend_wt(k) = neststruct%update_blend*cos(0.5*pi*log(rfcut/pfull)/log(rfcut/ptop))**2
+          blend_wt(k) = 0.
+          !blend_wt(k) = neststruct%update_blend*cos(0.5*pi*log(rfcut/pfull)/log(rfcut/ptop))**2
        else
           blend_wt(k) = neststruct%update_blend
        endif
     enddo
+
     if (neststruct%parent_proc .and. is_master() .and. first_timestep) then
        print*, ' TWO-WAY BLENDING WEIGHTS'
        ph2 = parent_grid%ak(1)
@@ -2619,6 +2604,16 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                end do
             end do
          end if
+!!$!!!! DEBUG CODE
+!!$         do k=1,parent_grid%npz
+!!$            write(mpp_pe()+3000,*) 'k = ', k, parent_grid%ak(k), parent_grid%bk(k)
+!!$         enddo
+!!$         write(mpp_pe()+3000,*) 
+!!$         do k=1,npz
+!!$            write(mpp_pe()+3000,*) 'k = ', k, ak(k), bk(k)
+!!$         enddo
+!!$!!!! END DEBUG CODE
+
          call update_remap_tqw(parent_grid%npz, parent_grid%ak, parent_grid%bk, &
               parent_grid%ps, &
               parent_grid%pt, parent_grid%q, parent_grid%w, &
