@@ -5192,6 +5192,19 @@ end subroutine eqv_pot
     return
   end subroutine getcape
 
+!!$  subroutine divg_diagnostics(divg, ..., idiag, bd, npz,gridstruct%area_64, domain, fv_time))
+!!$    real, INPUT(IN) :: divg(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+!!$    ....
+!!$    
+!!$    if (idiag%id_divg>0) then
+!!$       used = send_data(idiag%id_divg, divg, fv_time) 
+!!$
+!!$    endif
+!!$
+!!$
+!!$             if(flagstruct%fv_debug) call prt_mxm('divg',  dp1, is, ie, js, je, 0, npz, 1.,gridstruct%area_64, domain)
+!!$  end subroutine divg_diagnostics
+!!$    
 !-----------------------------------------------------------------------
 !ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 !-----------------------------------------------------------------------

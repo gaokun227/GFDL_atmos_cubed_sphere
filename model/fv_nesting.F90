@@ -2158,7 +2158,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
               Atm(n)%q, Atm(n)%ng, Atm(n)%flagstruct%ncnst,  Atm(n)%gridstruct%area_64, 0.,  &
               .false.,  .false., & 
               Atm(n)%flagstruct%moist_phys,  Atm(n)%flagstruct%hydrostatic, &
-              Atm(n)%flagstruct%nwat, Atm(n)%domain, .false.)
+              Atm(n)%flagstruct%nwat, Atm(n)%domain, Atm(n)%flagstruct%adiabatic, .false.)
       enddo
 
       do n=ngrids,2,-1 !loop backwards to allow information to propagate from finest to coarsest grids
@@ -2889,7 +2889,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
         q, ng, flagstruct%ncnst,  gridstruct%area_64, 0.,  &
         .false.,  .false., & !mountain argument not used
         flagstruct%moist_phys,  flagstruct%hydrostatic, &
-        flagstruct%nwat, domain, .false.)
+        flagstruct%nwat, domain, flagstruct%adiabatic, .false.)
 
 #endif
 

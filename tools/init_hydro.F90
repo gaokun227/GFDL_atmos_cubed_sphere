@@ -41,7 +41,7 @@ contains
  subroutine p_var(km, ifirst, ilast, jfirst, jlast, ptop, ptop_min,    &
                   delp, delz, pt, ps,  pe, peln, pk, pkz, cappa, q, ng, nq, area,   &
                   dry_mass, adjust_dry_mass, mountain, moist_phys,      &
-                  hydrostatic, nwat, domain, make_nh)
+                  hydrostatic, nwat, domain, adiabatic, make_nh)
                
 ! Given (ptop, delp) computes (ps, pk, pe, peln, pkz)
 ! Input:
@@ -50,7 +50,7 @@ contains
    integer,  intent(in):: jfirst, jlast            ! Latitude strip
    integer,  intent(in):: nq, nwat
    integer,  intent(in):: ng
-   logical, intent(in):: adjust_dry_mass, mountain, moist_phys, hydrostatic
+   logical, intent(in):: adjust_dry_mass, mountain, moist_phys, hydrostatic, adiabatic
    real, intent(in):: dry_mass, cappa, ptop, ptop_min
    real, intent(in   )::   pt(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng, km)
    real, intent(inout):: delz(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng, km)
@@ -135,6 +135,12 @@ contains
       endif
    enddo
 
+   if ( adiabatic  ) then
+      zvir = 0.
+   else
+      zvir = rvgas/rdgas - 1.
+   endif
+   sphum   = get_tracer_index (MODEL_ATMOS, 'sphum')
 
    if ( .not.hydrostatic ) then
 
@@ -142,11 +148,11 @@ contains
       if ( present(make_nh) ) then
           if ( make_nh ) then
              delz = 1.e25 
-!$OMP parallel do default(none) shared(ifirst,ilast,jfirst,jlast,km,delz,rdg,pt,peln)
+!$OMP parallel do default(none) shared(ifirst,ilast,jfirst,jlast,km,delz,rdg,pt,peln,zvir,sphum,q)
              do k=1,km
                 do j=jfirst,jlast
                    do i=ifirst,ilast
-                      delz(i,j,k) = rdg*pt(i,j,k)*(peln(i,k+1,j)-peln(i,k,j))
+                      delz(i,j,k) = rdg*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))*(peln(i,k+1,j)-peln(i,k,j))
                    enddo
                 enddo
              enddo
@@ -158,8 +164,6 @@ contains
 !------------------------------------------------------------------
 ! The following form is the same as in "fv_update_phys.F90"
 !------------------------------------------------------------------
-       zvir = rvgas/rdgas - 1.
-       sphum   = get_tracer_index (MODEL_ATMOS, 'sphum')
 !$OMP parallel do default(none) shared(ifirst,ilast,jfirst,jlast,km,pkz,cappa,rdg, &
 !$OMP                                  delp,pt,zvir,q,sphum,delz)
        do k=1,km

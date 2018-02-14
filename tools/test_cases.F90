@@ -2815,7 +2815,7 @@
 
      call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                 pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
-                .true., hydrostatic, nwat, domain)
+                .true., hydrostatic, nwat, domain, adiabatic)
 
 ! *** Add Initial perturbation ***
         pturb = 2.
@@ -3068,7 +3068,7 @@
 
      call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                 pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
-                .true., hydrostatic, nwat, domain)
+                .true., hydrostatic, nwat, domain, adiabatic)
 
       else if ( test_case==36 .or. test_case==37 ) then
 !------------------------------------
@@ -3674,7 +3674,7 @@
 #ifndef SUPER_K
      call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                 pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., mountain, &
-                moist_phys, hydrostatic, nwat, domain, .not.hydrostatic)
+                moist_phys, hydrostatic, nwat, domain, adiabatic, .not.hydrostatic)
 #endif
 
 #ifdef COLUMN_TRACER
@@ -6207,12 +6207,12 @@ end subroutine terminator_tracers
           if ( hydrostatic ) then
           call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
-                     moist_phys, .true., nwat , domain)
+                     moist_phys, .true., nwat , domain, flagstruct%adiabatic)
           else
                w(:,:,:) = 0.
           call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
-                     moist_phys, hydrostatic, nwat, domain, .true. )
+                     moist_phys, hydrostatic, nwat, domain, flagstruct%adiabatic, .true. )
           endif
 
          q = 0.
@@ -6268,7 +6268,7 @@ end subroutine terminator_tracers
 
           call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
-                     moist_phys, .false., nwat, domain)
+                     moist_phys, .false., nwat, domain, flagstruct%adiabatic)
 
 ! *** Add Initial perturbation ***
            r0 = 5.*max(dx_const, dy_const)
@@ -6439,7 +6439,7 @@ end subroutine terminator_tracers
 
         call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                    pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
-                   .true., hydrostatic, nwat, domain)
+                   .true., hydrostatic, nwat, domain, flagstruct%adiabatic)
 
 ! *** Add Initial perturbation ***
         pturb = 2.
@@ -6547,7 +6547,7 @@ end subroutine terminator_tracers
 
         call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                    pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
-                   .true., hydrostatic, nwat, domain)
+                   .true., hydrostatic, nwat, domain, flagstruct%adiabatic)
 
 ! *** Add Initial perturbation ***
 	if (bubble_do) then
