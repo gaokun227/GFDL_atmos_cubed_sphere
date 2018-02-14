@@ -405,6 +405,7 @@ module fv_arrays_mod
    integer :: nf_omega  = 1           ! Filter omega "nf_omega" times
    integer :: fv_sg_adj = -1          ! Perform grid-scale dry adjustment if > 0
                                       ! Relaxzation time  scale (sec) if positive
+   real    :: sg_cutoff = -1          ! cutoff level for fv_sg_adj (2dz filter; overrides n_sponge)
    integer :: na_init = 0             ! Perform adiabatic initialization
    logical :: nudge_dz = .false.      ! Whether to nudge delz in the adiabatic initialization
    real    :: p_ref = 1.E5
