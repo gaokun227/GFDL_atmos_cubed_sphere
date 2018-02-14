@@ -111,7 +111,7 @@ contains
 
     integer :: unit
     real, allocatable :: dz1(:)
-    real rgrav, f00, ztop, pertn
+    real rgrav, f00, ztop, pertn, ph
     logical :: hybrid
     logical :: cold_start_grids(size(Atm))
     character(len=128):: tname, errstring, fname, tracer_name
@@ -521,6 +521,17 @@ contains
         call mpp_sum(sumpertn)
         call mpp_sum(npts)
         write(errstring,'(A, E16.9)') "RMS added noise: ", sqrt(sumpertn/npts)
+        call mpp_error(NOTE, errstring)
+     endif
+
+     if (Atm(n)%flagstruct%fv_sg_adj > 0 .and. Atm(n)%flagstruct%sg_cutoff > 0) then
+        !Choose n_sponge from first reference level above sg_cutoff
+        do k=1,Atm(n)%npz
+           ph = Atm(n)%ak(k+1) +  Atm(n)%bk(k+1)*Atm(n)%flagstruct%p_ref
+           if (ph > Atm(n)%flagstruct%sg_cutoff) exit
+        enddo
+        Atm(n)%flagstruct%n_sponge = min(k,Atm(n)%npz)
+        write(errstring,'(A, I3, A)') ' Override n_sponge: applying 2dz filter to ', k , ' levels'
         call mpp_error(NOTE, errstring)
      endif
 
