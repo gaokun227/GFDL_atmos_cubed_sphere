@@ -6,7 +6,7 @@
 module fv_cmp_mod
     
     use constants_mod, only: rvgas, rdgas, grav, hlv, hlf, cp_air
-    use fv_mp_mod, only: is_master
+    !use fv_mp_mod, only: is_master
     use fv_arrays_mod, only: r_grid
     use gfdl_cloud_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql_mlt, ql0_max, qi_lim, qs_mlt
     use gfdl_cloud_microphys_mod, only: icloud_f, sat_adj0, t_sub, cld_min
@@ -318,7 +318,7 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
             if (dq0 > 0.) then ! whole grid - box saturated
                 src (i) = min (adj_fac * dq0, max (ql_gen - ql (i, j), fac_v2l * dq0))
             else ! evaporation of ql
-                ! sjl 20170703 added ql factor to prevent the situation of high ql and rh<1
+                ! sjl 20170703 added ql factor to prevent the situation of high ql and rh < 1
                 ! factor = - min (1., fac_l2v * sqrt (max (0., ql (i, j)) / 1.e-5) * 10. * (1. - qv (i, j) / wqsat (i)))
                 ! factor = - fac_l2v
                 ! factor = - 1
@@ -925,7 +925,7 @@ subroutine qs_init (kmp)
     
     if (mp_initialized) return
     
-    if (is_master ()) write (*, *) 'top layer for gfdl_mp = ', kmp
+    !if (is_master ()) write (*, *) 'top layer for gfdl_mp = ', kmp
     
     ! generate es table (dt = 0.1 deg c)
     

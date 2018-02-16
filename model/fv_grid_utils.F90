@@ -56,7 +56,7 @@
  public f_p 
  public ptop_min, big_number !CLEANUP: OK to keep since they are constants?
  public cos_angle
- public latlon2xyz, gnomonic_grids, &
+ public update_dwinds_phys, update2d_dwinds_phys, latlon2xyz, gnomonic_grids, &
         global_mx, unit_vect_latlon,  &
         cubed_to_latlon, c2l_ord2, g_sum, global_qsum, great_circle_dist,  &
         v_prod, get_unit_vect2, project_sphere_v
@@ -1396,7 +1396,7 @@
  if ( is_master() ) then
       p1(1) = lamda(1,1);    p1(2) = theta(1,1)
       p2(1) = lamda(2,1);    p2(2) = theta(2,1)
-      write(*,*) 'Gird distance at face edge (km)=',great_circle_dist( p1, p2, radius )   ! earth radius is assumed
+      write(*,*) 'Grid distance at face edge (m)=',great_circle_dist( p1, p2, radius )   ! earth radius is assumed
  endif
 
  end subroutine gnomonic_ed
@@ -3352,6 +3352,337 @@
  enddo
 
  end subroutine project_sphere_v
+
+ subroutine update_dwinds_phys(is, ie, js, je, isd, ied, jsd, jed, dt, u_dt, v_dt, u, v, gridstruct, npx, npy, npz, domain)
+
+! Purpose; Transform wind tendencies on A grid to D grid for the final update
+ 
+  integer, intent(in):: is,  ie,  js,  je
+  integer, intent(in):: isd, ied, jsd, jed
+  integer, intent(IN) :: npx,npy, npz
+  real,    intent(in):: dt
+  real, intent(inout):: u(isd:ied,  jsd:jed+1,npz)
+  real, intent(inout):: v(isd:ied+1,jsd:jed  ,npz)
+  real, intent(inout), dimension(isd:ied,jsd:jed,npz):: u_dt, v_dt
+  type(fv_grid_type), intent(IN), target :: gridstruct
+  type(domain2d), intent(INOUT) :: domain
+
+! local:
+  real v3(is-1:ie+1,js-1:je+1,3)
+  real ue(is-1:ie+1,js:je+1,3)    ! 3D winds at edges
+  real ve(is:ie+1,js-1:je+1,  3)    ! 3D winds at edges
+  real, dimension(is:ie):: ut1, ut2, ut3
+  real, dimension(js:je):: vt1, vt2, vt3
+  real dt5, gratio
+  integer i, j, k, m, im2, jm2
+
+  real(kind=R_GRID), pointer, dimension(:,:,:) :: vlon, vlat
+  real(kind=R_GRID), pointer, dimension(:,:,:,:) :: es, ew
+  real(kind=R_GRID), pointer, dimension(:) :: edge_vect_w, edge_vect_e, edge_vect_s, edge_vect_n
+
+  es   => gridstruct%es
+  ew   => gridstruct%ew
+  vlon => gridstruct%vlon
+  vlat => gridstruct%vlat
+
+  edge_vect_w => gridstruct%edge_vect_w
+  edge_vect_e => gridstruct%edge_vect_e
+  edge_vect_s => gridstruct%edge_vect_s
+  edge_vect_n => gridstruct%edge_vect_n
+
+    dt5 = 0.5 * dt
+    im2 = (npx-1)/2
+    jm2 = (npy-1)/2
+
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,gridstruct,u,dt5,u_dt,v,v_dt,  &
+!$OMP                                  vlon,vlat,jm2,edge_vect_w,npx,edge_vect_e,im2, &
+!$OMP                                  edge_vect_s,npy,edge_vect_n,es,ew)             &
+!$OMP                          private(ut1, ut2, ut3, vt1, vt2, vt3, ue, ve, v3)
+    do k=1, npz
+
+     if ( gridstruct%grid_type > 3 ) then    ! Local & one tile configurations
+
+       do j=js,je+1
+          do i=is,ie
+             u(i,j,k) = u(i,j,k) + dt5*(u_dt(i,j-1,k) + u_dt(i,j,k))
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie+1
+             v(i,j,k) = v(i,j,k) + dt5*(v_dt(i-1,j,k) + v_dt(i,j,k))
+          enddo
+       enddo
+
+     else
+! Compute 3D wind tendency on A grid
+       do j=js-1,je+1
+          do i=is-1,ie+1
+             v3(i,j,1) = u_dt(i,j,k)*vlon(i,j,1) + v_dt(i,j,k)*vlat(i,j,1)
+             v3(i,j,2) = u_dt(i,j,k)*vlon(i,j,2) + v_dt(i,j,k)*vlat(i,j,2)
+             v3(i,j,3) = u_dt(i,j,k)*vlon(i,j,3) + v_dt(i,j,k)*vlat(i,j,3)
+          enddo
+       enddo
+
+! Interpolate to cell edges
+       do j=js,je+1
+          do i=is-1,ie+1
+             ue(i,j,1) = v3(i,j-1,1) + v3(i,j,1)
+             ue(i,j,2) = v3(i,j-1,2) + v3(i,j,2)
+             ue(i,j,3) = v3(i,j-1,3) + v3(i,j,3)
+          enddo
+       enddo
+
+       do j=js-1,je+1
+          do i=is,ie+1
+             ve(i,j,1) = v3(i-1,j,1) + v3(i,j,1)
+             ve(i,j,2) = v3(i-1,j,2) + v3(i,j,2)
+             ve(i,j,3) = v3(i-1,j,3) + v3(i,j,3)
+          enddo
+       enddo
+
+! --- E_W edges (for v-wind):
+     if ( is==1 .and. .not. gridstruct%nested ) then
+       i = 1
+       do j=js,je
+        if ( j>jm2 ) then
+             vt1(j) = edge_vect_w(j)*ve(i,j-1,1)+(1.-edge_vect_w(j))*ve(i,j,1)
+             vt2(j) = edge_vect_w(j)*ve(i,j-1,2)+(1.-edge_vect_w(j))*ve(i,j,2)
+             vt3(j) = edge_vect_w(j)*ve(i,j-1,3)+(1.-edge_vect_w(j))*ve(i,j,3)
+        else
+             vt1(j) = edge_vect_w(j)*ve(i,j+1,1)+(1.-edge_vect_w(j))*ve(i,j,1)
+             vt2(j) = edge_vect_w(j)*ve(i,j+1,2)+(1.-edge_vect_w(j))*ve(i,j,2)
+             vt3(j) = edge_vect_w(j)*ve(i,j+1,3)+(1.-edge_vect_w(j))*ve(i,j,3)
+        endif
+       enddo
+       do j=js,je
+          ve(i,j,1) = vt1(j)
+          ve(i,j,2) = vt2(j)
+          ve(i,j,3) = vt3(j)
+       enddo
+     endif
+     if ( (ie+1)==npx .and. .not. gridstruct%nested ) then
+       i = npx
+       do j=js,je
+        if ( j>jm2 ) then
+             vt1(j) = edge_vect_e(j)*ve(i,j-1,1)+(1.-edge_vect_e(j))*ve(i,j,1)
+             vt2(j) = edge_vect_e(j)*ve(i,j-1,2)+(1.-edge_vect_e(j))*ve(i,j,2)
+             vt3(j) = edge_vect_e(j)*ve(i,j-1,3)+(1.-edge_vect_e(j))*ve(i,j,3)
+        else
+             vt1(j) = edge_vect_e(j)*ve(i,j+1,1)+(1.-edge_vect_e(j))*ve(i,j,1)
+             vt2(j) = edge_vect_e(j)*ve(i,j+1,2)+(1.-edge_vect_e(j))*ve(i,j,2)
+             vt3(j) = edge_vect_e(j)*ve(i,j+1,3)+(1.-edge_vect_e(j))*ve(i,j,3)
+        endif
+       enddo
+       do j=js,je
+          ve(i,j,1) = vt1(j)
+          ve(i,j,2) = vt2(j)
+          ve(i,j,3) = vt3(j)
+       enddo
+     endif
+! N-S edges (for u-wind):
+     if ( js==1  .and. .not. gridstruct%nested) then
+       j = 1
+       do i=is,ie
+        if ( i>im2 ) then
+             ut1(i) = edge_vect_s(i)*ue(i-1,j,1)+(1.-edge_vect_s(i))*ue(i,j,1)
+             ut2(i) = edge_vect_s(i)*ue(i-1,j,2)+(1.-edge_vect_s(i))*ue(i,j,2)
+             ut3(i) = edge_vect_s(i)*ue(i-1,j,3)+(1.-edge_vect_s(i))*ue(i,j,3)
+        else
+             ut1(i) = edge_vect_s(i)*ue(i+1,j,1)+(1.-edge_vect_s(i))*ue(i,j,1)
+             ut2(i) = edge_vect_s(i)*ue(i+1,j,2)+(1.-edge_vect_s(i))*ue(i,j,2)
+             ut3(i) = edge_vect_s(i)*ue(i+1,j,3)+(1.-edge_vect_s(i))*ue(i,j,3)
+        endif
+       enddo
+       do i=is,ie
+          ue(i,j,1) = ut1(i)
+          ue(i,j,2) = ut2(i)
+          ue(i,j,3) = ut3(i)
+       enddo
+     endif
+     if ( (je+1)==npy  .and. .not. gridstruct%nested) then
+       j = npy
+       do i=is,ie
+        if ( i>im2 ) then
+             ut1(i) = edge_vect_n(i)*ue(i-1,j,1)+(1.-edge_vect_n(i))*ue(i,j,1)
+             ut2(i) = edge_vect_n(i)*ue(i-1,j,2)+(1.-edge_vect_n(i))*ue(i,j,2)
+             ut3(i) = edge_vect_n(i)*ue(i-1,j,3)+(1.-edge_vect_n(i))*ue(i,j,3)
+        else
+             ut1(i) = edge_vect_n(i)*ue(i+1,j,1)+(1.-edge_vect_n(i))*ue(i,j,1)
+             ut2(i) = edge_vect_n(i)*ue(i+1,j,2)+(1.-edge_vect_n(i))*ue(i,j,2)
+             ut3(i) = edge_vect_n(i)*ue(i+1,j,3)+(1.-edge_vect_n(i))*ue(i,j,3)
+        endif
+       enddo
+       do i=is,ie
+          ue(i,j,1) = ut1(i)
+          ue(i,j,2) = ut2(i)
+          ue(i,j,3) = ut3(i)
+       enddo
+     endif
+       do j=js,je+1
+          do i=is,ie
+             u(i,j,k) = u(i,j,k) + dt5*( ue(i,j,1)*es(1,i,j,1) +  &
+                                         ue(i,j,2)*es(2,i,j,1) +  &
+                                         ue(i,j,3)*es(3,i,j,1) )
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie+1
+             v(i,j,k) = v(i,j,k) + dt5*( ve(i,j,1)*ew(1,i,j,2) +  &
+                                         ve(i,j,2)*ew(2,i,j,2) +  &
+                                         ve(i,j,3)*ew(3,i,j,2) )
+          enddo
+       enddo
+! Update:
+      endif   ! end grid_type
+ 
+    enddo         ! k-loop
+
+ end subroutine update_dwinds_phys 
+
+
+ subroutine update2d_dwinds_phys(is, ie, js, je, isd, ied, jsd, jed, dt, u_dt, v_dt, u, v, gridstruct, npx, npy, npz, domain)
+
+! Purpose; Transform wind tendencies on A grid to D grid for the final update
+
+  integer, intent(in):: is,  ie,  js,  je
+  integer, intent(in):: isd, ied, jsd, jed
+  real,    intent(in):: dt
+  real, intent(inout):: u(isd:ied,  jsd:jed+1,npz)
+  real, intent(inout):: v(isd:ied+1,jsd:jed  ,npz)
+  real, intent(inout), dimension(isd:ied,jsd:jed,npz):: u_dt, v_dt
+  type(fv_grid_type), intent(IN), target :: gridstruct
+  integer, intent(IN) :: npx,npy, npz
+  type(domain2d), intent(INOUT) :: domain
+
+! local:
+  real ut(isd:ied,jsd:jed)
+  real:: dt5, gratio
+  integer i, j, k
+
+  real(kind=R_GRID), pointer, dimension(:,:,:) :: vlon, vlat
+  real(kind=R_GRID), pointer, dimension(:,:,:,:) :: es, ew
+  real(kind=R_GRID), pointer, dimension(:) :: edge_vect_w, edge_vect_e, edge_vect_s, edge_vect_n
+  real, pointer, dimension(:,:) :: z11, z12, z21, z22, dya, dxa
+
+  es   => gridstruct%es
+  ew   => gridstruct%ew
+  vlon => gridstruct%vlon
+  vlat => gridstruct%vlat
+
+  edge_vect_w => gridstruct%edge_vect_w
+  edge_vect_e => gridstruct%edge_vect_e
+  edge_vect_s => gridstruct%edge_vect_s
+  edge_vect_n => gridstruct%edge_vect_n
+
+  z11 => gridstruct%z11
+  z21 => gridstruct%z21
+  z12 => gridstruct%z12
+  z22 => gridstruct%z22
+
+  dxa => gridstruct%dxa
+  dya => gridstruct%dya
+
+! Transform wind tendency on A grid to local "co-variant" components:
+
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,z11,u_dt,z12,v_dt,z21,z22) &
+!$OMP                          private(ut)
+    do k=1,npz
+       do j=js,je
+          do i=is,ie
+                 ut(i,j) = z11(i,j)*u_dt(i,j,k) + z12(i,j)*v_dt(i,j,k)
+             v_dt(i,j,k) = z21(i,j)*u_dt(i,j,k) + z22(i,j)*v_dt(i,j,k)
+             u_dt(i,j,k) = ut(i,j)
+          enddo
+       enddo
+    enddo
+! (u_dt,v_dt) are now on local coordinate system
+       call timing_on('COMM_TOTAL')
+  call mpp_update_domains(u_dt, v_dt, domain, gridtype=AGRID_PARAM)
+       call timing_off('COMM_TOTAL')
+
+    dt5 = 0.5 * dt
+
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,gridstruct,u,dt5,u_dt,v,v_dt, &
+!$OMP                                  dya,npy,dxa,npx)                              &
+!$OMP                          private(gratio)
+    do k=1, npz
+
+     if ( gridstruct%grid_type > 3 .or. gridstruct%nested) then    ! Local & one tile configurations
+
+       do j=js,je+1
+          do i=is,ie
+             u(i,j,k) = u(i,j,k) + dt5*(u_dt(i,j-1,k) + u_dt(i,j,k))
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie+1
+             v(i,j,k) = v(i,j,k) + dt5*(v_dt(i-1,j,k) + v_dt(i,j,k))
+          enddo
+       enddo
+
+     else
+
+!--------
+! u-wind
+!--------
+! Edges:
+    if ( js==1 ) then
+       do i=is,ie
+          gratio = dya(i,2) / dya(i,1)
+          u(i,1,k) = u(i,1,k) + dt5*((2.+gratio)*(u_dt(i,0,k)+u_dt(i,1,k))  &
+                   -(u_dt(i,-1,k)+u_dt(i,2,k)))/(1.+gratio)
+       enddo
+    endif
+
+! Interior
+    do j=max(2,js),min(npy-1,je+1)
+       do i=is,ie
+          u(i,j,k) = u(i,j,k) + dt5*(u_dt(i,j-1,k)+u_dt(i,j,k))
+       enddo
+    enddo
+
+    if ( (je+1)==npy ) then
+       do i=is,ie
+          gratio = dya(i,npy-2) / dya(i,npy-1)
+          u(i,npy,k) = u(i,npy,k) + dt5*((2.+gratio)*(u_dt(i,npy-1,k)+u_dt(i,npy,k)) &
+                     -(u_dt(i,npy-2,k)+u_dt(i,npy+1,k)))/(1.+gratio)
+       enddo
+    endif
+
+!--------
+! v-wind
+!--------
+! West Edges:
+    if ( is==1 ) then
+       do j=js,je
+          gratio = dxa(2,j) / dxa(1,j)
+          v(1,j,k) = v(1,j,k) + dt5*((2.+gratio)*(v_dt(0,j,k)+v_dt(1,j,k)) &
+                   -(v_dt(-1,j,k)+v_dt(2,j,k)))/(1.+gratio)
+       enddo
+    endif
+
+! Interior
+    do j=js,je
+       do i=max(2,is),min(npx-1,ie+1)
+          v(i,j,k) = v(i,j,k) + dt5*(v_dt(i-1,j,k)+v_dt(i,j,k))
+       enddo
+    enddo
+
+! East Edges:
+    if ( (ie+1)==npx ) then
+       do j=js,je
+          gratio = dxa(npx-2,j) / dxa(npx-1,j)
+          v(npx,j,k) = v(npx,j,k) + dt5*((2.+gratio)*(v_dt(npx-1,j,k)+v_dt(npx,j,k)) &
+                     -(v_dt(npx-2,j,k)+v_dt(npx+1,j,k)))/(1.+gratio)
+       enddo
+    endif
+
+    endif   ! end grid_type
+
+    enddo         ! k-loop
+
+ end subroutine update2d_dwinds_phys
+
 
 #ifdef TO_DO_MQ
  subroutine init_mq(phis, gridstruct, npx, npy, is, ie, js, je, ng)

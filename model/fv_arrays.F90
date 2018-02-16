@@ -96,6 +96,8 @@ module fv_arrays_mod
      real, allocatable :: zxg(:,:)
      real, allocatable :: pt1(:)
 
+     integer :: id_prer, id_prei, id_pres, id_preg
+     integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
 
      logical :: initialized = .false.
      real  sphum, liq_wat, ice_wat       ! GFDL physics
@@ -307,6 +309,7 @@ module fv_arrays_mod
    logical :: RF_fast =.false.      !  Fast inline Rayleigh Friction
    logical :: consv_am  = .false.   ! Apply Angular Momentum Correction (to zonal wind component)
    logical :: do_sat_adj= .false.   ! 
+   logical :: do_inline_mp = .false. ! inline cloud microphysics
    logical :: do_f3d    = .false.   ! 
    logical :: no_dycore = .false.   ! skip the dycore
    logical :: convert_ke = .false. 
@@ -604,6 +607,13 @@ module fv_arrays_mod
 
   end type fv_nest_type
 
+  type inline_mp_type
+    real, _ALLOCATABLE :: prer(:,:)     _NULL
+    real, _ALLOCATABLE :: prei(:,:)     _NULL
+    real, _ALLOCATABLE :: pres(:,:)     _NULL
+    real, _ALLOCATABLE :: preg(:,:)     _NULL
+  end type inline_mp_type
+
   interface allocate_fv_nest_BC_type
      module procedure allocate_fv_nest_BC_type_3D
      module procedure allocate_fv_nest_BC_type_3D_Atm
@@ -759,6 +769,8 @@ module fv_arrays_mod
      real(kind=R_GRID), allocatable, dimension(:,:,:,:) :: grid_global
 
   integer :: atmos_axes(4)
+
+     type(inline_mp_type) :: inline_mp
 
 
   end type fv_atmos_type
@@ -930,6 +942,11 @@ contains
     allocate (  Atm%ak(npz_2d+1) )
     allocate (  Atm%bk(npz_2d+1) )
 
+    allocate ( Atm%inline_mp%prer(is:ie,js:je) )
+    allocate ( Atm%inline_mp%prei(is:ie,js:je) )
+    allocate ( Atm%inline_mp%pres(is:ie,js:je) )
+    allocate ( Atm%inline_mp%preg(is:ie,js:je) )
+
     !--------------------------
     ! Non-hydrostatic dynamics:
     !--------------------------
@@ -959,7 +976,7 @@ contains
 ! Notes by SJL
 ! Place the memory in the optimal shared mem space
 ! This will help the scaling with OpenMP
-!$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,Atm,nq,ncnst)
+!$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,Atm,nq,ncnst)
      do k=1, npz
         do j=jsd, jed
            do i=isd, ied
@@ -1002,6 +1019,14 @@ contains
               Atm%qdiag(i,j,k,n) = real_big
            enddo
         enddo
+        enddo
+     enddo
+     do j=js, je
+        do i=is, ie
+           Atm%inline_mp%prer(i,j) = real_big
+           Atm%inline_mp%prei(i,j) = real_big
+           Atm%inline_mp%pres(i,j) = real_big
+           Atm%inline_mp%preg(i,j) = real_big
         enddo
      enddo
 #endif
@@ -1234,6 +1259,11 @@ contains
     deallocate (  Atm%cy )
     deallocate (  Atm%ak )
     deallocate (  Atm%bk )
+
+    deallocate ( Atm%inline_mp%prer )
+    deallocate ( Atm%inline_mp%prei )
+    deallocate ( Atm%inline_mp%pres )
+    deallocate ( Atm%inline_mp%preg )
 
     deallocate ( Atm%u_srf )
     deallocate ( Atm%v_srf )

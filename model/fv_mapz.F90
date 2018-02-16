@@ -25,17 +25,20 @@ module fv_mapz_mod
   use constants_mod,     only: radius, pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
   use tracer_manager_mod,only: get_tracer_index
   use field_manager_mod, only: MODEL_ATMOS
-  use fv_grid_utils_mod, only: g_sum, ptop_min
+  use fv_grid_utils_mod, only: g_sum, ptop_min, cubed_to_latlon, update_dwinds_phys
   use fv_fill_mod,       only: fillz
   use mpp_domains_mod,   only: mpp_update_domains, domain2d
   use mpp_mod,           only: NOTE, mpp_error, get_unit, mpp_root_pe, mpp_pe
-  use fv_arrays_mod,     only: fv_grid_type
+  use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID, inline_mp_type
   use fv_timing_mod,     only: timing_on, timing_off
-  use fv_mp_mod,         only: is_master
+  use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
   use fv_cmp_mod,        only: qs_init, fv_sat_adj
+#ifndef DYCORE_SOLO
+  use gfdl_mp_mod,       only: gfdl_mp_driver
+#endif
 
   implicit none
-  real, parameter:: consv_min= 0.001   ! below which no correction applies
+  real, parameter:: consv_min = 0.001   ! below which no correction applies
   real, parameter:: t_min= 184.   ! below which applies stricter constraint
   real, parameter:: r3 = 1./3., r23 = 2./3., r12 = 1./12.
   real, parameter:: cv_vap = 3.*rvgas  ! 1384.5
@@ -56,15 +59,19 @@ module fv_mapz_mod
 contains
 
  subroutine Lagrangian_to_Eulerian(last_step, consv, ps, pe, delp, pkz, pk,   &
-                                   mdt, pdt, km, is,ie,js,je, isd,ied,jsd,jed,       &
+                                   mdt, pdt, npx, npy, km, is,ie,js,je, isd,ied,jsd,jed,       &
                       nq, nwat, sphum, q_con, u, v, w, delz, pt, q, hs, r_vir, cp,  &
                       akap, cappa, kord_mt, kord_wz, kord_tr, kord_tm,  peln, te0_2d,        &
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
-                      hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init)
+                      hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
+                      do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
+                      moist_phys)
   logical, intent(in):: last_step
+  logical, intent(in):: fv_debug
   real,    intent(in):: mdt                   ! remap time step
   real,    intent(in):: pdt                   ! phys time step
+  integer, intent(in):: npx, npy
   integer, intent(in):: km
   integer, intent(in):: nq                    ! number of tracers (including h2o)
   integer, intent(in):: nwat
@@ -76,6 +83,7 @@ contains
   integer, intent(in):: kord_wz               ! Mapping order/option for w
   integer, intent(in):: kord_tr(nq)           ! Mapping order for tracers
   integer, intent(in):: kord_tm               ! Mapping order for thermodynamics
+  integer, intent(in):: c2l_ord
 
   real, intent(in):: consv                 ! factor for TE conservation
   real, intent(in):: r_vir
@@ -86,6 +94,7 @@ contains
   real, intent(in):: ws(is:ie,js:je)
 
   logical, intent(in):: do_sat_adj
+  logical, intent(in):: do_inline_mp
   logical, intent(in):: fill                  ! fill negative tracers
   logical, intent(in):: reproduce_sum
   logical, intent(in):: do_omega, adiabatic, do_adiabatic_init
@@ -95,6 +104,7 @@ contains
   real, intent(in):: pfull(km)
   type(fv_grid_type), intent(IN), target :: gridstruct
   type(domain2d), intent(INOUT) :: domain
+  type(fv_grid_bounds_type), intent(IN) :: bd
 
 ! !INPUT/OUTPUT
   real, intent(inout):: pk(is:ie,js:je,km+1) ! pe to the kappa
@@ -113,6 +123,7 @@ contains
   logical, intent(in):: hydrostatic
   logical, intent(in):: hybrid_z
   logical, intent(in):: out_dt
+  logical, intent(in):: moist_phys
 
   real, intent(inout)::   ua(isd:ied,jsd:jed,km)   ! u-wind (m/s) on physics grid
   real, intent(inout)::   va(isd:ied,jsd:jed,km)   ! v-wind (m/s) on physics grid
@@ -122,21 +133,27 @@ contains
   real, intent(out)::    pkz(is:ie,js:je,km)       ! layer-mean pk for converting t to pt
   real, intent(out)::     te(isd:ied,jsd:jed,km)
 
+  type(inline_mp_type), intent(inout):: inline_mp
+
 ! !DESCRIPTION:
 !
 ! !REVISION HISTORY:
 ! SJL 03.11.04: Initial version for partial remapping
 !
 !-----------------------------------------------------------------------
+  real, allocatable, dimension(:,:,:) :: dp0, u0, v0
+  real, allocatable, dimension(:,:,:) :: u_dt, v_dt
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
   real, dimension(is:ie,km)  :: q2, dp2
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
+  real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gz, cvm, qv
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
   integer:: i,j,k 
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
+  integer:: ccn_cm3
 
        k1k = rdgas/cv_air   ! akap / (1.-akap) = rg/Cv=0.4
         rg = rdgas
@@ -149,8 +166,9 @@ contains
        snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat')
        graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
        cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
+       ccn_cm3 = get_tracer_index (MODEL_ATMOS, 'ccn_cm3')
 
-       if ( do_sat_adj ) then
+       if ( do_adiabatic_init .or. do_sat_adj ) then
             fast_mp_consv = (.not.do_adiabatic_init) .and. consv>consv_min
             do k=1,km
                kmp = k
@@ -164,7 +182,7 @@ contains
 !$OMP                                  graupel,q_con,sphum,cappa,r_vir,rcp,k1k,delp, &
 !$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
-!$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,ua)    &
+!$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,pe4)    &
 !$OMP                          private(qv,gz,cvm,kp,k_next,bkh,dp2,   &
 !$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2)
   do 1000 j=js,je+1
@@ -477,27 +495,58 @@ contains
 
      do k=1,km
         do i=is,ie
-           ua(i,j,k) = pe2(i,k+1)
+           pe4(i,j,k) = pe2(i,k+1)
         enddo
      enddo
 
 1000  continue
 
-!$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,isd,ied,jsd,jed,kord_mt, &
+!-----------------------------------------------------------------------
+! Inline GFDL MP
+!-----------------------------------------------------------------------
+
+  if ((.not. do_adiabatic_init) .and. do_inline_mp) then
+
+    allocate(u_dt(isd:ied,jsd:jed,km))
+    allocate(v_dt(isd:ied,jsd:jed,km))
+
+    ! save D grid u and v
+    if (consv .gt. consv_min) then
+      allocate(u0(isd:ied,jsd:jed+1,km))
+      allocate(v0(isd:ied+1,jsd:jed,km))
+      u0 = u
+      v0 = v
+    endif
+
+    ! D grid wind to A grid wind remap
+    call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
+             domain, gridstruct%nested, c2l_ord, bd)
+
+    ! save delp
+    if (consv .gt. consv_min) then
+      allocate(dp0(isd:ied,jsd:jed,km))
+      dp0 = delp
+    endif
+
+  endif
+
+!$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,va,isd,ied,jsd,jed,kord_mt, &
 !$OMP                               te_2d,te,delp,hydrostatic,hs,rg,pt,peln, adiabatic, &
 !$OMP                               cp,delz,nwat,rainwat,liq_wat,ice_wat,snowwat,       &
 !$OMP                               graupel,q_con,r_vir,sphum,w,pk,pkz,last_step,consv, &
 !$OMP                               do_adiabatic_init,zsum1,zsum0,te0_2d,domain,        &
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
-!$OMP                               fast_mp_consv,kord_tm) &
-!$OMP                       private(pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
+!$OMP                               fast_mp_consv,kord_tm,pe4, &
+!$OMP                               npx,npy,ccn_cm3,inline_mp,u_dt,v_dt,   &
+!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps) &
+!$OMP                       private(q2,pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
 
 !$OMP do
   do k=2,km
      do j=js,je
         do i=is,ie
-           pe(i,k,j) = ua(i,j,k-1)
+           pe(i,k,j) = pe4(i,j,k-1)
         enddo
      enddo
   enddo
@@ -624,8 +673,9 @@ endif        ! end last_step check
 
 ! Note: pt at this stage is T_v
 ! if ( (.not.do_adiabatic_init) .and. do_sat_adj ) then
-  if ( do_sat_adj ) then
+  if (do_adiabatic_init .or. do_sat_adj) then
                                            call timing_on('sat_adj2')
+
 !$OMP do
            do k=kmp,km
               do j=js,je
@@ -662,9 +712,75 @@ endif        ! end last_step check
                    enddo
                 enddo
            endif
+
                                            call timing_off('sat_adj2')
   endif   ! do_sat_adj
 
+!-----------------------------------------------------------------------
+! Inline GFDL MP
+!-----------------------------------------------------------------------
+
+  if ((.not. do_adiabatic_init) .and. do_inline_mp) then
+
+!$OMP do
+    do j = js, je
+
+        if (ccn_cm3 .gt. 0) then
+          q2(is:ie,:) = q(is:ie,j,:,ccn_cm3)
+        else
+          q2(is:ie,:) = 0.0
+        endif
+ 
+        ! note: ua and va are A-grid variables
+        ! note: pt is virtual temperature at this point
+        ! note: w is vertical velocity (m/s)
+        ! note: delz is negative, delp is positive, delz doesn't change in constant volume situation
+        ! note: hs is geopotential height (m^2/s^2)
+        ! note: the unit of q2 is #/cc
+        ! note: the unit of area is m^2
+        ! note: the unit of prer, prei, pres, preg is mm/day
+
+        ! save ua, va for wind tendency calculation
+        u_dt(is:ie,j,:) = ua(is:ie,j,:)
+        v_dt(is:ie,j,:) = va(is:ie,j,:)
+
+#ifndef DYCORE_SOLO
+        call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
+                       q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
+                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), &
+                       pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
+                       delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
+                       hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
+                       inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), hydrostatic, &
+                       is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:), consv>consv_min, &
+                       te(is:ie,j,:), last_step)
+#endif
+ 
+        ! compute wind tendency at A grid fori D grid wind update
+        u_dt(is:ie,j,:) = (ua(is:ie,j,:) - u_dt(is:ie,j,:)) / abs(mdt)
+        v_dt(is:ie,j,:) = (va(is:ie,j,:) - v_dt(is:ie,j,:)) / abs(mdt)
+
+        ! update pe, peln, pk, ps
+        do k=2,km+1
+            pe(is:ie,k,j) = pe(is:ie,k-1,j)+delp(is:ie,j,k-1)
+            peln(is:ie,k,j) = log(pe(is:ie,k,j))
+            pk(is:ie,j,k) = exp(akap*peln(is:ie,k,j))
+        enddo
+        
+        ps(is:ie,j) = pe(is:ie,km+1,j)
+
+        ! update pkz
+        if (.not. hydrostatic) then
+#ifdef MOIST_CAPPA
+            pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
+#else
+            pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
+#endif
+        endif
+ 
+    enddo
+
+  endif
 
   if ( last_step ) then
        ! Output temperature if last_step
@@ -713,6 +829,78 @@ endif        ! end last_step check
     endif
   endif
 !$OMP end parallel
+
+!-----------------------------------------------------------------------
+! Inline GFDL MP
+!-----------------------------------------------------------------------
+
+  if ((.not. do_adiabatic_init) .and. do_inline_mp) then
+
+    ! Note: (ua,va) are *lat-lon* wind tendenies on cell centers
+    if ( gridstruct%square_domain ) then                  
+         call mpp_update_domains(u_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.false.)
+         call mpp_update_domains(v_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.true.)
+    else
+         call mpp_update_domains(u_dt, domain, complete=.false.)
+         call mpp_update_domains(v_dt, domain, complete=.true.)
+    endif                
+    ! update u_dt and v_dt in halo
+    call mpp_update_domains(u_dt, v_dt, domain)
+
+    ! update D grid wind
+    call update_dwinds_phys(is, ie, js, je, isd, ied, jsd, jed, abs(mdt), u_dt, v_dt, u, v, &
+             gridstruct, npx, npy, km, domain)
+
+    ! update dry total energy
+    if (consv .gt. consv_min) then
+      do j=js,je
+        if (hydrostatic) then
+          do k = 1, km
+            do i=is,ie
+              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + delp(i,j,k) * &
+                           (0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
+                                                        v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                           (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))) &
+                                                    - dp0(i,j,k) * &
+                           (0.25*gridstruct%rsin2(i,j)*(u0(i,j,k)**2+u0(i,j+1,k)**2 +  &
+                                                        v0(i,j,k)**2+v0(i+1,j,k)**2 -  &
+                           (u0(i,j,k)+u0(i,j+1,k))*(v0(i,j,k)+v0(i+1,j,k))*gridstruct%cosa_s(i,j)))
+            enddo
+          enddo
+        else
+          do i=is,ie
+             phis(i,km+1) = hs(i,j)
+          enddo
+          do k=km,1,-1
+             do i=is,ie
+                phis(i,k) = phis(i,k+1) - grav*delz(i,j,k)
+             enddo
+          enddo
+          do k = 1, km
+            do i=is,ie
+              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + delp(i,j,k) * &
+                             (0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
+                              u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                             (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)))) &
+                                                    - dp0(i,j,k) * &
+                             (0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
+                              u0(i,j,k)**2+u0(i,j+1,k)**2 + v0(i,j,k)**2+v0(i+1,j,k)**2 -  &
+                             (u0(i,j,k)+u0(i,j+1,k))*(v0(i,j,k)+v0(i+1,j,k))*gridstruct%cosa_s(i,j))))
+            enddo
+          enddo
+        endif
+      enddo
+    end if
+
+    deallocate(u_dt)
+    deallocate(v_dt)
+    if (consv .gt. consv_min) then
+      deallocate(u0)
+      deallocate(v0)
+      deallocate(dp0)
+    endif
+
+  endif
 
  end subroutine Lagrangian_to_Eulerian
 
