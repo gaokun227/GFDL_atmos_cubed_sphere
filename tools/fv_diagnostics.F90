@@ -2075,7 +2075,7 @@ contains
                 call mp_reduce_sum(e2)
                 if (master) then
                    write(*,*) ' TERMINATOR TEST: '
-                   write(*,*) '      chlorine mass: ', real(qm)/(4.*pi*RADIUS*RADIUS)
+                   write(*,*) '      chlorine mass: ', qm/(4.*pi*RADIUS*RADIUS)
                    write(*,*) '             L2 err: ', sqrt(e2)/sqrt(4.*pi*RADIUS*RADIUS)/qcly0
                    write(*,*) '            max err: ', einf/qcly0
                 endif
@@ -2825,6 +2825,18 @@ contains
 #else
           idiag%pt1 = 0. 
 #endif
+          if (.not. Atm(n)%flagstruct%hydrostatic) then
+           do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                wk(i,j,k) =  (Atm(n)%pt(i,j,k)*exp(-kappa*log(-Atm(n)%delp(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
+                      Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum)))) - idiag%pt1(k)) * pk0
+!                 Atm(n)%pkz(i,j,k) = exp(kappa*log(-Atm(n)%delp(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
+!                      Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum))))
+             enddo
+             enddo
+           enddo
+          else
           do k=1,npz
           do j=jsc,jec
              do i=isc,iec
@@ -2833,6 +2845,7 @@ contains
              enddo
           enddo
           enddo
+          endif
           used=send_data(idiag%id_ppt, wk, Time)
 
           if( prt_minmax ) then
