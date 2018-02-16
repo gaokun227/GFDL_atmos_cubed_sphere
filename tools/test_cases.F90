@@ -50,6 +50,11 @@
       implicit none
       private
 
+!!! A NOTE ON TEST CASES
+!!! If you have a DRY test case with no physics, be sure to set adiabatic = .TRUE. in your runscript.
+!!!! This is especially important for nonhydrostatic cases in which delz will be initialized with the
+!!!!  virtual temperature effect.
+
 ! Test Case Number  
 !                   -1 = Divergence conservation test
 !                    0 = Idealized non-linear deformational flow
@@ -88,6 +93,7 @@
 !                   45 = New test
 !                   51 = 3D tracer advection (deformational nondivergent flow)
 !                   55 = TC 
+!                  -55 = DCMIP 2016 TC test
 !                  101 = 3D non-hydrostatic Large-Eddy-Simulation (LES) with hybrid_z IC
 
       integer :: sphum, theta_d
@@ -3851,6 +3857,7 @@
 !--------------------------------------------------------------------
 ! This routine implements the terminator test.
 ! Coded by Lucas Harris for DCMIP 2016, May 2016
+! NOTE: Implementation assumes DRY mixing ratio!!!
 !--------------------------------------------------------------------
   integer, intent(in):: km          ! vertical dimension
   integer, intent(in):: i0, i1      ! compute domain dimension in E-W
@@ -7207,7 +7214,8 @@ end subroutine terminator_tracers
 
    real, parameter :: zconv = 1.e-6
    real, parameter :: rdgrav = rdgas/grav
-   real, parameter :: zvir = rvgas/rdgas - 1.
+   !real, parameter :: zvir = rvgas/rdgas - 1.
+   real :: zvir
    real, parameter :: rrdgrav = grav/rdgas
 
    integer :: i,j,k,iter, sphum, cl, cl2, n
@@ -7224,6 +7232,7 @@ end subroutine terminator_tracers
 
    !Compute p, z, T on both the staggered and unstaggered grids. Then compute the zonal
    !  and meridional winds on both grids, and rotate as needed
+   zvir = rvgas/rdgas - 1.
 
    !PS
    do j=js,je
@@ -7299,7 +7308,7 @@ end subroutine terminator_tracers
    enddo
    enddo
 
-   !Temperature: Compute from hydro balance
+   !(Virtual) Temperature: Compute from hydro balance
    do k=1,npz
    do j=js,je
    do i=is,ie
@@ -7308,6 +7317,8 @@ end subroutine terminator_tracers
    enddo
    enddo
 
+   call mpp_update_domains(pt, domain)
+   call mpp_update_domains(gz, domain)
    !Compute height and temperature for u and v points also, to be able to compute the local winds
    !Use temporary 2d arrays for this purpose
    do j=js,je+1
@@ -7404,6 +7415,19 @@ end subroutine terminator_tracers
    enddo
    enddo
 
+   !Compute nonhydrostatic variables, if needed
+   if (.not. hydrostatic) then
+      do k=1,npz
+      do j=js,je
+      do i=is,ie
+         w(i,j,k) = 0.
+         !Re-compute from hydro balance
+         delz(i,j,k) = rdgrav * (peln(i,k+1,j) - peln(i,k,j)) * pt(i,j,k)
+         !delz(i,j,k) = gz(i,j,k) - gz(i,j,k+1)
+      enddo
+      enddo
+      enddo
+   endif
    !Compute moisture and other tracer fields, as desired
    do n=1,nq
    do k=1,npz
@@ -7414,19 +7438,15 @@ end subroutine terminator_tracers
    enddo
    enddo
    enddo
-   if (.not. adiabatic) then
       sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
       do k=1,npz
       do j=js,je
       do i=is,ie
          p = delp(i,j,k)/(peln(i,k+1,j) - peln(i,k,j))
          q(i,j,k,sphum) = DCMIP16_BC_sphum(p,ps(i,j),agrid(i,j,2),agrid(i,j,1))
-         !Convert pt to non-virtual temperature
-         pt(i,j,k) = pt(i,j,k) / ( 1. + zvir*q(i,j,k,sphum))
       enddo
       enddo
       enddo
-   endif
 
    cl = get_tracer_index(MODEL_ATMOS, 'cl')
    cl2 = get_tracer_index(MODEL_ATMOS, 'cl2')
@@ -7436,13 +7456,12 @@ end subroutine terminator_tracers
       call mpp_update_domains(q,domain)
    endif
 
-   !Compute nonhydrostatic variables, if needed
-   if (.not. hydrostatic) then
+   if (.not. adiabatic) then
       do k=1,npz
       do j=js,je
       do i=is,ie
-         w(i,j,k) = 0.
-         delz(i,j,k) = gz(i,j,k) - gz(i,j,k+1)
+         !Convert pt to non-virtual temperature
+         pt(i,j,k) = pt(i,j,k) / ( 1. + zvir*q(i,j,k,sphum))
       enddo
       enddo
       enddo
@@ -7579,6 +7598,7 @@ end subroutine terminator_tracers
    real, parameter :: zconv = 1.e-6
    real, parameter :: rdgrav = rdgas/grav
    real, parameter :: rrdgrav = grav/rdgas
+   real, parameter :: zvir = rvgas/rdgas - 1.
 
    integer :: i,j,k,iter, sphum, cl, cl2, n
    real :: p,z,z0,ziter,piter,titer,uu,vv,pl, r
@@ -7790,6 +7810,8 @@ end subroutine terminator_tracers
       do i=is,ie
          z = 0.5*(gz(i,j,k) + gz(i,j,k+1))
          q(i,j,k,sphum) = DCMIP16_TC_sphum(z)
+         !Convert pt to non-virtual temperature
+         pt(i,j,k) = pt(i,j,k) / ( 1. + zvir*q(i,j,k,sphum))
       enddo
       enddo
       enddo
