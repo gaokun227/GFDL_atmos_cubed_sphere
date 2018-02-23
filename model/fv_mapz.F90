@@ -510,6 +510,15 @@ contains
     allocate(u_dt(isd:ied,jsd:jed,km))
     allocate(v_dt(isd:ied,jsd:jed,km))
 
+    do k=1,km
+    do j=jsd,jed
+    do i=isd,ied
+       u_dt(i,j,k) = 0.
+       v_dt(i,j,k) = 0.
+    enddo
+    enddo
+    enddo
+
     ! save D grid u and v
     if (consv .gt. consv_min) then
       allocate(u0(isd:ied,jsd:jed+1,km))
