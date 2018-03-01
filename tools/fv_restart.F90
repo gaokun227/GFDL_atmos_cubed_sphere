@@ -454,9 +454,6 @@ contains
     do n=1, ntileMe
        !Send ptop for each grid, needed for remap BCs
        call mpp_broadcast(Atm(n)%ptop,Atm(n)%pelist(1))
-       !!! DEBUG CODE
-       write(mpp_pe()+1000,*) 'AK: ', Atm(n)%npz+1, size(Atm(n)%ak), Atm(n)%pelist(1)
-       !!! END DEBUG CODE
        call mpp_broadcast(Atm(n)%ak,Atm(n)%npz+1,Atm(n)%pelist(1))
        call mpp_broadcast(Atm(n)%bk,Atm(n)%npz+1,Atm(n)%pelist(1))
     enddo
@@ -487,7 +484,8 @@ contains
                 endif
              enddo
           endif
-          
+
+          Atm(n)%neststruct%parent_grid%neststruct%do_remap_BC(n) = Atm(n)%neststruct%do_remap_BC(n)
           if (Atm(n)%neststruct%do_remap_BC(n)) then
              if (is_master() .and. grids_on_this_pe(n)) print*, ' Remapping BCs ENABLED on grid', n
           else
