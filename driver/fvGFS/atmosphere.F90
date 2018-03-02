@@ -45,7 +45,7 @@ use mpp_mod,                only: mpp_error, stdout, FATAL, NOTE, &
                                   input_nml_file, mpp_root_pe,    &
                                   mpp_npes, mpp_pe, mpp_chksum,   &
                                   mpp_get_current_pelist,         &
-                                  mpp_set_current_pelist
+                                  mpp_set_current_pelist, mpp_sync
 use mpp_parameter_mod,      only: EUPDATE, WUPDATE, SUPDATE, NUPDATE
 use mpp_domains_mod,        only: domain2d, mpp_update_domains
 use xgrid_mod,              only: grid_box_type
@@ -397,6 +397,11 @@ contains
      call timing_off('fv_dynamics')
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
+       call timing_on('TWOWAY_IMBALANCE')
+       call mpp_set_current_pelist()
+       call mpp_sync()
+       call set_atmosphere_pelist()
+       call timing_off('TWOWAY_IMBALANCE')
        call timing_on('TWOWAY_UPDATE')
        call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
        call timing_off('TWOWAY_UPDATE')
@@ -1106,6 +1111,9 @@ contains
 !--- nesting update after updating atmospheric variables with
 !--- physics tendencies
     if (ngrids > 1 .and. p_split > 0) then
+       call mpp_set_current_pelist()
+       call mpp_sync()
+       call set_atmosphere_pelist()
        call timing_on('TWOWAY_UPDATE')
        call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
        call timing_off('TWOWAY_UPDATE')
