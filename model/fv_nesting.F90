@@ -274,13 +274,13 @@ contains
 
           !Compute and send staggered pressure
              !u points
+!$OMP parallel do default(none) shared(ak,pe_ustag,delp, &
+!$OMP                                  is,ie,js,je,npz)
              do j=js,je+1
              do i=is,ie
                 pe_ustag(i,j,1) = ak(1)
              enddo
-             enddo
              do k=1,npz
-             do j=js,je+1
              do i=is,ie
                 pe_ustag(i,j,k+1) = pe_ustag(i,j,k) + 0.5*(delp(i,j,k)+delp(i,j-1,k)) 
              enddo
@@ -289,13 +289,13 @@ contains
              call nested_grid_BC_send(pe_ustag, neststruct%nest_domain_all(p), 0, 1)
 
              !v points
+!$OMP parallel do default(none) shared(ak,pe_vstag,delp, &
+!$OMP                                  is,ie,js,je,npz)
              do j=js,je
              do i=is,ie+1
                 pe_vstag(i,j,1) = ak(1)
              enddo
-             enddo
              do k=1,npz
-             do j=js,je
              do i=is,ie+1
                 pe_vstag(i,j,k+1) = pe_vstag(i,j,k) + 0.5*(delp(i,j,k)+delp(i-1,j,k)) 
              enddo
@@ -304,6 +304,8 @@ contains
              call nested_grid_BC_send(pe_vstag, neststruct%nest_domain_all(p), 1, 0)
 
              !b points
+!$OMP parallel do default(none) shared(ak,pe_bstag,delp, &
+!$OMP                                  is,ie,js,je,npz)
              do j=js,je+1
              do i=is,ie+1
                 pe_bstag(i,j,1) = ak(1)
@@ -330,9 +332,11 @@ contains
                    delp(npx,npy,k) = a13*(delp(npx-1,npy-1,k) + delp(npx,npy-1,k) + delp(npx-1,npy,k))
                 enddo
              endif
-
-             do k=1,npz
+ 
+!$OMP parallel do default(none) shared(ak,pe_bstag,delp, &
+!$OMP                                  is,ie,js,je,npz)
              do j=js,je+1
+             do k=1,npz
              do i=is,ie+1
                 pe_bstag(i,j,k+1) = pe_bstag(i,j,k) + & 
                      0.25*(delp(i,j,k)+delp(i-1,j,k)+delp(i,j-1,k)+delp(i-1,j-1,k))
@@ -794,6 +798,9 @@ contains
    real :: pealn, pebln, rpkz
 
 !Assumes dry kappa
+!$OMP parallel do default(none) shared(peBC,ptBC,zvir,sphumBC, &
+!$OMP                                  istart,iend,jstart,jend,npz) &
+!$OMP                           private(pealn,pebln,rpkz)
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
@@ -877,21 +884,21 @@ contains
 
    character(len=120) :: errstring
 
-!$no-OMP parallel do default(none) shared(istart,iend,jstart,jend,psBC,ptop_src)
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,pelagBC,ptop_src)
    do j=jstart,jend
    do i=istart,iend
       pelagBC(i,j,1) = ptop_src 
    enddo
    enddo
-!$no-OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,psBC,delplagBC)
-   do k=1,npz_coarse
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz_coarse,pelagBC,delplagBC) 
    do j=jstart,jend
+   do k=1,npz_coarse
    do i=istart,iend
       pelagBC(i,j,k+1) = pelagBC(i,j,k) + delplagBC(i,j,k)
    end do
    end do
    end do
-!$no-OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,psBC,delpeulBC,ak_dst,bk_dst)
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,npz_coarse,peeulBC,pelagBC,ak_dst,bk_dst)
    do k=1,npz+1
    do j=jstart,jend
    do i=istart,iend
@@ -899,6 +906,7 @@ contains
    enddo
    enddo
    enddo
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,peeulBC,delpeulBC)
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
@@ -948,6 +956,7 @@ contains
    jed = bd%jed
    
    if (is == 1) then
+!$OMP parallel do default(none) shared(isd,jsd,jed,jstag,npz,pe_BC,ps)
       do j=jsd,jed+jstag
       do i=isd,0
          pe_BC%west_t1(i,j,npz+1) = ps(i,j)
@@ -956,6 +965,7 @@ contains
    end if
 
    if (ie == npx-1) then
+!$OMP parallel do default(none) shared(npx,ied,istag,jsd,jed,jstag,npz,pe_BC,ps)
       do j=jsd,jed+jstag
       do i=npx+istag,ied+istag
          pe_BC%east_t1(i,j,npz+1) = ps(i,j)
@@ -975,6 +985,7 @@ contains
    end if
 
    if (js == 1) then
+!$OMP parallel do default(none) shared(isd,ied,istag,jsd,npz,pe_BC,ps)
       do j=jsd,0
       do i=isd,ied+istag
          pe_BC%south_t1(i,j,npz+1) = ps(i,j)
@@ -983,6 +994,7 @@ contains
    end if
 
    if (je == npy-1) then
+!$OMP parallel do default(none) shared(isd,ied,istag,npy,jed,jstag,npz,pe_BC,ps)
       do j=npy+jstag,jed+jstag
       do i=isd,ied+istag
          pe_BC%north_t1(i,j,npz+1) = ps(i,j)
@@ -992,6 +1004,7 @@ contains
 
  end subroutine copy_ps_BC
 
+!In this routine, the pe_*_BC arrays should already have PS filled in on the npz+1 level
  subroutine setup_eul_pe_BC(pe_src_BC, pe_eul_BC, ak_dst, bk_dst, npx, npy, npz, npz_src, istag, jstag, bd, make_src_in, ak_src, bk_src)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
@@ -1066,6 +1079,7 @@ contains
 
    character(len=120) :: errstring
 
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,npz_src,peeulBC,ak_dst,pesrcBC,bk_dst)
    do k=1,npz+1
    do j=jstart,jend
    do i=istart,iend
@@ -1075,6 +1089,7 @@ contains
    enddo
    
    if (make_src) then
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz_src,pesrcBC,ak_src,bk_src)
    do k=1,npz_src+1
    do j=jstart,jend
    do i=istart,iend
@@ -1223,9 +1238,11 @@ contains
    real peln_eul(istart:iend,npz+1)
    character(120) :: errstring
    
-   do j=jstart,jend
+   if (log_pe) then
 
-      if (log_pe) then
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,npz_coarse,pe_lagBC,pe_eulBC,var_lagBC,var_eulBC,iv,kord) &
+!$OMP                           private(peln_lag,peln_eul)
+      do j=jstart,jend
 
          do k=1,npz_coarse+1
          do i=istart,iend
@@ -1255,16 +1272,20 @@ contains
                     npz, peln_eul, var_eulBC(istart:iend,j:j,:), &
                     istart, iend, iv, kord, pe_eulBC(istart,j,1))
 
-      else
+      enddo
+
+   else
+
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,npz_coarse,pe_lagBC,pe_eulBC,var_lagBC,var_eulBC,iv,kord)
+      do j=jstart,jend
 
          call mappm(npz_coarse, pe_lagBC(istart:iend,j:j,:), var_lagBC(istart:iend,j:j,:), &
                     npz, pe_eulBC(istart:iend,j:j,:), var_eulBC(istart:iend,j:j,:), &
                     istart, iend, iv, kord, pe_eulBC(istart,j,1))
          !!! NEED A FILLQ/FILLZ CALL HERE??
 
-      endif
-
-   enddo
+      enddo
+   endif
 
  end subroutine remap_BC_k
 
@@ -1339,6 +1360,7 @@ contains
    character(len=120) :: errstring
    integer :: i,j,k
    
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,delzBC,delpBC)
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
@@ -1364,6 +1386,7 @@ contains
    character(len=120) :: errstring
    integer :: i,j,k
    
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,delzBC,delpBC)
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
@@ -1661,6 +1684,15 @@ contains
    rdg = -rdgas / grav
    cv_air =  cp_air - rdgas
 
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,zvir,ptBC,sphumBC,delpBC,delzBC,liq_watBC,rainwatBC,ice_watBC,snowwatBC,graupelBC, &
+#ifdef USE_COND
+!$OMP                                  q_conBC, &
+#ifdef MOIST_CAPPA
+!$OMP                                  cappaBC, &
+#endif
+#endif
+!$OMP                                  rdg, cv_air) &
+!$OMP                          private(dp1,q_liq,q_sol,q_con,cvm,pkz) 
    do k=1,npz
    do j=jstart,jend
    do i=istart,iend
@@ -2619,7 +2651,6 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
       if (neststruct%parent_proc) then
 
          parent_grid%ps = parent_grid%ptop
-!This loop appears to cause problems with OMP
 !$OMP parallel do default(none) shared(jsd_p,jed_p,isd_p,ied_p,parent_grid)
          do j=jsd_p,jed_p
             do k=1,parent_grid%npz
@@ -2803,46 +2834,59 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 !!$      write(debug_unit,*) istart,iend,jstart,jend,istag,jstag
 !!$      write(debug_unit,*)
 !!$!!! END DEBUG CODE
-   do j=jstart,jend
+   
+   
+   !Compute Eulerian pressures
+   !NOTE: assumes that istag + jstag <= 1
+   if (istag > 0) then
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz_src,npz_dst,pe_src,ak_src,ps_src,bk_src,pe_dst,ak_dst,ps_dst,bk_dst)
+      do j=jstart,jend
+      do k=1,npz_src+1
+      do i=istart,iend
+         pe_src(i,k) = ak_src(k) + 0.5*(ps_src(i,j)+ps_src(i-1,j))*bk_src(k)
+      enddo
+      enddo
+      do k=1,npz_dst+1
+      do i=istart,iend
+         pe_dst(i,k) = ak_dst(k) + 0.5*(ps_dst(i,j)+ps_dst(i-1,j))*bk_dst(k)
+      enddo
+      enddo
+      enddo
+   elseif (jstag > 0) then
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz_src,npz_dst,pe_src,ak_src,ps_src,bk_src,pe_dst,ak_dst,ps_dst,bk_dst)
+      do j=jstart,jend
+      do k=1,npz_src+1
+      do i=istart,iend
+         pe_src(i,k) = ak_src(k) + 0.5*(ps_src(i,j)+ps_src(i,j-1))*bk_src(k)
+      enddo
+      enddo
+      do k=1,npz_dst+1
+      do i=istart,iend
+         pe_dst(i,k) = ak_dst(k) + 0.5*(ps_dst(i,j)+ps_dst(i,j-1))*bk_dst(k)
+      enddo
+      enddo
+      enddo
+   else
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz_src,npz_dst,pe_src,ak_src,ps_src,bk_src,pe_dst,ak_dst,ps_dst,bk_dst)
+      do j=jstart,jend
+      do k=1,npz_src+1
+      do i=istart,iend
+         pe_src(i,k) = ak_src(k) + ps_src(i,j)*bk_src(k)
+      enddo
+      enddo
+      do k=1,npz_dst+1
+      do i=istart,iend
+         pe_dst(i,k) = ak_dst(k) + ps_dst(i,j)*bk_dst(k)
+      enddo
+      enddo
+      enddo
+   endif
+      
+   if (log_pe) then
 
-      !Compute Eulerian pressures
-      !NOTE: assumes that istag + jstag <= 1
-      if (istag > 0) then
-         do k=1,npz_src+1
-         do i=istart,iend
-            pe_src(i,k) = ak_src(k) + 0.5*(ps_src(i,j)+ps_src(i-1,j))*bk_src(k)
-         enddo
-         enddo
-         do k=1,npz_dst+1
-         do i=istart,iend
-            pe_dst(i,k) = ak_dst(k) + 0.5*(ps_dst(i,j)+ps_dst(i-1,j))*bk_dst(k)
-         enddo
-         enddo
-      elseif (jstag > 0) then
-         do k=1,npz_src+1
-         do i=istart,iend
-            pe_src(i,k) = ak_src(k) + 0.5*(ps_src(i,j)+ps_src(i,j-1))*bk_src(k)
-         enddo
-         enddo
-         do k=1,npz_dst+1
-         do i=istart,iend
-            pe_dst(i,k) = ak_dst(k) + 0.5*(ps_dst(i,j)+ps_dst(i,j-1))*bk_dst(k)
-         enddo
-         enddo
-      else
-         do k=1,npz_src+1
-         do i=istart,iend
-            pe_src(i,k) = ak_src(k) + ps_src(i,j)*bk_src(k)
-         enddo
-         enddo
-         do k=1,npz_dst+1
-         do i=istart,iend
-            pe_dst(i,k) = ak_dst(k) + ps_dst(i,j)*bk_dst(k)
-         enddo
-         enddo
-      endif
-
-      if (log_pe) then
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz_src,npz_dst,pe_src,pe_dst,var_src,var_dst,iv,kord,blend_wt) &
+!$OMP                          private(peln_src,peln_dst,bw1,bw2,var_dst_unblend)
+      do j=jstart,jend
 
          do k=1,npz_src+1
          do i=istart,iend
@@ -2861,36 +2905,35 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                        npz_dst, peln_dst, var_dst_unblend, &
                        istart, iend, iv, kord, peln_dst(istart,1))
 
-      else
+         do k=1,npz_dst
+            bw1 = blend_wt(k)
+            bw2 = 1. - bw1
+         do i=istart,iend
+            var_dst(i,j,k) = var_dst(i,j,k)*bw2 + var_dst_unblend(i,k)*bw1
+         enddo
+         enddo
+      enddo
+
+   else
+
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz_src,npz_dst,pe_src,pe_dst,var_src,var_dst,iv,kord,blend_wt) &
+!$OMP                          private(bw1,bw2,var_dst_unblend)
+      do j=jstart,jend
 
          call mappm(npz_src, pe_src, var_src(istart:iend,j:j,:), &
                     npz_dst, pe_dst, var_dst_unblend, &
                     istart, iend, iv, kord, pe_dst(istart,1))
-
-      endif
-!!$!!!! DEBUG CODE
-!!$      do i=istart,iend
-!!$         write(debug_unit,*) pe_src(i,npz_src), pe_dst(i,npz_dst)
-!!$         write(debug_unit,*) var_src(i,j,npz_src), var_dst_unblend(i,npz_dst), var_dst(i,j,npz_dst)
-!!$      enddo
-!!$!!!! END DEBUG CODE
-
-      do k=1,npz_dst
-        bw1 = blend_wt(k)
-        bw2 = 1. - bw1
-      do i=istart,iend
-         var_dst(i,j,k) = var_dst(i,j,k)*bw2 + var_dst_unblend(i,k)*bw1
-      enddo
+         
+         do k=1,npz_dst
+            bw1 = blend_wt(k)
+            bw2 = 1. - bw1
+         do i=istart,iend
+            var_dst(i,j,k) = var_dst(i,j,k)*bw2 + var_dst_unblend(i,k)*bw1
+         enddo
+         enddo
       enddo
 
-   enddo
-
-!!$!!!! DEBUG CODE
-!!$      write(debug_unit,*)
-!!$      write(debug_unit,*)
-!!$      write(debug_unit,*)
-!!$!!!! END DEBUG CODE
-
+   endif
 
  end subroutine remap_up_k
 
@@ -3161,24 +3204,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
          enddo
       enddo
       qn1 = 0. 
-!!$        !!! DEBUG CODE
-!!$        if (j == jstart+1) then
-!!$           i = istart+1
-!!$           do k=1,kmd
-!!$              write(debug_unit,*) k, qt(i,k), pe0(i,k)
-!!$           enddo
-!!$           write(debug_unit,*) 
-!!$        endif
-!!$        !!! END DEBUG CODE
       call mappm(kmd, pe0(istart:iend,:), qt(istart:iend,:), npz, pe1(istart:iend,:), qn1(istart:iend,:), istart,iend, -1, kord_mt, ptop)
-!!$        !!! DEBUG CODE
-!!$        if (j == jstart+1) then
-!!$           i = istart+1
-!!$           do k=1,npz
-!!$              write(debug_unit,*) k, qn1(i,k), u_dst(i,j,k), pe1(i,k), blend_wt(k)
-!!$           enddo
-!!$        endif
-!!$        !!! END DEBUG CODE
       do k=1,npz
          wt1 = blend_wt(k)
          wt2 = 1. - wt1
