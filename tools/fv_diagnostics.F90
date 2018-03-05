@@ -2637,7 +2637,7 @@ contains
 !          call dbzcalc_smithxue(Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
           call dbzcalc(Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
                a3, a2, allmax, Atm(n)%bd, npz, Atm(n)%ncnst, Atm(n)%flagstruct%hydrostatic, &
-               zvir, .false., .false., .false., .true. ) ! GFDL MP has constant N_0 intercept
+               zvir, .false., .false., .false., .true., Atm(n)%flagstruct%do_inline_mp ) ! GFDL MP has constant N_0 intercept
 
           if (idiag%id_dbz > 0) used=send_data(idiag%id_dbz, a3, time)
           if (idiag%id_maxdbz > 0) used=send_data(idiag%id_maxdbz, a2, time)
@@ -4684,7 +4684,7 @@ end subroutine eqv_pot
 
  subroutine dbzcalc(q, pt, delp, peln, delz, &
       dbz, maxdbz, allmax, bd, npz, ncnst, &
-      hydrostatic, zvir, in0r, in0s, in0g, iliqskin)
+      hydrostatic, zvir, in0r, in0s, in0g, iliqskin, do_inline_mp)
 
    !Code from Mark Stoelinga's dbzcalc.f from the RIP package. 
    !Currently just using values taken directly from that code, which is
@@ -4728,6 +4728,7 @@ end subroutine eqv_pot
 !   Thompson presumably is an extension of Reisner MP.
 
    use gfdl_cloud_microphys_mod, only : do_hail, rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh
+   use gfdl_mp_mod, only: do_hail_inline => do_hail ! assuming same densities and numbers in both inline and traditional GFDL MP
    implicit none
 
    type(fv_grid_bounds_type), intent(IN) :: bd
@@ -4737,7 +4738,7 @@ end subroutine eqv_pot
    real,    intent(IN),  dimension(bd%is :bd%ie,  npz+1, bd%js:bd%je) :: peln
    real,    intent(OUT), dimension(bd%is :bd%ie,  bd%js :bd%je , npz) :: dbz
    real,    intent(OUT), dimension(bd%is :bd%ie,  bd%js :bd%je)      :: maxdbz
-   logical, intent(IN) :: hydrostatic, in0r, in0s, in0g, iliqskin
+   logical, intent(IN) :: hydrostatic, in0r, in0s, in0g, iliqskin, do_inline_mp
    real,    intent(IN) :: zvir
    real,    intent(OUT) :: allmax
 
@@ -4794,7 +4795,7 @@ end subroutine eqv_pot
    maxdbz(:,:) = -20. !Minimum value
    allmax = -20.
 
-   if (do_hail) then
+   if ((do_hail .and. .not. do_inline_mp) .or. (do_hail_inline .and. do_inline_mp)) then
       rhogh = rhoh
       vcongh = vconh
       normgh = normh

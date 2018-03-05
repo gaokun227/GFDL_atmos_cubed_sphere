@@ -23,7 +23,7 @@ module gfdl_mp_mod
     
     private
     
-    public gfdl_mp_driver, gfdl_mp_init, gfdl_mp_end
+    public gfdl_mp_driver, gfdl_mp_init, gfdl_mp_end, do_hail
     
     real :: missing_value = - 1.e10
     
@@ -90,7 +90,20 @@ module gfdl_mp_mod
     real, parameter :: dz_min = 1.e-2 ! use for correcting flipped height
     
     real, parameter :: sfcrho = 1.2 ! surface air density
+
+    ! intercept parameters
+    
+    real, parameter :: rnzr = 8.0e6 ! lin83
+    real, parameter :: rnzs = 3.0e6 ! lin83
+    real, parameter :: rnzg = 4.0e6 ! rh84
+    real, parameter :: rnzh = 4.0e4 ! lin83 --- lmh 29 sep 17
+    
+    ! density parameters
+    
     real, parameter :: rhor = 1.e3 ! density of rain water, lin83
+    real, parameter :: rhos = 0.1e3 ! lin83 (snow density; 1 / 10 of water)
+    real, parameter :: rhog = 0.4e3 ! rh84 (graupel density)
+    real, parameter :: rhoh = 0.917e3 !  lin83 --- lmh 29 sep 17
     
     real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw ! constants for accretions
     real :: acco (3, 4) ! constants for accretions
@@ -262,7 +275,8 @@ module gfdl_mp_mod
     logical :: use_ppm = .false. ! use ppm fall scheme
     logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
     logical :: mp_print = .false. ! cloud microphysics debugging printout
-    
+    logical :: do_hail = .false. ! use hail parameters instead of graupel
+
     ! real :: global_area = - 1.
     
     real :: log_10, tice0, t_wfr
@@ -282,7 +296,7 @@ module gfdl_mp_mod
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
-        ntimes
+        ntimes, do_hail
     
 contains
 
@@ -3107,8 +3121,10 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     
     real, parameter :: vcons = 6.6280504
     real, parameter :: vcong = 87.2382675
+    real, parameter :: vconh = vcong*sqrt(rhoh/rhog)
     real, parameter :: norms = 942477796.076938
     real, parameter :: normg = 5026548245.74367
+    real, parameter :: normh = pi*rhoh*rnzh
     
     real, dimension (ks:ke) :: qden, tc, rhof
     
@@ -3176,6 +3192,16 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     if (const_vg) then
         vtg (:) = vg_fac ! 2.
     else
+       if (do_hail) then
+        do k = ks, ke
+            if (qg (k) < thg) then
+                vtg (k) = vf_min
+            else
+                vtg (k) = vg_fac * vconh * rhof (k) * sqrt (sqrt (sqrt (qg (k) * den (k) / normh)))
+                vtg (k) = min (vg_max, max (vf_min, vtg (k)))
+            endif
+        enddo          
+       else
         do k = ks, ke
             if (qg (k) < thg) then
                 vtg (k) = vf_min
@@ -3184,6 +3210,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
                 vtg (k) = min (vg_max, max (vf_min, vtg (k)))
             endif
         enddo
+       endif
     endif
     
 end subroutine fall_speed
@@ -3207,16 +3234,6 @@ subroutine setupm
         gam425 = 8.285063, gam450 = 11.631769, gam480 = 17.837789, &
         gam625 = 184.860962, gam680 = 496.604067
     
-    ! intercept parameters
-    
-    real, parameter :: rnzr = 8.0e6 ! lin83
-    real, parameter :: rnzs = 3.0e6 ! lin83
-    real, parameter :: rnzg = 4.0e6 ! rh84
-    
-    ! density parameters
-    
-    real, parameter :: rhos = 0.1e3 ! lin83 (snow density; 1 / 10 of water)
-    real, parameter :: rhog = 0.4e3 ! rh84 (graupel density)
     real, parameter :: acc (3) = (/ 5.0, 2.0, 0.5 /)
     
     real den_rc
@@ -3254,8 +3271,13 @@ subroutine setupm
     
     cracs = pisq * rnzr * rnzs * rhos
     csacr = pisq * rnzr * rnzs * rhor
-    cgacr = pisq * rnzr * rnzg * rhor
-    cgacs = pisq * rnzg * rnzs * rhos
+    if (do_hail) then
+       cgacr = pisq * rnzr * rnzh * rhor
+       cgacs = pisq * rnzh * rnzs * rhos
+    else
+       cgacr = pisq * rnzr * rnzg * rhor
+       cgacs = pisq * rnzg * rnzs * rhos
+    endif
     cgacs = cgacs * c_pgacs
     
     ! act: 1 - 2:racs (s - r) ; 3 - 4:sacr (r - s) ;
@@ -3263,7 +3285,11 @@ subroutine setupm
     
     act (1) = pie * rnzs * rhos
     act (2) = pie * rnzr * rhor
-    act (6) = pie * rnzg * rhog
+    if (do_hail) then
+       act (6) = pie * rnzh * rhoh
+    else
+       act (6) = pie * rnzg * rhog
+    endif
     act (3) = act (2)
     act (4) = act (1)
     act (5) = act (2)
@@ -3284,7 +3310,11 @@ subroutine setupm
     craci = pie * rnzr * alin * gam380 / (4. * act (2) ** 0.95)
     csaci = csacw * c_psaci
     
-    cgacw = pie * rnzg * gam350 * gcon / (4. * act (6) ** 0.875)
+    if (do_hail) then
+       cgacw = pie * rnzh * gam350 * gcon / (4. * act (6) ** 0.875)
+    else
+       cgacw = pie * rnzg * gam350 * gcon / (4. * act (6) ** 0.875)
+    endif
     ! cgaci = cgacw * 0.1
     
     ! sjl, may 28, 2012
@@ -3297,7 +3327,11 @@ subroutine setupm
     ! subl and revp: five constants for three separate processes
     
     cssub (1) = 2. * pie * vdifu * tcond * rvgas * rnzs
-    cgsub (1) = 2. * pie * vdifu * tcond * rvgas * rnzg
+    if (do_hail) then
+       cgsub (1) = 2. * pie * vdifu * tcond * rvgas * rnzh
+    else
+       cgsub (1) = 2. * pie * vdifu * tcond * rvgas * rnzg
+    endif
     crevp (1) = 2. * pie * vdifu * tcond * rvgas * rnzr
     cssub (2) = 0.78 / sqrt (act (1))
     cgsub (2) = 0.78 / sqrt (act (6))
@@ -3325,8 +3359,13 @@ subroutine setupm
     
     ! gmlt: five constants
     
-    cgmlt (1) = 2. * pie * tcond * rnzg / hltf
-    cgmlt (2) = 2. * pie * vdifu * rnzg * hltc / hltf
+    if (do_hail) then
+       cgmlt (1) = 2. * pie * tcond * rnzh / hltf
+       cgmlt (2) = 2. * pie * vdifu * rnzh * hltc / hltf
+    else
+       cgmlt (1) = 2. * pie * tcond * rnzg / hltf
+       cgmlt (2) = 2. * pie * vdifu * rnzg * hltc / hltf
+    endif
     cgmlt (3) = cgsub (2)
     cgmlt (4) = cgsub (3)
     cgmlt (5) = ch2o / hltf
