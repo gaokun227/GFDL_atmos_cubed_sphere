@@ -451,60 +451,62 @@ contains
     allocate(pelist(0:mpp_npes()-1))
     call mpp_get_current_pelist(pelist)      
     call mpp_set_current_pelist()
-    do n=1, ntileMe
-       !Send ptop for each grid, needed for remap BCs
-       call mpp_broadcast(Atm(n)%ptop,Atm(n)%pelist(1))
-       call mpp_broadcast(Atm(n)%ak,Atm(n)%npz+1,Atm(n)%pelist(1))
-       call mpp_broadcast(Atm(n)%bk,Atm(n)%npz+1,Atm(n)%pelist(1))
-    enddo
-    call mpp_sync()
-    call mpp_set_current_pelist(pelist)
 
+    if (ntileMe > 1) then
+       do n=1, ntileMe
+          !Send ptop for each grid, needed for remap BCs
+          call mpp_broadcast(Atm(n)%ptop,Atm(n)%pelist(1))
+          call mpp_broadcast(Atm(n)%ak,Atm(n)%npz+1,Atm(n)%pelist(1))
+          call mpp_broadcast(Atm(n)%bk,Atm(n)%npz+1,Atm(n)%pelist(1))
+       enddo
+       call mpp_sync()
+       call mpp_set_current_pelist(pelist)
+    endif
 
     do n = 1, ntileMe
 
        if (ntileMe > 1) then
           allocate(Atm(n)%neststruct%do_remap_BC(ntileMe))
-       endif
 
-       Atm(n)%neststruct%do_remap_BC(ntileMe) = .false.
+          Atm(n)%neststruct%do_remap_BC(ntileMe) = .false.
 
-       if (Atm(n)%neststruct%nested) then
-          if (Atm(n)%npz /= Atm(n)%parent_grid%npz) then
-             Atm(n)%neststruct%do_remap_BC(n) = .true.
-          else
-             do k=1,Atm(n)%npz+1
-                if (Atm(n)%ak(k) /= Atm(n)%parent_grid%ak(k)) then
-                   Atm(n)%neststruct%do_remap_BC(n) = .true.
-                   exit
-                endif
-                if (Atm(n)%bk(k) /= Atm(n)%parent_grid%bk(k)) then
-                   Atm(n)%neststruct%do_remap_BC(n) = .true.
-                   exit
-                endif
-             enddo
-          endif
+          if (Atm(n)%neststruct%nested) then
+             if (Atm(n)%npz /= Atm(n)%parent_grid%npz) then
+                Atm(n)%neststruct%do_remap_BC(n) = .true.
+             else
+                do k=1,Atm(n)%npz+1
+                   if (Atm(n)%ak(k) /= Atm(n)%parent_grid%ak(k)) then
+                      Atm(n)%neststruct%do_remap_BC(n) = .true.
+                      exit
+                   endif
+                   if (Atm(n)%bk(k) /= Atm(n)%parent_grid%bk(k)) then
+                      Atm(n)%neststruct%do_remap_BC(n) = .true.
+                      exit
+                   endif
+                enddo
+             endif
 
-          Atm(n)%neststruct%parent_grid%neststruct%do_remap_BC(n) = Atm(n)%neststruct%do_remap_BC(n)
-          if (Atm(n)%neststruct%do_remap_BC(n)) then
-             if (is_master() .and. grids_on_this_pe(n)) print*, ' Remapping BCs ENABLED on grid', n
-          else
-             if (is_master() .and. grids_on_this_pe(n)) print*, ' Remapping BCs DISABLED (not necessary) on grid', n             
-          endif
-       endif
-
-
-       if (.not. grids_on_this_pe(n)) cycle
-
-       if (Atm(n)%neststruct%nested) then
-          if (is_master()) then
-             write(*,'(A, I3, A, F8.2, A)') ' Nested grid ', n, ',  ptop = ', Atm(n)%ak(1), ' Pa'
-             write(*,'(A, I3, A, F8.2, A)') ' Parent grid ', n, ',  ptop = ', Atm(n)%parent_grid%ak(1), ' Pa'
-             if (Atm(n)%ak(1) < Atm(n)%parent_Grid%ak(1)) then
-                print*, ' WARNING nested grid top above parent grid top. May have problems with remapping BCs.'
+             Atm(n)%neststruct%parent_grid%neststruct%do_remap_BC(n) = Atm(n)%neststruct%do_remap_BC(n)
+             if (Atm(n)%neststruct%do_remap_BC(n)) then
+                if (is_master() .and. grids_on_this_pe(n)) print*, ' Remapping BCs ENABLED on grid', n
+             else
+                if (is_master() .and. grids_on_this_pe(n)) print*, ' Remapping BCs DISABLED (not necessary) on grid', n             
              endif
           endif
 
+
+          if (.not. grids_on_this_pe(n)) cycle
+
+          if (Atm(n)%neststruct%nested) then
+             if (is_master()) then
+                write(*,'(A, I3, A, F8.2, A)') ' Nested grid ', n, ',  ptop = ', Atm(n)%ak(1), ' Pa'
+                write(*,'(A, I3, A, F8.2, A)') ' Parent grid ', n, ',  ptop = ', Atm(n)%parent_grid%ak(1), ' Pa'
+                if (Atm(n)%ak(1) < Atm(n)%parent_Grid%ak(1)) then
+                   print*, ' WARNING nested grid top above parent grid top. May have problems with remapping BCs.'
+                endif
+             endif
+
+          endif
        endif
 
        isd = Atm(n)%bd%isd
