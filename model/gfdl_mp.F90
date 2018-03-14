@@ -3121,10 +3121,10 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     
     real, parameter :: vcons = 6.6280504
     real, parameter :: vcong = 87.2382675
-    real, parameter :: vconh = vcong*sqrt(rhoh/rhog)
+    real, parameter :: vconh = vcong*sqrt(rhoh/rhog) ! 132.087495104005
     real, parameter :: norms = 942477796.076938
-    real, parameter :: normg = 5026548245.74367
-    real, parameter :: normh = pi*rhoh*rnzh
+    real, parameter :: normg =               5026548245.74367
+    real, parameter :: normh = pi*rhoh*rnzh ! 115233618.533674
     
     real, dimension (ks:ke) :: qden, tc, rhof
     
