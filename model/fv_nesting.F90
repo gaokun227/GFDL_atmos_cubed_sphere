@@ -2283,7 +2283,8 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                     Atm(n)%ncnst, sphum, Atm(n)%u, Atm(n)%v, Atm(n)%w, &
                     Atm(n)%pt, Atm(n)%delp, Atm(n)%q, &
                     Atm(n)%pe, Atm(n)%pkz, Atm(n)%delz, Atm(n)%ps, Atm(n)%ptop, Atm(n)%ak, Atm(n)%bk, &
-                    Atm(n)%gridstruct, Atm(n)%flagstruct, Atm(n)%neststruct, Atm(n)%parent_grid, Atm(N)%bd, .false.)
+                    Atm(n)%gridstruct, Atm(n)%flagstruct, Atm(n)%neststruct, Atm(n)%domain, &
+                    Atm(n)%parent_grid, Atm(N)%bd, .false.)
             endif
          endif
 
@@ -2312,7 +2313,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                         u, v, w, pt, delp, q,   &
                         pe, pkz, delz, ps, ptop, ak, bk, &
                         gridstruct, flagstruct, neststruct, &
-                        parent_grid, bd, conv_theta_in)
+                        domain, parent_grid, bd, conv_theta_in)
 
     real, intent(IN) :: zvir, ptop, ak(npz+1), bk(npz+1)
 
@@ -2336,6 +2337,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
     type(fv_grid_type), intent(INOUT) :: gridstruct
     type(fv_flags_type), intent(INOUT) :: flagstruct
     type(fv_nest_type), intent(INOUT) :: neststruct
+    type(domain2d), intent(INOUT) :: domain
 
     type(fv_atmos_type), intent(INOUT) :: parent_grid
 
@@ -2472,6 +2474,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 !!$            endif
 !!$         endif
 !!$
+!!$            call mpp_update_domains(qdp, domain)
 !!$            call update_coarse_grid(var_src, qdp, neststruct%nest_domain, &
 !!$                 gridstruct%dx, gridstruct%dy, gridstruct%area, &
 !!$                 isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
@@ -2547,6 +2550,12 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 #ifndef SW_DYNAMICS
    if (neststruct%nestupdate /= 3 .and. neststruct%nestupdate /= 8) then
 
+      if (neststruct%child_proc) then
+         call mpp_update_domains(ps, domain, complete=.true.)
+         if (.not. flagstruct%hydrostatic) call mpp_update_domains(w, domain)
+         ! if (neststruct%child_proc)  call mpp_update_domains(delz, domain)
+         call mpp_update_domains(u, v, domain, gridtype=DGRID_NE)
+      endif
       allocate(pt_src(isd_p:ied_p,jsd_p:jed_p,npz))
       pt_src = -999.
 
@@ -2565,7 +2574,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                   enddo
                enddo
             enddo
-            deallocate(t_nest)
+            call mpp_update_domains(t_nest, domain, complete=.true.)
          endif
 
          call update_coarse_grid(pt_src, &
@@ -2576,7 +2585,9 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
               npx, npy, npz, 0, 0, &
               neststruct%refinement, neststruct%nestupdate, upoff, 0, &
               neststruct%parent_proc, neststruct%child_proc, parent_grid)
+         if (neststruct%child_proc)  deallocate(t_nest)
       else
+         if (neststruct%child_proc)  call mpp_update_domains(pt, domain, complete=.true.)
 
          call update_coarse_grid(pt_src, &
               pt, neststruct%nest_domain, &
