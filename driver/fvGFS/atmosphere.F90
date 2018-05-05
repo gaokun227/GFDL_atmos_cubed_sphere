@@ -399,7 +399,7 @@ contains
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
        call mpp_sync()
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
        call timing_off('TWOWAY_UPDATE')
     endif
 
@@ -1109,7 +1109,7 @@ contains
     if (ngrids > 1 .and. p_split > 0) then
        call mpp_sync()
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
        call timing_off('TWOWAY_UPDATE')
     endif   
    call nullify_domain()

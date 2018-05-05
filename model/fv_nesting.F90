@@ -43,6 +43,7 @@ module fv_nesting_mod
    use fv_mp_mod,           only: mp_reduce_sum
    use fv_diagnostics_mod,  only: sphum_ll_fix, range_check
    use sw_core_mod,         only: divergence_corner, divergence_corner_nest
+   use time_manager_mod,    only: time_type
 
 implicit none
    logical :: RF_initialized = .false.
@@ -2250,12 +2251,13 @@ end subroutine d2a_setup
 !!  unless flux nested grid BCs are specified, or if a quantity is
 !!  not updated at all. This ability has not been implemented.
 
-subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
+subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
 
    type(fv_atmos_type), intent(INOUT) :: Atm(ngrids)
    integer, intent(IN) :: ngrids
    logical, intent(IN) :: grids_on_this_pe(ngrids)
    real, intent(IN) :: zvir
+   type(time_type), intent(IN) :: Time
 
    integer :: n, p, sphum
 
@@ -2299,7 +2301,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                  Atm(n)%ps,  Atm(n)%pe,  Atm(n)%pk,  Atm(n)%peln,  Atm(n)%pkz, &
                  Atm(n)%phis,  Atm(n)%ua,  Atm(n)%va,  &
                  Atm(n)%ptop, Atm(n)%gridstruct, Atm(n)%flagstruct, &
-                 Atm(n)%domain, Atm(n)%bd)
+                 Atm(n)%domain, Atm(n)%bd, Time)
          endif
       enddo
 
@@ -2952,7 +2954,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
                         u, v, w, delz, pt, delp, q,              &
                         ps, pe, pk, peln, pkz, phis, ua, va,     &
                         ptop, gridstruct, flagstruct,            &
-                        domain, bd)
+                        domain, bd, Time)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
     real, intent(IN) :: ptop
@@ -2988,6 +2990,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
     type(fv_grid_type), intent(IN) :: gridstruct
     type(fv_flags_type), intent(IN) :: flagstruct
     type(domain2d), intent(INOUT) :: domain
+    type(time_type), intent(IN) :: Time
 
     logical :: bad_range
 
@@ -3028,11 +3031,11 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir)
 #endif
 
       if (flagstruct%range_warn) then
-         call range_check('TA update', pt, is, ie, js, je, ng, npz, gridstruct%agrid, 130., 350., bad_range)
-         call range_check('UA update', ua, is, ie, js, je, ng, npz, gridstruct%agrid, -220., 250., bad_range)
-         call range_check('VA update', va, is, ie, js, je, ng, npz, gridstruct%agrid, -220., 220., bad_range)
+         call range_check('TA update', pt, is, ie, js, je, ng, npz, gridstruct%agrid, 130., 350., bad_range, Time)
+         call range_check('UA update', ua, is, ie, js, je, ng, npz, gridstruct%agrid, -220., 250., bad_range, Time)
+         call range_check('VA update', va, is, ie, js, je, ng, npz, gridstruct%agrid, -220., 220., bad_range, Time)
          if (.not. flagstruct%hydrostatic) then
-            call range_check('W update', w, is, ie, js, je, ng, npz, gridstruct%agrid, -50., 100., bad_range)
+            call range_check('W update', w, is, ie, js, je, ng, npz, gridstruct%agrid, -50., 100., bad_range, Time)
          endif
       endif
 

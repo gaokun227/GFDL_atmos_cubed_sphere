@@ -148,13 +148,13 @@ contains
 
     if ( Atm(n)%flagstruct%range_warn ) then
          call range_check('DELP', Atm(n)%delp, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,    &
-                           0.01*ptop, 200.E2, bad_range)
+                           0.01*ptop, 200.E2, bad_range, Time)
          call range_check('UA', Atm(n)%ua, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           -250., 250., bad_range)
+                           -250., 250., bad_range, Time)
          call range_check('VA', Atm(n)%va, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           -250., 250., bad_range)
+                           -250., 250., bad_range, Time)
          call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           150., 350., bad_range) !DCMIP ICs have very low temperatures
+                           150., 350., bad_range, Time) !DCMIP ICs have very low temperatures
     endif
 
     !--- A-GRID WINDS

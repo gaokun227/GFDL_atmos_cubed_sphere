@@ -1202,17 +1202,17 @@ contains
 
     elseif ( Atm(n)%flagstruct%range_warn ) then
          call range_check('DELP', Atm(n)%delp, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,    &
-                           0.01*ptop, 200.E2, bad_range)
+                           0.01*ptop, 200.E2, bad_range, Time)
          call range_check('UA', Atm(n)%ua, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           -250., 250., bad_range)
+                           -250., 250., bad_range, Time)
          call range_check('VA', Atm(n)%va, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           -250., 250., bad_range)
+                           -250., 250., bad_range, Time)
 #ifndef SW_DYNAMICS
          call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
 #ifdef HIWPP
-                           130., 350., bad_range) !DCMIP ICs have very low temperatures
+                           130., 350., bad_range, Time) !DCMIP ICs have very low temperatures
 #else
-                           150., 350., bad_range)
+                           150., 350., bad_range, Time)
 #endif
 #endif
 
@@ -3154,7 +3154,7 @@ contains
 
  end subroutine get_height_field
 
- subroutine range_check(qname, q, is, ie, js, je, n_g, km, pos, q_low, q_hi, bad_range)
+ subroutine range_check(qname, q, is, ie, js, je, n_g, km, pos, q_low, q_hi, bad_range, Time)
       character(len=*), intent(in)::  qname
       integer, intent(in):: is, ie, js, je
       integer, intent(in):: n_g, km
@@ -3162,9 +3162,11 @@ contains
       real, intent(in):: pos(is-n_g:ie+n_g, js-n_g:je+n_g,2)
       real, intent(in):: q_low, q_hi
       logical, optional, intent(out):: bad_range
+      type(time_type), optional, intent(IN) :: Time
 !
       real qmin, qmax
       integer i,j,k
+      integer year, month, day, hour, minute, second
 
       if ( present(bad_range) ) bad_range = .false. 
       qmin = q(is,js,1)
@@ -3187,6 +3189,11 @@ contains
 
       if( qmin<q_low .or. qmax>q_hi ) then
           if(master) write(*,*) 'Range_check Warning:', qname, ' max = ', qmax, ' min = ', qmin
+          if (present(Time)) then
+             call get_date(Time, year, month, day, hour, minute, second)
+             if (master) write(*,999) year, month, day, hour, minute, second
+999          format(' Range violation on: ', I4, '/', I02, '/', I02, ' ', I02, ':', I02, ':', I02)
+          endif
           if ( present(bad_range) ) then
                bad_range = .true. 
           endif
