@@ -639,6 +639,7 @@ module fv_arrays_mod
      logical :: allocated = .false.
      logical :: dummy = .false. ! same as grids_on_this_pe(n)
      integer :: grid_number = 1
+     character(len=32) :: nml_filename = "input.nml"
 
      !Timestep-related variables.
 
