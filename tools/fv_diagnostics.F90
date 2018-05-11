@@ -21,7 +21,7 @@ module fv_diagnostics_mod
 
  use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, radius, kappa, WTMAIR, WTMCO2, &
                                omega, hlv, cp_air, cp_vapor, TFREEZE
- use fms_mod,            only: write_version_number
+ use fms_mod,            only: write_version_number, check_nml_error
  use fms_io_mod,         only: set_domain, nullify_domain, write_version_number
  use time_manager_mod,   only: time_type, get_date, get_time
  use mpp_domains_mod,    only: domain2d, mpp_update_domains, DGRID_NE
@@ -155,7 +155,7 @@ contains
 
     character(len=64) :: errmsg
     logical :: exists
-    integer :: nlunit, ios
+    integer :: ierr, nlunit, ios
 
 
     call write_version_number ( 'FV_DIAGNOSTICS_MOD', version )
@@ -987,7 +987,8 @@ contains
 
 
 #ifdef INTERNAL_FILE_NML
-    read(input_nml_file, nml=fv_diag_column_nml)
+    read(input_nml_file, nml=fv_diag_column_nml,iostat=ios)
+    ierr = check_nml_error(ios,'fv_diag_column_nml')
 #else
     inquire (file=trim(Atm(n)%nml_filename), exist=exists)
     if (.not. exists) then
