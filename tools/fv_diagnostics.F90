@@ -111,10 +111,13 @@ module fv_diagnostics_mod
  integer :: sound_freq = 3
  integer :: num_diag_debug = 0
  integer :: num_diag_sonde = 0
+ character(100) :: runname = 'test'
+ integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
+
 
  namelist /fv_diag_column_nml/ do_diag_debug, do_diag_sonde, sound_freq, &
       diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, &
-      diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names
+      diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -1094,6 +1097,9 @@ contains
 
     endif
 
+    !Model initialization time (not necessarily the time this simulation is started,
+    ! conceivably a restart could be done
+    call get_date(Atm(n)%Time_init, yr_init, mo_init, dy_init, hr_init, mn_init, sec_init)
 
     call nullify_domain()  ! Nullify  set_domain info
 
@@ -5643,8 +5649,10 @@ end subroutine eqv_pot
     real, PARAMETER :: p0 = 1000.e2
 
     integer :: i, j, k, n
+    integer :: yr_v, mo_v, dy_v, hr_v, mn_v, sec_v ! need to get numbers for these
 
     if (.not. any(do_sonde_diag_column)) return
+    call get_date(Time, yr_v, mo_v, dy_v, hr_v, mn_v, sec_v)
     call eqv_pot(thetae, pt, delp, delz, peln, pkz, q(bd%isd,bd%jsd,1,sphum), &
          bd%is, bd%ie, bd%js, bd%je, ng, npz, hydrostatic, moist_phys)
 
@@ -5657,11 +5665,20 @@ end subroutine eqv_pot
        if (j < bd%js .or. j > bd%je) cycle
 
        if (do_sonde_diag_column(i,j)) then
-          call column_diagnostics_header(diag_sonde_names(n), diag_sonde_units(n), Time, n, &
-               diag_sonde_lon, diag_sonde_lat, diag_sonde_i, diag_sonde_j)
+          !call column_diagnostics_header(diag_sonde_names(n), diag_sonde_units(n), Time, n, &
+          !     diag_sonde_lon, diag_sonde_lat, diag_sonde_i, diag_sonde_j)
 
+          write(diag_sonde_units(n),600)        &
+               trim(diag_sonde_names(n)), yr_v, mo_v, dy_v, hr_v, yr_init, mo_init, dy_init, hr_init, trim(runname)
+600       format(A,'.v', I4, I2.2, I2.2, I2.2, '.i', I4, I2.2, I2.2, I2.2, '.', A, '.dat########################################################')
+          write(diag_sonde_units(n),601) trim(diag_sonde_names(n)), yr_v, mo_v, dy_v, hr_v, yr_init, mo_init, dy_init, hr_init, &
+               trim(runname), diag_sonde_lon(n), diag_sonde_lat(n)
+601       format(3x, A16, ' Valid ', I4, I2.2, I2.2, '.', I2.2, 'Z  Init ', I4, I2.2, I2.2, '.', I2.2, 'Z \n', A, 2F8.3)
+          write(diag_sonde_units(n),*)  
+          write(diag_sonde_units(n),*)        '-------------------------------------------------------------------------------'
           write(diag_sonde_units(n),'(11A7)') 'PRES', 'HGHT', "TEMP", "DWPT", "RELH", "MIXR", "DRCT", "SKNT", "THTA", "THTE", "THTV"
           write(diag_sonde_units(n),'(11A7)') 'hPa', 'm', 'C', 'C', '%', 'g/kg', 'deg', 'knot', 'K', 'K', 'K'
+          write(diag_sonde_units(n),*)        '-------------------------------------------------------------------------------'
 
           if (hydrostatic) then
              call mpp_error(NOTE, 'Hydrostatic diagnostic sounding not yet supported')
@@ -5687,7 +5704,7 @@ end subroutine eqv_pot
                 wspd = 0.5*sqrt((u(i,j,k)+u(i,j+1,k))*(u(i,j,k)+u(i,j+1,k)) + (v(i,j,k)+v(i+1,j,k))*(v(i,j,k)+v(i+1,j,k)))*ms_to_knot ! convert to knots
                 if (wspd > 0.01) then
                    !https://www.eol.ucar.edu/content/wind-direction-quick-reference
-                   wdir = atan2(-u(i,j,k)-u(i,j+1,k),-v(i,j,k)-v(i+1,j,k)) * rad2deg
+                   wdir = atan2(u(i,j,k)+u(i,j+1,k),v(i,j,k)+v(i+1,j,k)) * rad2deg
                 else
                    wdir = 0.
                 endif

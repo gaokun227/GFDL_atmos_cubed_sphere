@@ -519,7 +519,6 @@ module fv_control_mod
    integer, intent(INOUT) :: p_split
    !--- local variables ---
    character(len=80) :: tracerName, errString
-   character(len=32) :: nested_grid_filename
    integer :: ios, ierr, f_unit, unit
    logical :: exists
 
@@ -603,8 +602,8 @@ module fv_control_mod
 #ifdef INTERNAL_FILE_NML
    ! Set input_file_nml for correct parent/nest initialization
       if (n .gt. 1) then
-         write(nested_grid_filename,'(A4, I2.2)') 'nest', n
-         call read_input_nml(nested_grid_filename)
+         write(Atm(n)%nml_filename,'(A4, I2.2)') 'nest', n
+         call read_input_nml(Atm(n)%nml_filename)
       endif
    ! Read FVCORE namelist 
       read (input_nml_file,fv_core_nml,iostat=ios)
@@ -621,8 +620,8 @@ module fv_control_mod
       else if (n == 1) then
          f_unit = open_namelist_file('input.nml')
       else 
-         write(nested_grid_filename,'(A10, I2.2, A4)') 'input_nest', n, '.nml'
-         f_unit = open_namelist_file(nested_grid_filename)
+         write(Atm(n)%nml_filename,'(A10, I2.2, A4)') 'input_nest', n, '.nml'
+         f_unit = open_namelist_file(Atm(n)%nml_filename)
       endif
 
    ! Read FVCORE namelist 
