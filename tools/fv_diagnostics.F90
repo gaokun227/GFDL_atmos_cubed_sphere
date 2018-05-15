@@ -990,7 +990,7 @@ contains
 
 
 #ifdef INTERNAL_FILE_NML
-    read(input_nml_file, nml=fv_diag_column_nml)
+    read(input_nml_file, nml=fv_diag_column_nml,iostat=ios)
 #else
     inquire (file=trim(Atm(n)%nml_filename), exist=exists)
     if (.not. exists) then
