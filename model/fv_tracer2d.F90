@@ -742,19 +742,6 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
                           call timing_off('COMM_TRACER')
                       call timing_off('COMM_TOTAL')
       endif
-           !Apply nested-grid BCs
-           if ( gridstruct%nested ) then
-              do iq=1,nq
-
-
-                 call nested_grid_BC_apply_intT(q(isd:ied,jsd:jed,:,iq), &
-                      0, 0, npx, npy, npz, bd, &
-                      real(neststruct%tracer_nest_timestep), real(nsplt*k_split), &
-                 neststruct%q_BC(iq), bctype=neststruct%nestbctype  )
-
-              end do
-           end if
-
 
    enddo  ! nsplt
 
