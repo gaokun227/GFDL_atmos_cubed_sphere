@@ -19,7 +19,7 @@
 !***********************************************************************
 module fv_update_phys_mod
 
-  use constants_mod,      only: kappa, rdgas, rvgas, grav, cp_air, cp_vapor, pi=>pi_8, radius
+  use constants_mod,      only: kappa, rdgas, rvgas, grav, cp_air, cp_vapor, pi=>pi_8, radius, TFREEZE
   use field_manager_mod,  only: MODEL_ATMOS
   use mpp_domains_mod,    only: mpp_update_domains, domain2d
   use mpp_parameter_mod,  only: AGRID_PARAM=>AGRID
@@ -32,7 +32,7 @@ module fv_update_phys_mod
   use fv_arrays_mod,      only: fv_flags_type, fv_nest_type, R_GRID
   use fv_eta_mod,         only: get_eta_level
   use fv_timing_mod,      only: timing_on, timing_off
-  use fv_diagnostics_mod, only: prt_maxmin
+  use fv_diagnostics_mod, only: prt_maxmin, range_check
   use fv_mapz_mod,        only: moist_cv, moist_cp
 #if defined (ATMOS_NUDGE)
   use atmos_nudge_mod,    only: get_atmos_nudge, do_ps
@@ -46,6 +46,7 @@ module fv_update_phys_mod
   use fv_arrays_mod,      only: fv_grid_type, fv_nest_type, fv_grid_bounds_type
   use fv_grid_utils_mod,  only: cubed_to_latlon, update_dwinds_phys, update2d_dwinds_phys
   use fv_nesting_mod,     only: set_physics_BCs
+  use sat_vapor_pres_mod, only: tcmin, tcmax
 
   implicit none
 
@@ -139,6 +140,7 @@ module fv_update_phys_mod
     integer  rainwat, snowwat, graupel          ! GFDL Cloud Microphysics
     integer  w_diff                             ! w-tracer for PBL diffusion
     real:: qstar, dbk, rdg, zvir, p_fac, cv_air, gama_dt
+    logical :: bad_range
 
 !f1p                                                                                                                                                                                                                                        
 !account for change in air molecular weight because of H2O change                                                                                                                                                                            
@@ -362,6 +364,22 @@ module fv_update_phys_mod
 #endif
 
    enddo ! k-loop
+
+   if ( flagstruct%range_warn ) then
+      call range_check('PT UPDATE', pt, is, ie, js, je, ng, npz, gridstruct%agrid,    &
+                          tcmin+TFREEZE, tcmax+TFREEZE, bad_range, Time)
+      if (bad_range) then
+         do k=1,npz
+         do j=js,je
+         do i=is,ie
+            if (pt(i,j,k) < tcmin+TFREEZE .or. pt(i,j,k) > tcmax+TFREEZE) then
+               write(*,*) 'PT UPDATE: ', t_dt(i,j,k)*dt, i,j,k, gridstruct%agrid(i,j,:)
+            endif
+         enddo
+         enddo
+         enddo
+      endif
+   endif
 
 ! [delp, (ua, va), pt, q] updated. Perform nudging if requested
 !------- nudging of atmospheric variables toward specified data --------
