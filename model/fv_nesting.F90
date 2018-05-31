@@ -193,7 +193,7 @@ contains
                ua, va, &
                uc(isd,jsd,k), vc(isd,jsd,k), flagstruct%nord>0, &
                isd,ied,jsd,jed, is,ie,js,je, npx,npy, &
-               gridstruct%grid_type, gridstruct%nested, &
+               gridstruct%grid_type, gridstruct%bounded_domain, &
                gridstruct%se_corner, gridstruct%sw_corner, &
                gridstruct%ne_corner, gridstruct%nw_corner, &
                gridstruct%rsin_u, gridstruct%rsin_v, &
@@ -1817,7 +1817,7 @@ contains
       ua, va, &
 	  uc, vc, dord4, &
       isd,ied,jsd,jed, is,ie,js,je, npx,npy, &
-      grid_type, nested, &
+      grid_type, bounded_domain, &
       se_corner, sw_corner, ne_corner, nw_corner, &
       rsin_u,rsin_v,cosa_s,rsin2 )
 
@@ -1829,7 +1829,7 @@ contains
   real, intent(out), dimension(isd:ied+1,jsd:jed  ):: uc
   real, intent(out), dimension(isd:ied  ,jsd:jed+1):: vc
   integer, intent(in) :: isd,ied,jsd,jed, is,ie,js,je, npx,npy,grid_type
-  logical, intent(in) :: nested, se_corner, sw_corner, ne_corner, nw_corner
+  logical, intent(in) :: bounded_domain, se_corner, sw_corner, ne_corner, nw_corner
   real, intent(in) :: rsin_u(isd:ied+1,jsd:jed)
   real, intent(in) :: rsin_v(isd:ied,jsd:jed+1)
   real, intent(in) :: cosa_s(isd:ied,jsd:jed)
@@ -1852,13 +1852,13 @@ contains
   endif
 
 
-  if (grid_type < 3 .and. .not. nested) then
+  if (grid_type < 3 .and. .not. bounded_domain) then
      npt = 4
   else
      npt = -2
   endif
 
-  if ( nested) then  
+  if ( bounded_domain) then  
 
      do j=jsd+1,jed-1
         do i=isd,ied
@@ -1986,7 +1986,7 @@ contains
          enddo
      endif
 
-  if (grid_type < 3 .and. .not. nested) then
+  if (grid_type < 3 .and. .not. bounded_domain) then
      ifirst = max(3,    is-1)
      ilast  = min(npx-2,ie+2)
   else
@@ -2004,7 +2004,7 @@ contains
 
      if (grid_type < 3) then
 ! Xdir:
-     if( is==1 .and. .not. nested ) then
+     if( is==1 .and. .not. bounded_domain ) then
         do j=js-1,je+1
            uc(0,j) = c1*utmp(-2,j) + c2*utmp(-1,j) + c3*utmp(0,j) 
            uc(1,j) = ( t14*(utmp( 0,j)+utmp(1,j))    &
@@ -2014,7 +2014,7 @@ contains
         enddo
      endif
 
-     if( (ie+1)==npx .and. .not. nested ) then
+     if( (ie+1)==npx .and. .not. bounded_domain ) then
         do j=js-1,je+1
            uc(npx-1,j) = c1*utmp(npx-3,j)+c2*utmp(npx-2,j)+c3*utmp(npx-1,j) 
            uc(npx,j) = (t14*(utmp(npx-1,j)+utmp(npx,j))+      &
@@ -2053,21 +2053,21 @@ contains
      if (grid_type < 3) then
 
      do j=js-1,je+2
-      if ( j==1  .and. .not. nested) then
+      if ( j==1  .and. .not. bounded_domain) then
         do i=is-1,ie+1
            vc(i,1) = (t14*(vtmp(i, 0)+vtmp(i,1))    &
                     + t12*(vtmp(i,-1)+vtmp(i,2))    &
                     + t15*(vtmp(i,-2)+vtmp(i,3)))*rsin_v(i,1)
         enddo
-      elseif ( (j==0 .or. j==(npy-1))  .and. .not. nested) then
+      elseif ( (j==0 .or. j==(npy-1))  .and. .not. bounded_domain) then
         do i=is-1,ie+1
            vc(i,j) = c1*vtmp(i,j-2) + c2*vtmp(i,j-1) + c3*vtmp(i,j)
         enddo
-      elseif ( (j==2 .or. j==(npy+1))  .and. .not. nested) then
+      elseif ( (j==2 .or. j==(npy+1))  .and. .not. bounded_domain) then
         do i=is-1,ie+1
            vc(i,j) = c1*vtmp(i,j+1) + c2*vtmp(i,j) + c3*vtmp(i,j-1)
         enddo
-      elseif ( j==npy  .and. .not. nested) then
+      elseif ( j==npy  .and. .not. bounded_domain) then
         do i=is-1,ie+1
            vc(i,npy) = (t14*(vtmp(i,npy-1)+vtmp(i,npy))    &
                       + t12*(vtmp(i,npy-2)+vtmp(i,npy+1))  &
@@ -2093,7 +2093,7 @@ contains
 
  subroutine d2a_setup(u, v, ua, va, dord4, &
       isd,ied,jsd,jed, is,ie,js,je, npx,npy, &
-      grid_type, nested, &
+      grid_type, bounded_domain, &
       cosa_s,rsin2 )
 
   logical, intent(in):: dord4
@@ -2104,7 +2104,7 @@ contains
   integer, intent(in) :: isd,ied,jsd,jed, is,ie,js,je, npx,npy,grid_type
   real, intent(in) :: cosa_s(isd:ied,jsd:jed)
   real, intent(in) :: rsin2(isd:ied,jsd:jed)
-  logical, intent(in) :: nested
+  logical, intent(in) :: bounded_domain
 
 ! Local 
   real, dimension(isd:ied,jsd:jed):: utmp, vtmp
@@ -2123,13 +2123,13 @@ contains
   endif
 
 
-  if (grid_type < 3 .and. .not. nested) then
+  if (grid_type < 3 .and. .not. bounded_domain) then
      npt = 4
   else
      npt = -2
   endif
 
-  if ( nested) then  
+  if ( bounded_domain) then  
 
      do j=jsd+1,jed-1
         do i=isd,ied
@@ -3009,7 +3009,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
     call cubed_to_latlon(u, v, ua, va, &
          gridstruct, npx, npy, npz, &
          1, gridstruct%grid_type, domain, &
-         gridstruct%nested, flagstruct%c2l_ord, bd)
+         gridstruct%bounded_domain, flagstruct%c2l_ord, bd)
 
 #ifndef SW_DYNAMICS
 
@@ -3044,7 +3044,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
  end subroutine after_twoway_nest_update
 
 
- !Routines for remapping (interpolated) nested-grid data to the coarse-grid's vertical coordinate.
+ !Routines for remapping (interpolated) nestedp-grid data to the coarse-grid's vertical coordinate.
 
  subroutine update_remap_tqw( npz, ak_dst,  bk_dst,  ps_dst, t_dst, q_dst, w_dst, &
                       hydrostatic, &

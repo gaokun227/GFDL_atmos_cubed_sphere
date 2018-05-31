@@ -173,7 +173,7 @@
 !
 !     init_winds :: initialize the winds 
 !
-      subroutine init_winds(UBar, u,v,ua,va,uc,vc, defOnGrid, npx, npy, ng, ndims, nregions, nested, gridstruct, domain, tile)
+      subroutine init_winds(UBar, u,v,ua,va,uc,vc, defOnGrid, npx, npy, ng, ndims, nregions, bounded_domain, gridstruct, domain, tile)
  ! defOnGrid = -1:null_op, 0:All-Grids, 1:C-Grid, 2:D-Grid, 3:A-Grid, 4:A-Grid then Rotate, 5:D-Grid with unit vectors then Rotate
 
       real  ,    intent(INOUT) :: UBar
@@ -188,7 +188,7 @@
       integer,      intent(IN) :: ng
       integer,      intent(IN) :: ndims
       integer,      intent(IN) :: nregions
-      logical,      intent(IN) :: nested
+      logical,      intent(IN) :: bounded_domain
       type(fv_grid_type), intent(IN), target :: gridstruct
       type(domain2d), intent(INOUT) :: domain
       integer, intent(IN)  :: tile
@@ -252,7 +252,7 @@
       acapS                         => gridstruct%acapS
       globalarea                    => gridstruct%globalarea
 
-      if (nested) then
+      if (bounded_domain) then
 
          is2 = is-2
          ie2 = ie+2
@@ -351,7 +351,7 @@
          call mpp_update_domains( uc, vc, domain, gridtype=CGRID_NE_PARAM)
          call fill_corners(uc, vc, npx, npy, VECTOR=.true., CGRID=.true.)
          call ctoa(uc,vc,ua,va,dx, dy, dxc,dyc,dxa,dya,npx,npy,ng)
-         call atod(ua,va,u ,v ,dxa, dya,dxc,dyc,npx,npy,ng, nested, domain)
+         call atod(ua,va,u ,v ,dxa, dya,dxc,dyc,npx,npy,ng, bounded_domain, domain)
         ! call d2a2c(npx,npy,1, is,ie, js,je, ng, u(isd,jsd),v(isd,jsd), &
         !            ua(isd,jsd),va(isd,jsd), uc(isd,jsd),vc(isd,jsd))
       elseif ( (cubed_sphere) .and. (defOnGrid==2) ) then
@@ -371,7 +371,7 @@
          enddo
          call mp_update_dwinds(u, v, npx, npy, domain)
          call dtoa( u, v,ua,va,dx,dy,dxa,dya,dxc,dyc,npx,npy,ng)
-         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, nested, domain) 
+         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, bounded_domain, domain) 
       elseif ( (cubed_sphere) .and. (defOnGrid==3) ) then
          do j=js,je
             do i=is,ie
@@ -388,8 +388,8 @@
             enddo
          enddo
          call mpp_update_domains( ua, va, domain, gridtype=AGRID_PARAM)
-         call atod(ua,va, u, v,dxa, dya,dxc,dyc,npx,npy,ng, nested, domain)
-         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, nested,domain)
+         call atod(ua,va, u, v,dxa, dya,dxc,dyc,npx,npy,ng, bounded_domain, domain)
+         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, bounded_domain,domain)
       elseif ( (latlon) .or. (defOnGrid==4) ) then
 
          do j=js,je
@@ -411,8 +411,8 @@
             enddo
          enddo
          call mpp_update_domains( ua, va, domain, gridtype=AGRID_PARAM)
-         call atod(ua,va, u, v,dxa, dya,dxc,dyc,npx,npy,ng, nested, domain)
-         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, nested, domain)
+         call atod(ua,va, u, v,dxa, dya,dxc,dyc,npx,npy,ng, bounded_domain, domain)
+         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, bounded_domain, domain)
      elseif ( (latlon) .or. (defOnGrid==5) ) then
 ! SJL mods:
 ! v-wind:
@@ -446,7 +446,7 @@
 
          call mp_update_dwinds(u, v, npx, npy, domain)
          call dtoa( u, v,ua,va,dx,dy,dxa,dya,dxc,dyc,npx,npy,ng)
-         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, nested, domain)
+         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, bounded_domain, domain)
      else
          !print*, 'Choose an appropriate grid to define the winds on'
          !stop
@@ -689,7 +689,7 @@
       acapS                         => gridstruct%acapS
       globalarea                    => gridstruct%globalarea
 
-      if (gridstruct%nested) then
+      if (gridstruct%bounded_domain) then
          is2 = isd
          ie2 = ied
          js2 = jsd
@@ -739,7 +739,7 @@
                                    sin(agrid(i  ,j  ,2))*cos(alpha) ) ** 2.0
             enddo
          enddo
-         call init_winds(UBar, u,v,ua,va,uc,vc, 1, npx, npy, ng, ndims, nregions, gridstruct%nested, gridstruct, domain, tile)
+         call init_winds(UBar, u,v,ua,va,uc,vc, 1, npx, npy, ng, ndims, nregions, gridstruct%bounded_domain, gridstruct, domain, tile)
 
 ! Test Divergence operator at cell centers
          do j=js,je
@@ -775,7 +775,7 @@
           write(*,201) 'Divergence Linf_norm     : ', Linf_norm
       endif 
 
-         call init_winds(UBar, u,v,ua,va,uc,vc, 3, npx, npy, ng, ndims, nregions, gridstruct%nested, gridstruct, domain, tile)
+         call init_winds(UBar, u,v,ua,va,uc,vc, 3, npx, npy, ng, ndims, nregions, gridstruct%bounded_domain, gridstruct, domain, tile)
 ! Test Divergence operator at cell centers
          do j=js,je
             do i=is,ie
@@ -805,7 +805,7 @@
           write(*,201) 'Divergence Linf_norm     : ', Linf_norm
       endif
 
-         call init_winds(UBar, u,v,ua,va,uc,vc, 2, npx, npy, ng, ndims, nregions, gridstruct%nested, gridstruct, domain, tile)
+         call init_winds(UBar, u,v,ua,va,uc,vc, 2, npx, npy, ng, ndims, nregions, gridstruct%bounded_domain, gridstruct, domain, tile)
          !call d2a2c(npx,npy,1, is,ie, js,je, ng, u(isd,jsd,1),v(isd,jsd,1), &
          !           ua(isd,jsd,1),va(isd,jsd,1), uc(isd,jsd,1),vc(isd,jsd,1))
 ! Test Divergence operator at cell centers
@@ -864,9 +864,9 @@
             enddo
          enddo
          call mpp_update_domains( ua, va, domain, gridtype=AGRID_PARAM)
-         call atod(ua,va, u, v,dxa, dya,dxc,dyc,npx,npy,ng, gridstruct%nested, domain)
+         call atod(ua,va, u, v,dxa, dya,dxc,dyc,npx,npy,ng, gridstruct%bounded_domain, domain)
          call mp_update_dwinds(u, v, npx, npy, npz, domain)
-         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, gridstruct%nested, domain)
+         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, gridstruct%bounded_domain, domain)
          call mpp_update_domains( uc, vc, domain, gridtype=CGRID_NE_PARAM)
          call fill_corners(uc, vc, npx, npy, npz, VECTOR=.true., CGRID=.true.)
          initWindsCase=initWindsCase0
@@ -1147,7 +1147,7 @@
          call mp_update_dwinds(u, v, npx, npy, npz, domain)
          call dtoa( u, v,ua,va,dx,dy,dxa,dya,dxc,dyc,npx,npy,ng)
          !call mpp_update_domains( ua, va, domain, gridtype=AGRID_PARAM)
-         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, gridstruct%nested, domain)
+         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, gridstruct%bounded_domain, domain)
          initWindsCase=initWindsCase6
       case(7)
 ! Barotropically unstable jet
@@ -1426,10 +1426,10 @@
          enddo
 
          call mpp_update_domains( ua, va, domain, gridtype=AGRID_PARAM)
-         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, gridstruct%nested, domain)
+         call atoc(ua,va,uc,vc,dx,dy,dxa,dya,npx,npy,ng, gridstruct%bounded_domain, domain)
          call mpp_update_domains( uc, vc, domain, gridtype=CGRID_NE_PARAM)
          call fill_corners(uc, vc, npx, npy, npz, VECTOR=.true., CGRID=.true.)
-         call atod(ua,va, u, v,dxa, dya,dxc,dyc,npx,npy,ng, gridstruct%nested, domain)
+         call atod(ua,va, u, v,dxa, dya,dxc,dyc,npx,npy,ng, gridstruct%bounded_domain, domain)
          call mp_update_dwinds(u, v, npx, npy, npz, domain)
          initWindsCase=initWindsCase9
 
@@ -1498,7 +1498,7 @@
       call mpp_update_domains( phis, domain )
       phi0  = delp
 
-      call init_winds(UBar, u,v,ua,va,uc,vc, initWindsCase, npx, npy, ng, ndims, nregions, gridstruct%nested, gridstruct, domain, tile)
+      call init_winds(UBar, u,v,ua,va,uc,vc, initWindsCase, npx, npy, ng, ndims, nregions, gridstruct%bounded_domain, gridstruct, domain, tile)
 ! Copy 3D data for Shallow Water Tests
       do z=2,npz
          u(:,:,z) = u(:,:,1)
@@ -1552,7 +1552,7 @@
        call surfdrv(npx, npy, gridstruct%grid_64, gridstruct%agrid_64,   &
                     gridstruct%area_64, dx, dy, dxa, dya, dxc, dyc, &
                     gridstruct%sin_sg, phis, &
-                    flagstruct%stretch_fac, gridstruct%nested, &
+                    flagstruct%stretch_fac, gridstruct%nested, gridstruct%bounded_domain, &
                     npx_global, domain, flagstruct%grid_number, bd)
        call mpp_update_domains( phis, domain )
 
@@ -4370,7 +4370,7 @@ end subroutine terminator_tracers
 
          call dtoa( u(:,:,1), v(:,:,1),ua(:,:,1),va(:,:,1),dx,dy,dxa,dya,dxc,dyc,npx,npy,ng)
          call mpp_update_domains( ua, va, domain, gridtype=AGRID_PARAM) !! ABSOLUTELY NECESSARY!!
-         call atoc(ua(:,:,1),va(:,:,1),uc(:,:,1),vc(:,:,1),dx,dy,dxa,dya,npx,npy,ng, gridstruct%nested, domain)
+         call atoc(ua(:,:,1),va(:,:,1),uc(:,:,1),vc(:,:,1),dx,dy,dxa,dya,npx,npy,ng, gridstruct%bounded_domain, domain)
         
         do k=2,npz
            do j=js,je
@@ -4466,7 +4466,7 @@ end subroutine terminator_tracers
        subroutine get_stats(dt, dtout, nt, maxnt, ndays, u,v,pt,delp,q,phis, ps, &
                             uc,vc, ua,va, npx, npy, npz, ncnst, ndims, nregions,    &
                             gridstruct, stats_lun, consv_lun, monitorFreq, tile, &
-                            domain, nested)
+                            domain, bounded_domain)
          integer,      intent(IN) :: nt, maxnt
          real  ,    intent(IN) :: dt, dtout, ndays
          real ,      intent(INOUT) ::    u(isd:ied  ,jsd:jed+1,npz)
@@ -4488,7 +4488,7 @@ end subroutine terminator_tracers
          integer,      intent(IN) :: monitorFreq
          type(fv_grid_type), target :: gridstruct
          type(domain2d), intent(INOUT) :: domain
-         logical, intent(IN) :: nested
+         logical, intent(IN) :: bounded_domain
 
          real   :: L1_norm
          real   :: L2_norm
@@ -4827,7 +4827,7 @@ end subroutine terminator_tracers
          vp = v - v0
 
          call dtoa(up(isd,jsd,k), vp(isd,jsd,k), ua, va, dx,dy, dxa, dya, dxc, dyc, npx, npy, ng)
-         call atoc(ua(isd,jsd,k),va(isd,jsd,k),uc0(isd,jsd,k),vc0(isd,jsd,k),dx,dy,dxa,dya,npx,npy,ng,nested, domain, noComm=.true.)
+         call atoc(ua(isd,jsd,k),va(isd,jsd,k),uc0(isd,jsd,k),vc0(isd,jsd,k),dx,dy,dxa,dya,npx,npy,ng,bounded_domain, domain, noComm=.true.)
 ! Conservation of Kinetic Energy
          do j=js,je
             do i=is,ie
@@ -5548,7 +5548,7 @@ end subroutine terminator_tracers
          call wrtvar_ncdf(ncid, pv_id, nout, is,ie, js,je, npx, npy, npz, nregions, tmpA, 3)
       endif
 
-      call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, 1, 1, gridstruct%grid_type, gridstruct%nested, flagstruct%c2l_ord, bd)
+      call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, 1, 1, gridstruct%grid_type, gridstruct%bounded_domain, flagstruct%c2l_ord, bd)
       do j=js,je
          do i=is,ie
             ut(i,j,tile) = ua(i,j,1)
@@ -5594,7 +5594,7 @@ end subroutine terminator_tracers
       call wrtvar_ncdf(ncid, pt_id, nout, is,ie, js,je, npx, npy, npz, nregions, tmpA_3d, 4)
 
 ! Write U,V Data
-      call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, npz, gridstruct%grid_type, gridstruct%nested, flagstruct%c2l_ord)
+      call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, npz, gridstruct%grid_type, gridstruct%bounded_domain, flagstruct%c2l_ord)
       do k=1,npz
          do j=js,je
             do i=is,ie
@@ -5737,7 +5737,7 @@ end subroutine terminator_tracers
 
 #if defined(SW_DYNAMICS)
       if (test_case > 1) then
-         call atob_s(delp(:,:,1)/Grav, tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%nested) !, altInterp=1)
+         call atob_s(delp(:,:,1)/Grav, tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%bounded_domain) !, altInterp=1)
          tmpA(is:ie,js:je,tile) = delp(is:ie,js:je,1)/Grav
 
          if ((nt==0) .and. (test_case==2)) then
@@ -5793,10 +5793,10 @@ end subroutine terminator_tracers
            enddo
          endif
 
-         call atob_s(phi0(:,:,1), tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%nested) !, altInterp=1)
+         call atob_s(phi0(:,:,1), tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%bounded_domain) !, altInterp=1)
          tmpA(is:ie,js:je,tile) = phi0(is:ie,js:je,1)
          call wrt2d(phis_lun, nout  , is,ie, js,je, npx, npy, nregions, tmpA(1:npx-1,1:npy-1,1:nregions))
-         call atob_s(delp(:,:,1), tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%nested) !, altInterp=1)
+         call atob_s(delp(:,:,1), tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%bounded_domain) !, altInterp=1)
          tmpA(is:ie,js:je,tile) = delp(is:ie,js:je,1)
       endif
    !   call wrt2d(phi_lun, nout, is,ie+1, js,je+1, npx+1, npy+1, nregions, tmp(1:npx,1:npy,1:nregions))
@@ -5811,7 +5811,7 @@ end subroutine terminator_tracers
                vort(i,j) = Grav*vort(i,j)/delp(i,j,1)
             enddo
          enddo
-         call atob_s(vort, tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%nested) !, altInterp=1)
+         call atob_s(vort, tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%bounded_domain) !, altInterp=1)
          call wrt2d(pv_lun, nout, is,ie+1, js,je+1, npx+1, npy+1, nregions, tmp(1:npx,1:npy,1:nregions))
       endif
 
@@ -5837,7 +5837,7 @@ end subroutine terminator_tracers
       call wrt2d(uv_lun, 2*(nout-1) + 2, is,ie, js,je, npx, npy, nregions,   vt(1:npx-1,1:npy-1,1:nregions))
 
       if ((test_case >= 2) .and. (nt==0) ) then
-         call atob_s(phis/Grav, tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%nested) !, altInterp=1)
+         call atob_s(phis/Grav, tmp(isd:ied+1,jsd:jed+1,tile), npx,npy, dxa, dya, gridstruct%bounded_domain) !, altInterp=1)
        !  call wrt2d(phis_lun, nout  , is,ie+1, js,je+1, npx+1, npy+1, nregions, tmp(1:npx,1:npy,1:nregions))
          tmpA(is:ie,js:je,tile) = phis(is:ie,js:je)/Grav
          call wrt2d(phis_lun, nout  , is,ie, js,je, npx, npy, nregions, tmpA(1:npx-1,1:npy-1,1:nregions))
@@ -8172,7 +8172,7 @@ end subroutine terminator_tracers
      
       end subroutine init_latlon_winds
 
- subroutine d2a2c(im,jm,km, ifirst,ilast, jfirst,jlast, ng, nested, &
+ subroutine d2a2c(im,jm,km, ifirst,ilast, jfirst,jlast, ng, bounded_domain, &
                   u,v, ua,va, uc,vc, gridstruct, domain)
 
 ! Input
@@ -8180,7 +8180,7 @@ end subroutine terminator_tracers
   integer, intent(IN) :: ifirst,ilast
   integer, intent(IN) :: jfirst,jlast
   integer, intent(IN) :: ng
-  logical, intent(IN) :: nested
+  logical, intent(IN) :: bounded_domain
   type(fv_grid_type), intent(IN), target :: gridstruct
   type(domain2d), intent(INOUT) :: domain
 
@@ -8284,9 +8284,9 @@ end subroutine terminator_tracers
  if (cubed_sphere) then
 
     call dtoa( u, v,ua,va,dx,dy,dxa,dya,dxc,dyc,im,jm,ng)
-    if (.not. nested) call fill_corners(ua, va, im, jm, VECTOR=.true., AGRID=.true.)
-    call atoc(ua,va,uc,vc,dx,dy,dxa,dya,im,jm,ng, nested, domain, noComm=.true.)
-    if (.not. nested) call fill_corners(uc, vc, im, jm, VECTOR=.true., CGRID=.true.)
+    if (.not. bounded_domain) call fill_corners(ua, va, im, jm, VECTOR=.true., AGRID=.true.)
+    call atoc(ua,va,uc,vc,dx,dy,dxa,dya,im,jm,ng, bounded_domain, domain, noComm=.true.)
+    if (.not. bounded_domain) call fill_corners(uc, vc, im, jm, VECTOR=.true., CGRID=.true.)
 
  else  ! Lat-Lon
 
@@ -8341,7 +8341,7 @@ end subroutine terminator_tracers
        endif
 
        call dtoa(u, v, ua, va, dx,dy,dxa,dya,dxc,dyc,im, jm, ng)
-       if (.not. nested) call fill_corners(ua, va, im, jm, VECTOR=.true., AGRID=.true.)
+       if (.not. bounded_domain) call fill_corners(ua, va, im, jm, VECTOR=.true., AGRID=.true.)
 
        if ( have_south_pole ) then
 ! Projection at SP
@@ -8396,18 +8396,18 @@ end subroutine terminator_tracers
         if (latlon) call mp_ghost_ew(im,jm,1,1, ifirst,ilast, jfirst,jlast, 1,1, ng,ng, ng,ng, va(:,:))
 
 ! A -> C
-        call atoc(ua, va, uc, vc, dx,dy,dxa,dya,im, jm, ng, nested, domain, noComm=.true.)
+        call atoc(ua, va, uc, vc, dx,dy,dxa,dya,im, jm, ng, bounded_domain, domain, noComm=.true.)
 
      enddo ! km loop
 
-     if (.not. nested) call fill_corners(uc, vc, im, jm, VECTOR=.true., CGRID=.true.)
+     if (.not. bounded_domain) call fill_corners(uc, vc, im, jm, VECTOR=.true., CGRID=.true.)
    endif
 
 
  end subroutine d2a2c
 
 
-      subroutine atob_s(qin, qout, npx, npy, dxa, dya, nested, cubed_sphere, altInterp)
+      subroutine atob_s(qin, qout, npx, npy, dxa, dya, bounded_domain, cubed_sphere, altInterp)
 
 !     atob_s :: interpolate scalar from the A-Grid to the B-grid
 !
@@ -8415,7 +8415,7 @@ end subroutine terminator_tracers
          real  , intent(IN)    ::  qin(isd:ied  ,jsd:jed  )    ! A-grid field
          real  , intent(OUT)   :: qout(isd:ied+1,jsd:jed+1)    ! Output  B-grid field
          integer, OPTIONAL, intent(IN) :: altInterp 
-         logical, intent(IN) :: nested, cubed_sphere
+         logical, intent(IN) :: bounded_domain, cubed_sphere
          real, intent(IN), dimension(isd:ied,jsd:jed)    :: dxa, dya
 
          integer :: i,j,n
@@ -8434,13 +8434,13 @@ end subroutine terminator_tracers
 
          tmpq(:,:) = qin(:,:)
 
-         if (.not. nested) call fill_corners(tmpq  , npx, npy, FILL=XDir, AGRID=.true.)
+         if (.not. bounded_domain) call fill_corners(tmpq  , npx, npy, FILL=XDir, AGRID=.true.)
 ! ATOC
          do j=jsd,jed
             call interp_left_edge_1d(tmpq1(:,j), tmpq(:,j), dxa(:,j), isd, ied, altInterp) 
          enddo
 
-         if (.not. nested) call fill_corners(tmpq  , npx, npy, FILL=YDir, AGRID=.true.)
+         if (.not. bounded_domain) call fill_corners(tmpq  , npx, npy, FILL=YDir, AGRID=.true.)
 ! ATOD
          do i=isd,ied
             tmp1j(jsd:jed) = 0.0 
@@ -8476,7 +8476,7 @@ end subroutine terminator_tracers
          enddo
 
 ! Fix Corners
-         if (cubed_sphere  .and. .not. nested) then
+         if (cubed_sphere  .and. .not. bounded_domain) then
             i=1
             j=1
             if ( (is==i) .and. (js==j) ) then
@@ -8511,7 +8511,7 @@ end subroutine terminator_tracers
                enddo
             enddo
 
-            if (.not. nested) then
+            if (.not. bounded_domain) then
             i=1
             j=1
             if ( (is==i) .and. (js==j) ) then
@@ -8535,7 +8535,7 @@ end subroutine terminator_tracers
             if ( (ie+1==i) .and. (je+1==j) ) then
                qout(i,j) = (1./3.) * (qin(i-1,j-1) + qin(i,j-1) + qin(i-1,j))
             endif
-            endif !not nested
+            endif !not bounded_domain
 
         endif ! altInterp
 
@@ -8549,7 +8549,7 @@ end subroutine terminator_tracers
 !
 !     atod :: interpolate from the A-Grid to the D-grid
 !
-      subroutine atod(uin, vin, uout, vout, dxa, dya, dxc, dyc, npx, npy, ng, nested, domain)
+      subroutine atod(uin, vin, uout, vout, dxa, dya, dxc, dyc, npx, npy, ng, bounded_domain, domain)
 
 
          integer,      intent(IN) :: npx, npy, ng
@@ -8557,7 +8557,7 @@ end subroutine terminator_tracers
          real  , intent(IN)    ::  vin(isd:ied  ,jsd:jed  ) ! A-grid v-wind field
          real  , intent(OUT)   :: uout(isd:ied  ,jsd:jed+1) ! D-grid u-wind field
          real  , intent(OUT)   :: vout(isd:ied+1,jsd:jed  ) ! D-grid v-wind field
-         logical, intent(IN) :: nested
+         logical, intent(IN) :: bounded_domain
          real  , intent(IN), dimension(isd:ied,jsd:jed) :: dxa, dya
          real  , intent(IN), dimension(isd:ied+1,jsd:jed) :: dxc
          real  , intent(IN), dimension(isd:ied,jsd:jed+1) :: dyc
@@ -8587,7 +8587,7 @@ end subroutine terminator_tracers
             uout(i,:) = tmp1j(:)/dyc(i,:)
          enddo
          call mp_update_dwinds(uout, vout, npx, npy, domain)
-         if (.not. nested) call fill_corners(uout, vout, npx, npy, VECTOR=.true., DGRID=.true.)
+         if (.not. bounded_domain) call fill_corners(uout, vout, npx, npy, VECTOR=.true., DGRID=.true.)
       end subroutine atod
 !
 ! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
@@ -8654,7 +8654,7 @@ end subroutine terminator_tracers
 !
 !     atoc :: interpolate from the A-Grid to the C-grid
 !
-      subroutine atoc(uin, vin, uout, vout, dx, dy, dxa, dya, npx, npy, ng, nested, domain, noComm)
+      subroutine atoc(uin, vin, uout, vout, dx, dy, dxa, dya, npx, npy, ng, bounded_domain, domain, noComm)
 
 
          integer,      intent(IN) :: npx, npy, ng
@@ -8662,7 +8662,7 @@ end subroutine terminator_tracers
          real  , intent(IN)    ::  vin(isd:ied  ,jsd:jed  ) ! A-grid v-wind field
          real  , intent(OUT)   :: uout(isd:ied+1,jsd:jed  ) ! C-grid u-wind field
          real  , intent(OUT)   :: vout(isd:ied  ,jsd:jed+1) ! C-grid v-wind field
-         logical, intent(IN) :: nested
+         logical, intent(IN) :: bounded_domain
          logical, OPTIONAL, intent(IN)   :: noComm
          real  , intent(IN), dimension(isd:ied,jsd:jed+1) :: dx
          real  , intent(IN), dimension(isd:ied+1,jsd:jed) :: dy
@@ -8723,7 +8723,7 @@ end subroutine terminator_tracers
             vout(i,:) = tmp1j(:)/dx(i,:)
          enddo
 
-       if (cubed_sphere .and. .not. nested) then
+       if (cubed_sphere .and. .not. bounded_domain) then
          csFac = COS(30.0*PI/180.0)
       ! apply Corner scale factor for interp on Cubed-Sphere
          if ( (is==1) .and. (js==1) ) then
@@ -8767,7 +8767,7 @@ end subroutine terminator_tracers
          else
             call mpp_update_domains( uout,vout, domain, gridtype=CGRID_NE_PARAM, complete=.true.)
          endif
-         if (.not. nested) call fill_corners(uout, vout, npx, npy, VECTOR=.true., CGRID=.true.)
+         if (.not. bounded_domain) call fill_corners(uout, vout, npx, npy, VECTOR=.true., CGRID=.true.)
 
       end subroutine atoc
 !
@@ -8888,7 +8888,7 @@ end subroutine terminator_tracers
          type(domain2d), intent(INOUT) :: domain
 
          call mpp_update_domains( u, v, domain, gridtype=DGRID_NE, complete=.true.)
-!        if (.not. nested) call fill_corners(u , v , npx, npy, VECTOR=.true., DGRID=.true.)
+!        if (.not. bounded_domain) call fill_corners(u , v , npx, npy, VECTOR=.true., DGRID=.true.)
 
       end subroutine mp_update_dwinds_2d
 !
@@ -8908,7 +8908,7 @@ end subroutine terminator_tracers
 
       call mpp_update_domains( u, v, domain, gridtype=DGRID_NE, complete=.true.)
 !     do k=1,npz
-!        if (.not. nested) call fill_corners(u(isd:,jsd:,k) , v(isd:,jsd:,k) , npx, npy, VECTOR=.true., DGRID=.true.)
+!        if (.not. bounded_domain) call fill_corners(u(isd:,jsd:,k) , v(isd:,jsd:,k) , npx, npy, VECTOR=.true., DGRID=.true.)
 !     enddo
 
       end subroutine mp_update_dwinds_3d

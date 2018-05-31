@@ -26,6 +26,8 @@ module fv_tracer2d_mod
    use mpp_domains_mod,   only: mpp_update_domains, CGRID_NE, domain2d
    use fv_timing_mod,     only: timing_on, timing_off
    use boundary_mod,      only: nested_grid_BC_apply_intT
+   use fv_regional_mod,   only: regional_boundary_update
+   use fv_regional_mod,   only: current_time_in_seconds
    use fv_arrays_mod,     only: fv_grid_type, fv_nest_type, fv_atmos_type, fv_grid_bounds_type
    use mpp_mod,           only: mpp_error, FATAL, mpp_broadcast, mpp_send, mpp_recv, mpp_sum, mpp_max
 
@@ -546,6 +548,7 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
       real :: cmax_t
       real :: c_global
       real :: frac, rdt
+      real :: recip_nsplt,reg_bc_update_time
       integer :: nsplt, nsplt_parent, msg_split_steps = 1
       integer :: i,j,k,it,iq
 
@@ -692,6 +695,17 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
            enddo
       endif
 
+      if (gridstruct%regional) then
+            reg_bc_update_time=current_time_in_seconds+(it-1)*recip_nsplt*dt   !<-- dt is the k_split timestep length
+            do iq=1,nq
+                 call regional_boundary_update(q(:,:,:,iq), 'q', &
+                                               isd, ied, jsd, jed, npz, &
+                                               is,  ie,  js,  je,       &
+                                               isd, ied, jsd, jed,      &
+                                               reg_bc_update_time,      &
+                                               iq )
+            enddo
+      endif
 
 !$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,dp1,mfx,mfy,rarea,nq, &
 !$OMP                                  area,xfx,yfx,q,cx,cy,npx,npy,hord,gridstruct,bd,it,nsplt,nord_tr,trdm,lim_fac) &

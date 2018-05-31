@@ -29,7 +29,7 @@ module dyn_core_mod
   use fv_mp_mod,          only: group_halo_update_type
   use sw_core_mod,        only: c_sw, d_sw
   use a2b_edge_mod,       only: a2b_ord2, a2b_ord4
-  use nh_core_mod,        only: Riem_Solver3, Riem_Solver_C, update_dz_c, update_dz_d, nest_halo_nh
+  use nh_core_mod,        only: Riem_Solver3, Riem_Solver_C, update_dz_c, update_dz_d, nh_bc
   use tp_core_mod,        only: copy_corners
   use fv_timing_mod,      only: timing_on, timing_off
   use fv_diagnostics_mod, only: prt_maxmin, fv_time, prt_mxm
@@ -46,10 +46,15 @@ module dyn_core_mod
                                 fv_grid_bounds_type, R_GRID
 
   use boundary_mod,         only: extrapolation_BC,  nested_grid_BC_apply_intT
+  use fv_regional_mod,      only: regional_boundary_update
+  use fv_regional_mod,      only: current_time_in_seconds
 
 #ifdef SW_DYNAMICS
   use test_cases_mod,      only: test_case, case9_forcing1, case9_forcing2
 #endif
+  use fv_regional_mod,     only: write_after_bc_time_interpolation
+  use fv_regional_mod,     only: dump_field, exch_uv, H_STAGGER, U_STAGGER, V_STAGGER
+  use fv_regional_mod,     only: a_step, p_step, k_step, n_step
 
 implicit none
 private
@@ -174,6 +179,8 @@ contains
     real    :: dt, dt2, rdt
     real    :: d2_divg
     real    :: k1k, rdg, dtmp, delt
+    real    :: recip_k_split_n_split
+    real    :: reg_bc_update_time
     logical :: last_step, remap_step
     logical used
     real :: split_timestep_bc
@@ -203,6 +210,7 @@ contains
     beta = flagstruct%beta
     rdg = -rdgas / grav
     cv_air = cp_air - rdgas
+    recip_k_split_n_split=1./real(flagstruct%k_split*n_split)
 
 ! Indexes:
     iep1 = ie + 1
@@ -325,7 +333,7 @@ contains
                              call timing_off('COMM_TOTAL')
 
       if ( it==1 ) then
-         if (gridstruct%nested) then
+         if (gridstruct%bounded_domain) then
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,gz,zs,delz)
          do j=jsd,jed
             do i=isd,ied
@@ -430,9 +438,24 @@ contains
               neststruct%pt_BC, bctype=neststruct%nestbctype )
 #endif
       endif
+      if (flagstruct%regional) then
+        reg_bc_update_time=current_time_in_seconds+(0.5+(it-1))*dt
+        call regional_boundary_update(delpc, 'delp', &
+                                      isd, ied, jsd, jed, npz, &
+                                      is,  ie,  js,  je,       &
+                                      isd, ied, jsd, jed,      &
+                                      reg_bc_update_time )
+#ifndef SW_DYNAMICS
+        call regional_boundary_update(ptc, 'pt', &
+                                      isd, ied, jsd, jed, npz, &
+                                      is,  ie,  js,  je,       &
+                                      isd, ied, jsd, jed,      &
+                                      reg_bc_update_time )
+#endif
+      endif
       if ( hydrostatic ) then
            call geopk(ptop, pe, peln, delpc, pkc, gz, phis, ptc, q_con, pkz, npz, akap, .true., &
-                      gridstruct%nested, .false., npx, npy, flagstruct%a2b_ord, bd)
+                      gridstruct%bounded_domain, .false., npx, npy, flagstruct%a2b_ord, bd)
       else
 #ifndef SW_DYNAMICS
            if ( it == 1 ) then
@@ -478,12 +501,22 @@ contains
                  call nested_grid_BC_apply_intT(delz, &
                       0, 0, npx, npy, npz, bd, split_timestep_BC+0.5, real(n_split*flagstruct%k_split), &
                 neststruct%delz_BC, bctype=neststruct%nestbctype )
+           endif
 
+           if (flagstruct%regional) then
+             reg_bc_update_time=current_time_in_seconds+(0.5+(it-1))*dt
+             call regional_boundary_update(delz, 'delz', &
+                                           isd, ied, jsd, jed, ubound(delz,3), &
+                                           is,  ie,  js,  je,       &
+                                           isd, ied, jsd, jed,      &
+                                           reg_bc_update_time )
+           endif
 
+           if (gridstruct%bounded_domain) then
               !Compute gz/pkc
               !NOTE: nominally only need to compute quantities one out in the halo for p_grad_c
               !(instead of entire halo)
-           call nest_halo_nh(ptop, grav, akap, cp, delpc, delz, ptc, phis, &
+           call nh_bc(ptop, grav, akap, cp, delpc, delz, ptc, phis, &
 #ifdef USE_COND
                 q_con, &
 #ifdef MOIST_CAPPA
@@ -491,7 +524,7 @@ contains
 #endif
 #endif
                 pkc, gz, pk3, &
-                npx, npy, npz, gridstruct%nested, .false., .false., .false., bd)
+                npx, npy, npz, gridstruct%bounded_domain, .false., .false., .false., bd)
 
            endif
 
@@ -542,13 +575,52 @@ contains
 
       end if
 
-    if ( gridstruct%nested .and. flagstruct%inline_q ) then
+      if (flagstruct%regional) then
+
+        call exch_uv(domain, bd, npz, vc, uc)
+        
+        reg_bc_update_time=current_time_in_seconds+(0.5+(it-1))*dt
+        call regional_boundary_update(vc, 'vc', &
+                                      isd, ied, jsd, jed+1, npz, &
+                                      is,  ie,  js,  je,       &
+                                      isd, ied, jsd, jed,      &
+                                      reg_bc_update_time )
+        call regional_boundary_update(uc, 'uc', &
+                                      isd, ied+1, jsd, jed, npz, &
+                                      is,  ie,  js,  je,       &
+                                      isd, ied, jsd, jed,      &
+                                      reg_bc_update_time )
+!!! Currently divgd is always 0.0 in the regional domain boundary area.
+        reg_bc_update_time=current_time_in_seconds+(it-1)*dt
+        call regional_boundary_update(divgd, 'divgd', &
+                                      isd, ied+1, jsd, jed+1, npz, &
+                                      is,  ie,  js,  je,       &
+                                      isd, ied, jsd, jed,      &
+                                      reg_bc_update_time )
+      endif
+
+    if ( flagstruct%inline_q ) then
+      if ( gridstruct%nested ) then
             do iq=1,nq
                   call nested_grid_BC_apply_intT(q(isd:ied,jsd:jed,:,iq), &
                        0, 0, npx, npy, npz, bd, split_timestep_BC+1, real(n_split*flagstruct%k_split), &
                neststruct%q_BC(iq), bctype=neststruct%nestbctype )
             end do
       endif
+      if (flagstruct%regional) then
+        reg_bc_update_time=current_time_in_seconds+(it-1)*dt
+        do iq=1,nq
+          call regional_boundary_update(q(:,:,:,iq), 'q', &
+                                        isd, ied, jsd, jed, npz, &
+                                        is,  ie,  js,  je,       &
+                                        isd, ied, jsd, jed,      &
+                                        reg_bc_update_time )
+        enddo
+      endif
+
+    endif
+
+    if (flagstruct%regional) call exch_uv(domain, bd, npz, vc, uc)
 
                                                      call timing_on('d_sw')
 !$OMP parallel do default(none) shared(npz,flagstruct,nord_v,pfull,damp_vt,hydrostatic,last_step, &
@@ -685,6 +757,10 @@ contains
        endif
     enddo           ! end openMP k-loop
 
+    if (flagstruct%regional) then
+       call exch_uv(domain, bd, npz, vc, uc)
+       call exch_uv(domain, bd, npz, u,  v )
+    endif
                                                      call timing_off('d_sw')
 
     if( flagstruct%fill_dp ) call mix_dp(hydrostatic, w, delp, pt, npz, ak, bk, .false., flagstruct%fv_debug, bd)
@@ -751,9 +827,33 @@ contains
 #endif
 
     end if
+    if (flagstruct%regional) then
+      reg_bc_update_time=current_time_in_seconds+bdt+(it-1)*dt
+      call regional_boundary_update(delp, 'delp', &
+                                    isd, ied, jsd, jed, npz, &
+                                    is,  ie,  js,  je,       &
+                                    isd, ied, jsd, jed,      &
+                                    reg_bc_update_time )
+#ifndef SW_DYNAMICS
+      call regional_boundary_update(pt, 'pt', &
+                                    isd, ied, jsd, jed, npz, &
+                                    is,  ie,  js,  je,       &
+                                    isd, ied, jsd, jed,      &
+                                    reg_bc_update_time )
+
+#ifdef USE_COND
+      call regional_boundary_update(q_con, 'q_con', &
+                                    isd, ied, jsd, jed, npz, &
+                                    is,  ie,  js,  je,       &
+                                    isd, ied, jsd, jed,      &
+                                    reg_bc_update_time )
+#endif
+
+#endif
+    endif
      if ( hydrostatic ) then
           call geopk(ptop, pe, peln, delp, pkc, gz, phis, pt, q_con, pkz, npz, akap, .false., &
-                     gridstruct%nested, .true., npx, npy, flagstruct%a2b_ord, bd)
+                     gridstruct%bounded_domain, .true., npx, npy, flagstruct%a2b_ord, bd)
        else
 #ifndef SW_DYNAMICS
                                             call timing_on('UPDATE_DZ')
@@ -803,16 +903,27 @@ contains
           call nested_grid_BC_apply_intT(delz, &
                0, 0, npx, npy, npz, bd, split_timestep_BC+1., real(n_split*flagstruct%k_split), &
                neststruct%delz_BC, bctype=neststruct%nestbctype  )
+       endif
           
+       if (flagstruct%regional) then
+         reg_bc_update_time=current_time_in_seconds+it*dt
+         call regional_boundary_update(delz, 'delz', &
+                                       isd, ied, jsd, jed, ubound(delz,3), &
+                                       is,  ie,  js,  je,       &
+                                       isd, ied, jsd, jed,      &
+                                       reg_bc_update_time )
+       endif
+
+       if (gridstruct%bounded_domain) then
           !Compute gz/pkc/pk3; note that now pkc should be nonhydro pert'n pressure
-          call nest_halo_nh(ptop, grav, akap, cp, delp, delz, pt, phis, &
+          call nh_bc(ptop, grav, akap, cp, delp, delz, pt, phis, &
 #ifdef USE_COND
                q_con, &
 #ifdef MOIST_CAPPA
                cappa, &
 #endif
 #endif
-               pkc, gz, pk3, npx, npy, npz, gridstruct%nested, .true., .true., .true., bd)
+               pkc, gz, pk3, npx, npy, npz, gridstruct%bounded_domain, .true., .true., .true., bd)
 
        endif
         call timing_on('COMM_TOTAL')
@@ -926,7 +1037,7 @@ contains
 !-------------------------------------------------------------------------------------------------------
 
                                                      call timing_on('COMM_TOTAL')
-    if( it==n_split .and. gridstruct%grid_type<4 .and. .not. gridstruct%nested) then
+    if( it==n_split .and. gridstruct%grid_type<4 .and. .not. gridstruct%bounded_domain) then
 ! Prevent accumulation of rounding errors at overlapped domain edges:
        call mpp_get_boundary(u, v, domain, ebuffery=ebuffer,  &
                              nbufferx=nbuffer, gridtype=DGRID_NE )
@@ -1021,6 +1132,33 @@ contains
             1, 0, npx, npy, npz, bd, split_timestep_BC+1, real(n_split*flagstruct%k_split), &
             neststruct%v_BC, bctype=neststruct%nestbctype )
 
+      end if
+
+      if (flagstruct%regional) then
+
+#ifndef SW_DYNAMICS
+         if (.not. hydrostatic) then
+           reg_bc_update_time=current_time_in_seconds+it*dt
+           call regional_boundary_update(w, 'w', &
+                                         isd, ied, jsd, jed, ubound(w,3), &
+                                         is,  ie,  js,  je,       &
+                                         isd, ied, jsd, jed,      &
+                                         reg_bc_update_time )
+         endif
+#endif SW_DYNAMICS
+
+         call regional_boundary_update(u, 'u', &
+                                       isd, ied, jsd, jed+1, npz, &
+                                       is,  ie,  js,  je,       &
+                                       isd, ied, jsd, jed,      &
+                                       reg_bc_update_time )
+         call regional_boundary_update(v, 'v', &
+                                       isd, ied+1, jsd, jed, npz, &
+                                       is,  ie,  js,  je,       &
+                                       isd, ied, jsd, jed,      &
+                                       reg_bc_update_time )
+      
+         call exch_uv(domain, bd, npz, u,  v )      
       end if
 
 !-----------------------------------------------------
@@ -1939,7 +2077,7 @@ do 1000 j=jfirst,jlast
  end subroutine  mix_dp
 
 
- subroutine geopk(ptop, pe, peln, delp, pk, gz, hs, pt, q_con, pkz, km, akap, CG, nested, computehalo, npx, npy, a2b_ord, bd)
+ subroutine geopk(ptop, pe, peln, delp, pk, gz, hs, pt, q_con, pkz, km, akap, CG, bounded_domain, computehalo, npx, npy, a2b_ord, bd)
 
    integer, intent(IN) :: km, npx, npy, a2b_ord
    real   , intent(IN) :: akap, ptop
@@ -1947,7 +2085,7 @@ do 1000 j=jfirst,jlast
    real   , intent(IN) :: hs(bd%isd:bd%ied,bd%jsd:bd%jed)
    real, intent(IN), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,km):: pt, delp
    real, intent(IN), dimension(bd%isd:,bd%jsd:,1:):: q_con
-   logical, intent(IN) :: CG, nested, computehalo
+   logical, intent(IN) :: CG, bounded_domain, computehalo
    ! !OUTPUT PARAMETERS
    real, intent(OUT), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,km+1):: gz, pk
    real, intent(OUT) :: pe(bd%is-1:bd%ie+1,km+1,bd%js-1:bd%je+1)
@@ -1976,7 +2114,7 @@ do 1000 j=jfirst,jlast
       jsd = bd%jsd
       jed = bd%jed
 
-   if ( (.not. CG .and. a2b_ord==4) .or. (nested .and. .not. CG) ) then   ! D-Grid
+   if ( (.not. CG .and. a2b_ord==4) .or. (bounded_domain .and. .not. CG) ) then   ! D-Grid
       ifirst = is-2; ilast = ie+2
       jfirst = js-2; jlast = je+2
    else
@@ -1984,7 +2122,7 @@ do 1000 j=jfirst,jlast
       jfirst = js-1; jlast = je+1
    endif
 
-   if (nested .and. computehalo) then
+   if (bounded_domain .and. computehalo) then
       if (is == 1)     ifirst = isd
       if (ie == npx-1) ilast  = ied
       if (js == 1)     jfirst = jsd
@@ -2149,7 +2287,7 @@ do 1000 j=jfirst,jlast
                q(1,npy,k) =  q(1,je,k)
             endif
 
-            if(nt>0) call copy_corners(q(isd,jsd,k), npx, npy, 1, gridstruct%nested, bd, &
+            if(nt>0 .and. (.not. gridstruct%bounded_domain)) call copy_corners(q(isd,jsd,k), npx, npy, 1, gridstruct%bounded_domain, bd, &
                  gridstruct%sw_corner, gridstruct%se_corner, gridstruct%nw_corner, gridstruct%ne_corner )
             do j=js-nt,je+nt
                do i=is-nt,ie+1+nt
@@ -2161,7 +2299,7 @@ do 1000 j=jfirst,jlast
                enddo
             enddo
 
-            if(nt>0) call copy_corners(q(isd,jsd,k), npx, npy, 2, gridstruct%nested, bd, &
+            if(nt>0 .and. (.not. gridstruct%bounded_domain)) call copy_corners(q(isd,jsd,k), npx, npy, 2, gridstruct%bounded_domain, bd, &
                  gridstruct%sw_corner, gridstruct%se_corner, gridstruct%nw_corner, gridstruct%ne_corner)
             do j=js-nt,je+1+nt
                do i=is-nt,ie+nt

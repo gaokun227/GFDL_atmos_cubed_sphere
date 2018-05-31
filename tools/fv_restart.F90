@@ -292,14 +292,14 @@ contains
                                           Atm(n)%gridstruct%area_64, Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
                                           Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
                                           Atm(n)%flagstruct%n_zs_filter, cnst_0p20*Atm(n)%gridstruct%da_min, &
-                                          .false., oro_g, Atm(n)%neststruct%nested, Atm(n)%domain, Atm(n)%bd)
+                                          .false., oro_g, Atm(n)%gridstruct%bounded_domain, Atm(n)%domain, Atm(n)%bd)
                    if ( is_master() ) write(*,*) 'Warning !!! del-2 terrain filter has been applied ', &
                         Atm(n)%flagstruct%n_zs_filter, ' times'
               else if( Atm(n)%flagstruct%nord_zs_filter == 4 ) then
                    call del4_cubed_sphere(Atm(n)%npx, Atm(n)%npy, Atm(n)%phis, Atm(n)%gridstruct%area_64, &
                                           Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
                                           Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
-                                          Atm(n)%flagstruct%n_zs_filter, .false., oro_g, Atm(n)%neststruct%nested, &
+                                          Atm(n)%flagstruct%n_zs_filter, .false., oro_g, Atm(n)%gridstruct%bounded_domain, &
                                           Atm(n)%domain, Atm(n)%bd)
                  if ( is_master() ) write(*,*) 'Warning !!! del-4 terrain filter has been applied ', &
                       Atm(n)%flagstruct%n_zs_filter, ' times'
@@ -650,7 +650,7 @@ contains
               Atm(n)%gridstruct, &
               Atm(n)%npx, Atm(n)%npy, npz, 1, &              
               Atm(n)%gridstruct%grid_type, Atm(n)%domain, &
-              Atm(n)%gridstruct%nested, Atm(n)%flagstruct%c2l_ord, Atm(n)%bd)
+              Atm(n)%gridstruct%bounded_domain, Atm(n)%flagstruct%c2l_ord, Atm(n)%bd)
          do j=jsc,jec
             do i=isc,iec
                Atm(n)%u_srf(i,j) = Atm(n)%ua(i,j,npz)

@@ -232,6 +232,8 @@ module fv_control_mod
   real(kind=R_GRID), pointer :: deglat
 
   logical, pointer :: nested, twowaynest
+  logical, pointer :: regional
+  integer, pointer :: bc_update_interval 
   integer, pointer :: parent_tile, refinement, nestbctype, nestupdate, nsponge, ioffset, joffset
   real, pointer :: s_weight, update_blend
 
@@ -345,6 +347,8 @@ module fv_control_mod
             Atm(n)%gridstruct%nested    => Atm(n)%neststruct%nested
             Atm(n)%gridstruct%grid_type => Atm(n)%flagstruct%grid_type
             Atm(n)%flagstruct%grid_number => Atm(n)%grid_number
+            Atm(n)%gridstruct%regional  => Atm(n)%flagstruct%regional
+            Atm(n)%gridstruct%bounded_domain = Atm(n)%flagstruct%regional .or. Atm(n)%neststruct%nested
 
             call init_grid(Atm(n), grid_name, grid_file, npx, npy, npz, ndims, ntiles, ng)
 
@@ -562,7 +566,7 @@ module fv_control_mod
                          nested, twowaynest, parent_grid_num, parent_tile, nudge_qv, &
                          refinement, nestbctype, nestupdate, nsponge, s_weight, &
                          ioffset, joffset, check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
-                         do_uni_zfull, adj_mass_vmr, update_blend
+                         do_uni_zfull, adj_mass_vmr, update_blend, regional, bc_update_interval
 
    namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size
 
@@ -649,7 +653,7 @@ module fv_control_mod
          nf_omega = 0
       endif
 
-      if (.not. nested) Atm(n)%neststruct%npx_global = npx
+      if (.not. (nested .or. regional)) Atm(n)%neststruct%npx_global = npx
 
       ! Define n_split if not in namelist
       if (ntiles==6) then
@@ -802,7 +806,7 @@ module fv_control_mod
  198  format(A,i2.2,A,i4.4,'x',i4.4,'x',i1.1,'-',f9.3)
  199  format(A,i3.3)
 
-      if (.not. nested) alpha = alpha*pi
+      if (.not. (nested .or. regional)) alpha = alpha*pi
 
 
       allocate(Atm(n)%neststruct%child_grids(size(Atm)))
@@ -1072,6 +1076,8 @@ module fv_control_mod
      stretch_fac                   => Atm%flagstruct%stretch_fac
      target_lat                    => Atm%flagstruct%target_lat
      target_lon                    => Atm%flagstruct%target_lon
+     regional                      => Atm%flagstruct%regional
+     bc_update_interval            => Atm%flagstruct%bc_update_interval 
      reset_eta                     => Atm%flagstruct%reset_eta
      p_fac                         => Atm%flagstruct%p_fac
      a_imp                         => Atm%flagstruct%a_imp

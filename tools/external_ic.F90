@@ -46,7 +46,12 @@ module external_ic_mod
    use fv_grid_utils_mod, only: ptop_min, g_sum,mid_pt_sphere,get_unit_vect2,get_latlon_vector,inner_prod
    use fv_io_mod,         only: fv_io_read_tracers 
    use fv_mapz_mod,       only: mappm
+   use fv_regional_mod,   only: dump_field, H_STAGGER, U_STAGGER, V_STAGGER
    use fv_mp_mod,         only: ng, is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
+   use fv_regional_mod,   only: BC_t0, BC_t1, bc_hour, bc_time_interval,  &
+                                regional_bc_data, regional_bc_t1_to_t0,   &
+                                setup_regional_BC,  &
+                                ak_in, bk_in
    use fv_surf_map_mod,   only: surfdrv, FV3_zs_filter
    use fv_surf_map_mod,   only: sgh_g, oro_g
    use fv_surf_map_mod,   only: del2_cubed_sphere, del4_cubed_sphere
@@ -128,13 +133,15 @@ contains
       enddo
 
       call mpp_update_domains( f0, fv_domain )
-      if ( Atm(1)%gridstruct%cubed_sphere .and. .not. Atm(1)%neststruct%nested) call fill_corners(f0, Atm(1)%npx, Atm(1)%npy, YDir)
+      if ( Atm(1)%gridstruct%cubed_sphere .and. (.not. Atm(1)%gridstruct%bounded_domain))then
+         call fill_corners(f0, Atm(1)%npx, Atm(1)%npy, YDir)
+      endif
  
 ! Read in cubed_sphere terrain
       if ( Atm(1)%flagstruct%mountain ) then
            call get_cubed_sphere_terrain(Atm, fv_domain)
       else
-         if (.not. Atm(1)%neststruct%nested) Atm(1)%phis = 0.
+         if (.not. Atm(1)%neststruct%nested) Atm(1)%phis = 0. !TODO: Not sure about this line --- lmh 30 may 18
       endif
  
 ! Read in the specified external dataset and do all the needed transformation
@@ -258,7 +265,8 @@ contains
                          Atm(n)%gridstruct%dxa, Atm(n)%gridstruct%dya, &
                          Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
                          Atm(n)%phis, Atm(n)%flagstruct%stretch_fac, &
-                         Atm(n)%neststruct%nested, Atm(n)%neststruct%npx_global, Atm(N)%domain, &
+                         Atm(n)%neststruct%nested, Atm(n)%gridstruct%bounded_domain, &
+                         Atm(n)%neststruct%npx_global, Atm(N)%domain, &
                          Atm(n)%flagstruct%grid_number, Atm(n)%bd )
           call mpp_error(NOTE,'terrain datasets generated using USGS data')
        endif
@@ -336,7 +344,7 @@ contains
       real(kind=R_GRID), dimension(2):: p1, p2, p3
       real(kind=R_GRID), dimension(3):: e1, e2, ex, ey
       integer:: i,j,k,nts, ks
-      integer:: liq_wat, ice_wat, rainwat, snowwat, graupel, tke
+      integer:: liq_wat, ice_wat, rainwat, snowwat, graupel, tke, ntclamt
       namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds, &
                                  checker_tr, nt_checker
 
@@ -550,6 +558,44 @@ contains
         if(is_master())  write(*,*) 'GFS ak(1)=', ak(1), ' ak(2)=', ak(2)
         ak(1) = max(1.e-9, ak(1))
 
+!***  For regional runs read in each of the BC variables from the NetCDF boundary file
+!***  and remap in the vertical from the input levels to the model integration levels.
+!***  Here in the initialization we begn by allocating the regional domain's boundary
+!***  objects.  Then we need to read the first two regional BC files so the integration 
+!***  can begin interpolating between those two times as the forecast proceeds.
+
+        if (n==1.and.Atm(1)%flagstruct%regional) then     !<-- Select the parent regional domain.
+
+          call setup_regional_BC(Atm(1)                &
+                                ,isd, ied, jsd, jed    &
+                                ,Atm(1)%npx, Atm(1)%npy )
+
+          bc_hour=0
+          call regional_bc_data(Atm(1), bc_hour        &  !<-- Fill time level t1 from BC file at 0 hours.
+                               ,is, ie, js, je         &
+                               ,isd, ied, jsd, jed     &
+                               ,ak, bk )
+          call regional_bc_t1_to_t0(BC_t1, BC_t0               &  !
+                                   ,Atm(n)%npz                 &  !<-- Move BC t1 data
+                                   ,Atm(n)%ncnst               &  !    to t0.
+                                   ,Atm(n)%regional_bc_bounds )   !
+
+          bc_hour=bc_hour+bc_time_interval
+          call regional_bc_data(Atm(n), bc_hour        &  !<-- Fill time level t1 from BC file from 2nd time level in BC file.
+                               ,is, ie, js, je         &
+                               ,isd, ied, jsd, jed     &
+                               ,ak, bk )
+          allocate (ak_in(levp+1))                        !<-- Save the input vertical structure for
+          allocate (bk_in(levp+1))                        !    remapping BC updates during the forecast.
+          do k=1,levp+1
+            ak_in(k)=ak(k)
+            bk_in(k)=bk(k)
+          enddo
+        endif
+
+!
+!***  Remap the variables in the compute domain.
+!
         call remap_scalar(Atm(n), levp, npz, ntracers, ak, bk, ps, q, zh, omga)
 
         allocate ( ud(is:ie,  js:je+1, 1:levp) )
@@ -607,7 +653,7 @@ contains
            call mpp_update_domains(Atm(n)%phis, Atm(n)%domain)
 
            call FV3_zs_filter( Atm(n)%bd, isd, ied, jsd, jed, npx, npy, Atm(n)%neststruct%npx_global, &
-                Atm(n)%flagstruct%stretch_fac, Atm(n)%neststruct%nested, Atm(n)%domain, &
+                Atm(n)%flagstruct%stretch_fac, Atm(n)%gridstruct%bounded_domain, Atm(n)%domain, &
                 Atm(n)%gridstruct%area_64, Atm(n)%gridstruct%dxa, Atm(n)%gridstruct%dya, &
                 Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy, Atm(n)%gridstruct%dxc, &
                 Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%grid_64, Atm(n)%gridstruct%agrid_64, &
@@ -623,14 +669,16 @@ contains
                    Atm(n)%gridstruct%area_64, Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
                    Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
                    Atm(n)%flagstruct%n_zs_filter, cnst_0p20*Atm(n)%gridstruct%da_min, &
-                   .false., oro_g, Atm(n)%neststruct%nested, Atm(n)%domain, Atm(n)%bd)
+                   .false., oro_g, Atm(n)%gridstruct%bounded_domain, &
+	           Atm(n)%domain, Atm(n)%bd)
             if ( is_master() ) write(*,*) 'Warning !!! del-2 terrain filter has been applied ', &
                    Atm(n)%flagstruct%n_zs_filter, ' times'
           else if( Atm(n)%flagstruct%nord_zs_filter == 4 ) then
             call del4_cubed_sphere(Atm(n)%npx, Atm(n)%npy, Atm(n)%phis, Atm(n)%gridstruct%area_64, &
                    Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
                    Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
-                   Atm(n)%flagstruct%n_zs_filter, .false., oro_g, Atm(n)%neststruct%nested, &
+                   Atm(n)%flagstruct%n_zs_filter, .false., oro_g, &
+	           Atm(n)%gridstruct%bounded_domain, &
                    Atm(n)%domain, Atm(n)%bd)
             if ( is_master() ) write(*,*) 'Warning !!! del-4 terrain filter has been applied ', &
                    Atm(n)%flagstruct%n_zs_filter, ' times'
@@ -656,6 +704,7 @@ contains
         rainwat = get_tracer_index(MODEL_ATMOS, 'rainwat')
         snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
         graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
+        ntclamt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
 !--- Add cloud condensate from GFS to total MASS
 ! 20160928: Adjust the mixing ratios consistently...
         do k=1,npz
@@ -676,6 +725,7 @@ contains
                  Atm(n)%q(i,j,k,iq) = m_fac * Atm(n)%q(i,j,k,iq)
               enddo
               Atm(n)%delp(i,j,k) = qt
+              if (ntclamt > 0) Atm(n)%q(i,j,k,ntclamt) = 0.0    ! Moorthi
             enddo
           enddo
         enddo
@@ -2484,7 +2534,7 @@ contains
   enddo
   call pmaxmn('ZS_diff (m)', wk, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
 
-  if (.not.Atm%neststruct%nested) then
+  if (.not.Atm%gridstruct%bounded_domain) then
       call prt_gb_nh_sh('DATA_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
       if ( .not. Atm%flagstruct%hydrostatic )  &
       call prt_height('fv3_IC Z500', is,ie, js,je, 3, npz, 500.E2, Atm%phis, Atm%delz, Atm%peln,   &
@@ -2654,7 +2704,8 @@ contains
   jsd = Atm%bd%jsd
   jed = Atm%bd%jed
 
-  if (Atm%neststruct%nested) then
+!Not sure what this is for
+  if (Atm%gridstruct%bounded_domain) then
      do j=jsd,jed
      do i=isd,ied
         psd(i,j) = Atm%ps(i,j)
@@ -3142,7 +3193,7 @@ contains
        enddo
 
 ! --- E_W edges (for v-wind):
-     if (.not. gridstruct%nested) then
+     if (.not. gridstruct%bounded_domain) then
      if ( is==1) then
        i = 1
        do j=js,je
@@ -3224,7 +3275,7 @@ contains
        enddo
      endif
 
-     endif ! .not. nested
+     endif ! .not. bounded_domain
 
      do j=js,je+1
         do i=is,ie

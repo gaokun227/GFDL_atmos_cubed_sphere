@@ -1918,43 +1918,11 @@ contains
                 call prt_mxm('Z100',a3(isc:iec,jsc:jec,11),isc,iec,jsc,jec,0,1,1.E-3,Atm(n)%gridstruct%area_64,Atm(n)%domain)
 
                 if(all(idiag%id_h(minloc(abs(levs-500)))>0))  then
-                   if (.not. Atm(n)%neststruct%nested) then
-#ifdef TO_BE_DELETED
-                   t_eq = 0.   ;    t_nh = 0.;    t_sh = 0.;    t_gb = 0.
-                   area_eq = 0.; area_nh = 0.; area_sh = 0.; area_gb = 0.
-                   do j=jsc,jec
-                      do i=isc,iec
-                         slat = Atm(n)%gridstruct%agrid(i,j,2)*rad2deg
-                         area_gb = area_gb + Atm(n)%gridstruct%area(i,j)
-                         t_gb = t_gb + a3(i,j,19)*Atm(n)%gridstruct%area(i,j)
-                         if( (slat>-20. .and. slat<20.) ) then
-! Tropics:
-                              area_eq = area_eq + Atm(n)%gridstruct%area(i,j)
-                                 t_eq =    t_eq + a3(i,j,19)*Atm(n)%gridstruct%area(i,j)
-                         elseif( slat>=20. .and. slat<80. ) then
-! NH
-                              area_nh = area_nh + Atm(n)%gridstruct%area(i,j)
-                                 t_nh =    t_nh + a3(i,j,19)*Atm(n)%gridstruct%area(i,j)
-                         elseif( slat<=-20. .and. slat>-80. ) then
-! SH
-                              area_sh = area_sh + Atm(n)%gridstruct%area(i,j)
-                                 t_sh =    t_sh + a3(i,j,19)*Atm(n)%gridstruct%area(i,j)
-                         endif
-                      enddo
-                   enddo
-                   call mp_reduce_sum(area_gb)
-                   call mp_reduce_sum(   t_gb)
-                   call mp_reduce_sum(area_nh)
-                   call mp_reduce_sum(   t_nh)
-                   call mp_reduce_sum(area_sh)
-                   call mp_reduce_sum(   t_sh)
-                   call mp_reduce_sum(area_eq)
-                   call mp_reduce_sum(   t_eq)
-                   if (master) write(*,*) 'Z500 GB_NH_SH_EQ=', t_gb/area_gb, t_nh/area_nh, t_sh/area_sh, t_eq/area_eq
-#endif
-!                  call prt_mxm('Z500',a3(isc:iec,jsc:jec,19),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
-                   call prt_gb_nh_sh('fv_GFS Z500', isc,iec, jsc,jec, a3(isc,jsc,19), Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
-                                     Atm(n)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
+                   if (Atm(n)%gridstruct%bounded_domain) then
+                      call prt_mxm('Z500',a3(isc:iec,jsc:jec,19),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
+                   else
+                      call prt_gb_nh_sh('fv_GFS Z500', isc,iec, jsc,jec, a3(isc,jsc,19), Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
+                                        Atm(n)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
                    endif
                 endif
 
@@ -2119,7 +2087,7 @@ contains
           if ( all(idiag%id_t(minloc(abs(levs-100)))>0) .and. prt_minmax ) then
              call prt_mxm('T100:', a3(isc:iec,jsc:jec,11), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
-             if (.not. Atm(n)%neststruct%nested)  then
+             if (.not. Atm(n)%gridstruct%bounded_domain)  then
                 tmp = 0.
                 sar = 0.
                 !            Compute mean temp at 100 mb near EQ
@@ -2144,7 +2112,7 @@ contains
           if ( all(idiag%id_t(minloc(abs(levs-200)))>0) .and. prt_minmax ) then
              call prt_mxm('T200:', a3(isc:iec,jsc:jec,13), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
-             if (.not. Atm(n)%neststruct%nested) then
+             if (.not. Atm(n)%gridstruct%bounded_domain) then
                 tmp = 0.
                 sar = 0.
                 do j=jsc,jec
@@ -2286,7 +2254,7 @@ contains
                    einf = max(einf, abs(a2(i,j) - qcly0))
                 enddo
              enddo
-             if (prt_minmax .and. .not. Atm(n)%neststruct%nested) then
+             if (prt_minmax .and. .not. Atm(n)%gridstruct%bounded_domain) then
                 call mp_reduce_sum(qm)
                 call mp_reduce_max(einf)
                 call mp_reduce_sum(e2)
@@ -3198,7 +3166,7 @@ contains
         enddo
 
 ! Maximum overlap cloud fraction
-      if ( .not. Atm(n)%neststruct%nested )  then
+      if ( .not. Atm(n)%gridstruct%bounded_domain )  then
         if ( cld_amt > 0 .and. prt_minmax ) then
           a2(:,:) = 0.
           do k=1,npz

@@ -30,7 +30,7 @@ module nh_utils_mod
    implicit none
    private
 
-   public update_dz_c, update_dz_d, nest_halo_nh
+   public update_dz_c, update_dz_d, nh_bc
    public sim_solver, sim1_solver, sim3_solver
    public sim3p0_solver, rim_2d
    public Riem_Solver_c
@@ -1625,7 +1625,8 @@ CONTAINS
 
  end subroutine edge_profile
 
- subroutine nest_halo_nh(ptop, grav, kappa, cp, delp, delz, pt, phis, &
+!TODO LMH 25may18: do not need delz defined on full compute domain; pass appropriate BCs instead
+ subroutine nh_bc(ptop, grav, kappa, cp, delp, delz, pt, phis, &
 #ifdef USE_COND
       q_con, &
 #ifdef MOIST_CAPPA
@@ -1633,12 +1634,12 @@ CONTAINS
 #endif
 #endif
       pkc, gz, pk3, &
-      npx, npy, npz, nested, pkc_pertn, computepk3, fullhalo, bd)
+      npx, npy, npz, bounded_domain, pkc_pertn, computepk3, fullhalo, bd)
 
       !INPUT: delp, delz, pt
       !OUTPUT: gz, pkc, pk3 (optional)
       integer, intent(IN) :: npx, npy, npz
-      logical, intent(IN) :: pkc_pertn, computepk3, fullhalo, nested
+      logical, intent(IN) :: pkc_pertn, computepk3, fullhalo, bounded_domain
       real, intent(IN) :: ptop, kappa, cp, grav
       type(fv_grid_bounds_type), intent(IN) :: bd
       real, intent(IN) :: phis(bd%isd:bd%ied,bd%jsd:bd%jed)
@@ -1678,7 +1679,7 @@ CONTAINS
       jsd = bd%jsd
       jed = bd%jed
 
-      if (.not. nested) return
+      if (.not. bounded_domain) return
       ifirst = isd
       jfirst = jsd
       ilast = ied
@@ -2157,6 +2158,6 @@ CONTAINS
 
       endif
 
-end subroutine nest_halo_nh
+end subroutine nh_bc
 
 end module nh_utils_mod

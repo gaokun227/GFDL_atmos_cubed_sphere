@@ -24,7 +24,7 @@ module nh_core_mod
 !------------------------------
    use constants_mod,     only: rdgas, cp_air, grav
    use tp_core_mod,       only: fv_tp_2d
-   use nh_utils_mod,      only: update_dz_c, update_dz_d, nest_halo_nh
+   use nh_utils_mod,      only: update_dz_c, update_dz_d, nh_bc
    use nh_utils_mod,      only: sim_solver, sim1_solver, sim3_solver
    use nh_utils_mod,      only: sim3p0_solver, rim_2d
    use nh_utils_mod,      only: Riem_Solver_c
@@ -32,7 +32,7 @@ module nh_core_mod
    implicit none
    private
 
-   public Riem_Solver3, Riem_Solver_c, update_dz_c, update_dz_d, nest_halo_nh
+   public Riem_Solver3, Riem_Solver_c, update_dz_c, update_dz_d, nh_bc
    real, parameter:: r3 = 1./3.
 
 CONTAINS 

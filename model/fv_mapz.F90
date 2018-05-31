@@ -529,7 +529,7 @@ contains
 
     ! D grid wind to A grid wind remap
     call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
-             domain, gridstruct%nested, c2l_ord, bd)
+             domain, gridstruct%bounded_domain, c2l_ord, bd)
 
     ! save delp
     if (consv .gt. consv_min) then
