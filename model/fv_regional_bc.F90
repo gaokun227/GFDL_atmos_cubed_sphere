@@ -77,6 +77,7 @@ module fv_regional_mod
       integer, public, parameter :: U_STAGGER = 2
       integer, public, parameter :: V_STAGGER = 3
 
+      !These parameters are ONLY used for the dump_field debugging routines
       real, parameter :: stretch_factor = 1.5
       real, parameter :: target_lon = -97.5
       real, parameter :: target_lat = 35.5
