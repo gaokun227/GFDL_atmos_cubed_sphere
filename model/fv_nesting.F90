@@ -787,13 +787,18 @@ contains
  end subroutine setup_pt_BC
 
 
- subroutine setup_pt_BC_k(ptBC, sphumBC, peBC, zvir, isd, ied, istart, iend, jstart, jend, npz)
+!!!! A NOTE ON NOMENCLATURE
+!!!! Originally the BC arrays were bounded by isd and ied in the i-direction.
+!!!!   However these were NOT intended to delineate the dimensions of the data domain
+!!!!   but instead were of the BC arrays. This is confusing especially in other locations
+!!!!   where BCs and data arrays are both present.
+ subroutine setup_pt_BC_k(ptBC, sphumBC, peBC, zvir, isd_BC, ied_BC, istart, iend, jstart, jend, npz)
 
-   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz
+   integer, intent(IN) :: isd_BC, ied_BC, istart, iend, jstart, jend, npz
    real,    intent(IN) :: zvir
-   real, intent(INOUT), dimension(isd:ied,jstart:jend,npz) :: ptBC
-   real, intent(IN),    dimension(isd:ied,jstart:jend,npz) :: sphumBC
-   real, intent(IN),    dimension(isd:ied,jstart:jend,npz+1) :: peBC
+   real, intent(INOUT), dimension(isd_BC:ied_BC,jstart:jend,npz) :: ptBC
+   real, intent(IN),    dimension(isd_BC:ied_BC,jstart:jend,npz) :: sphumBC
+   real, intent(IN),    dimension(isd_BC:ied_BC,jstart:jend,npz+1) :: peBC
 
    integer :: i,j,k
    real :: pealn, pebln, rpkz
@@ -874,16 +879,20 @@ contains
    
  end subroutine setup_eul_delp_BC
 
- subroutine setup_eul_delp_BC_k(delplagBC, delpeulBC, pelagBC, peeulBC, ptop_src, ak_dst, bk_dst, isd, ied, istart, iend, jstart, jend, npz, npz_coarse)
+ subroutine setup_eul_delp_BC_k(delplagBC, delpeulBC, pelagBC, peeulBC, ptop_src, ak_dst, bk_dst, isd_BC, ied_BC, istart, iend, jstart, jend, npz, npz_coarse)
 
-   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz, npz_coarse
-   real, intent(INOUT) :: delplagBC(isd:ied,jstart:jend,npz_coarse), pelagBC(isd:ied,jstart:jend,npz_coarse+1)
-   real, intent(INOUT) :: delpeulBC(isd:ied,jstart:jend,npz), peeulBC(isd:ied,jstart:jend,npz+1)
+   integer, intent(IN) :: isd_BC, ied_BC, istart, iend, jstart, jend, npz, npz_coarse
+   real, intent(INOUT) :: delplagBC(isd_BC:ied_BC,jstart:jend,npz_coarse), pelagBC(isd_BC:ied_BC,jstart:jend,npz_coarse+1)
+   real, intent(INOUT) :: delpeulBC(isd_BC:ied_BC,jstart:jend,npz), peeulBC(isd_BC:ied_BC,jstart:jend,npz+1)
    real, intent(IN) :: ptop_src, ak_dst(npz+1), bk_dst(npz+1)
 
    integer :: i,j,k
 
    character(len=120) :: errstring
+
+!!$!!! DEBUG CODE
+!!$   write(*, '(A, 7I5)') 'setup_eul_delp_BC_k', mpp_pe(), isd_BC, ied_BC, istart, iend, lbound(pelagBC,1), ubound(pelagBC,1)
+!!$!!! END DEBUG CODE
 
 !$OMP parallel do default(none) shared(istart,iend,jstart,jend,pelagBC,ptop_src)
    do j=jstart,jend
@@ -1067,11 +1076,11 @@ contains
    
  end subroutine setup_eul_pe_BC
 
- subroutine setup_eul_pe_BC_k(pesrcBC, peeulBC, ak_dst, bk_dst, isd, ied, istart, iend, jstart, jend, npz, npz_src, make_src, ak_src, bk_src)
+ subroutine setup_eul_pe_BC_k(pesrcBC, peeulBC, ak_dst, bk_dst, isd_BC, ied_BC, istart, iend, jstart, jend, npz, npz_src, make_src, ak_src, bk_src)
 
-   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz, npz_src
-   real, intent(INOUT) :: pesrcBC(isd:ied,jstart:jend,npz_src+1)
-   real, intent(INOUT) :: peeulBC(isd:ied,jstart:jend,npz+1)
+   integer, intent(IN) :: isd_BC, ied_BC, istart, iend, jstart, jend, npz, npz_src
+   real, intent(INOUT) :: pesrcBC(isd_BC:ied_BC,jstart:jend,npz_src+1)
+   real, intent(INOUT) :: peeulBC(isd_BC:ied_BC,jstart:jend,npz+1)
    real, intent(IN) :: ak_dst(npz+1), bk_dst(npz+1)
    logical, intent(IN) :: make_src
    real, intent(IN) :: ak_src(npz_src+1), bk_src(npz_src+1)
@@ -1227,12 +1236,12 @@ contains
    
  end subroutine remap_BC_direct
 
- subroutine remap_BC_k(pe_lagBC, pe_eulBC, var_lagBC, var_eulBC, isd, ied, istart, iend, jstart, jend, npz, npz_coarse, iv, kord, log_pe)
+ subroutine remap_BC_k(pe_lagBC, pe_eulBC, var_lagBC, var_eulBC, isd_BC, ied_BC, istart, iend, jstart, jend, npz, npz_coarse, iv, kord, log_pe)
 
-   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz, npz_coarse, iv, kord
+   integer, intent(IN) :: isd_BC, ied_BC, istart, iend, jstart, jend, npz, npz_coarse, iv, kord
    logical, intent(IN) :: log_pe
-   real, intent(INOUT) :: pe_lagBC(isd:ied,jstart:jend,npz_coarse+1), var_lagBC(isd:ied,jstart:jend,npz_coarse)
-   real, intent(INOUT) :: pe_eulBC(isd:ied,jstart:jend,npz+1), var_eulBC(isd:ied,jstart:jend,npz)
+   real, intent(INOUT) :: pe_lagBC(isd_BC:ied_BC,jstart:jend,npz_coarse+1), var_lagBC(isd_BC:ied_BC,jstart:jend,npz_coarse)
+   real, intent(INOUT) :: pe_eulBC(isd_BC:ied_BC,jstart:jend,npz+1), var_eulBC(isd_BC:ied_BC,jstart:jend,npz)
 
    integer :: i, j, k
    real peln_lag(istart:iend,npz_coarse+1)
@@ -1352,11 +1361,11 @@ contains
    
  end subroutine remap_delz_BC
 
- subroutine compute_specific_volume_BC_k(delpBC, delzBC, isd, ied, istart, iend, jstart, jend, npz)
+ subroutine compute_specific_volume_BC_k(delpBC, delzBC, isd_BC, ied_BC, istart, iend, jstart, jend, npz)
 
-   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz
-   real, intent(IN)    :: delpBC(isd:ied,jstart:jend,npz)
-   real, intent(INOUT) :: delzBC(isd:ied,jstart:jend,npz)
+   integer, intent(IN) :: isd_BC, ied_BC, istart, iend, jstart, jend, npz
+   real, intent(IN)    :: delpBC(isd_BC:ied_BC,jstart:jend,npz)
+   real, intent(INOUT) :: delzBC(isd_BC:ied_BC,jstart:jend,npz)
 
    character(len=120) :: errstring
    integer :: i,j,k
@@ -1378,11 +1387,11 @@ contains
 
  end subroutine compute_specific_volume_BC_k
 
- subroutine compute_delz_BC_k(delpBC, delzBC, isd, ied, istart, iend, jstart, jend, npz)
+ subroutine compute_delz_BC_k(delpBC, delzBC, isd_BC, ied_BC, istart, iend, jstart, jend, npz)
 
-   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz
-   real, intent(IN)    :: delpBC(isd:ied,jstart:jend,npz)
-   real, intent(INOUT) :: delzBC(isd:ied,jstart:jend,npz)
+   integer, intent(IN) :: isd_BC, ied_BC, istart, iend, jstart, jend, npz
+   real, intent(IN)    :: delpBC(isd_BC:ied_BC,jstart:jend,npz)
+   real, intent(INOUT) :: delzBC(isd_BC:ied_BC,jstart:jend,npz)
    
    character(len=120) :: errstring
    integer :: i,j,k
@@ -1659,16 +1668,16 @@ contains
                              cappaBC, &
 #endif
 #endif
-                             zvir, isd, ied, istart, iend, jstart, jend, npz)
+                             zvir, isd_BC, ied_BC, istart, iend, jstart, jend, npz)
 
-   integer, intent(IN) :: isd, ied, istart, iend, jstart, jend, npz
-   real, intent(OUT), dimension(isd:ied,jstart:jend,npz) :: ptBC
-   real, intent(IN),  dimension(isd:ied,jstart:jend,npz) :: sphumBC, delpBC, delzBC
-   real, intent(IN),  dimension(isd:ied,jstart:jend,npz) :: liq_watBC,rainwatBC,ice_watBC,snowwatBC,graupelBC
+   integer, intent(IN) :: isd_BC, ied_BC, istart, iend, jstart, jend, npz
+   real, intent(OUT), dimension(isd_BC:ied_BC,jstart:jend,npz) :: ptBC
+   real, intent(IN),  dimension(isd_BC:ied_BC,jstart:jend,npz) :: sphumBC, delpBC, delzBC
+   real, intent(IN),  dimension(isd_BC:ied_BC,jstart:jend,npz) :: liq_watBC,rainwatBC,ice_watBC,snowwatBC,graupelBC
 #ifdef USE_COND
-   real, intent(OUT), dimension(isd:ied,jstart:jend,npz) ::   q_conBC
+   real, intent(OUT), dimension(isd_BC:ied_BC,jstart:jend,npz) ::   q_conBC
 #ifdef MOIST_CAPPA
-   real, intent(OUT), dimension(isd:ied,jstart:jend,npz) ::   cappaBC
+   real, intent(OUT), dimension(isd_BC:ied_BC,jstart:jend,npz) ::   cappaBC
 #endif
 #endif
    real, intent(IN) :: zvir
@@ -1684,6 +1693,10 @@ contains
 
    rdg = -rdgas / grav
    cv_air =  cp_air - rdgas
+
+!!$!!! DEBUG CODE
+!!$   write(*, '(A, 7I5)') 'setup_pt_NH_BC_k', mpp_pe(), isd, ied, istart, iend, lbound(ptBC,1), ubound(ptBC,1)
+!!$!!! END DEBUG CODE
 
 !$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,zvir,ptBC,sphumBC,delpBC,delzBC,liq_watBC,rainwatBC,ice_watBC,snowwatBC,graupelBC, &
 #ifdef USE_COND
