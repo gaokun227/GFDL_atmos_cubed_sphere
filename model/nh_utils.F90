@@ -1665,7 +1665,10 @@ CONTAINS
       real, dimension(bd%isd:bd%ied) :: bet
       real :: pm
 
+      real :: BC_split, BC_step
+
       integer :: ifirst, ilast, jfirst, jlast
+      integer :: istart, iend
 
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
@@ -1685,9 +1688,6 @@ CONTAINS
       ilast = ied
       jlast = jed
 
-      !Remember we want to compute these in the HALO. Note also this routine
-      !requires an appropriate
-
       rgrav = 1./grav
       gama = 1./(1.-kappa)
       ptk = ptop ** kappa
@@ -1695,469 +1695,275 @@ CONTAINS
       peln1 = log(ptop)
       rdg = - rdgas * rgrav
 
-      !NOTE: Compiler does NOT like this sort of nested-grid BC code. Is it trying to do some ugly optimization?
+      BC_split = 1.
+      BC_step  = 1.
 
       if (is == 1) then
 
-         do j=jfirst,jlast
-
-            !GZ
-            do i=ifirst,0
-               gz(i,j,npz+1) = phis(i,j)
-            enddo
-            do k=npz,1,-1
-               do i=ifirst,0
-                  gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)*grav
-               enddo
-            enddo
-
-            !Hydrostatic interface pressure
-            do i=ifirst,0
-               pe(i,1,j) = ptop
-               peln(i,1,j) = peln1
+         call nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
 #ifdef USE_COND
-               peg(i,1) = ptop
-               pelng(i,1) = peln1
-#endif
-            enddo
-            do k=2,npz+1
-               do i=ifirst,0
-                  pe(i,k,j) = pe(i,k-1,j) + delp(i,j,k-1)
-                  peln(i,k,j) = log(pe(i,k,j))
-#ifdef USE_COND
-                  peg(i,k) = peg(i,k-1) + delp(i,j,k-1)*(1.-q_con(i,j,k-1))
-                  pelng(i,k) = log(peg(i,k))
-#endif
-               enddo
-            enddo
-
-            !Perturbation nonhydro layer-mean pressure (NOT to the kappa)
-            do k=1,npz
-               do i=ifirst,0
-                  !Full p
+              q_con, &
 #ifdef MOIST_CAPPA
-                  pkz(i,k) = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-#else
-                  pkz(i,k) = exp(gama*log(-delp(i,j,k)*rgrav/delz(i,j,k)*rdgas*pt(i,j,k)))
+              cappa, &
 #endif
-                  !hydro
-#ifdef USE_COND
-                  pm = (peg(i,k+1)-peg(i,k))/(pelng(i,k+1)-pelng(i,k))
-#else
-                  pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
 #endif
-                  !Remove hydro cell-mean pressure
-                  pkz(i,k) = pkz(i,k) - pm
-               enddo
-            enddo
-
-            !pressure solver
-            do k=1,npz-1
-               do i=ifirst,0
-                  g_rat(i,k) = delp(i,j,k)/delp(i,j,k+1)
-                  bb(i,k) = 2.*(1. + g_rat(i,k))
-                  dd(i,k) = 3.*(pkz(i,k) + g_rat(i,k)*pkz(i,k+1))
-               enddo
-            enddo
-
-            do i=ifirst,0
-               bet(i) = bb(i,1)
-               pkc(i,j,1) = 0.
-               pkc(i,j,2) = dd(i,1)/bet(i)
-               bb(i,npz) = 2.
-               dd(i,npz) = 3.*pkz(i,npz)
-            enddo
-            do k=2,npz
-               do i=ifirst,0
-                  gam(i,k) = g_rat(i,k-1)/bet(i)
-                  bet(i) = bb(i,k) - gam(i,k)
-                  pkc(i,j,k+1) = (dd(i,k) - pkc(i,j,k))/bet(i)
-               enddo
-            enddo
-            do k=npz,2,-1
-               do i=ifirst,0
-                  pkc(i,j,k) = pkc(i,j,k) - gam(i,k)*pkc(i,j,k+1)
-#ifdef NHNEST_DEBUG
-                  if (abs(pkc(i,j,k)) > 1.e5) then
-                     print*, mpp_pe(), i,j,k, 'PKC: ', pkc(i,j,k)
-                  endif
-#endif
-               enddo
-            enddo
-
-         enddo
-
-         do j=jfirst,jlast
-
-            if (.not. pkc_pertn) then
-               do k=npz+1,1,-1
-                  do i=ifirst,0
-                     pkc(i,j,k) = pkc(i,j,k) + pe(i,k,j)
-                  enddo
-               enddo
-            endif
-
-            !pk3 if necessary; doesn't require condenstate loading calculation
-            if (computepk3) then
-               do i=ifirst,0
-                  pk3(i,j,1) = ptk
-               enddo
-               do k=2,npz+1
-                  do i=ifirst,0
-                     pk3(i,j,k) = exp(kappa*log(pe(i,k,j)))
-                  enddo
-               enddo
-            endif
-
-         enddo
+              pkc, gz, pk3, &
+              BC_split, BC_step, &
+              pkc_pertn, computepk3, isd, ied, isd, 0, isd, 0, jsd, jed, jsd, jed, npz)
 
       endif
 
       if (ie == npx-1) then
 
-         do j=jfirst,jlast
-
-            !GZ
-            do i=npx,ilast
-               gz(i,j,npz+1) = phis(i,j)
-            enddo
-            do k=npz,1,-1
-               do i=npx,ilast
-                  gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)*grav
-               enddo
-            enddo
-
-            !Hydrostatic interface pressure
-            do i=npx,ilast
-               pe(i,1,j) = ptop
-               peln(i,1,j) = peln1
+         call nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
 #ifdef USE_COND
-               peg(i,1) = ptop
-               pelng(i,1) = peln1
-#endif
-            enddo
-            do k=2,npz+1
-               do i=npx,ilast
-                  pe(i,k,j) = pe(i,k-1,j) + delp(i,j,k-1)
-                  peln(i,k,j) = log(pe(i,k,j))
-#ifdef USE_COND
-                  peg(i,k) = peg(i,k-1) + delp(i,j,k-1)*(1.-q_con(i,j,k-1))
-                  pelng(i,k) = log(peg(i,k))
-#endif
-               enddo
-            enddo
-
-            !Perturbation nonhydro layer-mean pressure (NOT to the kappa)
-            do k=1,npz
-               do i=npx,ilast
-                  !Full p
+              q_con, &
 #ifdef MOIST_CAPPA
-                  pkz(i,k) = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-#else
-                  pkz(i,k) = exp(gama*log(-delp(i,j,k)*rgrav/delz(i,j,k)*rdgas*pt(i,j,k)))
+              cappa, &
 #endif
-                  !hydro
-#ifdef USE_COND
-                  pm = (peg(i,k+1)-peg(i,k))/(pelng(i,k+1)-pelng(i,k))
-#else
-                  pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
 #endif
-                  !Remove hydro cell-mean pressure
-                  pkz(i,k) = pkz(i,k) - pm
-               enddo
-            enddo
-
-            !pressure solver
-            do k=1,npz-1
-               do i=npx,ilast
-                  g_rat(i,k) = delp(i,j,k)/delp(i,j,k+1)
-                  bb(i,k) = 2.*(1. + g_rat(i,k))
-                  dd(i,k) = 3.*(pkz(i,k) + g_rat(i,k)*pkz(i,k+1))
-               enddo
-            enddo
-
-            do i=npx,ilast
-               bet(i) = bb(i,1)
-               pkc(i,j,1) = 0.
-               pkc(i,j,2) = dd(i,1)/bet(i)
-               bb(i,npz) = 2.
-               dd(i,npz) = 3.*pkz(i,npz)
-            enddo
-            do k=2,npz
-               do i=npx,ilast
-                  gam(i,k) = g_rat(i,k-1)/bet(i)
-                  bet(i) = bb(i,k) - gam(i,k)
-                  pkc(i,j,k+1) = (dd(i,k) - pkc(i,j,k))/bet(i)
-               enddo
-            enddo
-            do k=npz,2,-1
-               do i=npx,ilast
-                  pkc(i,j,k) = pkc(i,j,k) - gam(i,k)*pkc(i,j,k+1)
-               enddo
-            enddo
-
-
-         enddo
-
-         do j=jfirst,jlast
-
-            if (.not. pkc_pertn) then
-               do k=npz+1,1,-1
-                  do i=npx,ilast
-                     pkc(i,j,k) = pkc(i,j,k) + pe(i,k,j)
-                  enddo
-               enddo
-            endif
-
-            !pk3 if necessary
-            if (computepk3) then
-               do i=npx,ilast
-                  pk3(i,j,1) = ptk
-               enddo
-               do k=2,npz+1
-                  do i=npx,ilast
-                     pk3(i,j,k) = exp(kappa*log(pe(i,k,j)))
-                  enddo
-               enddo
-            endif
-
-         enddo
+              pkc, gz, pk3, &
+              BC_split, BC_step, &
+              pkc_pertn, computepk3, isd, ied, npx, ied, npx, ied, jsd, jed, jsd, jed, npz)
 
       endif
+
+      if (is == 1) then
+         istart = is
+      else
+         istart = isd
+      end if
+      if (ie == npx-1) then
+         iend = ie
+      else
+         iend = ied
+      end if
 
       if (js == 1) then
 
-         do j=jfirst,0
-
-            !GZ
-            do i=ifirst,ilast
-               gz(i,j,npz+1) = phis(i,j)
-            enddo
-            do k=npz,1,-1
-               do i=ifirst,ilast
-                  gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)*grav
-               enddo
-            enddo
-
-            !Hydrostatic interface pressure
-            do i=ifirst,ilast
-               pe(i,1,j) = ptop
-               peln(i,1,j) = peln1
+         call nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
 #ifdef USE_COND
-               peg(i,1) = ptop
-               pelng(i,1) = peln1
-#endif
-            enddo
-            do k=2,npz+1
-               do i=ifirst,ilast
-                  pe(i,k,j) = pe(i,k-1,j) + delp(i,j,k-1)
-                  peln(i,k,j) = log(pe(i,k,j))
-#ifdef USE_COND
-                  peg(i,k) = peg(i,k-1) + delp(i,j,k-1)*(1.-q_con(i,j,k-1))
-                  pelng(i,k) = log(peg(i,k))
-#endif
-               enddo
-            enddo
-
-            !Perturbation nonhydro layer-mean pressure (NOT to the kappa)
-            do k=1,npz
-               do i=ifirst,ilast
-                  !Full p
+              q_con, &
 #ifdef MOIST_CAPPA
-                  pkz(i,k) = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-#else
-                  pkz(i,k) = exp(gama*log(-delp(i,j,k)*rgrav/delz(i,j,k)*rdgas*pt(i,j,k)))
+              cappa, &
 #endif
-                  !hydro
-#ifdef USE_COND
-                  pm = (peg(i,k+1)-peg(i,k))/(pelng(i,k+1)-pelng(i,k))
-#else
-                  pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
 #endif
-                  !hydro
-                  pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
-                  !Remove hydro cell-mean pressure
-                  pkz(i,k) = pkz(i,k) - pm
-               enddo
-            enddo
+              pkc, gz, pk3, &
+              BC_split, BC_step, &
+              pkc_pertn, computepk3, isd, ied, isd, ied, istart, iend, jsd, jed, jsd, 0, npz)
 
-            !pressure solver
-            do k=1,npz-1
-               do i=ifirst,ilast
-                  g_rat(i,k) = delp(i,j,k)/delp(i,j,k+1)
-                  bb(i,k) = 2.*(1. + g_rat(i,k))
-                  dd(i,k) = 3.*(pkz(i,k) + g_rat(i,k)*pkz(i,k+1))
-               enddo
-            enddo
 
-            do i=ifirst,ilast
-               bet(i) = bb(i,1)
-               pkc(i,j,1) = 0.
-               pkc(i,j,2) = dd(i,1)/bet(i)
-               bb(i,npz) = 2.
-               dd(i,npz) = 3.*pkz(i,npz)
-            enddo
-            do k=2,npz
-               do i=ifirst,ilast
-                  gam(i,k) = g_rat(i,k-1)/bet(i)
-                  bet(i) = bb(i,k) - gam(i,k)
-                  pkc(i,j,k+1) = (dd(i,k) - pkc(i,j,k))/bet(i)
-               enddo
-            enddo
-            do k=npz,2,-1
-               do i=ifirst,ilast
-                  pkc(i,j,k) = pkc(i,j,k) - gam(i,k)*pkc(i,j,k+1)
-#ifdef NHNEST_DEBUG
-                  if (abs(pkc(i,j,k)) > 1.e5) then
-                     print*, mpp_pe(), i,j,k, 'PKC: ', pkc(i,j,k)
-                  endif
-#endif
-               enddo
-            enddo
-
-         enddo
-
-         do j=jfirst,0
-
-            if (.not. pkc_pertn) then
-               do k=npz+1,1,-1
-                  do i=ifirst,ilast
-                     pkc(i,j,k) = pkc(i,j,k) + pe(i,k,j)
-                  enddo
-               enddo
-            endif
-
-            !pk3 if necessary
-            if (computepk3) then
-               do i=ifirst,ilast
-                  pk3(i,j,1) = ptk
-               enddo
-               do k=2,npz+1
-                  do i=ifirst,ilast
-                     pk3(i,j,k) = exp(kappa*log(pe(i,k,j)))
-                  enddo
-               enddo
-            endif
-
-         enddo
-
-      endif
+      end if
 
       if (je == npy-1) then
 
-         do j=npy,jlast
-
-            !GZ
-            do i=ifirst,ilast
-               gz(i,j,npz+1) = phis(i,j)
-            enddo
-            do k=npz,1,-1
-               do i=ifirst,ilast
-                  gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)*grav
-               enddo
-            enddo
-
-            !Hydrostatic interface pressure
-            do i=ifirst,ilast
-               pe(i,1,j) = ptop
-               peln(i,1,j) = peln1
+         call nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
 #ifdef USE_COND
-               peg(i,1) = ptop
-               pelng(i,1) = peln1
-#endif
-            enddo
-            do k=2,npz+1
-               do i=ifirst,ilast
-                  pe(i,k,j) = pe(i,k-1,j) + delp(i,j,k-1)
-                  peln(i,k,j) = log(pe(i,k,j))
-#ifdef USE_COND
-                  peg(i,k) = peg(i,k-1) + delp(i,j,k-1)*(1.-q_con(i,j,k-1))
-                  pelng(i,k) = log(peg(i,k))
-#endif
-               enddo
-            enddo
-
-            !Perturbation nonhydro layer-mean pressure (NOT to the kappa)
-            do k=1,npz
-               do i=ifirst,ilast
-                  !Full p
+              q_con, &
 #ifdef MOIST_CAPPA
-                  pkz(i,k) = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-#else
-                  pkz(i,k) = exp(gama*log(-delp(i,j,k)*rgrav/delz(i,j,k)*rdgas*pt(i,j,k)))
+              cappa, &
 #endif
-                  !hydro
-#ifdef USE_COND
-                  pm = (peg(i,k+1)-peg(i,k))/(pelng(i,k+1)-pelng(i,k))
-#else
-                  pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
 #endif
-                  !hydro
-                  pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
-                  !Remove hydro cell-mean pressure
-                  pkz(i,k) = pkz(i,k) - pm
-               enddo
-            enddo
-
-            !Reversible interpolation on layer NH pressure perturbation
-            !                 to recover  lastge NH pressure perturbation
-            do k=1,npz-1
-               do i=ifirst,ilast
-                  g_rat(i,k) = delp(i,j,k)/delp(i,j,k+1)
-                  bb(i,k) = 2.*(1. + g_rat(i,k))
-                  dd(i,k) = 3.*(pkz(i,k) + g_rat(i,k)*pkz(i,k+1))
-               enddo
-            enddo
-
-            do i=ifirst,ilast
-               bet(i) = bb(i,1)
-               pkc(i,j,1) = 0.
-               pkc(i,j,2) = dd(i,1)/bet(i)
-               bb(i,npz) = 2.
-               dd(i,npz) = 3.*pkz(i,npz)
-            enddo
-            do k=2,npz
-               do i=ifirst,ilast
-                  gam(i,k) = g_rat(i,k-1)/bet(i)
-                  bet(i) = bb(i,k) - gam(i,k)
-                  pkc(i,j,k+1) = (dd(i,k) - pkc(i,j,k))/bet(i)
-               enddo
-            enddo
-            do k=npz,2,-1
-               do i=ifirst,ilast
-                  pkc(i,j,k) = pkc(i,j,k) - gam(i,k)*pkc(i,j,k+1)
-               enddo
-            enddo
-
-
-         enddo
-
-         do j=npy,jlast
-
-            if (.not. pkc_pertn) then
-               do k=npz+1,1,-1
-                  do i=ifirst,ilast
-                     pkc(i,j,k) = pkc(i,j,k) + pe(i,k,j)
-                  enddo
-               enddo
-            endif
-
-            !pk3 if necessary
-            if (computepk3) then
-               do i=ifirst,ilast
-                  pk3(i,j,1) = ptk
-               enddo
-               do k=2,npz+1
-                  do i=ifirst,ilast
-                     pk3(i,j,k) = exp(kappa*log(pe(i,k,j)))
-                  enddo
-               enddo
-            endif
-
-         enddo
-
+              pkc, gz, pk3, &
+              BC_split, BC_step, &
+              pkc_pertn, computepk3, isd, ied, isd, ied, istart, iend, jsd, jed, npy, jed, npz)
       endif
 
 end subroutine nh_bc
+
+subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
+#ifdef USE_COND
+      q_con, &
+#ifdef MOIST_CAPPA
+      cappa, &
+#endif
+#endif
+      pkc, gz, pk3, &
+      BC_split, BC_step, &      
+      pkc_pertn, computepk3, isd, ied, isd_BC, ied_BC, istart, iend, jsd, jed, jstart, jend, npz)
+
+   integer, intent(IN) :: isd, ied, isd_BC, ied_BC, istart, iend, jsd, jed, jstart, jend, npz
+   real, intent(IN)    :: BC_split, BC_step
+
+   logical, intent(IN) :: pkc_pertn, computepk3
+   real, intent(IN) :: ptop, kappa, cp, grav
+   real, intent(IN) :: phis(isd:ied,jsd:jed)
+   real, intent(IN),  dimension(isd:ied,jsd:jed,npz):: pt, delp, delz
+#ifdef USE_COND
+   real, intent(IN),  dimension(isd:ied,jsd:jed,npz):: q_con
+#ifdef MOIST_CAPPA
+   real, intent(INOUT),  dimension(isd:ied,jsd:jed,npz):: cappa
+#endif
+#endif
+   real, intent(INOUT), dimension(isd:ied,jsd:jed,npz+1):: gz, pkc, pk3
+
+   integer :: i,j,k
+   real :: gama !'gamma'
+   real :: ptk, rgrav, rkap, peln1, rdg, denom
+
+   real, dimension(istart:iend, npz+1, jstart:jend ) :: pe, peln
+#ifdef USE_COND
+   real, dimension(istart:iend, npz+1 ) :: peg, pelng
+#endif
+   real, dimension(istart:iend, npz) :: gam, bb, dd, pkz
+   real, dimension(istart:iend, npz-1) :: g_rat
+   real, dimension(istart:iend) :: bet
+   real :: pm, delz_int
+
+
+   real :: pealn, pebln, rpkz
+
+   rgrav = 1./grav
+   gama = 1./(1.-kappa)
+   ptk = ptop ** kappa
+   rkap = 1./kappa
+   peln1 = log(ptop)
+   rdg = - rdgas * rgrav
+   denom = 1./BC_split
+
+!!$   !!! DEBUG CODE
+!!$!   if (is_master()) then
+!!$      print*, mpp_pe(), BC_split, BC_step, delzBC_t0(istart,jstart,npz), delzBC_t1(istart,jstart,npz)
+!!$      !print*, jstart, jend
+!!$      !print*, delzBC_t0(:,jstart,npz)
+!!$!   endif
+!!$   !!! END DEBUG CODE
+
+   do j=jstart,jend
+
+      !GZ
+      do i=istart,iend
+         gz(i,j,npz+1) = phis(i,j)
+      enddo
+      do k=npz,1,-1
+         do i=istart,iend
+            !delz_int = (delzBC_t0(i,j,k)*(BC_split-BC_step) + BC_step*delzBC_t1(i,j,k))*denom            
+            gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)*grav
+         enddo
+      enddo
+
+      !Hydrostatic interface pressure
+      do i=istart,iend
+         pe(i,1,j) = ptop
+         peln(i,1,j) = peln1
+#ifdef USE_COND
+         peg(i,1) = ptop
+         pelng(i,1) = peln1
+#endif
+      enddo
+      do k=2,npz+1
+         do i=istart,iend
+            pe(i,k,j) = pe(i,k-1,j) + delp(i,j,k-1)
+            peln(i,k,j) = log(pe(i,k,j))
+#ifdef USE_COND
+            peg(i,k) = peg(i,k-1) + delp(i,j,k-1)*(1.-q_con(i,j,k-1))
+            pelng(i,k) = log(peg(i,k))
+#endif
+         enddo
+      enddo
+
+      !Perturbation nonhydro layer-mean pressure (NOT to the kappa)
+      do k=1,npz
+         do i=istart,iend
+            !delz_int = (delzBC_t0(i,j,k)*(BC_split-BC_step) + BC_step*delzBC_t1(i,j,k))*denom
+
+            !Full p
+#ifdef MOIST_CAPPA
+            pkz(i,k) = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+#else
+            pkz(i,k) = exp(gama*log(-delp(i,j,k)*rgrav/delz(i,j,k)*rdgas*pt(i,j,k)))
+#endif
+            !hydro
+#ifdef USE_COND
+            pm = (peg(i,k+1)-peg(i,k))/(pelng(i,k+1)-pelng(i,k))
+#else
+            pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
+#endif
+            !Remove hydro cell-mean pressure
+            pkz(i,k) = pkz(i,k) - pm
+         enddo
+      enddo
+
+!!$!!! DEBUG CODE
+!!$   if (isd == -2 .and. j == 0) then
+!!$      k=npz-1
+!!$      i=1
+!!$      print*, 'nh_BC_k:', i, j, k, istart, iend, jstart, jend, rdg, rgrav, gama
+!!$      print*, pkc(i,j,k), pe(i,k,j), pkz(i,k), peg(i,k), peln(i,k,j), (peg(i,k+1)-peg(i,k))/(pelng(i,k+1)-pelng(i,k)), &
+!!$           exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k))), q_con(i,j,k-1)
+!!$   endif
+!!$!!! END DEBUG CODE
+
+      !pressure solver
+      do k=1,npz-1
+         do i=istart,iend
+            g_rat(i,k) = delp(i,j,k)/delp(i,j,k+1)
+            bb(i,k) = 2.*(1. + g_rat(i,k))
+            dd(i,k) = 3.*(pkz(i,k) + g_rat(i,k)*pkz(i,k+1))
+         enddo
+      enddo
+
+      do i=istart,iend
+         bet(i) = bb(i,1)
+         pkc(i,j,1) = 0.
+         pkc(i,j,2) = dd(i,1)/bet(i)
+         bb(i,npz) = 2.
+         dd(i,npz) = 3.*pkz(i,npz)
+      enddo
+      do k=2,npz
+         do i=istart,iend
+            gam(i,k) = g_rat(i,k-1)/bet(i)
+            bet(i) = bb(i,k) - gam(i,k)
+            pkc(i,j,k+1) = (dd(i,k) - pkc(i,j,k))/bet(i)
+         enddo
+      enddo
+      do k=npz,2,-1
+         do i=istart,iend
+            pkc(i,j,k) = pkc(i,j,k) - gam(i,k)*pkc(i,j,k+1)
+#ifdef NHNEST_DEBUG
+            if (abs(pkc(i,j,k)) > 1.e5) then
+               print*, mpp_pe(), i,j,k, 'PKC: ', pkc(i,j,k)
+            endif
+#endif
+         enddo
+      enddo
+
+!!$!!! DEBUG CODE
+!!$   if (isd == -2 .and. j == 0) then
+!!$      k=npz-1
+!!$      i=1
+!!$      print*, pkc(i,j,k), pe(i,k,j), pkz(i,k), peg(i,k), peln(i,k,j), (peg(i,k+1)-peg(i,k))/(pelng(i,k+1)-pelng(i,k)), &
+!!$           exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k))), q_con(i,j,k-1)
+!!$   endif
+!!$!!! END DEBUG CODE
+
+   enddo
+
+   do j=jstart,jend
+
+      if (.not. pkc_pertn) then
+         do k=npz+1,1,-1
+            do i=istart,iend
+               pkc(i,j,k) = pkc(i,j,k) + pe(i,k,j)
+            enddo
+         enddo
+      endif
+
+      !pk3 if necessary; doesn't require condenstate loading calculation
+      if (computepk3) then
+         do i=istart,iend
+            pk3(i,j,1) = ptk
+         enddo
+         do k=2,npz+1
+            do i=istart,iend
+               pk3(i,j,k) = exp(kappa*log(pe(i,k,j)))
+            enddo
+         enddo
+      endif
+
+   enddo
+
+end subroutine nh_BC_k
+
 
 end module nh_utils_mod
