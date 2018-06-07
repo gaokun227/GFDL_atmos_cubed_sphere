@@ -25,7 +25,7 @@ module nh_utils_mod
    use constants_mod,     only: rdgas, cp_air, grav
    use tp_core_mod,       only: fv_tp_2d
    use sw_core_mod,       only: fill_4corners, del6_vt_flux
-   use fv_arrays_mod,     only: fv_grid_bounds_type, fv_grid_type
+   use fv_arrays_mod,     only: fv_grid_bounds_type, fv_grid_type, fv_nest_BC_type_3d
 
    implicit none
    private
@@ -1626,7 +1626,7 @@ CONTAINS
  end subroutine edge_profile
 
 !TODO LMH 25may18: do not need delz defined on full compute domain; pass appropriate BCs instead
- subroutine nh_bc(ptop, grav, kappa, cp, delp, delz, pt, phis, &
+ subroutine nh_bc(ptop, grav, kappa, cp, delp, delzBC, pt, phis, &
 #ifdef USE_COND
       q_con, &
 #ifdef MOIST_CAPPA
@@ -1634,16 +1634,18 @@ CONTAINS
 #endif
 #endif
       pkc, gz, pk3, &
+      BC_step, BC_split, &
       npx, npy, npz, bounded_domain, pkc_pertn, computepk3, fullhalo, bd)
 
-      !INPUT: delp, delz, pt
+      !INPUT: delp, delz (BC), pt
       !OUTPUT: gz, pkc, pk3 (optional)
       integer, intent(IN) :: npx, npy, npz
       logical, intent(IN) :: pkc_pertn, computepk3, fullhalo, bounded_domain
-      real, intent(IN) :: ptop, kappa, cp, grav
+      real, intent(IN) :: ptop, kappa, cp, grav, BC_step, BC_split
       type(fv_grid_bounds_type), intent(IN) :: bd
       real, intent(IN) :: phis(bd%isd:bd%ied,bd%jsd:bd%jed)
-      real, intent(IN),  dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz):: pt, delp, delz
+      real, intent(IN),  dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz):: pt, delp
+      type(fv_nest_BC_type_3d), intent(IN) :: delzBC
 #ifdef USE_COND
       real, intent(IN),  dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz):: q_con
 #ifdef MOIST_CAPPA
@@ -1653,21 +1655,7 @@ CONTAINS
       real, intent(INOUT), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz+1):: gz, pkc, pk3
 
       integer :: i,j,k
-      real :: gama !'gamma'
-      real :: ptk, rgrav, rkap, peln1, rdg
 
-      real, dimension(bd%isd:bd%ied, npz+1, bd%jsd:bd%jed ) :: pe, peln
-#ifdef USE_COND
-      real, dimension(bd%isd:bd%ied, npz+1 ) :: peg, pelng
-#endif
-      real, dimension(bd%isd:bd%ied, npz) :: gam, bb, dd, pkz
-      real, dimension(bd%isd:bd%ied, npz-1) :: g_rat
-      real, dimension(bd%isd:bd%ied) :: bet
-      real :: pm
-
-      real :: BC_split, BC_step
-
-      integer :: ifirst, ilast, jfirst, jlast
       integer :: istart, iend
 
       integer :: is,  ie,  js,  je
@@ -1683,24 +1671,10 @@ CONTAINS
       jed = bd%jed
 
       if (.not. bounded_domain) return
-      ifirst = isd
-      jfirst = jsd
-      ilast = ied
-      jlast = jed
-
-      rgrav = 1./grav
-      gama = 1./(1.-kappa)
-      ptk = ptop ** kappa
-      rkap = 1./kappa
-      peln1 = log(ptop)
-      rdg = - rdgas * rgrav
-
-      BC_split = 1.
-      BC_step  = 1.
 
       if (is == 1) then
 
-         call nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
+         call nh_BC_k(ptop, grav, kappa, cp, delp, delzBC%west_t0, delzBC%west_t1, pt, phis, &
 #ifdef USE_COND
               q_con, &
 #ifdef MOIST_CAPPA
@@ -1708,14 +1682,14 @@ CONTAINS
 #endif
 #endif
               pkc, gz, pk3, &
-              BC_split, BC_step, &
+              BC_step, BC_split, &
               pkc_pertn, computepk3, isd, ied, isd, 0, isd, 0, jsd, jed, jsd, jed, npz)
 
       endif
 
       if (ie == npx-1) then
 
-         call nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
+         call nh_BC_k(ptop, grav, kappa, cp, delp, delzBC%east_t0, delzBC%east_t1, pt, phis, &
 #ifdef USE_COND
               q_con, &
 #ifdef MOIST_CAPPA
@@ -1723,7 +1697,7 @@ CONTAINS
 #endif
 #endif
               pkc, gz, pk3, &
-              BC_split, BC_step, &
+              BC_step, BC_split, &
               pkc_pertn, computepk3, isd, ied, npx, ied, npx, ied, jsd, jed, jsd, jed, npz)
 
       endif
@@ -1741,7 +1715,7 @@ CONTAINS
 
       if (js == 1) then
 
-         call nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
+         call nh_BC_k(ptop, grav, kappa, cp, delp, delzBC%south_t0, delzBC%south_t1, pt, phis, &
 #ifdef USE_COND
               q_con, &
 #ifdef MOIST_CAPPA
@@ -1749,7 +1723,7 @@ CONTAINS
 #endif
 #endif
               pkc, gz, pk3, &
-              BC_split, BC_step, &
+              BC_step, BC_split, &
               pkc_pertn, computepk3, isd, ied, isd, ied, istart, iend, jsd, jed, jsd, 0, npz)
 
 
@@ -1757,7 +1731,7 @@ CONTAINS
 
       if (je == npy-1) then
 
-         call nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
+         call nh_BC_k(ptop, grav, kappa, cp, delp, delzBC%north_t0, delzBC%north_t1, pt, phis, &
 #ifdef USE_COND
               q_con, &
 #ifdef MOIST_CAPPA
@@ -1765,13 +1739,13 @@ CONTAINS
 #endif
 #endif
               pkc, gz, pk3, &
-              BC_split, BC_step, &
+              BC_step, BC_split, &
               pkc_pertn, computepk3, isd, ied, isd, ied, istart, iend, jsd, jed, npy, jed, npz)
       endif
 
 end subroutine nh_bc
 
-subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
+subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delzBC_t0, delzBC_t1, pt, phis, &
 #ifdef USE_COND
       q_con, &
 #ifdef MOIST_CAPPA
@@ -1779,16 +1753,17 @@ subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
 #endif
 #endif
       pkc, gz, pk3, &
-      BC_split, BC_step, &      
+      BC_step, BC_split, &      
       pkc_pertn, computepk3, isd, ied, isd_BC, ied_BC, istart, iend, jsd, jed, jstart, jend, npz)
 
    integer, intent(IN) :: isd, ied, isd_BC, ied_BC, istart, iend, jsd, jed, jstart, jend, npz
-   real, intent(IN)    :: BC_split, BC_step
+   real, intent(IN),    dimension(isd_BC:ied_BC,jstart:jend,npz) :: delzBC_t0, delzBC_t1
+   real, intent(IN)    :: BC_step, BC_split
 
    logical, intent(IN) :: pkc_pertn, computepk3
    real, intent(IN) :: ptop, kappa, cp, grav
    real, intent(IN) :: phis(isd:ied,jsd:jed)
-   real, intent(IN),  dimension(isd:ied,jsd:jed,npz):: pt, delp, delz
+   real, intent(IN),  dimension(isd:ied,jsd:jed,npz):: pt, delp
 #ifdef USE_COND
    real, intent(IN),  dimension(isd:ied,jsd:jed,npz):: q_con
 #ifdef MOIST_CAPPA
@@ -1823,7 +1798,7 @@ subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
 
 !!$   !!! DEBUG CODE
 !!$!   if (is_master()) then
-!!$      print*, mpp_pe(), BC_split, BC_step, delzBC_t0(istart,jstart,npz), delzBC_t1(istart,jstart,npz)
+!!$      print*, mpp_pe(), BC_step, BC_split, delzBC_t0(istart,jstart,npz), delzBC_t1(istart,jstart,npz)
 !!$      !print*, jstart, jend
 !!$      !print*, delzBC_t0(:,jstart,npz)
 !!$!   endif
@@ -1837,8 +1812,8 @@ subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
       enddo
       do k=npz,1,-1
          do i=istart,iend
-            !delz_int = (delzBC_t0(i,j,k)*(BC_split-BC_step) + BC_step*delzBC_t1(i,j,k))*denom            
-            gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)*grav
+            delz_int = (delzBC_t0(i,j,k)*(BC_split-BC_step) + BC_step*delzBC_t1(i,j,k))*denom            
+            gz(i,j,k) = gz(i,j,k+1) - delz_int*grav
          enddo
       enddo
 
@@ -1865,13 +1840,13 @@ subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
       !Perturbation nonhydro layer-mean pressure (NOT to the kappa)
       do k=1,npz
          do i=istart,iend
-            !delz_int = (delzBC_t0(i,j,k)*(BC_split-BC_step) + BC_step*delzBC_t1(i,j,k))*denom
+            delz_int = (delzBC_t0(i,j,k)*(BC_split-BC_step) + BC_step*delzBC_t1(i,j,k))*denom
 
             !Full p
 #ifdef MOIST_CAPPA
-            pkz(i,k) = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+            pkz(i,k) = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz_int*pt(i,j,k)))
 #else
-            pkz(i,k) = exp(gama*log(-delp(i,j,k)*rgrav/delz(i,j,k)*rdgas*pt(i,j,k)))
+            pkz(i,k) = exp(gama*log(-delp(i,j,k)*rgrav/delz_int*rdgas*pt(i,j,k)))
 #endif
             !hydro
 #ifdef USE_COND
@@ -1884,15 +1859,6 @@ subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
          enddo
       enddo
 
-!!$!!! DEBUG CODE
-!!$   if (isd == -2 .and. j == 0) then
-!!$      k=npz-1
-!!$      i=1
-!!$      print*, 'nh_BC_k:', i, j, k, istart, iend, jstart, jend, rdg, rgrav, gama
-!!$      print*, pkc(i,j,k), pe(i,k,j), pkz(i,k), peg(i,k), peln(i,k,j), (peg(i,k+1)-peg(i,k))/(pelng(i,k+1)-pelng(i,k)), &
-!!$           exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k))), q_con(i,j,k-1)
-!!$   endif
-!!$!!! END DEBUG CODE
 
       !pressure solver
       do k=1,npz-1
@@ -1928,14 +1894,6 @@ subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delz, pt, phis, &
          enddo
       enddo
 
-!!$!!! DEBUG CODE
-!!$   if (isd == -2 .and. j == 0) then
-!!$      k=npz-1
-!!$      i=1
-!!$      print*, pkc(i,j,k), pe(i,k,j), pkz(i,k), peg(i,k), peln(i,k,j), (peg(i,k+1)-peg(i,k))/(pelng(i,k+1)-pelng(i,k)), &
-!!$           exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k))), q_con(i,j,k-1)
-!!$   endif
-!!$!!! END DEBUG CODE
 
    enddo
 
