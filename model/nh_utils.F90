@@ -1726,7 +1726,6 @@ CONTAINS
               BC_step, BC_split, &
               pkc_pertn, computepk3, isd, ied, isd, ied, istart, iend, jsd, jed, jsd, 0, npz)
 
-
       end if
 
       if (je == npy-1) then
@@ -1795,14 +1794,6 @@ subroutine nh_BC_k(ptop, grav, kappa, cp, delp, delzBC_t0, delzBC_t1, pt, phis, 
    peln1 = log(ptop)
    rdg = - rdgas * rgrav
    denom = 1./BC_split
-
-!!$   !!! DEBUG CODE
-!!$!   if (is_master()) then
-!!$      print*, mpp_pe(), BC_step, BC_split, delzBC_t0(istart,jstart,npz), delzBC_t1(istart,jstart,npz)
-!!$      !print*, jstart, jend
-!!$      !print*, delzBC_t0(:,jstart,npz)
-!!$!   endif
-!!$   !!! END DEBUG CODE
 
    do j=jstart,jend
 
