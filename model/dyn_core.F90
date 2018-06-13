@@ -499,9 +499,6 @@ contains
                                                call timing_off('Riem_Solver')
 
            if (gridstruct%nested) then
-!!$                 call nested_grid_BC_apply_intT(delz, &
-!!$                      0, 0, npx, npy, npz, bd, split_timestep_BC+0.5, real(n_split*flagstruct%k_split), &
-!!$                neststruct%delz_BC, bctype=neststruct%nestbctype )
            call nh_bc(ptop, grav, akap, cp, delpc, neststruct%delz_BC, ptc, phis, &
 #ifdef USE_COND
                 q_con, &
@@ -517,40 +514,25 @@ contains
            if (flagstruct%regional) then
               ! Refactoring: test of regional BC's ability to use existing nest_BC_type
              reg_bc_update_time=current_time_in_seconds+(0.5+(it-1))*dt
-!!$             call nh_bc(ptop, grav, akap, cp, delpc, delz_regBC, ptc, phis, &
-!!$#ifdef USE_COND
-!!$                q_con, &
-!!$#ifdef MOIST_CAPPA
-!!$                cappa, &
-!!$#endif
-!!$#endif
-!!$                pkc, gz, pk3, &
-!!$                mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600.,  &
-!!$                npx, npy, npz, gridstruct%bounded_domain, .false., .false., .false., bd)
-!!$
+             call nh_bc(ptop, grav, akap, cp, delpc, delz_regBC, ptc, phis, &
+#ifdef USE_COND
+                q_con, &
+#ifdef MOIST_CAPPA
+                cappa, &
+#endif
+#endif
+                pkc, gz, pk3, &
+                mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600.,  &
+                npx, npy, npz, gridstruct%bounded_domain, .false., .false., .false., bd)
+
              call regional_boundary_update(delz, 'delz', &
                                            isd, ied, jsd, jed, ubound(delz,3), &
                                            is,  ie,  js,  je,       &
                                            isd, ied, jsd, jed,      &
                                            reg_bc_update_time )
+
            endif
 
-!!$           if (gridstruct%bounded_domain) then
-!!$              !Compute gz/pkc
-!!$              !NOTE: nominally only need to compute quantities one out in the halo for p_grad_c
-!!$              !(instead of entire halo)
-!!$           call nh_bc(ptop, grav, akap, cp, delpc, neststruct%delz_BC, ptc, phis, &
-!!$#ifdef USE_COND
-!!$                q_con, &
-!!$#ifdef MOIST_CAPPA
-!!$                cappa, &
-!!$#endif
-!!$#endif
-!!$                pkc, gz, pk3, &
-!!$                BC_step, BC_split, &
-!!$                npx, npy, npz, gridstruct%bounded_domain, .false., .false., .false., bd)
-!!$
-!!$           endif
 #endif SW_DYNAMICS
 
       endif   ! end hydro check
@@ -922,10 +904,8 @@ contains
         else
              call pk3_halo(is, ie, js, je, isd, ied, jsd, jed, npz, ptop, akap, pk3, delp)
         endif
-       if (gridstruct%nested) then
-!!$          call nested_grid_BC_apply_intT(delz, &
-!!$               0, 0, npx, npy, npz, bd, split_timestep_BC+1., real(n_split*flagstruct%k_split), & ! step and split
-!!$               neststruct%delz_BC, bctype=neststruct%nestbctype  )
+
+        if (gridstruct%nested) then
            call nh_bc(ptop, grav, akap, cp, delp, neststruct%delz_BC, pt, phis, &
 #ifdef USE_COND
                 q_con, &
@@ -936,39 +916,23 @@ contains
                 pkc, gz, pk3, &
                 split_timestep_BC+1., real(n_split*flagstruct%k_split), &
                 npx, npy, npz, gridstruct%bounded_domain, .true., .true., .true., bd)
-       endif
+        endif
           
-       if (flagstruct%regional) then
-         reg_bc_update_time=current_time_in_seconds+it*dt
-!!$         call nh_bc(ptop, grav, akap, cp, delp, delz_regBC, pt, phis, &
-!!$#ifdef USE_COND
-!!$               q_con, &
-!!$#ifdef MOIST_CAPPA
-!!$               cappa, &
-!!$#endif
-!!$#endif
-!!$                pkc, gz, pk3, &
-!!$                mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600., &
-!!$                npx, npy, npz, gridstruct%bounded_domain, .true., .true., .true., bd)
-         call regional_boundary_update(delz, 'delz', &
-                                       isd, ied, jsd, jed, ubound(delz,3), &
-                                       is,  ie,  js,  je,       &
-                                       isd, ied, jsd, jed,      &
-                                       reg_bc_update_time )
+        if (flagstruct%regional) then
+          reg_bc_update_time=current_time_in_seconds+it*dt
+          call nh_bc(ptop, grav, akap, cp, delp, delz_regBC, pt, phis, &
+#ifdef USE_COND
+               q_con, &
+#ifdef MOIST_CAPPA
+               cappa, &
+#endif
+#endif
+                pkc, gz, pk3, &
+                mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600., &
+                npx, npy, npz, gridstruct%bounded_domain, .true., .true., .true., bd)
 
-       endif
-!!$       if (gridstruct%bounded_domain) then
-!!$          !Compute gz/pkc/pk3; note that now pkc should be nonhydro pert'n pressure
-!!$          call nh_bc(ptop, grav, akap, cp, delp, delz, pt, phis, &
-!!$#ifdef USE_COND
-!!$               q_con, &
-!!$#ifdef MOIST_CAPPA
-!!$               cappa, &
-!!$#endif
-!!$#endif
-!!$               pkc, gz, pk3, npx, npy, npz, gridstruct%bounded_domain, .true., .true., .true., bd)
-!!$
-!!$       endif
+        endif
+
         call timing_on('COMM_TOTAL')
         call complete_group_halo_update(i_pack(4), domain)
         call timing_off('COMM_TOTAL')
