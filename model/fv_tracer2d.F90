@@ -512,7 +512,7 @@ end subroutine tracer_2d
 
 subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz,   &
                      nq,  hord, q_split, dt, id_divg, q_pack, nord_tr, trdm, &
-                     k_split, neststruct, parent_grid, lim_fac)
+                     k_split, neststruct, parent_grid, n_map, lim_fac)
 
       type(fv_grid_bounds_type), intent(IN) :: bd
       integer, intent(IN) :: npx
@@ -520,7 +520,7 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
       integer, intent(IN) :: npz
       integer, intent(IN) :: nq    ! number of tracers to be advected
       integer, intent(IN) :: hord, nord_tr
-      integer, intent(IN) :: q_split, k_split
+      integer, intent(IN) :: q_split, k_split, n_map
       integer, intent(IN) :: id_divg
       real   , intent(IN) :: dt, trdm
       real   , intent(IN) :: lim_fac
@@ -548,7 +548,7 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
       real :: cmax_t
       real :: c_global
       real :: frac, rdt
-      real :: recip_nsplt,reg_bc_update_time
+      real :: reg_bc_update_time
       integer :: nsplt, nsplt_parent, msg_split_steps = 1
       integer :: i,j,k,it,iq
 
@@ -696,7 +696,9 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
       endif
 
       if (gridstruct%regional) then
-            reg_bc_update_time=current_time_in_seconds+(it-1)*recip_nsplt*dt   !<-- dt is the k_split timestep length
+            !This is more accurate than the nested BC calculation
+            ! since it takes into account varying nsplit
+            reg_bc_update_time=current_time_in_seconds+(real(n_map-1) + real(it-1)/frac)*dt
             do iq=1,nq
                  call regional_boundary_update(q(:,:,:,iq), 'q', &
                                                isd, ied, jsd, jed, npz, &
