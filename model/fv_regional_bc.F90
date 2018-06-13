@@ -40,7 +40,10 @@ module fv_regional_mod
    use fv_arrays_mod,     only: fv_atmos_type                           &
                                ,fv_grid_bounds_type                     &
                                ,fv_regional_bc_bounds_type              &
-                               ,R_GRID
+                               ,R_GRID                                  &
+                               ,fv_nest_BC_type_3D                      &
+                               ,allocate_fv_nest_BC_type
+
    use fv_diagnostics_mod,only: prt_gb_nh_sh, prt_height
    use fv_grid_utils_mod, only: g_sum,mid_pt_sphere,get_unit_vect2      &
                                ,get_latlon_vector,inner_prod            &
@@ -49,6 +52,7 @@ module fv_regional_mod
    use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
    use fv_fill_mod,       only: fillz
    use fms_io_mod,        only: read_data
+   use boundary_mod,      only: fv_nest_BC_type_3D
 
       private
 
@@ -140,6 +144,9 @@ module fv_regional_mod
                                                     ,bc_east_t1
 
       type(fv_regional_bc_bounds_type),pointer,save :: regional_bounds
+
+      type(fv_nest_BC_type_3D), public :: delz_regBC ! lmh
+      integer :: ns = 0 ! lmh
 
       real,parameter :: tice=273.16                                     &
                        ,t_i0=15.
@@ -475,6 +482,8 @@ contains
         bc_west_t1=>BC_t1%west
 !
       endif
+
+      call allocate_fv_nest_BC_type(delz_regBC,Atm,ns,0,0,.false.)
 !
 !-----------------------------------------------------------------------
 !***  We need regional versions of the arrays for surface elevation,
@@ -1095,6 +1104,8 @@ contains
       character(len=50) :: file_name
 !
       integer,save :: kount1=0,kount2=0
+      integer :: istart, iend, jstart, jend
+      integer :: npx, npy
 !-----------------------------------------------------------------------
 !***********************************************************************
 !-----------------------------------------------------------------------
@@ -1140,6 +1151,9 @@ contains
       ie_input=ie+nhalo_data
       js_input=js-nhalo_data
       je_input=je+nhalo_data
+!
+      npx = Atm%npx
+      npy = Atm%npy
 !
       allocate( ps_input(is_input:ie_input,js_input:je_input,1)) ; ps_input=real_snan                      !<-- Sfc pressure
       allocate(  w_input(is_input:ie_input,js_input:je_input,1:klev_in)) ; w_input=real_snan               !<-- Vertical velocity
@@ -1314,6 +1328,10 @@ contains
 !***  from two different boundary side regions.
 !-----------------------------------------------------------------------
 !
+! Definitions in this module greatly differ from those in existing nesting
+!  code or elsewhere in FMS. North <--> South, East <--> West, and 
+!  North and South always span  [isd-1 , ied+1] while East and West do not
+!  go into the outermost corners (so the they span [1, je], always.)
 !-----------
 !***  North
 !-----------
@@ -1344,6 +1362,49 @@ contains
                                              ,ps_reg                       &  !<-- Derived FV3 psfc in regional domain boundary region
 
                                              ,BC_t1%north )                   !<-- North BC vbls on final integration levels
+
+          if (is == 1) then
+             istart = 1
+          else
+             istart = isd
+          endif
+          if (ie == npx-1) then
+             iend = npx-1
+          else
+             iend = ied
+          endif
+
+          do k=1,npz
+          do j=jsd,0
+          do i=istart,iend 
+             delz_regBC%south_t1(i,j,k) = BC_t1%north%delz_BC(i,j,k)
+             delz_regBC%south_t0(i,j,k) = BC_t0%north%delz_BC(i,j,k)
+          enddo
+          enddo
+          enddo
+
+          ! North, south include all corners
+          if (is == 1) then
+          do k=1,npz
+          do j=jsd,0
+          do i=isd,0
+             delz_regBC%west_t1(i,j,k) = BC_t1%north%delz_BC(i,j,k)
+             delz_regBC%west_t0(i,j,k) = BC_t0%north%delz_BC(i,j,k)
+          enddo
+          enddo
+          enddo
+          endif
+
+          if (ie == npx-1) then
+          do k=1,npz
+          do j=jsd,0
+          do i=npx,ied
+             delz_regBC%east_t1(i,j,k) = BC_t1%north%delz_BC(i,j,k)
+             delz_regBC%east_t0(i,j,k) = BC_t0%north%delz_BC(i,j,k)
+          enddo
+          enddo
+          enddo
+          endif
 !
       endif
 !
@@ -1378,6 +1439,49 @@ contains
 
                                            ,BC_t1%south )                     !<-- South BC vbls on final integration levels
 !
+
+          if (is == 1) then
+             istart = 1
+          else
+             istart = isd
+          endif
+          if (ie == npx-1) then
+             iend = npx-1
+          else
+             iend = ied
+          endif
+
+          do k=1,npz
+          do j=npy,jed
+          do i=istart,iend
+             delz_regBC%north_t1(i,j,k) = BC_t1%south%delz_BC(i,j,k)
+             delz_regBC%north_t0(i,j,k) = BC_t0%south%delz_BC(i,j,k)
+          enddo
+          enddo
+          enddo
+
+          ! North, south include all corners
+          if (is == 1) then
+          do k=1,npz
+          do j=npy,jed
+          do i=isd,0
+             delz_regBC%west_t1(i,j,k) = BC_t1%south%delz_BC(i,j,k)
+             delz_regBC%west_t0(i,j,k) = BC_t0%south%delz_BC(i,j,k)
+          enddo
+          enddo
+          enddo
+          endif
+
+          if (ie == npx-1) then
+          do k=1,npz
+          do j=npy,jed
+          do i=npx,ied
+             delz_regBC%east_t1(i,j,k) = BC_t1%south%delz_BC(i,j,k)
+             delz_regBC%east_t0(i,j,k) = BC_t0%south%delz_BC(i,j,k)
+          enddo
+          enddo
+          enddo
+          endif
       endif
 !
 !----------
@@ -1411,6 +1515,27 @@ contains
 
                                            ,BC_t1%east )
 !
+        if (js == 1) then
+           jstart = 1
+        else
+           jstart = jsd
+        endif
+        if (je == npy-1) then
+           jend = je
+        else
+           jend = jed
+        endif
+
+
+          do k=1,npz
+          do j=jstart,jend
+          do i=isd,0
+             delz_regBC%west_t1(i,j,k) = BC_t1%east%delz_BC(i,j,k)
+             delz_regBC%west_t0(i,j,k) = BC_t0%east%delz_BC(i,j,k)
+          enddo
+          enddo
+          enddo
+
       endif
 !
 !----------
@@ -1444,6 +1569,25 @@ contains
 
                                            ,BC_t1%west )
 !
+        if (js == 1) then
+           jstart = 1
+        else
+           jstart = jsd
+        endif
+        if (je == npy-1) then
+           jend = je
+        else
+           jend = jed
+        endif
+
+          do k=1,npz
+          do j=jstart,jend
+          do i=npx,ied
+             delz_regBC%east_t1(i,j,k) = BC_t1%west%delz_BC(i,j,k)
+             delz_regBC%east_t0(i,j,k) = BC_t0%west%delz_BC(i,j,k)
+          enddo
+          enddo
+          enddo
       endif
 !
 !-----------------------------------------------------------------------
@@ -2909,7 +3053,16 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
       enddo
 
 ! map shpum, o3mr, liq_wat tracers
+! Note that currently there are only THREE tracers to remap
+! Set the others to 0 for now
       do iq=1,ncnst
+         if (iq /= sphum .and. iq/=o3mr .and. iq/=liq_wat) then
+            do k=1,npz
+            do i=is,ie
+               BC_side%q_BC(i,j,k,iq) = 0.
+            enddo
+            enddo
+         else
          do k=1,km
             do i=is,ie
                qp(i,k) = qa(i,j,k,iq)
@@ -2929,6 +3082,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
              BC_side%q_BC(i,j,k,iq) = qn1(i,k)
            enddo
          enddo
+         endif
       enddo
 
 !---------------------------------------------------
@@ -3283,21 +3437,21 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
 !---------------------------------------------------------------------
 !
-      if(north_bc)then
+      if(north_bc)then !north BC is really our SOUTH bc ?!?
         call bc_values_into_arrays(BC_t0%north,BC_t1%north            &
-                                  ,'north'                            &
-                                  ,bd%isd                             &
-                                  ,bd%ied                             &
-                                  ,bd%jsd                             &
-                                  ,bd%js-1                            &
-                                  ,bd%isd                             &
-                                  ,bd%ied                             &
-                                  ,bd%jsd                             &
-                                  ,bd%js-1                            &
-                                  ,bd%isd                             &
-                                  ,bd%ied+1                           &
-                                  ,bd%jsd                             &
-                                  ,bd%js-1)                       
+                                  ,'north'                            & !side
+                                  ,bd%isd                             & !i1
+                                  ,bd%ied                             & !i2
+                                  ,bd%jsd                             & !j1
+                                  ,bd%js-1                            & !j2
+                                  ,bd%isd                             & !i1_uvs
+                                  ,bd%ied                             & !i2_uvs
+                                  ,bd%jsd                             & !j1_uvs
+                                  ,bd%js-1                            & !j2_uvs
+                                  ,bd%isd                             & !i1_uvw
+                                  ,bd%ied+1                           & !i2_uvw
+                                  ,bd%jsd                             & !j1_uvw
+                                  ,bd%js-1)                             !j2_uvw
       endif
 !
       if(south_bc)then
