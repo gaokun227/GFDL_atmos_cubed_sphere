@@ -558,9 +558,10 @@ contains
           call nested_grid_BC_apply_intT(w, &
                0, 0, npx, npy, npz, bd, 1., 1., &
                neststruct%w_BC, bctype=neststruct%nestbctype  )
-          call nested_grid_BC_apply_intT(delz, &
-               0, 0, npx, npy, npz, bd, 1., 1., &
-               neststruct%delz_BC, bctype=neststruct%nestbctype  )
+          !Removed halo from delz --- BCs now directly applied in nh_BC --- lmh june 2018
+!!$          call nested_grid_BC_apply_intT(delz, &
+!!$               0, 0, npx, npy, npz, bd, 1., 1., &
+!!$               neststruct%delz_BC, bctype=neststruct%nestbctype  )
        endif
 #ifdef USE_COND
        call nested_grid_BC_apply_intT(q_con, &
