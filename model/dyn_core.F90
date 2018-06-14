@@ -43,7 +43,7 @@ module dyn_core_mod
 #endif
   use diag_manager_mod,   only: send_data
   use fv_arrays_mod,      only: fv_grid_type, fv_flags_type, fv_nest_type, fv_diag_type, &
-                                fv_grid_bounds_type, R_GRID
+                                fv_grid_bounds_type, R_GRID, fv_nest_BC_type_3d
 
   use boundary_mod,         only: extrapolation_BC,  nested_grid_BC_apply_intT
   use fv_regional_mod,      only: regional_boundary_update
@@ -81,7 +81,7 @@ contains
 !     dyn_core :: FV Lagrangian dynamics driver
 !-----------------------------------------------------------------------
  
- subroutine dyn_core(npx, npy, npz, ng, sphum, nq, bdt, n_split, zvir, cp, akap, cappa, grav, hydrostatic,  &
+ subroutine dyn_core(npx, npy, npz, ng, sphum, nq, bdt, n_map, n_split, zvir, cp, akap, cappa, grav, hydrostatic,  &
                      u,  v,  w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va, & 
                      uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, &
                      ks, gridstruct, flagstruct, neststruct, idiag, bd, domain, &
@@ -90,7 +90,7 @@ contains
     integer, intent(IN) :: npy
     integer, intent(IN) :: npz
     integer, intent(IN) :: ng, nq, sphum
-    integer, intent(IN) :: n_split
+    integer, intent(IN) :: n_map, n_split
     real   , intent(IN) :: bdt
     real   , intent(IN) :: zvir, cp, akap, grav
     real   , intent(IN) :: ptop
@@ -335,30 +335,37 @@ contains
 
       if ( it==1 ) then
          if (gridstruct%bounded_domain) then
-!$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,gz,zs,delz)
-         do j=jsd,jed
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,gz,zs,npz)
+            do j=jsd,jed
             do i=isd,ied
                gz(i,j,npz+1) = zs(i,j)
             enddo
-            do k=npz,1,-1
-               do i=isd,ied
-                  gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)
-               enddo
             enddo
-         enddo
+            if (gridstruct%nested) then
+               call gz_bc(gz,neststruct%delz_BC,bd,npx,npy,npz,split_timestep_BC, real(n_split*flagstruct%k_split))
+            endif
+            if (gridstruct%regional) then
+               reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
+               if (is_master()) print*, ' REG_BC_UPDATE_TIME: ', it, current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
+               call gz_bc(gz, delz_regBC,bd,npx,npy,npz,mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600.)
+            endif
          else
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,gz,zs,delz)
-         do j=js,je
+!$OMP parallel do default(none) shared(is,ie,js,je,gz,zs,npz)
+            do j=js,je
             do i=is,ie
                gz(i,j,npz+1) = zs(i,j)
             enddo
+            enddo
+         endif
+
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,gz,delz)
+         do j=js,je
             do k=npz,1,-1
                do i=is,ie
                   gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)
                enddo
             enddo
          enddo
-         endif
                              call timing_on('COMM_TOTAL')
          call start_group_halo_update(i_pack(5), gz,  domain)
                              call timing_off('COMM_TOTAL')
@@ -440,7 +447,7 @@ contains
 #endif
       endif
       if (flagstruct%regional) then
-        reg_bc_update_time=current_time_in_seconds+(0.5+(it-1))*dt
+        reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(0.5+(it-1))*dt
         call regional_boundary_update(delpc, 'delp', &
                                       isd, ied, jsd, jed, npz, &
                                       is,  ie,  js,  je,       &
@@ -476,6 +483,18 @@ contains
            enddo
 
         else 
+
+           if (gridstruct%bounded_domain) then
+              if (gridstruct%nested) then
+                 call gz_bc(gz,neststruct%delz_BC,bd,npx,npy,npz,split_timestep_BC, real(n_split*flagstruct%k_split))
+              endif
+              if (gridstruct%regional) then
+                 reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
+                 if (is_master()) print*, ' REG_BC_UPDATE_TIME: ', it, current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
+                 call gz_bc(gz, delz_regBC,bd,npx,npy,npz,mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600.)
+              endif
+           endif
+
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,zh,gz)
            do k=1, npz+1
               do j=jsd,jed
@@ -484,6 +503,7 @@ contains
                  enddo
               enddo
            enddo
+
         endif
                                             call timing_on('UPDATE_DZ_C')
          call update_dz_c(is, ie, js, je, npz, ng, dt2, dp_ref, zs, gridstruct%area, ut, vt, gz, ws3, &
@@ -512,8 +532,8 @@ contains
            endif
 
            if (flagstruct%regional) then
-              ! Refactoring: test of regional BC's ability to use existing nest_BC_type
-             reg_bc_update_time=current_time_in_seconds+(0.5+(it-1))*dt
+
+             reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(0.5+(it-1))*dt
              call nh_bc(ptop, grav, akap, cp, delpc, delz_regBC, ptc, phis, &
 #ifdef USE_COND
                 q_con, &
@@ -524,12 +544,6 @@ contains
                 pkc, gz, pk3, &
                 mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600.,  &
                 npx, npy, npz, gridstruct%bounded_domain, .false., .false., .false., bd)
-
-             call regional_boundary_update(delz, 'delz', &
-                                           isd, ied, jsd, jed, ubound(delz,3), &
-                                           is,  ie,  js,  je,       &
-                                           isd, ied, jsd, jed,      &
-                                           reg_bc_update_time )
 
            endif
 
@@ -584,7 +598,7 @@ contains
 
         call exch_uv(domain, bd, npz, vc, uc)
         
-        reg_bc_update_time=current_time_in_seconds+(0.5+(it-1))*dt
+        reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(0.5+(it-1))*dt
         call regional_boundary_update(vc, 'vc', &
                                       isd, ied, jsd, jed+1, npz, &
                                       is,  ie,  js,  je,       &
@@ -596,7 +610,7 @@ contains
                                       isd, ied, jsd, jed,      &
                                       reg_bc_update_time )
 !!! Currently divgd is always 0.0 in the regional domain boundary area.
-        reg_bc_update_time=current_time_in_seconds+(it-1)*dt
+        reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
         call regional_boundary_update(divgd, 'divgd', &
                                       isd, ied+1, jsd, jed+1, npz, &
                                       is,  ie,  js,  je,       &
@@ -613,7 +627,7 @@ contains
             end do
       endif
       if (flagstruct%regional) then
-        reg_bc_update_time=current_time_in_seconds+(it-1)*dt
+        reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
         do iq=1,nq
           call regional_boundary_update(q(:,:,:,iq), 'q', &
                                         isd, ied, jsd, jed, npz, &
@@ -833,7 +847,7 @@ contains
 
     end if
     if (flagstruct%regional) then
-      reg_bc_update_time=current_time_in_seconds+bdt+(it-1)*dt
+      reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
       call regional_boundary_update(delp, 'delp', &
                                     isd, ied, jsd, jed, npz, &
                                     is,  ie,  js,  je,       &
@@ -919,7 +933,7 @@ contains
         endif
           
         if (flagstruct%regional) then
-          reg_bc_update_time=current_time_in_seconds+it*dt
+          reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+it*dt
           call nh_bc(ptop, grav, akap, cp, delp, delz_regBC, pt, phis, &
 #ifdef USE_COND
                q_con, &
@@ -1145,7 +1159,7 @@ contains
 
 #ifndef SW_DYNAMICS
          if (.not. hydrostatic) then
-           reg_bc_update_time=current_time_in_seconds+it*dt
+           reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+it*dt
            call regional_boundary_update(w, 'w', &
                                          isd, ied, jsd, jed, ubound(w,3), &
                                          is,  ie,  js,  je,       &
@@ -2463,6 +2477,93 @@ do 1000 j=jfirst,jlast
      enddo
 
  end subroutine Ray_fast
+
+ subroutine gz_bc(gz,delzBC,bd,npx,npy,npz,step,split)
+
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: npx, npy, npz
+    real, intent(INOUT) :: gz(bd%isd:bd%ied,bd%jsd:bd%jed,npz+1)
+    type(fv_nest_BC_type_3d), intent(IN) :: delzBC
+    real, intent(IN) :: step, split
+
+    real :: a1, a2
+    integer i, j, k
+
+    integer :: is,  ie,  js,  je
+    integer :: isd, ied, jsd, jed
+
+    integer :: istart, iend
+
+    is  = bd%is
+    ie  = bd%ie
+    js  = bd%js
+    je  = bd%je
+    isd = bd%isd
+    ied = bd%ied
+    jsd = bd%jsd
+    jed = bd%jed
+    
+    a1 = (split-step)/split
+    a2 = step/split
+
+    if (is == 1) then
+!$OMP parallel do default(none) shared(jsd,jed,npz,isd,delzBC,gz,a1,a2)
+       do j=jsd,jed
+       do k=npz,1,-1
+       do i=isd,0
+          gz(i,j,k) = gz(i,j,k+1) - (delzBC%west_t1(i,j,k)*a2 + delzBC%west_t0(i,j,k)*a1)
+       enddo
+       enddo
+       enddo
+    endif
+   
+    if (ie == npx-1) then
+!$OMP parallel do default(none) shared(jsd,jed,npz,npx,ied,delzBC,gz,a1,a2)
+       do j=jsd,jed
+       do k=npz,1,-1
+       do i=npx,ied
+          gz(i,j,k) = gz(i,j,k+1) - (delzBC%east_t1(i,j,k)*a2 + delzBC%east_t0(i,j,k)*a1)
+       enddo
+       enddo
+       enddo
+    endif
+   
+    if (is == 1) then
+       istart = is
+    else
+       istart = isd
+    end if
+    if (ie == npx-1) then
+       iend = ie
+    else
+       iend = ied
+    end if
+
+    if (js == 1) then
+!$OMP parallel do default(none) shared(jsd,npz,istart,iend,delzBC,gz,a1,a2)
+       do j=jsd,0
+       do k=npz,1,-1
+       do i=istart,iend
+          gz(i,j,k) = gz(i,j,k+1) - (delzBC%south_t1(i,j,k)*a2 + delzBC%south_t0(i,j,k)*a1)
+          if (gz(i,j,k) <= gz(i,j,k+1) .or. abs(gz(i,j,k)) > 1.e6) print*, ' BAD GZ (bc): ', i, j, k, gz(i,j,k:k+1), delzBC%west_t1(i,j,k), delzBC%west_t0(i,j,k)
+       enddo
+       enddo
+       enddo
+    endif
+
+    if (je == npy-1) then
+!$OMP parallel do default(none) shared(npy,jed,npz,istart,iend,delzBC,gz,a1,a2)
+       do j=npy,jed
+       do k=npz,1,-1
+       do i=istart,iend
+          gz(i,j,k) = gz(i,j,k+1) - (delzBC%north_t1(i,j,k)*a2 + delzBC%north_t0(i,j,k)*a1)
+          if (gz(i,j,k) <= gz(i,j,k+1) .or. abs(gz(i,j,k)) > 1.e6) print*, ' BAD GZ (bc): ', i, j, k, gz(i,j,k:k+1), delzBC%west_t1(i,j,k), delzBC%west_t0(i,j,k)
+       enddo
+       enddo
+       enddo
+    endif
+
+ end subroutine gz_bc
 
 
 end module dyn_core_mod
