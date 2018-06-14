@@ -104,7 +104,7 @@ contains
     real, intent(inout), dimension(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz):: u  ! D grid zonal wind (m/s)
     real, intent(inout), dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz):: v  ! D grid meridional wind (m/s)
     real, intent(inout) :: w(   bd%isd:,bd%jsd:,1:)  ! vertical vel. (m/s)
-    real, intent(inout) ::  delz(bd%isd:,bd%jsd:,1:)  ! delta-height (m, negative)
+    real, intent(inout) ::  delz(bd%is:,bd%js:,1:)  ! delta-height (m, negative)
     real, intent(inout) :: cappa(bd%isd:,bd%jsd:,1:) ! moist kappa
     real, intent(inout) :: pt(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! temperature (K)
     real, intent(inout) :: delp(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! pressure thickness (pascal)
@@ -877,7 +877,7 @@ contains
 #ifndef SW_DYNAMICS
                                             call timing_on('UPDATE_DZ')
         call update_dz_d(nord_v, damp_vt, flagstruct%hord_tm, is, ie, js, je, npz, ng, npx, npy, gridstruct%area,  &
-                         gridstruct%rarea, dp_ref, zs, zh, crx, cry, xfx, yfx, delz, ws, rdt, gridstruct, bd, flagstruct%lim_fac)
+                         gridstruct%rarea, dp_ref, zs, zh, crx, cry, xfx, yfx, ws, rdt, gridstruct, bd, flagstruct%lim_fac) 
                                             call timing_off('UPDATE_DZ')
     if ( flagstruct%fv_debug ) then
          if ( .not. flagstruct%hydrostatic )    &
@@ -896,7 +896,7 @@ contains
                                                          call timing_on('Riem_Solver')
         call Riem_Solver3(flagstruct%m_split, dt,  is,  ie,   js,   je, npz, ng,     &
                          isd, ied, jsd, jed, &
-                         akap, cappa, cp,  ptop, zs, q_con, w, delz, pt, delp, zh,   &
+                         akap, cappa, cp,  ptop, zs, q_con, w, delz, pt, delp, zh,   & 
                          pe, pkc, pk3, pk, peln, ws, &
                          flagstruct%scale_z, flagstruct%p_fac, flagstruct%a_imp, &
                          flagstruct%use_logp, remap_step, beta<-0.1)

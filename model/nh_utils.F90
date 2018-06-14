@@ -181,7 +181,7 @@ CONTAINS
 
 
   subroutine update_dz_d(ndif, damp, hord, is, ie, js, je, km, ng, npx, npy, area, rarea,   &
-                         dp0, zs, zh, crx, cry, xfx, yfx, delz, ws, rdt, gridstruct, bd, lim_fac)
+                         dp0, zs, zh, crx, cry, xfx, yfx, ws, rdt, gridstruct, bd, lim_fac)
 
   type(fv_grid_bounds_type), intent(IN) :: bd
   integer, intent(in):: is, ie, js, je, ng, km, npx, npy
@@ -194,7 +194,6 @@ CONTAINS
   integer, intent(inout):: ndif(km+1)
   real, intent(in   ) ::  zs(is-ng:ie+ng,js-ng:je+ng)
   real, intent(inout) ::  zh(is-ng:ie+ng,js-ng:je+ng,km+1)
-  real, intent(  out) ::delz(is-ng:ie+ng,js-ng:je+ng,km)
   real, intent(inout), dimension(is:ie+1,js-ng:je+ng,km):: crx, xfx
   real, intent(inout), dimension(is-ng:ie+ng,js:je+1,km):: cry, yfx
   real, intent(out)   :: ws(is:ie,js:je)
@@ -433,7 +432,7 @@ CONTAINS
    real, intent(inout):: pe(is-1:ie+1,km+1,js-1:je+1)
    real, intent(out):: peln(is:ie,km+1,js:je)          ! ln(pe)
    real, intent(out), dimension(isd:ied,jsd:jed,km+1):: ppe
-   real, intent(out):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(out):: delz(is:ie,js:je,km)
    real, intent(out):: pk(is:ie,js:je,km+1)
    real, intent(out):: pk3(isd:ied,jsd:jed,km+1)
 ! Local:
@@ -577,7 +576,7 @@ CONTAINS
   subroutine imp_diff_w(j, is, ie, js, je, ng, km, cd, delz, ws, w, w3)
   integer, intent(in) :: j, is, ie, js, je, km, ng
   real, intent(in) :: cd
-  real, intent(in) :: delz(is-ng:ie+ng, km)  ! delta-height (m)
+  real, intent(in) :: delz(is:ie, km)  ! delta-height (m)
   real, intent(in) :: w(is:ie, km)  ! vertical vel. (m/s)
   real, intent(in) :: ws(is:ie)
   real, intent(out) :: w3(is-ng:ie+ng,js-ng:je+ng,km)

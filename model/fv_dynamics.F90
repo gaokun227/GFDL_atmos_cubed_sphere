@@ -465,7 +465,7 @@ contains
 
                                            call timing_on('DYN_CORE')
       call dyn_core(npx, npy, npz, ng, sphum, nq, mdt, n_map, n_split, zvir, cp_air, akap, cappa, grav, hydrostatic, &
-                    u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           & 
+                    u, v, w, delz(is:ie,js:je,1:npz), pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &  ! TEMPORARY
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
                     domain, n_map==1, i_pack, last_step, time_total)

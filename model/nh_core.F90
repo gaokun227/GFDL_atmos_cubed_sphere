@@ -63,7 +63,7 @@ CONTAINS
    real, intent(inout):: pe(is-1:ie+1,km+1,js-1:je+1)
    real, intent(out):: peln(is:ie,km+1,js:je)          ! ln(pe)
    real, intent(out), dimension(isd:ied,jsd:jed,km+1):: ppe
-   real, intent(out):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(out):: delz(is:ie,js:je,km)
    real, intent(out):: pk(is:ie,js:je,km+1)
    real, intent(out):: pk3(isd:ied,jsd:jed,km+1)
 ! Local:
