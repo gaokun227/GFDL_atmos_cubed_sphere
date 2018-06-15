@@ -82,8 +82,8 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
     
     real, intent (in) :: zvir, mdt ! remapping time step
     
-    real, intent (in), dimension (is - ng:ie + ng, js - ng:je + ng) :: dp, delz, hs
-    real, intent (in), dimension (is:ie, js:je) :: dpln
+    real, intent (in), dimension (is - ng:ie + ng, js - ng:je + ng) :: dp, hs
+    real, intent (in), dimension (is:ie, js:je) :: dpln, delz
     
     real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: pt, qv, ql, qi, qr, qs, qg
     real, intent (inout), dimension (is - ng:, js - ng:) :: q_con, cappa

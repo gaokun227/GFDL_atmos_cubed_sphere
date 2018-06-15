@@ -332,7 +332,7 @@ contains
 !---------------------
       if ( consv_te > 0.  .and. (.not.do_adiabatic_init) ) then
            call compute_total_energy(is, ie, js, je, isd, ied, jsd, jed, npz,        &
-                                     u, v, w, delz, pt, delp, q, dp1, pe, peln, phis, &
+                                     u, v, w, delz(is:ie,js:je,1:npz), pt, delp, q, dp1, pe, peln, phis, & !TEMPORARY
                                      gridstruct%rsin2, gridstruct%cosa_s, &
                                      zvir, cp_air, rdgas, hlv, te_2d, ua, va, teq,        &
                                      flagstruct%moist_phys, nwat, sphum, liq_wat, rainwat,   &
@@ -548,7 +548,7 @@ contains
 
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
                      pkz, pk, mdt, bdt, npx, npy, npz, is,ie,js,je, isd,ied,jsd,jed,       &
-                     nq, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
+                     nq, nwat, sphum, q_con, u,  v, w, delz(is:ie,js:je,1:npz), pt, q, phis,    &
                      zvir, cp_air, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
                      kord_tracer, flagstruct%kord_tm, peln, te_2d,               &
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
