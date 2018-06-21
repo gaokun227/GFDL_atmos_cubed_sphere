@@ -25,7 +25,7 @@ module fv_nesting_mod
    use tracer_manager_mod,  only: get_tracer_index
    use fv_sg_mod,           only: neg_adj3
    use mpp_domains_mod,     only: mpp_get_data_domain, mpp_get_compute_domain, mpp_get_global_domain
-   use mpp_domains_mod,     only: DGRID_NE, mpp_update_domains, domain2D
+   use mpp_domains_mod,     only: AGRID, CGRID_NE, DGRID_NE, mpp_update_domains, domain2D
    use mpp_mod,             only: mpp_sync_self, mpp_sync, mpp_send, mpp_recv, mpp_error, FATAL, mpp_pe, WARNING, NOTE
    use mpp_domains_mod,     only: mpp_global_sum, BITWISE_EFP_SUM, BITWISE_EXACT_SUM
    use boundary_mod,        only: update_coarse_grid
@@ -205,7 +205,6 @@ contains
           endif
        end do       
     endif
-
 !! Nested grid: receive from parent grid (Lagrangian coordinate, npz_coarse)
     if (neststruct%nested) then
 
@@ -233,22 +232,16 @@ contains
        endif
 #endif
        if (neststruct%do_remap_BC(flagstruct%grid_number)) then
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz_coarse+1, bd, &
-               pe_u_buf)
-          call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz_coarse+1, bd, &
-               pe_v_buf)
+          call nested_grid_BC_recv(neststruct%nest_domain, npz_coarse+1, bd, &
+               pe_u_buf, pe_v_buf, gridtype=DGRID_NE)
           call nested_grid_BC_recv(neststruct%nest_domain, 1, 1,  npz_coarse+1, bd, &
                pe_b_buf)
        endif
 
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz_coarse, bd, &
-            u_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 1,  npz_coarse, bd, &
-            vc_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz_coarse, bd, &
-            v_buf)
-       call nested_grid_BC_recv(neststruct%nest_domain, 1, 0,  npz_coarse, bd, &
-            uc_buf)
+       call nested_grid_BC_recv(neststruct%nest_domain, npz_coarse, bd, &
+               u_buf, v_buf, gridtype=DGRID_NE)
+       call nested_grid_BC_recv(neststruct%nest_domain, npz_coarse, bd, &
+               uc_buf, vc_buf, gridtype=CGRID_NE)
        call nested_grid_BC_recv(neststruct%nest_domain, 1, 1,  npz_coarse, bd, &
             divg_buf)
     endif
@@ -287,7 +280,6 @@ contains
              enddo
              enddo
              enddo
-             call nested_grid_BC_send(pe_ustag, neststruct%nest_domain_all(p), 0, 1)
 
              !v points
 !$OMP parallel do default(none) shared(ak,pe_vstag,delp, &
@@ -302,7 +294,7 @@ contains
              enddo
              enddo
              enddo
-             call nested_grid_BC_send(pe_vstag, neststruct%nest_domain_all(p), 1, 0)
+             call nested_grid_BC_send(pe_ustag, pe_vstag, neststruct%nest_domain_all(p), gridtype=DGRID_NE)
 
              !b points
 !$OMP parallel do default(none) shared(ak,pe_bstag,delp, &
@@ -348,10 +340,8 @@ contains
 
           endif
 
-          call nested_grid_BC_send(u, neststruct%nest_domain_all(p), 0, 1)
-          call nested_grid_BC_send(vc, neststruct%nest_domain_all(p), 0, 1)
-          call nested_grid_BC_send(v, neststruct%nest_domain_all(p), 1, 0)
-          call nested_grid_BC_send(uc, neststruct%nest_domain_all(p), 1, 0)
+          call nested_grid_BC_send(u, v, neststruct%nest_domain_all(p), gridtype=DGRID_NE)
+          call nested_grid_BC_send(uc, vc, neststruct%nest_domain_all(p), gridtype=CGRID_NE)
           call nested_grid_BC_send(divg, neststruct%nest_domain_all(p), 1, 1)
        endif
     enddo
@@ -662,8 +652,7 @@ contains
          !Note also u_dt and v_dt are unstaggered
          call nested_grid_BC(ps, parent_ps, neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
               npx, npy, bd, 1, npx-1, 1, npy-1)
-         call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, u_dt_buf) 
-         call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, v_dt_buf) 
+         call nested_grid_BC_recv(neststruct%nest_domain, npz_coarse, bd, u_dt_buf, v_dt_buf, gridtype=AGRID)
 
          call allocate_fv_nest_BC_type(pe_src_BC, is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz_coarse+1,ng,0,0,0,.false.)
          call allocate_fv_nest_BC_type(pe_dst_BC, is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz+1,ng,0,0,0,.false.)
@@ -681,12 +670,8 @@ contains
          call deallocate_fv_nest_BC_type(pe_dst_BC)
 
       else
-
-         call nested_grid_BC(u_dt, dum, neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
-              npx, npy, npz, bd, 1, npx-1, 1, npy-1)
-         call nested_grid_BC(v_dt, dum, neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
-              npx, npy, npz, bd, 1, npx-1, 1, npy-1)
-
+         call nested_grid_BC(u_dt, v_dt, dum, dum, neststruct%nest_domain, neststruct%ind_h, neststruct%ind_h, &
+              neststruct%wt_h, neststruct%wt_h, 0, 0, 0, 0, npx, npy, npz, bd, 1, npx-1, 1, npy-1, gridtype=AGRID)
       endif
 
    endif
@@ -694,8 +679,7 @@ contains
       if (neststruct%child_grids(n)) then
          if (neststruct%do_remap_BC(n)) &
               call nested_grid_BC(ps, neststruct%nest_domain_all(n), 0, 0)
-         call nested_grid_BC_send(u_dt, neststruct%nest_domain_all(n), 0, 0)
-         call nested_grid_BC_send(v_dt, neststruct%nest_domain_all(n), 0, 0)
+         call nested_grid_BC_send(u_dt, v_dt, neststruct%nest_domain_all(n), gridtype=AGRID)
       endif
    enddo
 
@@ -2635,22 +2619,15 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
    allocate(v_src(isd_p:ied_p+1,jsd_p:jed_p,npz))
    u_src = -999.
    v_src = -999.
-   call update_coarse_grid(u_src, u, neststruct%nest_domain, &
+   call update_coarse_grid(u_src, v_src, u, v, neststruct%nest_domain, &
         gridstruct%dx, gridstruct%dy, gridstruct%area, &
         isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
         neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-        npx, npy, npz, 0, 1, &
+        npx, npy, npz, 0, 1, 1, 0, &
         neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-        neststruct%parent_proc, neststruct%child_proc, parent_grid)
-   call update_coarse_grid(v_src, v, neststruct%nest_domain, &
-        gridstruct%dx, gridstruct%dy, gridstruct%area, &
-        isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-        neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-        npx, npy, npz, 1, 0, &
-        neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-        neststruct%parent_proc, neststruct%child_proc, parent_grid)
+        neststruct%parent_proc, neststruct%child_proc, parent_grid, gridtype=DGRID_NE)
 
-   call mpp_sync
+   call mpp_sync()
 
 #ifndef SW_DYNAMICS
    if (neststruct%nestupdate >= 5 .and. npz > 4) then
