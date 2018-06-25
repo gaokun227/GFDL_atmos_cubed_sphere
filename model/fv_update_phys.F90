@@ -76,7 +76,7 @@ module fv_update_phys_mod
 
     real, intent(in), dimension(npz+1):: ak, bk
     real, intent(in) :: phis(isd:ied,jsd:jed)
-    real, intent(inout):: delz(isd:,jsd:,1:)
+    real, intent(inout):: delz(is:,js:,1:)
 
 ! optional arguments for atmospheric nudging
     real, intent(in), dimension(isd:ied,jsd:jed), optional ::   &

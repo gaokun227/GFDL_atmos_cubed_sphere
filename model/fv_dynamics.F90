@@ -100,7 +100,7 @@ contains
     real, intent(inout) :: pt(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! temperature (K)
     real, intent(inout) :: delp(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! pressure thickness (pascal)
     real, intent(inout) :: q(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, ncnst) ! specific humidity and constituents
-    real, intent(inout) :: delz(bd%isd:,bd%jsd:,1:)   ! delta-height (m); non-hydrostatic only
+    real, intent(inout) :: delz(bd%is:,bd%js:,1:)   ! delta-height (m); non-hydrostatic only
     real, intent(inout) ::  ze0(bd%is:, bd%js: ,1:) ! height at edges (m); non-hydrostatic
 ! ze0 no longer used
 
@@ -321,7 +321,7 @@ contains
 #endif
          call prt_mxm('PS',        ps, is, ie, js, je, ng,   1, 0.01, gridstruct%area_64, domain)
          call prt_mxm('T_dyn_b',   pt, is, ie, js, je, ng, npz, 1.,   gridstruct%area_64, domain)
-         if ( .not. hydrostatic) call prt_mxm('delz',    delz, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
+         if ( .not. hydrostatic) call prt_mxm('delz',    delz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
          call prt_mxm('delp_b ', delp, is, ie, js, je, ng, npz, 0.01, gridstruct%area_64, domain)
          call prt_mxm('pk_b',    pk, is, ie, js, je, 0, npz+1, 1.,gridstruct%area_64, domain)
          call prt_mxm('pkz_b',   pkz,is, ie, js, je, 0, npz,   1.,gridstruct%area_64, domain)
@@ -332,7 +332,7 @@ contains
 !---------------------
       if ( consv_te > 0.  .and. (.not.do_adiabatic_init) ) then
            call compute_total_energy(is, ie, js, je, isd, ied, jsd, jed, npz,        &
-                                     u, v, w, delz(is:ie,js:je,1:npz), pt, delp, q, dp1, pe, peln, phis, & !TEMPORARY
+                                     u, v, w, delz, pt, delp, q, dp1, pe, peln, phis, &
                                      gridstruct%rsin2, gridstruct%cosa_s, &
                                      zvir, cp_air, rdgas, hlv, te_2d, ua, va, teq,        &
                                      flagstruct%moist_phys, nwat, sphum, liq_wat, rainwat,   &
@@ -465,7 +465,7 @@ contains
 
                                            call timing_on('DYN_CORE')
       call dyn_core(npx, npy, npz, ng, sphum, nq, mdt, n_map, n_split, zvir, cp_air, akap, cappa, grav, hydrostatic, &
-                    u, v, w, delz(is:ie,js:je,1:npz), pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &  ! TEMPORARY
+                    u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           & 
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
                     domain, n_map==1, i_pack, last_step, time_total)
@@ -548,7 +548,7 @@ contains
 
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
                      pkz, pk, mdt, bdt, npx, npy, npz, is,ie,js,je, isd,ied,jsd,jed,       &
-                     nq, nwat, sphum, q_con, u,  v, w, delz(is:ie,js:je,1:npz), pt, q, phis,    &
+                     nq, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
                      zvir, cp_air, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
                      kord_tracer, flagstruct%kord_tm, peln, te_2d,               &
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
@@ -877,7 +877,7 @@ contains
     real, intent(inout):: pt(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! temp
     real, intent(inout):: ua(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! 
     real, intent(inout):: va(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! 
-    real, intent(inout):: delz(bd%isd:    ,bd%jsd:      ,1: ) ! delta-height (m); non-hydrostatic only
+    real, intent(inout):: delz(bd%is:    ,bd%js:      ,1: ) ! delta-height (m); non-hydrostatic only
     real,   intent(in) :: agrid(bd%isd:bd%ied,  bd%jsd:bd%jed,2)
     real, intent(in) :: phis(bd%isd:bd%ied,bd%jsd:bd%jed)     ! Surface geopotential (g*Z_surf)
     type(fv_grid_type), intent(IN) :: gridstruct
@@ -1048,7 +1048,7 @@ contains
     real, intent(inout):: pt(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! temp
     real, intent(inout):: ua(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! 
     real, intent(inout):: va(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! 
-    real, intent(inout):: delz(bd%isd:    ,bd%jsd:      ,1: ) ! delta-height (m); non-hydrostatic only
+    real, intent(inout):: delz(bd%is:    ,bd%js:      ,1: ) ! delta-height (m); non-hydrostatic only
     type(fv_grid_type), intent(IN) :: gridstruct
     type(domain2d), intent(INOUT) :: domain
 ! local:

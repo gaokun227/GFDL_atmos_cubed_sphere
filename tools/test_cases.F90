@@ -492,7 +492,7 @@
       real ,      intent(INOUT) ::   vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
       real ,      intent(INOUT) ::   ua(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
       real ,      intent(INOUT) ::   va(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
-      real ,      intent(inout) :: delz(bd%isd:,bd%jsd:,1:)
+      real ,      intent(inout) :: delz(bd%is:,bd%js:,1:)
       real ,      intent(inout)   ::  ze0(bd%is:,bd%js:,1:)
 
       real ,      intent(inout) ::   ak(npz+1)
@@ -6025,7 +6025,7 @@ end subroutine terminator_tracers
         real ,      intent(INOUT) ::   vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
         real ,      intent(INOUT) ::   ua(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
         real ,      intent(INOUT) ::   va(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)
-        real ,      intent(inout) :: delz(bd%isd:,bd%jsd:,1:)
+        real ,      intent(inout) :: delz(bd%is:,bd%js:,1:)
         real ,      intent(inout)   ::  ze0(bd%is:,bd%js:,1:)
         
         real ,      intent(inout)    ::   ak(npz+1)
@@ -6856,7 +6856,8 @@ end subroutine terminator_tracers
  real, intent(inout):: ptop
  real(kind=R_GRID), intent(in):: agrid(is-ng:ie+ng,js-ng:je+ng,2)
  real, intent(inout), dimension(km+1):: ak, bk
- real, intent(inout), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, delz
+ real, intent(inout), dimension(is:ie,js:je,km):: pt
+ real, intent(inout), dimension(is:,js:,1:) :: delz
  real, intent(out), dimension(is:ie,js:je,km+1):: pk
 ! pt is FV's cp*thelta_v
  real, intent(inout), dimension(is-1:ie+1,km+1,js-1:je+1):: pe
@@ -7177,7 +7178,8 @@ end subroutine terminator_tracers
    real, intent(IN) :: ptop
    real, intent(IN), dimension(npz+1) :: ak, bk
    real, intent(INOUT), dimension(isd:ied,jsd:jed,npz,nq) :: q
-   real, intent(OUT), dimension(isd:ied,jsd:jed,npz) :: delp, pt, w, delz
+   real, intent(OUT), dimension(isd:ied,jsd:jed,npz) :: delp, pt, w
+   real, intent(OUT), dimension(is:,js:,1:) :: delz
    real, intent(OUT), dimension(isd:ied,jsd:jed+1,npz) :: u
    real, intent(OUT), dimension(isd:ied+1,jsd:jed,npz) :: v
    real, intent(OUT), dimension(is:ie,js:je,npz+1) :: pk
@@ -7562,7 +7564,8 @@ end subroutine terminator_tracers
    real, intent(IN) :: ptop
    real, intent(IN), dimension(npz+1) :: ak, bk
    real, intent(INOUT), dimension(isd:ied,jsd:jed,npz,nq) :: q
-   real, intent(OUT), dimension(isd:ied,jsd:jed,npz) :: delp, pt, w, delz
+   real, intent(OUT), dimension(isd:ied,jsd:jed,npz) :: delp, pt, w
+   real, intent(OUT), dimension(is:,js:,1:) :: delz
    real, intent(OUT), dimension(isd:ied,jsd:jed+1,npz) :: u
    real, intent(OUT), dimension(isd:ied+1,jsd:jed,npz) :: v
    real, intent(OUT), dimension(is:ie,js:je,npz+1) :: pk
@@ -7928,7 +7931,7 @@ end subroutine terminator_tracers
         real ,      intent(INOUT) ::   vc(isd:ied  ,jsd:jed+1,npz)
         real ,      intent(INOUT) ::   ua(isd:ied  ,jsd:jed  ,npz)
         real ,      intent(INOUT) ::   va(isd:ied  ,jsd:jed  ,npz)
-        real ,      intent(inout) :: delz(isd:,jsd:,1:)
+        real ,      intent(inout) :: delz(is:,js:,1:)
         real ,      intent(inout)   ::  ze0(is:,js:,1:)
         
         real ,      intent(IN)    ::   ak(npz+1)

@@ -985,11 +985,11 @@ contains
     if ( Atm%flagstruct%hydrostatic ) then
        !Note length-one initialization if hydrostatic = .true.
        allocate (    Atm%w(isd:isd, jsd:jsd  ,1) )
-       allocate ( Atm%delz(isd:isd, jsd:jsd  ,1) )
+       allocate ( Atm%delz(is:is, js:js  ,1) )
        allocate (  Atm%ze0(is:is, js:js  ,1) )
     else
        allocate (    Atm%w(isd:ied, jsd:jed  ,npz  ) )
-       allocate ( Atm%delz(isd:ied, jsd:jed  ,npz) )
+       allocate ( Atm%delz(is:ie, js:je  ,npz) )
        if( Atm%flagstruct%hybrid_z ) then
           allocate (  Atm%ze0(is:ie, js:je ,npz+1) )
        else
@@ -1034,6 +1034,10 @@ contains
            do j=jsd, jed
               do i=isd, ied
                     Atm%w(i,j,k) = real_big
+              enddo
+           enddo
+           do j=js, je
+              do i=is, ie
                  Atm%delz(i,j,k) = real_big
               enddo
            enddo

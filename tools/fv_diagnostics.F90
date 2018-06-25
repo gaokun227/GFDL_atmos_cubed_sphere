@@ -3285,7 +3285,7 @@ contains
   real, intent(in):: peln(is:ie,km+1,js:je)
   real, intent(in):: pt(is-ng:ie+ng,js-ng:je+ng,km)
   real, intent(in)::  q(is-ng:ie+ng,js-ng:je+ng,km,*) ! water vapor
-  real, intent(in):: delz(is-ng:,js-ng:,1:)
+  real, intent(in):: delz(is:,js:,1:)
   real, intent(in):: zvir
   logical, intent(in):: hydrostatic
   real, intent(out):: wz(is:ie,js:je,km+1)
@@ -3720,7 +3720,7 @@ contains
  real, intent(in):: press
  real, intent(in):: peln(is:ie,km+1,js:je)
  real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
- real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+ real, intent(in):: delz(is:,js:,1:)
  real(kind=R_GRID), intent(in), dimension(is:ie, js:je):: area, lat
 ! local:
  real:: a2(is:ie,js:je)      ! height (m)
@@ -4097,7 +4097,7 @@ contains
    integer, intent(in):: is, ie, js, je, ng, km, sphum
    real, intent(in):: grav, zvir, z_bot, z_top
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
-   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: delz(is:ie,js:je,km)
    real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
    real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in):: peln(is:ie,km+1,js:je) 
@@ -4180,7 +4180,7 @@ contains
    integer, intent(in):: is, ie, js, je, ng, km, sphum
    real, intent(in):: grav, zvir, z_bot, z_top
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
-   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: delz(is:ie,js:je,km)
    real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
    real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in):: peln(is:ie,km+1,js:je) 
@@ -4256,7 +4256,7 @@ contains
    integer, intent(in):: is, ie, js, je, ng, km, sphum
    real, intent(in):: grav, zvir
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
-   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: delz(is:ie,js:je,km)
    real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
    real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in):: peln(is:ie,km+1,js:je) 
@@ -4335,7 +4335,7 @@ contains
    real, intent(in):: grav, zvir, z_bot, z_top
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, w
    real, intent(in), dimension(is:ie,js:je,km):: vort
-   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: delz(is:ie,js:je,km)
    real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
    real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in):: peln(is:ie,km+1,js:je) 
@@ -4623,7 +4623,7 @@ subroutine eqv_pot(theta_e, pt, delp, delz, peln, pkz, q, is, ie, js, je, ng, np
 ! Simplified form coded by SJL
     integer, intent(in):: is,ie,js,je,ng,npz
     real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,npz):: pt, delp, q
-    real, intent(in), dimension(is-ng:     ,js-ng:     ,1: ):: delz
+    real, intent(in), dimension(is:     ,js:     ,1: ):: delz
     real, intent(in), dimension(is:ie,npz+1,js:je):: peln
     real, intent(in):: pkz(is:ie,js:je,npz) 
     logical, intent(in):: hydrostatic, moist
@@ -4706,7 +4706,7 @@ subroutine eqv_pot(theta_e, pt, delp, delz, peln, pkz, q, is, ie, js, je, ng, np
 ! Modified by SJL
     integer, intent(in):: is,ie,js,je,ng,npz
     real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,npz):: pt, delp, q
-    real, intent(in), dimension(is-ng:     ,js-ng:     ,1: ):: delz
+    real, intent(in), dimension(is:     ,js:     ,1: ):: delz
     real, intent(in), dimension(is:ie,npz+1,js:je):: peln
     real, intent(in):: pkz(is:ie,js:je,npz) 
     logical, intent(in):: hydrostatic, moist
@@ -4788,7 +4788,8 @@ end subroutine eqv_pot
 ! !INPUT PARAMETERS:
    integer,  intent(in):: km, is, ie, js, je, isd, ied, jsd, jed
    integer,  intent(in):: nwat, sphum, liq_wat, rainwat, ice_wat, snowwat, graupel
-   real, intent(in), dimension(isd:ied,jsd:jed,km):: ua, va, pt, delp, w, delz
+   real, intent(in), dimension(isd:ied,jsd:jed,km):: ua, va, pt, delp, w
+   real, intent(in), dimension(is:ie,js:je,km) :: delz
    real, intent(in), dimension(isd:ied,jsd:jed,km,nwat):: q
    real, intent(in):: hs(isd:ied,jsd:jed)  ! surface geopotential
    real, intent(in):: area(isd:ied, jsd:jed)
@@ -4903,7 +4904,8 @@ end subroutine eqv_pot
 
    type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: npz, ncnst
-   real,    intent(IN),  dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz) :: pt, delp, delz
+   real,    intent(IN),  dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz) :: pt, delp
+   real,    intent(IN),  dimension(bd%is:, bd%js:, 1:) :: delz
    real,    intent(IN),  dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst) :: q
    real,    intent(IN),  dimension(bd%is :bd%ie,  npz+1, bd%js:bd%je) :: peln
    real,    intent(OUT), dimension(bd%is :bd%ie,  bd%js :bd%je , npz) :: dbz
@@ -5545,7 +5547,8 @@ end subroutine eqv_pot
     type(fv_grid_bounds_type), intent(IN) :: bd
     integer, intent(IN) :: npz, ncnst, sphum, nwat
     logical, intent(IN) :: hydrostatic
-    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, delz, w
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w
+    real, dimension(bd%is:, bd%js:,1:), intent(IN) :: delz
     real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz), intent(IN) :: u
     real, dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz), intent(IN) :: v
     real, dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst), intent(IN) :: q
@@ -5598,7 +5601,8 @@ end subroutine eqv_pot
     integer, intent(IN) :: npz, ncnst, sphum, nwat, ng
     real,    intent(IN) :: zvir
     logical, intent(IN) :: hydrostatic, moist_phys
-    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, delz
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp
+    real, dimension(bd%is:, bd%js:, 1:), intent(IN) :: delz
     real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz), intent(IN) :: u
     real, dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz), intent(IN) :: v
     real, dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst), intent(IN) :: q

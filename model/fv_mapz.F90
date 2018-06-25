@@ -182,6 +182,7 @@ contains
        endif
 
 !!! DEBUG CODE
+       if (.not. hydrostatic) then
        !For some reason without this COPY the model CRASHES!!! need to find out what is going wrong.
        do k=1,km
        do j=js,je
@@ -190,6 +191,7 @@ contains
        enddo
        enddo
        enddo
+       endif
 !!! END DEBUG CODE
 
 !$OMP parallel do default(none) shared(is,ie,js,je,km,pe,ptop,kord_tm,hydrostatic, &
@@ -356,6 +358,11 @@ contains
                        km,   pe2,  w,              &
                        is, ie, j, isd, ied, jsd, jed, -2, kord_wz)
 ! Remap delz for hybrid sigma-p coordinate
+!!! DEBUG CODE
+        gz = 1.e8
+!!! END DEBUG CODE
+!        call map1_ppm (km,   pe1, delz_nohalo(is,j),  gz(is,j),   &
+!                       km,   pe2, delz_nohalo(is,j),              &
         call map1_ppm (km,   pe1, delz_nohalo,  gz,   &
                        km,   pe2, delz_nohalo,              &
                        is, ie, j, is,  ie,  js,  je,  1, abs(kord_tm))
@@ -930,6 +937,7 @@ endif        ! end last_step check
   endif
 
 !!! DEBUG CODE
+  if (.not. hydrostatic) then
   do k=1,km
   do j=js,je
   do i=is,ie
@@ -937,6 +945,7 @@ endif        ! end last_step check
   enddo
   enddo
   enddo
+  endif
 !!! END DEBUG CODE
 
 

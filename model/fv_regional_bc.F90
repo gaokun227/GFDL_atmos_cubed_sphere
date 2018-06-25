@@ -3404,7 +3404,8 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                                                 delp  &
                                                                ,pt 
 ! 
-      real,dimension(bd%isd:,bd%jsd:,1:),intent(out) :: delz,q_con,w
+      real,dimension(bd%isd:,bd%jsd:,1:),intent(out) :: q_con,w
+      real,dimension(bd%is:, bd%js:, 1:),intent(out) :: delz
 !
       real,dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz,ntracers),intent(out) :: q
 !
@@ -3605,9 +3606,9 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
         enddo
       enddo
 !
-      ie=min(ubound(side_t0%delz_BC,1),ubound(delz,1))
-      je=min(ubound(side_t0%delz_BC,2),ubound(delz,2))
-      nz=ubound(delz,3)
+      ie=min(ubound(side_t0%w_BC,1),ubound(w,1))
+      je=min(ubound(side_t0%w_BC,2),ubound(w,2))
+      nz=ubound(w,3)
 !
       do k=1,nz
         do j=jstart,jend
