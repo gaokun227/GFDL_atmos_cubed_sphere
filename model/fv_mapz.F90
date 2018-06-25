@@ -150,9 +150,6 @@ contains
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gz, cvm, qv
 
-  !!! DEBUG CODE
-  real, dimension(is:ie,js:je,km) :: delz_nohalo ! TEMPORARY
-  !!! END DEBUG CODE
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
   integer:: i,j,k 
@@ -181,23 +178,10 @@ contains
             call qs_init(kmp)
        endif
 
-!!! DEBUG CODE
-       if (.not. hydrostatic) then
-       !For some reason without this COPY the model CRASHES!!! need to find out what is going wrong.
-       do k=1,km
-       do j=js,je
-       do i=is,ie
-          delz_nohalo(i,j,k) = delz(i,j,k)
-       enddo
-       enddo
-       enddo
-       endif
-!!! END DEBUG CODE
-
 !$OMP parallel do default(none) shared(is,ie,js,je,km,pe,ptop,kord_tm,hydrostatic, &
 !$OMP                                  pt,pk,rg,peln,q,nwat,liq_wat,rainwat,ice_wat,snowwat,    &
 !$OMP                                  graupel,q_con,sphum,cappa,r_vir,rcp,k1k,delp, &
-!$OMP                                  delz_nohalo,akap,pkz,te,u,v,ps, gridstruct, last_step, &
+!$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
 !$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,pe4)    &
 !$OMP                          private(qv,gz,cvm,kp,k_next,bkh,dp2,   &
@@ -234,13 +218,13 @@ contains
                   do i=is,ie
                      q_con(i,j,k) = gz(i)
                      cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
-                     pt(i,j,k) = pt(i,j,k)*exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz_nohalo(i,j,k)*pt(i,j,k)))
+                     pt(i,j,k) = pt(i,j,k)*exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
                   enddo
 #else
                   do i=is,ie
-                     pt(i,j,k) = pt(i,j,k)*exp(k1k*log(rrg*delp(i,j,k)/delz_nohalo(i,j,k)*pt(i,j,k)))
+                     pt(i,j,k) = pt(i,j,k)*exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
 ! Using dry pressure for the definition of the virtual potential temperature
-!                    pt(i,j,k) = pt(i,j,k)*exp(k1k*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz_nohalo(i,j,k)*    &
+!                    pt(i,j,k) = pt(i,j,k)*exp(k1k*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*    &
 !                                              pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
                   enddo
 #endif
@@ -262,7 +246,7 @@ contains
      if ( .not. hydrostatic ) then
            do k=1,km
               do i=is,ie
-                 delz_nohalo(i,j,k) = -delz_nohalo(i,j,k) / delp(i,j,k) ! ="specific volume"/grav
+                 delz(i,j,k) = -delz(i,j,k) / delp(i,j,k) ! ="specific volume"/grav
               enddo
            enddo
       endif
@@ -358,20 +342,12 @@ contains
                        km,   pe2,  w,              &
                        is, ie, j, isd, ied, jsd, jed, -2, kord_wz)
 ! Remap delz for hybrid sigma-p coordinate
-!!! DEBUG CODE
-        gz = 1.e8
-!!! END DEBUG CODE
-!        call map1_ppm (km,   pe1, delz_nohalo(is,j),  gz(is,j),   &
-!                       km,   pe2, delz_nohalo(is,j),              &
-        call map1_ppm (km,   pe1, delz_nohalo,  gz,   &
-                       km,   pe2, delz_nohalo,              &
+        call map1_ppm (km,   pe1, delz,  gz,   & ! works
+                       km,   pe2, delz,              &
                        is, ie, j, is,  ie,  js,  je,  1, abs(kord_tm))
-!!$        call map1_ppm (km,   pe1, delz,  gz,   &
-!!$                       km,   pe2, delz,              &
-!!$                       is, ie, j, isd,  ied,  jsd,  jed,  1, abs(kord_tm))
         do k=1,km
            do i=is,ie
-              delz_nohalo(i,j,k) = -delz_nohalo(i,j,k)*dp2(i,k)
+              delz(i,j,k) = -delz(i,j,k)*dp2(i,k)
            enddo
         enddo
    endif
@@ -424,20 +400,20 @@ contains
             do i=is,ie
                q_con(i,j,k) = gz(i)
                cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
-               pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz_nohalo(i,j,k)*pt(i,j,k)))
+               pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
             enddo
 #else
          if ( kord_tm < 0 ) then
            do i=is,ie
-              pkz(i,j,k) = exp(akap*log(rrg*delp(i,j,k)/delz_nohalo(i,j,k)*pt(i,j,k)))
+              pkz(i,j,k) = exp(akap*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
 ! Using dry pressure for the definition of the virtual potential temperature
-!             pkz(i,j,k) = exp(akap*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz_nohalo(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
+!             pkz(i,j,k) = exp(akap*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
            enddo
          else
            do i=is,ie
-              pkz(i,j,k) = exp(k1k*log(rrg*delp(i,j,k)/delz_nohalo(i,j,k)*pt(i,j,k)))
+              pkz(i,j,k) = exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
 ! Using dry pressure for the definition of the virtual potential temperature
-!             pkz(i,j,k) = exp(k1k*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz_nohalo(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
+!             pkz(i,j,k) = exp(k1k*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
            enddo
            if ( last_step .and. (.not.adiabatic) ) then
               do i=is,ie
@@ -566,7 +542,7 @@ contains
 
 !$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,va,isd,ied,jsd,jed,kord_mt, &
 !$OMP                               te_2d,te,delp,hydrostatic,hs,rg,pt,peln, adiabatic, &
-!$OMP                               cp,delz_nohalo,nwat,rainwat,liq_wat,ice_wat,snowwat,       &
+!$OMP                               cp,delz,nwat,rainwat,liq_wat,ice_wat,snowwat,       &
 !$OMP                               graupel,q_con,r_vir,sphum,w,pk,pkz,last_step,consv, &
 !$OMP                               do_adiabatic_init,zsum1,zsum0,te0_2d,domain,        &
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
@@ -618,7 +594,7 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
            enddo
            do k=km,1,-1
               do i=is,ie
-                 phis(i,k) = phis(i,k+1) - grav*delz_nohalo(i,j,k)
+                 phis(i,k) = phis(i,k+1) - grav*delz(i,j,k)
               enddo
            enddo
 
@@ -721,15 +697,15 @@ endif        ! end last_step check
                              te(isd,jsd,k), q(isd,jsd,k,sphum), q(isd,jsd,k,liq_wat),   &
                              q(isd,jsd,k,ice_wat), q(isd,jsd,k,rainwat),    &
                              q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel),    &
-                             hs ,dpln, delz_nohalo(is:ie,js:je,k), pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), & ! TEMPORARY
+                             hs ,dpln, delz(is:ie,js:je,k), pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), & ! TEMPORARY
               cappa(isd:,jsd:,k), gridstruct%area_64, dtdt(is,js,k), out_dt, last_step, cld_amt>0, q(isd,jsd,k,cld_amt))
               if ( .not. hydrostatic  ) then
                  do j=js,je
                     do i=is,ie
 #ifdef MOIST_CAPPA
-                       pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz_nohalo(i,j,k)*pt(i,j,k)))
+                       pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
 #else
-                       pkz(i,j,k) = exp(akap*log(rrg*delp(i,j,k)/delz_nohalo(i,j,k)*pt(i,j,k)))
+                       pkz(i,j,k) = exp(akap*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
 #endif
                     enddo
                  enddo
@@ -783,7 +759,7 @@ endif        ! end last_step check
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
                        q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), &
                        pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
-                       delz_nohalo(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
+                       delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
                        hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
                        inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), hydrostatic, &
                        is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:), consv>consv_min, &
@@ -806,9 +782,9 @@ endif        ! end last_step check
         ! update pkz
         if (.not. hydrostatic) then
 #ifdef MOIST_CAPPA
-            pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz_nohalo(is:ie,j,:)*pt(is:ie,j,:)))
+            pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
 #else
-            pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz_nohalo(is:ie,j,:)*pt(is:ie,j,:)))
+            pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
 #endif
         endif
  
@@ -907,7 +883,7 @@ endif        ! end last_step check
           enddo
           do k=km,1,-1
              do i=is,ie
-                phis(i,k) = phis(i,k+1) - grav*delz_nohalo(i,j,k)
+                phis(i,k) = phis(i,k+1) - grav*delz(i,j,k)
              enddo
           enddo
           do k = 1, km
@@ -935,19 +911,6 @@ endif        ! end last_step check
     endif
 
   endif
-
-!!! DEBUG CODE
-  if (.not. hydrostatic) then
-  do k=1,km
-  do j=js,je
-  do i=is,ie
-     delz(i,j,k) = delz_nohalo(i,j,k)
-  enddo
-  enddo
-  enddo
-  endif
-!!! END DEBUG CODE
-
 
  end subroutine Lagrangian_to_Eulerian
 
