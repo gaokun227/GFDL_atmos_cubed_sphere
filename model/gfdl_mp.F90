@@ -391,9 +391,8 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     call mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, qg, &
         qa, qn, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, area, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, last_step)
-
-    te = 0.0
+        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, consv_te, te, &
+        last_step)
     
     ! call mpp_clock_end (gfdl_mp_clock)
     
@@ -417,12 +416,14 @@ end subroutine gfdl_mp_driver
 subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qn, dz, is, ie, ks, ke, dt_in, &
         rain, snow, graupel, ice, m2_rain, m2_sol, area1, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, last_step)
+        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, consv_te, te, &
+        last_step)
     
     implicit none
     
     logical, intent (in) :: hydrostatic
     logical, intent (in) :: last_step
+    logical, intent (in) :: consv_te
     integer, intent (in) :: is, ie, ks, ke
     real, intent (in) :: dt_in
     real (kind = r_grid), intent (in), dimension (is:ie) :: area1
@@ -439,6 +440,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (out), dimension (is:ie) :: w_var
     real, intent (out), dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
     real, intent (out), dimension (is:ie, ks:ke) :: m2_rain, m2_sol
+    real, intent (out), dimension (is:ie, ks:ke) :: te
     ! local:
     real, dimension (ks:ke) :: q_liq, q_sol
     real, dimension (ks:ke) :: qvz, qlz, qrz, qiz, qsz, qgz, qaz
@@ -525,6 +527,30 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             do k = ks, ke
                 w1 (k) = w (i, k)
             enddo
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! fix energy conservation
+        ! -----------------------------------------------------------------------
+        
+        if (consv_te) then
+            if (hydrostatic) then
+                do k = ks, ke
+                    te (i, k) = - c_air * tz (k) * delp (i, k)
+                enddo
+            else
+                do k = ks, ke
+#ifdef MOIST_CAPPA
+                    q_liq (k) = ql (i, k) + qr (i, k)
+                    q_sol (k) = qi (i, k) + qs (i, k) + qg (i, k)
+                    q_con (i, k) = q_liq (k) + q_sol (k)
+                    cvm (k) = (one_r8 - (qv (i, k) + q_con (i, k))) * c_air + qv (i, k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                    te (i, k) = - cvm (k) * tz (k) * delp (i, k)
+#else
+                    te (i, k) = - c_air * tz (k) * delp (i, k)
+#endif
+                enddo
+            endif
         endif
         
         ! -----------------------------------------------------------------------
@@ -724,6 +750,26 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             pt (i, k) = tz (k) * (1. + zvir * qvz (k))
 #endif
         enddo
+        
+        ! -----------------------------------------------------------------------
+        ! fix energy conservation
+        ! -----------------------------------------------------------------------
+        
+        if (consv_te) then
+            if (hydrostatic) then
+                do k = ks, ke
+                    te (i, k) = te (i, k) + c_air * tz (k) * delp (i, k)
+                enddo
+            else
+                do k = ks, ke
+#ifdef MOIST_CAPPA
+                    te (i, k) = te (i, k) + cvm (k) * tz (k) * delp (i, k)
+#else
+                    te (i, k) = te (i, k) + c_air * tz (k) * delp (i, k)
+#endif
+                enddo
+            endif
+        endif
         
         ! -----------------------------------------------------------------------
         ! update cloud fraction tendency
