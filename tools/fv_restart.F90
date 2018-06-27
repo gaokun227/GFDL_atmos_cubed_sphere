@@ -164,9 +164,11 @@ contains
                 if (Atm(n)%flagstruct%nggps_ic) then
                    call fill_nested_grid_topo(Atm(n), .false.)
                    call fill_nested_grid_topo_halo(Atm(n), .false.)
+                   call mpp_get_data_domain( Atm(n)%parent_grid%domain, isd, ied, jsd, jed)
+
                    call nested_grid_BC(Atm(n)%ps, Atm(n)%parent_grid%ps, Atm(n)%neststruct%nest_domain, &
                         Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-                        Atm(n)%npx, Atm(n)%npy,Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)         
+                        Atm(n)%npx, Atm(n)%npy,Atm(n)%bd, isd, ied, jsd, jed, proc_in=.false.)         
                 else
                    call fill_nested_grid_topo(Atm(n), .false.)
                    if ( Atm(n)%flagstruct%external_ic .and. grid_type < 4 ) call fill_nested_grid_data(Atm(n:n), .false.)
@@ -670,18 +672,18 @@ contains
 
     type(fv_atmos_type), intent(INOUT) :: Atm
     logical, intent(IN), OPTIONAL :: proc_in
-    integer :: isg, ieg, jsg, jeg
+    integer :: isd, ied, jsd, jed
 
     if (.not. Atm%neststruct%nested) return
 
-    call mpp_get_global_domain( Atm%parent_grid%domain, &
-         isg, ieg, jsg, jeg)
+    call mpp_get_data_domain( Atm%parent_grid%domain, &
+         isd, ied, jsd, jed)
 
     !This is 2D and doesn't need remapping
     if (is_master()) print*, '  FILLING NESTED GRID HALO WITH INTERPOLATED TERRAIN'
     call nested_grid_BC(Atm%phis, Atm%parent_grid%phis, Atm%neststruct%nest_domain, &
          Atm%neststruct%ind_h, Atm%neststruct%wt_h, 0, 0, &
-         Atm%npx, Atm%npy, Atm%bd, isg, ieg, jsg, jeg, proc_in=proc_in)
+         Atm%npx, Atm%npy, Atm%bd, isd, ied, jsd, jed, proc_in=proc_in)
     
   end subroutine fill_nested_grid_topo_halo
 
