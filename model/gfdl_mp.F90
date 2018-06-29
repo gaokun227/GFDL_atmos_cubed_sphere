@@ -4,7 +4,7 @@
 ! key elements have been simplified / improved. this code at this stage
 ! bears little to no similarity to the original lin mp in zetac.
 ! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
-! developer: shian-jiann lin, linjiong zhou
+! developer: shian - jiann lin, linjiong zhou
 ! revision: inline gfdl cloud microphysics, 9 / 8 / 2017
 ! =======================================================================
 
@@ -53,8 +53,8 @@ module gfdl_mp_mod
     ! real, parameter :: c_ice = 2106.0 ! heat capacity of ice at 0 deg c: c = c_ice + 7.3 * (t - tice)
     ! real, parameter :: c_liq = 4190.0 ! heat capacity of water at 0 deg c
     
-    real, parameter :: c_ice = 1972.0 ! gfdl: heat capacity of ice at - 15 deg c
-    real, parameter :: c_liq = 4185.5 ! gfdl: heat capacity of water at 15 deg c
+    real, parameter :: c_ice = 1972. ! gfdl: heat capacity of ice at - 15 deg c
+    real, parameter :: c_liq = 4.1855e+3 ! gfs: heat capacity of water at 0c
     ! real, parameter :: c_liq = 4218.0 ! ifs: heat capacity of liquid at 0 deg c
     
     real, parameter :: eps = rdgas / rvgas ! 0.6219934995
@@ -75,10 +75,10 @@ module gfdl_mp_mod
     ! real, parameter :: hlf0 = 3.337e5 ! emanuel
     
     real, parameter :: lv0 = hlv0 - dc_vap * t_ice! 3.13905782e6, evaporation latent heat coefficient at 0 deg k
-    real, parameter :: li00 = hlf0 - dc_ice * t_ice! - 2.7105966e5, fussion latend heat coefficient at 0 deg k
+    real, parameter :: li0 = hlf0 - dc_ice * t_ice! - 2.7105966e5, fussion latend heat coefficient at 0 deg k
     
     real (kind = r_grid), parameter :: d2ice = dc_vap + dc_ice ! - 126, isobaric heating / cooling
-    real (kind = r_grid), parameter :: li2 = lv0 + li00 ! 2.86799816e6, sublimation latent heat coefficient at 0 deg k
+    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.86799816e6, sublimation latent heat coefficient at 0 deg k
     
     real, parameter :: qrmin = 1.e-8 ! min value for ???
     real, parameter :: qvmin = 1.e-20 ! min value for water vapor (treated as zero)
@@ -116,8 +116,11 @@ module gfdl_mp_mod
     real :: lati, latv, lats, lat2, lcp, icp, tcp ! used in bigg mechanism and wet bulk
     
     real :: d0_vap ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
-    real :: lv00 ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
-
+    real (kind = r_grid) :: lv00, li00, li20
+    ! scaled constants:
+    real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
+    real (kind = r_grid), parameter :: one_r8 = 1.
+    
     integer :: ntimes = 1 ! cloud microphysics sub cycles
     
     ! cloud microphysics switchers
@@ -127,7 +130,7 @@ module gfdl_mp_mod
     
     logical :: de_ice = .false. ! to prevent excessive build - up of cloud ice from external sources
     logical :: sedi_transport = .true. ! transport of momentum in sedimentation
-    logical :: do_sedi_w = .false. ! transport of vertical motion in sedimentation
+    logical :: do_sedi_w = .true. ! transport of vertical motion in sedimentation
     logical :: do_sedi_heat = .true. ! transport of heat in sedimentation
     logical :: prog_ccn = .false. ! do prognostic ccn (yi ming's method)
     logical :: do_qa = .true. ! do inline cloud fraction
@@ -136,8 +139,7 @@ module gfdl_mp_mod
     logical :: rad_rain = .true. ! consider rain in cloud fraction calculation
     logical :: fix_negative = .false. ! fix negative water species
     logical :: do_setup = .true. ! setup constants and parameters
-    logical :: p_nonhydro = .false. ! perform hydrosatic adjustment on air density
-    logical :: dry_mp = .false. ! use dry mass mixing ratio in gfdl mp
+    logical :: disp_heat = .false. ! dissipative heating due to sedimentation
     
     real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
     real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
@@ -153,14 +155,8 @@ module gfdl_mp_mod
     ! minimum temperature water can exist (moore & molinero nov. 2011, nature)
     ! dt_fr can be considered as the error bar
     
-    real :: p_min = 100. ! minimum pressure (pascal) for mp to operate
-    
-    ! slj, the following parameters are for cloud - resolving resolution: 1 - 5 km
-    
-    ! qi0_crt = 0.8e-4
-    ! qs0_crt = 0.6e-3
-    ! c_psaci = 0.1
-    ! c_pgacs = 0.1
+    real, parameter :: p0_min = 100. ! minimum pressure (pascal) for mp to operate
+    real :: p_min
     
     ! -----------------------------------------------------------------------
     ! namelist parameters
@@ -227,9 +223,8 @@ module gfdl_mp_mod
     
     real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain)
     real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources)
-    
     real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold (was 1.e-4)
-    ! qi0_crt is highly dependent on horizontal resolution
+    ! qi0_crt if negative, its magnitude is used as the mixing ration threshold; otherwise, used as density
     real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold
     ! lfo used * mixing ratio * = 1.e-4 (hail in lfo)
     real :: qs0_crt = 1.0e-3 ! snow to graupel density threshold (0.6e-3 in purdue lin scheme)
@@ -268,18 +263,20 @@ module gfdl_mp_mod
     
     ! cloud microphysics switchers
     
+    ! this should be removed with the inline code
     logical :: fast_sat_adj = .false. ! has fast saturation adjustments
     logical :: z_slope_liq = .true. ! use linear mono slope for autocconversions
     logical :: z_slope_ice = .false. ! use linear mono slope for autocconversions
     logical :: use_ccn = .false. ! must be true when prog_ccn is false
     logical :: use_ppm = .false. ! use ppm fall scheme
+    logical :: use_ppm_ice = .false. ! use ppm fall scheme for cloud ice
     logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
     logical :: mp_print = .false. ! cloud microphysics debugging printout
     logical :: do_hail = .false. ! use hail parameters instead of graupel
 
     ! real :: global_area = - 1.
     
-    real :: log_10, tice0, t_wfr
+    real :: g2, log_10, tice0, t_wfr
     
     ! -----------------------------------------------------------------------
     ! namelist
@@ -294,9 +291,9 @@ module gfdl_mp_mod
         tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
-        rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
+        rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
-        ntimes, do_hail
+        ntimes, disp_heat, do_hail
     
 contains
 
@@ -329,22 +326,22 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (inout), dimension (is:ie, ks:ke) :: delp
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
-    
     real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
-    
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     real, intent (out), dimension (is:ie, ks:ke) :: te
-    
     ! logical :: used
-    
     real, dimension (is:ie) :: w_var
-    
     real, dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
-    
     real, dimension (is:ie, ks:ke) :: m2_rain, m2_sol
     
     ! call mpp_clock_begin (gfdl_mp_clock)
+    
+    if (last_step) then
+        p_min = p0_min ! final clean - up
+    else
+        p_min = 30.e2 ! time saving trick
+    endif
     
     ! -----------------------------------------------------------------------
     ! define heat capacity of dry air and water vapor based on hydrostatical property
@@ -353,16 +350,24 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     if (hydrostatic) then
         c_air = cp_air
         c_vap = cp_vap
-        p_nonhydro = .false.
+        do_sedi_w = .false.
     else
         c_air = cv_air
         c_vap = cv_vap
-        p_nonhydro = .true.
     endif
     d0_vap = c_vap - c_liq
-    lv00 = hlv0 - d0_vap * t_ice
     
-    if (hydrostatic) do_sedi_w = .false.
+    ! scaled constants (to reduce fp errors for 32 - bit) :
+    d1_vap = d0_vap / c_air
+    d1_ice = dc_ice / c_air
+    
+    lv00 = (hlv0 - d0_vap * t_ice) / c_air
+    li00 = (hlf0 - dc_ice * t_ice) / c_air
+    li20 = lv00 + li00
+    
+    c1_vap = c_vap / c_air
+    c1_liq = c_liq / c_air
+    c1_ice = c_ice / c_air
     
     ! -----------------------------------------------------------------------
     ! define latent heat coefficient used in wet bulb and bigg mechanism
@@ -417,62 +422,49 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     implicit none
     
     logical, intent (in) :: hydrostatic
-    
     logical, intent (in) :: last_step
-    
     logical, intent (in) :: consv_te
-    
     integer, intent (in) :: is, ie, ks, ke
-    
     real, intent (in) :: dt_in
-    
     real (kind = r_grid), intent (in), dimension (is:ie) :: area1
     real, intent (in), dimension (is:ie) :: hs
-    
     real, intent (in), dimension (is:ie, ks:ke) :: dz
     real, intent (in), dimension (is:ie, ks:ke) :: qn
     
     real, intent (inout), dimension (is:ie, ks:ke) :: delp
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
-    
     real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
-    
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     real, intent (out), dimension (is:ie) :: w_var
-    
     real, intent (out), dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
-    
     real, intent (out), dimension (is:ie, ks:ke) :: m2_rain, m2_sol
-    
     real, intent (out), dimension (is:ie, ks:ke) :: te
-    
-    real, dimension (ks:ke) :: mc_air
-    
+    ! local:
+    real, dimension (ks:ke) :: q_liq, q_sol
     real, dimension (ks:ke) :: qvz, qlz, qrz, qiz, qsz, qgz, qaz
     real, dimension (ks:ke) :: vtiz, vtsz, vtgz, vtrz
-    real, dimension (ks:ke) :: dp0, dp1, dz0, dz1
-    real, dimension (ks:ke) :: qv0, ql0, qr0, qi0, qs0, qg0, qa0
-    real, dimension (ks:ke) :: t0, den, den0, tz, p1, denfac
+    real, dimension (ks:ke) :: dp1, dz1
+    real, dimension (ks:ke) :: den, p1, denfac
     real, dimension (ks:ke) :: ccn, c_praut, m1_rain, m1_sol, m1
     real, dimension (ks:ke) :: u0, v0, u1, v1, w1
-    real, dimension (ks:ke) :: omq
     
     real :: cpaut, rh_adj, rh_rain
     real :: r1, s1, i1, g1, rdt, ccn0
     real :: dt_rain
-    real :: s_leng, t_land, t_ocean, h_var
-    real :: cvm, tmp
+    real :: s_leng, t_land, t_ocean, h_var, tmp
+    real (kind = r_grid), dimension (ks:ke) :: dp0, tz, cvm
+    real (kind = r_grid) :: con_r8, c8
     real :: convt
     real :: dts
     
     integer :: i, k, n
-
+    
     dts = dt_in / real (ntimes)
     
     dt_rain = dts * 0.5
-    rdt = 1. / dts
+    rdt = one_r8 / dts
     
     ! convert to mm / day
     convt = 86400. * rdt * rgrav
@@ -484,63 +476,43 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     do i = is, ie
         
         do k = ks, ke
-            
 #ifdef MOIST_CAPPA
-            t0 (k) = pt (i, k) / ((1. + zvir * qv (i, k)) * (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k))))
+            tz (k) = pt (i, k) / ((1. + zvir * qv (i, k)) * (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k))))
 #else
-            t0 (k) = pt (i, k) / (1. + zvir * qv (i, k))
+            tz (k) = pt (i, k) / (1. + zvir * qv (i, k))
 #endif
-            tz (k) = t0 (k)
-            dp1 (k) = delp (i, k)
-            dp0 (k) = dp1 (k) ! moist air mass * grav
-            
+            dp0 (k) = delp (i, k)
             ! -----------------------------------------------------------------------
             ! convert moist mixing ratios to dry mixing ratios
             ! -----------------------------------------------------------------------
-            
             qvz (k) = qv (i, k)
             qlz (k) = ql (i, k)
             qrz (k) = qr (i, k)
             qiz (k) = qi (i, k)
             qsz (k) = qs (i, k)
             qgz (k) = qg (i, k)
-            
-            qa0 (k) = qa (i, k)
+            ! save moist ratios for te:
+            q_liq (k) = qlz (k) + qrz (k)
+            q_sol (k) = qiz (k) + qsz (k) + qgz (k)
+            q_con (i, k) = q_liq (k) + q_sol (k)
             qaz (k) = 0.
-            dz0 (k) = dz (i, k)
+            dz1 (k) = dz (i, k)
+            con_r8 = one_r8 - (qvz (k) + q_con (i, k))
+            ! dp1 is dry mass (no change during mp)
+            dp1 (k) = dp0 (k) * con_r8
+            con_r8 = one_r8 / con_r8
+            qvz (k) = qvz (k) * con_r8
+            qlz (k) = qlz (k) * con_r8
+            qrz (k) = qrz (k) * con_r8
+            qiz (k) = qiz (k) * con_r8
+            qsz (k) = qsz (k) * con_r8
+            qgz (k) = qgz (k) * con_r8
+            
+            den (k) = - dp1 (k) / (grav * dz1 (k)) ! density of dry air
+            p1 (k) = den (k) * rdgas * tz (k) ! dry air pressure
             
             ! -----------------------------------------------------------------------
-            ! save a copy of old value for computing tendencies
-            ! -----------------------------------------------------------------------
-            
-            qv0 (k) = qvz (k)
-            ql0 (k) = qlz (k)
-            qr0 (k) = qrz (k)
-            qi0 (k) = qiz (k)
-            qs0 (k) = qsz (k)
-            qg0 (k) = qgz (k)
-            
-            if (dry_mp) then
-                mc_air (k) = c_air
-                dp1 (k) = dp1 (k) * (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)))
-                omq (k) = dp0 (k) / dp1 (k)
-            else
-                mc_air (k) = (1. - (qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k))) * c_air
-                omq (k) = 1.0
-            endif
-            
-            qvz (k) = qvz (k) * omq (k)
-            qlz (k) = qlz (k) * omq (k)
-            qrz (k) = qrz (k) * omq (k)
-            qiz (k) = qiz (k) * omq (k)
-            qsz (k) = qsz (k) * omq (k)
-            qgz (k) = qgz (k) * omq (k)
-            
-            den0 (k) = - dp1 (k) / (grav * dz0 (k)) ! density of moist air
-            p1 (k) = den0 (k) * rdgas * t0 (k) ! dry air pressure
-            
-            ! -----------------------------------------------------------------------
-            ! for sedi_momentum
+            ! for sedi_momentum transport:
             ! -----------------------------------------------------------------------
             
             m1 (k) = 0.
@@ -548,7 +520,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             v0 (k) = va (i, k)
             u1 (k) = u0 (k)
             v1 (k) = v0 (k)
-            
+            denfac (k) = sqrt (sfcrho / den (k))
         enddo
         
         if (do_sedi_w) then
@@ -564,15 +536,18 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         if (consv_te) then
             if (hydrostatic) then
                 do k = ks, ke
-                    te (i, k) = - c_air * t0 (k) * delp (i, k)
+                    te (i, k) = - c_air * tz (k) * delp (i, k)
                 enddo
             else
                 do k = ks, ke
 #ifdef MOIST_CAPPA
-                    cvm = mc_air (k) + qv0 (k) * c_vap + (qr0 (k) + ql0 (k)) * c_liq + (qi0 (k) + qs0 (k) + qg0 (k)) * c_ice
-                    te (i, k) = - cvm * t0 (k) * delp (i, k)
+                    q_liq (k) = ql (i, k) + qr (i, k)
+                    q_sol (k) = qi (i, k) + qs (i, k) + qg (i, k)
+                    q_con (i, k) = q_liq (k) + q_sol (k)
+                    cvm (k) = (one_r8 - (qv (i, k) + q_con (i, k))) * c_air + qv (i, k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                    te (i, k) = - cvm (k) * tz (k) * delp (i, k)
 #else
-                    te (i, k) = - c_air * t0 (k) * delp (i, k)
+                    te (i, k) = - c_air * tz (k) * delp (i, k)
 #endif
                 enddo
             endif
@@ -618,10 +593,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         t_ocean = dw_ocean * s_leng
         h_var = t_land * min (1., abs (hs (i)) / (10. * grav)) + t_ocean * (1. - min (1., abs (hs (i)) / (10. * grav)))
         h_var = min (0.20, max (0.01, h_var))
-        ! if (id_var > 0) w_var (i) = h_var
         
         ! -----------------------------------------------------------------------
-        ! relative humidity increment
+        ! relative humidity thresholds
         ! -----------------------------------------------------------------------
         
         rh_adj = 1. - h_var - rh_inc
@@ -632,37 +606,19 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         if (fix_negative) &
-            call neg_adj (ks, ke, tz, dp1, qvz, qlz, qrz, qiz, qsz, qgz, mc_air)
+            call neg_adj (ks, ke, tz, dp1, qvz, qlz, qrz, qiz, qsz, qgz)
         
         m2_rain (i, :) = 0.
         m2_sol (i, :) = 0.
-
-        do n = 1, ntimes
         
-            ! -----------------------------------------------------------------------
-            ! define air density based on hydrostatical property
-            ! -----------------------------------------------------------------------
-            
-            if (p_nonhydro) then
-                do k = ks, ke
-                    dz1 (k) = dz0 (k)
-                    den (k) = den0 (k) ! dry air density remains the same
-                    denfac (k) = sqrt (sfcrho / den (k))
-                enddo
-            else
-                do k = ks, ke
-                    dz1 (k) = dz0 (k) * tz (k) / t0 (k) ! hydrostatic balance
-                    den (k) = den0 (k) * dz0 (k) / dz1 (k)
-                    denfac (k) = sqrt (sfcrho / den (k))
-                enddo
-            endif
+        do n = 1, ntimes
             
             ! -----------------------------------------------------------------------
             ! time - split warm rain processes: 1st pass
             ! -----------------------------------------------------------------------
             
             call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, mc_air)
+                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var)
             
             rain (i) = rain (i) + r1 * convt
             
@@ -678,7 +634,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             call fall_speed (ks, ke, den, qsz, qiz, qgz, qlz, tz, vtsz, vtiz, vtgz)
             
             call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
-                dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, mc_air)
+                dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1)
             
             rain (i) = rain (i) + r1 * convt ! from melted snow & ice that reached the ground
             snow (i) = snow (i) + s1 * convt
@@ -698,7 +654,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, mc_air)
+                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var)
             
             rain (i) = rain (i) + r1 * convt
             
@@ -713,8 +669,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, &
-                denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, mc_air, last_step)
-
+                denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, last_step)
+            
         enddo
         
         ! -----------------------------------------------------------------------
@@ -730,18 +686,29 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 va (i, k) = v1 (k)
             enddo
             ! sjl modify tz due to ke loss:
-            ! seperate loop (vectorize better with no k-dependency)
-            do k = ks + 1, ke
+            ! seperate loop (vectorize better with no k - dependency)
+            if (disp_heat) then
+                do k = ks + 1, ke
 #ifdef MOIST_CAPPA
-                cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
-                tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / cvm
+                    c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
+                    tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / c8
 #else
-                tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / c_air
+                    tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / c_air
 #endif
-            enddo
+                enddo
+            endif
         endif
         
-        if (do_sedi_w) then
+        if (do_sedi_w .and. disp_heat) then
+            ! conserve local te
+            do k = ks, ke
+#ifdef MOIST_CAPPA
+                c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
+                tz (k) = tz (k) + 0.5 * (w (i, k) ** 2 - w1 (k) ** 2) / c8
+#else
+                tz (k) = tz (k) + 0.5 * (w (i, k) ** 2 - w1 (k) ** 2) / c_air
+#endif
+            enddo
             do k = ks, ke
                 w (i, k) = w1 (k)
             enddo
@@ -753,41 +720,35 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         do k = ks, ke
-            
-            qvz (k) = qvz (k) / omq (k)
-            qlz (k) = qlz (k) / omq (k)
-            qrz (k) = qrz (k) / omq (k)
-            qiz (k) = qiz (k) / omq (k)
-            qsz (k) = qsz (k) / omq (k)
-            qgz (k) = qgz (k) / omq (k)
-            
+            ! total mass changed due to sedimentation !!!
+            con_r8 = one_r8 + qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
+            delp (i, k) = dp1 (k) * con_r8
+            ! convert back to moist mixing ratios
+            con_r8 = one_r8 / con_r8
+            qvz (k) = qvz (k) * con_r8
+            qlz (k) = qlz (k) * con_r8
+            qrz (k) = qrz (k) * con_r8
+            qiz (k) = qiz (k) * con_r8
+            qsz (k) = qsz (k) * con_r8
+            qgz (k) = qgz (k) * con_r8
+            ! all are moist mixing ratios at this point on:
             qv (i, k) = qvz (k)
             ql (i, k) = qlz (k)
             qr (i, k) = qrz (k)
             qi (i, k) = qiz (k)
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
-            
-            q_con (i, k) = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
-            delp (i, k) = dp0 (k) * &
-                 (1. - (qv0 (k) + ql0 (k) + qr0 (k) + qi0 (k) + qs0 (k) + qg0 (k))) / &
-                 (1. - (qvz (k) + q_con (i, k)))
-            
+            q_liq (k) = qlz (k) + qrz (k)
+            q_sol (k) = qiz (k) + qsz (k) + qgz (k)
+            q_con (i, k) = q_liq (k) + q_sol (k)
+            cvm (k) = (one_r8 - (qvz (k) + q_con (i, k))) * c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            tmp = rdgas * (1. + zvir * qvz (k))
+            cappa (i, k) = tmp / (tmp + cvm (k))
 #ifdef MOIST_CAPPA
-            if (dry_mp) then
-                mc_air (k) = c_air
-            else
-                mc_air (k) = (1. - (qvz (k) + q_con (i, k))) * c_air
-            endif
-            cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
-            tmp = 1. + zvir * qvz (k)
-            pt (i, k) = tz (k) * tmp * (1. - q_con (i, k))
-            tmp = rdgas * tmp
-            cappa (i, k) = tmp / (tmp + cvm)
+            pt (i, k) = tz (k) * (1. + zvir * qvz (k)) * (1. - q_con (i, k))
 #else
             pt (i, k) = tz (k) * (1. + zvir * qvz (k))
 #endif
-            
         enddo
         
         ! -----------------------------------------------------------------------
@@ -802,8 +763,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             else
                 do k = ks, ke
 #ifdef MOIST_CAPPA
-                    cvm = mc_air (k) + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
-                    te (i, k) = te (i, k) + cvm * tz (k) * delp (i, k)
+                    te (i, k) = te (i, k) + cvm (k) * tz (k) * delp (i, k)
 #else
                     te (i, k) = te (i, k) + c_air * tz (k) * delp (i, k)
 #endif
@@ -816,46 +776,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         do k = ks, ke
-            if (do_qa) then
-                qa (i, k) = qaz (k)
-            else
-                qa (i, k) = 0.
-            endif
+            qa (i, k) = qaz (k)
         enddo
-        
-        ! -----------------------------------------------------------------------
-        ! fms diagnostics:
-        ! -----------------------------------------------------------------------
-        
-        ! if (id_vtr > 0) then
-        ! do k = ks, ke
-        ! vt_r (i, k) = vtrz (k)
-        ! enddo
-        ! endif
-        !
-        ! if (id_vts > 0) then
-        ! do k = ks, ke
-        ! vt_s (i, k) = vtsz (k)
-        ! enddo
-        ! endif
-        !
-        ! if (id_vtg > 0) then
-        ! do k = ks, ke
-        ! vt_g (i, k) = vtgz (k)
-        ! enddo
-        ! endif
-        !
-        ! if (id_vts > 0) then
-        ! do k = ks, ke
-        ! vt_i (i, k) = vtiz (k)
-        ! enddo
-        ! endif
-        !
-        ! if (id_droplets > 0) then
-        ! do k = ks, ke
-        ! qn2 (i, k) = ccn (k)
-        ! enddo
-        ! endif
         
     enddo
     
@@ -866,52 +788,33 @@ end subroutine mpdrv
 ! -----------------------------------------------------------------------
 
 subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
-    
-    implicit none
-    
+    ! revised with a precise energy conserving form: s. - j. lin, jan 22, 2018
     ! input q fields are dry mixing ratios, and dm is dry air mass
-    
+    implicit none
     integer, intent (in) :: ks, ke
-    
     real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
-    
-    real, intent (inout), dimension (ks:ke) :: tz
-    
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
     real, intent (in) :: cw ! heat capacity
-    
-    real, dimension (ks:ke) :: dgz, cvn
-    
-    real :: tmp
-    
+    ! local:
+    real, dimension (ks:ke) :: dgz, cvn, cv0
     integer :: k
     
-    do k = ks, ke
-        dgz (k) = - 0.5 * grav * dz (k) ! > 0
-        cvn (k) = dm (k) * (cv_air + qv (k) * cv_vap + (qr (k) + ql (k)) * &
-            c_liq + (qi (k) + qs (k) + qg (k)) * c_ice)
+    ! this is the vectorized loop
+    do k = ks + 1, ke
+        dgz (k) = - g2 * (dz (k - 1) + dz (k))
+        cvn (k) = dm (k) * (cv_air + qv (k) * cv_vap + (qr (k) + ql (k)) * c_liq + &
+             (qi (k) + qs (k) + qg (k)) * c_ice)
+        cv0 (k) = cvn (k) + cw * (m1 (k) - m1 (k - 1))
     enddo
-    
-    ! -----------------------------------------------------------------------
-    ! sjl, july 2014
-    ! assumption: the ke in the falling condensates is negligible compared to the potential energy
-    ! that was unaccounted for. local thermal equilibrium is assumed, and the loss in pe is transformed
-    ! into internal energy (to heat the whole grid box)
-    ! backward time - implicit upwind transport scheme:
-    ! dm here is dry air mass
-    ! -----------------------------------------------------------------------
-    
-    k = ks
-    tmp = cvn (k) + m1 (k) * cw
-    tz (k) = (tmp * tz (k) + m1 (k) * dgz (k)) / tmp
     
     ! -----------------------------------------------------------------------
     ! implicit algorithm: can't be vectorized
     ! needs an inner i - loop for vectorization
     ! -----------------------------------------------------------------------
-    
+    ! top layer: cv0 = cvn + cw * m1 (k)
+    ! tz (k) = cv0 (k) * tz (k) / (cvn (k) + cw * m1 (k)) = tz (k) -- > no change
     do k = ks + 1, ke
-        tz (k) = ((cvn (k) + cw * (m1 (k) - m1 (k - 1))) * tz (k) + m1 (k - 1) * &
-            cw * tz (k - 1) + dgz (k) * (m1 (k - 1) + m1 (k))) / (cvn (k) + cw * m1 (k))
+        tz (k) = (cv0 (k) * tz (k) + m1 (k - 1) * (cw * tz (k - 1) + dgz (k))) / (cvn (k) + cw * m1 (k))
     enddo
     
 end subroutine sedi_heat
@@ -921,7 +824,7 @@ end subroutine sedi_heat
 ! -----------------------------------------------------------------------
 
 subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
-        den, denfac, ccn, c_praut, rh_rain, vtr, r1, m1_rain, w1, h_var, mc_air)
+        den, denfac, ccn, c_praut, rh_rain, vtr, r1, m1_rain, w1, h_var)
     
     implicit none
     
@@ -929,35 +832,25 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     
     real, intent (in) :: dt ! time step (s)
     real, intent (in) :: rh_rain, h_var
-    
     real, intent (in), dimension (ks:ke) :: dp, dz, den
     real, intent (in), dimension (ks:ke) :: denfac, ccn, c_praut
     
-    real, intent (in), dimension (ks:ke) :: mc_air
-    
-    real, intent (inout), dimension (ks:ke) :: tz, vtr
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-    real, intent (inout), dimension (ks:ke) :: m1_rain, w1
-    
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real, intent (inout), dimension (ks:ke) :: vtr, qv, ql, qr, qi, qs, qg, m1_rain, w1
     real, intent (out) :: r1
-    
     real, parameter :: so3 = 7. / 3.
+    ! fall velocity constants:
+    real, parameter :: vconr = 2503.23638966667
+    real, parameter :: normr = 25132741228.7183
+    real, parameter :: thr = 1.e-8
     
     real, dimension (ks:ke) :: dl, dm
     real, dimension (ks:ke + 1) :: ze, zt
-    
     real :: sink, dq, qc0, qc
     real :: qden
     real :: zs = 0.
     real :: dt5
-    
     integer :: k
-    
-    ! fall velocity constants:
-    
-    real, parameter :: vconr = 2503.23638966667
-    real, parameter :: normr = 25132741228.7183
-    real, parameter :: thr = 1.e-8
     
     logical :: no_fall
     
@@ -1004,8 +897,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         ! evaporation and accretion of rain for the first 1 / 2 time step
         ! -----------------------------------------------------------------------
         
-        ! if (.not. fast_sat_adj) &
-        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, mc_air)
+        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var)
         
         if (do_sedi_w) then
             do k = ks, ke
@@ -1037,15 +929,15 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         ! -----------------------------------------------------------------------
         
         if (do_sedi_w) then
-            w1 (ks) = (dm (ks) * w1 (ks) + m1_rain (ks) * vtr (ks)) / (dm (ks) - m1_rain (ks))
+            w1 (ks) = w1 (ks) + m1_rain (ks) * vtr (ks) / dm (ks)
             do k = ks + 1, ke
-                w1 (k) = (dm (k) * w1 (k) - m1_rain (k - 1) * vtr (k - 1) + m1_rain (k) * vtr (k)) &
-                     / (dm (k) + m1_rain (k - 1) - m1_rain (k))
+                w1 (k) = (dm (k) * w1 (k) + m1_rain (k - 1) * (w1 (k - 1) - vtr (k - 1)) + m1_rain (k) * vtr (k)) &
+                     / (dm (k) + m1_rain (k - 1))
             enddo
         endif
         
         ! -----------------------------------------------------------------------
-        ! heat transportation during sedimentation
+        ! heat exchanges during sedimentation
         ! -----------------------------------------------------------------------
         
         if (do_sedi_heat) &
@@ -1055,7 +947,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         ! evaporation and accretion of rain for the remaing 1 / 2 time step
         ! -----------------------------------------------------------------------
         
-        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, mc_air)
+        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var)
         
     endif
     
@@ -1137,23 +1029,19 @@ end subroutine warm_rain
 ! evaporation of rain
 ! -----------------------------------------------------------------------
 
-subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, mc_air)
+subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var)
     
     implicit none
     
     integer, intent (in) :: ks, ke
-    
     real, intent (in) :: dt ! time step (s)
     real, intent (in) :: rh_rain, h_var
-    
     real, intent (in), dimension (ks:ke) :: den, denfac
-    
-    real, intent (in), dimension (ks:ke) :: mc_air
-    
-    real, intent (inout), dimension (ks:ke) :: tz, qv, qr, ql, qi, qs, qg
-    
-    real, dimension (ks:ke) :: lhl, cvm, q_liq, q_sol, lcpk
-    
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real, intent (inout), dimension (ks:ke) :: qv, qr, ql, qi, qs, qg
+    ! local:
+    real (kind = r_grid), dimension (ks:ke) :: cvm
+    real, dimension (ks:ke) :: q_liq, q_sol, lcpk
     real :: dqv, qsat, dqsdt, evap, t2, qden, q_plus, q_minus, sink
     real :: qpz, dq, dqh, tin
     
@@ -1167,13 +1055,11 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             ! define heat capacity and latent heat coefficient
             ! -----------------------------------------------------------------------
             
-            lhl (k) = lv00 + d0_vap * tz (k)
             q_liq (k) = ql (k) + qr (k)
             q_sol (k) = qi (k) + qs (k) + qg (k)
-            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            lcpk (k) = lhl (k) / cvm (k)
-            
-            tin = tz (k) - lcpk (k) * ql (k) ! presence of clouds suppresses the rain evap
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
+            tin = (tz (k) * cvm (k) - lv00 * ql (k)) / (1. + (qv (k) + ql (k)) * c1_vap + qr (k) * c1_liq + q_sol (k) * c1_ice)
             qpz = qv (k) + ql (k)
             qsat = wqs2 (tin, den (k), dqsdt)
             dqh = max (ql (k), h_var * max (qpz, qcmin))
@@ -1214,8 +1100,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
                 qr (k) = qr (k) - evap
                 qv (k) = qv (k) + evap
                 q_liq (k) = q_liq (k) - evap
-                cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz (k) = tz (k) - evap * lhl (k) / cvm (k)
+                tz (k) = (cvm (k) * tz (k) - lv00 * evap) / (one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice)
             endif
             
             ! -----------------------------------------------------------------------
@@ -1247,15 +1132,10 @@ subroutine linear_prof (km, q, dm, z_var, h_var)
     implicit none
     
     integer, intent (in) :: km
-    
     real, intent (in) :: q (km), h_var
-    
     real, intent (out) :: dm (km)
-    
     logical, intent (in) :: z_var
-    
     real :: dq (km)
-    
     integer :: k
     
     if (z_var) then
@@ -1304,30 +1184,26 @@ end subroutine linear_prof
 ! =======================================================================
 
 subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
-        den, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, mc_air, last_step)
+        den, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, last_step)
     
     implicit none
     
     logical, intent (in) :: last_step
-    
     integer, intent (in) :: ks, ke
-    
     real, intent (in), dimension (ks:ke) :: p1, dp1, den, denfac, vts, vtg, vtr
-    
-    real, intent (in), dimension (ks:ke) :: mc_air
-    
-    real, intent (inout), dimension (ks:ke) :: tzk, qvk, qlk, qrk, qik, qsk, qgk, qak
-    
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tzk
+    real, intent (inout), dimension (ks:ke) :: qvk, qlk, qrk, qik, qsk, qgk, qak
     real, intent (in) :: rh_adj, rh_rain, dts, h_var
-    
-    real, dimension (ks:ke) :: lcpk, icpk, tcpk, di, lhl, lhi
-    real, dimension (ks:ke) :: cvm, q_liq, q_sol
-    
+    ! local:
+    real, dimension (ks:ke) :: icpk, di
+    real, dimension (ks:ke) :: q_liq, q_sol
+    real (kind = r_grid), dimension (ks:ke) :: cvm
+    real (kind = r_grid) :: tz
     real :: rdts, fac_g2v, fac_v2g, fac_i2s, fac_imlt
-    real :: tz, qv, ql, qr, qi, qs, qg, melt
+    real :: qv, ql, qr, qi, qs, qg, melt
     real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, praci, psaci
-    real :: pgmlt, psmlt, pgfr, pgaut, psaut, pgsub
-    real :: tc, tsq, dqs0, qden, qim, qsm
+    real :: pgmlt, psmlt, pgfr, psaut
+    real :: tc, dqs0, qden, qim, qsm
     real :: dt5, factor, sink, qi_crt
     real :: tmp, qsw, qsi, dqsdt, dq
     real :: dtmp, qc, q_plus, q_minus
@@ -1335,7 +1211,6 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     integer :: k
     
     dt5 = 0.5 * dts
-    
     rdts = 1. / dts
     
     ! -----------------------------------------------------------------------
@@ -1345,7 +1220,6 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     fac_i2s = 1. - exp (- dts / tau_i2s)
     fac_g2v = 1. - exp (- dts / tau_g2v)
     fac_v2g = 1. - exp (- dts / tau_v2g)
-    
     fac_imlt = 1. - exp (- dt5 / tau_imlt)
     
     ! -----------------------------------------------------------------------
@@ -1353,11 +1227,10 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        lhi (k) = li00 + dc_ice * tzk (k)
         q_liq (k) = qlk (k) + qrk (k)
         q_sol (k) = qik (k) + qsk (k) + qgk (k)
-        cvm (k) = mc_air (k) + qvk (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-        icpk (k) = lhi (k) / cvm (k)
+        cvm (k) = one_r8 + qvk (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+        icpk (k) = (li00 + d1_ice * tzk (k)) / cvm (k)
     enddo
     
     ! -----------------------------------------------------------------------
@@ -1381,14 +1254,14 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             qik (k) = qik (k) - melt
             q_liq (k) = q_liq (k) + melt
             q_sol (k) = q_sol (k) - melt
-            cvm (k) = mc_air (k) + qvk (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tzk (k) = tzk (k) - melt * lhi (k) / cvm (k)
+            tzk (k) = tzk (k) * cvm (k) - li00 * melt
+            cvm (k) = one_r8 + qvk (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tzk (k) = tzk (k) / cvm (k)
             
         elseif (tzk (k) < t_wfr .and. qlk (k) > qcmin) then
             
             ! -----------------------------------------------------------------------
             ! pihom: homogeneous freezing of cloud water into cloud ice
-            ! this is the 1st occurance of liquid water freezing in the split mp process
             ! -----------------------------------------------------------------------
             
             dtmp = t_wfr - tzk (k)
@@ -1401,8 +1274,9 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             qik (k) = qik (k) + tmp
             q_liq (k) = q_liq (k) - sink
             q_sol (k) = q_sol (k) + sink
-            cvm (k) = mc_air (k) + qvk (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tzk (k) = tzk (k) + sink * lhi (k) / cvm (k)
+            tzk (k) = tzk (k) * cvm (k) + li00 * sink
+            cvm (k) = one_r8 + qvk (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tzk (k) = tzk (k) / cvm (k)
             
         endif
     enddo
@@ -1418,11 +1292,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        lhl (k) = lv00 + d0_vap * tzk (k)
-        lhi (k) = li00 + dc_ice * tzk (k)
-        lcpk (k) = lhl (k) / cvm (k)
-        icpk (k) = lhi (k) / cvm (k)
-        tcpk (k) = lcpk (k) + icpk (k)
+        icpk (k) = (li00 + d1_ice * tzk (k)) / cvm (k)
     enddo
     
     do k = ks, ke
@@ -1451,7 +1321,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             ! melting of snow
             ! -----------------------------------------------------------------------
             
-            dqs0 = ces0 / p1 (k) - qv
+            dqs0 = ces0 / p1 (k) - qv ! not sure if this is correct; check again
             
             if (qs > qcmin) then
                 
@@ -1490,17 +1360,18 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                     den (k), denfac (k)))
                 sink = min (qs, dts * (psmlt + pracs), tc / icpk (k))
                 qs = qs - sink
-                ! sjl, 20170321:
                 tmp = min (sink, dim (qs_mlt, ql)) ! max ql due to snow melt
                 ql = ql + tmp
                 qr = qr + sink - tmp
-                ! qr = qr + sink
-                ! sjl, 20170321:
                 q_liq (k) = q_liq (k) + sink
                 q_sol (k) = q_sol (k) - sink
-                cvm (k) = mc_air (k) + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz = tz - sink * lhi (k) / cvm (k)
+                
+                tz = tz * cvm (k) - li00 * sink
+                cvm (k) = one_r8 + qv * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+                tz = tz / cvm (k)
+                
                 tc = tz - tice
+                icpk (k) = (li00 + d1_ice * tz) / cvm (k)
                 
             endif
             
@@ -1508,8 +1379,6 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             ! update capacity heat and latend heat coefficient
             ! -----------------------------------------------------------------------
             
-            lhi (k) = li00 + dc_ice * tz
-            icpk (k) = lhi (k) / cvm (k)
             
             ! -----------------------------------------------------------------------
             ! melting of graupel
@@ -1545,9 +1414,9 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 qr = qr + pgmlt
                 q_liq (k) = q_liq (k) + pgmlt
                 q_sol (k) = q_sol (k) - pgmlt
-                cvm (k) = mc_air (k) + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz = tz - pgmlt * lhi (k) / cvm (k)
-                
+                tz = tz * cvm (k) - li00 * pgmlt
+                cvm (k) = one_r8 + qv * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+                tz = tz / cvm (k)
             endif
             
         else
@@ -1582,7 +1451,11 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 ! threshold from wsm6 scheme, hong et al 2004, eq (13) : qi0_crt ~0.8e-4
                 ! -----------------------------------------------------------------------
                 
-                qim = qi0_crt / den (k)
+                if (qi0_crt < 0.) then
+                    qim = - qi0_crt
+                else
+                    qim = qi0_crt / den (k)
+                endif
                 
                 ! -----------------------------------------------------------------------
                 ! assuming linear subgrid vertical distribution of cloud ice
@@ -1682,17 +1555,12 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 qg = qg + pgfr
                 q_liq (k) = q_liq (k) - sink
                 q_sol (k) = q_sol (k) + sink
-                cvm (k) = mc_air (k) + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz = tz + sink * lhi (k) / cvm (k)
                 
+                tz = tz * cvm (k) + li00 * sink
+                cvm (k) = one_r8 + qv * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+                tz = tz / cvm (k)
+                icpk (k) = (li00 + d1_ice * tz) / cvm (k)
             endif
-            
-            ! -----------------------------------------------------------------------
-            ! update capacity heat and latend heat coefficient
-            ! -----------------------------------------------------------------------
-            
-            lhi (k) = li00 + dc_ice * tz
-            icpk (k) = lhi (k) / cvm (k)
             
             ! -----------------------------------------------------------------------
             ! graupel production terms:
@@ -1759,11 +1627,10 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 qg = qg + sink
                 qr = qr - pgacr
                 ql = ql - pgacw
+                
                 q_liq (k) = q_liq (k) - sink
                 q_sol (k) = q_sol (k) + sink
-                cvm (k) = mc_air (k) + qv * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz = tz + sink * lhi (k) / cvm (k)
-                
+                tz = (tz * cvm (k) + li00 * sink) / (one_r8 + qv * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice)
             endif
             
         endif
@@ -1783,7 +1650,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     ! -----------------------------------------------------------------------
     
     call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tzk, qvk, &
-        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, mc_air, last_step)
+        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, last_step)
     
 end subroutine icloud
 
@@ -1792,55 +1659,39 @@ end subroutine icloud
 ! =======================================================================
 
 subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
-        ql, qr, qi, qs, qg, qa, h_var, rh_rain, mc_air, last_step)
+        ql, qr, qi, qs, qg, qa, h_var, rh_rain, last_step)
     
     implicit none
     
     logical, intent (in) :: last_step
-    
     integer, intent (in) :: ks, ke
-    
     real, intent (in), dimension (ks:ke) :: p1, den, denfac
-    
-    real, intent (in), dimension (ks:ke) :: mc_air
-    
     real, intent (in) :: dts, rh_adj, h_var, rh_rain
-    
-    real, intent (inout), dimension (ks:ke) :: tz, qv, ql, qr, qi, qs, qg, qa
-    
-    real, dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3, lhl, lhi
-    real, dimension (ks:ke) :: cvm, q_liq, q_sol, q_cond
-    
-    real :: fac_v2l, fac_l2v
-    
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
+    ! local:
+    real, dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+    real, dimension (ks:ke) :: q_liq, q_sol, q_cond
+    real (kind = r_grid), dimension (ks:ke) :: cvm
+    ! local:
     real :: pidep, qi_crt
-    
     ! -----------------------------------------------------------------------
     ! qstar over water may be accurate only down to - 80 deg c with ~10% uncertainty
     ! must not be too large to allow psc
     ! -----------------------------------------------------------------------
-    
     real :: rh, rqi, tin, qsw, qsi, qpz, qstar
     real :: dqsdt, dwsdt, dq, dq0, factor, tmp
-    real :: q_plus, q_minus, dt_evap, dt_pisub
-    real :: evap, sink, tc, pisub, q_adj, dtmp
-    real :: pssub, pgsub, tsq, qden, fac_g2v, fac_v2g
-    
+    real :: q_plus, q_minus
+    real :: evap, sink, tc, pisub, dtmp
+    real :: pssub, pgsub, tsq, qden
+    real :: fac_l2v, fac_g2v, fac_v2g
     integer :: k
-    
-    if (fast_sat_adj) then
-        dt_evap = 0.5 * dts
-    else
-        dt_evap = dts
-    endif
     
     ! -----------------------------------------------------------------------
     ! define conversion scalar / factor
     ! -----------------------------------------------------------------------
     
-    fac_v2l = 1. - exp (- dt_evap / tau_v2l)
-    fac_l2v = 1. - exp (- dt_evap / tau_l2v)
-    
+    fac_l2v = 1. - exp (- dts / tau_l2v)
     fac_g2v = 1. - exp (- dts / tau_g2v)
     fac_v2g = 1. - exp (- dts / tau_v2g)
     
@@ -1849,14 +1700,11 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        lhl (k) = lv00 + d0_vap * tz (k)
-        lhi (k) = li00 + dc_ice * tz (k)
         q_liq (k) = ql (k) + qr (k)
         q_sol (k) = qi (k) + qs (k) + qg (k)
-        cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-        lcpk (k) = lhl (k) / cvm (k)
-        icpk (k) = lhi (k) / cvm (k)
-        tcpk (k) = lcpk (k) + icpk (k)
+        cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+        lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
+        icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
         tcp3 (k) = lcpk (k) + icpk (k) * min (1., dim (tice, tz (k)) / (tice - t_wfr))
     enddo
     
@@ -1873,30 +1721,18 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qv (k) = qv (k) - sink
             qi (k) = qi (k) + sink
             q_sol (k) = q_sol (k) + sink
-            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tz (k) = tz (k) + sink * (lhl (k) + lhi (k)) / cvm (k)
+            tz (k) = (tz (k) * cvm (k) + li20 * sink) / (one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice)
             if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
             cycle
         endif
-        
-        ! -----------------------------------------------------------------------
-        ! update heat capacity and latend heat coefficient
-        ! -----------------------------------------------------------------------
-        
-        lhl (k) = lv00 + d0_vap * tz (k)
-        lhi (k) = li00 + dc_ice * tz (k)
-        lcpk (k) = lhl (k) / cvm (k)
-        icpk (k) = lhi (k) / cvm (k)
-        tcpk (k) = lcpk (k) + icpk (k)
-        tcp3 (k) = lcpk (k) + icpk (k) * min (1., dim (tice, tz (k)) / (tice - t_wfr))
         
         ! -----------------------------------------------------------------------
         ! instant evaporation / sublimation of all clouds if rh < rh_adj -- > cloud free
         ! -----------------------------------------------------------------------
         
         qpz = qv (k) + ql (k) + qi (k)
-        tin = tz (k) - (lhl (k) * (ql (k) + qi (k)) + lhi (k) * qi (k)) / (mc_air (k) + &
-            qpz * c_vap + qr (k) * c_liq + (qs (k) + qg (k)) * c_ice)
+        tin = (tz (k) * cvm (k) - lv00 * ql (k) - li20 * qi (k)) / &
+             (one_r8 + qpz * c1_vap + qr (k) * c1_liq + (qs (k) + qg (k)) * c1_ice)
         if (tin > t_sub + 6.) then
             rh = qpz / iqs1 (tin, den (k))
             if (rh < rh_adj) then ! qpz / rh_adj < qs
@@ -1912,34 +1748,28 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! cloud water < -- > vapor adjustment:
         ! -----------------------------------------------------------------------
         
-        qsw = wqs2 (tz (k), den (k), dwsdt)
+        tin = tz (k)
+        qsw = wqs2 (tin, den (k), dwsdt)
         dq0 = qsw - qv (k)
-        if (dq0 > 0.) then
-            ! sjl 20170703 added ql factor to prevent the situation of high ql and low rh
-            ! factor = min (1., fac_l2v * sqrt (max (0., ql (k)) / 1.e-5) * 10. * dq0 / qsw)
-            ! factor = fac_l2v
-            ! factor = 1
+        if (dq0 > 0.) then ! evaporation
             factor = min (1., fac_l2v * (10. * dq0 / qsw)) ! the rh dependent factor = 1 at 90%
             evap = min (ql (k), factor * dq0 / (1. + tcp3 (k) * dwsdt))
         else ! condensate all excess vapor into cloud water
-            ! -----------------------------------------------------------------------
-            ! evap = fac_v2l * dq0 / (1. + tcp3 (k) * dwsdt)
-            ! sjl, 20161108
-            ! -----------------------------------------------------------------------
             evap = dq0 / (1. + tcp3 (k) * dwsdt)
         endif
+        ! sjl on jan 23 2018: reversible evap / condensation:
         qv (k) = qv (k) + evap
         ql (k) = ql (k) - evap
         q_liq (k) = q_liq (k) - evap
-        cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-        tz (k) = tz (k) - evap * lhl (k) / cvm (k)
+        tz (k) = cvm (k) * tz (k) - lv00 * evap
+        cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+        tz (k) = tz (k) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! update heat capacity and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        lhi (k) = li00 + dc_ice * tz (k)
-        icpk (k) = lhi (k) / cvm (k)
+        icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! enforce complete freezing below - 48 c
@@ -1952,47 +1782,37 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qi (k) = qi (k) + sink
             q_liq (k) = q_liq (k) - sink
             q_sol (k) = q_sol (k) + sink
-            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tz (k) = tz (k) + sink * lhi (k) / cvm (k)
+            
+            tz (k) = tz (k) * cvm (k) + li00 * sink
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = tz (k) / cvm (k)
+            
+            icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
         endif
-        
-        ! -----------------------------------------------------------------------
-        ! update heat capacity and latend heat coefficient
-        ! -----------------------------------------------------------------------
-        
-        lhi (k) = li00 + dc_ice * tz (k)
-        icpk (k) = lhi (k) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! bigg mechanism
         ! -----------------------------------------------------------------------
         
-        if (fast_sat_adj) then
-            dt_pisub = 0.5 * dts
-        else
-            dt_pisub = dts
-            tc = tice - tz (k)
-            if (ql (k) > qrmin .and. tc > 0.) then
-                sink = 3.3333e-10 * dts * (exp (0.66 * tc) - 1.) * den (k) * ql (k) * ql (k)
-                sink = min (ql (k), tc / icpk (k), sink)
-                ql (k) = ql (k) - sink
-                qi (k) = qi (k) + sink
-                q_liq (k) = q_liq (k) - sink
-                q_sol (k) = q_sol (k) + sink
-                cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                tz (k) = tz (k) + sink * lhi (k) / cvm (k)
-            endif ! significant ql existed
-        endif
+        tc = tice - tz (k)
+        if (ql (k) > qrmin .and. tc > 0.1) then
+            sink = 3.3333e-10 * dts * (exp (0.66 * tc) - 1.) * den (k) * ql (k) * ql (k)
+            sink = min (ql (k), tc / icpk (k), sink)
+            ql (k) = ql (k) - sink
+            qi (k) = qi (k) + sink
+            q_liq (k) = q_liq (k) - sink
+            q_sol (k) = q_sol (k) + sink
+            
+            tz (k) = tz (k) * cvm (k) + li00 * sink
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = tz (k) / cvm (k)
+        endif ! significant ql existed
         
         ! -----------------------------------------------------------------------
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        lhl (k) = lv00 + d0_vap * tz (k)
-        lhi (k) = li00 + dc_ice * tz (k)
-        lcpk (k) = lhl (k) / cvm (k)
-        icpk (k) = lhi (k) / cvm (k)
-        tcpk (k) = lcpk (k) + icpk (k)
+        tcpk (k) = (li20 + (d1_vap + d1_ice) * tz (k)) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! sublimation / deposition of ice
@@ -2005,7 +1825,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             if (qi (k) > qrmin) then
                 ! eq 9, hong et al. 2004, mwr
                 ! for a and b, see dudhia 1989: page 3103 eq (b7) and (b8)
-                pidep = dt_pisub * dq * 349138.78 * exp (0.875 * log (qi (k) * den (k))) &
+                pidep = dts * dq * 349138.78 * exp (0.875 * log (qi (k) * den (k))) &
                      / (qsi * den (k) * lat2 / (0.0243 * rvgas * tz (k) ** 2) + 4.42478e4)
             else
                 pidep = 0.
@@ -2023,19 +1843,17 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qv (k) = qv (k) - sink
             qi (k) = qi (k) + sink
             q_sol (k) = q_sol (k) + sink
-            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tz (k) = tz (k) + sink * (lhl (k) + lhi (k)) / cvm (k)
+            
+            tz (k) = tz (k) * cvm (k) + li20 * sink
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = tz (k) / cvm (k)
         endif
         
         ! -----------------------------------------------------------------------
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        lhl (k) = lv00 + d0_vap * tz (k)
-        lhi (k) = li00 + dc_ice * tz (k)
-        lcpk (k) = lhl (k) / cvm (k)
-        icpk (k) = lhi (k) / cvm (k)
-        tcpk (k) = lcpk (k) + icpk (k)
+        tcpk (k) = (li20 + (d1_vap + d1_ice) * tz (k)) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! sublimation / deposition of snow
@@ -2063,19 +1881,11 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qs (k) = qs (k) - pssub
             qv (k) = qv (k) + pssub
             q_sol (k) = q_sol (k) - pssub
-            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tz (k) = tz (k) - pssub * (lhl (k) + lhi (k)) / cvm (k)
+            tz (k) = tz (k) * cvm (k) - li20 * pssub
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = tz (k) / cvm (k)
+            tcpk (k) = (li20 + (d1_vap + d1_ice) * tz (k)) / cvm (k)
         endif
-        
-        ! -----------------------------------------------------------------------
-        ! update capacity heat and latend heat coefficient
-        ! -----------------------------------------------------------------------
-        
-        lhl (k) = lv00 + d0_vap * tz (k)
-        lhi (k) = li00 + dc_ice * tz (k)
-        lcpk (k) = lhl (k) / cvm (k)
-        icpk (k) = lhi (k) / cvm (k)
-        tcpk (k) = lcpk (k) + icpk (k)
         
         ! -----------------------------------------------------------------------
         ! simplified 2 - way grapuel sublimation - deposition mechanism
@@ -2098,40 +1908,17 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qg (k) = qg (k) + pgsub
             qv (k) = qv (k) - pgsub
             q_sol (k) = q_sol (k) + pgsub
-            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tz (k) = tz (k) + pgsub * (lhl (k) + lhi (k)) / cvm (k)
+            tz (k) = tz (k) * cvm (k) + li20 * pgsub
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = tz (k) / cvm (k)
         endif
-        
-#ifdef USE_MIN_EVAP
-        ! -----------------------------------------------------------------------
-        ! update capacity heat and latend heat coefficient
-        ! -----------------------------------------------------------------------
-        
-        lhl (k) = lv00 + d0_vap * tz (k)
-        lcpk (k) = lhl (k) / cvm (k)
-        
-        ! -----------------------------------------------------------------------
-        ! * minimum evap of rain in dry environmental air
-        ! -----------------------------------------------------------------------
-        
-        if (qr (k) > qcmin) then
-            qsw = wqs2 (tz (k), den (k), dqsdt)
-            sink = min (qr (k), dim (rh_rain * qsw, qv (k)) / (1. + lcpk (k) * dqsdt))
-            qv (k) = qv (k) + sink
-            qr (k) = qr (k) - sink
-            q_liq (k) = q_liq (k) - sink
-            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tz (k) = tz (k) - sink * lhl (k) / cvm (k)
-        endif
-#endif
         
         ! -----------------------------------------------------------------------
         ! update capacity heat and latend heat coefficient
         ! -----------------------------------------------------------------------
         
-        lhl (k) = lv00 + d0_vap * tz (k)
-        cvm (k) = mc_air (k) + (qv (k) + q_liq (k) + q_sol (k)) * c_vap
-        lcpk (k) = lhl (k) / cvm (k)
+        lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
+        icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
         
         ! -----------------------------------------------------------------------
         ! compute cloud fraction
@@ -2166,9 +1953,6 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! -----------------------------------------------------------------------
         
         tin = tz (k) - (lcpk (k) * q_cond (k) + icpk (k) * q_sol (k)) ! minimum temperature
-        ! tin = tz (k) - ((lv00 + d0_vap * tz (k)) * q_cond (k) + &
-        ! (li00 + dc_ice * tz (k)) * q_sol (k)) / (c_air + qpz * c_vap)
-        
         ! -----------------------------------------------------------------------
         ! determine saturated specific humidity
         ! -----------------------------------------------------------------------
@@ -2229,9 +2013,11 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! -----------------------------------------------------------------------
         
         if (rh > 0.75 .and. qpz > 1.e-6) then
+            
             dq = h_var * qpz
             q_plus = qpz + dq
             q_minus = qpz - dq
+            
             if (icloud_f == 2) then
                 if (qpz > qstar) then
                     qa (k) = 1.
@@ -2270,136 +2056,32 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
 end subroutine subgrid_z_proc
 
 ! =======================================================================
-! rain evaporation
-! =======================================================================
-
-subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den, hvar, mc_air)
-    
-    implicit none
-    
-    logical, intent (in) :: hydrostatic
-    
-    integer, intent (in) :: is, ie
-    
-    real, intent (in) :: dt ! time step (s)
-    
-    real, intent (in), dimension (is:ie) :: den, hvar, qi, qs, qg
-    
-    real, intent (in), dimension (is:ie) :: mc_air
-    
-    real, intent (inout), dimension (is:ie) :: tz, qv, qr, ql
-    
-    real, dimension (is:ie) :: lcp2, denfac, q_liq, q_sol, cvm, lhl
-    
-    real :: dqv, qsat, dqsdt, evap, qden, q_plus, q_minus, sink
-    real :: tin, t2, qpz, dq, dqh
-    
-    integer :: i
-    
-    ! -----------------------------------------------------------------------
-    ! define latend heat coefficient
-    ! -----------------------------------------------------------------------
-    
-    do i = is, ie
-        lhl (i) = lv00 + d0_vap * tz (i)
-        q_liq (i) = ql (i) + qr (i)
-        q_sol (i) = qi (i) + qs (i) + qg (i)
-        cvm (i) = mc_air (i) + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
-        lcp2 (i) = lhl (i) / cvm (i)
-        ! denfac (i) = sqrt (sfcrho / den (i))
-    enddo
-    
-    do i = is, ie
-        if (qr (i) > qrmin .and. tz (i) > t_wfr) then
-            qpz = qv (i) + ql (i)
-            tin = tz (i) - lcp2 (i) * ql (i) ! presence of clouds suppresses the rain evap
-            qsat = wqs2 (tin, den (i), dqsdt)
-            dqh = max (ql (i), hvar (i) * max (qpz, qcmin))
-            dqv = qsat - qv (i)
-            q_minus = qpz - dqh
-            q_plus = qpz + dqh
-            
-            ! -----------------------------------------------------------------------
-            ! qsat must be > q_minus to activate evaporation
-            ! qsat must be < q_plus to activate accretion
-            ! -----------------------------------------------------------------------
-            
-            ! -----------------------------------------------------------------------
-            ! rain evaporation
-            ! -----------------------------------------------------------------------
-            
-            if (dqv > qvmin .and. qsat > q_minus) then
-                if (qsat > q_plus) then
-                    dq = qsat - qpz
-                else
-                    ! q_minus < qsat < q_plus
-                    ! dq == dqh if qsat == q_minus
-                    dq = 0.25 * (q_minus - qsat) ** 2 / dqh
-                endif
-                qden = qr (i) * den (i)
-                t2 = tin * tin
-                evap = crevp (1) * t2 * dq * (crevp (2) * sqrt (qden) + crevp (3) * exp (0.725 * log (qden))) &
-                     / (crevp (4) * t2 + crevp (5) * qsat * den (i))
-                evap = min (qr (i), dt * evap, dqv / (1. + lcp2 (i) * dqsdt))
-                qr (i) = qr (i) - evap
-                qv (i) = qv (i) + evap
-                q_liq (i) = q_liq (i) - evap
-                cvm (i) = mc_air (i) + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
-                tz (i) = tz (i) - evap * lhl (i) / cvm (i)
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! accretion: pracc
-            ! -----------------------------------------------------------------------
-            
-            if (qr (i) > qrmin .and. ql (i) > 1.e-8 .and. qsat < q_plus) then
-                denfac (i) = sqrt (sfcrho / den (i))
-                sink = dt * denfac (i) * cracw * exp (0.95 * log (qr (i) * den (i)))
-                sink = sink / (1. + sink) * ql (i)
-                ql (i) = ql (i) - sink
-                qr (i) = qr (i) + sink
-            endif
-        endif
-    enddo
-    
-end subroutine revap_rac1
-
-! =======================================================================
 ! compute terminal fall speed
 ! consider cloud ice, snow, and graupel's melting during fall
 ! =======================================================================
 
 subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
-        den, vtg, vts, vti, r1, g1, s1, i1, m1_sol, w1, mc_air)
+        den, vtg, vts, vti, r1, g1, s1, i1, m1_sol, w1)
     
     implicit none
     
     integer, intent (in) :: ks, ke
-    
     real, intent (in) :: dtm ! time step (s)
-    
     real, intent (in), dimension (ks:ke) :: vtg, vts, vti, den, dp, dz
-    
-    real, intent (in), dimension (ks:ke) :: mc_air
-    
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, tz, m1_sol, w1
-    
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, m1_sol, w1
     real, intent (out) :: r1, g1, s1, i1
-    
+    ! local:
     real, dimension (ks:ke + 1) :: ze, zt
-    
     real :: qsat, dqsdt, dt5, evap, dtime
     real :: factor, frac
     real :: tmp, precip, tc, sink
-    
-    real, dimension (ks:ke) :: lcpk, icpk, cvm, q_liq, q_sol, lhl, lhi
+    real, dimension (ks:ke) :: lcpk, icpk, cvm, q_liq, q_sol
     real, dimension (ks:ke) :: m1, dm
-    
     real :: zs = 0.
     real :: fac_imlt
     
     integer :: k, k0, m
-    
     logical :: no_fall
     
     dt5 = 0.5 * dtm
@@ -2411,13 +2093,11 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     
     do k = ks, ke
         m1_sol (k) = 0.
-        lhl (k) = lv00 + d0_vap * tz (k)
-        lhi (k) = li00 + dc_ice * tz (k)
         q_liq (k) = ql (k) + qr (k)
         q_sol (k) = qi (k) + qs (k) + qg (k)
-        cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-        lcpk (k) = lhl (k) / cvm (k)
-        icpk (k) = lhi (k) / cvm (k)
+        cvm (k) = 1. + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+        lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
+        icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
     enddo
     
     ! -----------------------------------------------------------------------
@@ -2446,8 +2126,9 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             qi (k) = qi (k) - sink
             q_liq (k) = q_liq (k) + sink
             q_sol (k) = q_sol (k) - sink
-            cvm (k) = mc_air (k) + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            tz (k) = tz (k) - sink * lhi (k) / cvm (k)
+            tz (k) = tz (k) * cvm (k) - li00 * sink
+            cvm (k) = 1. + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = tz (k) / cvm (k)
             tc = tz (k) - tice
         endif
     enddo
@@ -2473,8 +2154,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     ! -----------------------------------------------------------------------
     
     do k = k0, ke
-        lhi (k) = li00 + dc_ice * tz (k)
-        icpk (k) = lhi (k) / cvm (k)
+        icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
     enddo
     
     ! -----------------------------------------------------------------------
@@ -2507,8 +2187,9 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
                             tmp = min (sink, dim (ql_mlt, ql (m)))
                             ql (m) = ql (m) + tmp
                             qr (m) = qr (m) - tmp + sink
-                            tz (m) = tz (m) - sink * icpk (m)
                             qi (k) = qi (k) - sink * dp (m) / dp (k)
+                            tz (m) = (tz (m) * cvm (m) - li00 * sink) / &
+                                 (1. + qv (m) * c1_vap + (ql (m) + qr (m)) * c1_liq + (qi (m) + qs (m) + qg (m)) * c1_ice)
                         endif
                     enddo
                 endif
@@ -2521,17 +2202,17 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             enddo
         endif
         
-        if (use_ppm) then
+        if (use_ppm_ice) then
             call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qi, i1, m1_sol, mono_prof)
         else
             call implicit_fall (dtm, ks, ke, ze, vti, dp, qi, i1, m1_sol)
         endif
         
         if (do_sedi_w) then
-            w1 (ks) = (dm (ks) * w1 (ks) + m1_sol (ks) * vti (ks)) / (dm (ks) - m1_sol (ks))
+            w1 (ks) = w1 (ks) + m1_sol (ks) * vti (ks) / dm (ks)
             do k = ks + 1, ke
-                w1 (k) = (dm (k) * w1 (k) - m1_sol (k - 1) * vti (k - 1) + m1_sol (k) * vti (k)) &
-                     / (dm (k) + m1_sol (k - 1) - m1_sol (k))
+                w1 (k) = (dm (k) * w1 (k) + m1_sol (k - 1) * (w1 (k - 1) - vti (k - 1)) + m1_sol (k) * vti (k)) &
+                     / (dm (k) + m1_sol (k - 1))
             enddo
         endif
         
@@ -2599,10 +2280,10 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         enddo
         
         if (do_sedi_w) then
-            w1 (ks) = (dm (ks) * w1 (ks) + m1 (ks) * vts (ks)) / (dm (ks) - m1 (ks))
+            w1 (ks) = w1 (ks) + m1 (ks) * vts (ks) / dm (ks)
             do k = ks + 1, ke
-                w1 (k) = (dm (k) * w1 (k) - m1 (k - 1) * vts (k - 1) + m1 (k) * vts (k)) &
-                     / (dm (k) + m1 (k - 1) - m1 (k))
+                w1 (k) = (dm (k) * w1 (k) + m1 (k - 1) * (w1 (k - 1) - vts (k - 1)) + m1 (k) * vts (k)) &
+                     / (dm (k) + m1 (k - 1))
             enddo
         endif
         
@@ -2667,10 +2348,10 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         enddo
         
         if (do_sedi_w) then
-            w1 (ks) = (dm (ks) * w1 (ks) + m1 (ks) * vtg (ks)) / (dm (ks) - m1 (ks))
+            w1 (ks) = w1 (ks) + m1 (ks) * vtg (ks) / dm (ks)
             do k = ks + 1, ke
-                w1 (k) = (dm (k) * w1 (k) - m1 (k - 1) * vtg (k - 1) + m1 (k) * vtg (k)) &
-                     / (dm (k) + m1 (k - 1) - m1 (k))
+                w1 (k) = (dm (k) * w1 (k) + m1 (k - 1) * (w1 (k - 1) - vtg (k - 1)) + m1 (k) * vtg (k)) &
+                     / (dm (k) + m1 (k - 1))
             enddo
         endif
         
@@ -2687,11 +2368,8 @@ subroutine check_column (ks, ke, q, no_fall)
     implicit none
     
     integer, intent (in) :: ks, ke
-    
     real, intent (in) :: q (ks:ke)
-    
     logical, intent (out) :: no_fall
-    
     integer :: k
     
     no_fall = .true.
@@ -2715,21 +2393,13 @@ subroutine implicit_fall (dt, ks, ke, ze, vt, dp, q, precip, m1)
     implicit none
     
     integer, intent (in) :: ks, ke
-    
     real, intent (in) :: dt
-    
     real, intent (in), dimension (ks:ke + 1) :: ze
-    
     real, intent (in), dimension (ks:ke) :: vt, dp
-    
     real, intent (inout), dimension (ks:ke) :: q
-    
     real, intent (out), dimension (ks:ke) :: m1
-    
     real, intent (out) :: precip
-    
     real, dimension (ks:ke) :: dz, qm, dd
-    
     integer :: k
     
     do k = ks, ke
@@ -2777,7 +2447,7 @@ end subroutine implicit_fall
 
 ! =======================================================================
 ! lagrangian scheme
-! developed by sj lin, ????
+! developed by sj lin, around 2006
 ! =======================================================================
 
 subroutine lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, precip, m1, mono)
@@ -2785,28 +2455,19 @@ subroutine lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, precip, m1, mono)
     implicit none
     
     integer, intent (in) :: ks, ke
-    
     real, intent (in) :: zs
-    
     logical, intent (in) :: mono
-    
     real, intent (in), dimension (ks:ke + 1) :: ze, zt
-    
     real, intent (in), dimension (ks:ke) :: dp
     
     ! m1: flux
     real, intent (inout), dimension (ks:ke) :: q, m1
-    
     real, intent (out) :: precip
-    
     real, dimension (ks:ke) :: qm, dz
     
     real :: a4 (4, ks:ke)
-    
     real :: pl, pr, delz, esl
-    
     integer :: k, k0, n, m
-    
     real, parameter :: r3 = 1. / 3., r23 = 2. / 3.
     
     ! -----------------------------------------------------------------------
@@ -2884,15 +2545,10 @@ subroutine cs_profile (a4, del, km, do_mono)
     implicit none
     
     integer, intent (in) :: km ! vertical dimension
-    
     real, intent (in) :: del (km)
-    
     logical, intent (in) :: do_mono
-    
     real, intent (inout) :: a4 (4, km)
-    
     real, parameter :: qp_min = 1.e-6
-    
     real :: gam (km)
     real :: q (km + 1)
     real :: d4, bet, a_bot, grat, pmp, lac
@@ -3102,7 +2758,8 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     
     integer, intent (in) :: ks, ke
     
-    real, intent (in), dimension (ks:ke) :: den, qs, qi, qg, ql, tk
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: tk
+    real, intent (in), dimension (ks:ke) :: den, qs, qi, qg, ql
     real, intent (out), dimension (ks:ke) :: vts, vti, vtg
     
     ! fall velocity constants:
@@ -3123,7 +2780,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     real, parameter :: vcong = 87.2382675
     real, parameter :: vconh = vcong*sqrt(rhoh/rhog) ! 132.087495104005
     real, parameter :: norms = 942477796.076938
-    real, parameter :: normg =               5026548245.74367
+    real, parameter :: normg = 5026548245.74367
     real, parameter :: normh = pi*rhoh*rnzh ! 115233618.533674
     
     real, dimension (ks:ke) :: qden, tc, rhof
@@ -3451,6 +3108,7 @@ subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
         do_setup = .false.
     endif
     
+    g2 = 0.5 * grav
     log_10 = log (10.)
     
     tice0 = tice - 0.01
@@ -3682,11 +3340,8 @@ real function wqs2 (ta, den, dqdt)
     ! input "den" can be either dry or moist air density
     
     real, intent (in) :: ta, den
-    
     real, intent (out) :: dqdt
-    
     real :: es, ap1, tmin
-    
     integer :: it
     
     tmin = table_ice - 160.
@@ -3767,12 +3422,10 @@ real function iqs2 (ta, den, dqdt)
     ! water - ice phase; universal dry / moist formular using air density
     ! input "den" can be either dry or moist air density
     
-    real, intent (in) :: ta, den
-    
+    real (kind = r_grid), intent (in) :: ta
+    real, intent (in) :: den
     real, intent (out) :: dqdt
-    
-    real :: es, ap1, tmin
-    
+    real (kind = r_grid) :: tmin, es, ap1
     integer :: it
     
     tmin = table_ice - 160.
@@ -3786,262 +3439,6 @@ real function iqs2 (ta, den, dqdt)
     
 end function iqs2
 
-! =======================================================================
-! compute the gradient of saturated specific humidity for table iii
-! =======================================================================
-
-real function qs1d_moist (ta, qv, pa, dqdt)
-    
-    implicit none
-    
-    real, intent (in) :: ta, pa, qv
-    
-    real, intent (out) :: dqdt
-    
-    real :: es, ap1, tmin, eps10
-    
-    integer :: it
-    
-    tmin = table_ice - 160.
-    eps10 = 10. * eps
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table2 (it) + (ap1 - it) * des2 (it)
-    qs1d_moist = eps * es * (1. + zvir * qv) / pa
-    it = ap1 - 0.5
-    dqdt = eps10 * (des2 (it) + (ap1 - it) * (des2 (it + 1) - des2 (it))) * (1. + zvir * qv) / pa
-    
-end function qs1d_moist
-
-! =======================================================================
-! compute the gradient of saturated specific humidity for table ii
-! =======================================================================
-
-real function wqsat2_moist (ta, qv, pa, dqdt)
-    
-    implicit none
-    
-    real, intent (in) :: ta, pa, qv
-    
-    real, intent (out) :: dqdt
-    
-    real :: es, ap1, tmin, eps10
-    
-    integer :: it
-    
-    tmin = table_ice - 160.
-    eps10 = 10. * eps
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = tablew (it) + (ap1 - it) * desw (it)
-    wqsat2_moist = eps * es * (1. + zvir * qv) / pa
-    it = ap1 - 0.5
-    dqdt = eps10 * (desw (it) + (ap1 - it) * (desw (it + 1) - desw (it))) * (1. + zvir * qv) / pa
-    
-end function wqsat2_moist
-
-! =======================================================================
-! compute the saturated specific humidity for table ii
-! =======================================================================
-
-real function wqsat_moist (ta, qv, pa)
-    
-    implicit none
-    
-    real, intent (in) :: ta, pa, qv
-    
-    real :: es, ap1, tmin
-    
-    integer :: it
-    
-    tmin = table_ice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = tablew (it) + (ap1 - it) * desw (it)
-    wqsat_moist = eps * es * (1. + zvir * qv) / pa
-    
-end function wqsat_moist
-
-! =======================================================================
-! compute the saturated specific humidity for table iii
-! =======================================================================
-
-real function qs1d_m (ta, qv, pa)
-    
-    implicit none
-    
-    real, intent (in) :: ta, pa, qv
-    
-    real :: es, ap1, tmin
-    
-    integer :: it
-    
-    tmin = table_ice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table2 (it) + (ap1 - it) * des2 (it)
-    qs1d_m = eps * es * (1. + zvir * qv) / pa
-    
-end function qs1d_m
-
-! =======================================================================
-! computes the difference in saturation vapor * density * between water and ice
-! =======================================================================
-
-real function d_sat (ta, den)
-    
-    implicit none
-    
-    real, intent (in) :: ta, den
-    
-    real :: es_w, es_i, ap1, tmin
-    
-    integer :: it
-    
-    tmin = table_ice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es_w = tablew (it) + (ap1 - it) * desw (it)
-    es_i = table2 (it) + (ap1 - it) * des2 (it)
-    d_sat = dim (es_w, es_i) / (rvgas * ta * den) ! take positive difference
-    
-end function d_sat
-
-! =======================================================================
-! compute the saturated water vapor pressure for table ii
-! =======================================================================
-
-real function esw_table (ta)
-    
-    implicit none
-    
-    real, intent (in) :: ta
-    
-    real :: ap1, tmin
-    
-    integer :: it
-    
-    tmin = table_ice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    esw_table = tablew (it) + (ap1 - it) * desw (it)
-    
-end function esw_table
-
-! =======================================================================
-! compute the saturated water vapor pressure for table iii
-! =======================================================================
-
-real function es2_table (ta)
-    
-    implicit none
-    
-    real, intent (in) :: ta
-    
-    real :: ap1, tmin
-    
-    integer :: it
-    
-    tmin = table_ice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es2_table = table2 (it) + (ap1 - it) * des2 (it)
-    
-end function es2_table
-
-! =======================================================================
-! compute the saturated water vapor pressure for table ii
-! =======================================================================
-
-subroutine esw_table1d (ta, es, n)
-    
-    implicit none
-    
-    integer, intent (in) :: n
-    
-    real, intent (in) :: ta (n)
-    
-    real, intent (out) :: es (n)
-    
-    real :: ap1, tmin
-    
-    integer :: i, it
-    
-    tmin = table_ice - 160.
-    
-    do i = 1, n
-        ap1 = 10. * dim (ta (i), tmin) + 1.
-        ap1 = min (2621., ap1)
-        it = ap1
-        es (i) = tablew (it) + (ap1 - it) * desw (it)
-    enddo
-    
-end subroutine esw_table1d
-
-! =======================================================================
-! compute the saturated water vapor pressure for table iii
-! =======================================================================
-
-subroutine es2_table1d (ta, es, n)
-    
-    implicit none
-    
-    integer, intent (in) :: n
-    
-    real, intent (in) :: ta (n)
-    
-    real, intent (out) :: es (n)
-    
-    real :: ap1, tmin
-    
-    integer :: i, it
-    
-    tmin = table_ice - 160.
-    
-    do i = 1, n
-        ap1 = 10. * dim (ta (i), tmin) + 1.
-        ap1 = min (2621., ap1)
-        it = ap1
-        es (i) = table2 (it) + (ap1 - it) * des2 (it)
-    enddo
-    
-end subroutine es2_table1d
-
-! =======================================================================
-! compute the saturated water vapor pressure for table iv
-! =======================================================================
-
-subroutine es3_table1d (ta, es, n)
-    
-    implicit none
-    
-    integer, intent (in) :: n
-    
-    real, intent (in) :: ta (n)
-    
-    real, intent (out) :: es (n)
-    
-    real :: ap1, tmin
-    
-    integer :: i, it
-    
-    tmin = table_ice - 160.
-    
-    do i = 1, n
-        ap1 = 10. * dim (ta (i), tmin) + 1.
-        ap1 = min (2621., ap1)
-        it = ap1
-        es (i) = table3 (it) + (ap1 - it) * des3 (it)
-    enddo
-    
-end subroutine es3_table1d
 
 ! =======================================================================
 ! saturation water vapor pressure table ii
@@ -4187,29 +3584,6 @@ subroutine qs_table3 (n)
     
 end subroutine qs_table3
 
-! =======================================================================
-! compute the saturated specific humidity for table
-! note: this routine is based on "moist" mixing ratio
-! =======================================================================
-
-real function qs_blend (t, p, q)
-    
-    implicit none
-    
-    real, intent (in) :: t, p, q
-    
-    real :: es, ap1, tmin
-    
-    integer :: it
-    
-    tmin = table_ice - 160.
-    ap1 = 10. * dim (t, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table (it) + (ap1 - it) * des (it)
-    qs_blend = eps * es * (1. + zvir * q) / p
-    
-end function qs_blend
 
 ! =======================================================================
 ! saturation water vapor pressure table i
@@ -4273,75 +3647,20 @@ subroutine qs_table (n)
     
 end subroutine qs_table
 
-! =======================================================================
-! compute the saturated specific humidity and the gradient of saturated specific humidity
-! input t in deg k, p in pa; p = rho rdry tv, moist pressure
-! =======================================================================
-
-subroutine qsmith (im, km, ks, t, p, q, qs, dqdt)
-    
-    implicit none
-    
-    integer, intent (in) :: im, km, ks
-    
-    real, intent (in), dimension (im, km) :: t, p, q
-    
-    real, intent (out), dimension (im, km) :: qs
-    
-    real, intent (out), dimension (im, km), optional :: dqdt
-    
-    real :: eps10, ap1, tmin
-    
-    real, dimension (im, km) :: es
-    
-    integer :: i, k, it
-    
-    tmin = table_ice - 160.
-    eps10 = 10. * eps
-    
-    if (.not. tables_are_initialized) then
-        call qsmith_init
-    endif
-    
-    do k = ks, km
-        do i = 1, im
-            ap1 = 10. * dim (t (i, k), tmin) + 1.
-            ap1 = min (2621., ap1)
-            it = ap1
-            es (i, k) = table (it) + (ap1 - it) * des (it)
-            qs (i, k) = eps * es (i, k) * (1. + zvir * q (i, k)) / p (i, k)
-        enddo
-    enddo
-    
-    if (present (dqdt)) then
-        do k = ks, km
-            do i = 1, im
-                ap1 = 10. * dim (t (i, k), tmin) + 1.
-                ap1 = min (2621., ap1) - 0.5
-                it = ap1
-                dqdt (i, k) = eps10 * (des (it) + (ap1 - it) * (des (it + 1) - des (it))) * (1. + zvir * q (i, k)) / p (i, k)
-            enddo
-        enddo
-    endif
-    
-end subroutine qsmith
 
 ! =======================================================================
 ! fix negative water species
 ! this is designed for 6 - class micro - physics schemes
 ! =======================================================================
 
-subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, mc_air)
+subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg)
     
     implicit none
     
     integer, intent (in) :: ks, ke
-    
     real, intent (in), dimension (ks:ke) :: dp
-    
-    real, intent (in), dimension (ks:ke) :: mc_air
-    
-    real, intent (inout), dimension (ks:ke) :: pt, qv, ql, qr, qi, qs, qg
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: pt
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     
     real, dimension (ks:ke) :: lcpk, icpk
     
@@ -4354,9 +3673,9 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, mc_air)
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        cvm = mc_air (k) + qv (k) * c_vap + (qr (k) + ql (k)) * c_liq + (qi (k) + qs (k) + qg (k)) * c_ice
-        lcpk (k) = (lv00 + d0_vap * pt (k)) / cvm
-        icpk (k) = (li00 + dc_ice * pt (k)) / cvm
+        cvm = 1. + qv (k) * c1_vap + (qr (k) + ql (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+        lcpk (k) = (lv00 + d1_vap * pt (k)) / cvm
+        icpk (k) = (li00 + d1_ice * pt (k)) / cvm
     enddo
     
     do k = ks, ke
@@ -4376,11 +3695,13 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, mc_air)
             qs (k) = 0.
         endif
         ! if graupel < 0, borrow from rain
+#ifdef TEST_NEG_HT
         if (qg (k) < 0.) then
             qr (k) = qr (k) + qg (k)
             pt (k) = pt (k) - qg (k) * icpk (k) ! heating
             qg (k) = 0.
         endif
+#endif
         
         ! -----------------------------------------------------------------------
         ! liquid phase:
@@ -4391,35 +3712,39 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, mc_air)
             ql (k) = ql (k) + qr (k)
             qr (k) = 0.
         endif
+#ifdef TEST_NEG_HT
         ! if cloud water < 0, borrow from water vapor
         if (ql (k) < 0.) then
             qv (k) = qv (k) + ql (k)
             pt (k) = pt (k) - ql (k) * lcpk (k) ! heating
             ql (k) = 0.
         endif
+#endif
         
+    enddo
+    
+#ifdef TEST_NEG_HT
+    ! -----------------------------------------------------------------------
+    ! fix water vapor; borrow from above
+    ! -----------------------------------------------------------------------
+    do k = ks + 1, ke
+        if (qv (k) < 0. .and. qv (k - 1) > 0.) then
+            dq = min (- qv (k) * dp (k), qv (k - 1) * dp (k - 1))
+            qv (k - 1) = qv (k - 1) - dq / dp (k - 1)
+            qv (k) = qv (k) + dq / dp (k)
+        endif
     enddo
     
     ! -----------------------------------------------------------------------
     ! fix water vapor; borrow from below
     ! -----------------------------------------------------------------------
-    
     do k = ks, ke - 1
         if (qv (k) < 0.) then
             qv (k + 1) = qv (k + 1) + qv (k) * dp (k) / dp (k + 1)
             qv (k) = 0.
         endif
     enddo
-    
-    ! -----------------------------------------------------------------------
-    ! bottom layer; borrow from above
-    ! -----------------------------------------------------------------------
-    
-    if (qv (ke) < 0. .and. qv (ke - 1) > 0.) then
-        dq = min (- qv (ke) * dp (ke), qv (ke - 1) * dp (ke - 1))
-        qv (ke - 1) = qv (ke - 1) - dq / dp (ke - 1)
-        qv (ke) = qv (ke) + dq / dp (ke)
-    endif
+#endif
     
 end subroutine neg_adj
 
@@ -4468,49 +3793,5 @@ end subroutine neg_adj
 ! endif
 !
 !end function g_sum
-
-! =======================================================================
-! interpolate to a prescribed height
-! =======================================================================
-
-subroutine interpolate_z (is, ie, km, zl, hgt, a3, a2)
-    
-    implicit none
-    
-    integer, intent (in) :: is, ie, km
-    
-    real, intent (in), dimension (is:ie, km) :: a3
-    
-    real, intent (in), dimension (is:ie, km + 1) :: hgt ! hgt (k) > hgt (k + 1)
-    
-    real, intent (in) :: zl
-    
-    real, intent (out), dimension (is:ie) :: a2
-    
-    real, dimension (km) :: zm ! middle layer height
-    
-    integer :: i, k
-    
-    !$omp parallel do default (none) shared (is, ie, km, hgt, zl, a2, a3) private (zm)
-    
-    do i = is, ie
-        do k = 1, km
-            zm (k) = 0.5 * (hgt (i, k) + hgt (i, k + 1))
-        enddo
-        if (zl >= zm (1)) then
-            a2 (i) = a3 (i, 1)
-        elseif (zl <= zm (km)) then
-            a2 (i) = a3 (i, km)
-        else
-            do k = 1, km - 1
-                if (zl <= zm (k) .and. zl >= zm (k + 1)) then
-                    a2 (i) = a3 (i, k) + (a3 (i, k + 1) - a3 (i, k)) * (zm (k) - zl) / (zm (k) - zm (k + 1))
-                    exit
-                endif
-            enddo
-        endif
-    enddo
-    
-end subroutine interpolate_z
 
 end module gfdl_mp_mod
