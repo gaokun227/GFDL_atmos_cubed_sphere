@@ -122,7 +122,6 @@ contains
     real :: pe_ustag(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz+1)
     real :: pe_vstag(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz+1)
     real :: pe_bstag(bd%isd:bd%ied+1,bd%jsd:bd%jed+1,npz+1)
-    real :: delz_halo(bd%isd:bd%ied,bd%jsd:bd%jed,npz) !!! DEBUG CODE
     real, parameter :: a13 = 1./3.
 
     integer :: i,j,k,n,p, sphum, npz_coarse
@@ -261,21 +260,7 @@ contains
 
           if (.not. flagstruct%hydrostatic) then
              call nested_grid_BC_send(w, neststruct%nest_domain_all(p), 0, 0)
-             do k=1,npz
-             do j=jsd,jed
-             do i=isd,ied
-                delz_halo(i,j,k) = 1.e36
-             enddo
-             enddo
-             enddo
-             do k=1,npz
-             do j=js,je
-             do i=is,ie
-                delz_halo(i,j,k) = delz(i,j,k)
-             enddo
-             enddo
-             enddo
-             call nested_grid_BC_send(delz_halo, neststruct%nest_domain_all(p), 0, 0) ! This seems to need the halo to work correctly.
+             call nested_grid_BC_send(delz, neststruct%nest_domain_all(p), 0, 0) 
           endif          
 #endif
 
