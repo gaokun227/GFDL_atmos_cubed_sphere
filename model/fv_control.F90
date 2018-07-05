@@ -349,6 +349,7 @@ module fv_control_mod
             Atm(n)%flagstruct%grid_number => Atm(n)%grid_number
             Atm(n)%gridstruct%regional  => Atm(n)%flagstruct%regional
             Atm(n)%gridstruct%bounded_domain = Atm(n)%flagstruct%regional .or. Atm(n)%neststruct%nested
+            if (Atm(n)%gridstruct%bounded_domain .and. is_master()) print*, ' Bounded domain: nested = ', Atm(n)%neststruct%nested, ', regional = ', Atm(n)%flagstruct%regional
 
             call init_grid(Atm(n), grid_name, grid_file, npx, npy, npz, ndims, ntiles, ng)
 
