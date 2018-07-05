@@ -2765,9 +2765,10 @@ contains
 !
       if(status /= nf90_noerr) then
         write(0,*)' check netcdf status=',status
-        write(0,10001)trim(nf90_strerror(status))
+        !write(0,10001)trim(nf90_strerror(status))
 10001   format(' NetCDF error ',a)
-        stop "Stopped"
+        !stop "Stopped"
+        call mpp_error(FATAL, ' NetCDF error ' // trim(nf90_strerror(status)))
       endif
       end subroutine check
 !
@@ -3613,9 +3614,9 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
       do k=1,nz
         do j=jstart,jend
         do i=i1,ie
-          delz(i,j,k)=side_t0%delz_BC(i,j,k)                            &
-                     +(side_t1%delz_BC(i,j,k)-side_t0%delz_BC(i,j,k))   &
-                      *fraction_interval
+!!$          delz(i,j,k)=side_t0%delz_BC(i,j,k)                            &
+!!$                     +(side_t1%delz_BC(i,j,k)-side_t0%delz_BC(i,j,k))   &
+!!$                      *fraction_interval
           q_con(i,j,k)=side_t0%q_con_BC(i,j,k)                          &
                      +(side_t1%q_con_BC(i,j,k)-side_t0%q_con_BC(i,j,k)) &
                       *fraction_interval
