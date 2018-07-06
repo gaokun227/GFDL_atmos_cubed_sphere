@@ -582,6 +582,7 @@ contains
       end if
 
       unit = stdout()
+      !!!NOTE: Checksums not yet working in stand-alone regional model!!
       write(unit,*)
       write(unit,*) 'fv_restart u   ', trim(gn),' = ', mpp_chksum(Atm(n)%u(isc:iec,jsc:jec,:))
       write(unit,*) 'fv_restart v   ', trim(gn),' = ', mpp_chksum(Atm(n)%v(isc:iec,jsc:jec,:))
