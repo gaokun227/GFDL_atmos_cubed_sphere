@@ -119,7 +119,8 @@ contains
   real, intent(inout)::  w(isd:     ,jsd:     ,1:)   ! vertical velocity (m/s)
   real, intent(inout):: pt(isd:ied  ,jsd:jed  ,km)   ! cp*virtual potential temperature 
                                                      ! as input; output: temperature
-  real, intent(inout), dimension(is:,js:,1:)::delz, q_con, cappa
+  real, intent(inout), dimension(isd:,jsd:,1:)::q_con, cappa
+  real, intent(inout), dimension(is:,js:,1:)::delz
   logical, intent(in):: hydrostatic
   logical, intent(in):: hybrid_z
   logical, intent(in):: out_dt
