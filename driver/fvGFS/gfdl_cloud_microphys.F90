@@ -3343,7 +3343,7 @@ subroutine gfdl_cloud_microphys_init (me, master, nlunit, input_nml_file, loguni
     ! master = (mpp_pe () .eq.mpp_root_pe ())
     
 #ifdef INTERNAL_FILE_NML
-    read (input_nml_file, nml = gfdl_cloud_microphysics_nml)
+    read (input_nml_file, nml = gfdl_cloud_microphysics_nml, iostat = ios)
 #else
     inquire (file = trim (fn_nml), exist = exists)
     if (.not. exists) then
@@ -3353,7 +3353,7 @@ subroutine gfdl_cloud_microphys_init (me, master, nlunit, input_nml_file, loguni
         open (unit = nlunit, file = fn_nml, readonly, status = 'old', iostat = ios)
     endif
     rewind (nlunit)
-    read (nlunit, nml = gfdl_cloud_microphysics_nml)
+    read (nlunit, nml = gfdl_cloud_microphysics_nml, iostat = ios)
     close (nlunit)
 #endif
     

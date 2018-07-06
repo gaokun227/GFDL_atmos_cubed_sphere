@@ -131,9 +131,10 @@ public :: fv_phys, fv_nudge
   real:: t_strat = 200.
   real:: tau_strat = 10.     ! days
   real:: t_fac = 1.
-  integer:: print_freq = 21600  ! seconds
+  integer:: print_freq = 6  ! hours
   integer:: seconds, days
   logical :: print_diag
+  integer :: istep = 0
 
   integer :: id_vr_k, id_rain, id_rain_k, id_pblh
   integer :: id_dqdt, id_dTdt, id_dudt, id_dvdt
@@ -223,10 +224,15 @@ contains
 
    call get_time (time, seconds, days)
 
-   if ( mod(seconds, print_freq)==0 ) then
-        print_diag = .true.
+   if (print_freq < 0) then
+      istep = istep + 1
+      print_diag = (mod(istep,-print_freq) == 0)
    else
-        print_diag = .false.
+      if ( mod(seconds, print_freq*3600)==0 ) then
+         print_diag = .true.
+      else
+         print_diag = .false.
+      endif
    endif
 
     master = is_master()
@@ -654,17 +660,11 @@ contains
  integer  i,j,k, km, iq, k_mp
  integer  isd, ied, jsd, jed
  integer  seconds, days
- logical print_diag, used
+ logical used
 
 !  if (.not. sim_phys_initialized) call fv_phys_init(nwat)
 
    call get_time (time, seconds, days)
-
-   if ( mod(seconds, print_freq)==0 ) then
-        print_diag = .true.
-   else
-        print_diag = .false.
-   endif
 
    km = npz
    isd = is-ng;   ied = ie + ng
@@ -980,33 +980,48 @@ endif
 
 !!NOTE: You can do threaded GFDL MP in solo core, but it **WILL** mess up your GFDL MP diagnostics!!!
                                                                                           call timing_on('gfdl_mp')
-#ifndef GFDL_MP_THREAD
-      call gfdl_cloud_microphys_driver(q3(is:ie,js:je,1:km,sphum),   q3(is:ie,js:je,1:km,liq_wat), q3(is:ie,js:je,1:km,rainwat),  &
-                                    q3(is:ie,js:je,1:km,ice_wat), q3(is:ie,js:je,1:km,snowwat), q3(is:ie,js:je,1:km,graupel),  &
-                                    q3(is:ie,js:je,1:km,cld_amt), q3(is:ie,js:je,1:km,cld_amt),   &
-                                  q_dt(is:ie,js:je,1:km,sphum), q_dt(is:ie,js:je,1:km,liq_wat), q_dt(is:ie,js:je,1:km,rainwat), &
-                                  q_dt(is:ie,js:je,1:km,ice_wat), q_dt(is:ie,js:je,1:km,snowwat), q_dt(is:ie,js:je,1:km,graupel), &
-                                  q_dt(is:ie,js:je,1:km,cld_amt), t_dt, t3, w(is:ie,js:je,1:km), u3, v3,     &
-                                  u_dt(is:ie,js:je,1:km),v_dt(is:ie,js:je,1:km), dz,      &
-                                  delp(is:ie,js:je,1:km), gridstruct%area(is:ie,js:je),  &
-                                  pdt, land, rain, snow, ice, graup, hydrostatic, phys_hydrostatic, &
-                                  1,ie-is+1, 1,je-js+1, 1,km, k_mp,npz, seconds ) !Time )
-#else
+!!$#ifndef GFDL_MP_THREAD
+!!$      call gfdl_cloud_microphys_driver(q3(is:ie,js:je,1:km,sphum),   q3(is:ie,js:je,1:km,liq_wat), q3(is:ie,js:je,1:km,rainwat),  &
+!!$                                    q3(is:ie,js:je,1:km,ice_wat), q3(is:ie,js:je,1:km,snowwat), q3(is:ie,js:je,1:km,graupel),  &
+!!$                                    q3(is:ie,js:je,1:km,cld_amt), q3(is:ie,js:je,1:km,cld_amt),   &
+!!$                                  q_dt(is:ie,js:je,1:km,sphum), q_dt(is:ie,js:je,1:km,liq_wat), q_dt(is:ie,js:je,1:km,rainwat), &
+!!$                                  q_dt(is:ie,js:je,1:km,ice_wat), q_dt(is:ie,js:je,1:km,snowwat), q_dt(is:ie,js:je,1:km,graupel), &
+!!$                                  q_dt(is:ie,js:je,1:km,cld_amt), t_dt, t3, w(is:ie,js:je,1:km), u3, v3,     &
+!!$                                  u_dt(is:ie,js:je,1:km),v_dt(is:ie,js:je,1:km), dz,      &
+!!$                                  dz(is:ie,js:je,1:km), delp(is:ie,js:je,1:km), gridstruct%area(is:ie,js:je),  &
+!!$                                  pdt, land, rain, snow, ice, graup, hydrostatic, phys_hydrostatic, &
+!!$                                  1,ie-is+1, 1,km, k_mp,npz, seconds ) !Time )
+!!$#else
 !$omp parallel do default(shared)
    do j=js,je
-      call gfdl_cloud_microphys_driver(q3(is:ie,j:j,1:km,sphum),     q3(is:ie,j:j,1:km,liq_wat), q3(is:ie,j:j,1:km,rainwat),  &
-                                    q3(is:ie,j:j,1:km,ice_wat),   q3(is:ie,j:j,1:km,snowwat), q3(is:ie,j:j,1:km,graupel),  &
-                                    q3(is:ie,j:j,1:km,cld_amt),   q3(is:ie,j:j,1:km,cld_amt),   &
-                                  q_dt(is:ie,j:j,1:km,sphum),   q_dt(is:ie,j:j,1:km,liq_wat), q_dt(is:ie,j:j,1:km,rainwat), &
-                                  q_dt(is:ie,j:j,1:km,ice_wat), q_dt(is:ie,j:j,1:km,snowwat), q_dt(is:ie,j:j,1:km,graupel), &
-                                  q_dt(is:ie,j:j,1:km,cld_amt), t_dt(is:ie,j:j,1:km), t3(is:ie,j:j,1:km), w(is:ie,j:j,1:km), u3(is:ie,j:j,1:km), v3(is:ie,j:j,1:km), &
-                                  u_dt(is:ie,j:j,1:km),         v_dt(is:ie,j:j,1:km), dz(is:ie,j:j,1:km),      &
-                                  delp(is:ie,j:j,1:km), gridstruct%area(is:ie,j:j),  &
-                                  pdt, land(is:ie,j:j), rain(is:ie,j:j), snow(is:ie,j:j), ice(is:ie,j:j), graup(is:ie,j:j), hydrostatic, phys_hydrostatic, &
-                                  1,ie-is+1, 1,1, 1,km, k_mp,npz, seconds ) ! Time )
+      call gfdl_cloud_microphys_driver(q3(is:ie,j,1:km,sphum),     q3(is:ie,j,1:km,liq_wat), q3(is:ie,j,1:km,rainwat),  &
+                                    q3(is:ie,j,1:km,ice_wat),   q3(is:ie,j,1:km,snowwat), q3(is:ie,j,1:km,graupel),  &
+                                    q3(is:ie,j,1:km,cld_amt),   q3(is:ie,j,1:km,cld_amt),   &
+                                  q_dt(is:ie,j,1:km,sphum),   q_dt(is:ie,j,1:km,liq_wat), q_dt(is:ie,j,1:km,rainwat), &
+                                  q_dt(is:ie,j,1:km,ice_wat), q_dt(is:ie,j,1:km,snowwat), q_dt(is:ie,j,1:km,graupel), &
+                                  q_dt(is:ie,j,1:km,cld_amt), t_dt(is:ie,j,1:km), t3(is:ie,j,1:km), w(is:ie,j,1:km), u3(is:ie,j,1:km), v3(is:ie,j,1:km), &
+                                  u_dt(is:ie,j,1:km),         v_dt(is:ie,j,1:km), dz(is:ie,j,1:km),      &
+                                  delp(is:ie,j,1:km), gridstruct%area(is:ie,j),  &
+                                  pdt, land(is:ie,j), rain(is:ie,j), snow(is:ie,j), ice(is:ie,j), graup(is:ie,j), hydrostatic, phys_hydrostatic, &
+                                  1,ie-is+1, 1,km, k_mp,npz, seconds ) ! Time )
    enddo
-#endif
+!!$#endif
                                                                                           call timing_off('gfdl_mp')
+     !GFDL MP outputs mm/d
+     if ( id_rain_k>0 ) then
+        prec_total(:,:) = prec_total(:,:) + rain(:,:) * pdt / 86400.
+        used = send_data(id_rain_k, prec_total, time)
+        if (print_diag) then
+           prec = g_sum(prec_total, is, ie, js, je, gridstruct%area(is:ie,js:je), 1)
+           if(master) write(*,*) ' Accumulated rain (m)', trim(gn), ' =', prec
+        endif
+        !call prt_maxmin(' W', w, is, ie, js, je, ng,  npz, 1.)
+     endif
+     if ( id_rain>0 ) then ! GFDL MP
+        used = send_data(id_rain, rain, time)
+        if (print_diag) call prt_maxmin(' Rain rate (mm/day): ', rain,  &
+             is,ie,js,je,0,1,1.)
+     endif
   endif
 
   if ( mixed_layer ) then
@@ -1601,12 +1616,10 @@ endif
 ! column) name!!                               !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    if (do_ls_cond .or. do_K_warm_rain .or. ( do_reed_phys .and. do_reed_cond) ) then
-       id_rain = register_diag_field (mod_name, 'rain', axes(1:2), time,        &
-            'rain_sim_phys', 'mm/day', missing_value=missing_value )
-       id_rain_k = register_diag_field (mod_name, 'rain_k', axes(1:2), time,        &
-            'accumuated rain_Kessler', 'mm/day', missing_value=missing_value )
-    endif
+    id_rain = register_diag_field (mod_name, 'rain', axes(1:2), time,        &
+         'rain_sim_phys', 'mm/day', missing_value=missing_value )
+    id_rain_k = register_diag_field (mod_name, 'rain_k', axes(1:2), time,        &
+         'accumuated rain', 'mm/day', missing_value=missing_value )
     if (do_K_warm_rain) then
        id_vr_k = register_diag_field (mod_name, 'vr_k', axes(1:3), time,        &
             'Terminal fall V_Kessler', 'm/s', missing_value=missing_value )

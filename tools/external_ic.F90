@@ -2464,7 +2464,7 @@ contains
 5000 continue
 
 ! Add some diagnostics:
-  call p_maxmin('delz_model', Atm%delz(is:ie,js:je,1:npz), is, ie, js, je, npz, 1.)
+  if (.not. Atm%flagstruct%hydrostatic) call p_maxmin('delz_model', Atm%delz(is:ie,js:je,1:npz), is, ie, js, je, npz, 1.)
   call p_maxmin('sphum_model', Atm%q(is:ie,js:je,1:npz,sphum), is, ie, js, je, npz, 1.)
   call p_maxmin('liq_wat_model', Atm%q(is:ie,js:je,1:npz,liq_wat), is, ie, js, je, npz, 1.)
   if (ice_wat .gt. 0) call p_maxmin('ice_wat_model', Atm%q(is:ie,js:je,1:npz,ice_wat), is, ie, js, je, npz, 1.)

@@ -144,7 +144,7 @@ contains
   real, allocatable, dimension(:,:,:) :: dp0, u0, v0
   real, allocatable, dimension(:,:,:) :: u_dt, v_dt
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
-  real, dimension(is:ie,km)  :: q2, dp2
+  real, dimension(is:ie,km)  :: q2, dp2, t0
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
   real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
@@ -549,7 +549,7 @@ contains
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
 !$OMP                               npx,npy,ccn_cm3,inline_mp,u_dt,v_dt,   &
 !$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps) &
-!$OMP                       private(q2,pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln)
+!$OMP                       private(q2,pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln,dp2,t0)
 
 !$OMP do
   do k=2,km
@@ -753,6 +753,10 @@ endif        ! end last_step check
         u_dt(is:ie,j,:) = ua(is:ie,j,:)
         v_dt(is:ie,j,:) = va(is:ie,j,:)
 
+        !save temperature and qv for tendencies
+        dp2(is:ie,:) = q(is:ie,j,:,sphum)
+        t0(is:ie,:) = pt(is:ie,j,:)
+
 #ifndef DYCORE_SOLO
         call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
@@ -768,6 +772,11 @@ endif        ! end last_step check
         ! compute wind tendency at A grid fori D grid wind update
         u_dt(is:ie,j,:) = (ua(is:ie,j,:) - u_dt(is:ie,j,:)) / abs(mdt)
         v_dt(is:ie,j,:) = (va(is:ie,j,:) - v_dt(is:ie,j,:)) / abs(mdt)
+
+        if (.not. do_adiabatic_init) then
+           if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt(is:ie,j,:) = (q(is:ie,j,:,sphum) - dp2(is:ie,:)) / abs(mdt)
+           if (allocated(inline_mp%t_dt))  inline_mp%t_dt(is:ie,j,:)  = (pt(is:ie,j,:)      -  t0(is:ie,:)) / abs(mdt)
+        endif
 
         ! update pe, peln, pk, ps
         do k=2,km+1

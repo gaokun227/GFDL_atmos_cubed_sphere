@@ -97,6 +97,7 @@ module fv_arrays_mod
      real, allocatable :: pt1(:)
 
      integer :: id_prer, id_prei, id_pres, id_preg
+     integer :: id_qv_dt_gfdlmp, id_T_dt_gfdlmp
      integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
 
      logical :: initialized = .false.
@@ -613,6 +614,9 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: prei(:,:)     _NULL
     real, _ALLOCATABLE :: pres(:,:)     _NULL
     real, _ALLOCATABLE :: preg(:,:)     _NULL
+
+    real, _ALLOCATABLE :: qv_dt(:,:,:)
+    real, _ALLOCATABLE :: t_dt(:,:,:)
   end type inline_mp_type
 
   interface allocate_fv_nest_BC_type
