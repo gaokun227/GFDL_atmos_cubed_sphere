@@ -603,6 +603,20 @@ contains
         call get_tracer_names(MODEL_ATMOS, iq, tracer_name)
         write(unit,*) 'fv_restart '//trim(tracer_name)//' = ', mpp_chksum(Atm(n)%q(isc:iec,jsc:jec,:,iq))
       enddo
+!!$      !!!! DEBUG CODE !!! checksum testing in 
+!!$      allocate(g_dat(isd:ied,jsd:jed,1))
+!!$      g_dat(isd:ied,jsd:jed,1) = cos(real(mpp_pe())) ! halo fill
+!!$      do j=jsc,jec
+!!$      do i=isc,iec
+!!$         g_dat(isc:iec,jsc:jec,1) = real(i + j*Atm(n)%npx)
+!!$      enddo
+!!$      enddo
+!!$      write(unit,*) ' TEST array', trim(gn), ' =', mpp_chksum(g_dat(isc:iec,jsc:jec,1))
+!!$      deallocate(g_dat)
+!!$      call mpp_get_current_pelist(pelist)      
+!!$      write(unit,*) ' PElist: len = ', size(pelist), mpp_npes()
+!!$      write(unit,*) pelist
+!!$      !!!! END DEBUG CODE
 !---------------
 ! Check Min/Max:
 !---------------

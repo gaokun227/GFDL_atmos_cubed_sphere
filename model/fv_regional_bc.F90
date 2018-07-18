@@ -5051,6 +5051,8 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
     integer :: mype
     integer :: north_pe, south_pe, east_pe, west_pe
 
+    return !!! LMH; this routine should not be needed since it is handled by mpp_update_domains et al
+
     mype = mpp_pe()
     call mpp_get_neighbor_pe( domain, NORTH, north_pe)
     call mpp_get_neighbor_pe( domain, SOUTH, south_pe)

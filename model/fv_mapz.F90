@@ -3390,7 +3390,7 @@ endif        ! end last_step check
   integer, intent(in):: is, ie, isd,ied, jsd,jed, km, nwat, j, k
   integer, intent(in):: sphum, liq_wat, rainwat, ice_wat, snowwat, graupel
   real, intent(in), dimension(isd:ied,jsd:jed,km,nwat):: q
-  real, intent(out), dimension(is:ie):: cvm, qd
+  real, intent(out), dimension(is:ie):: cvm, qd  ! qd is q_con
   real, intent(in), optional:: t1(is:ie)
 !
   real, parameter:: t_i0 = 15.
