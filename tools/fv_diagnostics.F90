@@ -503,7 +503,18 @@ contains
             'snow precipitation', 'mm/day', missing_value=missing_value )
        idiag%id_preg = register_diag_field ( trim(field), 'preg', axes(1:2), Time,           &
             'graupel precipitation', 'mm/day', missing_value=missing_value )
+!-------------------
+!! 3D Tendency terms from GFDL MP
+!-------------------
+       if (Atm(n)%flagstruct%write_3d_diags) then
 
+          idiag%id_qv_dt_gfdlmp = register_diag_field ( trim(field), 'qv_dt_gfdlmp', axes(1:3), Time,           &
+               'water vapor specific humidity tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qv_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,npz))
+          idiag%id_T_dt_gfdlmp = register_diag_field ( trim(field), 'T_dt_gfdlmp', axes(1:3), Time,           &
+               'temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
+          if (idiag%id_T_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%T_dt(isc:iec,jsc:jec,npz))
+       endif
 !
       do i=1,nplev
         write(plev,'(I5)') levs(i)
@@ -1000,7 +1011,7 @@ contains
       open (unit=nlunit, file=Atm(n)%nml_filename, READONLY, status='OLD', iostat=ios)
     endif
     rewind(nlunit)
-    read (nlunit, nml=fv_diag_column_nml)
+    read (nlunit, nml=fv_diag_column_nml, iostat=ios)
     close (nlunit)
 #endif
 
@@ -1099,7 +1110,12 @@ contains
 
     !Model initialization time (not necessarily the time this simulation is started,
     ! conceivably a restart could be done
-    call get_date(Atm(n)%Time_init, yr_init, mo_init, dy_init, hr_init, mn_init, sec_init)
+    if (m_calendar) then
+       call get_date(Atm(n)%Time_init, yr_init, mo_init, dy_init, hr_init, mn_init, sec_init)
+    else
+       call get_time(Atm(n)%Time_init, sec_init, dy_init)
+       yr_init = 0 ; mo_init = 0 ; hr_init = 0 ; mn_init = 0
+    endif
 
     call nullify_domain()  ! Nullify  set_domain info
 
@@ -1422,6 +1438,9 @@ contains
        if(idiag%id_prei > 0) used=send_data(idiag%id_prei, Atm(n)%inline_mp%prei(isc:iec,jsc:jec), Time)
        if(idiag%id_pres > 0) used=send_data(idiag%id_pres, Atm(n)%inline_mp%pres(isc:iec,jsc:jec), Time)
        if(idiag%id_preg > 0) used=send_data(idiag%id_preg, Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
+
+       if (idiag%id_qv_dt_gfdlmp > 0) used=send_data(idiag%id_qv_dt_gfdlmp, Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_t_dt_gfdlmp > 0)  used=send_data(idiag%id_t_dt_gfdlmp,  Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,1:npz), Time)
 
        if(idiag%id_c15>0 .or. idiag%id_c25>0 .or. idiag%id_c35>0 .or. idiag%id_c45>0) then
           call wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, Atm(n)%ua(isc:iec,jsc:jec,npz),   &
