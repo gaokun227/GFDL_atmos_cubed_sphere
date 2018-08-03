@@ -30,6 +30,8 @@ module fv_update_phys_mod
   use fv_mp_mod,          only: start_group_halo_update, complete_group_halo_update
   use fv_mp_mod,          only: group_halo_update_type
   use fv_arrays_mod,      only: fv_flags_type, fv_nest_type, R_GRID
+  use boundary_mod,       only: nested_grid_BC
+  use boundary_mod,       only: extrapolation_BC
   use fv_eta_mod,         only: get_eta_level
   use fv_timing_mod,      only: timing_on, timing_off
   use fv_diagnostics_mod, only: prt_maxmin, range_check
@@ -74,7 +76,7 @@ module fv_update_phys_mod
 
     real, intent(in), dimension(npz+1):: ak, bk
     real, intent(in) :: phis(isd:ied,jsd:jed)
-    real, intent(inout):: delz(isd:,jsd:,1:)
+    real, intent(inout):: delz(is:,js:,1:)
 
 ! optional arguments for atmospheric nudging
     real, intent(in), dimension(isd:ied,jsd:jed), optional ::   &
@@ -534,12 +536,72 @@ module fv_update_phys_mod
     call complete_group_halo_update(i_pack(1), domain)
 
     call timing_off('COMM_TOTAL')
+!
+! for regional grid need to set values for u_dt and v_dt at the edges.
+! Note from Lucas:The physics only operates on the compute domain.
+! One snag is that in fv_update_phys.F90 u_dt and v_dt from the physics need to be interpolated to the D-grids,
+! which requires BCs for u_dt and v_dt. For the nested grid I can simply get the BCs from the coarse grid, but
+! in your case I would recommend just setting the boundary conditions to 0 or to constant values (ie the value
+! of the cell closest to the boundary).
+    if (gridstruct%regional) then
+     if (is == 1) then
+      do k=1,npz
+       do j = js,je
+        u_dt(is-1,j,k) = u_dt(is,j,k)
+        v_dt(is-1,j,k) = v_dt(is,j,k)
+       enddo
+      enddo
+     endif
+     if (ie == npx) then
+      do k=1,npz
+       do j = js,je
+        u_dt(ie+1,j,k) = u_dt(ie,j,k)
+        v_dt(ie+1,j,k) = v_dt(ie,j,k)
+       enddo
+      enddo
+     endif
+     if (js == 1) then
+      do k=1,npz
+       do i = is,ie
+        u_dt(i,js-1,k) = u_dt(i,js,k)
+        v_dt(i,js-1,k) = v_dt(i,js,k)
+       enddo
+      enddo
+     endif
+     if (je == npy) then
+      do k=1,npz
+       do i = is,ie
+        u_dt(i,je+1,k) = u_dt(i,je,k)
+        v_dt(i,je+1,k) = v_dt(i,je,k)
+       enddo
+      enddo
+     endif
+!
+! corners
+!
+     do k=1,npz
+      if (is == 1 .and. js == 1) then
+       u_dt(is-1,js-1,k) = u_dt(is,js,k)
+       v_dt(is-1,js-1,k) = v_dt(is,js,k)
+      elseif (is == 1 .and. je == npy) then
+       u_dt(is-1,je+1,k) = u_dt(is,je,k)
+       v_dt(is-1,je+1,k) = v_dt(is,je,k)
+      elseif (ie == npx .and. js == 1) then
+       u_dt(ie+1,js-1,k) = u_dt(ie,je,k)
+       v_dt(ie+1,js-1,k) = v_dt(ie,je,k)
+      elseif (ie == npx .and. je == npy) then
+       u_dt(ie+1,je+1,k) = u_dt(ie,je,k)
+       v_dt(ie+1,je+1,k) = v_dt(ie,je,k)
+      endif
+     enddo
+    endif !regional
+!
     call update_dwinds_phys(is, ie, js, je, isd, ied, jsd, jed, dt, u_dt, v_dt, u, v, gridstruct, npx, npy, npz, domain)
  endif
                                                     call timing_off(' Update_dwinds')
 #ifdef GFS_PHYS
     call cubed_to_latlon(u, v, ua, va, gridstruct, &
-         npx, npy, npz, 1, gridstruct%grid_type, domain, gridstruct%nested, flagstruct%c2l_ord, bd)
+         npx, npy, npz, 1, gridstruct%grid_type, domain, gridstruct%bounded_domain, flagstruct%c2l_ord, bd)
 #endif
 
   if ( flagstruct%fv_debug ) then
@@ -621,15 +683,15 @@ module fv_update_phys_mod
                  (mask(i,j)+mask(i,j+1))*dy(i,j)*sina_u(i,j)* &
                  (q(i-1,j,k)-q(i,j,k))*rdxc(i,j)
          enddo
-         if (is == 1 .and. .not. gridstruct%nested)   fx(i,j) = &
+         if (is == 1 .and. .not. gridstruct%bounded_domain)   fx(i,j) = &
               (mask(is,j)+mask(is,j+1))*dy(is,j)*(q(is-1,j,k)-q(is,j,k))*rdxc(is,j)* &
             0.5*(sin_sg(1,j,1) + sin_sg(0,j,3))
-         if (ie+1==npx .and. .not. gridstruct%nested) fx(i,j) = &
+         if (ie+1==npx .and. .not. gridstruct%bounded_domain) fx(i,j) = &
               (mask(ie+1,j)+mask(ie+1,j+1))*dy(ie+1,j)*(q(ie,j,k)-q(ie+1,j,k))*rdxc(ie+1,j)* & 
             0.5*(sin_sg(npx,j,1) + sin_sg(npx-1,j,3))
       enddo
       do j=js,je+1
-         if ((j == 1 .OR. j == npy) .and. .not. gridstruct%nested) then
+         if ((j == 1 .OR. j == npy) .and. .not. gridstruct%bounded_domain) then
             do i=is,ie
                fy(i,j) = (mask(i,j)+mask(i+1,j))*dx(i,j)*&
                     (q(i,j-1,k)-q(i,j,k))*rdyc(i,j) &

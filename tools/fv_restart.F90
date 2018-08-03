@@ -164,9 +164,11 @@ contains
                 if (Atm(n)%flagstruct%nggps_ic) then
                    call fill_nested_grid_topo(Atm(n), .false.)
                    call fill_nested_grid_topo_halo(Atm(n), .false.)
+                   call mpp_get_data_domain( Atm(n)%parent_grid%domain, isd, ied, jsd, jed)
+
                    call nested_grid_BC(Atm(n)%ps, Atm(n)%parent_grid%ps, Atm(n)%neststruct%nest_domain, &
                         Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-                        Atm(n)%npx, Atm(n)%npy,Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.false.)         
+                        Atm(n)%npx, Atm(n)%npy,Atm(n)%bd, isd, ied, jsd, jed, proc_in=.false.)         
                 else
                    call fill_nested_grid_topo(Atm(n), .false.)
                    if ( Atm(n)%flagstruct%external_ic .and. grid_type < 4 ) call fill_nested_grid_data(Atm(n:n), .false.)
@@ -292,14 +294,14 @@ contains
                                           Atm(n)%gridstruct%area_64, Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
                                           Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
                                           Atm(n)%flagstruct%n_zs_filter, cnst_0p20*Atm(n)%gridstruct%da_min, &
-                                          .false., oro_g, Atm(n)%neststruct%nested, Atm(n)%domain, Atm(n)%bd)
+                                          .false., oro_g, Atm(n)%gridstruct%bounded_domain, Atm(n)%domain, Atm(n)%bd)
                    if ( is_master() ) write(*,*) 'Warning !!! del-2 terrain filter has been applied ', &
                         Atm(n)%flagstruct%n_zs_filter, ' times'
               else if( Atm(n)%flagstruct%nord_zs_filter == 4 ) then
                    call del4_cubed_sphere(Atm(n)%npx, Atm(n)%npy, Atm(n)%phis, Atm(n)%gridstruct%area_64, &
                                           Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
                                           Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
-                                          Atm(n)%flagstruct%n_zs_filter, .false., oro_g, Atm(n)%neststruct%nested, &
+                                          Atm(n)%flagstruct%n_zs_filter, .false., oro_g, Atm(n)%gridstruct%bounded_domain, &
                                           Atm(n)%domain, Atm(n)%bd)
                  if ( is_master() ) write(*,*) 'Warning !!! del-4 terrain filter has been applied ', &
                       Atm(n)%flagstruct%n_zs_filter, ' times'
@@ -580,6 +582,7 @@ contains
       end if
 
       unit = stdout()
+      !!!NOTE: Checksums not yet working in stand-alone regional model!!
       write(unit,*)
       write(unit,*) 'fv_restart u   ', trim(gn),' = ', mpp_chksum(Atm(n)%u(isc:iec,jsc:jec,:))
       write(unit,*) 'fv_restart v   ', trim(gn),' = ', mpp_chksum(Atm(n)%v(isc:iec,jsc:jec,:))
@@ -600,6 +603,20 @@ contains
         call get_tracer_names(MODEL_ATMOS, iq, tracer_name)
         write(unit,*) 'fv_restart '//trim(tracer_name)//' = ', mpp_chksum(Atm(n)%q(isc:iec,jsc:jec,:,iq))
       enddo
+!!$      !!!! DEBUG CODE !!! checksum testing in 
+!!$      allocate(g_dat(isd:ied,jsd:jed,1))
+!!$      g_dat(isd:ied,jsd:jed,1) = cos(real(mpp_pe())) ! halo fill
+!!$      do j=jsc,jec
+!!$      do i=isc,iec
+!!$         g_dat(isc:iec,jsc:jec,1) = real(i + j*Atm(n)%npx)
+!!$      enddo
+!!$      enddo
+!!$      write(unit,*) ' TEST array', trim(gn), ' =', mpp_chksum(g_dat(isc:iec,jsc:jec,1))
+!!$      deallocate(g_dat)
+!!$      call mpp_get_current_pelist(pelist)      
+!!$      write(unit,*) ' PElist: len = ', size(pelist), mpp_npes()
+!!$      write(unit,*) pelist
+!!$      !!!! END DEBUG CODE
 !---------------
 ! Check Min/Max:
 !---------------
@@ -650,7 +667,7 @@ contains
               Atm(n)%gridstruct, &
               Atm(n)%npx, Atm(n)%npy, npz, 1, &              
               Atm(n)%gridstruct%grid_type, Atm(n)%domain, &
-              Atm(n)%gridstruct%nested, Atm(n)%flagstruct%c2l_ord, Atm(n)%bd)
+              Atm(n)%gridstruct%bounded_domain, Atm(n)%flagstruct%c2l_ord, Atm(n)%bd)
          do j=jsc,jec
             do i=isc,iec
                Atm(n)%u_srf(i,j) = Atm(n)%ua(i,j,npz)
@@ -670,18 +687,18 @@ contains
 
     type(fv_atmos_type), intent(INOUT) :: Atm
     logical, intent(IN), OPTIONAL :: proc_in
-    integer :: isg, ieg, jsg, jeg
+    integer :: isd, ied, jsd, jed
 
     if (.not. Atm%neststruct%nested) return
 
-    call mpp_get_global_domain( Atm%parent_grid%domain, &
-         isg, ieg, jsg, jeg)
+    call mpp_get_data_domain( Atm%parent_grid%domain, &
+         isd, ied, jsd, jed)
 
     !This is 2D and doesn't need remapping
     if (is_master()) print*, '  FILLING NESTED GRID HALO WITH INTERPOLATED TERRAIN'
     call nested_grid_BC(Atm%phis, Atm%parent_grid%phis, Atm%neststruct%nest_domain, &
          Atm%neststruct%ind_h, Atm%neststruct%wt_h, 0, 0, &
-         Atm%npx, Atm%npy, Atm%bd, isg, ieg, jsg, jeg, proc_in=proc_in)
+         Atm%npx, Atm%npy, Atm%bd, isd, ied, jsd, jed, proc_in=proc_in)
     
   end subroutine fill_nested_grid_topo_halo
 

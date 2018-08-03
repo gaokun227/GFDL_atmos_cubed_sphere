@@ -32,7 +32,7 @@ module atmosphere_mod
 use block_control_mod,      only: block_control_type
 use constants_mod,          only: cp_air, rdgas, grav, rvgas, kappa, pstd_mks
 use time_manager_mod,       only: time_type, get_time, set_time, operator(+), &
-                                  operator(-)
+                                  operator(-), operator(/), time_type_to_real
 use fms_mod,                only: file_exist, open_namelist_file,    &
                                   close_file, error_mesg, FATAL,     &
                                   check_nml_error, stdlog,           &
@@ -71,6 +71,10 @@ use fv_mp_mod,          only: switch_current_Atm, is_master
 use fv_sg_mod,          only: fv_subgrid_z
 use fv_update_phys_mod, only: fv_update_phys
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
+use fv_regional_mod,    only: BC_t0, BC_t1, ak_in, bk_in, bc_hour, ntimesteps_per_bc_update, &
+                              regional_bc_t1_to_t0, regional_bc_data
+use fv_regional_mod,    only: a_step, p_step
+use fv_regional_mod,    only: current_time_in_seconds
 
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
 use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
@@ -154,6 +158,11 @@ contains
 
    integer :: nlunit = 9999
    character (len = 64) :: fn_nml = 'input.nml'
+
+   !For regional
+   a_step = 0
+   current_time_in_seconds = time_type_to_real( Time - Time_init )
+   if (mpp_pe() == 0) write(0,"('atmosphere_init: current_time_seconds = ',f9.1)")current_time_in_seconds
 
                     call timing_on('ATMOS_INIT')
    allocate(pelist(mpp_npes()))
@@ -368,12 +377,42 @@ contains
    integer :: itrac, n, psc
    integer :: k, w_diff, nt_dyn
 
+   type(time_type) :: atmos_time
+   integer :: atmos_time_step
 !---- Call FV dynamics -----
 
    call mpp_clock_begin (id_dynam)
 
    n = mytile
+   a_step = a_step + 1
+!
+!*** If this is a regional run then read in the next boundary data when it is time.
+!
+   if(Atm(n)%flagstruct%regional)then
+
+     atmos_time = Time - Atm(n)%Time_init
+     atmos_time_step = atmos_time / Time_step_atmos
+     current_time_in_seconds = time_type_to_real( atmos_time )
+     if (mpp_pe() == 0) write(0,"('current_time_seconds = ',f9.1)")current_time_in_seconds
+
+     if(a_step==1)then
+       ntimesteps_per_bc_update=nint(Atm(n)%flagstruct%bc_update_interval*3600./(dt_atmos/real(abs(p_split))))
+     endif
+     if(a_step>=ntimesteps_per_bc_update.and.mod(a_step-1,ntimesteps_per_bc_update)==0)then
+       bc_hour=bc_hour+Atm(n)%flagstruct%bc_update_interval
+       call regional_bc_t1_to_t0(BC_t1, BC_t0               &  !
+                                ,Atm(n)%npz                 &  !<-- Move BC t1 data
+                                ,Atm(n)%ncnst               &  !    to t0.
+                                ,Atm(n)%regional_bc_bounds )
+       call regional_bc_data(Atm(n), bc_hour                &  !<--
+                            ,Atm(n)%bd%is, Atm(n)%bd%ie     &  !    Fill time level t1 from BC file from
+                            ,Atm(n)%bd%js, Atm(n)%bd%je     &  !    the next time level in BC file.
+                            ,isd, ied, jsd, jed             &  !
+                            ,ak_in, bk_in )                    !<--
+     endif
+   endif
    do psc=1,abs(p_split)
+      p_step = psc
                     call timing_on('fv_dynamics')
 !uc/vc only need be same on coarse grid? However BCs do need to be the same
      call fv_dynamics(npx, npy, npz, nq, Atm(n)%ng, dt_atmos/real(abs(p_split)),&

@@ -53,7 +53,7 @@ contains
    logical, intent(in):: adjust_dry_mass, mountain, moist_phys, hydrostatic, adiabatic
    real, intent(in):: dry_mass, cappa, ptop, ptop_min
    real, intent(in   )::   pt(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng, km)
-   real, intent(inout):: delz(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng, km)
+   real, intent(inout):: delz(ifirst:ilast,jfirst:jlast, km)
    real, intent(inout):: delp(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng, km)
    real, intent(inout)::    q(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng, km, nq)
    real(kind=R_GRID), intent(IN)   :: area(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng)
@@ -290,7 +290,7 @@ contains
   real, intent(out):: ps(is-ng:ie+ng,js-ng:je+ng)
   real, intent(out)::   pt(is-ng:ie+ng,js-ng:je+ng,km)
   real, intent(out):: delp(is-ng:ie+ng,js-ng:je+ng,km)
-  real, intent(inout):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+  real, intent(inout):: delz(is:,js:,1:)
 ! Local
   real   gz(is:ie,km+1)
   real   ph(is:ie,km+1)

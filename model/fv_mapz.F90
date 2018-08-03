@@ -119,7 +119,8 @@ contains
   real, intent(inout)::  w(isd:     ,jsd:     ,1:)   ! vertical velocity (m/s)
   real, intent(inout):: pt(isd:ied  ,jsd:jed  ,km)   ! cp*virtual potential temperature 
                                                      ! as input; output: temperature
-  real, intent(inout), dimension(isd:,jsd:,1:)::delz, q_con, cappa
+  real, intent(inout), dimension(isd:,jsd:,1:)::q_con, cappa
+  real, intent(inout), dimension(is:,js:,1:)::delz
   logical, intent(in):: hydrostatic
   logical, intent(in):: hybrid_z
   logical, intent(in):: out_dt
@@ -149,6 +150,7 @@ contains
   real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gz, cvm, qv
+
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
   integer:: i,j,k 
@@ -341,9 +343,9 @@ contains
                        km,   pe2,  w,              &
                        is, ie, j, isd, ied, jsd, jed, -2, kord_wz)
 ! Remap delz for hybrid sigma-p coordinate
-        call map1_ppm (km,   pe1, delz,  gz,   &
+        call map1_ppm (km,   pe1, delz,  gz,   & ! works
                        km,   pe2, delz,              &
-                       is, ie, j, isd,  ied,  jsd,  jed,  1, abs(kord_tm))
+                       is, ie, j, is,  ie,  js,  je,  1, abs(kord_tm))
         do k=1,km
            do i=is,ie
               delz(i,j,k) = -delz(i,j,k)*dp2(i,k)
@@ -529,7 +531,7 @@ contains
 
     ! D grid wind to A grid wind remap
     call cubed_to_latlon(u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
-             domain, gridstruct%nested, c2l_ord, bd)
+             domain, gridstruct%bounded_domain, c2l_ord, bd)
 
     ! save delp
     if (consv .gt. consv_min) then
@@ -696,7 +698,7 @@ endif        ! end last_step check
                              te(isd,jsd,k), q(isd,jsd,k,sphum), q(isd,jsd,k,liq_wat),   &
                              q(isd,jsd,k,ice_wat), q(isd,jsd,k,rainwat),    &
                              q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel),    &
-                             hs ,dpln, delz(isd:,jsd:,k), pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), &
+                             hs ,dpln, delz(is:ie,js:je,k), pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), & ! TEMPORARY
               cappa(isd:,jsd:,k), gridstruct%area_64, dtdt(is,js,k), out_dt, last_step, cld_amt>0, q(isd,jsd,k,cld_amt))
               if ( .not. hydrostatic  ) then
                  do j=js,je
@@ -941,7 +943,7 @@ endif        ! end last_step check
    real, intent(inout)::  u(isd:ied,  jsd:jed+1,km)
    real, intent(inout)::  v(isd:ied+1,jsd:jed,  km)
    real, intent(in)::  w(isd:,jsd:,1:)   ! vertical velocity (m/s)
-   real, intent(in):: delz(isd:,jsd:,1:)
+   real, intent(in):: delz(is:,js:,1:)
    real, intent(in):: hs(isd:ied,jsd:jed)  ! surface geopotential
    real, intent(in)::   pe(is-1:ie+1,km+1,js-1:je+1) ! pressure at layer edges
    real, intent(in):: peln(is:ie,km+1,js:je)  ! log(pe)
@@ -1307,7 +1309,7 @@ endif        ! end last_step check
  integer, intent(in) :: ibeg, iend, jbeg, jend
  integer, intent(in) :: km                ! Original vertical dimension
  integer, intent(in) :: kn                ! Target vertical dimension
- real, intent(in) ::   qs(i1:i2)       ! bottom BC
+ real, intent(in) ::   qs(i1:i2)       ! bottom BC (only used if iv == -2 ?? )
  real, intent(in) ::  pe1(i1:i2,km+1)  ! pressure at layer edges 
                                        ! (from model top to bottom surface)
                                        ! in the original vertical coordinate
@@ -3022,7 +3024,7 @@ endif        ! end last_step check
   real, intent(out):: pt(isd:ied  ,jsd:jed  ,kn)   ! temperature
   real, intent(out):: q(isd:ied,jsd:jed,kn,1:ntp)
   real, intent(out):: qdiag(isd:ied,jsd:jed,kn,ntp+1:nq)
-  real, intent(out):: delz(isd:,jsd:,1:)   ! delta-height (m)
+  real, intent(out):: delz(is:,js:,1:)   ! delta-height (m)
 !-----------------------------------------------------------------------
   real r_vir, rgrav
   real ps(isd:ied,jsd:jed)  ! surface pressure
@@ -3397,7 +3399,7 @@ endif        ! end last_step check
   integer, intent(in):: is, ie, isd,ied, jsd,jed, km, nwat, j, k
   integer, intent(in):: sphum, liq_wat, rainwat, ice_wat, snowwat, graupel
   real, intent(in), dimension(isd:ied,jsd:jed,km,nwat):: q
-  real, intent(out), dimension(is:ie):: cvm, qd
+  real, intent(out), dimension(is:ie):: cvm, qd  ! qd is q_con
   real, intent(in), optional:: t1(is:ie)
 !
   real, parameter:: t_i0 = 15.

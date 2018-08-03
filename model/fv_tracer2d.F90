@@ -26,6 +26,8 @@ module fv_tracer2d_mod
    use mpp_domains_mod,   only: mpp_update_domains, CGRID_NE, domain2d
    use fv_timing_mod,     only: timing_on, timing_off
    use boundary_mod,      only: nested_grid_BC_apply_intT
+   use fv_regional_mod,   only: regional_boundary_update
+   use fv_regional_mod,   only: current_time_in_seconds
    use fv_arrays_mod,     only: fv_grid_type, fv_nest_type, fv_atmos_type, fv_grid_bounds_type
    use mpp_mod,           only: mpp_error, FATAL, mpp_broadcast, mpp_send, mpp_recv, mpp_sum, mpp_max
 
@@ -510,7 +512,7 @@ end subroutine tracer_2d
 
 subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz,   &
                      nq,  hord, q_split, dt, id_divg, q_pack, nord_tr, trdm, &
-                     k_split, neststruct, parent_grid, lim_fac)
+                     k_split, neststruct, parent_grid, n_map, lim_fac)
 
       type(fv_grid_bounds_type), intent(IN) :: bd
       integer, intent(IN) :: npx
@@ -518,7 +520,7 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
       integer, intent(IN) :: npz
       integer, intent(IN) :: nq    ! number of tracers to be advected
       integer, intent(IN) :: hord, nord_tr
-      integer, intent(IN) :: q_split, k_split
+      integer, intent(IN) :: q_split, k_split, n_map
       integer, intent(IN) :: id_divg
       real   , intent(IN) :: dt, trdm
       real   , intent(IN) :: lim_fac
@@ -546,6 +548,7 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
       real :: cmax_t
       real :: c_global
       real :: frac, rdt
+      real :: reg_bc_update_time
       integer :: nsplt, nsplt_parent, msg_split_steps = 1
       integer :: i,j,k,it,iq
 
@@ -692,6 +695,19 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
            enddo
       endif
 
+      if (gridstruct%regional) then
+            !This is more accurate than the nested BC calculation
+            ! since it takes into account varying nsplit
+            reg_bc_update_time=current_time_in_seconds+(real(n_map-1) + real(it-1)/frac)*dt
+            do iq=1,nq
+                 call regional_boundary_update(q(:,:,:,iq), 'q', &
+                                               isd, ied, jsd, jed, npz, &
+                                               is,  ie,  js,  je,       &
+                                               isd, ied, jsd, jed,      &
+                                               reg_bc_update_time,      &
+                                               iq )
+            enddo
+      endif
 
 !$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,dp1,mfx,mfy,rarea,nq, &
 !$OMP                                  area,xfx,yfx,q,cx,cy,npx,npy,hord,gridstruct,bd,it,nsplt,nord_tr,trdm,lim_fac) &
