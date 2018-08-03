@@ -2462,7 +2462,7 @@ contains
        endif
 
 ! Cloud top temperature & cloud top press:
-       if ( (idiag%id_ctt>0 .or. idiag%id_ctp>0 .or. idiag%id_ctz).and. Atm(n)%flagstruct%nwat==6) then
+       if ( (idiag%id_ctt>0 .or. idiag%id_ctp>0 .or. idiag%id_ctz>0).and. Atm(n)%flagstruct%nwat==6) then
             allocate ( var1(isc:iec,jsc:jec) )
             allocate ( var2(isc:iec,jsc:jec) )
 !$OMP parallel do default(shared) private(tmp)
