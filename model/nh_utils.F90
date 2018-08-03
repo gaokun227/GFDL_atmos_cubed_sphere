@@ -1973,8 +1973,6 @@ CONTAINS
 #else
                   pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
 #endif
-                  !hydro
-                  pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
                   !Remove hydro cell-mean pressure
                   pkz(i,k) = pkz(i,k) - pm
                enddo
@@ -2091,8 +2089,6 @@ CONTAINS
 #else
                   pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
 #endif
-                  !hydro
-                  pm = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
                   !Remove hydro cell-mean pressure
                   pkz(i,k) = pkz(i,k) - pm
                enddo
