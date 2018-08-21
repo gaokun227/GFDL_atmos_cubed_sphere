@@ -229,8 +229,15 @@ module fv_arrays_mod
 
      !! Convenience pointers
 
-     integer, pointer :: grid_type
-     logical, pointer :: nested
+     integer, pointer :: grid_type !< Which type of grid to use. If 0, the equidistant gnomonic
+                                   !< cubed-sphere will be used. If 4, a doubly-periodic
+                                   !< f-plane cartesian grid will be used. If -1, the grid is read 
+                                   !< from INPUT/grid_spec.nc. Values 2, 3, 5, 6, and 7 are not 
+                                   !< supported and will likely not run. The default value is 0.
+
+     logical, pointer :: nested   !< Whether this is a nested grid. .false. by default.
+     logical, pointer :: regional !< Is this a (stand-alone) limited area regional domain?
+     logical :: bounded_domain !< Is this a regional or nested domain?
 
   end type fv_grid_type
 
@@ -508,7 +515,11 @@ module fv_arrays_mod
   real(kind=R_GRID) :: deglon_start = -30., deglon_stop = 30., &  ! boundaries of latlon patch
                        deglat_start = -30., deglat_stop = 30.
 
-  !Convenience pointers
+   logical :: regional = .false.       !< Default setting for the regional domain.
+
+   integer :: bc_update_interval = 3   !< Default setting for interval (hours) between external regional BC data files.
+
+   !Convenience pointers
   integer, pointer :: grid_number
 
   !f1p
@@ -638,6 +649,24 @@ module fv_arrays_mod
 
   end type fv_grid_bounds_type
 
+  type fv_regional_bc_bounds_type
+
+     integer :: is_north ,ie_north ,js_north ,je_north &
+               ,is_south ,ie_south ,js_south ,je_south &
+               ,is_east  ,ie_east  ,js_east  ,je_east  &
+               ,is_west  ,ie_west  ,js_west  ,je_west
+
+     integer :: is_north_uvs ,ie_north_uvs ,js_north_uvs ,je_north_uvs &
+               ,is_south_uvs ,ie_south_uvs ,js_south_uvs ,je_south_uvs &
+               ,is_east_uvs  ,ie_east_uvs  ,js_east_uvs  ,je_east_uvs  &
+               ,is_west_uvs  ,ie_west_uvs  ,js_west_uvs  ,je_west_uvs   
+
+     integer :: is_north_uvw ,ie_north_uvw ,js_north_uvw ,je_north_uvw &
+               ,is_south_uvw ,ie_south_uvw ,js_south_uvw ,je_south_uvw &
+               ,is_east_uvw  ,ie_east_uvw  ,js_east_uvw  ,je_east_uvw  &
+               ,is_west_uvw  ,ie_west_uvw  ,js_west_uvw  ,je_west_uvw
+
+  end type fv_regional_bc_bounds_type
   type fv_atmos_type
 
      logical :: allocated = .false.
@@ -734,6 +763,7 @@ module fv_arrays_mod
 
      type(fv_grid_bounds_type) :: bd
 
+    type(fv_regional_bc_bounds_type) :: regional_bc_bounds
      type(domain2D) :: domain
 #if defined(SPMD)
 
@@ -918,7 +948,7 @@ contains
     allocate (   Atm%ps(isd:ied  ,jsd:jed) )
     allocate (   Atm%pe(is-1:ie+1, npz+1,js-1:je+1) )
     allocate (   Atm%pk(is:ie    ,js:je  , npz+1) )
-    allocate ( Atm%peln(is:ie,npz+1,js:je) )
+    allocate ( Atm%peln(is:ie,npz+1,js:je) ) 
     allocate (  Atm%pkz(is:ie,js:je,npz) )
 
     allocate ( Atm%u_srf(is:ie,js:je) )
@@ -959,11 +989,11 @@ contains
     if ( Atm%flagstruct%hydrostatic ) then
        !Note length-one initialization if hydrostatic = .true.
        allocate (    Atm%w(isd:isd, jsd:jsd  ,1) )
-       allocate ( Atm%delz(isd:isd, jsd:jsd  ,1) )
+       allocate ( Atm%delz(is:is, js:js  ,1) )
        allocate (  Atm%ze0(is:is, js:js  ,1) )
     else
        allocate (    Atm%w(isd:ied, jsd:jed  ,npz  ) )
-       allocate ( Atm%delz(isd:ied, jsd:jed  ,npz) )
+       allocate ( Atm%delz(is:ie, js:je  ,npz) )
        if( Atm%flagstruct%hybrid_z ) then
           allocate (  Atm%ze0(is:ie, js:je ,npz+1) )
        else
@@ -1008,6 +1038,10 @@ contains
            do j=jsd, jed
               do i=isd, ied
                     Atm%w(i,j,k) = real_big
+              enddo
+           enddo
+           do j=js, je
+              do i=is, ie
                  Atm%delz(i,j,k) = real_big
               enddo
            enddo

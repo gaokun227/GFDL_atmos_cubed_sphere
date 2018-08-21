@@ -36,6 +36,10 @@ module fv_dynamics_mod
    use tracer_manager_mod,  only: get_tracer_index
    use fv_sg_mod,           only: neg_adj3
    use fv_nesting_mod,      only: setup_nested_grid_BCs
+   use fv_regional_mod,     only: regional_boundary_update, set_regional_BCs, write_after_bc_time_interpolation
+   use fv_regional_mod,     only: dump_field, H_STAGGER, U_STAGGER, V_STAGGER
+   use fv_regional_mod,     only: a_step, p_step, k_step
+   use fv_regional_mod,     only: current_time_in_seconds
    use boundary_mod,        only: nested_grid_BC_apply_intT
    use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, fv_diag_type, fv_grid_bounds_type, inline_mp_type
    use fv_nwp_nudge_mod,    only: do_adiabatic_init
@@ -96,7 +100,7 @@ contains
     real, intent(inout) :: pt(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! temperature (K)
     real, intent(inout) :: delp(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! pressure thickness (pascal)
     real, intent(inout) :: q(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, ncnst) ! specific humidity and constituents
-    real, intent(inout) :: delz(bd%isd:,bd%jsd:,1:)   ! delta-height (m); non-hydrostatic only
+    real, intent(inout) :: delz(bd%is:,bd%js:,1:)   ! delta-height (m); non-hydrostatic only
     real, intent(inout) ::  ze0(bd%is:, bd%js: ,1:) ! height at edges (m); non-hydrostatic
 ! ze0 no longer used
 
@@ -149,6 +153,7 @@ contains
       real, dimension(bd%is:bd%ie):: cvm
       real, allocatable :: dp1(:,:,:), dtdt_m(:,:,:), cappa(:,:,:)
       real:: akap, rdg, ph1, ph2, mdt, gam, amdt, u0
+      real:: recip_k_split,reg_bc_update_time
       integer:: kord_tracer(ncnst)
       integer :: i,j,k, n, iq, n_map, nq, nwat, k_split
       integer :: sphum, liq_wat = -999, ice_wat = -999      ! GFDL physics
@@ -174,6 +179,7 @@ contains
       agrav = 1. / grav
         dt2 = 0.5*bdt
       k_split = flagstruct%k_split
+      recip_k_split=1./real(k_split)
       nwat = flagstruct%nwat
       nq = nq_tot - flagstruct%dnats
       rdg = -rdgas * agrav
@@ -207,6 +213,19 @@ contains
                                            call timing_off('NEST_BCs')
       endif
 
+    ! For the regional domain set values valid the beginning of the
+    ! current large timestep at the boundary points of the pertinent
+    ! prognostic arrays.
+
+      if (flagstruct%regional) then
+        call timing_on('Regional_BCs')
+
+        reg_bc_update_time=current_time_in_seconds
+        call set_regional_BCs          & !<-- Insert values into the boundary region valid for the start of this large timestep.
+              (delp,delz,w,pt,q_con,cappa,q,u,v,uc,vc, bd, npz, ncnst, reg_bc_update_time )
+
+        call timing_off('Regional_BCs')
+      endif
 
       if ( flagstruct%no_dycore ) then
          if ( nwat.eq.2 .and. (.not.hydrostatic) ) then
@@ -302,7 +321,7 @@ contains
 #endif
          call prt_mxm('PS',        ps, is, ie, js, je, ng,   1, 0.01, gridstruct%area_64, domain)
          call prt_mxm('T_dyn_b',   pt, is, ie, js, je, ng, npz, 1.,   gridstruct%area_64, domain)
-         if ( .not. hydrostatic) call prt_mxm('delz',    delz, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
+         if ( .not. hydrostatic) call prt_mxm('delz',    delz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
          call prt_mxm('delp_b ', delp, is, ie, js, je, ng, npz, 0.01, gridstruct%area_64, domain)
          call prt_mxm('pk_b',    pk, is, ie, js, je, 0, npz+1, 1.,gridstruct%area_64, domain)
          call prt_mxm('pkz_b',   pkz,is, ie, js, je, 0, npz,   1.,gridstruct%area_64, domain)
@@ -338,7 +357,7 @@ contains
 !         else
              call Rayleigh_Super(abs(bdt), npx, npy, npz, ks, pfull, phis, flagstruct%tau, u, v, w, pt,  &
                   ua, va, delz, gridstruct%agrid, cp_air, rdgas, ptop, hydrostatic,    &
-                 (.not. neststruct%nested), flagstruct%rf_cutoff, gridstruct, domain, bd)
+                 .not. gridstruct%bounded_domain, flagstruct%rf_cutoff, gridstruct, domain, bd)
 !         endif
         else
              call Rayleigh_Friction(abs(bdt), npx, npy, npz, ks, pfull, flagstruct%tau, u, v, w, pt,  &
@@ -410,6 +429,7 @@ contains
 
                                                   call timing_on('FV_DYN_LOOP')
   do n_map=1, k_split   ! first level of time-split
+      k_step = n_map
                                            call timing_on('COMM_TOTAL')
 #ifdef USE_COND
       call start_group_halo_update(i_pack(11), q_con, domain)
@@ -444,7 +464,7 @@ contains
 #endif
 
                                            call timing_on('DYN_CORE')
-      call dyn_core(npx, npy, npz, ng, sphum, nq, mdt, n_split, zvir, cp_air, akap, cappa, grav, hydrostatic, &
+      call dyn_core(npx, npy, npz, ng, sphum, nq, mdt, n_map, n_split, zvir, cp_air, akap, cappa, grav, hydrostatic, &
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           & 
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
@@ -466,11 +486,11 @@ contains
 ! mass fluxes
                                               call timing_on('tracer_2d')
        !!! CLEANUP: merge these two calls?
-       if (gridstruct%nested) then
+       if (gridstruct%bounded_domain) then
          call tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
                         flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), &
                         flagstruct%nord_tr, flagstruct%trdm2, &
-                        k_split, neststruct, parent_grid, flagstruct%lim_fac)
+                        k_split, neststruct, parent_grid, n_map, flagstruct%lim_fac)
        else
          if ( flagstruct%z_tracer ) then
          call tracer_2d_1L(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
@@ -488,15 +508,15 @@ contains
      if ( flagstruct%hord_tr<8 .and. flagstruct%moist_phys ) then
                                                   call timing_on('Fill2D')
        if ( liq_wat > 0 )  &
-        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,liq_wat), delp, gridstruct%area, domain, neststruct%nested, npx, npy)
+        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,liq_wat), delp, gridstruct%area, domain, gridstruct%bounded_domain, npx, npy)
        if ( rainwat > 0 )  &
-        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,rainwat), delp, gridstruct%area, domain, neststruct%nested, npx, npy)
+        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,rainwat), delp, gridstruct%area, domain, gridstruct%bounded_domain, npx, npy)
        if ( ice_wat > 0  )  &
-        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,ice_wat), delp, gridstruct%area, domain, neststruct%nested, npx, npy)
+        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,ice_wat), delp, gridstruct%area, domain, gridstruct%bounded_domain, npx, npy)
        if ( snowwat > 0 )  &
-        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,snowwat), delp, gridstruct%area, domain, neststruct%nested, npx, npy)
+        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,snowwat), delp, gridstruct%area, domain, gridstruct%bounded_domain, npx, npy)
        if ( graupel > 0 )  &
-        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,graupel), delp, gridstruct%area, domain, neststruct%nested, npx, npy)
+        call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,graupel), delp, gridstruct%area, domain, gridstruct%bounded_domain, npx, npy)
                                                   call timing_off('Fill2D')
      endif
 #endif
@@ -547,6 +567,14 @@ contains
             call nested_grid_BC_apply_intT(cappa, &
                  0, 0, npx, npy, npz, bd, real(n_map+1), real(k_split), &
                  neststruct%cappa_BC, bctype=neststruct%nestbctype  )
+         endif
+         if ( flagstruct%regional .and. .not. last_step) then
+            reg_bc_update_time=current_time_in_seconds+(n_map+1)*mdt
+            call regional_boundary_update(cappa, 'cappa', &
+                                          isd, ied, jsd, jed, npz, &
+                                          is,  ie,  js,  je,       &
+                                          isd, ied, jsd, jed,      &
+                                          reg_bc_update_time )
          endif
 #endif
 
@@ -684,7 +712,7 @@ contains
   endif
 
 911  call cubed_to_latlon(u, v, ua, va, gridstruct, &
-          npx, npy, npz, 1, gridstruct%grid_type, domain, gridstruct%nested, flagstruct%c2l_ord, bd)
+          npx, npy, npz, 1, gridstruct%grid_type, domain, gridstruct%bounded_domain, flagstruct%c2l_ord, bd)
 
   deallocate(dp1)
   deallocate(cappa)
@@ -849,7 +877,7 @@ contains
     real, intent(inout):: pt(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! temp
     real, intent(inout):: ua(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! 
     real, intent(inout):: va(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! 
-    real, intent(inout):: delz(bd%isd:    ,bd%jsd:      ,1: ) ! delta-height (m); non-hydrostatic only
+    real, intent(inout):: delz(bd%is:    ,bd%js:      ,1: ) ! delta-height (m); non-hydrostatic only
     real,   intent(in) :: agrid(bd%isd:bd%ied,  bd%jsd:bd%jed,2)
     real, intent(in) :: phis(bd%isd:bd%ied,bd%jsd:bd%jed)     ! Surface geopotential (g*Z_surf)
     type(fv_grid_type), intent(IN) :: gridstruct
@@ -917,7 +945,7 @@ contains
           RF_initialized = .true.
      endif
 
-    call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%nested)
+    call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%bounded_domain)
 
     allocate( u2f(isd:ied,jsd:jed,kmax) )
 
@@ -1020,7 +1048,7 @@ contains
     real, intent(inout):: pt(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! temp
     real, intent(inout):: ua(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! 
     real, intent(inout):: va(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! 
-    real, intent(inout):: delz(bd%isd:    ,bd%jsd:      ,1: ) ! delta-height (m); non-hydrostatic only
+    real, intent(inout):: delz(bd%is:    ,bd%js:      ,1: ) ! delta-height (m); non-hydrostatic only
     type(fv_grid_type), intent(IN) :: gridstruct
     type(domain2d), intent(INOUT) :: domain
 ! local:
@@ -1063,7 +1091,7 @@ contains
 
     allocate( u2f(isd:ied,jsd:jed,kmax) )
 
-    call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%nested)
+    call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%bounded_domain)
 
 !$OMP parallel do default(none) shared(is,ie,js,je,kmax,u2f,hydrostatic,ua,va,w)
     do k=1,kmax
@@ -1161,7 +1189,7 @@ contains
     real, dimension(is:ie):: r1, r2, dm
     integer i, j, k
 
-    call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%nested)
+    call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%bounded_domain)
     
 !$OMP parallel do default(none) shared(is,ie,js,je,npz,gridstruct,aam,m_fac,ps,ptop,delp,agrav,ua) &
 !$OMP                          private(r1, r2, dm)

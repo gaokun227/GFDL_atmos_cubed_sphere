@@ -205,7 +205,7 @@ contains
     type (time_type), intent(in) :: Time
     real, INTENT(IN), optional:: time_total
     logical, intent(in) ::  hydrostatic
-    real, intent(inout) ::  delz(is-ng:ie+ng,js-ng:je+ng,npz)
+    real, intent(inout) ::  delz(is:ie,js:je,npz)
 ! Local:
     real, parameter:: sigb = 0.7
     logical:: no_tendency = .true.
@@ -624,7 +624,7 @@ contains
  real, INTENT(INOUT)::    q(is-ng:ie+ng,js-ng:je+ng,npz, nq)
  real, INTENT(INOUT)::   pe(is-1:ie+1 ,1:npz+1,js-1:je+1)
  real, INTENT(INOUT):: peln(is  :ie   ,1:npz+1,js  :je  )
- real, INTENT(INOUT):: delz(is-ng :ie+ng  ,js-ng  :je+ng  ,npz)
+ real, INTENT(INOUT):: delz(is :ie  ,js  :je  ,npz)
  real, intent(inout):: w(is-ng:ie+ng,js-ng:je+ng,npz)
  real, INTENT(INOUT):: sst(is:ie,js:je)
 
@@ -1354,7 +1354,7 @@ endif
     real   , INTENT(INOUT) ::    v(is-ng:ie+1+ng,js-ng:je+  ng,npz)
     real   , INTENT(INOUT) ::    w(is-ng:ie+  ng,js-ng:je+  ng,npz)
     real   , INTENT(INOUT) :: delp(is-ng:ie+  ng,js-ng:je+  ng,npz)
-    real   , INTENT(INOUT) :: delz(is-ng:ie+  ng,js-ng:je+  ng,npz)
+    real   , INTENT(INOUT) :: delz(is:   ie     ,js:   je     ,npz)
     real   , INTENT(INOUT) ::   pt(is-ng:ie+  ng,js-ng:je+  ng,npz)
     real c_w, c_p, c_t
     integer  i, j, k
@@ -1732,7 +1732,8 @@ endif
  real, intent(in):: zvir
  integer, intent(in):: is, ie, js, je, km, ng, nq
  logical, intent(in) :: hydrostatic
- real, intent(inout), dimension(is-ng:ie+ng,js-ng:je+ng,km):: dp, delz, pt, w, u, v, u_dt, v_dt
+ real, intent(inout), dimension(is-ng:ie+ng,js-ng:je+ng,km):: dp, pt, w, u, v, u_dt, v_dt
+ real, intent(inout), dimension(is   :ie   ,js   :je   ,km):: delz
  real, intent(inout), dimension(is-ng:ie+ng,js-ng:je+ng,km,nq):: q
  real, INTENT(INOUT)::  pk(is:ie, js:je, km+1)
  real, INTENT(INOUT) :: pe(is-1:ie+1,1:km+1,js-1:je+1)

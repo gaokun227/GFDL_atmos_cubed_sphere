@@ -93,6 +93,7 @@ contains
     integer                            :: start(4), nread(4)  
     integer                            :: is,  ie,  js,  je
     integer                            :: isd, ied, jsd, jed
+      integer,save :: halo=3 ! for regional domain external tools
 
     is  = Atm%bd%is
     ie  = Atm%bd%ie
@@ -134,23 +135,29 @@ contains
 
     !FIXME: Doesn't work for a nested grid
     ntiles = get_mosaic_ntiles(atm_mosaic)
+    if( .not. Atm%flagstruct%regional) then  !<-- The regional setup has only 1 tile so do not shutdown in that case.
     if(ntiles .NE. 6) call mpp_error(FATAL, &
        'fv_grid_tools(read_grid): ntiles should be 6 in mosaic file '//trim(atm_mosaic) )
     if(nregions .NE. 6) call mpp_error(FATAL, &
        'fv_grid_tools(read_grid): nregions should be 6 when reading from mosaic file '//trim(grid_file) )
+    endif
 
     call get_var_att_value(atm_hgrid, 'x', 'units', units)
 
     !--- get the geographical coordinates of super-grid.
     isc2 = 2*is-1; iec2 = 2*ie+1
     jsc2 = 2*js-1; jec2 = 2*je+1  
+    if( Atm%flagstruct%regional) then
+      isc2 = 2*(isd+halo)-1; iec2 = 2*(ied+1+halo)-1   ! For the regional domain the cell corner locations must be transferred
+      jsc2 = 2*(jsd+halo)-1; jec2 = 2*(jed+1+halo)-1   ! from the entire supergrid to the compute grid, including the halo region. 
+    endif
     allocate(tmpx(isc2:iec2, jsc2:jec2) )
     allocate(tmpy(isc2:iec2, jsc2:jec2) )
     start = 1; nread = 1
     start(1) = isc2; nread(1) = iec2 - isc2 + 1
     start(2) = jsc2; nread(2) = jec2 - jsc2 + 1
-    call read_data(atm_hgrid, 'x', tmpx, start, nread, no_domain=.TRUE.)
-    call read_data(atm_hgrid, 'y', tmpy, start, nread, no_domain=.TRUE.)
+    call read_data(atm_hgrid, 'x', tmpx, start, nread, no_domain=.TRUE.)  !<-- tmpx (lon, deg east) is on the supergrid
+    call read_data(atm_hgrid, 'y', tmpy, start, nread, no_domain=.TRUE.)  !<-- tmpy (lat, deg) is on the supergrid
 
     !--- geographic grid at cell corner
     grid(isd: is-1, jsd:js-1,1:ndims)=0.
@@ -160,12 +167,25 @@ contains
     if(len_trim(units) < 6) call mpp_error(FATAL, &
           "fv_grid_tools_mod(read_grid): the length of units must be no less than 6")
     if(units(1:6) == 'degree') then
+    if( .not. Atm%flagstruct%regional) then
        do j = js, je+1
           do i = is, ie+1
              grid(i,j,1) = tmpx(2*i-1,2*j-1)*pi/180.
              grid(i,j,2) = tmpy(2*i-1,2*j-1)*pi/180.
           enddo
        enddo
+    else
+!
+!***  In the regional case the halo surrounding the domain was included in the read.
+!***  Transfer the compute and halo regions to the compute grid.
+!
+       do j = jsd, jed+1
+          do i = isd, ied+1
+             grid(i,j,1) = tmpx(2*i+halo+2,2*j+halo+2)*pi/180.
+             grid(i,j,2) = tmpy(2*i+halo+2,2*j+halo+2)*pi/180.
+          enddo
+       enddo
+    endif
     else if(units(1:6) == 'radian') then
        do j = js, je+1
           do i = is, ie+1
@@ -473,6 +493,7 @@ contains
     type(domain2d), pointer :: domain
     integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed
+    integer :: istart, iend, jstart, jend
 
     is  = Atm%bd%is
     ie  = Atm%bd%ie
@@ -635,7 +656,7 @@ contains
                                       n, grid_global(1:npx,1:npy,1,n), grid_global(1:npx,1:npy,2,n))
              enddo
              endif
-        endif
+        endif !is master
              call mpp_broadcast(grid_global, size(grid_global), mpp_root_pe())
 !--- copy grid to compute domain
        do n=1,ndims
@@ -645,17 +666,31 @@ contains
              enddo
           enddo
        enddo
-          endif
+          endif !(trim(grid_file) == 'INPUT/grid_spec.nc')
 !
 ! SJL: For phys/exchange grid, etc
 !
        call mpp_update_domains( grid, Atm%domain, position=CORNER)
-       if (.not. Atm%neststruct%nested) call fill_corners(grid(:,:,1), npx, npy, FILL=XDir, BGRID=.true.)
-       if (.not. Atm%neststruct%nested) call fill_corners(grid(:,:,2), npx, npy, FILL=XDir, BGRID=.true.)
+       if (.not. (Atm%gridstruct%bounded_domain)) then
+         call fill_corners(grid(:,:,1), npx, npy, FILL=XDir, BGRID=.true.)
+         call fill_corners(grid(:,:,2), npx, npy, FILL=XDir, BGRID=.true.)
+       endif
 
           !--- dx and dy         
-          do j = js, je+1
-             do i = is, ie
+          if( .not. Atm%flagstruct%regional) then
+            istart=is
+            iend=ie
+            jstart=js
+            jend=je
+          else
+            istart=isd
+            iend=ied
+            jstart=jsd
+            jend=jed
+          endif
+
+          do j = jstart, jend+1
+             do i = istart, iend
                 p1(1) = grid(i  ,j,1)
                 p1(2) = grid(i  ,j,2)
                 p2(1) = grid(i+1,j,1)
@@ -664,8 +699,8 @@ contains
              enddo
           enddo
           if( stretched_grid ) then
-             do j = js, je
-                do i = is, ie+1
+             do j = jstart, jend
+                do i = istart, iend+1
                    p1(1) = grid(i,j,  1)
                    p1(2) = grid(i,j,  2)
                    p2(1) = grid(i,j+1,1)
@@ -680,24 +715,30 @@ contains
 
           call mpp_get_boundary( dy, dx, Atm%domain, ebufferx=ebuffer, wbufferx=wbuffer, sbuffery=sbuffer, nbuffery=nbuffer,&
                flags=SCALAR_PAIR+XUPDATE, gridtype=CGRID_NE_PARAM)
+          if( .not. Atm%flagstruct%regional ) then
           if(is == 1 .AND. mod(tile,2) .NE. 0) then ! on the west boundary
              dy(is, js:je) = wbuffer(js:je)
           endif
           if(ie == npx-1) then  ! on the east boundary
              dy(ie+1, js:je) = ebuffer(js:je)
           endif
+          endif
 
           call mpp_update_domains( dy, dx, Atm%domain, flags=SCALAR_PAIR,      &
                gridtype=CGRID_NE_PARAM, complete=.true.)
-          if (cubed_sphere .and. .not. Atm%neststruct%nested) call fill_corners(dx, dy, npx, npy, DGRID=.true.)
+          if (cubed_sphere .and. (.not. (Atm%gridstruct%bounded_domain))) then
+            call fill_corners(dx, dy, npx, npy, DGRID=.true.)
+          endif
 
        if( .not. stretched_grid )         &
            call sorted_inta(isd, ied, jsd, jed, cubed_sphere, grid, iinta, jinta)
 
        agrid(:,:,:) = -1.e25
  
-       do j=js,je
-          do i=is,ie
+          !--- compute agrid (use same indices as for dx/dy above)
+
+       do j=jstart,jend
+          do i=istart,iend
              if ( stretched_grid ) then
                   call cell_center2(grid(i,j,  1:2), grid(i+1,j,  1:2),   &
                                     grid(i,j+1,1:2), grid(i+1,j+1,1:2),   &
@@ -713,8 +754,10 @@ contains
        enddo
 
        call mpp_update_domains( agrid, Atm%domain, position=CENTER, complete=.true. )
-       if (.not. Atm%neststruct%nested) call fill_corners(agrid(:,:,1), npx, npy, XDir, AGRID=.true.)
-       if (.not. Atm%neststruct%nested) call fill_corners(agrid(:,:,2), npx, npy, YDir, AGRID=.true.)
+       if (.not. (Atm%gridstruct%bounded_domain)) then
+         call fill_corners(agrid(:,:,1), npx, npy, XDir, AGRID=.true.)
+         call fill_corners(agrid(:,:,2), npx, npy, YDir, AGRID=.true.)
+       endif
 
        do j=jsd,jed
           do i=isd,ied
@@ -728,7 +771,9 @@ contains
           enddo
        enddo
 !      call mpp_update_domains( dxa, dya, Atm%domain, flags=SCALAR_PAIR, gridtype=AGRID_PARAM)
-       if (cubed_sphere  .and. .not. Atm%neststruct%nested) call fill_corners(dxa, dya, npx, npy, AGRID=.true.)
+       if (cubed_sphere  .and. (.not. (Atm%gridstruct%bounded_domain))) then
+         call fill_corners(dxa, dya, npx, npy, AGRID=.true.)
+       endif
 
 
     end if !if nested
@@ -739,6 +784,9 @@ contains
           do i=isd+1,ied
              dxc(i,j) = great_circle_dist(agrid(i,j,:), agrid(i-1,j,:), radius)
           enddo
+!xxxxxx
+      !Are the following 2 lines appropriate for the regional domain?
+!xxxxxx
           dxc(isd,j)   = dxc(isd+1,j)
           dxc(ied+1,j) = dxc(ied,j)
        enddo
@@ -750,6 +798,9 @@ contains
              dyc(i,j) = great_circle_dist(agrid(i,j,:), agrid(i,j-1,:), radius)
           enddo
        enddo
+!xxxxxx
+      !Are the following 2 lines appropriate for the regional domain?
+!xxxxxx
        do i=isd,ied
           dyc(i,jsd)   = dyc(i,jsd+1)
           dyc(i,jed+1) = dyc(i,jed)
@@ -760,13 +811,13 @@ contains
            call sorted_intb(isd, ied, jsd, jed, is, ie, js, je, npx, npy, &
                             cubed_sphere, agrid, iintb, jintb)
 
-       call grid_area( npx, npy, ndims, nregions, Atm%neststruct%nested, Atm%gridstruct, Atm%domain, Atm%bd )
+       call grid_area( npx, npy, ndims, nregions, Atm%gridstruct%bounded_domain, Atm%gridstruct, Atm%domain, Atm%bd )
 !      stretched_grid = .false.
 
 !----------------------------------
 ! Compute area_c, rarea_c, dxc, dyc
 !----------------------------------
-  if ( .not. stretched_grid .and. .not. Atm%neststruct%nested) then
+  if ( .not. stretched_grid .and. (.not. (Atm%gridstruct%bounded_domain))) then
 ! For symmetrical grids:
        if ( is==1 ) then
           i = 1
@@ -866,13 +917,15 @@ contains
 
        call mpp_update_domains( dxc, dyc, Atm%domain, flags=SCALAR_PAIR,   &
                                 gridtype=CGRID_NE_PARAM, complete=.true.)
-       if (cubed_sphere  .and. .not. Atm%neststruct%nested) call fill_corners(dxc, dyc, npx, npy, CGRID=.true.)
+       if (cubed_sphere  .and. (.not. (Atm%gridstruct%bounded_domain))) then
+         call fill_corners(dxc, dyc, npx, npy, CGRID=.true.)
+       endif
 
        call mpp_update_domains( area,   Atm%domain, complete=.true. )
 
 
        !Handling outermost ends for area_c
-       if (Atm%neststruct%nested) then
+       if (Atm%gridstruct%bounded_domain) then
           if (is == 1) then
              do j=jsd,jed
                 area_c(isd,j) = area_c(isd+1,j)
@@ -902,7 +955,7 @@ contains
        call mpp_update_domains( area_c, Atm%domain, position=CORNER, complete=.true.)
 
        ! Handle corner Area ghosting
-       if (cubed_sphere .and. .not. Atm%neststruct%nested) then
+       if (cubed_sphere .and. (.not. (Atm%gridstruct%bounded_domain))) then
           call fill_ghost(area, npx, npy, -big_number, Atm%bd)  ! fill in garbage values
           call fill_corners(area_c, npx, npy, FILL=XDir, BGRID=.true.)
        endif
@@ -954,7 +1007,7 @@ contains
        angM = -missing
        aspN =  missing
        aspM = -missing
-       if (tile == 1) then
+       !if (tile == 1) then ! doing a GLOBAL domain search on each grid
           do j=js, je
              do i=is, ie
                 if(i>ceiling(npx/2.) .OR. j>ceiling(npy/2.)) cycle
@@ -984,7 +1037,7 @@ contains
                 aspN  = MIN(aspN,asp)
              enddo
           enddo
-       endif
+       !endif
        call mpp_sum(angAv)
        call mpp_sum(dxAV)
        call mpp_sum(aspAV)
@@ -1920,11 +1973,11 @@ contains
 !                    (determined by ndims argument 2=lat/lon, 3=xyz)
 !                    [area is returned in m^2 on Unit sphere]
 !
-      subroutine grid_area(nx, ny, ndims, nregions, nested, gridstruct, domain, bd )
+      subroutine grid_area(nx, ny, ndims, nregions, bounded_domain, gridstruct, domain, bd )
 
         type(fv_grid_bounds_type), intent(IN) :: bd
         integer, intent(IN) :: nx, ny, ndims, nregions
-        logical, intent(IN) :: nested
+        logical, intent(IN) :: bounded_domain
         type(fv_grid_type), intent(IN), target :: gridstruct
         type(domain2d), intent(INOUT) :: domain
 
@@ -1969,7 +2022,7 @@ contains
          area   => gridstruct%area_64
          area_c => gridstruct%area_c_64
 
-         if (nested) nh = ng
+         if (bounded_domain) nh = ng
 
          maxarea = -1.e25
          minarea =  1.e25
@@ -1978,7 +2031,7 @@ contains
          do j=js-nh,je+nh
             do i=is-nh,ie+nh
                do n=1,ndims
-               if ( gridstruct%stretched_grid .or. nested ) then
+               if ( gridstruct%stretched_grid .or. bounded_domain ) then
                   p_lL(n) = grid(i  ,j  ,n)
                   p_uL(n) = grid(i  ,j+1,n)
                   p_lR(n) = grid(i+1,j  ,n)
@@ -2034,7 +2087,7 @@ contains
         if (is_master()) write(*,209) 'GLOBAL AREA (m*m):', globalarea, ' IDEAL GLOBAL AREA (m*m):', 4.0*pi*radius**2
  209  format(A,e21.14,A,e21.14)
 
-        if (nested) then
+        if (bounded_domain) then
            nh = ng-1 !cannot get rarea_c on boundary directly
            area_c = 1.e30
         end if
@@ -2042,7 +2095,7 @@ contains
          do j=js-nh,je+nh+1
             do i=is-nh,ie+nh+1
                do n=1,ndims
-               if ( gridstruct%stretched_grid .or. nested ) then
+               if ( gridstruct%stretched_grid .or. bounded_domain ) then
                   p_lL(n) = agrid(i-1,j-1,n)
                   p_lR(n) = agrid(i  ,j-1,n)
                   p_uL(n) = agrid(i-1,j  ,n)
@@ -2060,7 +2113,7 @@ contains
          enddo
 
 ! Corners: assuming triangular cells
-         if (gridstruct%cubed_sphere .and. .not. nested) then
+         if (gridstruct%cubed_sphere .and. .not. bounded_domain) then
 ! SW:
             i=1
             j=1

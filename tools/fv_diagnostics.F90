@@ -1937,43 +1937,11 @@ contains
                 call prt_mxm('Z100',a3(isc:iec,jsc:jec,11),isc,iec,jsc,jec,0,1,1.E-3,Atm(n)%gridstruct%area_64,Atm(n)%domain)
 
                 if(all(idiag%id_h(minloc(abs(levs-500)))>0))  then
-                   if (.not. Atm(n)%neststruct%nested) then
-#ifdef TO_BE_DELETED
-                   t_eq = 0.   ;    t_nh = 0.;    t_sh = 0.;    t_gb = 0.
-                   area_eq = 0.; area_nh = 0.; area_sh = 0.; area_gb = 0.
-                   do j=jsc,jec
-                      do i=isc,iec
-                         slat = Atm(n)%gridstruct%agrid(i,j,2)*rad2deg
-                         area_gb = area_gb + Atm(n)%gridstruct%area(i,j)
-                         t_gb = t_gb + a3(i,j,19)*Atm(n)%gridstruct%area(i,j)
-                         if( (slat>-20. .and. slat<20.) ) then
-! Tropics:
-                              area_eq = area_eq + Atm(n)%gridstruct%area(i,j)
-                                 t_eq =    t_eq + a3(i,j,19)*Atm(n)%gridstruct%area(i,j)
-                         elseif( slat>=20. .and. slat<80. ) then
-! NH
-                              area_nh = area_nh + Atm(n)%gridstruct%area(i,j)
-                                 t_nh =    t_nh + a3(i,j,19)*Atm(n)%gridstruct%area(i,j)
-                         elseif( slat<=-20. .and. slat>-80. ) then
-! SH
-                              area_sh = area_sh + Atm(n)%gridstruct%area(i,j)
-                                 t_sh =    t_sh + a3(i,j,19)*Atm(n)%gridstruct%area(i,j)
-                         endif
-                      enddo
-                   enddo
-                   call mp_reduce_sum(area_gb)
-                   call mp_reduce_sum(   t_gb)
-                   call mp_reduce_sum(area_nh)
-                   call mp_reduce_sum(   t_nh)
-                   call mp_reduce_sum(area_sh)
-                   call mp_reduce_sum(   t_sh)
-                   call mp_reduce_sum(area_eq)
-                   call mp_reduce_sum(   t_eq)
-                   if (master) write(*,*) 'Z500 GB_NH_SH_EQ=', t_gb/area_gb, t_nh/area_nh, t_sh/area_sh, t_eq/area_eq
-#endif
-!                  call prt_mxm('Z500',a3(isc:iec,jsc:jec,19),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
-                   call prt_gb_nh_sh('fv_GFS Z500', isc,iec, jsc,jec, a3(isc,jsc,19), Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
-                                     Atm(n)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
+                   if (Atm(n)%gridstruct%bounded_domain) then
+                      call prt_mxm('Z500',a3(isc:iec,jsc:jec,19),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
+                   else
+                      call prt_gb_nh_sh('fv_GFS Z500', isc,iec, jsc,jec, a3(isc,jsc,19), Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
+                                        Atm(n)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
                    endif
                 endif
 
@@ -2138,7 +2106,7 @@ contains
           if ( all(idiag%id_t(minloc(abs(levs-100)))>0) .and. prt_minmax ) then
              call prt_mxm('T100:', a3(isc:iec,jsc:jec,11), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
-             if (.not. Atm(n)%neststruct%nested)  then
+             if (.not. Atm(n)%gridstruct%bounded_domain)  then
                 tmp = 0.
                 sar = 0.
                 !            Compute mean temp at 100 mb near EQ
@@ -2163,7 +2131,7 @@ contains
           if ( all(idiag%id_t(minloc(abs(levs-200)))>0) .and. prt_minmax ) then
              call prt_mxm('T200:', a3(isc:iec,jsc:jec,13), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
-             if (.not. Atm(n)%neststruct%nested) then
+             if (.not. Atm(n)%gridstruct%bounded_domain) then
                 tmp = 0.
                 sar = 0.
                 do j=jsc,jec
@@ -2305,7 +2273,7 @@ contains
                    einf = max(einf, abs(a2(i,j) - qcly0))
                 enddo
              enddo
-             if (prt_minmax .and. .not. Atm(n)%neststruct%nested) then
+             if (prt_minmax .and. .not. Atm(n)%gridstruct%bounded_domain) then
                 call mp_reduce_sum(qm)
                 call mp_reduce_max(einf)
                 call mp_reduce_sum(e2)
@@ -3217,7 +3185,7 @@ contains
         enddo
 
 ! Maximum overlap cloud fraction
-      if ( .not. Atm(n)%neststruct%nested )  then
+      if ( .not. Atm(n)%gridstruct%bounded_domain )  then
         if ( cld_amt > 0 .and. prt_minmax ) then
           a2(:,:) = 0.
           do k=1,npz
@@ -3336,7 +3304,7 @@ contains
   real, intent(in):: peln(is:ie,km+1,js:je)
   real, intent(in):: pt(is-ng:ie+ng,js-ng:je+ng,km)
   real, intent(in)::  q(is-ng:ie+ng,js-ng:je+ng,km,*) ! water vapor
-  real, intent(in):: delz(is-ng:,js-ng:,1:)
+  real, intent(in):: delz(is:,js:,1:)
   real, intent(in):: zvir
   logical, intent(in):: hydrostatic
   real, intent(out):: wz(is:ie,js:je,km+1)
@@ -3771,7 +3739,7 @@ contains
  real, intent(in):: press
  real, intent(in):: peln(is:ie,km+1,js:je)
  real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
- real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+ real, intent(in):: delz(is:,js:,1:)
  real(kind=R_GRID), intent(in), dimension(is:ie, js:je):: area, lat
 ! local:
  real:: a2(is:ie,js:je)      ! height (m)
@@ -4148,7 +4116,7 @@ contains
    integer, intent(in):: is, ie, js, je, ng, km, sphum
    real, intent(in):: grav, zvir, z_bot, z_top
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
-   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: delz(is:ie,js:je,km)
    real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
    real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in):: peln(is:ie,km+1,js:je) 
@@ -4231,7 +4199,7 @@ contains
    integer, intent(in):: is, ie, js, je, ng, km, sphum
    real, intent(in):: grav, zvir, z_bot, z_top
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
-   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: delz(is:ie,js:je,km)
    real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
    real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in):: peln(is:ie,km+1,js:je) 
@@ -4307,7 +4275,7 @@ contains
    integer, intent(in):: is, ie, js, je, ng, km, sphum
    real, intent(in):: grav, zvir
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, ua, va
-   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: delz(is:ie,js:je,km)
    real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
    real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in):: peln(is:ie,km+1,js:je) 
@@ -4386,7 +4354,7 @@ contains
    real, intent(in):: grav, zvir, z_bot, z_top
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, w
    real, intent(in), dimension(is:ie,js:je,km):: vort
-   real, intent(in):: delz(is-ng:ie+ng,js-ng:je+ng,km)
+   real, intent(in):: delz(is:ie,js:je,km)
    real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
    real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in):: peln(is:ie,km+1,js:je) 
@@ -4674,7 +4642,7 @@ subroutine eqv_pot(theta_e, pt, delp, delz, peln, pkz, q, is, ie, js, je, ng, np
 ! Simplified form coded by SJL
     integer, intent(in):: is,ie,js,je,ng,npz
     real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,npz):: pt, delp, q
-    real, intent(in), dimension(is-ng:     ,js-ng:     ,1: ):: delz
+    real, intent(in), dimension(is:     ,js:     ,1: ):: delz
     real, intent(in), dimension(is:ie,npz+1,js:je):: peln
     real, intent(in):: pkz(is:ie,js:je,npz) 
     logical, intent(in):: hydrostatic, moist
@@ -4757,7 +4725,7 @@ subroutine eqv_pot(theta_e, pt, delp, delz, peln, pkz, q, is, ie, js, je, ng, np
 ! Modified by SJL
     integer, intent(in):: is,ie,js,je,ng,npz
     real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,npz):: pt, delp, q
-    real, intent(in), dimension(is-ng:     ,js-ng:     ,1: ):: delz
+    real, intent(in), dimension(is:     ,js:     ,1: ):: delz
     real, intent(in), dimension(is:ie,npz+1,js:je):: peln
     real, intent(in):: pkz(is:ie,js:je,npz) 
     logical, intent(in):: hydrostatic, moist
@@ -4839,7 +4807,8 @@ end subroutine eqv_pot
 ! !INPUT PARAMETERS:
    integer,  intent(in):: km, is, ie, js, je, isd, ied, jsd, jed
    integer,  intent(in):: nwat, sphum, liq_wat, rainwat, ice_wat, snowwat, graupel
-   real, intent(in), dimension(isd:ied,jsd:jed,km):: ua, va, pt, delp, w, delz
+   real, intent(in), dimension(isd:ied,jsd:jed,km):: ua, va, pt, delp, w
+   real, intent(in), dimension(is:ie,js:je,km) :: delz
    real, intent(in), dimension(isd:ied,jsd:jed,km,nwat):: q
    real, intent(in):: hs(isd:ied,jsd:jed)  ! surface geopotential
    real, intent(in):: area(isd:ied, jsd:jed)
@@ -4954,7 +4923,8 @@ end subroutine eqv_pot
 
    type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: npz, ncnst
-   real,    intent(IN),  dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz) :: pt, delp, delz
+   real,    intent(IN),  dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz) :: pt, delp
+   real,    intent(IN),  dimension(bd%is:, bd%js:, 1:) :: delz
    real,    intent(IN),  dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst) :: q
    real,    intent(IN),  dimension(bd%is :bd%ie,  npz+1, bd%js:bd%je) :: peln
    real,    intent(OUT), dimension(bd%is :bd%ie,  bd%js :bd%je , npz) :: dbz
@@ -5596,7 +5566,8 @@ end subroutine eqv_pot
     type(fv_grid_bounds_type), intent(IN) :: bd
     integer, intent(IN) :: npz, ncnst, sphum, nwat
     logical, intent(IN) :: hydrostatic
-    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, delz, w
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w
+    real, dimension(bd%is:, bd%js:,1:), intent(IN) :: delz
     real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz), intent(IN) :: u
     real, dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz), intent(IN) :: v
     real, dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst), intent(IN) :: q
@@ -5649,7 +5620,8 @@ end subroutine eqv_pot
     integer, intent(IN) :: npz, ncnst, sphum, nwat, ng
     real,    intent(IN) :: zvir
     logical, intent(IN) :: hydrostatic, moist_phys
-    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, delz
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp
+    real, dimension(bd%is:, bd%js:, 1:), intent(IN) :: delz
     real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz), intent(IN) :: u
     real, dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz), intent(IN) :: v
     real, dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst), intent(IN) :: q
