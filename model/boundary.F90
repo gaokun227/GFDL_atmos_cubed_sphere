@@ -1702,10 +1702,10 @@ contains
 
    integer                      :: position
 
-   integer                      :: isw_f, iew_f, jsw_f, jew_f, isw_c, iew_c, jsw_c, jew_c
-   integer                      :: ise_f, iee_f, jse_f, jee_f, ise_c, iee_c, jse_c, jee_c
-   integer                      :: iss_f, ies_f, jss_f, jes_f, iss_c, ies_c, jss_c, jes_c
-   integer                      :: isn_f, ien_f, jsn_f, jen_f, isn_c, ien_c, jsn_c, jen_c
+!!$   integer                      :: isw_f, iew_f, jsw_f, jew_f, isw_c, iew_c, jsw_c, jew_c
+!!$   integer                      :: ise_f, iee_f, jse_f, jee_f, ise_c, iee_c, jse_c, jee_c
+!!$   integer                      :: iss_f, ies_f, jss_f, jes_f, iss_c, ies_c, jss_c, jes_c
+!!$   integer                      :: isn_f, ien_f, jsn_f, jen_f, isn_c, ien_c, jsn_c, jen_c
 
    integer :: i,j, k
 
@@ -1774,13 +1774,13 @@ contains
          do k=1,npz
          do j=jsw_c,jew_c
          do i=isw_c,iew_c
-            nest_BC_buffers%west_t1(i,j,k) = 0.
+            nest_BC_buffers%west_t1(i,j,k) = 1.e24
          enddo
          enddo
          enddo         
       else
          allocate(nest_BC_buffers%west_t1(1,1,1))
-         nest_BC_buffers%west_t1(1,1,1) = 0.
+         nest_BC_buffers%west_t1(1,1,1) = 1.e24
       endif
 
       if( iee_c .GE. ise_c .AND. jee_c .GE. jse_c ) then
@@ -1789,13 +1789,13 @@ contains
          do k=1,npz
          do j=jse_c,jee_c
          do i=ise_c,iee_c
-            nest_BC_buffers%east_t1(i,j,k) = 0.
+            nest_BC_buffers%east_t1(i,j,k) = 1.e24
          enddo
          enddo
          enddo
       else
          allocate(nest_BC_buffers%east_t1(1,1,1))
-         nest_BC_buffers%east_t1(1,1,1) = 0.
+         nest_BC_buffers%east_t1(1,1,1) = 1.e24
       endif
 
       if( ies_c .GE. iss_c .AND. jes_c .GE. jss_c ) then
@@ -1804,13 +1804,13 @@ contains
          do k=1,npz
          do j=jss_c,jes_c
          do i=iss_c,ies_c
-            nest_BC_buffers%south_t1(i,j,k) = 0.
+            nest_BC_buffers%south_t1(i,j,k) = 1.e24
          enddo
          enddo
          enddo
       else
          allocate(nest_BC_buffers%south_t1(1,1,1))
-         nest_BC_buffers%south_t1(1,1,1) = 0.
+         nest_BC_buffers%south_t1(1,1,1) = 1.e24
       endif
 
       if( ien_c .GE. isn_c .AND. jen_c .GE. jsn_c ) then
@@ -1819,13 +1819,13 @@ contains
          do k=1,npz
          do j=jsn_c,jen_c
          do i=isn_c,ien_c
-            nest_BC_buffers%north_t1(i,j,k) = 0.
+            nest_BC_buffers%north_t1(i,j,k) = 1.e24
          enddo
          enddo
          enddo
       else
          allocate(nest_BC_buffers%north_t1(1,1,1))
-         nest_BC_buffers%north_t1(1,1,1) = 0
+         nest_BC_buffers%north_t1(1,1,1) = 1.e24
       endif
 
 

@@ -2545,7 +2545,7 @@ do 1000 j=jfirst,jlast
        do k=npz,1,-1
        do i=istart,iend
           gz(i,j,k) = gz(i,j,k+1) - (delzBC%south_t1(i,j,k)*a2 + delzBC%south_t0(i,j,k)*a1)
-          if (gz(i,j,k) <= gz(i,j,k+1) .or. abs(gz(i,j,k)) > 1.e6) print*, ' BAD GZ (bc): ', i, j, k, gz(i,j,k:k+1), delzBC%west_t1(i,j,k), delzBC%west_t0(i,j,k)
+          !if (gz(i,j,k) <= gz(i,j,k+1) .or. abs(gz(i,j,k)) > 1.e6) print*, ' BAD GZ (bc): ', i, j, k, gz(i,j,k:k+1), delzBC%west_t1(i,j,k), delzBC%west_t0(i,j,k)
        enddo
        enddo
        enddo
@@ -2557,7 +2557,7 @@ do 1000 j=jfirst,jlast
        do k=npz,1,-1
        do i=istart,iend
           gz(i,j,k) = gz(i,j,k+1) - (delzBC%north_t1(i,j,k)*a2 + delzBC%north_t0(i,j,k)*a1)
-          if (gz(i,j,k) <= gz(i,j,k+1) .or. abs(gz(i,j,k)) > 1.e6) print*, ' BAD GZ (bc): ', i, j, k, gz(i,j,k:k+1), delzBC%west_t1(i,j,k), delzBC%west_t0(i,j,k)
+          !if (gz(i,j,k) <= gz(i,j,k+1) .or. abs(gz(i,j,k)) > 1.e6) print*, ' BAD GZ (bc): ', i, j, k, gz(i,j,k:k+1), delzBC%west_t1(i,j,k), delzBC%west_t0(i,j,k)
        enddo
        enddo
        enddo

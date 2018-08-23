@@ -60,10 +60,6 @@ implicit none
    type(fv_nest_BC_type_3d), allocatable:: q_buf(:)
    real, dimension(:,:,:), allocatable, target :: dum_West, dum_East, dum_North, dum_South
 
-!!$   !!! DEBUG CODE
-!!$   integer :: debug_unit
-!!$   !!! END DEBUG CODE
-
 private
 public :: twoway_nesting, setup_nested_grid_BCs, set_physics_BCs
 
@@ -126,9 +122,6 @@ contains
 
     integer :: i,j,k,n,p, sphum, npz_coarse
     logical :: do_pd
-!!$!!! DEBUG CODE
-!!$    character(len=20) debug_file
-!!$!!! END DEBUG CODE
 
    type(fv_nest_BC_type_3d) :: delp_lag_BC, lag_BC, pe_lag_BC, pe_eul_BC
    type(fv_nest_BC_type_3d) :: lag_u_BC, pe_u_lag_BC, pe_u_eul_BC
@@ -152,14 +145,6 @@ contains
 
     child_grids => neststruct%child_grids
     
-!!$!!! DEBUG CODE
-!!$    write(debug_file,'(A6, I4.4)') 'debug.', int(mpp_pe())
-!!$    open(unit=debug_unit,file=debug_file,status='unknown')
-!!$    write(debug_unit,*) ' SETTING UP NEW BCs '
-!!$    write(debug_unit,*) 
-!!$    write(debug_unit,*) 
-!!$!!! END DEBUG CODE
-
     !IF nested, set up nested grid BCs for time-interpolation
     !(actually applying the BCs is done in dyn_core
 
@@ -608,10 +593,6 @@ contains
 
 
     call mpp_sync_self
-
-!!$!!! DEBUG CODE
-!!$    close(unit=debug_unit)
-!!$!!! END DEBUG CODE
 
  end subroutine setup_nested_grid_BCs
 
@@ -1145,16 +1126,6 @@ contains
 
    if (js == 1) then
       call remap_BC_k(pe_lag_BC%south_t1, pe_eul_BC%south_t1, var_lag_BC%south_t1, var_eul_BC%south_t1, isd, ied+istag, istart, iend+istag, jsd, 0, npz, npz_coarse, iv, kord, log_pe)
-!!$      !!! DEBUG CODE
-!!$      j = 0 
-!!$      i = istart+1
-!!$      write(debug_unit,*) varname
-!!$      write(debug_unit,*) 'LAG: ', var_lag_BC%south_t1(i,j,:)
-!!$      write(debug_unit,*) 'EUL: ', var_eul_BC%south_t1(i,j,:)
-!!$      write(debug_unit,*) 'LAG PE: ', pe_lag_BC%south_t1(i,j,:)
-!!$      write(debug_unit,*) 'EUL PE: ', pe_eul_BC%south_t1(i,j,:)
-!!$      write(debug_unit,*) 
-!!$      !!! END DEBUG CODE
    end if
 
    if (je == npy-1) then
