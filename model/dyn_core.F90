@@ -53,7 +53,6 @@ module dyn_core_mod
 #ifdef SW_DYNAMICS
   use test_cases_mod,      only: test_case, case9_forcing1, case9_forcing2
 #endif
-  use fv_regional_mod,     only: write_after_bc_time_interpolation
   use fv_regional_mod,     only: dump_field, exch_uv, H_STAGGER, U_STAGGER, V_STAGGER
   use fv_regional_mod,     only: a_step, p_step, k_step, n_step
 
@@ -596,7 +595,8 @@ contains
 
       if (flagstruct%regional) then
 
-        call exch_uv(domain, bd, npz, vc, uc)
+        !call exch_uv(domain, bd, npz, vc, uc)
+        call mpp_update_domains(uc, vc, domain, gridtype=CGRID_NE)
         
         reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(0.5+(it-1))*dt
         call regional_boundary_update(vc, 'vc', &
@@ -609,6 +609,7 @@ contains
                                       is,  ie,  js,  je,       &
                                       isd, ied, jsd, jed,      &
                                       reg_bc_update_time )
+        call mpp_update_domains(uc, vc, domain, gridtype=CGRID_NE)
 !!! Currently divgd is always 0.0 in the regional domain boundary area.
         reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
         call regional_boundary_update(divgd, 'divgd', &
@@ -639,7 +640,6 @@ contains
 
     endif
 
-    if (flagstruct%regional) call exch_uv(domain, bd, npz, vc, uc)
 
                                                      call timing_on('d_sw')
 !$OMP parallel do default(none) shared(npz,flagstruct,nord_v,pfull,damp_vt,hydrostatic,last_step, &
@@ -777,8 +777,8 @@ contains
     enddo           ! end openMP k-loop
 
     if (flagstruct%regional) then
-       call exch_uv(domain, bd, npz, vc, uc)
-       call exch_uv(domain, bd, npz, u,  v )
+       call mpp_update_domains(uc, vc, domain, gridtype=CGRID_NE)
+       call mpp_update_domains(u , v , domain, gridtype=DGRID_NE)
     endif
                                                      call timing_off('d_sw')
 
@@ -1179,7 +1179,7 @@ contains
                                        isd, ied, jsd, jed,      &
                                        reg_bc_update_time )
       
-         call exch_uv(domain, bd, npz, u,  v )      
+         call mpp_update_domains(u, v, domain, gridtype=DGRID_NE)
       end if
 
 !-----------------------------------------------------

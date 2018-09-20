@@ -48,10 +48,7 @@ module external_ic_mod
    use fv_mapz_mod,       only: mappm
    use fv_regional_mod,   only: dump_field, H_STAGGER, U_STAGGER, V_STAGGER
    use fv_mp_mod,         only: ng, is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
-   use fv_regional_mod,   only: BC_t0, BC_t1, bc_hour, bc_time_interval,  &
-                                regional_bc_data, regional_bc_t1_to_t0,   &
-                                setup_regional_BC,  &
-                                ak_in, bk_in
+   use fv_regional_mod,   only: start_regional_cold_start
    use fv_surf_map_mod,   only: surfdrv, FV3_zs_filter
    use fv_surf_map_mod,   only: sgh_g, oro_g
    use fv_surf_map_mod,   only: del2_cubed_sphere, del4_cubed_sphere
@@ -566,31 +563,9 @@ contains
 
         if (n==1.and.Atm(1)%flagstruct%regional) then     !<-- Select the parent regional domain.
 
-          call setup_regional_BC(Atm(1)                &
-                                ,isd, ied, jsd, jed    &
-                                ,Atm(1)%npx, Atm(1)%npy )
-
-          bc_hour=0
-          call regional_bc_data(Atm(1), bc_hour        &  !<-- Fill time level t1 from BC file at 0 hours.
-                               ,is, ie, js, je         &
-                               ,isd, ied, jsd, jed     &
-                               ,ak, bk )
-          call regional_bc_t1_to_t0(BC_t1, BC_t0               &  !
-                                   ,Atm(n)%npz                 &  !<-- Move BC t1 data
-                                   ,Atm(n)%ncnst               &  !    to t0.
-                                   ,Atm(n)%regional_bc_bounds )   !
-
-          bc_hour=bc_hour+bc_time_interval
-          call regional_bc_data(Atm(n), bc_hour        &  !<-- Fill time level t1 from BC file from 2nd time level in BC file.
-                               ,is, ie, js, je         &
-                               ,isd, ied, jsd, jed     &
-                               ,ak, bk )
-          allocate (ak_in(levp+1))                        !<-- Save the input vertical structure for
-          allocate (bk_in(levp+1))                        !    remapping BC updates during the forecast.
-          do k=1,levp+1
-            ak_in(k)=ak(k)
-            bk_in(k)=bk(k)
-          enddo
+          call start_regional_cold_start(Atm(1), ak, bk, levp, &
+                                         is, ie, js, je, &
+                                         isd, ied, jsd, jed )
         endif
 
 !

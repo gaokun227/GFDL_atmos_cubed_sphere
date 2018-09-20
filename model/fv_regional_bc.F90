@@ -29,12 +29,16 @@ module fv_regional_mod
                                 CENTER, CORNER,                         &
                                 mpp_domains_set_stack_size,             &
                                 mpp_update_domains, mpp_get_neighbor_pe
-   use mpp_mod,           only: FATAL, mpp_error ,mpp_pe, mpp_sync,     &
+   use mpp_mod,           only: FATAL, input_nml_file,                  &
+                                mpp_error ,mpp_pe, mpp_sync,            &
                                 mpp_npes, mpp_root_pe, mpp_gather,      &
                                 mpp_get_current_pelist, NULL_PE
    use mpp_io_mod
    use tracer_manager_mod,only: get_tracer_index
    use field_manager_mod, only: MODEL_ATMOS
+   use time_manager_mod,  only: get_time                                &
+                               ,operator(-),operator(/)                 &
+                               ,time_type,time_type_to_real 
    use constants_mod,     only: cp_air, cp_vapor, grav, kappa           &
                                ,pi=>pi_8,rdgas, rvgas
    use fv_arrays_mod,     only: fv_atmos_type                           &
@@ -51,6 +55,8 @@ module fv_regional_mod
    use fv_mapz_mod,       only: mappm, moist_cp, moist_cv
    use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
    use fv_fill_mod,       only: fillz
+   use fv_eta_mod,        only: get_eta_level
+   use fms_mod,           only: check_nml_error
    use fms_io_mod,        only: read_data
    use boundary_mod,      only: fv_nest_BC_type_3D
 
@@ -60,15 +66,17 @@ module fv_regional_mod
             ,bc_hour                                                    &
             ,bc_time_interval                                           &
             ,BC_t0,BC_t1                                                &
-            ,exch_uv                                                    &
+            ,begin_regional_restart,exch_uv                             &
             ,ntimesteps_per_bc_update                                   &
+            ,read_new_bc_data                                           &
             ,regional_bc_data                                           &
             ,regional_bc_t1_to_t0                                       &
             ,regional_boundary_update                                   &
             ,next_time_to_read_bcs                                      &
             ,set_regional_BCs                                           &
             ,setup_regional_BC                                          &
-            ,write_after_bc_time_interpolation                          &
+            ,start_regional_cold_start                                  &
+            ,start_regional_restart                                     &
             ,dump_field                                                 &
             ,current_time_in_seconds                                    &
             ,a_step, p_step, k_step, n_step
@@ -112,7 +120,8 @@ module fv_regional_mod
 
       real,dimension(:),allocatable :: ak_in, bk_in
 
-      logical,save :: north_bc,south_bc,east_bc,west_bc
+      logical,save :: north_bc,south_bc,east_bc,west_bc                &
+                     ,begin_regional_restart=.true.
 
       type fv_regional_BC_variables
         real,dimension(:,:,:),allocatable :: delp_BC, divgd_BC, u_BC, v_BC, uc_BC, vc_BC
@@ -156,6 +165,7 @@ module fv_regional_mod
                         ,cv_air = cp_air - rdgas                        &
                         ,cv_vap = cp_vapor - rvgas
 
+      real,dimension(:),allocatable :: dum1d, pref
       character(len=100) :: grid_data='grid.tile7.halo4.nc'             &
                            ,oro_data ='oro_data.tile7.halo4.nc'
 
@@ -202,6 +212,8 @@ contains
 !--------------------
 !
       integer :: i,i_start,i_end,j,j_start,j_end,klev_out
+!
+      real :: ps1
 !
 !-----------------------------------------------------------------------
 !***********************************************************************
@@ -526,7 +538,11 @@ contains
         i_start=isd
         i_end  =ied
         j_start=jsd
+        if(.not.Atm%flagstruct%warm_start)then                             !<-- NOT a restarted run.
         j_end  =jsd+nhalo_model-1
+        else                                                               !<-- A restarted run.
+          j_end=jsd+nhalo_model+1         
+        endif
         do j=j_start,j_end
         do i=i_start,i_end
           Atm%phis(i,j)=phis_reg(i,j)
@@ -537,8 +553,12 @@ contains
       if(south_bc)then
         i_start=isd
         i_end  =ied
-        j_start=jed-nhalo_model+1
         j_end  =jed
+        if(.not.Atm%flagstruct%warm_start)then                             !<-- NOT a restarted run.
+        j_start=jed-nhalo_model+1
+        else                                                               !<-- A restarted run.
+          j_start=jed-nhalo_model-1
+        endif
         do j=j_start,j_end
         do i=i_start,i_end
           Atm%phis(i,j)=phis_reg(i,j)
@@ -547,9 +567,13 @@ contains
       endif
       if(east_bc)then
         i_start=isd
-        i_end  =isd+nhalo_model-1
         j_start=jsd
         j_end  =jed
+        if(.not.Atm%flagstruct%warm_start)then                             !<-- NOT a restarted run.
+          i_end=isd+nhalo_model-1
+        else                                                               !<-- A restarted run.
+          i_end=isd+nhalo_model+1
+        endif
         do j=j_start,j_end
         do i=i_start,i_end
           Atm%phis(i,j)=phis_reg(i,j)
@@ -557,16 +581,32 @@ contains
         enddo
       endif
       if(west_bc)then
-        i_start=ied-nhalo_model+1
         i_end  =ied
         j_start=jsd
         j_end  =jed
+        if(.not.Atm%flagstruct%warm_start)then                             !<-- NOT a restarted run.
+          i_start=ied-nhalo_model+1
+        else                                                               !<-- A restarted run.
+          i_start=ied-nhalo_model-1
+        endif
         do j=j_start,j_end
         do i=i_start,i_end
           Atm%phis(i,j)=phis_reg(i,j)
         enddo
         enddo
       endif
+!
+!-----------------------------------------------------------------------
+!***  When nudging of specific humidity is selected then we need a 
+!***  reference pressure profile.  Compute it now.
+!-----------------------------------------------------------------------
+!
+      allocate(pref(npz+1))
+      allocate(dum1d(npz+1))
+!
+      ps1=101325.
+      pref(npz+1)=ps1
+      call get_eta_level(npz,ps1,pref(1),dum1d,Atm%ak,Atm%bk )
 !
 !-----------------------------------------------------------------------
 
@@ -1024,6 +1064,238 @@ contains
 !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 !-----------------------------------------------------------------------
 !
+      subroutine start_regional_cold_start(Atm, ak, bk, levp            &
+                                          ,is ,ie ,js ,je               &
+                                          ,isd,ied,jsd,jed )
+!
+!-----------------------------------------------------------------------
+!***  Prepare the regional run for a cold start.
+!-----------------------------------------------------------------------
+      implicit none
+!-----------------------------------------------------------------------
+!
+!------------------------
+!***  Argument variables
+!------------------------
+!
+      type(fv_atmos_type),intent(inout) :: Atm                             !<-- Atm object for the current domain
+!
+      integer ,intent(in) :: is ,ie ,js ,je                             &  !<-- Integration limits of task subdomain
+                            ,isd,ied,jsd,jed                            &  !<-- Memory limits of task subdomain
+                            ,levp 
+!
+      real,intent(in) :: ak(1:levp+1), bk(1:levp+1)
+!
+!---------------------
+!***  Local variables
+!---------------------
+!
+      integer :: k
+!
+!-----------------------------------------------------------------------
+!***********************************************************************
+!-----------------------------------------------------------------------
+!
+      call setup_regional_BC(Atm                                        &
+                            ,isd, ied, jsd, jed                         &
+                            ,Atm%npx, Atm%npy )
+!
+      bc_hour=0
+      call regional_bc_data(Atm, bc_hour                                &  !<-- Fill time level t1 from BC file at 0 hours.
+                           ,is, ie, js, je                              &
+                           ,isd, ied, jsd, jed                          &
+                           ,ak, bk )
+      call regional_bc_t1_to_t0(BC_t1, BC_t0                            &  !
+                               ,Atm%npz                                 &  !<-- Move BC t1 data
+                               ,Atm%ncnst                               &  !    to t0.
+                               ,Atm%regional_bc_bounds )                   !
+!
+      bc_hour=bc_hour+bc_time_interval
+!
+      call regional_bc_data(Atm, bc_hour                                &  !<-- Fill time level t1 
+                           ,is, ie, js, je                              &  !    from the 2nd time level
+                           ,isd, ied, jsd, jed                          &  !    in the BC file.
+                           ,ak, bk )                                       !
+!
+      allocate (ak_in(1:levp+1))                                           !<-- Save the input vertical structure for
+      allocate (bk_in(1:levp+1))                                           !    remapping BC updates during the forecast.
+      do k=1,levp+1
+        ak_in(k)=ak(k)
+        bk_in(k)=bk(k)
+      enddo
+!
+!-----------------------------------------------------------------------
+!
+      end subroutine start_regional_cold_start
+!
+!-----------------------------------------------------------------------
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!-----------------------------------------------------------------------
+!
+      subroutine start_regional_restart(Atm                             &
+                                       ,isc,iec,jsc,jec                 &
+                                       ,isd,ied,jsd,jed )
+!
+!-----------------------------------------------------------------------
+!***  Prepare the regional forecast for a restart.
+!-----------------------------------------------------------------------
+      implicit none
+!-----------------------------------------------------------------------
+!
+!------------------------
+!***  Argument variables
+!------------------------
+!
+      type(fv_atmos_type),intent(inout) :: Atm                             !<-- Atm object for the current domain
+!
+      integer ,intent(in) :: isc,iec,jsc,jec                            &  !<-- Integration limits of task subdomain
+                            ,isd,ied,jsd,jed                               !<-- Memory limits of task subdomain
+!
+!---------------------
+!***  Local variables
+!---------------------
+!
+      integer :: ierr, ios
+      real, allocatable :: wk2(:,:)
+!
+      logical :: filtered_terrain
+      logical :: gfs_dwinds
+      integer :: levp
+      logical :: checker_tr
+      integer :: nt_checker
+      namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds     &
+                                ,checker_tr, nt_checker
+!-----------------------------------------------------------------------
+!***********************************************************************
+!-----------------------------------------------------------------------
+!
+!-----------------------------------------------------------------------
+!*** Read the number of model layers in the external forecast (=levp).
+!-----------------------------------------------------------------------
+!
+      read (input_nml_file,external_ic_nml,iostat=ios)
+      ierr = check_nml_error(ios,'external_ic_nml')
+      if(ierr/=0)then
+        write(0,11011)ierr
+11011   format(' start_regional_restart failed to read external_ic_nml ierr=',i3)
+      endif
+!
+!-----------------------------------------------------------------------
+!***  Preliminary setup for the forecast.
+!-----------------------------------------------------------------------
+!
+     call setup_regional_BC(Atm                                         &
+                           ,isd, ied, jsd, jed                          &
+                           ,Atm%npx, Atm%npy )
+!
+     allocate (wk2(levp+1,2))
+     allocate (ak_in(levp+1))                                               !<-- Save the input vertical structure for
+     allocate (bk_in(levp+1))                                               !    remapping BC updates during the forecast.
+     call read_data('INPUT/gfs_ctrl.nc','vcoord',wk2, no_domain=.TRUE.)
+     ak_in(1:levp+1) = wk2(1:levp+1,1)
+     ak_in(1) = 1.e-9
+     bk_in(1:levp+1) = wk2(1:levp+1,2)
+     deallocate(wk2)
+     bc_hour=nint(current_time_in_seconds/3600.)
+!
+!-----------------------------------------------------------------------
+!***  Fill time level t1 from the BC file at the restart time.
+!-----------------------------------------------------------------------
+!
+     call regional_bc_data(Atm, bc_hour                                 & 
+                          ,isc, iec, jsc, jec                           & 
+                          ,isd, ied, jsd, jed                           & 
+                          ,ak_in, bk_in )
+!
+!-----------------------------------------------------------------------
+!
+      end subroutine start_regional_restart
+!
+!-----------------------------------------------------------------------
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!-----------------------------------------------------------------------
+!
+      subroutine read_new_bc_data(Atm, Time, Time_step_atmos, p_split   &
+                                 ,isd,ied,jsd,jed )
+!
+!-----------------------------------------------------------------------
+!***  When it is time to read new boundary data from the external files
+!***  move time level t1 to t0 and then read the data into t1.
+!-----------------------------------------------------------------------
+      implicit none
+!-----------------------------------------------------------------------
+!
+!------------------------
+!***  Argument variables
+!------------------------
+!
+      type(fv_atmos_type),intent(inout) :: Atm                             !<-- Atm object for the current domain
+      type(time_type),intent(in) :: Time                                   !<-- Current forecast time
+      type (time_type),intent(in) :: Time_step_atmos                       !<-- Large (physics) timestep
+!
+      integer,intent(in) :: isd,ied,jsd,jed                             &  !<-- Memory limits of task subdomain
+                           ,p_split
+!
+!---------------------
+!***  Local variables
+!---------------------
+!
+      integer :: atmos_time_step, sec
+      real :: dt_atmos
+      type(time_type) :: atmos_time
+!
+!-----------------------------------------------------------------------
+!***********************************************************************
+!-----------------------------------------------------------------------
+!
+      atmos_time = Time - Atm%Time_init
+      atmos_time_step = atmos_time / Time_step_atmos
+      current_time_in_seconds = time_type_to_real( atmos_time )
+      if (mpp_pe() == 0) write(*,"('current_time_seconds = ',f9.1)")current_time_in_seconds
+!
+      call get_time (Time_step_atmos, sec)
+      dt_atmos = real(sec)
+!
+      if(atmos_time_step==0.or.Atm%flagstruct%warm_start)then
+        ntimesteps_per_bc_update=nint(Atm%flagstruct%bc_update_interval*3600./(dt_atmos/real(abs(p_split))))
+      endif
+!
+      if(atmos_time_step+1>=ntimesteps_per_bc_update.and.mod(atmos_time_step,ntimesteps_per_bc_update)==0 &
+                                                    .or.                                                  &
+         Atm%flagstruct%warm_start.and.begin_regional_restart)then
+!
+        begin_regional_restart=.false.
+        bc_hour=bc_hour+Atm%flagstruct%bc_update_interval
+!
+!-----------------------------------------------------------------------
+!***  Transfer the time level t1 data to t0.
+!-----------------------------------------------------------------------
+!
+        call regional_bc_t1_to_t0(BC_t1, BC_t0                          &  
+                                 ,Atm%npz                               & 
+                                 ,Atm%ncnst                             &
+                                 ,Atm%regional_bc_bounds )
+!
+!-----------------------------------------------------------------------
+!***  Fill time level t1 from the BC file containing data from
+!***  the next time level.
+!-----------------------------------------------------------------------
+!
+        call regional_bc_data(Atm, bc_hour                              & 
+                             ,Atm%bd%is, Atm%bd%ie                      &
+                             ,Atm%bd%js, Atm%bd%je                      & 
+                             ,isd, ied, jsd, jed                        &
+                             ,ak_in, bk_in )
+      endif
+!
+!-----------------------------------------------------------------------
+!
+      end subroutine read_new_bc_data
+!
+!-----------------------------------------------------------------------
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!-----------------------------------------------------------------------
+!
       subroutine regional_bc_data(Atm,bc_hour                           &
                                  ,is,ie,js,je                           &
                                  ,isd,ied,jsd,jed                       &
@@ -1163,7 +1435,8 @@ contains
       allocate(u_w_input(is_input:ie_input,js_input:je_input,1:klev_in)) ; u_w_input=real_snan             !<-- C-grid u component
       allocate(v_w_input(is_input:ie_input,js_input:je_input,1:klev_in)) ; v_w_input=real_snan             !<-- D-grid v component
 !
-      allocate(tracers_input(is_input:ie_input,js_input:je_input,klev_in,ntracers)) ; tracers_input=real_snan
+      allocate(tracers_input(is_input:ie_input,js_input:je_input,klev_in,ntracers)) !; tracers_input=real_snan
+      tracers_input=0. ! Temporary fix
 !
 !-----------------------------------------------------------------------
 !***  Extract each variable from the regional BC file.  The final
@@ -1182,6 +1455,7 @@ contains
                                 ,'ps     '                              &
                                 ,array_3d=ps_input )                       !<-- ps is 2D but for simplicity here use a 3rd dim of 1
 !
+!!!!! NOTE !!!!!!! NEED TO FILL IN OTHER TRACERS WITH *****ZEROES****** if not present
 !-----------------------
 !***  Specific humidity
 !-----------------------
@@ -2026,6 +2300,16 @@ contains
                                    ,sphum_index,liq_water_index )
 !
 !-----------------------------------------------------------------------
+!***  If nudging of the specific humidity has been selected then
+!***  nudge the boundary values in the same way as is done for the
+!***  interior.
+!-----------------------------------------------------------------------
+!
+      if(Atm%flagstruct%nudge_qv)then
+        call nudge_qv_bc(Atm,isd,ied,jsd,jed)
+      endif
+!
+!-----------------------------------------------------------------------
 
       contains
 
@@ -2765,9 +3049,6 @@ contains
 !
       if(status /= nf90_noerr) then
         write(0,*)' check netcdf status=',status
-        !write(0,10001)trim(nf90_strerror(status))
-10001   format(' NetCDF error ',a)
-        !stop "Stopped"
         call mpp_error(FATAL, ' NetCDF error ' // trim(nf90_strerror(status)))
       endif
       end subroutine check
@@ -2815,7 +3096,6 @@ contains
       endif
 !
       allocate(BC_side%delp_BC (is_0:ie_0,js_0:je_0,klev)) ; BC_side%delp_BC=real_snan
-      allocate(BC_side%divgd_BC(is_0:ie_0,js_0:je_0,klev)) ; BC_side%divgd_BC=real_snan
 !
       allocate(BC_side%q_BC    (is_0:ie_0,js_0:je_0,1:klev,1:ntracers)) ; BC_side%q_BC=real_snan
 !
@@ -2844,6 +3124,7 @@ contains
 !
       allocate(BC_side%uc_BC(is_we:ie_we, js_we:je_we, klev)) ; BC_side%uc_BC=real_snan
       allocate(BC_side%v_BC (is_we:ie_we, js_we:je_we, klev)) ; BC_side%v_BC=real_snan
+      allocate(BC_side%divgd_BC(is_we:ie_we,js_sn:je_sn,klev)) ; BC_side%divgd_BC=real_snan
 !
 !---------------------------------------------------------------------
 !
@@ -2950,8 +3231,6 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
         je=js_bc+nhalo_data-1
       endif
 !
-      write(0,11011)is,ie,js,je
-11011 format(' remap_scalar_nggps_regional_bc is=',i4,' ie=',i4,' js=',i4,' je=',i4)
 
       allocate(pe0(is:ie,km+1)) ; pe0=real_snan
       allocate(qn1(is:ie,npz)) ; qn1=real_snan
@@ -3053,17 +3332,9 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
         enddo
       enddo
 
+! Need to set unassigned tracers to 0??
 ! map shpum, o3mr, liq_wat tracers
-! Note that currently there are only THREE tracers to remap
-! Set the others to 0 for now
       do iq=1,ncnst
-         if (iq /= sphum .and. iq/=o3mr .and. iq/=liq_wat) then
-            do k=1,npz
-            do i=is,ie
-               BC_side%q_BC(i,j,k,iq) = 0.
-            enddo
-            enddo
-         else
          do k=1,km
             do i=is,ie
                qp(i,k) = qa(i,j,k,iq)
@@ -3083,7 +3354,6 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
              BC_side%q_BC(i,j,k,iq) = qn1(i,k)
            enddo
          enddo
-         endif
       enddo
 
 !---------------------------------------------------
@@ -3735,7 +4005,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
         i1=isd
         i2=ied
-        if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v')then
+        if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v'.or.trim(bc_vbl_name)=='divgd')then
           i2=ied+1
         endif
 !
@@ -3766,13 +4036,13 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
         i1=isd
         i2=ied
-        if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v')then
+        if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v'.or.trim(bc_vbl_name)=='divgd')then
           i2=ied+1
         endif
 !
         j1=je+1
         j2=jed
-        if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc')then
+        if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc'.or.trim(bc_vbl_name)=='divgd')then
           j1=je+2
           j2=jed+1
         endif
@@ -3813,7 +4083,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
         endif
         if(south_bc)then
           j2=je
-          if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc')then
+          if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc'.or.trim(bc_vbl_name)=='divgd')then
             j2=je+1
           endif
         endif
@@ -3844,7 +4114,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
         i1=ie+1
         i2=ied
-        if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v')then
+        if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v'.or.trim(bc_vbl_name)=='divgd')then
           i1=ie+2
           i2=ied+1
         endif
@@ -3854,7 +4124,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
         endif
         if(south_bc)then
           j2=je
-          if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc')then
+          if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc'.or.trim(bc_vbl_name)=='divgd')then
             j2=je+1
           endif
         endif
@@ -4242,7 +4512,6 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           do j=js,je
           do i=is,ie
             BC_t0%north%delp_BC(i,j,k)=BC_t1%north%delp_BC(i,j,k)
-            BC_t0%north%divgd_BC(i,j,k)=BC_t1%north%divgd_BC(i,j,k)
           enddo
           enddo
         enddo
@@ -4303,6 +4572,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           enddo
         enddo
 !
+        BC_t0%north%divgd_BC =0. ! TEMPORARY
       endif
 !
 !-----------
@@ -4320,7 +4590,6 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           do j=js,je
           do i=is,ie
             BC_t0%south%delp_BC(i,j,k)=BC_t1%south%delp_BC(i,j,k)
-            BC_t0%south%divgd_BC(i,j,k)=BC_t1%south%divgd_BC(i,j,k)
           enddo
           enddo
         enddo
@@ -4381,6 +4650,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           enddo
         enddo
 !
+        BC_t0%south%divgd_BC =0. ! TEMPORARY
       endif
 !
 !----------
@@ -4398,7 +4668,6 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           do j=js,je
           do i=is,ie
             BC_t0%east%delp_BC(i,j,k)=BC_t1%east%delp_BC(i,j,k)
-            BC_t0%east%divgd_BC(i,j,k)=BC_t1%east%divgd_BC(i,j,k)
           enddo
           enddo
         enddo
@@ -4459,6 +4728,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           enddo
         enddo
 !
+        BC_t0%east%divgd_BC =0. ! TEMPORARY
       endif
 !
 !----------
@@ -4476,7 +4746,6 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           do j=js,je
           do i=is,ie
             BC_t0%west%delp_BC(i,j,k)=BC_t1%west%delp_BC(i,j,k)
-            BC_t0%west%divgd_BC(i,j,k)=BC_t1%west%divgd_BC(i,j,k)
           enddo
           enddo
         enddo
@@ -4537,6 +4806,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           enddo
         enddo
 !
+        BC_t0%west%divgd_BC =0. ! TEMPORARY
       endif
 !
 !---------------------------------------------------------------------
@@ -4830,6 +5100,215 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 
  end subroutine mp_auto_conversion
 
+!-----------------------------------------------------------------------
+!
+      subroutine nudge_qv_bc(Atm,isd,ied,jsd,jed)
+!
+!-----------------------------------------------------------------------
+!***  When nudging of specific humidity is selected then we must also
+!***  nudge the values in the regional boundary.
+!-----------------------------------------------------------------------
+      implicit none
+!-----------------------------------------------------------------------
+!
+!------------------------
+!***  Argument variables
+!------------------------
+!
+      integer,intent(in) :: isd,ied,jsd,jed                                !<-- Memory limits of task subdomain
+!
+      type(fv_atmos_type),target,intent(inout) :: Atm                      !<-- Atm object for the current domain
+!
+!---------------------
+!***  Local variables
+!---------------------
+!
+      integer :: i,i_x,ie,is,j,j_x,je,js,k
+!
+      real, parameter::    q1_h2o = 2.2E-6
+      real, parameter::    q7_h2o = 3.8E-6
+      real, parameter::  q100_h2o = 3.8E-6
+      real, parameter:: q1000_h2o = 3.1E-6
+      real, parameter:: q2000_h2o = 2.8E-6
+      real, parameter:: q3000_h2o = 3.0E-6
+      real, parameter:: wt=2., xt=1./(1.+wt)
+!
+      real :: p00,q00
+!
+      type(fv_regional_bc_bounds_type),pointer :: bnds
+!
+!-----------------------------------------------------------------------
+!***********************************************************************
+!-----------------------------------------------------------------------
+!
+      bnds=>Atm%regional_bc_bounds
+!
+!-----------
+!***  North
+!-----------
+!
+      if(north_bc)then
+        is=lbound(BC_t1%north%q_BC,1)
+        ie=ubound(BC_t1%north%q_BC,1)
+        js=lbound(BC_t1%north%q_BC,2)
+        je=ubound(BC_t1%north%q_BC,2)
+!
+        i_x=isd                                                          !<--  Use column at
+        j_x=jsd                                                          !     this location.
+!
+        p00=Atm%ptop                                                     !<-- Use layer interface pressures.
+!
+        n_loopk: do k=1,npz
+          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb. 
+            call get_q00
+            do j=js,je
+            do i=is,ie
+              BC_t1%north%q_BC(i,j,k,sphum_index)=                    &  !<-- Nudge the north boundary sphum at time t1.
+                        xt*(BC_t1%north%q_BC(i,j,k,sphum_index)+wt*q00)
+            enddo
+            enddo
+          else
+            exit n_loopk
+          endif
+          p00=p00+BC_t1%north%delp_BC(i_x,j_x,k)
+        enddo n_loopk
+      endif
+!
+!-----------
+!***  South
+!-----------
+!
+      if(south_bc)then
+        is=lbound(BC_t1%south%q_BC,1)
+        ie=ubound(BC_t1%south%q_BC,1)
+        js=lbound(BC_t1%south%q_BC,2)
+        je=ubound(BC_t1%south%q_BC,2)
+!
+        i_x=isd                                                          !<--  Use column at
+        j_x=jed                                                          !     this location.
+!
+        p00=Atm%ptop                                                     !<-- Use layer interface pressures.
+!
+        s_loopk: do k=1,npz      
+          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb. 
+            call get_q00
+            do j=js,je
+            do i=is,ie
+              BC_t1%south%q_BC(i,j,k,sphum_index)=                    &  !<-- Nudge the south boundary sphum at time t1.
+                        xt*(BC_t1%south%q_BC(i,j,k,sphum_index)+wt*q00)
+            enddo
+            enddo
+          else
+            exit s_loopk
+          endif
+          p00=p00+BC_t1%south%delp_BC(i_x,j_x,k)
+        enddo s_loopk
+      endif
+!
+!----------
+!***  East
+!----------
+!
+      if(east_bc)then
+        is=lbound(BC_t1%east%q_BC,1)
+        ie=ubound(BC_t1%east%q_BC,1)
+        js=lbound(BC_t1%east%q_BC,2)
+        je=ubound(BC_t1%east%q_BC,2)
+!
+        i_x=isd                                                          !<--  Use column at
+        j_x=jsd+nhalo_model                                              !     this location.
+!
+        p00=Atm%ptop                                                     !<-- Use layer interface pressures.
+!
+        e_loopk: do k=1,npz      
+          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb. 
+            call get_q00
+            do j=js,je
+            do i=is,ie
+              BC_t1%east%q_BC(i,j,k,sphum_index)=                     &  !<-- Nudge the east boundary sphum at time t1.
+                        xt*(BC_t1%east%q_BC(i,j,k,sphum_index)+wt*q00)
+            enddo
+            enddo
+          else
+            exit e_loopk
+          endif
+          p00=p00+BC_t1%east%delp_BC(i_x,j_x,k)
+        enddo e_loopk
+      endif
+!
+!----------
+!***  West
+!----------
+!
+      if(west_bc)then
+        is=lbound(BC_t1%west%q_BC,1)
+        ie=ubound(BC_t1%west%q_BC,1)
+        js=lbound(BC_t1%west%q_BC,2)
+        je=ubound(BC_t1%west%q_BC,2)
+!
+        i_x=ied                                                          !<--  Use column at
+        j_x=jsd+nhalo_model                                              !     this location.
+!
+        p00=Atm%ptop                                                     !<-- Use layer interface pressures.
+!
+        w_loopk: do k=1,npz      
+          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb. 
+            call get_q00
+            do j=js,je
+            do i=is,ie
+              BC_t1%west%q_BC(i,j,k,sphum_index)=                     &  !<-- Nudge the west boundary sphum at time t1.
+                        xt*(BC_t1%west%q_BC(i,j,k,sphum_index)+wt*q00)
+            enddo
+            enddo
+          else
+            exit w_loopk
+          endif
+          p00=p00+BC_t1%west%delp_BC(i_x,j_x,k)
+        enddo w_loopk
+      endif
+!
+!-----------------------------------------------------------------------
+!
+      contains
+!
+!-----------------------------------------------------------------------
+!
+      subroutine get_q00
+!
+!-----------------------------------------------------------------------
+!***  This is an internal subroutine to subroutine nudge_qv_bc that
+!***  computes the climatological contribution to the nudging ot the
+!***  input specific humidity.
+!-----------------------------------------------------------------------
+!***********************************************************************
+!-----------------------------------------------------------------------
+!
+      if ( p00 < 30.E2 ) then
+        if ( p00 < 1. ) then
+          q00 = q1_h2o
+        elseif ( p00 <= 7. .and. p00 >= 1. ) then
+          q00 = q1_h2o + (q7_h2o-q1_h2o)*log(pref(k)/1.)/log(7.)
+        elseif ( p00 < 100. .and. p00 >= 7. ) then
+          q00 = q7_h2o + (q100_h2o-q7_h2o)*log(pref(k)/7.)/log(100./7.)
+        elseif ( p00 < 1000. .and. p00 >= 100. ) then
+          q00 = q100_h2o + (q1000_h2o-q100_h2o)*log(pref(k)/1.E2)/log(10.)
+        elseif ( p00 < 2000. .and. p00 >= 1000. ) then
+          q00 = q1000_h2o + (q2000_h2o-q1000_h2o)*log(pref(k)/1.E3)/log(2.)
+        else
+          q00 = q2000_h2o + (q3000_h2o-q2000_h2o)*log(pref(k)/2.E3)/log(1.5)
+        endif
+      endif
+!
+!-----------------------------------------------------------------------
+!
+      end subroutine get_q00
+!
+!-----------------------------------------------------------------------
+!
+      end subroutine nudge_qv_bc
+!
+!-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
   subroutine dump_field_3d (domain, name, field, isd, ied, jsd, jed, nlev, stag)
 
     type(domain2d),         intent(INOUT) :: domain
@@ -5051,7 +5530,6 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
     integer :: mype
     integer :: north_pe, south_pe, east_pe, west_pe
 
-    return !!! LMH; this routine should not be needed since it is handled by mpp_update_domains et al
 
     mype = mpp_pe()
     call mpp_get_neighbor_pe( domain, NORTH, north_pe)

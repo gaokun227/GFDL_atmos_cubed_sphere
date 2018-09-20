@@ -71,8 +71,7 @@ use fv_mp_mod,          only: switch_current_Atm, is_master
 use fv_sg_mod,          only: fv_subgrid_z
 use fv_update_phys_mod, only: fv_update_phys
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
-use fv_regional_mod,    only: BC_t0, BC_t1, ak_in, bk_in, bc_hour, ntimesteps_per_bc_update, &
-                              regional_bc_t1_to_t0, regional_bc_data
+use fv_regional_mod,    only: start_regional_restart, read_new_bc_data
 use fv_regional_mod,    only: a_step, p_step
 use fv_regional_mod,    only: current_time_in_seconds
 
@@ -289,6 +288,13 @@ contains
 
                     call timing_off('ATMOS_INIT')
 
+!  --- initiate the start for a restarted regional forecast
+   if ( Atm(mytile)%gridstruct%regional .and. Atm(mytile)%flagstruct%warm_start ) then
+
+     call start_regional_restart(Atm(1),       &
+                                 isc, iec, jsc, jec, &
+                                 isd, ied, jsd, jed )
+   endif
    if ( Atm(mytile)%flagstruct%na_init>0 ) then
       call nullify_domain ( )
       if ( .not. Atm(mytile)%flagstruct%hydrostatic ) then
@@ -390,26 +396,8 @@ contains
 !
    if(Atm(n)%flagstruct%regional)then
 
-     atmos_time = Time - Atm(n)%Time_init
-     atmos_time_step = atmos_time / Time_step_atmos
-     current_time_in_seconds = time_type_to_real( atmos_time )
-     if (mpp_pe() == 0) write(0,"('current_time_seconds = ',f9.1)")current_time_in_seconds
-
-     if(a_step==1)then
-       ntimesteps_per_bc_update=nint(Atm(n)%flagstruct%bc_update_interval*3600./(dt_atmos/real(abs(p_split))))
-     endif
-     if(a_step>=ntimesteps_per_bc_update.and.mod(a_step-1,ntimesteps_per_bc_update)==0)then
-       bc_hour=bc_hour+Atm(n)%flagstruct%bc_update_interval
-       call regional_bc_t1_to_t0(BC_t1, BC_t0               &  !
-                                ,Atm(n)%npz                 &  !<-- Move BC t1 data
-                                ,Atm(n)%ncnst               &  !    to t0.
-                                ,Atm(n)%regional_bc_bounds )
-       call regional_bc_data(Atm(n), bc_hour                &  !<--
-                            ,Atm(n)%bd%is, Atm(n)%bd%ie     &  !    Fill time level t1 from BC file from
-                            ,Atm(n)%bd%js, Atm(n)%bd%je     &  !    the next time level in BC file.
-                            ,isd, ied, jsd, jed             &  !
-                            ,ak_in, bk_in )                    !<--
-     endif
+     call read_new_bc_data(Atm(n), Time, Time_step_atmos, p_split, &
+                           isd, ied, jsd, jed )
    endif
    do psc=1,abs(p_split)
       p_step = psc
@@ -630,7 +618,7 @@ contains
    fv_domain = Atm(mytile)%domain_for_coupler
    layout(1:2) =  Atm(mytile)%layout(1:2)
 
-   regional = .false. ! dummy for now
+   regional = Atm(mytile)%flagstruct%regional
 
  end subroutine atmosphere_domain
 

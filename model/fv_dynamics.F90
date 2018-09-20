@@ -36,7 +36,7 @@ module fv_dynamics_mod
    use tracer_manager_mod,  only: get_tracer_index
    use fv_sg_mod,           only: neg_adj3
    use fv_nesting_mod,      only: setup_nested_grid_BCs
-   use fv_regional_mod,     only: regional_boundary_update, set_regional_BCs, write_after_bc_time_interpolation
+   use fv_regional_mod,     only: regional_boundary_update, set_regional_BCs
    use fv_regional_mod,     only: dump_field, H_STAGGER, U_STAGGER, V_STAGGER
    use fv_regional_mod,     only: a_step, p_step, k_step
    use fv_regional_mod,     only: current_time_in_seconds
