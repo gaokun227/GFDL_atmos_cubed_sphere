@@ -574,6 +574,8 @@ contains
        if (Atm%flagstruct%grid_type == 4) then
           call setup_cartesian(npx, npy, Atm%flagstruct%dx_const, Atm%flagstruct%dy_const, &
                Atm%flagstruct%deglat, Atm%bd)
+       elseif (Atm%flagstruct%grid_type == 5) then
+		  call setup_lambert(npx, npy, Atm%bd, grid_file)
        else
           call mpp_error(FATAL, 'init_grid: unsupported grid type')
        endif
@@ -1187,6 +1189,321 @@ contains
 
     end subroutine setup_cartesian
 
+    subroutine setup_lambert(npx, npy, bd, grid_file)
+      type(fv_grid_bounds_type), intent(IN) :: bd
+      character(len=*),    intent(IN)    :: grid_file
+      integer,      intent(IN) :: npx, npy
+      
+      ! real(kind=R_GRID), pointer, dimension(:,:,:) :: agrid, grid
+      ! real(kind=R_GRID), pointer, dimension(:,:) :: area, area_c
+      ! real(kind=R_GRID), pointer, dimension(:,:) :: dx, dy, dxc, dyc, dxa, dya
+      
+      ! real, pointer, dimension(:,:) :: rarea, rarea_c
+      ! real, pointer, dimension(:,:) :: rdx, rdy, rdxc, rdyc, rdxa, rdya
+      ! real, pointer, dimension(:,:,:) :: e1, e2
+      
+      
+      character(len=256)                 :: atm_mosaic, atm_hgrid
+      real, allocatable, dimension(:,:)  :: tmpx, tmpy, tmpu, tmpv, tmpa
+      
+      integer i, j, stdunit
+      integer :: is,  ie,  js,  je
+      integer :: isd, ied, jsd, jed
+      integer :: isc2, iec2, jsc2, jec2
+      integer :: start(4), nread(4)
+      integer,save :: halo=3
+      
+      real(kind=R_GRID)  :: dxN, dxM, dxAV
+      real(kind=R_GRID)  :: dx_local, dy_local
+	  real(kind=R_GRID)  :: maxarea, minarea, globalarea
+      
+	  
+      is  = bd%is
+      ie  = bd%ie
+      js  = bd%js
+      je  = bd%je
+      isd = bd%isd
+      ied = bd%ied
+      jsd = bd%jsd
+      jed = bd%jed
+      
+	  
+      if(.not. file_exist(grid_file)) call mpp_error(FATAL, 'fv_grid_tools(read_grid): file '// &
+      trim(grid_file)//' does not exist')
+      
+      !--- make sure the grid file is mosaic file.
+      if( field_exist(grid_file, 'atm_mosaic_file') .OR. field_exist(grid_file, 'gridfiles') ) then
+        stdunit = stdout()
+        write(stdunit,*) '==>Note from fv_grid_tools_mod(read_grid): read atmosphere grid from mosaic version grid'
+      else
+        call mpp_error(FATAL, 'fv_grid_tools(read_grid): neither atm_mosaic_file nor gridfiles exists in file ' &
+        //trim(grid_file))
+      endif
+      
+      if(field_exist(grid_file, 'atm_mosaic_file')) then
+        call read_data(grid_file, "atm_mosaic_file", atm_mosaic)
+        atm_mosaic = "INPUT/"//trim(atm_mosaic)
+      else
+        atm_mosaic = trim(grid_file)
+      endif
+      
+      call get_mosaic_tile_grid(atm_hgrid, atm_mosaic, Atm%domain)
+      
+      
+      !--- get the geographical coordinates of super-grid.
+      
+      isc2 = 2*(isd+halo)-1; iec2 = 2*(ied+1+halo)-1   ! For the regional domain the cell corner locations must be transferred
+      jsc2 = 2*(jsd+halo)-1; jec2 = 2*(jed+1+halo)-1   ! from the entire supergrid to the compute grid, including the halo region.
+      
+      
+      allocate(tmpx(isc2:iec2, jsc2:jec2) )
+      allocate(tmpy(isc2:iec2, jsc2:jec2) )
+      start = 1; nread = 1
+      start(1) = isc2; nread(1) = iec2 - isc2 + 1
+      start(2) = jsc2; nread(2) = jec2 - jsc2 + 1
+      call read_data(atm_hgrid, 'x', tmpx, start, nread, no_domain=.TRUE.)  !<-- tmpx (lon, deg east) is on the supergrid
+      call read_data(atm_hgrid, 'y', tmpy, start, nread, no_domain=.TRUE.)  !<-- tmpy (lat, deg) is on the supergrid
+      
+      !--- geographic grid at cell corner
+      grid(isd: is-1, jsd:js-1,1:ndims)=0.
+      grid(isd: is-1, je+2:jed+1,1:ndims)=0.
+      grid(ie+2:ied+1,jsd:js-1,1:ndims)=0.
+      grid(ie+2:ied+1,je+2:jed+1,1:ndims)=0.
+
+      
+      do j = jsd, jed+1
+        do i = isd, ied+1
+          grid(i,j,1) = tmpx(2*i+halo+2,2*j+halo+2)*pi/180.
+          grid(i,j,2) = tmpy(2*i+halo+2,2*j+halo+2)*pi/180.
+        enddo
+      enddo
+      
+      call mpp_update_domains( grid, Atm%domain, position=CORNER)
+      
+      iec2 = 2*(ied+1+halo)-2   ! For the regional domain the cell corner locations must be transferred
+      jec2 = 2*(jed+1+halo)-1   ! from the entire supergrid to the compute grid, including the halo region.
+      
+      allocate(tmpu(isc2:iec2, jsc2:jec2) )
+
+      nread(1) = iec2 - isc2 + 1
+      nread(2) = jec2 - jsc2 + 1
+      call read_data(atm_hgrid, 'dx', tmpu, start, nread, no_domain=.TRUE.)
+      
+      
+      do j = jsd, jed+1
+        do i = isd, ied
+          dx(i,j) = tmpu(2*i+halo+2,2*j+halo+2) + tmpu(2*i+halo+3,2*j+halo+2)
+        enddo
+      enddo
+      
+      iec2 = 2*(ied+1+halo)-1   ! For the regional domain the cell corner locations must be transferred
+      jec2 = 2*(jed+1+halo)-2   ! from the entire supergrid to the compute grid, including the halo region.
+      
+      allocate(tmpv(isc2:iec2, jsc2:jec2) )
+      
+      nread(1) = iec2 - isc2 + 1
+      nread(2) = jec2 - jsc2 + 1
+      call read_data(atm_hgrid, 'dy', tmpv, start, nread, no_domain=.TRUE.)
+      
+      
+      do j = jsd, jed
+        do i = isd, ied+1
+          dy(i,j) = tmpv(2*i+halo+2,2*j+halo+2) + tmpv(2*i+halo+2,2*j+halo+3)
+        enddo
+      enddo
+      
+      
+      call mpp_update_domains( dy, dx, Atm%domain, flags=SCALAR_PAIR,      &
+      gridtype=CGRID_NE_PARAM, complete=.true.)
+      
+      iec2 = 2*(ied+1+halo)-2   ! For the regional domain the cell corner locations must be transferred
+      jec2 = 2*(jed+1+halo)-2   ! from the entire supergrid to the compute grid, including the halo region.
+      
+      allocate(tmpa(isc2:iec2, jsc2:jec2) )
+      
+      nread(1) = iec2 - isc2 + 1
+      nread(2) = jec2 - jsc2 + 1
+      call read_data(atm_hgrid, 'area', tmpa, start, nread, no_domain=.TRUE.)  !<-- tmpx (lon, deg east) is on the supergrid
+      
+      !agrid(:,:,:) = -1.e25
+	  area_c(:,:) = -missing ! To prevent divide by zero error
+	  
+      
+      do j = jsd, jed
+        do i = isd, ied
+          agrid(i,j,1) = tmpx(2*i+halo+3,2*j+halo+3)*pi/180.
+          agrid(i,j,2) = tmpy(2*i+halo+3,2*j+halo+3)*pi/180.
+      
+              dxa(i,j) = tmpu(2*i+halo+2,2*j+halo+3) + tmpu(2*i+halo+3,2*j+halo+3)
+              dya(i,j) = tmpv(2*i+halo+3,2*j+halo+2) + tmpv(2*i+halo+3,2*j+halo+3)
+      
+             area(i,j) = tmpa(2*i+halo+2,2*j+halo+2) + tmpa(2*i+halo+3,2*j+halo+2) + tmpa(2*i+halo+2,2*j+halo+3) + tmpa(2*i+halo+3,2*j+halo+3)
+      
+        enddo
+      enddo
+      
+      call mpp_update_domains( agrid, Atm%domain, position=CENTER, complete=.true. )
+      call mpp_update_domains( area,   Atm%domain, complete=.true. )
+      call mpp_update_domains( dxa, dya, Atm%domain, flags=SCALAR_PAIR, gridtype=AGRID_PARAM)
+      
+      do j = jsd+1, jed
+        do i = isd+1, ied
+          area_c(i,j) = tmpa(2*i+halo+2,2*j+halo+2) + tmpa(2*i+halo+1,2*j+halo+2) + tmpa(2*i+halo+2,2*j+halo+1) + tmpa(2*i+halo+1,2*j+halo+1)
+        enddo
+      enddo
+      
+      if (is == 1) then
+        do j=jsd,jed
+          area_c(isd,j) = area_c(isd+1,j)
+        end do
+        if (js == 1)     area_c(isd,jsd) = area_c(isd+1,jsd+1)
+        if (js == npy-1) area_c(isd,jed+1) = area_c(isd+1,jed)
+      end if
+      if (ie == npx-1) then
+        do j=jsd,jed
+          area_c(ied+1,j) = area_c(ied,j)
+        end do
+        if (js == 1)     area_c(ied+1,jsd) = area_c(ied,jsd+1)
+        if (js == npy-1) area_c(ied+1,jed+1) = area_c(ied,jed)
+      end if
+      if (js == 1) then
+        do i=isd,ied
+          area_c(i,jsd) = area_c(i,jsd+1)
+        end do
+      end if
+      if (je == npy-1) then
+        do i=isd,ied
+          area_c(i,jed+1) = area_c(i,jed)
+        end do
+      end if
+      
+      
+      do j=jsd,jed
+        do i=isd+1,ied
+          dxc(i,j) = tmpu(2*i+halo+1,2*j+halo+3) + tmpu(2*i+halo+2,2*j+halo+3)
+      
+        enddo
+        !xxxxxx
+        !Are the following 2 lines appropriate for the regional domain?
+        !xxxxxx
+        dxc(isd,j)   = dxc(isd+1,j)
+        dxc(ied+1,j) = dxc(ied,j)
+      enddo
+      
+      
+      do j=jsd+1,jed
+        do i=isd,ied
+          dyc(i,j) = tmpv(2*i+halo+3,2*j+halo+1) + tmpv(2*i+halo+3,2*j+halo+2)
+        enddo
+      enddo
+      !xxxxxx
+      !Are the following 2 lines appropriate for the regional domain?
+      !xxxxxx
+      do i=isd,ied
+        dyc(i,jsd)   = dyc(i,jsd+1)
+        dyc(i,jed+1) = dyc(i,jed)
+      end do
+      
+      call mpp_update_domains( dxc, dyc, Atm%domain, flags=SCALAR_PAIR,   &
+      gridtype=CGRID_NE_PARAM, complete=.true.)
+      
+      call mpp_update_domains( area_c, Atm%domain, position=CORNER, complete=.true.)
+      
+	  
+      do j=jsd,jed+1
+        do i=isd,ied
+          rdx(i,j) = 1.0/dx(i,j)
+          rdyc(i,j) = 1.0/dyc(i,j)
+        enddo
+      enddo
+      do j=jsd,jed
+        do i=isd,ied+1
+          rdy(i,j) = 1.0/dy(i,j)
+          rdxc(i,j) = 1.0/dxc(i,j)
+        enddo
+      enddo
+      
+      do j=jsd,jed
+        do i=isd,ied
+          rarea(i,j) = 1.0/area(i,j)
+          rdxa(i,j) = 1./dxa(i,j)
+          rdya(i,j) = 1./dya(i,j)
+        enddo
+      enddo
+      
+      do j=jsd,jed+1
+        do i=isd,ied+1
+          rarea_c(i,j) = 1.0/area_c(i,j)
+        enddo
+      enddo
+      
+      
+      
+      ! Get and print Grid Statistics
+      dxAV =0.0
+
+      dxN  =  missing
+      dxM  = -missing
+      
+      do j=js, je
+        do i=is, ie
+          if(i>ceiling(npx/2.) .OR. j>ceiling(npy/2.)) cycle
+
+          dx_local = dx(i,j)
+          dy_local = dy(i,j)
+      
+          dxAV  = dxAV + 0.5 * (dx_local + dy_local)
+          dxM   = MAX(dxM,dx_local)
+          dxM   = MAX(dxM,dy_local)
+          dxN   = MIN(dxN,dx_local)
+          dxN   = MIN(dxN,dy_local)
+      
+        enddo
+      enddo
+      
+
+      call mpp_sum(dxAV)
+      call mpp_max(dxM)
+      call mpp_min(dxN)
+	  
+      globalarea = mpp_global_sum(domain, area)
+      maxarea = mpp_global_max(domain, area)
+      minarea = mpp_global_min(domain, area)     
+      
+      if( is_master() ) then
+      
+        dxAV  = dxAV  / ( (ceiling(npy/2.0))*(ceiling(npx/2.0)) )
+        
+		write(*,*  ) ''
+        write(*,*  ) ' Lambert Grid Stats : ', npx,'x',npy,'x 1'
+        write(*,201) '      Grid Length               : min: ', dxN,' max: ', dxM,' avg: ', dxAV, ' min/max: ',dxN/dxM
+        write(*,*  ) ''
+        write(*,209) 'MAX    AREA (m*m):', maxarea,            '          MIN AREA (m*m):', minarea
+        write(*,210) 'GLOBAL AREA (m*m):', globalarea
+		
+201  format(A,f9.2,A,f9.2,A,f9.2,A,f9.2)
+209  format(A,e21.14,A,e21.14)
+210  format(A,e21.14)
+ 
+      endif
+      
+!      sina(:,:) = 1.
+!      cosa(:,:) = 0.
+      
+      e1(1,:,:) = 1.
+      e1(2,:,:) = 0.
+      e1(3,:,:) = 0.
+      
+      e2(1,:,:) = 0.
+      e2(2,:,:) = 1.
+      e2(3,:,:) = 0.
+      
+      
+      deallocate(tmpx, tmpy, tmpu, tmpv, tmpa)
+      
+    end subroutine setup_lambert
+	
+	
     subroutine setup_aligned_nest(Atm)
 
       type(fv_atmos_type), intent(INOUT), target :: Atm
