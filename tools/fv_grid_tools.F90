@@ -575,7 +575,7 @@ contains
           call setup_cartesian(npx, npy, Atm%flagstruct%dx_const, Atm%flagstruct%dy_const, &
                Atm%flagstruct%deglat, Atm%bd)
        elseif (Atm%flagstruct%grid_type == 5) then
-		  call setup_lambert(npx, npy, Atm%bd, grid_file)
+		  call setup_orthogonal_grid(npx, npy, Atm%bd, grid_file)
        else
           call mpp_error(FATAL, 'init_grid: unsupported grid type')
        endif
@@ -1189,7 +1189,7 @@ contains
 
     end subroutine setup_cartesian
 
-    subroutine setup_lambert(npx, npy, bd, grid_file)
+    subroutine setup_orthogonal_grid(npx, npy, bd, grid_file)
       type(fv_grid_bounds_type), intent(IN) :: bd
       character(len=*),    intent(IN)    :: grid_file
       integer,      intent(IN) :: npx, npy
@@ -1476,10 +1476,11 @@ contains
         
 		write(*,*  ) ''
         write(*,*  ) ' Lambert Grid Stats : ', npx,'x',npy,'x 1'
-        write(*,201) '      Grid Length               : min: ', dxN,' max: ', dxM,' avg: ', dxAV, ' min/max: ',dxN/dxM
+        write(*,201) '      Grid Length   : min: ', dxN,' max: ', dxM,' avg: ', dxAV, ' min/max: ',dxN/dxM
         write(*,*  ) ''
-        write(*,209) 'MAX    AREA (m*m):', maxarea,            '          MIN AREA (m*m):', minarea
-        write(*,210) 'GLOBAL AREA (m*m):', globalarea
+        write(*,209) '   MAX    AREA (m*m):', maxarea,            '          MIN AREA (m*m):', minarea
+        write(*,210) '   GLOBAL AREA (m*m):', globalarea
+		write(*,*  ) ''
 		
 201  format(A,f9.2,A,f9.2,A,f9.2,A,f9.2)
 209  format(A,e21.14,A,e21.14)
@@ -1501,7 +1502,7 @@ contains
       
       deallocate(tmpx, tmpy, tmpu, tmpv, tmpa)
       
-    end subroutine setup_lambert
+    end subroutine setup_orthogonal_grid
 	
 	
     subroutine setup_aligned_nest(Atm)

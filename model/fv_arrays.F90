@@ -231,7 +231,8 @@ module fv_arrays_mod
 
      integer, pointer :: grid_type !< Which type of grid to use. If 0, the equidistant gnomonic
                                    !< cubed-sphere will be used. If 4, a doubly-periodic
-                                   !< f-plane cartesian grid will be used. If -1, the grid is read 
+                                   !< f-plane cartesian grid will be used. If 5, a user-defined
+								   !< orthogonal grid will be used. If -1, the grid is read 
                                    !< from INPUT/grid_spec.nc. Values 2, 3, 5, 6, and 7 are not 
                                    !< supported and will likely not run. The default value is 0.
 
@@ -265,7 +266,7 @@ module fv_arrays_mod
 !                                    !  2: the equal-angular Gnomonic grid
 !                                    !  3: the lat-lon grid -- to be implemented
 !                                    !  4: double periodic boundary condition on Cartesian grid
-!                                    !  5: channel flow on Cartesian grid
+!                                    !  5: a user-defined orthogonal grid for stand alone regional model
 !  -> moved to grid_tools
 
 ! Momentum (or KE) options:

@@ -326,7 +326,7 @@ contains
          case ( 1 )  ! Lat-Lon "cyclic"
 
             select case (grid_type)
-            case (0,1,2) !Gnomonic nested grid
+            case (0,1,2,5) !Gnomonic nested grid
                if (nested) then
                   type = "Cubed-sphere nested grid"
                else
@@ -376,12 +376,12 @@ contains
                else
                   call mpp_define_layout( (/1,npx-1,1,npy-1/), npes_per_tile, layout )
                endif
-            case (5)   ! latlon patch
-               type="Lat-Lon: patch"
-               nregions = 1
-               num_contact = 0
-               npes_per_tile = npes/nregions
-               call mpp_define_layout( (/1,npx-1,1,npy-1/), npes_per_tile, layout )
+            ! case (5)   ! latlon patch
+               ! type="Lat-Lon: patch"
+               ! nregions = 1
+               ! num_contact = 0
+               ! npes_per_tile = npes/nregions
+               ! call mpp_define_layout( (/1,npx-1,1,npy-1/), npes_per_tile, layout )
             case (6)   ! latlon strip
                type="Lat-Lon: strip"
                nregions = 1
