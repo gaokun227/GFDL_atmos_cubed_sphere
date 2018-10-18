@@ -1251,7 +1251,7 @@ contains
       atmos_time = Time - Atm%Time_init
       atmos_time_step = atmos_time / Time_step_atmos
       current_time_in_seconds = time_type_to_real( atmos_time )
-      if (mpp_pe() == 0) write(*,"('current_time_seconds = ',f9.1)")current_time_in_seconds
+      if (mpp_pe() == 0 .and. Atm%flagstruct%fv_debug) write(*,"('current_time_seconds = ',f9.1)")current_time_in_seconds
 !
       call get_time (Time_step_atmos, sec)
       dt_atmos = real(sec)

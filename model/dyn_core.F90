@@ -345,7 +345,7 @@ contains
             endif
             if (gridstruct%regional) then
                reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
-               if (is_master()) print*, ' REG_BC_UPDATE_TIME: ', it, current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
+               if (is_master() .and. flagstruct%fv_debug) print*, ' REG_BC_UPDATE_TIME: ', it, current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
                call gz_bc(gz, delz_regBC,bd,npx,npy,npz,mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600.)
             endif
          else
@@ -489,7 +489,7 @@ contains
               endif
               if (gridstruct%regional) then
                  reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
-                 if (is_master()) print*, ' REG_BC_UPDATE_TIME: ', it, current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
+                 if (is_master() .and. flagstruct%fv_debug) print*, ' REG_BC_UPDATE_TIME: ', it, current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
                  call gz_bc(gz, delz_regBC,bd,npx,npy,npz,mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600.)
               endif
            endif
