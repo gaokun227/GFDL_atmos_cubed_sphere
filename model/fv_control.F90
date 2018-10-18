@@ -151,6 +151,7 @@ module fv_control_mod
    integer , pointer :: ncnst 
    integer , pointer :: pnats 
    integer , pointer :: dnats 
+   integer , pointer :: dnrts 
    integer , pointer :: ntiles        
    integer , pointer :: nf_omega  
    integer , pointer :: fv_sg_adj 
@@ -324,6 +325,7 @@ module fv_control_mod
             write(*,*) 'ncnst=', ncnst,' num_prog=',nt_prog,' pnats=',pnats,' dnats=',dnats,' num_family=',num_family         
             print*, ''
          endif
+         if (dnrts < 0) dnrts = dnats
 
          if (grids_on_this_pe(n)) then
             call allocate_fv_atmos_type(Atm(n), Atm(n)%bd%isd, Atm(n)%bd%ied, Atm(n)%bd%jsd, Atm(n)%bd%jed, &
@@ -560,7 +562,7 @@ module fv_control_mod
                          range_warn, dwind_2d, inline_q, z_tracer, reproduce_sum, adiabatic, do_vort_damp, no_dycore,   &
                          tau, tau_h2o, rf_cutoff, nf_omega, hydrostatic, fv_sg_adj, sg_cutoff, breed_vortex_inline,  &
                          na_init, nudge_dz, hybrid_z, Make_NH, n_zs_filter, nord_zs_filter, full_zs_filter, reset_eta,         &
-                         pnats, dnats, a2b_ord, remap_t, p_ref, d2_bg_k1, d2_bg_k2,  &
+                         pnats, dnats, dnrts, a2b_ord, remap_t, p_ref, d2_bg_k1, d2_bg_k2,  &
                          c2l_ord, dx_const, dy_const, umax, deglat,      &
                          deglon_start, deglon_stop, deglat_start, deglat_stop, &
                          phys_hydrostatic, use_hydro_pressure, make_hybrid_z, old_divg_damp, add_noise, &
@@ -1097,6 +1099,7 @@ module fv_control_mod
      ncnst                         => Atm%flagstruct%ncnst
      pnats                         => Atm%flagstruct%pnats
      dnats                         => Atm%flagstruct%dnats
+     dnrts                         => Atm%flagstruct%dnrts
      ntiles                        => Atm%flagstruct%ntiles
      nf_omega                      => Atm%flagstruct%nf_omega
      fv_sg_adj                     => Atm%flagstruct%fv_sg_adj

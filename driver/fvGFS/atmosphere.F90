@@ -51,7 +51,7 @@ use mpp_domains_mod,        only: domain2d, mpp_update_domains
 use xgrid_mod,              only: grid_box_type
 use field_manager_mod,      only: MODEL_ATMOS
 use tracer_manager_mod,     only: get_tracer_index, get_number_tracers, &
-                                  NO_TRACER
+                                  NO_TRACER, get_tracer_names
 use IPD_typedefs,           only: IPD_data_type, kind_phys
 
 !-----------------
@@ -1002,6 +1002,7 @@ contains
    integer :: i, j, ix, k, k1, n, w_diff, nt_dyn, iq
    integer :: nb, blen, nwat, dnats, nq_adv
    real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
+   character(len=32) :: tracer_name
 
    Time_prev = Time
    Time_next = Time + Time_step_atmos
@@ -1022,13 +1023,23 @@ contains
 !$OMP              shared (rdt, n, nq, dnats, npz, ncnst, nwat, mytile, u_dt, v_dt, t_dt,&
 !$OMP                      Atm, IPD_Data, Atm_block, sphum, liq_wat, rainwat, ice_wat,   &
 !$OMP                      snowwat, graupel, nq_adv)   &
-!$OMP             private (nb, blen, i, j, k, k1, ix, q0, qwat, qt)
+!$OMP             private (nb, blen, i, j, k, k1, ix, q0, qwat, qt,tracer_name)
    do nb = 1,Atm_block%nblks
 
 !SJL: perform vertical filling to fix the negative humidity if the SAS convection scheme is used
 !     This call may be commented out if RAS or other positivity-preserving CPS is used.
      blen = Atm_block%blksz(nb)
      call fill_gfs(blen, npz, IPD_Data(nb)%Statein%prsi, IPD_Data(nb)%Stateout%gq0, 1.e-9_kind_phys)
+
+!LMH 28sep18: If the name of a tracer ends in 'nopbl' then do NOT update it;
+     !override this by setting Stateout%gq0(:,:,iq) to the input value
+     do iq = 1, nq
+        call get_tracer_names (MODEL_ATMOS, iq, tracer_name)
+        if (index(tracer_name, 'nopbl') > 0) then
+           IPD_Data(nb)%Stateout%gq0(:,:,iq) = IPD_Data(nb)%Statein%qgrs(:,:,iq)
+        endif
+     enddo
+
 
      do k = 1, npz
        k1 = npz+1-k !reverse the k direction 
@@ -1492,6 +1503,7 @@ contains
 ! Convert to tracer mass:
          IPD_Data(nb)%Statein%qgrs(ix,k,1:nq_adv) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,1:nq_adv))) &
                                                           * IPD_Data(nb)%Statein%prsl(ix,k)
+
          if (dnats .gt. 0) &
              IPD_Data(nb)%Statein%qgrs(ix,k,nq_adv+1:nq) =  _DBL_(_RL_(Atm(mytile)%q(i,j,k1,nq_adv+1:nq)))
          !--- SHOULD THESE BE CONVERTED TO MASS SINCE THE DYCORE DOES NOT TOUCH THEM IN ANY WAY???

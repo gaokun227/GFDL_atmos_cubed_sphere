@@ -557,9 +557,9 @@ contains
            all(idiag%id_h(minloc(abs(levs-250)))>0) .or. all(idiag%id_h(minloc(abs(levs-300)))>0) .or. &
            all(idiag%id_h(minloc(abs(levs-500)))>0) .or. all(idiag%id_h(minloc(abs(levs-700)))>0) .or. &
            all(idiag%id_h(minloc(abs(levs-850)))>0) .or. all(idiag%id_h(minloc(abs(levs-1000)))>0) ) then
-           idiag%id_hght = 1
+           idiag%id_any_hght = 1
       else
-           idiag%id_hght = 0
+           idiag%id_any_hght = 0
       endif
 !-----------------------------
 ! mean temp between 300-500 mb
@@ -629,6 +629,9 @@ contains
           idiag%id_divg  = register_diag_field ( trim(field), 'divg', axes(1:3), Time,      &
                'mean divergence', '1/s', missing_value=missing_value )
 
+          idiag%id_hght3d  = register_diag_field( trim(field), 'hght', axes(1:3), Time, &
+               'height', 'm', missing_value=missing_value )
+
           idiag%id_rh = register_diag_field ( trim(field), 'rh', axes(1:3), Time,        &
                'Relative Humidity', '%', missing_value=missing_value )
           !            'Relative Humidity', '%', missing_value=missing_value, range=rhrange )
@@ -644,8 +647,6 @@ contains
              idiag%id_pfnh = register_diag_field ( trim(field), 'pfnh', axes(1:3), Time,        &
                   'non-hydrostatic pressure', 'pa', missing_value=missing_value )
           endif
-          idiag%id_zratio = register_diag_field ( trim(field), 'zratio', axes(1:3), Time,        &
-               'nonhydro_ratio', 'n/a', missing_value=missing_value )
           !--------------------
           ! 3D Condensate
           !--------------------
@@ -1869,7 +1870,7 @@ contains
 
 
 
-       if( idiag%id_slp>0 .or. idiag%id_tm>0 .or. idiag%id_hght>0 .or. idiag%id_c15>0 .or. idiag%id_ctz ) then
+       if( idiag%id_slp>0 .or. idiag%id_tm>0 .or. idiag%id_any_hght>0 .or. idiag%id_hght3d .or. idiag%id_c15>0 .or. idiag%id_ctz ) then
 
           allocate ( wz(isc:iec,jsc:jec,npz+1) )
           call get_height_field(isc, iec, jsc, jec, ngc, npz, Atm(n)%flagstruct%hydrostatic, Atm(n)%delz,  &
@@ -1877,6 +1878,10 @@ contains
           if( prt_minmax )   &
           call prt_mxm('ZTOP',wz(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0, 1, 1.E-3, Atm(n)%gridstruct%area_64, Atm(n)%domain)
 !         call prt_maxmin('ZTOP', wz(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0, 1, 1.E-3)
+
+          if (idiag%id_hght3d > 0) then
+             used = send_data(idiag%id_hght3d, 0.5*(wz(isc:iec,jsc:jec,1:npz)+wz(isc:iec,jsc:jec,2:npz+1)), Time)
+          endif
 
           if(idiag%id_slp > 0) then
 ! Cumpute SLP (pressure at height=0)
@@ -1902,7 +1907,7 @@ contains
           endif
 
 ! Compute H3000 and/or H500
-          if( idiag%id_tm>0 .or. idiag%id_hght>0 .or. idiag%id_ppt>0) then
+          if( idiag%id_tm>0 .or. idiag%id_any_hght>0 .or. idiag%id_ppt>0) then
 
              allocate( a3(isc:iec,jsc:jec,nplev) )
 

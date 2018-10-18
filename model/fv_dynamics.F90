@@ -155,7 +155,7 @@ contains
       real:: akap, rdg, ph1, ph2, mdt, gam, amdt, u0
       real:: recip_k_split,reg_bc_update_time
       integer:: kord_tracer(ncnst)
-      integer :: i,j,k, n, iq, n_map, nq, nwat, k_split
+      integer :: i,j,k, n, iq, n_map, nq, nr, nwat, k_split
       integer :: sphum, liq_wat = -999, ice_wat = -999      ! GFDL physics
       integer :: rainwat = -999, snowwat = -999, graupel = -999, cld_amt = -999
       integer :: theta_d = -999
@@ -182,6 +182,7 @@ contains
       recip_k_split=1./real(k_split)
       nwat = flagstruct%nwat
       nq = nq_tot - flagstruct%dnats
+      nr = nq_tot - flagstruct%dnrts
       rdg = -rdgas * agrav
       allocate ( dp1(isd:ied, jsd:jed, 1:npz) )
       
@@ -535,7 +536,7 @@ contains
 ! Eulerian coordinate.
 !------------------------------------------------------------------------
 
-         do iq=1,nq
+         do iq=1,nr
                                 kord_tracer(iq) = flagstruct%kord_tr
             if ( iq==cld_amt )  kord_tracer(iq) = 9      ! monotonic
          enddo
@@ -548,7 +549,7 @@ contains
 
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
                      pkz, pk, mdt, bdt, npx, npy, npz, is,ie,js,je, isd,ied,jsd,jed,       &
-                     nq, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
+                     nr, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
                      zvir, cp_air, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
                      kord_tracer, flagstruct%kord_tm, peln, te_2d,               &
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &

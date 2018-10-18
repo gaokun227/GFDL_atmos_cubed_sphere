@@ -52,7 +52,7 @@ module fv_arrays_mod
            id_tq, id_rh, id_c15, id_c25, id_c35, id_c45,          &
                          id_f15, id_f25, id_f35, id_f45, id_ctp,  &
            id_ppt, id_ts, id_tb, id_ctt, id_pmask, id_pmaskv2,    &
-           id_delp, id_delz, id_zratio, id_ws, id_iw, id_lw,      &
+           id_delp, id_delz, id_ws, id_iw, id_lw,                 &
            id_pfhy, id_pfnh,                                      &
            id_qn, id_qn200, id_qn500, id_qn850, id_qp, id_mdt,    &
            id_qdt, id_aam, id_amdt,                               &
@@ -79,7 +79,7 @@ module fv_arrays_mod
  integer :: id_rh1000_cmip, id_rh925_cmip, id_rh850_cmip, id_rh700_cmip, id_rh500_cmip, &
             id_rh300_cmip,  id_rh250_cmip, id_rh100_cmip, id_rh50_cmip,  id_rh10_cmip
 
- integer :: id_hght
+ integer :: id_hght3d, id_any_hght
  integer :: id_u100m, id_v100m, id_w100m
 
      ! For initial conditions:
@@ -411,6 +411,7 @@ module fv_arrays_mod
    integer :: ncnst = 0               ! Number of advected consituents
    integer :: pnats = 0               ! Number of non-advected consituents
    integer :: dnats = 0               ! Number of non-advected consituents (as seen by dynamics)
+   integer :: dnrts = -1               ! Number of non-remapped consituents. Only makes sense for dnrts <= dnats
    integer :: ntiles = 1                 ! Number or tiles that make up the Grid 
    integer :: ndims = 2     ! Lat-Lon Dims for Grid in Radians
    integer :: nf_omega  = 1           ! Filter omega "nf_omega" times
