@@ -81,8 +81,7 @@ module fv_regional_mod
             ,current_time_in_seconds                                    &
             ,a_step, p_step, k_step, n_step
 
-      integer,parameter :: bc_time_interval=3                           &
-                          ,nhalo_data =4                                &
+      integer,parameter :: nhalo_data =4                                &
                           ,nhalo_model=3
 
       integer, public, parameter :: H_STAGGER = 1
@@ -109,6 +108,7 @@ module fv_regional_mod
 !     integer, parameter :: jend_nest = 1290
 
       real :: current_time_in_seconds
+	  integer,save :: bc_time_interval
       integer,save :: ncid,next_time_to_read_bcs,npz,ntracers
       integer,save :: liq_water_index,o3mr_index,sphum_index               !<-- Locations of tracer vbls in the tracers array
       integer,save :: bc_hour, ntimesteps_per_bc_update
@@ -287,6 +287,11 @@ contains
 !
 !-----------------------------------------------------------------------
 !
+
+      bc_time_interval = Atm%flagstruct%bc_update_interval ! kyc: set up bc_time_interval based on namelist 
+	  
+	  
+	  
       ntracers=Atm%ncnst                                                   !<-- # of advected tracers
       npz=Atm%npz                                                          !<-- # of layers in vertical configuration of integration
       klev_out=npz
