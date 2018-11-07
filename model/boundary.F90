@@ -2222,7 +2222,7 @@ contains
    real, intent(IN)    :: dy(isd:ied+1,jsd:jed)
    real, intent(IN)    :: area(isd:ied,jsd:jed)
    logical, intent(IN) :: parent_proc, child_proc
-   type(fv_atmos_type), intent(INOUT) :: parent_grid
+   type(fv_atmos_type), pointer, intent(IN) :: parent_grid
    type(nest_domain_type), intent(INOUT) :: nest_domain
 
    real :: var_nest_3d(is_n:ie_n+istag,js_n:je_n+jstag,1)
@@ -2262,7 +2262,7 @@ contains
    real, intent(IN)    :: dx(isd:ied,jsd:jed+1)
    real, intent(IN)    :: dy(isd:ied+1,jsd:jed)
    logical, intent(IN) :: parent_proc, child_proc
-   type(fv_atmos_type), intent(INOUT) :: parent_grid
+   type(fv_atmos_type), pointer, intent(IN) :: parent_grid
    type(nest_domain_type), intent(INOUT) :: nest_domain
 
    integer :: in, jn, ini, jnj, s, qr
@@ -2441,7 +2441,7 @@ contains
    integer, intent(IN) :: npx, npy, npz, nestupdate
    real, intent(INOUT) :: var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag,npz)
    real, intent(INOUT) :: coarse_dat_recv(isd_p:ied_p+istag,jsd_p:jed_p+jstag,npz)
-   type(fv_atmos_type), intent(INOUT) :: parent_grid
+   type(fv_atmos_type), pointer, intent(IN) :: parent_grid
 
    integer :: i, j, k
 
@@ -2535,7 +2535,7 @@ contains
    real, intent(IN)    :: dx(isd:ied,jsd:jed+1)
    real, intent(IN)    :: dy(isd:ied+1,jsd:jed)
    logical, intent(IN) :: parent_proc, child_proc
-   type(fv_atmos_type), intent(INOUT) :: parent_grid
+   type(fv_atmos_type), pointer, intent(IN) :: parent_grid
    type(nest_domain_type), intent(INOUT) :: nest_domain
    integer, optional,      intent(IN)    :: flags, gridtype
 

@@ -612,7 +612,7 @@ module fv_arrays_mod
 #endif
 
      !points to same parent grid as does Atm%parent_grid
-     type(fv_atmos_type), pointer :: parent_grid _NULL
+     type(fv_atmos_type), pointer :: parent_grid => NULL()
 
 
      !These are for tracer flux BCs

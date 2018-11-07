@@ -106,7 +106,7 @@ contains
 #endif
 #endif
     integer, intent(INOUT) :: nest_timestep, tracer_nest_timestep
-    type(fv_atmos_type), intent(INOUT) :: parent_grid
+    type(fv_atmos_type), pointer, intent(IN) :: parent_grid
 
     type(fv_grid_type), intent(INOUT) :: gridstruct
     type(fv_flags_type), intent(INOUT) :: flagstruct
@@ -2310,7 +2310,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
     type(fv_nest_type), intent(INOUT) :: neststruct
     type(domain2d), intent(INOUT) :: domain
 
-    type(fv_atmos_type), intent(INOUT) :: parent_grid
+    type(fv_atmos_type), pointer, intent(IN) :: parent_grid
 
     real, allocatable :: t_nest(:,:,:), ps0(:,:)
     integer :: i,j,k,n
