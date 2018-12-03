@@ -309,6 +309,10 @@ contains
        stile_name = ''
     endif
 
+!!!! A NOTE about file names
+!!! file_exist() needs the full relative path, including INPUT/
+!!! But register_restart_field ONLY looks in INPUT/ and so JUST needs the file name!!
+
 !    do n = 1, ntileMe
     n = 1
        fname = 'fv_core.res'//trim(stile_name)//'.nc'
@@ -334,8 +338,8 @@ contains
                      domain=fv_domain, tile_count=n)
        call restore_state(FV_tile_restart_r)
        call free_restart_type(FV_tile_restart_r)
-       fname = 'INPUT/fv_srf_wnd.res'//trim(stile_name)//'.nc'
-       if (file_exist(fname)) then
+       fname = 'fv_srf_wnd.res'//trim(stile_name)//'.nc'
+       if (file_exist('INPUT/'//fname)) then
          call restore_state(Atm(n)%Rsf_restart)
          Atm(n)%flagstruct%srf_init = .true.
        else
@@ -345,15 +349,15 @@ contains
 
        if ( Atm(n)%flagstruct%fv_land ) then
 !--- restore data for mg_drag - if it exists
-         fname = 'INPUT/mg_drag.res'//trim(stile_name)//'.nc'
-         if (file_exist(fname)) then
+         fname = 'mg_drag.res'//trim(stile_name)//'.nc'
+         if (file_exist('INPUT/'//fname)) then
            call restore_state(Atm(n)%Mg_restart)
          else
            call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
          endif
 !--- restore data for fv_land - if it exists
-         fname = 'INPUT/fv_land.res'//trim(stile_name)//'.nc'
-         if (file_exist(fname)) then
+         fname = 'fv_land.res'//trim(stile_name)//'.nc'
+         if (file_exist('INPUT/'//fname)) then
            call restore_state(Atm(n)%Lnd_restart)
          else
            call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
@@ -361,7 +365,7 @@ contains
        endif
 
        fname = 'fv_tracer.res'//trim(stile_name)//'.nc'
-       if (file_exist('INPUT'//trim(fname))) then
+       if (file_exist('INPUT/'//fname)) then
          do nt = 1, ntprog
             call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
             call set_tracer_profile (MODEL_ATMOS, nt, q_r(isc:iec,jsc:jec,:,nt)  )
