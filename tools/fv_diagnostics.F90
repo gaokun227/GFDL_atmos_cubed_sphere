@@ -89,7 +89,11 @@ module fv_diagnostics_mod
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field
 
- integer, parameter :: nplev = 9 ! 31 ! lmh
+#ifdef FEWER_PLEVS
+ integer, parameter :: nplev = 10 ! 31 ! lmh
+#else
+ integer, parameter :: nplev = 31
+#endif
  integer :: levs(nplev)
 
  integer, parameter :: MAX_DIAG_COLUMN = 100
@@ -314,9 +318,13 @@ contains
 ! Selected pressure levels
 ! SJL note: 31 is enough here; if you need more levels you should do it OFF line
 ! do not add more to prevent the model from slowing down too much.
-    !levs = (/1,2,3,5,7,10,20,30,50,70,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,925,950,975,1000/)
-    levs = (/50,100,200,250,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
-
+#ifdef FEWER_PLEVS
+    levs = (/50,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
+#else
+    levs = (/1,2,3,5,7,10,20,30,50,70,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,925,950,975,1000/)
+#endif
+    !
+    
     id_plev = diag_axis_init('plev', levs(:)*1.0, 'mb', 'z', &
             'actual pressure level', direction=-1, set_name="dynamics")
 
@@ -1420,6 +1428,8 @@ contains
                            150., 350., bad_range, Time)
 #endif
 #endif
+         call range_check('Qv', Atm(n)%q(:,:,:,sphum), isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
+                          -1.e-8, 1.e20, bad_range, Time)
 
       endif
 
@@ -1961,19 +1971,19 @@ contains
                 k1 = -1
                 k2 = -1
                 do k=1,nplev
-                   if (abs(plevs(k)-500.) < 1.) then
+                   if (abs(levs(k)-500.) < 1.) then
                       k2 = k
                       exit
                    endif
                 enddo
                 do k=1,nplev
-                   if (abs(plevs(k)-300.) < 1.) then
+                   if (abs(levs(k)-300.) < 1.) then
                       k1 = k
                       exit
                    endif
                 enddo
                 if (k1 <= 0 .or. k2 <= 0) then
-                   call mpp_error(NOTE, "Could not find plevs for 300--500 mb mean temperature, setting to -1")
+                   call mpp_error(NOTE, "Could not find levs for 300--500 mb mean temperature, setting to -1")
                    a2 = -1.
                 else
                  do j=jsc,jec
