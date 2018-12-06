@@ -178,6 +178,7 @@ module fv_control_mod
    logical , pointer :: fill 
    logical , pointer :: fill_dp 
    logical , pointer :: fill_wz 
+   logical , pointer :: fill_gfs
    logical , pointer :: check_negative
    logical , pointer :: non_ortho 
    logical , pointer :: adiabatic 
@@ -558,7 +559,7 @@ module fv_control_mod
                          dddmp, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
                          warm_start, adjust_dry_mass, mountain, d_con, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
                          dry_mass, grid_type, do_Held_Suarez, do_reed_physics, reed_cond_only, &
-                         consv_te, fill, filter_phys, fill_dp, fill_wz, consv_am, RF_fast, &
+                         consv_te, fill, filter_phys, fill_dp, fill_wz, fill_gfs, consv_am, RF_fast, &
                          range_warn, dwind_2d, inline_q, z_tracer, reproduce_sum, adiabatic, do_vort_damp, no_dycore,   &
                          tau, tau_h2o, rf_cutoff, nf_omega, hydrostatic, fv_sg_adj, sg_cutoff, breed_vortex_inline,  &
                          na_init, nudge_dz, hybrid_z, Make_NH, n_zs_filter, nord_zs_filter, full_zs_filter, reset_eta,         &
@@ -1124,6 +1125,7 @@ module fv_control_mod
      fill                          => Atm%flagstruct%fill
      fill_dp                       => Atm%flagstruct%fill_dp
      fill_wz                       => Atm%flagstruct%fill_wz
+     fill_gfs                      => Atm%flagstruct%fill_gfs
      check_negative                => Atm%flagstruct%check_negative
      non_ortho                     => Atm%flagstruct%non_ortho
      adiabatic                     => Atm%flagstruct%adiabatic

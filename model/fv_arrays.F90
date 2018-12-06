@@ -441,6 +441,7 @@ module fv_arrays_mod
    logical :: fill = .false.
    logical :: fill_dp = .false.
    logical :: fill_wz = .false.
+   logical :: fill_gfs = .true. ! default behavior
    logical :: check_negative = .false.
    logical :: non_ortho = .true.
    logical :: moist_phys = .true.     ! Run with moist physics
