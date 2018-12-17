@@ -108,7 +108,7 @@ module fv_regional_mod
 !     integer, parameter :: jend_nest = 1290
 
       real :: current_time_in_seconds
-	  integer,save :: bc_time_interval
+	  integer :: bc_time_interval
       integer,save :: ncid,next_time_to_read_bcs,npz,ntracers
       integer,save :: liq_water_index,o3mr_index,sphum_index               !<-- Locations of tracer vbls in the tracers array
       integer,save :: bc_hour, ntimesteps_per_bc_update
@@ -255,6 +255,8 @@ contains
 !
 !-----------------------------------------------------------------------
 !
+      bc_time_interval = Atm%flagstruct%bc_update_interval ! kyc: set up bc_time_interval according to the namelist 
+
       north_bc=.false.
       south_bc=.false.
       east_bc =.false.
@@ -288,10 +290,6 @@ contains
 !-----------------------------------------------------------------------
 !
 
-      bc_time_interval = Atm%flagstruct%bc_update_interval ! kyc: set up bc_time_interval based on namelist 
-	  
-	  
-	  
       ntracers=Atm%ncnst                                                   !<-- # of advected tracers
       npz=Atm%npz                                                          !<-- # of layers in vertical configuration of integration
       klev_out=npz
