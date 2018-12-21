@@ -57,6 +57,7 @@ module fv_io_mod
 
   use fv_mp_mod,               only: ng, mp_gather, is_master
   use fms_io_mod,              only: set_domain
+  use fv_treat_da_inc_mod,     only: read_da_inc
 
   implicit none
   private
@@ -258,6 +259,7 @@ contains
     real, allocatable:: q_r(:,:,:,:), qdiag_r(:,:,:,:)
 !-------------------------------------------------------------------------
     integer npz, npz_rst, ng
+    integer i,j,k
 
     npz     = Atm(1)%npz       ! run time z dimension
     npz_rst = Atm(1)%flagstruct%npz_rst   ! restart z dimension
@@ -384,6 +386,19 @@ contains
          call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
        endif
 
+!      ====== PJP added DA functionality ======
+       if (Atm(n)%flagstruct%read_increment) then
+          ! print point in middle of domain for a sanity check
+          i = (isc + iec)/2
+          j = (jsc + jec)/2
+          k = npz_rst/2
+          if( is_master() ) write(*,*) 'Calling read_da_inc',pt_r(i,j,k)
+          call read_da_inc(Atm(n), Atm(n)%domain, Atm(n)%bd, npz_rst, ntprog, &
+               u_r, v_r, q_r, delp_r, pt_r, isc, jsc, iec, jec )
+          if( is_master() ) write(*,*) 'Back from read_da_inc',pt_r(i,j,k)
+       endif
+!      ====== end PJP added DA functionailty======
+       
        call rst_remap(npz_rst, npz, isc, iec, jsc, jec, isd, ied, jsd, jed, ntracers, ntprog,      &
                       delp_r,      u_r,      v_r,      w_r,      delz_r,      pt_r,  q_r,  qdiag_r,&
                       Atm(n)%delp, Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%delz, Atm(n)%pt, Atm(n)%q, & 

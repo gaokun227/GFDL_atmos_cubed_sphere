@@ -61,12 +61,21 @@ contains
   !> @brief description
   !> @author Xi.Chen <xi.chen@noaa.gov>
   !> @date 02/12/2016
-  subroutine read_da_inc(Atm, fv_domain)
-    type(fv_atmos_type), intent(inout) :: Atm(:)
-    type(domain2d),      intent(inout) :: fv_domain
-    ! local
-    integer :: nq
 
+  !> Do NOT Have delz increment available yet
+  !> EMC reads in delz increments but does NOT use them!!
+  subroutine read_da_inc(Atm, fv_domain, bd, npz_in, nq, u, v, q, delp, pt, is_in, js_in, ie_in, je_in )
+    type(fv_atmos_type),       intent(inout) :: Atm
+    type(domain2d),            intent(inout) :: fv_domain
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer,                   intent(IN) :: npz_in, nq, is_in, js_in, ie_in, je_in
+    real, intent(inout), dimension(is_in:ie_in,  js_in:je_in+1,npz_in):: u  ! D grid zonal wind (m/s)
+    real, intent(inout), dimension(is_in:ie_in+1,js_in:je_in  ,npz_in):: v  ! D grid meridional wind (m/s)
+    real, intent(inout) :: delp(is_in:ie_in  ,js_in:je_in  ,npz_in)  ! pressure thickness (pascal)
+    real, intent(inout) :: pt(  is_in:ie_in  ,js_in:je_in  ,npz_in)  ! temperature (K)
+    real, intent(inout) :: q(   is_in:ie_in  ,js_in:je_in  ,npz_in, nq)  ! 
+
+    ! local
     real :: deg2rad
     character(len=128) :: fname
     real(kind=4), allocatable:: wk1(:), wk2(:,:), wk3(:,:,:)
@@ -75,17 +84,17 @@ contains
     real, dimension(:,:,:), allocatable:: u_inc, v_inc, ud_inc, vd_inc
     real, allocatable:: lat(:), lon(:)
     real, allocatable:: pt_c(:,:,:), pt_d(:,:,:)
-    real:: s2c(Atm(1)%bd%is:Atm(1)%bd%ie,Atm(1)%bd%js:Atm(1)%bd%je,4)
-    real:: s2c_c(Atm(1)%bd%is:Atm(1)%bd%ie+1,Atm(1)%bd%js:Atm(1)%bd%je,4)
-    real:: s2c_d(Atm(1)%bd%is:Atm(1)%bd%ie,Atm(1)%bd%js:Atm(1)%bd%je+1,4)
-    integer, dimension(Atm(1)%bd%is:Atm(1)%bd%ie,Atm(1)%bd%js:Atm(1)%bd%je):: &
+    real:: s2c(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,4)
+    real:: s2c_c(Atm%bd%is:Atm%bd%ie+1,Atm%bd%js:Atm%bd%je,4)
+    real:: s2c_d(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je+1,4)
+    integer, dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je):: &
         id1, id2, jdc
-    integer, dimension(Atm(1)%bd%is:Atm(1)%bd%ie+1,Atm(1)%bd%js:Atm(1)%bd%je)::&
+    integer, dimension(Atm%bd%is:Atm%bd%ie+1,Atm%bd%js:Atm%bd%je)::&
         id1_c, id2_c, jdc_c
-    integer, dimension(Atm(1)%bd%is:Atm(1)%bd%ie,Atm(1)%bd%js:Atm(1)%bd%je+1)::&
+    integer, dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je+1)::&
         id1_d, id2_d, jdc_d
 
-    integer:: i, j, k, im, jm, km, npz, npt
+    integer:: i, j, k, im, jm, km, npt
     integer:: i1, i2, j1, ncid
     integer:: jbeg, jend
     integer tsize(3)
@@ -97,20 +106,18 @@ contains
     integer :: isd, ied, jsd, jed
     integer :: sphum, liq_wat, o3mr
 
-    is  = Atm(1)%bd%is
-    ie  = Atm(1)%bd%ie
-    js  = Atm(1)%bd%js
-    je  = Atm(1)%bd%je
-    isd = Atm(1)%bd%isd
-    ied = Atm(1)%bd%ied
-    jsd = Atm(1)%bd%jsd
-    jed = Atm(1)%bd%jed
+    is  = Atm%bd%is
+    ie  = Atm%bd%ie
+    js  = Atm%bd%js
+    je  = Atm%bd%je
+    isd = Atm%bd%isd
+    ied = Atm%bd%ied
+    jsd = Atm%bd%jsd
+    jed = Atm%bd%jed
 
     deg2rad = pi/180.
 
-    npz = Atm(1)%npz
-
-    fname = 'INPUT/'//Atm(1)%flagstruct%res_latlon_dynamics
+    fname = 'INPUT/'//Atm%flagstruct%res_latlon_dynamics
 
     if( file_exist(fname) ) then
       call open_ncfile( fname, ncid )        ! open the file
@@ -120,10 +127,10 @@ contains
 
       im = tsize(1); jm = tsize(2); km = tsize(3)
 
-      if (km.ne.npz) then
+      if (km.ne.npz_in) then
         if (is_master()) print *, 'km = ', km
         call mpp_error(FATAL, &
-            '==> Error in read_da_inc: km is not equal to npz')
+            '==> Error in read_da_inc: km is not equal to npz_in')
       endif
 
       if(is_master())  write(*,*) fname, ' DA increment dimensions:', tsize
@@ -150,7 +157,7 @@ contains
     ! Initialize lat-lon to Cubed bi-linear interpolation coeff:
     call remap_coef( is, ie, js, je, isd, ied, jsd, jed, &
         im, jm, lon, lat, id1, id2, jdc, s2c, &
-        Atm(1)%gridstruct%agrid)
+        Atm%gridstruct%agrid)
 
     ! Find bounding latitudes:
     jbeg = jm-1;         jend = 2
@@ -170,11 +177,11 @@ contains
     allocate ( wk3(1:im,jbeg:jend, 1:km) )
     allocate (  tp(is:ie,js:je,km) )
 
-    call apply_inc_on_3d_scalar('T_inc',Atm(1)%pt)
-    call apply_inc_on_3d_scalar('delp_inc',Atm(1)%delp)
-    call apply_inc_on_3d_scalar('sphum_inc',Atm(1)%q(:,:,:,sphum))
-    call apply_inc_on_3d_scalar('liq_wat_inc',Atm(1)%q(:,:,:,liq_wat))
-    call apply_inc_on_3d_scalar('o3mr_inc',Atm(1)%q(:,:,:,o3mr))
+    call apply_inc_on_3d_scalar('T_inc',pt, is_in, js_in, ie_in, je_in)
+    call apply_inc_on_3d_scalar('delp_inc',delp, is_in, js_in, ie_in, je_in)
+    call apply_inc_on_3d_scalar('sphum_inc',q(:,:,:,sphum), is_in, js_in, ie_in, je_in)
+    call apply_inc_on_3d_scalar('liq_wat_inc',q(:,:,:,liq_wat), is_in, js_in, ie_in, je_in)
+    call apply_inc_on_3d_scalar('o3mr_inc',q(:,:,:,o3mr), is_in, js_in, ie_in, je_in)
 
     deallocate ( tp )
     deallocate ( wk3 )
@@ -188,7 +195,7 @@ contains
     call get_staggered_grid( &
         is, ie, js, je, &
         isd, ied, jsd, jed, &
-        Atm(1)%gridstruct%grid, pt_c, pt_d)
+        Atm%gridstruct%grid, pt_c, pt_d)
 
     !------ pt_c part ------
     ! Initialize lat-lon to Cubed bi-linear interpolation coeff:
@@ -228,14 +235,14 @@ contains
                          s2c_c(i,j,2)*wk3_v(i2,j1  ,k) + &
                          s2c_c(i,j,3)*wk3_v(i2,j1+1,k) + &
                          s2c_c(i,j,4)*wk3_v(i1,j1+1,k)
-          p1(:) = Atm(1)%gridstruct%grid(i,j  ,1:2)
-          p2(:) = Atm(1)%gridstruct%grid(i,j+1,1:2)
+          p1(:) = Atm%gridstruct%grid(i,j  ,1:2)
+          p2(:) = Atm%gridstruct%grid(i,j+1,1:2)
           call  mid_pt_sphere(p1, p2, p3)
           call get_unit_vect2(p1, p2, e2)
           call get_latlon_vector(p3, ex, ey)
           vd_inc(i,j,k) = u_inc(i,j,k)*inner_prod(e2,ex) + &
                           v_inc(i,j,k)*inner_prod(e2,ey)
-          Atm(1)%v(i,j,k) = Atm(1)%v(i,j,k) + vd_inc(i,j,k)
+          v(i,j,k) = v(i,j,k) + vd_inc(i,j,k)
         enddo
       enddo
     enddo
@@ -281,14 +288,14 @@ contains
                          s2c_d(i,j,2)*wk3_v(i2,j1  ,k) + &
                          s2c_d(i,j,3)*wk3_v(i2,j1+1,k) + &
                          s2c_d(i,j,4)*wk3_v(i1,j1+1,k)
-          p1(:) = Atm(1)%gridstruct%grid(i,  j,1:2)
-          p2(:) = Atm(1)%gridstruct%grid(i+1,j,1:2)
+          p1(:) = Atm%gridstruct%grid(i,  j,1:2)
+          p2(:) = Atm%gridstruct%grid(i+1,j,1:2)
           call  mid_pt_sphere(p1, p2, p3)
           call get_unit_vect2(p1, p2, e1)
           call get_latlon_vector(p3, ex, ey)
           ud_inc(i,j,k) = u_inc(i,j,k)*inner_prod(e1,ex) + &
                           v_inc(i,j,k)*inner_prod(e1,ey)
-          Atm(1)%u(i,j,k) = Atm(1)%u(i,j,k) + ud_inc(i,j,k)
+          u(i,j,k) = u(i,j,k) + ud_inc(i,j,k)
         enddo
       enddo
     enddo
@@ -297,11 +304,11 @@ contains
     deallocate ( wk3_u, wk3_v )
 
 !rab The following is not necessary as ua/va will be re-calculated during model startup
-!rab    call cubed_to_latlon(Atm(1)%u, Atm(1)%v, Atm(1)%ua, Atm(1)%va, &
-!rab        Atm(1)%gridstruct, Atm(1)%flagstruct%npx, Atm(1)%flagstruct%npy, &
-!rab        Atm(1)%flagstruct%npz, 1, Atm(1)%gridstruct%grid_type, &
-!rab        fv_domain, Atm(1)%gridstruct%nested, &
-!rab        Atm(1)%flagstruct%c2l_ord, Atm(1)%bd)
+!rab    call cubed_to_latlon(Atm%u, Atm%v, Atm%ua, Atm%va, &
+!rab        Atm%gridstruct, Atm%flagstruct%npx, Atm%flagstruct%npy, &
+!rab        Atm%flagstruct%npz, 1, Atm%gridstruct%grid_type, &
+!rab        fv_domain, Atm%gridstruct%nested, &
+!rab        Atm%flagstruct%c2l_ord, Atm%bd)
 
     !------ winds clean up ------
     deallocate ( pt_c, pt_d, ud_inc, vd_inc )
@@ -310,12 +317,14 @@ contains
 
   contains
     !---------------------------------------------------------------------------
-    subroutine apply_inc_on_3d_scalar(field_name,var)
+    subroutine apply_inc_on_3d_scalar(field_name,var, is_in, js_in, ie_in, je_in)
       character(len=*), intent(in) :: field_name
-      real, dimension(isd:ied,jsd:jed,1:km), intent(inout) :: var
+      integer, intent(IN) :: is_in, js_in, ie_in, je_in
+      real, dimension(is_in:ie_in,js_in:je_in,1:km), intent(inout) :: var
 
+      if (is_master()) print*, 'Reading increments ', field_name
       call get_var3_r4( ncid, field_name, 1,im, jbeg,jend, 1,km, wk3 )
-      print*,trim(field_name),'before=',var(4,4,30)
+      if (is_master()) print*,trim(field_name),'before=',var(4,4,30)
 
       do k=1,km
         do j=js,je
@@ -329,7 +338,7 @@ contains
           enddo
         enddo
       enddo
-      print*,trim(field_name),'after=',var(4,4,30),tp(4,4,30)
+      if (is_master()) print*,trim(field_name),'after=',var(4,4,30),tp(4,4,30)
 
     end subroutine apply_inc_on_3d_scalar
     !---------------------------------------------------------------------------
