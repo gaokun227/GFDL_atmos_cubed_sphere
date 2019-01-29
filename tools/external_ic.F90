@@ -45,7 +45,7 @@ module external_ic_mod
    use fv_diagnostics_mod,only: prt_maxmin, prt_gb_nh_sh, prt_height
    use fv_grid_utils_mod, only: ptop_min, g_sum,mid_pt_sphere,get_unit_vect2,get_latlon_vector,inner_prod
    use fv_io_mod,         only: fv_io_read_tracers
-   use fv_mapz_mod,       only: mappm
+   use fv_mapz_mod,       only: mappm, map_scalar
    use fv_regional_mod,   only: dump_field, H_STAGGER, U_STAGGER, V_STAGGER
    use fv_mp_mod,         only: ng, is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
    use fv_regional_mod,   only: start_regional_cold_start
@@ -772,9 +772,9 @@ contains
       type(domain2d),      intent(inout) :: fv_domain
 ! local:
       real, dimension(:), allocatable:: ak, bk
-      real, dimension(:,:), allocatable:: wk2, ps, oro_g
+      real, dimension(:,:), allocatable:: wk2, oro_g
       real, dimension(:,:,:), allocatable:: ud, vd, u_w, v_w, u_s, v_s, w, t
-      real, dimension(:,:,:), allocatable:: zh(:,:,:)  ! 3D height at 65 edges
+      real, dimension(:,:,:), allocatable:: zh, pe  ! 3D height at 65 edges
       real, dimension(:,:,:,:), allocatable:: q
       real, dimension(:,:), allocatable :: phis_coarse ! lmh
       real rdg, wt, qt, m_fac, pe1
@@ -792,7 +792,7 @@ contains
       logical :: remap
       logical :: filtered_terrain = .true.
       logical :: gfs_dwinds = .true.
-      integer :: levp = 51
+      integer :: levp = 50
       logical :: checker_tr = .false.
       integer :: nt_checker = 0
       real(kind=R_GRID), dimension(2):: p1, p2, p3
@@ -892,8 +892,8 @@ contains
       endif
       call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using tiled data file '//trim(fn_gfs_ics)//' for NGGPS IC')
 
-      allocate (zh(is:ie,js:je,levp+1))   ! SJL
-      allocate (ps(is:ie,js:je))
+      allocate (zh(is:ie,js:je,levp+1))
+	  allocate (pe(is:ie,js:je,levp+1))
       allocate (w(is:ie,js:je,levp))
 	  allocate (t(is:ie,js:je,levp))
       allocate (q (is:ie,js:je,levp,ntracers))
@@ -944,7 +944,7 @@ contains
         endif
 
         ! surface pressure (Pa)
-        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'ps', ps, domain=Atm(n)%domain)
+        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'pe', pe, domain=Atm(n)%domain)
 
         ! physical temperature (K)
         id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'pt', t, domain=Atm(n)%domain)
@@ -995,26 +995,10 @@ contains
         ! multiply NCEP ICs terrain 'phis' by gravity to be true geopotential
         Atm(n)%phis = Atm(n)%phis*grav
 
-        ! set the pressure levels and ptop to be used
-        ! else eta is set in grid_init
-        if (Atm(1)%flagstruct%external_eta) then
-          itoa = levp - npz + 1
-          Atm(n)%ptop = ak(itoa)
-          Atm(n)%ak(1:npz+1) = ak(itoa:levp+1)
-          Atm(n)%bk(1:npz+1) = bk(itoa:levp+1)
-          call set_external_eta (Atm(n)%ak, Atm(n)%bk, Atm(n)%ptop, Atm(n)%ks)
-!!$        else
-!!$          if ( (npz == 63 .or. npz == 64) .and. len(trim(Atm(n)%flagstruct%npz_type)) == 0 ) then
-!!$             if (is_master()) print*, 'Using default GFS levels'
-!!$             Atm(n)%ak(:) = ak_sj(:)
-!!$             Atm(n)%bk(:) = bk_sj(:)
-!!$             Atm(n)%ptop = Atm(n)%ak(1)
-!!$          else
-!!$             call set_eta(npz, ks, Atm(n)%ptop, Atm(n)%ak, Atm(n)%bk, Atm(n)%flagstruct%npz_type)
-!!$          endif
-        endif
-        ! call vertical remapping algorithms
-        if(is_master())  write(*,*) 'GFS ak(1)=', ak(1), ' ak(2)=', ak(2)
+
+
+
+        if(is_master())  write(*,*) 'HRRRv3 ak(1)=', ak(1), ' ak(2)=', ak(2)
         ak(1) = max(1.e-9, ak(1))
 
 !***  For regional runs read in each of the BC variables from the NetCDF boundary file
@@ -1033,7 +1017,7 @@ contains
 !
 !***  Remap the variables in the compute domain.
 !
-        call remap_scalar_nh(Atm(n), levp, npz, ntracers, ak, bk, ps, q, zh, w, t)
+        call remap_scalar_nh(Atm(n), levp, npz, ntracers, pe, q, zh, w, t)
 
         allocate ( ud(is:ie,  js:je+1, 1:levp) )
         allocate ( vd(is:ie+1,js:je,   1:levp) )
@@ -1067,7 +1051,7 @@ contains
         deallocate ( u_s )
         deallocate ( v_s )
 
-        call remap_dwinds(levp, npz, ak, bk, ps, ud, vd, Atm(n))
+        call remap_dwinds(levp, npz, ak, bk, pe(:,:,levp+1), ud, vd, Atm(n))
         deallocate ( ud )
         deallocate ( vd )
 
@@ -1193,13 +1177,13 @@ contains
 
       deallocate (ak)
       deallocate (bk)
-      deallocate (ps)
       deallocate (q )
 	  deallocate (t )
-	  deallocate (zh )
+	  deallocate (zh)
+	  deallocate (pe)
 
-  end subroutine get_hrrrv3_ic
-!------------------------------------------------------------------
+
+  end subroutine get_hrrrv3_ic!------------------------------------------------------------------
 !------------------------------------------------------------------
   subroutine get_ncep_ic( Atm, fv_domain, nq )
       type(fv_atmos_type), intent(inout) :: Atm(:)
@@ -2656,11 +2640,11 @@ contains
 
  end subroutine remap_coef
 
- subroutine remap_scalar_nh(Atm, km, npz, ncnst, ak0, bk0, psc, qa, zh, w, t)
+
+ subroutine remap_scalar_nh(Atm, km, npz, ncnst, pe, qa, zh, w, t)
   type(fv_atmos_type), intent(inout) :: Atm
   integer, intent(in):: km, npz, ncnst
-  real,    intent(in):: ak0(km+1), bk0(km+1)
-  real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je):: psc
+  real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km+1):: pe
   real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km):: w
   real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km):: t
   real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km,ncnst):: qa
@@ -2727,13 +2711,13 @@ contains
 
 !$OMP parallel do default(none) &
 !$OMP             shared(sphum,liq_wat,rainwat,ice_wat,snowwat,graupel,&
-!$OMP                    cld_amt,ncnst,npz,is,ie,js,je,km,k2,ak0,bk0,psc,zh,w,qa,Atm,z500,t) &
+!$OMP                    cld_amt,ncnst,npz,is,ie,js,je,km,k2,pe,zh,w,qa,Atm,z500,t) &
 !$OMP             private(l,m,pst,pn,gz,pe0,pn0,pe1,pn1,dp2,qp,qn1,gz_fv)
 
   do 5000 j=js,je
      do k=1,km+1
         do i=is,ie
-           pe0(i,k) = ak0(k) + bk0(k)*psc(i,j)
+           pe0(i,k) = pe(i,j,k)
            pn0(i,k) = log(pe0(i,k))
         enddo
      enddo
@@ -2813,17 +2797,23 @@ contains
          enddo
       enddo
 
-      do k=1,km
-         do i=is,ie
-            qp(i,k) = t(i,j,k)
-         enddo
-      enddo
-      call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, 1, 8, Atm%ptop)
-      do k=1,npz
-         do i=is,ie
-            atm%pt(i,j,k) = qn1(i,k)
-         enddo
-      enddo
+!      do k=1,km
+!         do i=is,ie
+!            qp(i,k) = t(i,j,k)
+!         enddo
+!      enddo
+!      call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, 1, 8, Atm%ptop)
+!      do k=1,npz
+!         do i=is,ie
+!            atm%pt(i,j,k) = qn1(i,k)
+!         enddo
+!      enddo
+
+      call map_scalar(km,  REAL(pn0), t, t(:,j,km),   &
+                      npz, REAL(pn1), atm%pt, &
+                      is, ie, j, Atm%bd%isd, Atm%bd%ied, Atm%bd%jsd, Atm%bd%jed, 1, 8, 184.)
+
+     if (is_master()) write(*,*) atm%pt(is,:)
 
 !---------------------------------------------------
 ! Retrive temperature using  geopotential height from external data
@@ -2948,7 +2938,7 @@ contains
             qp(i,k) = w(i,j,k)
          enddo
       enddo
-      call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, -1, 4, Atm%ptop)
+      call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, -2, 11, Atm%ptop)
       do k=1,npz
          do i=is,ie
             atm%w(i,j,k) = qn1(i,k)
@@ -2979,16 +2969,10 @@ contains
   enddo
   call pmaxmn('ZS_diff (m)', wk, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
 
-  if (.not.Atm%gridstruct%bounded_domain) then
-      call prt_gb_nh_sh('DATA_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
-      if ( .not. Atm%flagstruct%hydrostatic )  &
-      call prt_height('fv3_IC Z500', is,ie, js,je, 3, npz, 500.E2, Atm%phis, Atm%delz, Atm%peln,   &
-                      Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
-  endif
 
   do j=js,je
      do i=is,ie
-        wk(i,j) = Atm%ps(i,j) - psc(i,j)
+        wk(i,j) = Atm%ps(i,j) - pe(i,j,km+1)
      enddo
   enddo
   call pmaxmn('PS_diff (mb)', wk, is, ie, js, je, 1, 0.01, Atm%gridstruct%area_64, Atm%domain)
@@ -2996,7 +2980,6 @@ contains
   if (is_master()) write(*,*) 'done remap_scalar'
 
  end subroutine remap_scalar_nh
-
 
  subroutine remap_scalar(Atm, km, npz, ncnst, ak0, bk0, psc, qa, zh, omga)
   type(fv_atmos_type), intent(inout) :: Atm
