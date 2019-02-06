@@ -782,7 +782,7 @@ contains
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
       integer :: ios, ierr, unit, id_res
-      type (restart_file_type) :: ORO_restart, SFC_restart, GFS_restart
+      type (restart_file_type) :: ORO_restart, SFC_restart, HRRR_restart
       character(len=6)  :: gn, stile_name
       character(len=64) :: tracer_name
       character(len=64) :: fn_gfs_ctl = 'gfs_ctrl.nc'
@@ -802,8 +802,8 @@ contains
       namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds, &
                                  checker_tr, nt_checker
 
-      call mpp_error(NOTE,'Using external_IC::get_nggps_ic which is valid only for data which has been &
-                          &horizontally interpolated to the current cubed-sphere grid')
+      call mpp_error(NOTE,'Using external_IC::get_hrrrv3_ic which is valid only for data which has been &
+                          &horizontally interpolated to the current lambert grid')
 #ifdef INTERNAL_FILE_NML
       read (input_nml_file,external_ic_nml,iostat=ios)
       ierr = check_nml_error(ios,'external_ic_nml')
@@ -815,24 +815,24 @@ contains
 #endif
 
       unit = stdlog()
-      call write_version_number ( 'EXTERNAL_IC_MOD::get_nggps_ic', version )
+      call write_version_number ( 'EXTERNAL_IC_MOD::get_hrrrv3_ic', version )
       write(unit, nml=external_ic_nml)
 
       remap = .true.
       if (Atm(1)%flagstruct%external_eta) then
         if (filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_nggps_ic -  use externally-generated, filtered terrain &
+          call mpp_error(NOTE,'External_IC::get_hrrrv3_ic -  use externally-generated, filtered terrain &
                               &and NCEP pressure levels (no vertical remapping)')
         else if (.not. filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_nggps_ic -  use externally-generated, raw terrain &
+          call mpp_error(NOTE,'External_IC::get_hrrrv3_ic -  use externally-generated, raw terrain &
                               &and NCEP pressure levels (no vertical remapping)')
         endif
       else  ! (.not.external_eta)
         if (filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_nggps_ic -  use externally-generated, filtered terrain &
+          call mpp_error(NOTE,'External_IC::get_hrrrv3_ic -  use externally-generated, filtered terrain &
                               &and FV3 pressure levels (vertical remapping)')
         else if (.not. filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_nggps_ic -  use externally-generated, raw terrain &
+          call mpp_error(NOTE,'External_IC::get_hrrrv3_ic -  use externally-generated, raw terrain &
                               &and FV3 pressure levels (vertical remapping)')
         endif
       endif
@@ -859,13 +859,13 @@ contains
 
 !--- test for existence of the GFS control file
       if (.not. file_exist('INPUT/'//trim(fn_gfs_ctl), no_domain=.TRUE.)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_nggps_ic: file '//trim(fn_gfs_ctl)//' for NGGPS IC does not exist')
+        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv3_ic: file '//trim(fn_gfs_ctl)//' for NGGPS IC does not exist')
       endif
-      call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using control file '//trim(fn_gfs_ctl)//' for NGGPS IC')
+      call mpp_error(NOTE,'==> External_ic::get_hrrrv3_ic: using control file '//trim(fn_gfs_ctl)//' for NGGPS IC')
 
 !--- read in the number of tracers in the NCEP NGGPS ICs
       call read_data ('INPUT/'//trim(fn_gfs_ctl), 'ntrac', ntrac, no_domain=.TRUE.)
-      if (ntrac > ntracers) call mpp_error(FATAL,'==> External_ic::get_nggps_ic: more NGGPS tracers &
+      if (ntrac > ntracers) call mpp_error(FATAL,'==> External_ic::get_hrrrv3_ic: more NGGPS tracers &
                                  &than defined in field_table '//trim(fn_gfs_ctl)//' for NGGPS IC')
 
 !--- read in ak and bk from the gfs control file using fms_io read_data ---
@@ -893,7 +893,7 @@ contains
       call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using tiled data file '//trim(fn_gfs_ics)//' for NGGPS IC')
 
       allocate (zh(is:ie,js:je,levp+1))
-	  allocate (pe(is:ie,js:je,levp+1))
+	  allocate (pe(is-1:ie+1,js-1:je+1,levp+1))
       allocate (w(is:ie,js:je,levp))
 	  allocate (t(is:ie,js:je,levp))
       allocate (q (is:ie,js:je,levp,ntracers))
@@ -943,31 +943,31 @@ contains
           id_res = register_restart_field (ORO_restart, fn_oro_ics, 'land_frac', Atm(n)%oro, domain=Atm(n)%domain)
         endif
 
-        ! surface pressure (Pa)
-        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'pe', pe, domain=Atm(n)%domain)
+        ! edge pressure (Pa)
+        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'pe', pe(is:ie,js:je,:), domain=Atm(n)%domain)
 
         ! physical temperature (K)
-        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'pt', t, domain=Atm(n)%domain)
+        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'pt', t, domain=Atm(n)%domain)
 
         ! D-grid west  face tangential wind component (m/s)
-        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'u_w', u_w, domain=Atm(n)%domain,position=EAST)
+        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'u_w', u_w, domain=Atm(n)%domain,position=EAST)
         ! D-grid west  face normal wind component (m/s)
-        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'v_w', v_w, domain=Atm(n)%domain,position=EAST)
+        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'v_w', v_w, domain=Atm(n)%domain,position=EAST)
         ! D-grid south face tangential wind component (m/s)
-        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'u_s', u_s, domain=Atm(n)%domain,position=NORTH)
+        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'u_s', u_s, domain=Atm(n)%domain,position=NORTH)
         ! D-grid south face normal wind component (m/s)
-        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'v_s', v_s, domain=Atm(n)%domain,position=NORTH)
+        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'v_s', v_s, domain=Atm(n)%domain,position=NORTH)
 
 
         ! vertical velocity (m/s)
-        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'w', w, domain=Atm(n)%domain)
+        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'w', w, domain=Atm(n)%domain)
         ! GFS grid height at edges (including surface height)
-        id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'ZH', zh, domain=Atm(n)%domain)
+        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'ZH', zh, domain=Atm(n)%domain)
 
         ! prognostic tracers
         do nt = 1, ntracers
           call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
-          id_res = register_restart_field (GFS_restart, fn_gfs_ics, trim(tracer_name), q(:,:,:,nt), &
+          id_res = register_restart_field (HRRR_restart, fn_gfs_ics, trim(tracer_name), q(:,:,:,nt), &
                                            mandatory=.false.,domain=Atm(n)%domain)
         enddo
 
@@ -983,23 +983,7 @@ contains
           call set_tracer_profile (MODEL_ATMOS, nt, Atm(n)%qdiag(:,:,:,nt)  )
         enddo
 
-        ! read in the restart
-        call restore_state (ORO_restart)
-        call restore_state (SFC_restart)
-        call restore_state (GFS_restart)
-        ! free the restart type to be re-used by the nest
-        call free_restart_type(ORO_restart)
-        call free_restart_type(SFC_restart)
-        call free_restart_type(GFS_restart)
 
-        ! multiply NCEP ICs terrain 'phis' by gravity to be true geopotential
-        Atm(n)%phis = Atm(n)%phis*grav
-
-
-
-
-        if(is_master())  write(*,*) 'HRRRv3 ak(1)=', ak(1), ' ak(2)=', ak(2)
-        ak(1) = max(1.e-9, ak(1))
 
 !***  For regional runs read in each of the BC variables from the NetCDF boundary file
 !***  and remap in the vertical from the input levels to the model integration levels.
@@ -1012,12 +996,38 @@ contains
           call start_regional_cold_start(Atm(1), ak, bk, levp, &
                                          is, ie, js, je, &
                                          isd, ied, jsd, jed )
+
+          do i = is-1,ie+1
+          do k = 1,npz+1
+          do j = js-1,je+1
+            pe(i,j,k) = Atm(1)%pe(i,k,j)
+          enddo
+          enddo
+          enddo
         endif
+
+
+        ! read in the restart
+        call restore_state (ORO_restart)
+        call restore_state (SFC_restart)
+        call restore_state (HRRR_restart)
+        ! free the restart type to be re-used by the nest
+        call free_restart_type(ORO_restart)
+        call free_restart_type(SFC_restart)
+        call free_restart_type(HRRR_restart)
+
+
+        ! multiply static terrain 'phis' by gravity to be true geopotential
+        Atm(n)%phis = Atm(n)%phis*grav
+
+
+        if(is_master())  write(*,*) 'HRRRv3 ak(1)=', ak(1), ' ak(2)=', ak(2)
+        ak(1) = max(1.e-9, ak(1))
 
 !
 !***  Remap the variables in the compute domain.
 !
-        call remap_scalar_nh(Atm(n), levp, npz, ntracers, pe, q, zh, w, t)
+        call remap_scalar_nh(Atm(n), levp, npz, ntracers, pe(is:ie,js:je,:), q, zh, w, t)
 
         allocate ( ud(is:ie,  js:je+1, 1:levp) )
         allocate ( vd(is:ie+1,js:je,   1:levp) )
@@ -1051,7 +1061,8 @@ contains
         deallocate ( u_s )
         deallocate ( v_s )
 
-        call remap_dwinds(levp, npz, ak, bk, pe(:,:,levp+1), ud, vd, Atm(n))
+        !call remap_dwinds(levp, npz, ak, bk, Atm(n)%ps(is:ie,js:je), ud, vd, Atm(n))
+        call remap_dwinds_nh(levp, npz, pe(is-1:ie+1,js-1:je+1,:), ud, vd, Atm(n))
         deallocate ( ud )
         deallocate ( vd )
 
@@ -1183,7 +1194,8 @@ contains
 	  deallocate (pe)
 
 
-  end subroutine get_hrrrv3_ic!------------------------------------------------------------------
+  end subroutine get_hrrrv3_ic
+!------------------------------------------------------------------
 !------------------------------------------------------------------
   subroutine get_ncep_ic( Atm, fv_domain, nq )
       type(fv_atmos_type), intent(inout) :: Atm(:)
@@ -2743,17 +2755,17 @@ contains
         enddo
 123     Atm%ps(i,j) = exp(pst)
 
-! ------------------
-! Find 500-mb height
-! ------------------
-        pst = log(500.e2)
-        do k=km+k2-1, 2, -1
-          if( pst.le.pn(k+1) .and. pst.ge.pn(k) ) then
-              z500(i,j) = (gz(k+1) + (gz(k)-gz(k+1))*(pn(k+1)-pst)/(pn(k+1)-pn(k)))/grav
-              go to 124
-          endif
-        enddo
-124     continue
+!! ------------------
+!! Find 500-mb height
+!! ------------------
+!        pst = log(500.e2)
+!        do k=km+k2-1, 2, -1
+!          if( pst.le.pn(k+1) .and. pst.ge.pn(k) ) then
+!              z500(i,j) = (gz(k+1) + (gz(k)-gz(k+1))*(pn(k+1)-pst)/(pn(k+1)-pn(k)))/grav
+!              go to 124
+!          endif
+!        enddo
+!124     continue
 
      enddo   ! i-loop
 
@@ -2797,23 +2809,21 @@ contains
          enddo
       enddo
 
-!      do k=1,km
-!         do i=is,ie
-!            qp(i,k) = t(i,j,k)
-!         enddo
-!      enddo
-!      call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, 1, 8, Atm%ptop)
-!      do k=1,npz
-!         do i=is,ie
-!            atm%pt(i,j,k) = qn1(i,k)
-!         enddo
-!      enddo
+      do k=1,km
+         do i=is,ie
+            qp(i,k) = t(i,j,k)
+         enddo
+      enddo
+      call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, 1, 8, Atm%ptop)
+      do k=1,npz
+         do i=is,ie
+            atm%pt(i,j,k) = qn1(i,k)
+         enddo
+      enddo
 
-      call map_scalar(km,  REAL(pn0), t, t(:,j,km),   &
-                      npz, REAL(pn1), atm%pt, &
-                      is, ie, j, Atm%bd%isd, Atm%bd%ied, Atm%bd%jsd, Atm%bd%jed, 1, 8, 184.)
-
-     if (is_master()) write(*,*) atm%pt(is,:)
+!      call map_scalar(km,  REAL(pn0), t, t(:,j,km),   &
+!                      npz, REAL(pn1), atm%pt, &
+!                      is, ie, j, Atm%bd%isd, Atm%bd%ied, Atm%bd%jsd, Atm%bd%jed, 1, 8, 184.)
 
 !---------------------------------------------------
 ! Retrive temperature using  geopotential height from external data
@@ -2871,6 +2881,7 @@ contains
       if ( .not. Atm%flagstruct%hydrostatic ) then
          do k=1,npz
             Atm%delz(i,j,k) = (gz_fv(k+1) - gz_fv(k)) / grav
+            !Atm%delz(i,j,k) = rdgas / grav * atm%pt(i,j,k)
          enddo
       endif
 
@@ -2977,7 +2988,7 @@ contains
   enddo
   call pmaxmn('PS_diff (mb)', wk, is, ie, js, je, 1, 0.01, Atm%gridstruct%area_64, Atm%domain)
 
-  if (is_master()) write(*,*) 'done remap_scalar'
+  if (is_master()) write(*,*) 'done remap_scalar_nh'
 
  end subroutine remap_scalar_nh
 
@@ -3440,6 +3451,95 @@ contains
   endif
 
  end subroutine mp_auto_conversion
+
+ subroutine remap_dwinds_nh(km, npz, pec, ud, vd, Atm)
+  type(fv_atmos_type), intent(inout) :: Atm
+  integer, intent(in):: km, npz
+  real,    intent(in):: pec(Atm%bd%is-1:Atm%bd%ie+1,Atm%bd%js-1:Atm%bd%je+1, km+1)
+  real,    intent(in)::  ud(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je+1,km)
+  real,    intent(in)::  vd(Atm%bd%is:Atm%bd%ie+1,Atm%bd%js:Atm%bd%je,km)
+! local:
+  real, dimension(Atm%bd%isd:Atm%bd%ied,Atm%bd%jsd:Atm%bd%jed, km+1):: psd
+  real, dimension(Atm%bd%is:Atm%bd%ie+1, km+1):: pe0
+  real, dimension(Atm%bd%is:Atm%bd%ie+1,npz+1):: pe1
+  real, dimension(Atm%bd%is:Atm%bd%ie+1,npz):: qn1
+  integer i,j,k
+  integer :: is,  ie,  js,  je
+  integer :: isd, ied, jsd, jed
+
+  is  = Atm%bd%is
+  ie  = Atm%bd%ie
+  js  = Atm%bd%js
+  je  = Atm%bd%je
+  isd = Atm%bd%isd
+  ied = Atm%bd%ied
+  jsd = Atm%bd%jsd
+  jed = Atm%bd%jed
+
+     do k=1, km+1
+     do j=js-1,je+1
+     do i=is-1,ie+1
+        psd(i,j,k) = pec(i,j,k)
+     enddo
+     enddo
+     enddo
+
+  call mpp_update_domains( psd, Atm%domain, complete=.true. )
+  call mpp_update_domains( Atm%ps, Atm%domain, complete=.true. )
+
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,km,Atm,psd,ud,vd) &
+!$OMP                          private(pe1,pe0,qn1)
+  do 5000 j=js,je+1
+!------
+! map u
+!------
+     do k=1,km+1
+        do i=is,ie
+           pe0(i,k) = 0.5*(psd(i,j-1,k)+psd(i,j,k))
+        enddo
+     enddo
+     do k=1,npz+1
+        do i=is,ie
+           pe1(i,k) = Atm%ak(k) + Atm%bk(k)*0.5*(Atm%ps(i,j-1)+Atm%ps(i,j))
+        enddo
+     enddo
+     call mappm(km, pe0(is:ie,1:km+1), ud(is:ie,j,1:km), npz, pe1(is:ie,1:npz+1),   &
+                qn1(is:ie,1:npz), is,ie, -1, 8, Atm%ptop)
+     do k=1,npz
+        do i=is,ie
+           Atm%u(i,j,k) = qn1(i,k)
+        enddo
+     enddo
+!------
+! map v
+!------
+     if ( j/=(je+1) ) then
+
+     do k=1,km+1
+        do i=is,ie+1
+           pe0(i,k) = 0.5*(psd(i,j-1,k)+psd(i,j,k))
+        enddo
+     enddo
+     do k=1,npz+1
+        do i=is,ie+1
+           pe1(i,k) = Atm%ak(k) + Atm%bk(k)*0.5*(Atm%ps(i-1,j)+Atm%ps(i,j))
+        enddo
+     enddo
+     call mappm(km, pe0(is:ie+1,1:km+1), vd(is:ie+1,j,1:km), npz, pe1(is:ie+1,1:npz+1),  &
+                qn1(is:ie+1,1:npz), is,ie+1, -1, 8, Atm%ptop)
+     do k=1,npz
+        do i=is,ie+1
+           Atm%v(i,j,k) = qn1(i,k)
+        enddo
+     enddo
+
+     endif
+
+5000 continue
+
+  if (is_master()) write(*,*) 'done remap_dwinds_nh'
+
+ end subroutine remap_dwinds_nh
 
 
  subroutine remap_dwinds(km, npz, ak0, bk0, psc, ud, vd, Atm)
