@@ -54,6 +54,7 @@ module fv_update_phys_mod
 
   public :: fv_update_phys, del2_phys
   real,parameter:: con_cp  = cp_air
+  real, parameter :: tmax = 330
 
   contains
 
@@ -220,7 +221,7 @@ module fv_update_phys_mod
 !$OMP                    nq,w_diff,dt,nwat,liq_wat,rainwat,ice_wat,snowwat,    &
 !$OMP                    graupel,delp,cld_amt,hydrostatic,pt,t_dt,delz,adj_vmr,&
 !$OMP                    gama_dt,cv_air,ua,u_dt,va,v_dt,isd,ied,jsd,jed,       &
-!$OMP                    conv_vmr_mmr)                                         &
+!$OMP                    conv_vmr_mmr,pe,ptop)                                 &
 !$OMP             private(cvm, qc, qstar, ps_dt, p_fac)
     do k=1, npz
 
@@ -350,6 +351,10 @@ module fv_update_phys_mod
                   do i=is,ie
 !!!                  pt(i,j,k) = pt(i,j,k) + t_dt(i,j,k)*dt*con_cp/cv_air
                      pt(i,j,k) = pt(i,j,k) + t_dt(i,j,k)*dt*con_cp/cvm(i)
+!-- Limiter (sjl):  to deal with excessively high temp from PBL (YSU) ------------------------------------------------
+                     delz(i,j,k) = delz(i,j,k) - delp(i,j,k)*dim(pt(i,j,k), tmax)*cvm(i) / (grav*(pe(i,k+1,j)-ptop))
+                     pt(i,j,k) = min(tmax, pt(i,j,k))
+!-- Limiter (sjl): ---------------------------------------------------------------------------------------------------
                   enddo
                enddo
             endif

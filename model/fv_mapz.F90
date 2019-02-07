@@ -50,6 +50,10 @@ module fv_mapz_mod
   real, parameter:: cp_vap = cp_vapor   ! 1846.
   real, parameter:: tice = 273.16
 
+  real, parameter :: w_max = 60.
+  real, parameter :: w_min = -30.
+  logical, parameter :: w_limiter = .true.
+
   real(kind=4) :: E_Flux = 0.
   private
 
@@ -145,7 +149,7 @@ contains
   real, allocatable, dimension(:,:,:) :: dp0, u0, v0
   real, allocatable, dimension(:,:,:) :: u_dt, v_dt
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
-  real, dimension(is:ie,km)  :: q2, dp2, t0
+  real, dimension(is:ie,km)  :: q2, dp2, t0, w2
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
   real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
@@ -186,7 +190,7 @@ contains
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
 !$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,pe4)    &
 !$OMP                          private(qv,gz,cvm,kp,k_next,bkh,dp2,   &
-!$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2)
+!$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2,w2)
   do 1000 j=js,je+1
 
      do k=1,km+1
@@ -351,6 +355,47 @@ contains
               delz(i,j,k) = -delz(i,j,k)*dp2(i,k)
            enddo
         enddo
+
+        !Fix excessive w - momentum conserving --- sjl
+        ! gz(:) used here as a temporary array
+        if ( w_limiter ) then
+           do k=1,km
+              do i=is,ie
+                 w2(i,k) = w(i,j,k)
+              enddo
+           enddo
+           do k=1, km-1
+              do i=is,ie
+                 if ( w2(i,k) > w_max ) then
+                    gz(i) = (w2(i,k)-w_max) * dp2(i,k)
+                    w2(i,k  ) = w_max
+                    w2(i,k+1) = w2(i,k+1) + gz(i)/dp2(i,k+1)
+                 elseif ( w2(i,k) < w_min ) then
+                    gz(i) = (w2(i,k)-w_min) * dp2(i,k)
+                    w2(i,k  ) = w_min
+                    w2(i,k+1) = w2(i,k+1) + gz(i)/dp2(i,k+1)
+                 endif
+              enddo
+           enddo
+           do k=km, 2, -1
+              do i=is,ie
+                 if ( w2(i,k) > w_max ) then
+                    gz(i) = (w2(i,k)-w_max) * dp2(i,k)
+                    w2(i,k  ) = w_max
+                    w2(i,k-1) = w2(i,k-1) + gz(i)/dp2(i,k-1)
+                 elseif ( w2(i,k) < w_min ) then
+                    gz(i) = (w2(i,k)-w_min) * dp2(i,k)
+                    w2(i,k  ) = w_min
+                    w2(i,k-1) = w2(i,k-1) + gz(i)/dp2(i,k-1)
+                 endif
+              enddo
+           enddo
+           do k=1,km
+              do i=is,ie
+                 w(i,j,k) = w2(i,k)
+              enddo
+           enddo
+        endif
    endif
 
 !----------
@@ -801,6 +846,7 @@ endif        ! end last_step check
     enddo
 
   endif
+
 
   if ( last_step ) then
        ! Output temperature if last_step
