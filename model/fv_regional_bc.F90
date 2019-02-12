@@ -1691,8 +1691,9 @@ endif
 
                                              ,klev_in, klev_out            &
                                              ,ntracers                     &
-                                             ,pe_input                     &
-
+                                             ,ak, bk                       &
+											 
+                                             ,ps_input                     &  !<--
                                              ,tracers_input                &  !  BC vbls on
                                              ,w_input                      &  !  input model levels
                                              ,pt_input                     &
@@ -1797,8 +1798,9 @@ endif
 
                                              ,klev_in, klev_out            &
                                              ,ntracers                     &
-                                             ,pe_input                       &
+                                             ,ak, bk                       &
 
+                                             ,ps_input                     &  !<--
                                              ,tracers_input                &  !  BC vbls on
                                              ,w_input                      &  !  input model levels
                                              ,pt_input                     &
@@ -1905,8 +1907,9 @@ endif
 
                                              ,klev_in, klev_out            &
                                              ,ntracers                     &
-                                             ,pe_input                     &
-
+                                             ,ak, bk                       &
+											 
+                                             ,ps_input                     &  !<--
                                              ,tracers_input                &  !  BC vbls on
                                              ,w_input                      &  !  input model levels
                                              ,pt_input                     &
@@ -1919,7 +1922,7 @@ endif
                                              ,BC_t1%east )                   !<-- North BC vbls on final integration levels
           else
 
-           call remap_scalar_nggps_regional_bc(Atm                          &
+           call remap_scalar_nggps_regional_bc(Atm                         &
                                              ,'east '                      &
 
                                              ,isd,ied,jsd,jed              &  !<-- Atm array indices w/halo
@@ -1944,7 +1947,7 @@ endif
 
                                              ,BC_t1%east )                   !<-- North BC vbls on final integration levels
 
-          endif
+		  endif
 !
         if (js == 1) then
            jstart = 1
@@ -1988,8 +1991,9 @@ endif
 
                                              ,klev_in, klev_out            &
                                              ,ntracers                     &
-                                             ,pe_input                     &
-
+                                             ,ak, bk                       &
+											 
+                                             ,ps_input                     &  !<--
                                              ,tracers_input                &  !  BC vbls on
                                              ,w_input                      &  !  input model levels
                                              ,pt_input                     &
@@ -2026,8 +2030,8 @@ endif
                                              ,ps_reg                       &  !<-- Derived FV3 psfc in regional domain boundary region
 
                                              ,BC_t1%west )                   !<-- North BC vbls on final integration levels
-
-          endif
+										   
+		  endif
 !
         if (js == 1) then
            jstart = 1
@@ -2142,32 +2146,7 @@ endif
             enddo
           enddo
         enddo
-
-        if (Atm%flagstruct%hrrrv3_ic) then
-          call remap_dwinds_regional_bc_nh(Atm                                  &
-
-                                     ,is_input                             &  !<--
-                                     ,ie_input                             &  !  Index limits for scalars
-                                     ,js_input                             &  !  at center of north BC region grid cells.
-                                     ,je_input                             &  !<--
-
-                                     ,is_u                                 &  !<--
-                                     ,ie_u                                 &  !  Index limits for u component
-                                     ,js_u                                 &  !  on north edge of BC region grid cells.
-                                     ,je_u                                 &  !<--
-
-                                     ,is_v                                 &  !<--
-                                     ,ie_v                                 &  !  Index limits for v component
-                                     ,js_v                                 &  !  on north edge of BC region grid cells.
-                                     ,je_v                                 &  !<--
-
-                                     ,klev_in, klev_out                    &  !<-- data / model levels
-                                     ,pe_input                             &  !<-- BC values of edge pressure
-                                     ,ud ,vd                               &  !<-- BC values of D-grid u and v
-                                     ,uc ,vc                               &  !<-- BC values of C-grid u and v
-                                     ,BC_t1%north )                           !<-- North BC vbls on final integration levels
-
-        else
+!
           call remap_dwinds_regional_bc(Atm                                  &
 
                                      ,is_input                             &  !<--
@@ -2192,7 +2171,7 @@ endif
                                      ,ud ,vd                               &  !<-- BC values of D-grid u and v
                                      ,uc ,vc                               &  !<-- BC values of C-grid u and v
                                      ,BC_t1%north )                           !<-- North BC vbls on final integration levels
-        endif
+
 !
         deallocate(ud,vd,uc,vc)
 !
@@ -2250,31 +2229,6 @@ endif
           enddo
         enddo
 !
-        if (Atm%flagstruct%hrrrv3_ic) then
-          call remap_dwinds_regional_bc_nh(Atm                                  &
-
-                                     ,is_input                             &  !<--
-                                     ,ie_input                             &  !  Index limits for scalars
-                                     ,js_input                             &  !  at center of south BC region grid cells.
-                                     ,je_input                             &  !<--
-
-                                     ,is_u                                 &  !<--
-                                     ,ie_u                                 &  !  Index limits for u component
-                                     ,js_u                                 &  !  on south edge of BC region grid cells.
-                                     ,je_u                                 &  !<--
-
-                                     ,is_v                                 &  !<--
-                                     ,ie_v                                 &  !  Index limits for v component
-                                     ,js_v                                 &  !  on south edge of BC region grid cells.
-                                     ,je_v                                 &  !<--
-
-                                     ,klev_in, klev_out                    &  !<-- data / model levels
-                                     ,pe_input                             &  !<-- BC values of edge pressure
-                                     ,ud ,vd                               &  !<-- BC values of D-grid u and v
-                                     ,uc ,vc                               &  !<-- BC values of C-grid u and v
-                                     ,BC_t1%south )                           !<-- South BC vbls on final integration levels
-
-        else
           call remap_dwinds_regional_bc(Atm                                  &
 
                                      ,is_input                             &  !<--
@@ -2298,8 +2252,8 @@ endif
                                      ,ps_reg                               &  !<-- BC values of sfc pressure
                                      ,ud ,vd                               &  !<-- BC values of D-grid u and v
                                      ,uc ,vc                               &  !<-- BC values of C-grid u and v
+
                                      ,BC_t1%south )                           !<-- South BC vbls on final integration levels
-        endif
 !
         deallocate(ud,vd,uc,vc)
 !
@@ -2358,31 +2312,6 @@ endif
           enddo
         enddo
 !
-        if (Atm%flagstruct%hrrrv3_ic) then
-          call remap_dwinds_regional_bc_nh(Atm                                  &
-
-                                     ,is_input                             &  !<--
-                                     ,ie_input                             &  !  Index limits for scalars
-                                     ,js_input                             &  !  at center of east BC region grid cells.
-                                     ,je_input                             &  !<--
-
-                                     ,is_u                                 &  !<--
-                                     ,ie_u                                 &  !  Index limits for u component
-                                     ,js_u                                 &  !  on east edge of BC region grid cells.
-                                     ,je_u                                 &  !<--
-
-                                     ,is_v                                 &  !<--
-                                     ,ie_v                                 &  !  Index limits for v component
-                                     ,js_v                                 &  !  on east edge of BC region grid cells.
-                                     ,je_v                                 &  !<--
-
-                                     ,klev_in, klev_out                    &  !<-- data / model levels
-                                     ,pe_input                             &  !<-- BC values of edge pressure
-                                     ,ud ,vd                               &  !<-- BC values of D-grid u and v
-                                     ,uc ,vc                               &  !<-- BC values of C-grid u and v
-                                     ,BC_t1%east )                            !<-- East BC vbls on final integration levels
-
-        else
           call remap_dwinds_regional_bc(Atm                                  &
 
                                      ,is_input                             &  !<--
@@ -2407,7 +2336,6 @@ endif
                                      ,ud ,vd                               &  !<-- BC values of D-grid u and v
                                      ,uc ,vc                               &  !<-- BC values of C-grid u and v
                                      ,BC_t1%east )                            !<-- East BC vbls on final integration levels
-        endif
 !
         deallocate(ud,vd,uc,vc)
 !
@@ -2465,31 +2393,6 @@ endif
           enddo
         enddo
 !
-        if (Atm%flagstruct%hrrrv3_ic) then
-          call remap_dwinds_regional_bc_nh(Atm                                  &
-
-                                     ,is_input                             &  !<--
-                                     ,ie_input                             &  !  Index limits for scalars
-                                     ,js_input                             &  !  at center of west BC region grid cells.
-                                     ,je_input                             &  !<--
-
-                                     ,is_u                                 &  !<--
-                                     ,ie_u                                 &  !  Index limits for u component
-                                     ,js_u                                 &  !  on west edge of BC region grid cells.
-                                     ,je_u                                 &  !<--
-
-                                     ,is_v                                 &  !<--
-                                     ,ie_v                                 &  !  Index limits for v component
-                                     ,js_v                                 &  !  on west edge of BC region grid cells.
-                                     ,je_v                                 &  !<--
-
-                                     ,klev_in, klev_out                    &  !<-- data / model levels
-                                     ,pe_input                             &  !<-- BC values of edge pressure
-                                     ,ud ,vd                               &  !<-- BC values of D-grid u and v
-                                     ,uc ,vc                               &  !<-- BC values of C-grid u and v
-                                     ,BC_t1%west )                            !<-- West BC vbls on final integration levels
-
-        else
           call remap_dwinds_regional_bc(Atm                                  &
 
                                      ,is_input                             &  !<--
@@ -2514,7 +2417,6 @@ endif
                                      ,ud ,vd                               &  !<-- BC values of D-grid u and v
                                      ,uc ,vc                               &  !<-- BC values of C-grid u and v
                                      ,BC_t1%west )                            !<-- West BC vbls on final integration levels
-        endif
 !
         deallocate(ud,vd,uc,vc)
 !
@@ -3823,8 +3725,8 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
                                          ,side                        &
                                          ,isd,ied,jsd,jed             &
                                          ,is_bc,ie_bc,js_bc,je_bc     &
-                                         ,km, npz, ncnst              &
-                                         ,pec, qa, w, pt, zh          &
+                                         ,km, npz, ncnst, ak0, bk0    &
+                                         ,psc, qa, w, pt, zh          &
                                          ,phis_reg                    &
                                          ,ps                          &
                                          ,BC_side )
@@ -3835,9 +3737,12 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
   integer, intent(in):: km    &                  !<-- # of levels in 3-D input variables
                        ,npz   &                  !<-- # of levels in final 3-D integration variables
                        ,ncnst                    !<-- # of tracer variables
+  real,    intent(in):: ak0(km+1), bk0(km+1)
+  real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc):: psc											
   real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc,km):: w, pt
   real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc,km,ncnst):: qa
-  real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc,km+1):: zh, pec
+  real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc,km+1):: zh
+																														 
   real,    intent(inout), dimension(isd-1:ied+1,jsd-1:jed+1):: phis_reg   !<-- Filtered sfc geopotential from preprocessing.
   real,    intent(out),dimension(is_bc:ie_bc,js_bc:je_bc) :: ps  !<-- sfc p in regional domain boundary region
   character(len=5),intent(in) :: side
@@ -3926,7 +3831,7 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
 !
      do k=1,km+1
         do i=is,ie
-           pe0(i,k) = pec(i,j,k)
+           pe0(i,k) = ak0(k) + bk0(k)*psc(i,j)
            pn0(i,k) = log(pe0(i,k))
         enddo
      enddo
@@ -3990,7 +3895,7 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
 !---------------------------------------------------------------------------------
      do k=1,km+1
         do i=is,ie
-           pe0(i,k) = pec(i,j,k)
+           pe0(i,k) = ak0(k) + bk0(k)*psc(i,j)
            pn0(i,k) = log(pe0(i,k))
         enddo
       enddo
@@ -4115,6 +4020,10 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
 !xxx     Atm%peln(i,k,j) = pn1(i,k)
 !xxx  enddo
 
+													
+				
+																														
+		   
 
       if ( .not. Atm%flagstruct%hydrostatic ) then
          do k=1,npz
@@ -4213,6 +4122,7 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
 !---------------------------------------------------------------------
 
  end subroutine remap_scalar_regional_bc_nh
+
 
 !---------------------------------------------------------------------
 !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -4336,121 +4246,6 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
   if (is_master()) write(*,*) 'done remap_dwinds'
 
  end subroutine remap_dwinds_regional_bc
-
-
-
- subroutine remap_dwinds_regional_bc_nh(Atm                              &
-                                       ,is_input,ie_input                &
-                                       ,js_input,je_input                &
-                                       ,is_u,ie_u,js_u,je_u              &
-                                       ,is_v,ie_v,js_v,je_v              &
-                                       ,km, npz                          &
-                                       ,pec, ud, vd, uc, vc              &
-                                       ,BC_side )
-  type(fv_atmos_type), intent(inout) :: Atm
-  integer, intent(in):: is_input, ie_input, js_input, je_input   !<-- index limits of the boundary arrays with nahlo=nhalo_data
-  integer, intent(in):: is_u,ie_u,js_u,je_u          !<-- index limits of D-grid u in this boundary region
-  integer, intent(in):: is_v,ie_v,js_v,je_v          !<-- index limits of D-grid v in this boundary region
-  integer, intent(in):: km    &                      !<-- # of levels in 3-D input variables
-                       ,npz                          !<-- # of levels in final 3-D integration variables
-
-  real, intent(in) :: pec(is_input:ie_input,js_input:je_input, km+1)
-
-  real,    intent(in)::  ud(is_u:ie_u,js_u:je_u,km)
-  real,    intent(in)::  vc(is_u:ie_u,js_u:je_u,km)
-  real,    intent(in)::  vd(is_v:ie_v,js_v:je_v,km)
-  real,    intent(in)::  uc(is_v:ie_v,js_v:je_v,km)
-  type(fv_regional_BC_variables),intent(inout) :: BC_side   !<-- The BC variables on a domain side at the final integration levels.
-! local:
-      real, dimension(:,:),allocatable :: pe0
-      real, dimension(:,:),allocatable :: pe1
-      real, dimension(:,:),allocatable :: qn1_d,qn1_c
-  integer i,j,k
-
-      allocate(pe0  (is_u:ie_u, km+1)) ; pe0=real_snan
-      allocate(pe1  (is_u:ie_u, npz+1)) ; pe1=real_snan
-      allocate(qn1_d(is_u:ie_u, npz)) ; qn1_d=real_snan
-      allocate(qn1_c(is_u:ie_u, npz)) ; qn1_c=real_snan
-
-!----------------------------------------------------------------------------------------------
-    j_loopu: do j=js_u,je_u
-!----------------------------------------------------------------------------------------------
-
-!------
-! map u
-!------
-     do k=1,km+1
-        do i=is_u,ie_u
-           pe0(i,k) = 0.5*(pec(i,j-1,k)+pec(i,j,k))
-        enddo
-     enddo
-     do k=1,npz+1
-        do i=is_u,ie_u
-           pe1(i,k) = Atm%ak(k) + Atm%bk(k)*0.5*(pec(i,j-1,km+1)+pec(i,j,km+1))
-        enddo
-     enddo
-     call mappm(km, pe0(is_u:ie_u,1:km+1), ud(is_u:ie_u,j,1:km), npz, pe1(is_u:ie_u,1:npz+1),   &
-                qn1_d(is_u:ie_u,1:npz), is_u,ie_u, -1, 8, Atm%ptop )
-     call mappm(km, pe0(is_u:ie_u,1:km+1), vc(is_u:ie_u,j,1:km), npz, pe1(is_u:ie_u,1:npz+1),   &
-                qn1_c(is_u:ie_u,1:npz), is_u,ie_u, -1, 8, Atm%ptop )
-     do k=1,npz
-        do i=is_u,ie_u
-           BC_side%u_BC(i,j,k) = qn1_d(i,k)
-           BC_side%vc_BC(i,j,k) = qn1_c(i,k)
-        enddo
-     enddo
-
-     enddo j_loopu
-
-      deallocate(pe0)
-      deallocate(pe1)
-      deallocate(qn1_d)
-      deallocate(qn1_c)
-
-      allocate(pe0  (is_v:ie_v, km+1)) ; pe0=real_snan
-      allocate(pe1  (is_v:ie_v, npz+1)) ; pe1=real_snan
-      allocate(qn1_d(is_v:ie_v, npz)) ; qn1_d=real_snan
-      allocate(qn1_c(is_v:ie_v, npz)) ; qn1_c=real_snan
-
-!----------------------------------------------------------------------------------------------
-  j_loopv: do j=js_v,je_v
-!----------------------------------------------------------------------------------------------
-!
-!------
-! map v
-!------
-
-     do k=1,km+1
-        do i=is_v,ie_v
-           pe0(i,k) = 0.5*(pec(i-1,j,k)+pec(i,j,k))
-        enddo
-     enddo
-     do k=1,npz+1
-        do i=is_v,ie_v
-           pe1(i,k) = Atm%ak(k) + Atm%bk(k)*0.5*(pec(i-1,j,km+1)+pec(i,j,km+1))
-        enddo
-     enddo
-     call mappm(km, pe0(is_v:ie_v,1:km+1), vd(is_v:ie_v,j,1:km), npz, pe1(is_v:ie_v,1:npz+1),  &
-                qn1_d(is_v:ie_v,1:npz), is_v,ie_v, -1, 8, Atm%ptop)
-     call mappm(km, pe0(is_v:ie_v,1:km+1), uc(is_v:ie_v,j,1:km), npz, pe1(is_v:ie_v,1:npz+1),  &
-                qn1_c(is_v:ie_v,1:npz), is_v,ie_v, -1, 8, Atm%ptop)
-     do k=1,npz
-        do i=is_v,ie_v
-           BC_side%v_BC(i,j,k) = qn1_d(i,k)
-           BC_side%uc_BC(i,j,k) = qn1_c(i,k)
-        enddo
-     enddo
-
-      enddo j_loopv
-
-      deallocate(pe0)
-      deallocate(pe1)
-      deallocate(qn1_d)
-      deallocate(qn1_c)
-
-  if (is_master()) write(*,*) 'done remap_dwinds_nh'
-
- end subroutine remap_dwinds_regional_bc_nh
 
 !---------------------------------------------------------------------
 !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

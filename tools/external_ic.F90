@@ -772,9 +772,9 @@ contains
       type(domain2d),      intent(inout) :: fv_domain
 ! local:
       real, dimension(:), allocatable:: ak, bk
-      real, dimension(:,:), allocatable:: wk2, oro_g
+      real, dimension(:,:), allocatable:: wk2, ps, oro_g
       real, dimension(:,:,:), allocatable:: ud, vd, u_w, v_w, u_s, v_s, w, t
-      real, dimension(:,:,:), allocatable:: zh, pe  ! 3D height at 65 edges
+      real, dimension(:,:,:), allocatable:: zh ! 3D height at 65 edges
       real, dimension(:,:,:,:), allocatable:: q
       real, dimension(:,:), allocatable :: phis_coarse ! lmh
       real rdg, wt, qt, m_fac, pe1
@@ -893,8 +893,8 @@ contains
       call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using tiled data file '//trim(fn_gfs_ics)//' for NGGPS IC')
 
       allocate (zh(is:ie,js:je,levp+1))
-	  allocate (pe(is-1:ie+1,js-1:je+1,levp+1))
-      allocate (w(is:ie,js:je,levp))
+      allocate (ps(is:ie,js:je))
+	  allocate (w(is:ie,js:je,levp))
 	  allocate (t(is:ie,js:je,levp))
       allocate (q (is:ie,js:je,levp,ntracers))
       allocate ( u_w(is:ie+1, js:je, 1:levp) )
@@ -944,7 +944,7 @@ contains
         endif
 
         ! edge pressure (Pa)
-        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'pe', pe(is:ie,js:je,:), domain=Atm(n)%domain)
+        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'ps', ps, domain=Atm(n)%domain)
 
         ! physical temperature (K)
         id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'pt', t, domain=Atm(n)%domain)
@@ -984,29 +984,6 @@ contains
         enddo
 
 
-
-!***  For regional runs read in each of the BC variables from the NetCDF boundary file
-!***  and remap in the vertical from the input levels to the model integration levels.
-!***  Here in the initialization we begn by allocating the regional domain's boundary
-!***  objects.  Then we need to read the first two regional BC files so the integration
-!***  can begin interpolating between those two times as the forecast proceeds.
-
-        if (n==1.and.Atm(1)%flagstruct%regional) then     !<-- Select the parent regional domain.
-
-          call start_regional_cold_start(Atm(1), ak, bk, levp, &
-                                         is, ie, js, je, &
-                                         isd, ied, jsd, jed )
-
-          do i = is-1,ie+1
-          do k = 1,npz+1
-          do j = js-1,je+1
-            pe(i,j,k) = Atm(1)%pe(i,k,j)
-          enddo
-          enddo
-          enddo
-        endif
-
-
         ! read in the restart
         call restore_state (ORO_restart)
         call restore_state (SFC_restart)
@@ -1024,10 +1001,23 @@ contains
         if(is_master())  write(*,*) 'HRRRv3 ak(1)=', ak(1), ' ak(2)=', ak(2)
         ak(1) = max(1.e-9, ak(1))
 
+!***  For regional runs read in each of the BC variables from the NetCDF boundary file
+!***  and remap in the vertical from the input levels to the model integration levels.
+!***  Here in the initialization we begn by allocating the regional domain's boundary
+!***  objects.  Then we need to read the first two regional BC files so the integration
+!***  can begin interpolating between those two times as the forecast proceeds.
+
+        if (n==1.and.Atm(1)%flagstruct%regional) then     !<-- Select the parent regional domain.
+
+          call start_regional_cold_start(Atm(1), ak, bk, levp, &
+                                         is, ie, js, je, &
+                                         isd, ied, jsd, jed )
+        endif
+
 !
 !***  Remap the variables in the compute domain.
 !
-        call remap_scalar_nh(Atm(n), levp, npz, ntracers, pe(is:ie,js:je,:), q, zh, w, t)
+        call remap_scalar_nh(Atm(n), levp, npz, ntracers, ak, bk, ps, q, zh, w, t)
 
         allocate ( ud(is:ie,  js:je+1, 1:levp) )
         allocate ( vd(is:ie+1,js:je,   1:levp) )
@@ -1061,8 +1051,8 @@ contains
         deallocate ( u_s )
         deallocate ( v_s )
 
-        !call remap_dwinds(levp, npz, ak, bk, Atm(n)%ps(is:ie,js:je), ud, vd, Atm(n))
-        call remap_dwinds_nh(levp, npz, pe(is-1:ie+1,js-1:je+1,:), ud, vd, Atm(n))
+        call remap_dwinds(levp, npz, ak, bk, Atm(n)%ps(is:ie,js:je), ud, vd, Atm(n))
+        !call remap_dwinds_nh(levp, npz, pe(is-1:ie+1,js-1:je+1,:), ud, vd, Atm(n))
         deallocate ( ud )
         deallocate ( vd )
 
@@ -1188,10 +1178,11 @@ contains
 
       deallocate (ak)
       deallocate (bk)
+	  deallocate (ps)
       deallocate (q )
 	  deallocate (t )
 	  deallocate (zh)
-	  deallocate (pe)
+
 
 
   end subroutine get_hrrrv3_ic
@@ -2653,12 +2644,12 @@ contains
  end subroutine remap_coef
 
 
- subroutine remap_scalar_nh(Atm, km, npz, ncnst, pe, qa, zh, w, t)
+ subroutine remap_scalar_nh(Atm, km, npz, ncnst, ak0, bk0, psc, qa, zh, w, t)
   type(fv_atmos_type), intent(inout) :: Atm
   integer, intent(in):: km, npz, ncnst
-  real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km+1):: pe
-  real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km):: w
-  real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km):: t
+  real,    intent(in):: ak0(km+1), bk0(km+1)
+  real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je):: psc
+  real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km):: w, t
   real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km,ncnst):: qa
   real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km+1):: zh
 ! local:
@@ -2723,13 +2714,13 @@ contains
 
 !$OMP parallel do default(none) &
 !$OMP             shared(sphum,liq_wat,rainwat,ice_wat,snowwat,graupel,&
-!$OMP                    cld_amt,ncnst,npz,is,ie,js,je,km,k2,pe,zh,w,qa,Atm,z500,t) &
+!$OMP                    cld_amt,ncnst,npz,is,ie,js,je,km,k2,ak0,bk0,psc,zh,w,t,qa,Atm,z500) &
 !$OMP             private(l,m,pst,pn,gz,pe0,pn0,pe1,pn1,dp2,qp,qn1,gz_fv)
 
   do 5000 j=js,je
      do k=1,km+1
         do i=is,ie
-           pe0(i,k) = pe(i,j,k)
+           pe0(i,k) = ak0(k) + bk0(k)*psc(i,j)
            pn0(i,k) = log(pe0(i,k))
         enddo
      enddo
@@ -2983,7 +2974,7 @@ contains
 
   do j=js,je
      do i=is,ie
-        wk(i,j) = Atm%ps(i,j) - pe(i,j,km+1)
+        wk(i,j) = Atm%ps(i,j) - psc(i,j)
      enddo
   enddo
   call pmaxmn('PS_diff (mb)', wk, is, ie, js, je, 1, 0.01, Atm%gridstruct%area_64, Atm%domain)
