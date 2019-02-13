@@ -1373,7 +1373,7 @@ contains
       real,dimension(:,:,:),allocatable :: ps_input,w_input,zh_input
       real,dimension(:,:,:),allocatable :: u_s_input,v_s_input          &
                                           ,u_w_input,v_w_input
-      real,dimension(:,:,:),allocatable :: pt_input, pe_input
+      real,dimension(:,:,:),allocatable :: pt_input
       real,dimension(:,:,:,:),allocatable :: tracers_input
 !
       real(kind=R_GRID), dimension(2):: p1, p2, p3, p4
@@ -1460,7 +1460,6 @@ contains
 
       if (Atm%flagstruct%hrrrv3_ic) then
         allocate(  pt_input(is_input:ie_input,js_input:je_input,1:klev_in)) ; pt_input=real_snan
-        allocate( pe_input(is_input:ie_input,js_input:je_input,1:klev_in+1)) ; pe_input = -999999.
       endif
 !
 !-----------------------------------------------------------------------
@@ -1595,30 +1594,6 @@ contains
 
 
 if (Atm%flagstruct%hrrrv3_ic) then
-!-----------------------
-!***  Edge pressure
-!-----------------------
-!
-      nlev=klev_in+1
-      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
-                                ,nlev                                   &
-                                ,ntracers                               &
-!                               ,Atm%regional_bc_bounds                 &
-                                ,'pe     '                              &
-                                ,array_3d=pe_input)
-
-      if (bc_hour == 0) then
-
-        do i = is-1,ie+1
-        do k = 1,npz+1
-        do j = js-1,je+1
-          Atm%pe(i,k,j) = pe_input(i,j,k)
-        enddo
-        enddo
-        enddo
-
-      endif
-
 !
 !-----------------------
 !***  Virtual temp.
@@ -1692,7 +1667,7 @@ endif
                                              ,klev_in, klev_out            &
                                              ,ntracers                     &
                                              ,ak, bk                       &
-											 
+
                                              ,ps_input                     &  !<--
                                              ,tracers_input                &  !  BC vbls on
                                              ,w_input                      &  !  input model levels
@@ -1908,7 +1883,7 @@ endif
                                              ,klev_in, klev_out            &
                                              ,ntracers                     &
                                              ,ak, bk                       &
-											 
+
                                              ,ps_input                     &  !<--
                                              ,tracers_input                &  !  BC vbls on
                                              ,w_input                      &  !  input model levels
@@ -1992,7 +1967,7 @@ endif
                                              ,klev_in, klev_out            &
                                              ,ntracers                     &
                                              ,ak, bk                       &
-											 
+
                                              ,ps_input                     &  !<--
                                              ,tracers_input                &  !  BC vbls on
                                              ,w_input                      &  !  input model levels
@@ -2030,7 +2005,7 @@ endif
                                              ,ps_reg                       &  !<-- Derived FV3 psfc in regional domain boundary region
 
                                              ,BC_t1%west )                   !<-- North BC vbls on final integration levels
-										   
+
 		  endif
 !
         if (js == 1) then
@@ -2460,9 +2435,6 @@ endif
       endif
       if(allocated(pt_input))then
         deallocate(pt_input)
-      endif
-      if(allocated(pe_input))then
-        deallocate(pe_input)
       endif
 !
 !-----------------------------------------------------------------------
@@ -3738,11 +3710,11 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
                        ,npz   &                  !<-- # of levels in final 3-D integration variables
                        ,ncnst                    !<-- # of tracer variables
   real,    intent(in):: ak0(km+1), bk0(km+1)
-  real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc):: psc											
+  real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc):: psc
   real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc,km):: w, pt
   real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc,km,ncnst):: qa
   real,    intent(in), dimension(is_bc:ie_bc,js_bc:je_bc,km+1):: zh
-																														 
+
   real,    intent(inout), dimension(isd-1:ied+1,jsd-1:jed+1):: phis_reg   !<-- Filtered sfc geopotential from preprocessing.
   real,    intent(out),dimension(is_bc:ie_bc,js_bc:je_bc) :: ps  !<-- sfc p in regional domain boundary region
   character(len=5),intent(in) :: side
@@ -4020,10 +3992,10 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
 !xxx     Atm%peln(i,k,j) = pn1(i,k)
 !xxx  enddo
 
-													
-				
-																														
-		   
+
+
+
+
 
       if ( .not. Atm%flagstruct%hydrostatic ) then
          do k=1,npz
@@ -4113,7 +4085,7 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
 
   do j=js,je
      do i=is,ie
-        wk(i,j) = ps(i,j) - pec(i,j,km+1)
+        wk(i,j) = ps(i,j) - psc(i,j)
      enddo
   enddo
 !call pmaxmn('PS_diff (mb)', wk, is, ie, js, je, 1, 0.01, Atm%gridstruct%area_64, Atm%domain)
