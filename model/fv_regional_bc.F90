@@ -2095,29 +2095,39 @@ endif
         do k=1,nlev
           do j=js_u,je_u
           do i=is_u,ie_u
-            p1(:) = grid_reg(i,  j,1:2)
-            p2(:) = grid_reg(i+1,j,1:2)
-            call  mid_pt_sphere(p1, p2, p3)
-            call get_unit_vect2(p1, p2, e1)
-            call get_latlon_vector(p3, ex, ey)
-            ud(i,j,k) = u_s_input(i,j,k)*inner_prod(e1,ex)+v_s_input(i,j,k)*inner_prod(e1,ey)
-            p4(:) = agrid_reg(i,j,1:2) ! cell centroid
-            call get_unit_vect2(p3, p4, e2) !C-grid V-wind unit vector
-            vc(i,j,k) = u_s_input(i,j,k)*inner_prod(e2,ex)+v_s_input(i,j,k)*inner_prod(e2,ey)
+            if (Atm%flagstruct%hrrrv3_ic) then
+                ud(i,j,k) = u_s_input(i,j,k)
+                vc(i,j,k) = v_s_input(i,j,k)
+            else
+                p1(:) = grid_reg(i,  j,1:2)
+                p2(:) = grid_reg(i+1,j,1:2)
+                call  mid_pt_sphere(p1, p2, p3)
+                call get_unit_vect2(p1, p2, e1)
+                call get_latlon_vector(p3, ex, ey)
+                ud(i,j,k) = u_s_input(i,j,k)*inner_prod(e1,ex)+v_s_input(i,j,k)*inner_prod(e1,ey)
+                p4(:) = agrid_reg(i,j,1:2) ! cell centroid
+                call get_unit_vect2(p3, p4, e2) !C-grid V-wind unit vector
+                vc(i,j,k) = u_s_input(i,j,k)*inner_prod(e2,ex)+v_s_input(i,j,k)*inner_prod(e2,ey)
+            endif
           enddo
           enddo
 !
           do j=js_v,je_v
             do i=is_v,ie_v
-              p1(:) = grid_reg(i,j  ,1:2)
-              p2(:) = grid_reg(i,j+1,1:2)
-              call  mid_pt_sphere(p1, p2, p3)
-              call get_unit_vect2(p1, p2, e2)
-              call get_latlon_vector(p3, ex, ey)
-              vd(i,j,k) = u_w_input(i,j,k)*inner_prod(e2,ex)+v_w_input(i,j,k)*inner_prod(e2,ey)
-              p4(:) = agrid_reg(i,j,1:2) ! cell centroid
-              call get_unit_vect2(p3, p4, e1) !C-grid U-wind unit vector
-              uc(i,j,k) = u_w_input(i,j,k)*inner_prod(e1,ex)+v_w_input(i,j,k)*inner_prod(e1,ey)
+              if (Atm%flagstruct%hrrrv3_ic) then
+                  vd(i,j,k) = v_w_input(i,j,k)
+                  uc(i,j,k) = u_w_input(i,j,k)
+              else
+                  p1(:) = grid_reg(i,j  ,1:2)
+                  p2(:) = grid_reg(i,j+1,1:2)
+                  call  mid_pt_sphere(p1, p2, p3)
+                  call get_unit_vect2(p1, p2, e2)
+                  call get_latlon_vector(p3, ex, ey)
+                  vd(i,j,k) = u_w_input(i,j,k)*inner_prod(e2,ex)+v_w_input(i,j,k)*inner_prod(e2,ey)
+                  p4(:) = agrid_reg(i,j,1:2) ! cell centroid
+                  call get_unit_vect2(p3, p4, e1) !C-grid U-wind unit vector
+                  uc(i,j,k) = u_w_input(i,j,k)*inner_prod(e1,ex)+v_w_input(i,j,k)*inner_prod(e1,ey)
+              endif
             enddo
           enddo
         enddo
@@ -2177,29 +2187,39 @@ endif
         do k=1,nlev
           do j=js_u,je_u
           do i=is_u,ie_u
-            p1(:) = grid_reg(i,  j,1:2)
-            p2(:) = grid_reg(i+1,j,1:2)
-            call  mid_pt_sphere(p1, p2, p3)
-            call get_unit_vect2(p1, p2, e1)
-            call get_latlon_vector(p3, ex, ey)
-            ud(i,j,k) = u_s_input(i,j,k)*inner_prod(e1,ex)+v_s_input(i,j,k)*inner_prod(e1,ey)
-            p4(:) = agrid_reg(i,j,1:2) ! cell centroid
-            call get_unit_vect2(p3, p4, e2) !C-grid V-wind unit vector
-            vc(i,j,k) = u_s_input(i,j,k)*inner_prod(e2,ex)+v_s_input(i,j,k)*inner_prod(e2,ey)
+            if (Atm%flagstruct%hrrrv3_ic) then
+                ud(i,j,k) = u_s_input(i,j,k)
+                vc(i,j,k) = v_s_input(i,j,k)
+            else
+                p1(:) = grid_reg(i,  j,1:2)
+                p2(:) = grid_reg(i+1,j,1:2)
+                call  mid_pt_sphere(p1, p2, p3)
+                call get_unit_vect2(p1, p2, e1)
+                call get_latlon_vector(p3, ex, ey)
+                ud(i,j,k) = u_s_input(i,j,k)*inner_prod(e1,ex)+v_s_input(i,j,k)*inner_prod(e1,ey)
+                p4(:) = agrid_reg(i,j,1:2) ! cell centroid
+                call get_unit_vect2(p3, p4, e2) !C-grid V-wind unit vector
+                vc(i,j,k) = u_s_input(i,j,k)*inner_prod(e2,ex)+v_s_input(i,j,k)*inner_prod(e2,ey)
+            endif
           enddo
           enddo
 !
           do j=js_v,je_v
             do i=is_v,ie_v
-              p1(:) = grid_reg(i,j  ,1:2)
-              p2(:) = grid_reg(i,j+1,1:2)
-              call  mid_pt_sphere(p1, p2, p3)
-              call get_unit_vect2(p1, p2, e2)
-              call get_latlon_vector(p3, ex, ey)
-              vd(i,j,k) = u_w_input(i,j,k)*inner_prod(e2,ex)+v_w_input(i,j,k)*inner_prod(e2,ey)
-              p4(:) = agrid_reg(i,j,1:2) ! cell centroid
-              call get_unit_vect2(p3, p4, e1) !C-grid U-wind unit vector
-              uc(i,j,k) = u_w_input(i,j,k)*inner_prod(e1,ex)+v_w_input(i,j,k)*inner_prod(e1,ey)
+              if (Atm%flagstruct%hrrrv3_ic) then
+                  vd(i,j,k) = v_w_input(i,j,k)
+                  uc(i,j,k) = u_w_input(i,j,k)
+              else
+                  p1(:) = grid_reg(i,j  ,1:2)
+                  p2(:) = grid_reg(i,j+1,1:2)
+                  call  mid_pt_sphere(p1, p2, p3)
+                  call get_unit_vect2(p1, p2, e2)
+                  call get_latlon_vector(p3, ex, ey)
+                  vd(i,j,k) = u_w_input(i,j,k)*inner_prod(e2,ex)+v_w_input(i,j,k)*inner_prod(e2,ey)
+                  p4(:) = agrid_reg(i,j,1:2) ! cell centroid
+                  call get_unit_vect2(p3, p4, e1) !C-grid U-wind unit vector
+                  uc(i,j,k) = u_w_input(i,j,k)*inner_prod(e1,ex)+v_w_input(i,j,k)*inner_prod(e1,ey)
+              endif
             enddo
           enddo
         enddo
@@ -2259,30 +2279,39 @@ endif
         do k=1,nlev
           do j=js_u,je_u
           do i=is_u,ie_u
-            p1(:) = grid_reg(i,  j,1:2)
-            p2(:) = grid_reg(i+1,j,1:2)
-            call  mid_pt_sphere(p1, p2, p3)
-            call get_unit_vect2(p1, p2, e1)
-            call get_latlon_vector(p3, ex, ey)
-            ud(i,j,k) = u_s_input(i,j,k)*inner_prod(e1,ex)+v_s_input(i,j,k)*inner_prod(e1,ey)
-            p4(:) = agrid_reg(i,j,1:2) ! cell centroid
-            call get_unit_vect2(p3, p4, e2) !C-grid V-wind unit vector
-            vc(i,j,k) = u_s_input(i,j,k)*inner_prod(e2,ex)+v_s_input(i,j,k)*inner_prod(e2,ey)
+            if (Atm%flagstruct%hrrrv3_ic) then
+                ud(i,j,k) = u_s_input(i,j,k)
+                vc(i,j,k) = v_s_input(i,j,k)
+            else
+                p1(:) = grid_reg(i,  j,1:2)
+                p2(:) = grid_reg(i+1,j,1:2)
+                call  mid_pt_sphere(p1, p2, p3)
+                call get_unit_vect2(p1, p2, e1)
+                call get_latlon_vector(p3, ex, ey)
+                ud(i,j,k) = u_s_input(i,j,k)*inner_prod(e1,ex)+v_s_input(i,j,k)*inner_prod(e1,ey)
+                p4(:) = agrid_reg(i,j,1:2) ! cell centroid
+                call get_unit_vect2(p3, p4, e2) !C-grid V-wind unit vector
+                vc(i,j,k) = u_s_input(i,j,k)*inner_prod(e2,ex)+v_s_input(i,j,k)*inner_prod(e2,ey)
+            endif
           enddo
           enddo
-!
 !
           do j=js_v,je_v
             do i=is_v,ie_v
-              p1(:) = grid_reg(i,j  ,1:2)
-              p2(:) = grid_reg(i,j+1,1:2)
-              call  mid_pt_sphere(p1, p2, p3)
-              call get_unit_vect2(p1, p2, e2)
-              call get_latlon_vector(p3, ex, ey)
-              vd(i,j,k) = u_w_input(i,j,k)*inner_prod(e2,ex)+v_w_input(i,j,k)*inner_prod(e2,ey)
-              p4(:) = agrid_reg(i,j,1:2) ! cell centroid
-              call get_unit_vect2(p3, p4, e1) !C-grid U-wind unit vector
-              uc(i,j,k) = u_w_input(i,j,k)*inner_prod(e1,ex)+v_w_input(i,j,k)*inner_prod(e1,ey)
+              if (Atm%flagstruct%hrrrv3_ic) then
+                  vd(i,j,k) = v_w_input(i,j,k)
+                  uc(i,j,k) = u_w_input(i,j,k)
+              else
+                  p1(:) = grid_reg(i,j  ,1:2)
+                  p2(:) = grid_reg(i,j+1,1:2)
+                  call  mid_pt_sphere(p1, p2, p3)
+                  call get_unit_vect2(p1, p2, e2)
+                  call get_latlon_vector(p3, ex, ey)
+                  vd(i,j,k) = u_w_input(i,j,k)*inner_prod(e2,ex)+v_w_input(i,j,k)*inner_prod(e2,ey)
+                  p4(:) = agrid_reg(i,j,1:2) ! cell centroid
+                  call get_unit_vect2(p3, p4, e1) !C-grid U-wind unit vector
+                  uc(i,j,k) = u_w_input(i,j,k)*inner_prod(e1,ex)+v_w_input(i,j,k)*inner_prod(e1,ey)
+              endif
             enddo
           enddo
         enddo
@@ -2341,29 +2370,39 @@ endif
         do k=1,nlev
           do j=js_u,je_u
           do i=is_u,ie_u
-            p1(:) = grid_reg(i,  j,1:2)
-            p2(:) = grid_reg(i+1,j,1:2)
-            call  mid_pt_sphere(p1, p2, p3)
-            call get_unit_vect2(p1, p2, e1)
-            call get_latlon_vector(p3, ex, ey)
-            ud(i,j,k) = u_s_input(i,j,k)*inner_prod(e1,ex)+v_s_input(i,j,k)*inner_prod(e1,ey)
-            p4(:) = agrid_reg(i,j,1:2) ! cell centroid
-            call get_unit_vect2(p3, p4, e2) !C-grid V-wind unit vector
-            vc(i,j,k) = u_s_input(i,j,k)*inner_prod(e2,ex)+v_s_input(i,j,k)*inner_prod(e2,ey)
+            if (Atm%flagstruct%hrrrv3_ic) then
+                ud(i,j,k) = u_s_input(i,j,k)
+                vc(i,j,k) = v_s_input(i,j,k)
+            else
+                p1(:) = grid_reg(i,  j,1:2)
+                p2(:) = grid_reg(i+1,j,1:2)
+                call  mid_pt_sphere(p1, p2, p3)
+                call get_unit_vect2(p1, p2, e1)
+                call get_latlon_vector(p3, ex, ey)
+                ud(i,j,k) = u_s_input(i,j,k)*inner_prod(e1,ex)+v_s_input(i,j,k)*inner_prod(e1,ey)
+                p4(:) = agrid_reg(i,j,1:2) ! cell centroid
+                call get_unit_vect2(p3, p4, e2) !C-grid V-wind unit vector
+                vc(i,j,k) = u_s_input(i,j,k)*inner_prod(e2,ex)+v_s_input(i,j,k)*inner_prod(e2,ey)
+            endif
           enddo
           enddo
 !
           do j=js_v,je_v
             do i=is_v,ie_v
-              p1(:) = grid_reg(i,j  ,1:2)
-              p2(:) = grid_reg(i,j+1,1:2)
-              call  mid_pt_sphere(p1, p2, p3)
-              call get_unit_vect2(p1, p2, e2)
-              call get_latlon_vector(p3, ex, ey)
-              vd(i,j,k) = u_w_input(i,j,k)*inner_prod(e2,ex)+v_w_input(i,j,k)*inner_prod(e2,ey)
-              p4(:) = agrid_reg(i,j,1:2) ! cell centroid
-              call get_unit_vect2(p3, p4, e1) !C-grid U-wind unit vector
-              uc(i,j,k) = u_w_input(i,j,k)*inner_prod(e1,ex)+v_w_input(i,j,k)*inner_prod(e1,ey)
+              if (Atm%flagstruct%hrrrv3_ic) then
+                  vd(i,j,k) = v_w_input(i,j,k)
+                  uc(i,j,k) = u_w_input(i,j,k)
+              else
+                  p1(:) = grid_reg(i,j  ,1:2)
+                  p2(:) = grid_reg(i,j+1,1:2)
+                  call  mid_pt_sphere(p1, p2, p3)
+                  call get_unit_vect2(p1, p2, e2)
+                  call get_latlon_vector(p3, ex, ey)
+                  vd(i,j,k) = u_w_input(i,j,k)*inner_prod(e2,ex)+v_w_input(i,j,k)*inner_prod(e2,ey)
+                  p4(:) = agrid_reg(i,j,1:2) ! cell centroid
+                  call get_unit_vect2(p3, p4, e1) !C-grid U-wind unit vector
+                  uc(i,j,k) = u_w_input(i,j,k)*inner_prod(e1,ex)+v_w_input(i,j,k)*inner_prod(e1,ey)
+              endif
             enddo
           enddo
         enddo

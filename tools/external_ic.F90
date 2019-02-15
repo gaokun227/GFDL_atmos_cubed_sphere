@@ -1027,22 +1027,12 @@ contains
         do k=1,levp
           do j=js,je+1
             do i=is,ie
-              p1(:) = Atm(1)%gridstruct%grid(i,  j,1:2)
-              p2(:) = Atm(1)%gridstruct%grid(i+1,j,1:2)
-              call  mid_pt_sphere(p1, p2, p3)
-              call get_unit_vect2(p1, p2, e1)
-              call get_latlon_vector(p3, ex, ey)
-              ud(i,j,k) = u_s(i,j,k)*inner_prod(e1,ex) + v_s(i,j,k)*inner_prod(e1,ey)
+              ud(i,j,k) = u_s(i,j,k)
             enddo
           enddo
           do j=js,je
             do i=is,ie+1
-              p1(:) = Atm(1)%gridstruct%grid(i,j  ,1:2)
-              p2(:) = Atm(1)%gridstruct%grid(i,j+1,1:2)
-              call  mid_pt_sphere(p1, p2, p3)
-              call get_unit_vect2(p1, p2, e2)
-              call get_latlon_vector(p3, ex, ey)
-              vd(i,j,k) = u_w(i,j,k)*inner_prod(e2,ex) + v_w(i,j,k)*inner_prod(e2,ey)
+              vd(i,j,k) = v_w(i,j,k)
             enddo
           enddo
         enddo
