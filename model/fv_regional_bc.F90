@@ -4063,7 +4063,7 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
             qp(i,k) = w(i,j,k)
          enddo
       enddo
-       call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, -2, 11, Atm%ptop)
+       call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, -1, 4, Atm%ptop)
       do k=1,npz
          do i=is,ie
             BC_side%w_BC(i,j,k) = qn1(i,k)
