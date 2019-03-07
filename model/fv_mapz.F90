@@ -153,7 +153,7 @@ contains
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
   real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
-  real, dimension(is:ie):: gz, cvm, qv
+  real, dimension(is:ie):: gsize, gz, cvm, qv
 
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
@@ -596,7 +596,7 @@ contains
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
 !$OMP                               npx,npy,ccn_cm3,inline_mp,u_dt,v_dt,   &
 !$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps) &
-!$OMP                       private(q2,pe0,pe1,pe2,pe3,qv,cvm,gz,phis,dpln,dp2,t0)
+!$OMP                       private(q2,pe0,pe1,pe2,pe3,qv,cvm,gz,gsize,phis,dpln,dp2,t0)
 
 !$OMP do
   do k=2,km
@@ -781,6 +781,8 @@ endif        ! end last_step check
 !$OMP do
     do j = js, je
 
+        gsize(is:ie) = sqrt(gridstruct%area_64(is:ie,j))
+
         if (ccn_cm3 .gt. 0) then
           q2(is:ie,:) = q(is:ie,j,:,ccn_cm3)
         else
@@ -809,7 +811,7 @@ endif        ! end last_step check
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
                        q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), &
                        pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
-                       delz(is:ie,j,:), delp(is:ie,j,:), gridstruct%area_64(is:ie,j), abs(mdt), &
+                       delz(is:ie,j,:), delp(is:ie,j,:), gsize, abs(mdt), &
                        hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
                        inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), hydrostatic, &
                        is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:), consv>consv_min, &
