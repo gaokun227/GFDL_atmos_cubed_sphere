@@ -51,6 +51,7 @@ use fv_restart_mod,     only: fv_restart
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
 use gfdl_cloud_microphys_mod, only: gfdl_cloud_microphys_init, gfdl_cloud_microphys_end
+use cloud_diagnosis_mod,only: cloud_diagnosis_init
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
 use fv_mp_mod,          only: switch_current_Atm
 use field_manager_mod,  only: MODEL_ATMOS
@@ -153,15 +154,18 @@ contains
         endif
 
         !   if ( Atm(n)%flagstruct%adiabatic .or. Atm(n)%flagstruct%do_Held_Suarez ) then
+        zvir = 0.
         if ( Atm(n)%flagstruct%adiabatic ) then
-           zvir = 0.         ! no virtual effect
            Atm(n)%flagstruct%moist_phys = .false.
         else
            zvir = rvgas/rdgas - 1.
            Atm(n)%flagstruct%moist_phys = .true.
-           if ( grids_on_this_pe(n)) then
-              call fv_phys_init(isc,iec,jsc,jec,Atm(n)%flagstruct%nwat, Atm(n)%ts, Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
-              if ( Atm(n)%flagstruct%nwat==6) call gfdl_cloud_microphys_init (mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml) 
+           if ( grids_on_this_pe(n) ) then
+                call fv_phys_init(isc,iec,jsc,jec,Atm(n)%flagstruct%nwat, Atm(n)%ts,   &
+                             Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
+                if ( Atm(n)%flagstruct%nwat==6) call gfdl_cloud_microphys_init(mpp_pe(),  &
+                                                mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml) 
+                if ( Atm(n)%flagstruct%nwat==6) call cloud_diagnosis_init(nlunit, input_nml_file, stdlog(), fn_nml)
            endif
         endif
 
