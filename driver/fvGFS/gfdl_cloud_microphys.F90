@@ -1171,19 +1171,19 @@ subroutine revap_racc (ktop, kbot, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, 
             ! define heat capacity and latent heat coefficient
             ! -----------------------------------------------------------------------
             
-            lhl (k) = lv00 + d0_vap * tz (k)
-            q_liq (k) = ql (k) + qr (k)
+            lhl (k) = lv00 + d0_vap * tz (k) ! latent heat for liquid water, temp. dependent
+            q_liq (k) = ql (k) + qr (k)      ! amount of liquid water
             q_sol (k) = qi (k) + qs (k) + qg (k)
             cvm (k) = c_air + qv (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            lcpk (k) = lhl (k) / cvm (k)
+            lcpk (k) = lhl (k) / cvm (k) ! Lv/cv for total air
             
-            tin = tz (k) - lcpk (k) * ql (k) ! presence of clouds suppresses the rain evap
-            qpz = qv (k) + ql (k)
-            qsat = wqs2 (tin, den (k), dqsdt)
-            dqh = max (ql (k), h_var * max (qpz, qcmin))
-            dqh = min (dqh, 0.2 * qpz) ! new limiter
-            dqv = qsat - qv (k) ! use this to prevent super - sat the gird box
-            q_minus = qpz - dqh
+            tin = tz (k) - lcpk (k) * ql (k) ! presence of clouds suppresses the rain evap ! T if all cloud water evaporates
+            qpz = qv (k) + ql (k)            ! liquid water plus water vapor
+            qsat = wqs2 (tin, den (k), dqsdt)   ! sat vapor pressure 
+            dqh = max (ql (k), h_var * max (qpz, qcmin))!if ql = 0 (no cloud) this is h_var*qv
+            dqh = min (dqh, 0.2 * qpz) ! new limiter ! if ql = 0 this is min(h_var*qv, 0.2*qv) = h_var*qv, which is no less than 0.01*qv
+            dqv = qsat - qv (k) ! use this to prevent super - sat the gird box !saturation deficit
+            q_minus = qpz - dqh ! if ql = 0 this is (1 - h_var)*qv 
             q_plus = qpz + dqh
             
             ! -----------------------------------------------------------------------
@@ -1195,15 +1195,15 @@ subroutine revap_racc (ktop, kbot, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, 
             ! rain evaporation
             ! -----------------------------------------------------------------------
             
-            if (dqv > qvmin .and. qsat > q_minus) then
-                if (qsat > q_plus) then
-                    dq = qsat - qpz
+            if (dqv > qvmin .and. qsat > q_minus) then ! if sat vapor pressure is > (1 - h_var)*qv ~= qv
+                if (qsat > q_plus) then ! if significantly unsaturated 
+                    dq = qsat - qpz ! sat deficit with cloud water included (evaporate that first)
                 else
                     ! -----------------------------------------------------------------------
                     ! q_minus < qsat < q_plus
-                    ! dq == dqh if qsat == q_minus
+                    ! dq == dqh if qsat == q_plus
                     ! -----------------------------------------------------------------------
-                    dq = 0.25 * (q_minus - qsat) ** 2 / dqh
+                    dq = 0.25 * (q_minus - qsat) ** 2 / dqh ! 0 for q_minus = q_sat; 
                 endif
                 qden = qr (k) * den (k)
                 t2 = tin * tin
