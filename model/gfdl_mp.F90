@@ -308,7 +308,7 @@ contains
 ! -----------------------------------------------------------------------
 
 subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
-        pt, w, ua, va, dz, delp, area, dts, hs, rain, snow, ice, &
+        pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
         graupel, hydrostatic, phys_hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
         te, last_step)
     
