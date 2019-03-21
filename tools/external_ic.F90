@@ -31,7 +31,7 @@ module external_ic_mod
    use fms_mod,            only: get_mosaic_tile_file, read_data, error_mesg
    use fms_io_mod,         only: get_tile_string, field_size, free_restart_type
    use fms_io_mod,         only: restart_file_type, register_restart_field
-   use fms_io_mod,         only: save_restart, restore_state, set_filename_appendix
+   use fms_io_mod,         only: save_restart, restore_state, set_filename_appendix, get_global_att_value
    use mpp_mod,            only: mpp_error, FATAL, NOTE, mpp_pe, mpp_root_pe
    use mpp_mod,            only: stdlog, input_nml_file
    use mpp_parameter_mod,  only: AGRID_PARAM=>AGRID
@@ -73,6 +73,8 @@ module external_ic_mod
    real, parameter:: zvir = rvgas/rdgas - 1.
    real(kind=R_GRID), parameter :: cnst_0p20=0.20d0
    real :: deg2rad
+   character (len = 80) :: source
+   character(len=27), parameter :: source_fv3gfs = 'FV3GFS GAUSSIAN NEMSIO FILE'
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -320,7 +322,7 @@ contains
 ! local:
       real, dimension(:), allocatable:: ak, bk
       real, dimension(:,:), allocatable:: wk2, ps, oro_g
-      real, dimension(:,:,:), allocatable:: ud, vd, u_w, v_w, u_s, v_s, omga
+      real, dimension(:,:,:), allocatable:: ud, vd, u_w, v_w, u_s, v_s, omga, temp
       real, dimension(:,:,:), allocatable:: zh(:,:,:)  ! 3D height at 65 edges
       real, dimension(:,:,:,:), allocatable:: q
       real, dimension(:,:), allocatable :: phis_coarse ! lmh
@@ -415,10 +417,18 @@ contains
       if (ntrac > ntracers) call mpp_error(FATAL,'==> External_ic::get_nggps_ic: more NGGPS tracers &
                                  &than defined in field_table '//trim(fn_gfs_ctl)//' for NGGPS IC')
 
+!
+      call get_data_source(source,Atm(1)%flagstruct%regional)
+      if (trim(source) == source_fv3gfs) then
+         call mpp_error(NOTE, "READING FROM REGRIDDED FV3GFS NEMSIO FILE")
+         levp = 65
+      endif
+!
 !--- read in ak and bk from the gfs control file using fms_io read_data ---
       allocate (wk2(levp+1,2))
       allocate (ak(levp+1))
       allocate (bk(levp+1))
+ 
       call read_data('INPUT/'//trim(fn_gfs_ctl),'vcoord',wk2, no_domain=.TRUE.)
       ak(1:levp+1) = wk2(1:levp+1,1)
       bk(1:levp+1) = wk2(1:levp+1,2)
@@ -447,6 +457,7 @@ contains
       allocate ( v_w(is:ie+1, js:je, 1:levp) )
       allocate ( u_s(is:ie, js:je+1, 1:levp) )
       allocate ( v_s(is:ie, js:je+1, 1:levp) )
+      if (trim(source) == source_fv3gfs) allocate (temp(is:ie,js:je,1:levp))
 
       do n = 1,size(Atm(:))
 
@@ -506,6 +517,9 @@ contains
         ! GFS grid height at edges (including surface height)
         id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'ZH', zh, domain=Atm(n)%domain)
 
+        ! real temperature (K)
+        if (trim(source) == source_fv3gfs) id_res = register_restart_field (GFS_restart, fn_gfs_ics, 't', temp, mandatory=.false., &
+                                                                            domain=Atm(n)%domain)
         ! prognostic tracers
         do nt = 1, ntracers
           call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
@@ -575,7 +589,7 @@ contains
 !
 !***  Remap the variables in the compute domain.
 !
-        call remap_scalar(Atm(n), levp, npz, ntracers, ak, bk, ps, q, zh, omga)
+        call remap_scalar(Atm(n), levp, npz, ntracers, ak, bk, ps, q, zh, omga, temp)
 
         allocate ( ud(is:ie,  js:je+1, 1:levp) )
         allocate ( vd(is:ie+1,js:je,   1:levp) )
@@ -684,13 +698,34 @@ contains
         snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
         graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
         ntclamt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
+        if (trim(source) == source_fv3gfs) then
+        do k=1,npz
+          do j=js,je
+            do i=is,ie
+              wt = Atm(n)%delp(i,j,k)
+              if ( Atm(n)%flagstruct%nwat == 6 ) then
+                 qt = wt*(1. + Atm(n)%q(i,j,k,liq_wat) + &
+                               Atm(n)%q(i,j,k,ice_wat) + &
+                               Atm(n)%q(i,j,k,rainwat) + &
+                               Atm(n)%q(i,j,k,snowwat) + &
+                               Atm(n)%q(i,j,k,graupel))
+              else   ! all other values of nwat
+                 qt = wt*(1. + sum(Atm(n)%q(i,j,k,2:Atm(n)%flagstruct%nwat)))
+              endif
+              Atm(n)%delp(i,j,k) = qt
+              if (ntclamt > 0) Atm(n)%q(i,j,k,ntclamt) = 0.0    ! Moorthi
+            enddo
+          enddo
+        enddo
+
+              else
 !--- Add cloud condensate from GFS to total MASS
 ! 20160928: Adjust the mixing ratios consistently...
         do k=1,npz
           do j=js,je
             do i=is,ie
               wt = Atm(n)%delp(i,j,k)
-              if ( Atm(n)%flagstruct%nwat .eq. 6 ) then
+              if ( Atm(n)%flagstruct%nwat == 6 ) then
                  qt = wt*(1. + Atm(n)%q(i,j,k,liq_wat) + &
                                Atm(n)%q(i,j,k,ice_wat) + &
                                Atm(n)%q(i,j,k,rainwat) + &
@@ -707,7 +742,10 @@ contains
               if (ntclamt > 0) Atm(n)%q(i,j,k,ntclamt) = 0.0    ! Moorthi
             enddo
           enddo
+             
         enddo
+      endif   !end trim(source) test
+
 
         tke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
         if (tke > 0) then
@@ -737,6 +775,8 @@ contains
       deallocate (bk)
       deallocate (ps)
       deallocate (q )
+      if (trim(source) == source_fv3gfs) deallocate (temp)
+      deallocate (omga)
 
   end subroutine get_nggps_ic
 !------------------------------------------------------------------
@@ -2973,12 +3013,13 @@ contains
 
  end subroutine remap_scalar_nh
 
- subroutine remap_scalar(Atm, km, npz, ncnst, ak0, bk0, psc, qa, zh, omga)
+
+ subroutine remap_scalar(Atm, km, npz, ncnst, ak0, bk0, psc, qa, zh, omga, t_in)
   type(fv_atmos_type), intent(inout) :: Atm
   integer, intent(in):: km, npz, ncnst
   real,    intent(in):: ak0(km+1), bk0(km+1)
   real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je):: psc
-  real,    intent(in), optional, dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km):: omga
+  real,    intent(in), optional, dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km):: omga, t_in
   real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km,ncnst):: qa
   real,    intent(in), dimension(Atm%bd%is:Atm%bd%ie,Atm%bd%js:Atm%bd%je,km+1):: zh
 ! local:
@@ -3037,13 +3078,13 @@ contains
    Atm%phis(is:ie,js:je) = zh(is:ie,js:je,km+1)*grav
 #endif
 
-  if (Atm%flagstruct%ecmwf_ic) then
+  if (Atm%flagstruct%ecmwf_ic) then 
       if (cld_amt .gt. 0) Atm%q(i,j,k,cld_amt) = 0.
   endif
 
 !$OMP parallel do default(none) &
-!$OMP             shared(sphum,liq_wat,rainwat,ice_wat,snowwat,graupel,&
-!$OMP                    cld_amt,ncnst,npz,is,ie,js,je,km,k2,ak0,bk0,psc,zh,omga,qa,Atm,z500) &
+!$OMP             shared(sphum,liq_wat,rainwat,ice_wat,snowwat,graupel,source,&
+!$OMP                    cld_amt,ncnst,npz,is,ie,js,je,km,k2,ak0,bk0,psc,zh,omga,qa,Atm,z500,t_in) &
 !$OMP             private(l,m,pst,pn,gz,pe0,pn0,pe1,pn1,dp2,qp,qn1,gz_fv)
 
   do 5000 j=js,je
@@ -3182,12 +3223,29 @@ contains
          Atm%peln(i,k,j) = pn1(i,k)
       enddo
 
+!----------------------------------------------------
 ! Compute true temperature using hydrostatic balance
-      do k=1,npz
+!----------------------------------------------------
+      if (trim(source) /= source_fv3gfs .or. .not. present(t_in)) then
+         do k=1,npz
 !        qc = 1.-(Atm%q(i,j,k,liq_wat)+Atm%q(i,j,k,rainwat)+Atm%q(i,j,k,ice_wat)+Atm%q(i,j,k,snowwat))
 !        Atm%pt(i,j,k) = (gz_fv(k)-gz_fv(k+1))*qc/( rdgas*(pn1(i,k+1)-pn1(i,k))*(1.+zvir*Atm%q(i,j,k,sphum)) )
-         Atm%pt(i,j,k) = (gz_fv(k)-gz_fv(k+1))/( rdgas*(pn1(i,k+1)-pn1(i,k))*(1.+zvir*Atm%q(i,j,k,sphum)) )
-      enddo
+            Atm%pt(i,j,k) = (gz_fv(k)-gz_fv(k+1))/( rdgas*(pn1(i,k+1)-pn1(i,k))*(1.+zvir*Atm%q(i,j,k,sphum)) )
+         enddo
+!------------------------------
+! Remap input T logarithmically in p.
+!------------------------------
+      else
+        do k=1,km
+            qp(i,k) = t_in(i,j,k)
+        enddo
+
+        call mappm(km, log(pe0), qp, npz, log(pe1), qn1, is,ie, 2, 4, Atm%ptop) ! pn0 and pn1 are higher-precision
+                                                                                ! and cannot be passed to mappm
+        do k=1,npz
+            Atm%pt(i,j,k) = qn1(i,k)
+        enddo
+      endif
       if ( .not. Atm%flagstruct%hydrostatic ) then
          do k=1,npz
             Atm%delz(i,j,k) = (gz_fv(k+1) - gz_fv(k)) / grav
@@ -3200,54 +3258,67 @@ contains
 ! seperate cloud water and cloud ice from Jan-Huey Chen's HiRAM code
 ! only use for NCEP IC and GFDL microphy
 !-----------------------------------------------------------------------
-   if ((Atm%flagstruct%nwat .eq. 3 .or. Atm%flagstruct%nwat .eq. 6) .and. &
-        (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%nggps_ic)) then
-      do k=1,npz
-         do i=is,ie
+   if (trim(source) /= source_fv3gfs) then
+      if ((Atm%flagstruct%nwat .eq. 3 .or. Atm%flagstruct%nwat .eq. 6) .and. &
+           (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%nggps_ic)) then 
+         do k=1,npz
+            do i=is,ie
 
-            qn1(i,k) = Atm%q(i,j,k,liq_wat)
-            if (cld_amt .gt. 0) Atm%q(i,j,k,cld_amt) = 0.
+               qn1(i,k) = Atm%q(i,j,k,liq_wat)
+               if (cld_amt .gt. 0) Atm%q(i,j,k,cld_amt) = 0.
 
-            if ( Atm%pt(i,j,k) > 273.16 ) then       ! > 0C all liq_wat
-               Atm%q(i,j,k,liq_wat) = qn1(i,k)
-               Atm%q(i,j,k,ice_wat) = 0.
+               if ( Atm%pt(i,j,k) > 273.16 ) then       ! > 0C all liq_wat
+                  Atm%q(i,j,k,liq_wat) = qn1(i,k)
+                  Atm%q(i,j,k,ice_wat) = 0.
 #ifdef ORIG_CLOUDS_PART
-            else if ( Atm%pt(i,j,k) < 258.16 ) then  ! < -15C all ice_wat
-               Atm%q(i,j,k,liq_wat) = 0.
-               Atm%q(i,j,k,ice_wat) = qn1(i,k)
-            else                                     ! between -15~0C: linear interpolation
-               Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-258.16)/15.)
-               Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
-            endif
-#else
-            else if ( Atm%pt(i,j,k) < 233.16 ) then  ! < -40C all ice_wat
-               Atm%q(i,j,k,liq_wat) = 0.
-               Atm%q(i,j,k,ice_wat) = qn1(i,k)
-            else
-               if ( k.eq.1 ) then  ! between [-40,0]: linear interpolation
-                  Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-233.16)/40.)
+               else if ( Atm%pt(i,j,k) < 258.16 ) then  ! < -15C all ice_wat
+                  Atm%q(i,j,k,liq_wat) = 0.
+                  Atm%q(i,j,k,ice_wat) = qn1(i,k)
+               else                                     ! between -15~0C: linear interpolation
+                  Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-258.16)/15.)
+																	 
+				 
+	 
+																		 
+										
+											  
+				
+																		  
+																			  
                   Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
-               else
-                 if (Atm%pt(i,j,k)<258.16 .and. Atm%q(i,j,k-1,ice_wat)>1.e-5 ) then
-                    Atm%q(i,j,k,liq_wat) = 0.
-                    Atm%q(i,j,k,ice_wat) = qn1(i,k)
-                 else  ! between [-40,0]: linear interpolation
-                    Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-233.16)/40.)
-                    Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
-                 endif
                endif
-            endif
+#else
+               else if ( Atm%pt(i,j,k) < 233.16 ) then  ! < -40C all ice_wat
+                  Atm%q(i,j,k,liq_wat) = 0.
+                  Atm%q(i,j,k,ice_wat) = qn1(i,k)
+               else
+                  if ( k.eq.1 ) then  ! between [-40,0]: linear interpolation
+                     Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-233.16)/40.)
+                     Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
+                  else
+                     if (Atm%pt(i,j,k)<258.16 .and. Atm%q(i,j,k-1,ice_wat)>1.e-5 ) then
+                        Atm%q(i,j,k,liq_wat) = 0.
+                        Atm%q(i,j,k,ice_wat) = qn1(i,k)
+                     else  ! between [-40,0]: linear interpolation
+                        Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-233.16)/40.)
+                        Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
+                     endif
+                  endif
+               endif
+				 
 #endif
-            if (Atm%flagstruct%nwat .eq. 6 ) then
-              Atm%q(i,j,k,rainwat) = 0.
-              Atm%q(i,j,k,snowwat) = 0.
-              Atm%q(i,j,k,graupel) = 0.
-              call mp_auto_conversion(Atm%q(i,j,k,liq_wat), Atm%q(i,j,k,rainwat),  &
-                                      Atm%q(i,j,k,ice_wat), Atm%q(i,j,k,snowwat) )
-            endif
+               if (Atm%flagstruct%nwat .eq. 6 ) then
+                  Atm%q(i,j,k,rainwat) = 0.
+                  Atm%q(i,j,k,snowwat) = 0.
+                  Atm%q(i,j,k,graupel) = 0.
+                  call mp_auto_conversion(Atm%q(i,j,k,liq_wat), Atm%q(i,j,k,rainwat),  &
+                       Atm%q(i,j,k,ice_wat), Atm%q(i,j,k,snowwat) )
+               endif
+            enddo
          enddo
-      enddo
-   endif
+		   
+      endif
+  endif ! data source /= FV3GFS GAUSSIAN NEMSIO FILE
 
 !-------------------------------------------------------------
 ! map omega or w
@@ -3259,11 +3330,19 @@ contains
          enddo
       enddo
       call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, -1, 4, Atm%ptop)
+    if (trim(source) == source_fv3gfs) then
+      do k=1,npz
+         do i=is,ie
+            atm%w(i,j,k) = qn1(i,k)
+         enddo
+      enddo
+    else
       do k=1,npz
          do i=is,ie
             atm%w(i,j,k) = qn1(i,k)/atm%delp(i,j,k)*atm%delz(i,j,k)
          enddo
       enddo
+     endif
    endif
 
 5000 continue
@@ -3292,7 +3371,7 @@ contains
   if (.not.Atm%gridstruct%bounded_domain) then
       call prt_gb_nh_sh('DATA_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
       if ( .not. Atm%flagstruct%hydrostatic )  &
-      call prt_height('fv3_IC Z500', is,ie, js,je, 3, npz, 500.E2, Atm%phis, Atm%delz, Atm%peln,   &
+      call prt_height('fv3_IC Z500', is,ie, js,je, 3, npz, 500.E2, Atm%phis, Atm%delz, Atm%peln,   & 
                       Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
   endif
 
@@ -4329,6 +4408,28 @@ subroutine pmaxmn(qname, q, is, ie, js, je, km, fac, area, domain)
     enddo
 
   end subroutine get_staggered_grid
+
+  subroutine get_data_source(source,regional)
+!
+! This routine extracts the data source information if it is present in the datafile.
+!
+      character (len = 80) :: source
+      integer              :: ncids,sourceLength
+      logical :: lstatus,regional
+!
+! Use the fms call here so we can actually get the return code value.
+!
+      if (regional) then
+       lstatus = get_global_att_value('INPUT/gfs_data.nc',"source", source)
+      else
+       lstatus = get_global_att_value('INPUT/gfs_data.tile1.nc',"source", source)
+      endif
+      if (.not. lstatus) then
+         if (mpp_pe() == 0) write(0,*) 'INPUT source not found ',lstatus,' set source=No Source Attribute'
+         source='No Source Attribute'
+      endif
+  end subroutine get_data_source
+
 
  end module external_ic_mod
 

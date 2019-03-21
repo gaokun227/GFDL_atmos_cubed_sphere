@@ -1,6 +1,6 @@
 ! =======================================================================
 ! fast saturation adjustment is part of the gfdl cloud microphysics
-! developer: shian-jiann lin, linjiong zhou
+! developer: shian - jiann lin, linjiong zhou
 ! =======================================================================
 
 module fv_cmp_mod
@@ -24,11 +24,11 @@ module fv_cmp_mod
     real, parameter :: cv_air = cp_air - rdgas ! 717.55, heat capacity of dry air at constant volume
     real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume
     
-    ! http: / / www.engineeringtoolbox.com / ice - thermal - properties - d_576.html
+    ! http: // www.engineeringtoolbox.com / ice - thermal - properties - d_576.html
     ! c_ice = 2050.0 at 0 deg c
     ! c_ice = 1972.0 at - 15 deg c
     ! c_ice = 1818.0 at - 40 deg c
-    ! http: / / www.engineeringtoolbox.com / water - thermal - properties - d_162.html
+    ! http: // www.engineeringtoolbox.com / water - thermal - properties - d_162.html
     ! c_liq = 4205.0 at 4 deg c
     ! c_liq = 4185.5 at 15 deg c
     ! c_liq = 4178.0 at 30 deg c
@@ -84,7 +84,7 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
     
     real, intent (in), dimension (is - ng:ie + ng, js - ng:je + ng) :: dp, hs
     real, intent (in), dimension (is:ie, js:je) :: dpln
-    real, intent (in), dimension (is:,   js:  ) :: delz
+    real, intent (in), dimension (is:, js:) :: delz
     
     real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: pt, qv, ql, qi, qr, qs, qg
     real, intent (inout), dimension (is - ng:, js - ng:) :: q_con, cappa

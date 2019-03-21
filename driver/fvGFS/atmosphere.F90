@@ -77,6 +77,7 @@ use fv_regional_mod,    only: current_time_in_seconds
 
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
 use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
+use cloud_diagnosis_mod,only: cloud_diagnosis_init
 
 implicit none
 private
@@ -263,6 +264,7 @@ contains
 
    if (Atm(mytile)%flagstruct%do_inline_mp) then
      call gfdl_mp_init(mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
+     call cloud_diagnosis_init(nlunit, input_nml_file, stdlog(), fn_nml)
    endif
 
    call fv_restart(Atm(mytile)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mytile)%gridstruct%grid_type, grids_on_this_pe)

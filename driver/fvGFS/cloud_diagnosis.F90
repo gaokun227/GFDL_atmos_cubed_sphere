@@ -1,10 +1,14 @@
+! =======================================================================
+! cloud radii diagnosis built for gfdl cloud microphysics
+! authors: linjiong zhou and shian - jiann lin
+! =======================================================================
 module cloud_diagnosis_mod
     
     implicit none
     
     private
     
-    public cloud_diagnosis
+    public cloud_diagnosis, cloud_diagnosis_init
     
     real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
     real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
@@ -17,6 +21,7 @@ module cloud_diagnosis_mod
     
     real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain)
     real :: qi0_max = 2.0e-4 ! max cloud ice value (by other sources)
+    real :: qi0_rei = 0.8e-4 ! max cloud ice value (by other sources)
     
     real :: ccn_o = 100. ! ccn over ocean (cm^ - 3)
     real :: ccn_l = 300. ! ccn over land (cm^ - 3)
@@ -24,7 +29,8 @@ module cloud_diagnosis_mod
     ! cloud diagnosis
     
     real :: qmin = 1.0e-12 ! minimum mass mixing ratio (kg / kg)
-    real :: beta = 1.22 ! defined in heymsfield and mcfarquhar, 1996
+    ! real :: beta = 1.22 ! defined in heymsfield and mcfarquhar, 1996
+    real :: beta = 1.
     ! real :: beta = 0.5 ! testing
     
     ! real :: rewmin = 1.0, rewmax = 25.0
@@ -33,17 +39,18 @@ module cloud_diagnosis_mod
     ! real :: resmin = 300, resmax = 1000.0
     ! real :: regmin = 1000.0, regmax = 1.0e5
     ! lz
-    real :: rewmin = 5.0, rewmax = 10.0
-    real :: reimin = 10.0, reimax = 150.0
-    real :: rermin = 0.0, rermax = 10000.0
-    real :: resmin = 0.0, resmax = 10000.0
-    real :: regmin = 0.0, regmax = 10000.0
+    ! real :: rewmin = 5.0, rewmax = 10.0
+    ! real :: reimin = 10.0, reimax = 150.0
+    ! real :: rermin = 0.0, rermax = 10000.0
+    ! real :: resmin = 0.0, resmax = 10000.0
+    ! real :: regmin = 0.0, regmax = 10000.0
     ! sjl
-    ! real :: rewmin = 4.0, rewmax = 10.0
-    ! real :: reimin = 4.0, reimax = 250.0
-    ! real :: rermin = 5.0, rermax = 2000.0
-    ! real :: resmin = 5.0, resmax = 2000.0
-    ! real :: regmin = 5.0, regmax = 2000.0
+    !!! real :: reimin = 10.0, reimax = 150.0
+    real :: rewmin = 4.0, rewmax = 10.0
+    real :: reimin = 4.0, reimax = 250.0
+    real :: rermin = 5.0, rermax = 2000.0
+    real :: resmin = 5.0, resmax = 2000.0
+    real :: regmin = 5.0, regmax = 2000.0
     
     real :: betaw = 1.0
     real :: betai = 1.0
@@ -52,7 +59,6 @@ module cloud_diagnosis_mod
     real :: betag = 1.0
     
     logical :: liq_ice_combine = .true.
-    logical :: snow_grauple_combine = .false.
     
     integer :: rewflag = 1
     ! 1: martin et al., 1994
@@ -63,6 +69,12 @@ module cloud_diagnosis_mod
     ! 2: donner et al., 1997
     ! 3: fu, 2007
     ! 4: kristjansson et al., 2000
+    ! 5: wyser, 1998
+    
+    namelist / cloud_diagnosis_nml / &
+        ql0_max, qi0_max, qi0_rei, ccn_o, ccn_l, qmin, beta, liq_ice_combine, rewflag, reiflag, &
+        rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, regmin, regmax, &
+        betaw, betai, betar, betas, betag
     
 contains
 
@@ -105,13 +117,16 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
     real :: mask
     real :: cor
     real :: tc0
+    real :: bw
     
     real :: lambdar, lambdas, lambdag
+    real :: rei_fac
     
     real :: rhow = 1.0e3, rhor = 1.0e3, rhos = 1.0e2, rhog = 4.0e2 ! density (kg / m^3)
     real :: n0r = 8.0e6, n0s = 3.0e6, n0g = 4.0e6 ! intercept parameters (m^ - 4)
     real :: alphar = 0.8, alphas = 0.25, alphag = 0.5 ! parameters in terminal equation in lin et al., 1983
     real :: gammar = 17.837789, gammas = 8.2850630, gammag = 11.631769 ! gamma values as a result of different alpha
+    real, parameter :: rho_0 = 50.e-3
     
     real :: retab (138) = (/ &
         0.05000, 0.05000, 0.05000, 0.05000, 0.05000, 0.05000, &
@@ -156,38 +171,64 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
     endif
     
     if (liq_ice_combine) then
-        ! qmw = qmw + qmr
-        ! qmr = 0.0
-        ! qmi = qmi + qms + qmg
-        ! qms = 0.0
-        ! qmg = 0.0
         do k = ks, ke
             do i = is, ie
+                
                 ! frozen condensates:
+                ! cloud ice treated as snow above freezing and graupel exists
+                if (t (i, k) > tice) then
+                    qms (i, k) = qmi (i, k) + qms (i, k)
+                    qmi (i, k) = 0.
+                else
+                    qmi (i, k) = qmi (i, k) + qms (i, k)
+                    if (qmi (i, k) .gt. qi0_max) then
+                        qms (i, k) = qmi (i, k) - qi0_max + qmg (i, k)
+                        qmi (i, k) = qi0_max
+                    else
+                        qms (i, k) = qmg (i, k)
+                    endif
+                    qmg (i, k) = 0. ! treating all graupel as "snow"
+                endif
+            enddo
+        enddo
+    else
+        ! treating snow as ice, graupel as snow
+        ! qmi (:, :) = qmi (:, :) + qms (:, :)
+        ! qms (:, :) = qmg (:, :)
+        ! qmg (:, :) = 0. ! treating all graupel as "snow"
+        do k = ks, ke
+            do i = is, ie
+                ! step - 1: combine cloud ice & snow
                 qmi (i, k) = qmi (i, k) + qms (i, k)
-                if (qmi (i, k) .gt. qi0_max) then
-                    qms (i, k) = qmi (i, k) - qi0_max + qmg (i, k)
+                ! step - 2: auto - convert cloud ice if > qi0_max
+                qms (i, k) = qmi (i, k) - qi0_max
+                if (qms (i, k) .gt. 0.) then
                     qmi (i, k) = qi0_max
                 else
-                    qms (i, k) = qmg (i, k)
-                endif
-                qmg (i, k) = 0. ! treating all graupel as "snow"
-                ! liquid condensates:
-                qmw (i, k) = qmw (i, k) + qmr (i, k)
-                qmr (i, k) = qmw (i, k) - ql0_max
-                if (qmr (i, k) .gt. 0.) then
-                    qmw (i, k) = ql0_max
-                else
-                    qmr (i, k) = 0.0
+                    qms (i, k) = 0.0
                 endif
             enddo
         enddo
     endif
     
-    if (snow_grauple_combine) then
-        qms = qms + qmg
-        qmg = 0.0
-    endif
+    ! liquid condensates:
+    
+    ! sjl: 20180825
+#ifdef COMBINE_QR
+    do k = ks, ke
+        do i = is, ie
+            ! step - 1: combine cloud water & rain
+            qmw (i, k) = qmw (i, k) + qmr (i, k)
+            ! step - 2: auto - convert cloud wat if > ql0_max
+            qmr (i, k) = qmw (i, k) - ql0_max
+            if (qmr (i, k) .gt. 0.) then
+                qmw (i, k) = ql0_max
+            else
+                qmr (i, k) = 0.0
+            endif
+        enddo
+    enddo
+#endif
     
     do k = ks, ke
         
@@ -204,11 +245,12 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
             mask = min (max (lsm (i), 0.0), 2.0)
             
             dpg = abs (delp (i, k)) / grav
-            ! rho = p (i, k) / (rdgas * t (i, k) * (1. + zvir * qv))
+            ! sjl:
+            ! rho = p (i, k) / (rdgas * t (i, k) * (1. + zvir * qv)) ! needs qv
             rho = p (i, k) / (rdgas * t (i, k))
-            ! use rho = delp / (g * delz)
+            ! use rho = dpg / delz ! needs delz
             
-            tc0 = min (0., t (i, k) - tice) ! if ice exists above freezing, set it as freezing
+            tc0 = t (i, k) - tice
             
             if (rewflag .eq. 1) then
                 
@@ -276,14 +318,21 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
                 
                 if (qmi (i, k) .gt. qmin) then
                     qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
+                    ! sjl
+                    ! rei_fac = log (1.0e3 * qmi (i, k) * rho)
+                    rei_fac = log (1.0e3 * min (qi0_rei, qmi (i, k)) * rho)
                     if (tc0 .lt. - 50) then
-                        rei (i, k) = beta / 9.917 * exp ((1 - 0.891) * log (1.0e3 * qmi (i, k) * rho)) * 1.0e3
+                        ! rei (i, k) = beta / 9.917 * exp ((1. - 0.891) * rei_fac) * 1.0e3
+                        rei (i, k) = beta / 9.917 * exp (0.109 * rei_fac) * 1.0e3
                     elseif (tc0 .lt. - 40) then
-                        rei (i, k) = beta / 9.337 * exp ((1 - 0.920) * log (1.0e3 * qmi (i, k) * rho)) * 1.0e3
+                        ! rei (i, k) = beta / 9.337 * exp ((1. - 0.920) * rei_fac) * 1.0e3
+                        rei (i, k) = beta / 9.337 * exp (0.08 * rei_fac) * 1.0e3
                     elseif (tc0 .lt. - 30) then
-                        rei (i, k) = beta / 9.208 * exp ((1 - 0.945) * log (1.0e3 * qmi (i, k) * rho)) * 1.0e3
+                        ! rei (i, k) = beta / 9.208 * exp ((1. - 0.945) * rei_fac) * 1.0e3
+                        rei (i, k) = beta / 9.208 * exp (0.055 * rei_fac) * 1.0e3
                     else
-                        rei (i, k) = beta / 9.387 * exp ((1 - 0.969) * log (1.0e3 * qmi (i, k) * rho)) * 1.0e3
+                        ! rei (i, k) = beta / 9.387 * exp ((1. - 0.969) * rei_fac) * 1.0e3
+                        rei (i, k) = beta / 9.387 * exp (0.031 * rei_fac) * 1.0e3
                     endif
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
@@ -334,8 +383,15 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
                 
                 if (qmi (i, k) .gt. qmin) then
                     qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
-                    rei (i, k) = 47.05 + tc0 * (0.6624 + 0.001741 * tc0)
-                    rei (i, k) = max (reimin, min (reimax, rei (i, k)))
+                    ! use fu2007 form below - 10 c
+                    if (tc0 > - 10) then
+                        ! tc = - 10, rei = 40.6
+                        rei (i, k) = 100.0 + tc0 * 5.94
+                    else
+                        rei (i, k) = 47.05 + tc0 * (0.6624 + 0.001741 * tc0)
+                    endif
+                    ! rei (i, k) = max (reimin, min (reimax, rei (i, k)))
+                    rei (i, k) = max (reimin, rei (i, k))
                 else
                     qci (i, k) = 0.0
                     rei (i, k) = reimin
@@ -346,7 +402,7 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
             if (reiflag .eq. 4) then
                 
                 ! -----------------------------------------------------------------------
-                ! cloud ice (fu, 2007)
+                ! cloud ice (kristjansson et al., 2000)
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qmin) then
@@ -355,6 +411,25 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
                     cor = t (i, k) - int (t (i, k))
                     rei (i, k) = retab (ind) * (1. - cor) + retab (ind + 1) * cor
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
+                else
+                    qci (i, k) = 0.0
+                    rei (i, k) = reimin
+                endif
+                
+            endif
+            
+            if (reiflag .eq. 5) then
+                
+                ! -----------------------------------------------------------------------
+                ! cloud ice (wyser, 1998)
+                ! -----------------------------------------------------------------------
+                
+                if (qmi (i, k) .gt. qmin) then
+                    qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
+                    bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / rho_0) * exp (1.5 * log (- min (- 1.e-6, tc0)))
+                    rei (i, k) = 377.4 + bw * (203.3 + bw * (37.91 + 2.3696 * bw))
+                    ! rei (i, k) = max (reimin, min (reimax, rei (i, k)))
+                    rei (i, k) = max (reimin, rei (i, k))
                 else
                     qci (i, k) = 0.0
                     rei (i, k) = reimin
@@ -409,5 +484,35 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
     enddo
     
 end subroutine cloud_diagnosis
+
+subroutine cloud_diagnosis_init (nlunit, input_nml_file, logunit, fn_nml)
+    
+    implicit none
+    
+    integer, intent (in) :: nlunit
+    integer, intent (in) :: logunit
+    
+    character (len = 64), intent (in) :: fn_nml
+    character (len = *), intent (in) :: input_nml_file (:)
+    
+    integer :: ios
+    logical :: exists
+    
+#ifdef INTERNAL_FILE_NML
+    read (input_nml_file, nml = cloud_diagnosis_nml, iostat = ios)
+#else
+    inquire (file = trim (fn_nml), exist = exists)
+    if (.not. exists) then
+        write (6, *) 'cloud_diagnosis :: namelist file: ', trim (fn_nml), ' does not exist'
+        stop
+    else
+        open (unit = nlunit, file = fn_nml, readonly, status = 'old', iostat = ios)
+    endif
+    rewind (nlunit)
+    read (nlunit, nml = cloud_diagnosis_nml)
+    close (nlunit)
+#endif
+    
+end subroutine cloud_diagnosis_init
 
 end module cloud_diagnosis_mod
