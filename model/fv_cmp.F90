@@ -33,10 +33,10 @@ module fv_cmp_mod
     ! c_liq = 4185.5 at 15 deg c
     ! c_liq = 4178.0 at 30 deg c
     
-    ! real, parameter :: c_ice = 2106.0 ! ifs: heat capacity of ice at 0 deg c
-    ! real, parameter :: c_liq = 4218.0 ! ifs: heat capacity of liquid at 0 deg c
-    real, parameter :: c_ice = 1972.0 ! gfdl: heat capacity of ice at - 15 deg c
-    real, parameter :: c_liq = 4185.5 ! gfdl: heat capacity of liquid at 15 deg c
+    real, parameter :: c_ice = 2106.0 ! ifs: heat capacity of ice at 0 deg c
+    real, parameter :: c_liq = 4218.0 ! ifs: heat capacity of liquid at 0 deg c
+    ! real, parameter :: c_ice = 1972.0 ! gfdl: heat capacity of ice at - 15 deg c
+    ! real, parameter :: c_liq = 4185.5 ! gfdl: heat capacity of liquid at 15 deg c
     
     real, parameter :: dc_vap = cp_vap - c_liq ! - 2339.5, isobaric heating / cooling
     real, parameter :: dc_ice = c_liq - c_ice ! 2213.5, isobaric heating / colling
