@@ -4686,7 +4686,8 @@ subroutine eqv_pot(theta_e, pt, delp, delz, peln, pkz, q, is, ie, js, je, ng, np
     real, dimension(is:ie,js:je,npz), intent(out) :: theta_e  !< eqv pot
 ! local
     real, parameter:: tice = 273.16
-    real, parameter:: c_liq = 4190.       ! heat capacity of water at 0C
+    !real, parameter:: c_liq = 4190.       ! heat capacity of water at 0C
+    real, parameter:: c_liq = 4218.       ! heat capacity of water at 0C
 #ifdef SIM_NGGPS
     real, parameter:: dc_vap = 0.
 #else
@@ -4852,7 +4853,8 @@ end subroutine eqv_pot
    type(domain2d), intent(INOUT) :: domain
    real, intent(out):: te(is:ie,js:je)   ! vertically integrated TE
 ! Local
-   real, parameter:: c_liq = 4190.       ! heat capacity of water at 0C
+   !real, parameter:: c_liq = 4190.       ! heat capacity of water at 0C
+   real, parameter:: c_liq = 4218.       ! heat capacity of water at 0C
    real(kind=R_Grid) ::    area_l(isd:ied, jsd:jed)
    real, parameter:: cv_vap = cp_vapor - rvgas  ! 1384.5
    real  phiz(is:ie,km+1)
