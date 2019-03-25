@@ -428,7 +428,7 @@ contains
       allocate (wk2(levp+1,2))
       allocate (ak(levp+1))
       allocate (bk(levp+1))
- 
+
       call read_data('INPUT/'//trim(fn_gfs_ctl),'vcoord',wk2, no_domain=.TRUE.)
       ak(1:levp+1) = wk2(1:levp+1,1)
       bk(1:levp+1) = wk2(1:levp+1,2)
@@ -742,7 +742,7 @@ contains
               if (ntclamt > 0) Atm(n)%q(i,j,k,ntclamt) = 0.0    ! Moorthi
             enddo
           enddo
-             
+
         enddo
       endif   !end trim(source) test
 
@@ -1162,21 +1162,6 @@ contains
         do k=1,npz
           do j=js,je
             do i=is,ie
-              wt = Atm(n)%delp(i,j,k)
-              if ( Atm(n)%flagstruct%nwat .eq. 6 ) then
-                 qt = wt*(1. + Atm(n)%q(i,j,k,liq_wat) + &
-                               Atm(n)%q(i,j,k,ice_wat) + &
-                               Atm(n)%q(i,j,k,rainwat) + &
-                               Atm(n)%q(i,j,k,snowwat) + &
-                               Atm(n)%q(i,j,k,graupel))
-              else   ! all other values of nwat
-                 qt = wt*(1. + sum(Atm(n)%q(i,j,k,2:Atm(n)%flagstruct%nwat)))
-              endif
-              m_fac = wt / qt
-              do iq=1,ntracers
-                 Atm(n)%q(i,j,k,iq) = m_fac * Atm(n)%q(i,j,k,iq)
-              enddo
-              Atm(n)%delp(i,j,k) = qt
               if (ntclamt > 0) Atm(n)%q(i,j,k,ntclamt) = 0.0    ! Moorthi
             enddo
           enddo
@@ -2908,58 +2893,15 @@ contains
 
    enddo   ! i-loop
 
-!-----------------------------------------------------------------------
-! seperate cloud water and cloud ice from Jan-Huey Chen's HiRAM code
-! only use for NCEP IC and GFDL microphy
-!-----------------------------------------------------------------------
-   if ((Atm%flagstruct%nwat .eq. 3 .or. Atm%flagstruct%nwat .eq. 6) .and. &
-        (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%hrrrv3_ic)) then
-      do k=1,npz
-         do i=is,ie
 
-            qn1(i,k) = Atm%q(i,j,k,liq_wat)
-            if (cld_amt .gt. 0) Atm%q(i,j,k,cld_amt) = 0.
+  do k=1,npz
+     do i=is,ie
 
-            if ( Atm%pt(i,j,k) > 273.16 ) then       ! > 0C all liq_wat
-               Atm%q(i,j,k,liq_wat) = qn1(i,k)
-               Atm%q(i,j,k,ice_wat) = 0.
-#ifdef ORIG_CLOUDS_PART
-            else if ( Atm%pt(i,j,k) < 258.16 ) then  ! < -15C all ice_wat
-               Atm%q(i,j,k,liq_wat) = 0.
-               Atm%q(i,j,k,ice_wat) = qn1(i,k)
-            else                                     ! between -15~0C: linear interpolation
-               Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-258.16)/15.)
-               Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
-            endif
-#else
-            else if ( Atm%pt(i,j,k) < 233.16 ) then  ! < -40C all ice_wat
-               Atm%q(i,j,k,liq_wat) = 0.
-               Atm%q(i,j,k,ice_wat) = qn1(i,k)
-            else
-               if ( k.eq.1 ) then  ! between [-40,0]: linear interpolation
-                  Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-233.16)/40.)
-                  Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
-               else
-                 if (Atm%pt(i,j,k)<258.16 .and. Atm%q(i,j,k-1,ice_wat)>1.e-5 ) then
-                    Atm%q(i,j,k,liq_wat) = 0.
-                    Atm%q(i,j,k,ice_wat) = qn1(i,k)
-                 else  ! between [-40,0]: linear interpolation
-                    Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-233.16)/40.)
-                    Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
-                 endif
-               endif
-            endif
-#endif
-            if (Atm%flagstruct%nwat .eq. 6 ) then
-              Atm%q(i,j,k,rainwat) = 0.
-              Atm%q(i,j,k,snowwat) = 0.
-              Atm%q(i,j,k,graupel) = 0.
-              call mp_auto_conversion(Atm%q(i,j,k,liq_wat), Atm%q(i,j,k,rainwat),  &
-                                      Atm%q(i,j,k,ice_wat), Atm%q(i,j,k,snowwat) )
-            endif
-         enddo
-      enddo
-   endif
+          call mp_auto_conversion(Atm%q(i,j,k,liq_wat), Atm%q(i,j,k,rainwat),  &
+                                  Atm%q(i,j,k,ice_wat), Atm%q(i,j,k,snowwat) )
+     enddo
+  enddo
+
 
 !-------------------------------------------------------------
 ! map omega or w
@@ -2984,7 +2926,11 @@ contains
   if (.not. Atm%flagstruct%hydrostatic) call p_maxmin('delz_model', Atm%delz, is, ie, js, je, npz, 1.)
   call p_maxmin('sphum_model', Atm%q(is:ie,js:je,1:npz,sphum), is, ie, js, je, npz, 1.)
   call p_maxmin('liq_wat_model', Atm%q(is:ie,js:je,1:npz,liq_wat), is, ie, js, je, npz, 1.)
-  if (ice_wat .gt. 0) call p_maxmin('ice_wat_model', Atm%q(is:ie,js:je,1:npz,ice_wat), is, ie, js, je, npz, 1.)
+  call p_maxmin('ice_wat_model', Atm%q(is:ie,js:je,1:npz,ice_wat), is, ie, js, je, npz, 1.)
+  call p_maxmin('rainwat_model', Atm%q(is:ie,js:je,1:npz,rainwat), is, ie, js, je, npz, 1.)
+  call p_maxmin('snowwat_model', Atm%q(is:ie,js:je,1:npz,snowwat), is, ie, js, je, npz, 1.)
+  call p_maxmin('graupel_model', Atm%q(is:ie,js:je,1:npz,graupel), is, ie, js, je, npz, 1.)
+  call p_maxmin('cld_amt_model', Atm%q(is:ie,js:je,1:npz,cld_amt), is, ie, js, je, npz, 1.)
   call p_maxmin('PS_model (mb)', Atm%ps(is:ie,js:je), is, ie, js, je, 1, 0.01)
   call p_maxmin('PT_model', Atm%pt(is:ie,js:je,1:npz), is, ie, js, je, npz, 1.)
   call pmaxmn('ZS_model', Atm%phis(is:ie,js:je)/grav, is, ie, js, je, 1, 1., Atm%gridstruct%area_64, Atm%domain)
@@ -3078,7 +3024,7 @@ contains
    Atm%phis(is:ie,js:je) = zh(is:ie,js:je,km+1)*grav
 #endif
 
-  if (Atm%flagstruct%ecmwf_ic) then 
+  if (Atm%flagstruct%ecmwf_ic) then
       if (cld_amt .gt. 0) Atm%q(i,j,k,cld_amt) = 0.
   endif
 
@@ -3260,7 +3206,7 @@ contains
 !-----------------------------------------------------------------------
    if (trim(source) /= source_fv3gfs) then
       if ((Atm%flagstruct%nwat .eq. 3 .or. Atm%flagstruct%nwat .eq. 6) .and. &
-           (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%nggps_ic)) then 
+           (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%nggps_ic)) then
          do k=1,npz
             do i=is,ie
 
@@ -3276,15 +3222,15 @@ contains
                   Atm%q(i,j,k,ice_wat) = qn1(i,k)
                else                                     ! between -15~0C: linear interpolation
                   Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-258.16)/15.)
-																	 
-				 
-	 
-																		 
-										
-											  
-				
-																		  
-																			  
+
+
+
+
+
+
+
+
+
                   Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
                endif
 #else
@@ -3305,7 +3251,7 @@ contains
                      endif
                   endif
                endif
-				 
+
 #endif
                if (Atm%flagstruct%nwat .eq. 6 ) then
                   Atm%q(i,j,k,rainwat) = 0.
@@ -3316,7 +3262,7 @@ contains
                endif
             enddo
          enddo
-		   
+
       endif
   endif ! data source /= FV3GFS GAUSSIAN NEMSIO FILE
 
@@ -3371,7 +3317,7 @@ contains
   if (.not.Atm%gridstruct%bounded_domain) then
       call prt_gb_nh_sh('DATA_IC Z500', is,ie, js,je, z500, Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
       if ( .not. Atm%flagstruct%hydrostatic )  &
-      call prt_height('fv3_IC Z500', is,ie, js,je, 3, npz, 500.E2, Atm%phis, Atm%delz, Atm%peln,   & 
+      call prt_height('fv3_IC Z500', is,ie, js,je, 3, npz, 500.E2, Atm%phis, Atm%delz, Atm%peln,   &
                       Atm%gridstruct%area_64(is:ie,js:je), Atm%gridstruct%agrid_64(is:ie,js:je,2))
   endif
 

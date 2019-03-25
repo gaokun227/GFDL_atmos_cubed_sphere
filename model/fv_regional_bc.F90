@@ -110,7 +110,10 @@ module fv_regional_mod
       real :: current_time_in_seconds
 	  integer :: bc_time_interval
       integer,save :: ncid,next_time_to_read_bcs,npz,ntracers
-      integer,save :: liq_water_index,o3mr_index,sphum_index               !<-- Locations of tracer vbls in the tracers array
+
+      !Locations of tracer vbls in the tracers array
+      integer,save :: o3mr_index, liq_wat_index, sphum_index
+      integer,save :: ice_wat_index, rainwat_index, snowwat_index, graupel_index
       integer,save :: bc_hour, ntimesteps_per_bc_update
 
       real(kind=R_GRID),dimension(:,:,:),allocatable :: agrid_reg      &   !<-- Lon/lat of cell centers
@@ -308,9 +311,13 @@ contains
 !
       call compute_regional_bc_indices(Atm%regional_bc_bounds)
 !
-      liq_water_index=get_tracer_index(MODEL_ATMOS, 'liq_wat')
+      liq_wat_index=get_tracer_index(MODEL_ATMOS, 'liq_wat')
       o3mr_index     =get_tracer_index(MODEL_ATMOS, 'o3mr')
       sphum_index    =get_tracer_index(MODEL_ATMOS, 'sphum')
+      ice_wat_index=get_tracer_index(MODEL_ATMOS, 'ice_wat')
+      rainwat_index=get_tracer_index(MODEL_ATMOS, 'rainwat')
+      snowwat_index=get_tracer_index(MODEL_ATMOS, 'snowwat')
+      graupel_index=get_tracer_index(MODEL_ATMOS, 'graupel')
 !
 !-----------------------------------------------------------------------
 !***  Allocate the objects that will hold the boundary variables
@@ -1506,20 +1513,82 @@ contains
 !                               ,Atm%regional_bc_bounds                 &
                                 ,'liq_wat'                              &
                                 ,array_4d=tracers_input                 &
-                                ,tlev=liq_water_index )
+                                ,tlev=liq_wat_index )
+
+!!
+!!------------------
+!!***  Ozone
+!!------------------
+!!
+!      nlev=klev_in
+!      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
+!                                ,nlev                                   &
+!                                ,ntracers                               &
+!!                               ,Atm%regional_bc_bounds                 &
+!                                ,'o3mr   '                              &
+!                                ,array_4d=tracers_input                 &
+!                                ,tlev=o3mr_index )
+
+
 !
-!-----------
-!***  Ozone
-!-----------
+!------------------
+!***  Ice water
+!------------------
 !
       nlev=klev_in
       call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
                                 ,nlev                                   &
                                 ,ntracers                               &
 !                               ,Atm%regional_bc_bounds                 &
-                                ,'o3mr   '                              &
+                                ,'ice_wat'                              &
                                 ,array_4d=tracers_input                 &
-                                ,tlev=o3mr_index )
+                                ,tlev=ice_wat_index )
+
+!
+!------------------
+!***  Rain water
+!------------------
+!
+      nlev=klev_in
+      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
+                                ,nlev                                   &
+                                ,ntracers                               &
+!                               ,Atm%regional_bc_bounds                 &
+                                ,'rainwat'                              &
+                                ,array_4d=tracers_input                 &
+                                ,tlev=rainwat_index )
+
+
+!
+!------------------
+!***  Snow water
+!------------------
+!
+      nlev=klev_in
+      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
+                                ,nlev                                   &
+                                ,ntracers                               &
+!                               ,Atm%regional_bc_bounds                 &
+                                ,'snowwat'                              &
+                                ,array_4d=tracers_input                 &
+                                ,tlev=snowwat_index )
+
+!
+!------------------
+!***  Graupel water
+!------------------
+!
+      nlev=klev_in
+      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
+                                ,nlev                                   &
+                                ,ntracers                               &
+!                               ,Atm%regional_bc_bounds                 &
+                                ,'graupel'                              &
+                                ,array_4d=tracers_input                 &
+                                ,tlev=graupel_index )
+
+
+
 !
 !-----------------------
 !***  Vertical velocity
@@ -2504,7 +2573,7 @@ endif
 !-----------------------------------------------------------------------
 !
       call convert_to_virt_pot_temp(isd,ied,jsd,jed,npz                 &
-                                   ,sphum_index,liq_water_index )
+                                   ,sphum_index,liq_wat_index )
 !
 !-----------------------------------------------------------------------
 !***  If nudging of the specific humidity has been selected then
@@ -2645,7 +2714,7 @@ endif
         do k=1,klev_out
           do j=js_north,je_north
           do i=is_north,ie_north
-            BC_t1%north%q_con_BC(i,j,k)=BC_t1%north%q_BC(i,j,k,liq_water_index)
+            BC_t1%north%q_con_BC(i,j,k)=BC_t1%north%q_BC(i,j,k,liq_wat_index)
           enddo
           enddo
         enddo
@@ -2662,7 +2731,7 @@ endif
         do k=1,klev_out
           do j=js_south,je_south
           do i=is_south,ie_south
-            BC_t1%south%q_con_BC(i,j,k)=BC_t1%south%q_BC(i,j,k,liq_water_index)
+            BC_t1%south%q_con_BC(i,j,k)=BC_t1%south%q_BC(i,j,k,liq_wat_index)
           enddo
           enddo
         enddo
@@ -2678,7 +2747,7 @@ endif
         do k=1,klev_out
           do j=js_east,je_east
           do i=is_east,ie_east
-            BC_t1%east%q_con_BC(i,j,k)=BC_t1%east%q_BC(i,j,k,liq_water_index)
+            BC_t1%east%q_con_BC(i,j,k)=BC_t1%east%q_BC(i,j,k,liq_wat_index)
           enddo
           enddo
         enddo
@@ -2695,7 +2764,7 @@ endif
         do k=1,klev_out
           do j=js_west,je_west
           do i=is_west,ie_west
-            BC_t1%west%q_con_BC(i,j,k)=BC_t1%west%q_BC(i,j,k,liq_water_index)
+            BC_t1%west%q_con_BC(i,j,k)=BC_t1%west%q_BC(i,j,k,liq_wat_index)
           enddo
           enddo
         enddo
@@ -2737,7 +2806,7 @@ endif
         j2=ubound(BC_t1%north%cappa_BC,2)
         cappa  =>BC_t1%north%cappa_BC
         temp   =>BC_t1%north%pt_BC
-        liq_wat=>BC_t1%north%q_BC(:,:,:,liq_water_index)
+        liq_wat=>BC_t1%north%q_BC(:,:,:,liq_wat_index)
         sphum  =>BC_t1%north%q_BC(:,:,:,sphum_index)
         call compute_cappa(i1,i2,j1,j2,cappa,temp,liq_wat,sphum)
       endif
@@ -2749,7 +2818,7 @@ endif
         j2=ubound(BC_t1%south%cappa_BC,2)
         cappa  =>BC_t1%south%cappa_BC
         temp   =>BC_t1%south%pt_BC
-        liq_wat=>BC_t1%south%q_BC(:,:,:,liq_water_index)
+        liq_wat=>BC_t1%south%q_BC(:,:,:,liq_wat_index)
         sphum  =>BC_t1%south%q_BC(:,:,:,sphum_index)
         call compute_cappa(i1,i2,j1,j2,cappa,temp,liq_wat,sphum)
       endif
@@ -2761,7 +2830,7 @@ endif
         j2=ubound(BC_t1%east%cappa_BC,2)
         cappa  =>BC_t1%east%cappa_BC
         temp   =>BC_t1%east%pt_BC
-        liq_wat=>BC_t1%east%q_BC(:,:,:,liq_water_index)
+        liq_wat=>BC_t1%east%q_BC(:,:,:,liq_wat_index)
         sphum  =>BC_t1%east%q_BC(:,:,:,sphum_index)
         call compute_cappa(i1,i2,j1,j2,cappa,temp,liq_wat,sphum)
       endif
@@ -2773,7 +2842,7 @@ endif
         j2=ubound(BC_t1%west%cappa_BC,2)
         cappa  =>BC_t1%west%cappa_BC
         temp   =>BC_t1%west%pt_BC
-        liq_wat=>BC_t1%west%q_BC(:,:,:,liq_water_index)
+        liq_wat=>BC_t1%west%q_BC(:,:,:,liq_wat_index)
         sphum  =>BC_t1%west%q_BC(:,:,:,sphum_index)
         call compute_cappa(i1,i2,j1,j2,cappa,temp,liq_wat,sphum)
       endif
@@ -4054,41 +4123,7 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
    if ( Atm%flagstruct%nwat .eq. 6 ) then
       do k=1,npz
          do i=is,ie
-            qn1(i,k) = BC_side%q_BC(i,j,k,liq_wat)
-            BC_side%q_BC(i,j,k,rainwat) = 0.
-            BC_side%q_BC(i,j,k,snowwat) = 0.
-            BC_side%q_BC(i,j,k,graupel) = 0.
-            if (cld_amt .gt. 0) BC_side%q_BC(i,j,k,cld_amt) = 0.
-            if ( BC_side%pt_BC(i,j,k) > 273.16 ) then       ! > 0C all liq_wat
-               BC_side%q_BC(i,j,k,liq_wat) = qn1(i,k)
-               BC_side%q_BC(i,j,k,ice_wat) = 0.
-#ifdef ORIG_CLOUDS_PART
-            else if ( BC_side%pt_BC(i,j,k) < 258.16 ) then  ! < -15C all ice_wat
-               BC_side%q_BC(i,j,k,liq_wat) = 0.
-               BC_side%q_BC(i,j,k,ice_wat) = qn1(i,k)
-            else                                     ! between -15~0C: linear interpolation
-               BC_side%q_BC(i,j,k,liq_wat) = qn1(i,k)*((BC_side%pt_BC(i,j,k)-258.16)/15.)
-               BC_side%q_BC(i,j,k,ice_wat) = qn1(i,k) - BC_side%q_BC(i,j,k,liq_wat)
-            endif
-#else
-            else if ( BC_side%pt_BC(i,j,k) < 233.16 ) then  ! < -40C all ice_wat
-               BC_side%q_BC(i,j,k,liq_wat) = 0.
-               BC_side%q_BC(i,j,k,ice_wat) = qn1(i,k)
-            else
-               if ( k.eq.1 ) then  ! between [-40,0]: linear interpolation
-                  BC_side%q_BC(i,j,k,liq_wat) = qn1(i,k)*((BC_side%pt_BC(i,j,k)-233.16)/40.)
-                  BC_side%q_BC(i,j,k,ice_wat) = qn1(i,k) - BC_side%q_BC(i,j,k,liq_wat)
-               else
-                 if (BC_side%pt_BC(i,j,k)<258.16 .and. BC_side%q_BC(i,j,k-1,ice_wat)>1.e-5 ) then
-                    BC_side%q_BC(i,j,k,liq_wat) = 0.
-                    BC_side%q_BC(i,j,k,ice_wat) = qn1(i,k)
-                 else  ! between [-40,0]: linear interpolation
-                    BC_side%q_BC(i,j,k,liq_wat) = qn1(i,k)*((BC_side%pt_BC(i,j,k)-233.16)/40.)
-                    BC_side%q_BC(i,j,k,ice_wat) = qn1(i,k) - BC_side%q_BC(i,j,k,liq_wat)
-                 endif
-               endif
-            endif
-#endif
+
             call mp_auto_conversion(BC_side%q_BC(i,j,k,liq_wat), BC_side%q_BC(i,j,k,rainwat),  &
                                     BC_side%q_BC(i,j,k,ice_wat), BC_side%q_BC(i,j,k,snowwat) )
          enddo
@@ -4098,7 +4133,7 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
 !-------------------------------------------------------------
 ! map omega
 !------- ------------------------------------------------------
-   if ( .not. Atm%flagstruct%hydrostatic ) then
+
       do k=1,km
          do i=is,ie
             qp(i,k) = w(i,j,k)
@@ -4110,7 +4145,7 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
             BC_side%w_BC(i,j,k) = qn1(i,k)
          enddo
       enddo
-   endif
+
 
    enddo jloop2
 
