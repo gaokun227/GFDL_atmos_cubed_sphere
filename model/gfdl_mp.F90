@@ -24,6 +24,10 @@ module gfdl_mp_mod
     private
     
     public gfdl_mp_driver, gfdl_mp_init, gfdl_mp_end, wqs1, do_hail, wqs2, iqs1, iqs2
+    public mpdrv, sedi_heat, warm_rain, revap_racc, linear_prof, icloud, subgrid_z_proc, &
+        terminal_fall, check_column, implicit_fall, lagrangian_fall_ppm, cs_profile, &
+        cs_limiters, fall_speed, setupm, setup_con, qsmith_init, qs_tablew, qs_table2, &
+        qs_table3, qs_table, neg_adj, acr3d, smlt, gmlt, wet_bulb
     
     real :: missing_value = - 1.e10
     
@@ -334,7 +338,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
-    real, intent (out), dimension (is:ie, ks:ke) :: te
+    real, intent (inout), dimension (is:ie, ks:ke) :: te
     ! logical :: used
     real, dimension (is:ie) :: w_var
     real, dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
@@ -542,7 +546,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                     q_liq (k) = ql (i, k) + qr (i, k)
                     q_sol (k) = qi (i, k) + qs (i, k) + qg (i, k)
                     q_con (i, k) = q_liq (k) + q_sol (k)
-                    cvm (k) = (one_r8 - (qv (i, k) + q_con (i, k))) * c_air + qv (i, k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                    cvm (k) = (one_r8 - (qv (i, k) + q_con (i, k))) * c_air + &
+                        qv (i, k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                     te (i, k) = - cvm (k) * tz (k) * delp (i, k)
 #else
                     te (i, k) = - c_air * tz (k) * delp (i, k)
@@ -1718,7 +1723,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             qv (k) = qv (k) - sink
             qi (k) = qi (k) + sink
             q_sol (k) = q_sol (k) + sink
-            tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / (one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice)
+            tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / &
+                 (one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice)
             if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
             cycle
         endif
