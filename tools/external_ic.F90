@@ -161,7 +161,7 @@ contains
                              call timing_off('NGGPS_IC')
       elseif ( Atm(1)%flagstruct%hrrrv3_ic ) then
                              call timing_on('HRRRv3_IC')
-           call get_hrrrv3_ic( Atm, fv_domain )
+           call get_hrrrv2_ic( Atm, fv_domain )
                              call timing_off('HRRRv3_IC')
       elseif ( Atm(1)%flagstruct%ecmwf_ic ) then
            if( is_master() ) write(*,*) 'Calling get_ecmwf_ic'
@@ -781,11 +781,11 @@ contains
   end subroutine get_nggps_ic
 !------------------------------------------------------------------
 !------------------------------------------------------------------
-  subroutine get_hrrrv3_ic (Atm, fv_domain)
+  subroutine get_hrrrv2_ic (Atm, fv_domain)
 !    read in data after it has been preprocessed with
 !    NCEP/EMC orography maker
 !
-!--- variables read in from 'gfs_ctrl.nc'
+!--- variables read in from 'hrrrv2_ctrl.nc'
 !       VCOORD  -  level information
 !                   maps to 'ak & bk'
 !--- variables read in from 'sfc_data.nc'
@@ -801,9 +801,7 @@ contains
 !       U_S -  D-grid south face tangential wind component (m/s)
 !       V_S -  D-grid south face normal wind component (m/s)
 !       W   -  vertical velocity 'omega' (Pa/s)
-!       Q   -  prognostic tracer fields (Specific Humidity,
-!                                        O3 mixing ratio,
-!                                        Cloud mixing ratio)
+!       Q   -  prognostic tracer fields (qv, qc, qi, qr, qg gs in the unit of specific humidity)
 !--- Namelist variables
 !       filtered_terrain  -  use orography maker filtered terrain mapping
 
@@ -825,8 +823,8 @@ contains
       type (restart_file_type) :: ORO_restart, SFC_restart, HRRR_restart
       character(len=6)  :: gn, stile_name
       character(len=64) :: tracer_name
-      character(len=64) :: fn_gfs_ctl = 'gfs_ctrl.nc'
-      character(len=64) :: fn_gfs_ics = 'hrrrv3_data.nc'
+      character(len=64) :: fn_hrr_ctl = 'hrrrv2_ctrl.nc'
+      character(len=64) :: fn_hrr_ics = 'hrrrv2_data.nc'
       character(len=64) :: fn_sfc_ics = 'sfc_data.nc'
       character(len=64) :: fn_oro_ics = 'oro_data.nc'
       logical :: remap
@@ -842,7 +840,7 @@ contains
       namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds, &
                                  checker_tr, nt_checker
 
-      call mpp_error(NOTE,'Using external_IC::get_hrrrv3_ic which is valid only for data which has been &
+      call mpp_error(NOTE,'Using external_IC::get_hrrrv2_ic which is valid only for data which has been &
                           &horizontally interpolated to the current lambert grid')
 #ifdef INTERNAL_FILE_NML
       read (input_nml_file,external_ic_nml,iostat=ios)
@@ -855,27 +853,19 @@ contains
 #endif
 
       unit = stdlog()
-      call write_version_number ( 'EXTERNAL_IC_MOD::get_hrrrv3_ic', version )
+      call write_version_number ( 'EXTERNAL_IC_MOD::get_hrrrv2_ic', version )
       write(unit, nml=external_ic_nml)
 
       remap = .true.
-      if (Atm(1)%flagstruct%external_eta) then
+
         if (filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_hrrrv3_ic -  use externally-generated, filtered terrain &
-                              &and NCEP pressure levels (no vertical remapping)')
-        else if (.not. filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_hrrrv3_ic -  use externally-generated, raw terrain &
-                              &and NCEP pressure levels (no vertical remapping)')
-        endif
-      else  ! (.not.external_eta)
-        if (filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_hrrrv3_ic -  use externally-generated, filtered terrain &
+          call mpp_error(NOTE,'External_IC::get_hrrrv2_ic -  use externally-generated, filtered terrain &
                               &and FV3 pressure levels (vertical remapping)')
         else if (.not. filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_hrrrv3_ic -  use externally-generated, raw terrain &
+          call mpp_error(NOTE,'External_IC::get_hrrrv2_ic -  use externally-generated, raw terrain &
                               &and FV3 pressure levels (vertical remapping)')
         endif
-      endif
+
 
       is  = Atm(1)%bd%is
       ie  = Atm(1)%bd%ie
@@ -897,40 +887,40 @@ contains
       end if
       call set_filename_appendix('')
 
-!--- test for existence of the GFS control file
-      if (.not. file_exist('INPUT/'//trim(fn_gfs_ctl), no_domain=.TRUE.)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv3_ic: file '//trim(fn_gfs_ctl)//' for NGGPS IC does not exist')
+!--- test for existence of the HRRR control file
+      if (.not. file_exist('INPUT/'//trim(fn_hrr_ctl), no_domain=.TRUE.)) then
+        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv2_ic: file '//trim(fn_hrr_ctl)//' for HRRR IC does not exist')
       endif
-      call mpp_error(NOTE,'==> External_ic::get_hrrrv3_ic: using control file '//trim(fn_gfs_ctl)//' for NGGPS IC')
+      call mpp_error(NOTE,'==> External_ic::get_hrrrv2_ic: using control file '//trim(fn_hrr_ctl)//' for HRRR IC')
 
-!--- read in the number of tracers in the NCEP NGGPS ICs
-      call read_data ('INPUT/'//trim(fn_gfs_ctl), 'ntrac', ntrac, no_domain=.TRUE.)
-      if (ntrac > ntracers) call mpp_error(FATAL,'==> External_ic::get_hrrrv3_ic: more NGGPS tracers &
-                                 &than defined in field_table '//trim(fn_gfs_ctl)//' for NGGPS IC')
+!--- read in the number of tracers in the HRRR ICs
+      call read_data ('INPUT/'//trim(fn_hrr_ctl), 'ntrac', ntrac, no_domain=.TRUE.)
+      if (ntrac > ntracers) call mpp_error(FATAL,'==> External_ic::get_hrrrv2_ic: more HRRR tracers &
+                                 &than defined in field_table '//trim(fn_hrr_ctl)//' for HRRR IC')
 
-!--- read in ak and bk from the gfs control file using fms_io read_data ---
+!--- read in ak and bk from the HRRR control file using fms_io read_data ---
       allocate (wk2(levp+1,2))
       allocate (ak(levp+1))
       allocate (bk(levp+1))
-      call read_data('INPUT/'//trim(fn_gfs_ctl),'vcoord',wk2, no_domain=.TRUE.)
+      call read_data('INPUT/'//trim(fn_hrr_ctl),'vcoord',wk2, no_domain=.TRUE.)
       ak(1:levp+1) = wk2(1:levp+1,1)
       bk(1:levp+1) = wk2(1:levp+1,2)
       deallocate (wk2)
 
       if (.not. file_exist('INPUT/'//trim(fn_oro_ics), domain=Atm(1)%domain)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_nggps_ic: tiled file '//trim(fn_oro_ics)//' for NGGPS IC does not exist')
+        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv2_ic: tiled file '//trim(fn_oro_ics)//' for HRRR IC does not exist')
       endif
-      call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using tiled data file '//trim(fn_oro_ics)//' for NGGPS IC')
+      call mpp_error(NOTE,'==> External_ic::get_hrrrv2_ic: using tiled data file '//trim(fn_oro_ics)//' for HRRR IC')
 
       if (.not. file_exist('INPUT/'//trim(fn_sfc_ics), domain=Atm(1)%domain)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_nggps_ic: tiled file '//trim(fn_sfc_ics)//' for NGGPS IC does not exist')
+        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv2_ic: tiled file '//trim(fn_sfc_ics)//' for HRRR IC does not exist')
       endif
-      call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using tiled data file '//trim(fn_sfc_ics)//' for NGGPS IC')
+      call mpp_error(NOTE,'==> External_ic::get_hrrrv2_ic: using tiled data file '//trim(fn_sfc_ics)//' for HRRR IC')
 
-      if (.not. file_exist('INPUT/'//trim(fn_gfs_ics), domain=Atm(1)%domain)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_nggps_ic: tiled file '//trim(fn_gfs_ics)//' for NGGPS IC does not exist')
+      if (.not. file_exist('INPUT/'//trim(fn_hrr_ics), domain=Atm(1)%domain)) then
+        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv2_ic: tiled file '//trim(fn_hrr_ics)//' for HRRR IC does not exist')
       endif
-      call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using tiled data file '//trim(fn_gfs_ics)//' for NGGPS IC')
+      call mpp_error(NOTE,'==> External_ic::get_hrrrv2_ic: using tiled data file '//trim(fn_hrr_ics)//' for HRRR IC')
 
       allocate (zh(is:ie,js:je,levp+1))
       allocate (ps(is:ie,js:je))
@@ -984,30 +974,30 @@ contains
         endif
 
         ! edge pressure (Pa)
-        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'ps', ps, domain=Atm(n)%domain)
+        id_res = register_restart_field (HRRR_restart, fn_hrr_ics, 'ps', ps, domain=Atm(n)%domain)
 
         ! physical temperature (K)
-        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'pt', t, domain=Atm(n)%domain)
+        id_res = register_restart_field (HRRR_restart, fn_hrr_ics, 'pt', t, domain=Atm(n)%domain)
 
         ! D-grid west  face tangential wind component (m/s)
-        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'u_w', u_w, domain=Atm(n)%domain,position=EAST)
+        id_res = register_restart_field (HRRR_restart, fn_hrr_ics, 'u_w', u_w, domain=Atm(n)%domain,position=EAST)
         ! D-grid west  face normal wind component (m/s)
-        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'v_w', v_w, domain=Atm(n)%domain,position=EAST)
+        id_res = register_restart_field (HRRR_restart, fn_hrr_ics, 'v_w', v_w, domain=Atm(n)%domain,position=EAST)
         ! D-grid south face tangential wind component (m/s)
-        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'u_s', u_s, domain=Atm(n)%domain,position=NORTH)
+        id_res = register_restart_field (HRRR_restart, fn_hrr_ics, 'u_s', u_s, domain=Atm(n)%domain,position=NORTH)
         ! D-grid south face normal wind component (m/s)
-        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'v_s', v_s, domain=Atm(n)%domain,position=NORTH)
+        id_res = register_restart_field (HRRR_restart, fn_hrr_ics, 'v_s', v_s, domain=Atm(n)%domain,position=NORTH)
 
 
         ! vertical velocity (m/s)
-        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'w', w, domain=Atm(n)%domain)
+        id_res = register_restart_field (HRRR_restart, fn_hrr_ics, 'w', w, domain=Atm(n)%domain)
         ! GFS grid height at edges (including surface height)
-        id_res = register_restart_field (HRRR_restart, fn_gfs_ics, 'ZH', zh, domain=Atm(n)%domain)
+        id_res = register_restart_field (HRRR_restart, fn_hrr_ics, 'ZH', zh, domain=Atm(n)%domain)
 
         ! prognostic tracers
         do nt = 1, ntracers
           call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
-          id_res = register_restart_field (HRRR_restart, fn_gfs_ics, trim(tracer_name), q(:,:,:,nt), &
+          id_res = register_restart_field (HRRR_restart, fn_hrr_ics, trim(tracer_name), q(:,:,:,nt), &
                                            mandatory=.false.,domain=Atm(n)%domain)
         enddo
 
@@ -1082,7 +1072,7 @@ contains
         deallocate ( v_s )
 
         call remap_dwinds(levp, npz, ak, bk, Atm(n)%ps(is:ie,js:je), ud, vd, Atm(n))
-        !call remap_dwinds_nh(levp, npz, pe(is-1:ie+1,js-1:je+1,:), ud, vd, Atm(n))
+
         deallocate ( ud )
         deallocate ( vd )
 
@@ -1151,14 +1141,9 @@ contains
         endif
 
         call mpp_update_domains( Atm(n)%phis, Atm(n)%domain, complete=.true. )
-        liq_wat = get_tracer_index(MODEL_ATMOS, 'liq_wat')
-        ice_wat = get_tracer_index(MODEL_ATMOS, 'ice_wat')
-        rainwat = get_tracer_index(MODEL_ATMOS, 'rainwat')
-        snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
-        graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
+
+
         ntclamt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
-!--- Add cloud condensate from GFS to total MASS
-! 20160928: Adjust the mixing ratios consistently...
         do k=1,npz
           do j=js,je
             do i=is,ie
@@ -1200,7 +1185,7 @@ contains
 
 
 
-  end subroutine get_hrrrv3_ic
+  end subroutine get_hrrrv2_ic
 !------------------------------------------------------------------
 !------------------------------------------------------------------
   subroutine get_ncep_ic( Atm, fv_domain, nq )
