@@ -196,6 +196,7 @@ module gfdl_mp_mod
     real :: tau_l2v = 300. ! cloud water to water vapor (evaporation)
     real :: tau_g2v = 900. ! grapuel sublimation
     real :: tau_v2g = 21600. ! grapuel deposition -- make it a slow process
+    real :: tau_revp = 0. ! rain evaporation
     
     ! horizontal subgrid variability
     
@@ -270,6 +271,10 @@ module gfdl_mp_mod
     real :: vs_max = 5.0 ! max fall speed for snow
     real :: vg_max = 8.0 ! max fall speed for graupel
     real :: vr_max = 12. ! max fall speed for rain
+
+    real :: xr_a = 0.25 ! p value in xu and randall, 1996
+    real :: xr_b = 100. ! alpha_0 value in xu and randall, 1996
+    real :: xr_c = 0.49 ! gamma value in xu and randall, 1996
     
     ! cloud microphysics switchers
     
@@ -283,6 +288,7 @@ module gfdl_mp_mod
     logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
     logical :: mp_print = .false. ! cloud microphysics debugging printout
     logical :: do_hail = .false. ! use hail parameters instead of graupel
+    logical :: xr_cloud = .false. ! use xu and randall, 1996's cloud diagnosis
     
     ! real :: global_area = - 1.
     
@@ -303,7 +309,7 @@ module gfdl_mp_mod
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
-        ntimes, disp_heat, do_hail
+        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c
     
 contains
 
@@ -1051,9 +1057,16 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk
     real :: dqv, qsat, dqsdt, evap, t2, qden, q_plus, q_minus, sink
     real :: qpz, dq, dqh, tin
+    real :: fac_revp
     
     integer :: k
     
+    if (tau_revp .gt. 1.E-6) then
+        fac_revp = 1. - exp (- dt / tau_revp)
+    else
+        fac_revp = 1.
+    endif
+
     do k = ks, ke
         
         if (tz (k) > t_wfr .and. qr (k) > qrmin) then
@@ -1100,7 +1113,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
                 t2 = tin * tin
                 evap = crevp (1) * t2 * dq * (crevp (2) * sqrt (qden) + crevp (3) * &
                     exp (0.725 * log (qden))) / (crevp (4) * t2 + crevp (5) * qsat * den (k))
-                evap = min (qr (k), dt * evap, dqv / (1. + lcpk (k) * dqsdt))
+                evap = min (qr (k), dt * fac_revp * evap, dqv / (1. + lcpk (k) * dqsdt))
                 ! -----------------------------------------------------------------------
                 ! alternative minimum evap in dry environmental air
                 ! sjl 20180831:
@@ -2007,40 +2020,52 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! icloud_f = 2: binary cloud scheme (0 / 1)
         ! -----------------------------------------------------------------------
         
-        if (rh > 0.80 .and. qpz > 1.e-6) then
-            
-            dq = h_var * qpz
-            q_plus = qpz + dq
-            q_minus = qpz - dq
-            
-            if (icloud_f == 2) then
-                if (qstar < qpz) then
-                    qa (k) = 1.
-                else
-                    qa (k) = 0.
-                endif
+        if (xr_cloud) then
+            if (rh >= 1.0) then
+                qa (k) = 1.0
+            elseif (rh > 0.80 .and. q_cond (k) > 1.e-6) then
+                qa (k) = rh ** xr_a * (1.0 - exp (- xr_b * max (0.0, q_cond (k)) / &
+                    max (1.e-5, (max (1.e-10, 1.0 - rh) * qstar) ** xr_c)))
+                qa (k) = max (0.0, min (1., qa (k)))
             else
-                if (qstar < q_minus) then
-                    qa (k) = 1.
-                else
-                    if (qstar < q_plus) then
-                        if (icloud_f == 0) then
-                            qa (k) = (q_plus - qstar) / (dq + dq)
-                        else
-                            qa (k) = (q_plus - qstar) / (2. * dq * (1. - q_cond (k)))
-                        endif
+                qa (k) = 0.0
+            endif
+        else
+            if (rh > 0.80 .and. qpz > 1.e-6) then
+                
+                dq = h_var * qpz
+                q_plus = qpz + dq
+                q_minus = qpz - dq
+                
+                if (icloud_f == 2) then
+                    if (qstar < qpz) then
+                        qa (k) = 1.
                     else
                         qa (k) = 0.
                     endif
-                    ! impose minimum cloudiness if substantial q_cond (k) exist
-                    if (q_cond (k) > 1.e-6) then
-                        qa (k) = max (cld_min, qa (k))
+                else
+                    if (qstar < q_minus) then
+                        qa (k) = 1.
+                    else
+                        if (qstar < q_plus) then
+                            if (icloud_f == 0) then
+                                qa (k) = (q_plus - qstar) / (dq + dq)
+                            else
+                                qa (k) = (q_plus - qstar) / (2. * dq * (1. - q_cond (k)))
+                            endif
+                        else
+                            qa (k) = 0.
+                        endif
+                        ! impose minimum cloudiness if substantial q_cond (k) exist
+                        if (q_cond (k) > 1.e-6) then
+                            qa (k) = max (cld_min, qa (k))
+                        endif
+                        qa (k) = min (1., qa (k))
                     endif
-                    qa (k) = min (1., qa (k))
                 endif
+            else
+                qa (k) = 0.
             endif
-        else
-            qa (k) = 0.
         endif
         
     enddo
