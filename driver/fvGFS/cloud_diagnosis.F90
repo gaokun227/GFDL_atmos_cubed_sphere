@@ -206,14 +206,16 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
         do k = ks, ke
             do i = is, ie
                 ! step - 1: combine cloud ice & snow
-                qmi (i, k) = qmi (i, k) + qms (i, k)
+                ! qmi (i, k) = qmi (i, k) + qms (i, k)
                 ! step - 2: auto - convert cloud ice if > qi0_max
-                qms (i, k) = qmi (i, k) - qi0_max
-                if (qms (i, k) .gt. 0.) then
-                    qmi (i, k) = qi0_max
-                else
-                    qms (i, k) = 0.0
-                endif
+                ! qms (i, k) = qmi (i, k) - qi0_max
+                ! if (qms (i, k) .gt. 0.) then
+                ! qmi (i, k) = qi0_max
+                ! else
+                ! qms (i, k) = 0.0
+                ! endif
+                qms (i, k) = qms (i, k) + qmg (i, k)
+                qmg (i, k) = 0.0
             enddo
         enddo
     endif
