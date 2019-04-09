@@ -310,7 +310,7 @@ module gfdl_mp_mod
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
-        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tice_mlt
+        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt
     
 contains
 
