@@ -172,6 +172,7 @@ module gfdl_mp_mod
     real :: cld_fac = 1.0 ! multiplication factor for cloud fraction
     real :: cld_min = 0.05 ! minimum cloud fraction
     real :: tice = 273.16 ! set tice = 165. to trun off ice - phase phys (kessler emulator)
+    real :: tice_mlt = 268.0 ! set ice melting temperature to 268.0 based on observation (kay et al., 2016, JC)
     
     ! real :: t_min = 178. ! min temp to freeze - dry all water vapor
     ! sjl 20181123
@@ -309,7 +310,7 @@ module gfdl_mp_mod
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
-        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c
+        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tice_mlt
     
 contains
 
@@ -1264,13 +1265,13 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        if (tzk (k) > tice .and. qik (k) > qcmin) then
+        if (tzk (k) > tice_mlt .and. qik (k) > qcmin) then
             
             ! -----------------------------------------------------------------------
             ! pimlt: instant melting of cloud ice
             ! -----------------------------------------------------------------------
             
-            melt = min (qik (k), fac_imlt * (tzk (k) - tice) / icpk (k))
+            melt = min (qik (k), fac_imlt * (tzk (k) - tice_mlt) / icpk (k))
             tmp = min (melt, dim (ql_mlt, qlk (k))) ! max ql amount
             qlk (k) = qlk (k) + tmp
             qrk (k) = qrk (k) + melt - tmp
