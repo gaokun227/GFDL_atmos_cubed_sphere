@@ -267,9 +267,12 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
                 ! cloud water (martin et al., 1994)
                 ! -----------------------------------------------------------------------
                 
-                ! ccnw = 0.80 * (- 1.15e-3 * (ccn_o ** 2) + 0.963 * ccn_o + 5.30) * abs (mask - 1.0) + &
-                ! 0.67 * (- 2.10e-4 * (ccn_l ** 2) + 0.568 * ccn_l - 27.9) * (1.0 - abs (mask - 1.0))
+#ifdef GFDL_MP_CCN
                 ccnw = ccn_o * abs (mask - 1.0) + ccn_l * (1.0 - abs (mask - 1.0))
+#else
+                ccnw = 0.80 * (- 1.15e-3 * (ccn_o ** 2) + 0.963 * ccn_o + 5.30) * abs (mask - 1.0) + &
+                0.67 * (- 2.10e-4 * (ccn_l ** 2) + 0.568 * ccn_l - 27.9) * (1.0 - abs (mask - 1.0))
+#endif
                 
                 if (qmw (i, k) .gt. qmin) then
                     qcw (i, k) = betaw * dpg * qmw (i, k) * 1.0e3
