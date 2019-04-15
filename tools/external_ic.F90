@@ -160,9 +160,9 @@ contains
            call get_nggps_ic( Atm, fv_domain )
                              call timing_off('NGGPS_IC')
       elseif ( Atm(1)%flagstruct%hrrrv3_ic ) then
-                             call timing_on('HRRRv3_IC')
-           call get_hrrrv2_ic( Atm, fv_domain )
-                             call timing_off('HRRRv3_IC')
+                             call timing_on('HRRR_IC')
+           call get_hrrr_ic( Atm, fv_domain )
+                             call timing_off('HRRR_IC')
       elseif ( Atm(1)%flagstruct%ecmwf_ic ) then
            if( is_master() ) write(*,*) 'Calling get_ecmwf_ic'
                              call timing_on('ECMWF_IC')
@@ -781,11 +781,11 @@ contains
   end subroutine get_nggps_ic
 !------------------------------------------------------------------
 !------------------------------------------------------------------
-  subroutine get_hrrrv2_ic (Atm, fv_domain)
+  subroutine get_hrrr_ic (Atm, fv_domain)
 !    read in data after it has been preprocessed with
 !    NCEP/EMC orography maker
 !
-!--- variables read in from 'hrrrv2_ctrl.nc'
+!--- variables read in from 'hrrr_ctrl.nc'
 !       VCOORD  -  level information
 !                   maps to 'ak & bk'
 !--- variables read in from 'sfc_data.nc'
@@ -812,7 +812,7 @@ contains
       real, dimension(:), allocatable:: ak, bk
       real, dimension(:,:), allocatable:: wk2, ps, oro_g
       real, dimension(:,:,:), allocatable:: ud, vd, u_w, v_w, u_s, v_s, w, t
-      real, dimension(:,:,:), allocatable:: zh ! 3D height at 65 edges
+      real, dimension(:,:,:), allocatable:: zh ! 3D height at 51 edges
       real, dimension(:,:,:,:), allocatable:: q
       real, dimension(:,:), allocatable :: phis_coarse ! lmh
       real rdg, wt, qt, m_fac, pe1
@@ -823,8 +823,8 @@ contains
       type (restart_file_type) :: ORO_restart, SFC_restart, HRRR_restart
       character(len=6)  :: gn, stile_name
       character(len=64) :: tracer_name
-      character(len=64) :: fn_hrr_ctl = 'hrrrv2_ctrl.nc'
-      character(len=64) :: fn_hrr_ics = 'hrrrv2_data.nc'
+      character(len=64) :: fn_hrr_ctl = 'hrrr_ctrl.nc'
+      character(len=64) :: fn_hrr_ics = 'hrrr_data.nc'
       character(len=64) :: fn_sfc_ics = 'sfc_data.nc'
       character(len=64) :: fn_oro_ics = 'oro_data.nc'
       logical :: remap
@@ -840,7 +840,7 @@ contains
       namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds, &
                                  checker_tr, nt_checker
 
-      call mpp_error(NOTE,'Using external_IC::get_hrrrv2_ic which is valid only for data which has been &
+      call mpp_error(NOTE,'Using external_IC::get_hrrr_ic which is valid only for data which has been &
                           &horizontally interpolated to the current lambert grid')
 #ifdef INTERNAL_FILE_NML
       read (input_nml_file,external_ic_nml,iostat=ios)
@@ -853,16 +853,16 @@ contains
 #endif
 
       unit = stdlog()
-      call write_version_number ( 'EXTERNAL_IC_MOD::get_hrrrv2_ic', version )
+      call write_version_number ( 'EXTERNAL_IC_MOD::get_hrrr_ic', version )
       write(unit, nml=external_ic_nml)
 
       remap = .true.
 
         if (filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_hrrrv2_ic -  use externally-generated, filtered terrain &
+          call mpp_error(NOTE,'External_IC::get_hrrr_ic -  use externally-generated, filtered terrain &
                               &and FV3 pressure levels (vertical remapping)')
         else if (.not. filtered_terrain) then
-          call mpp_error(NOTE,'External_IC::get_hrrrv2_ic -  use externally-generated, raw terrain &
+          call mpp_error(NOTE,'External_IC::get_hrrr_ic -  use externally-generated, raw terrain &
                               &and FV3 pressure levels (vertical remapping)')
         endif
 
@@ -889,13 +889,13 @@ contains
 
 !--- test for existence of the HRRR control file
       if (.not. file_exist('INPUT/'//trim(fn_hrr_ctl), no_domain=.TRUE.)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv2_ic: file '//trim(fn_hrr_ctl)//' for HRRR IC does not exist')
+        call mpp_error(FATAL,'==> Error in External_ic::get_hrrr_ic: file '//trim(fn_hrr_ctl)//' for HRRR IC does not exist')
       endif
-      call mpp_error(NOTE,'==> External_ic::get_hrrrv2_ic: using control file '//trim(fn_hrr_ctl)//' for HRRR IC')
+      call mpp_error(NOTE,'==> External_ic::get_hrrr_ic: using control file '//trim(fn_hrr_ctl)//' for HRRR IC')
 
 !--- read in the number of tracers in the HRRR ICs
       call read_data ('INPUT/'//trim(fn_hrr_ctl), 'ntrac', ntrac, no_domain=.TRUE.)
-      if (ntrac > ntracers) call mpp_error(FATAL,'==> External_ic::get_hrrrv2_ic: more HRRR tracers &
+      if (ntrac > ntracers) call mpp_error(FATAL,'==> External_ic::get_hrrr_ic: more HRRR tracers &
                                  &than defined in field_table '//trim(fn_hrr_ctl)//' for HRRR IC')
 
 !--- read in ak and bk from the HRRR control file using fms_io read_data ---
@@ -908,19 +908,19 @@ contains
       deallocate (wk2)
 
       if (.not. file_exist('INPUT/'//trim(fn_oro_ics), domain=Atm(1)%domain)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv2_ic: tiled file '//trim(fn_oro_ics)//' for HRRR IC does not exist')
+        call mpp_error(FATAL,'==> Error in External_ic::get_hrrr_ic: tiled file '//trim(fn_oro_ics)//' for HRRR IC does not exist')
       endif
-      call mpp_error(NOTE,'==> External_ic::get_hrrrv2_ic: using tiled data file '//trim(fn_oro_ics)//' for HRRR IC')
+      call mpp_error(NOTE,'==> External_ic::get_hrrr_ic: using tiled data file '//trim(fn_oro_ics)//' for HRRR IC')
 
       if (.not. file_exist('INPUT/'//trim(fn_sfc_ics), domain=Atm(1)%domain)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv2_ic: tiled file '//trim(fn_sfc_ics)//' for HRRR IC does not exist')
+        call mpp_error(FATAL,'==> Error in External_ic::get_hrrr_ic: tiled file '//trim(fn_sfc_ics)//' for HRRR IC does not exist')
       endif
-      call mpp_error(NOTE,'==> External_ic::get_hrrrv2_ic: using tiled data file '//trim(fn_sfc_ics)//' for HRRR IC')
+      call mpp_error(NOTE,'==> External_ic::get_hrrr_ic: using tiled data file '//trim(fn_sfc_ics)//' for HRRR IC')
 
       if (.not. file_exist('INPUT/'//trim(fn_hrr_ics), domain=Atm(1)%domain)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_hrrrv2_ic: tiled file '//trim(fn_hrr_ics)//' for HRRR IC does not exist')
+        call mpp_error(FATAL,'==> Error in External_ic::get_hrrr_ic: tiled file '//trim(fn_hrr_ics)//' for HRRR IC does not exist')
       endif
-      call mpp_error(NOTE,'==> External_ic::get_hrrrv2_ic: using tiled data file '//trim(fn_hrr_ics)//' for HRRR IC')
+      call mpp_error(NOTE,'==> External_ic::get_hrrr_ic: using tiled data file '//trim(fn_hrr_ics)//' for HRRR IC')
 
       allocate (zh(is:ie,js:je,levp+1))
       allocate (ps(is:ie,js:je))
@@ -1028,7 +1028,7 @@ contains
         Atm(n)%phis = Atm(n)%phis*grav
 
 
-        if(is_master())  write(*,*) 'HRRRv3 ak(1)=', ak(1), ' ak(2)=', ak(2)
+        if(is_master())  write(*,*) 'HRRR ak(1)=', ak(1), ' ak(2)=', ak(2)
         ak(1) = max(1.e-9, ak(1))
 
 !***  For regional runs read in each of the BC variables from the NetCDF boundary file
@@ -1185,7 +1185,7 @@ contains
 
 
 
-  end subroutine get_hrrrv2_ic
+  end subroutine get_hrrr_ic
 !------------------------------------------------------------------
 !------------------------------------------------------------------
   subroutine get_ncep_ic( Atm, fv_domain, nq )
@@ -2812,10 +2812,6 @@ contains
          enddo
       enddo
 
-!      call map_scalar(km,  REAL(pn0), t, t(:,j,km),   &
-!                      npz, REAL(pn1), atm%pt, &
-!                      is, ie, j, Atm%bd%isd, Atm%bd%ied, Atm%bd%jsd, Atm%bd%jed, 1, 8, 184.)
-
 !---------------------------------------------------
 ! Retrive temperature using  geopotential height from external data
 !---------------------------------------------------
@@ -2872,7 +2868,6 @@ contains
       if ( .not. Atm%flagstruct%hydrostatic ) then
          do k=1,npz
             Atm%delz(i,j,k) = (gz_fv(k+1) - gz_fv(k)) / grav
-            !Atm%delz(i,j,k) = rdgas / grav * atm%pt(i,j,k)
          enddo
       endif
 
