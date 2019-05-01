@@ -1158,11 +1158,11 @@ contains
       integer :: ierr, ios
       real, allocatable :: wk2(:,:)
 !
-      logical :: filtered_terrain
-      logical :: gfs_dwinds
-      integer :: levp
-      logical :: checker_tr
-      integer :: nt_checker
+      logical :: filtered_terrain = .true.
+      logical :: gfs_dwinds       = .true.
+      integer :: levp             = 64
+      logical :: checker_tr       = .false.
+      integer :: nt_checker       = 0
       namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds     &
                                 ,checker_tr, nt_checker
 !-----------------------------------------------------------------------
