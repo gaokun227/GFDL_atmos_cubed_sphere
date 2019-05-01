@@ -136,10 +136,10 @@ contains
     !FIXME: Doesn't work for a nested grid
     ntiles = get_mosaic_ntiles(atm_mosaic)
     if( .not. Atm%flagstruct%regional) then  !<-- The regional setup has only 1 tile so do not shutdown in that case.
-    if(ntiles .NE. 6) call mpp_error(FATAL, &
-       'fv_grid_tools(read_grid): ntiles should be 6 in mosaic file '//trim(atm_mosaic) )
-    if(nregions .NE. 6) call mpp_error(FATAL, &
-       'fv_grid_tools(read_grid): nregions should be 6 when reading from mosaic file '//trim(grid_file) )
+       if(ntiles .NE. 6) call mpp_error(FATAL, &
+            'fv_grid_tools(read_grid): ntiles should be 6 in mosaic file '//trim(atm_mosaic) )
+       if(nregions .NE. 6) call mpp_error(FATAL, &
+            'fv_grid_tools(read_grid): nregions should be 6 when reading from mosaic file '//trim(grid_file) )
     endif
 
     call get_var_att_value(atm_hgrid, 'x', 'units', units)
