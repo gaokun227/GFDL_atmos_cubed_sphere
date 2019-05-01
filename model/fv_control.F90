@@ -65,6 +65,8 @@ module fv_control_mod
    implicit none
    private
 
+   integer, parameter :: MAX_NNEST=20
+
 !-----------------------------------------------------------------------
 ! Grid descriptor file setup
 !-----------------------------------------------------------------------
@@ -292,14 +294,13 @@ module fv_control_mod
 
 ! Start up MPI
 
-   !call mp_assign_gid
 
     ! Initialize timing routines
       call timing_init
       call timing_on('TOTAL')
 
     ! Setup the run from namelist 
-      ntilesMe = size(Atm(:)) !Full number of Atm arrays; one less than number of grids, if multiple grids
+      ntilesMe = 1
 
       call run_setup(Atm,dt_atmos, grids_on_this_pe, p_split)   ! initializes domain_decomp
 
@@ -559,7 +560,7 @@ module fv_control_mod
                          c2l_ord, dx_const, dy_const, umax, deglat,      &
                          deglon_start, deglon_stop, deglat_start, deglat_stop, &
                          phys_hydrostatic, use_hydro_pressure, make_hybrid_z, old_divg_damp, add_noise, &
-                         nested, twowaynest, parent_grid_num, parent_tile, nudge_qv, &
+                         twowaynest, parent_grid_num, parent_tile, nudge_qv, &
                          refinement, nestbctype, nestupdate, nsponge, s_weight, &
                          ioffset, joffset, check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
                          do_uni_zfull, adj_mass_vmr, update_blend
@@ -590,113 +591,112 @@ module fv_control_mod
    unit = stdlog()
    write(unit, nml=fv_grid_nml)
 
-   do n=1,size(Atm)
+   call fv_diag_init_gn(Atm(1))
 
-      call switch_current_Atm(Atm(n), .false.)
-      call setup_pointers(Atm(n))
-      Atm(n)%grid_number = n
-      if (grids_on_this_pe(n)) then
-         call fv_diag_init_gn(Atm(n))
-      endif
+   do n = 1, ngrids
 
 #ifdef INTERNAL_FILE_NML
    ! Set input_file_nml for correct parent/nest initialization
-      if (n .gt. 1) then
-         write(Atm(n)%nml_filename,'(A4, I2.2)') 'nest', n
-         call read_input_nml(Atm(n)%nml_filename)
-      endif
+   if (Atm(1)%grid_number .gt. 1) then
+      write(Atm(1)%nml_filename,'(A4, I2.2)') 'nest', Atm(1)%grid_number
+      call read_input_nml(Atm(n)%nml_filename)
+   endif
+#endif
+   if(Atm(1)%grid_number == n) then
+      call setup_pointers(Atm(1))
+   else if(Atm(1)%
+
+
    ! Read FVCORE namelist 
-      read (input_nml_file,fv_core_nml,iostat=ios)
-      ierr = check_nml_error(ios,'fv_core_nml')
+   read (input_nml_file,fv_core_nml,iostat=ios)
+   ierr = check_nml_error(ios,'fv_core_nml')
    ! Read Test_Case namelist
-      read (input_nml_file,test_case_nml,iostat=ios)
-      ierr = check_nml_error(ios,'test_case_nml')
+   read (input_nml_file,test_case_nml,iostat=ios)
+   ierr = check_nml_error(ios,'test_case_nml')
 
    ! Reset input_file_nml to default behavior
-      call read_input_nml
+   call read_input_nml
 #else
-      if (size(Atm) == 1) then
-         f_unit = open_namelist_file()
-      else if (n == 1) then
-         f_unit = open_namelist_file('input.nml')
-      else 
-         write(Atm(n)%nml_filename,'(A10, I2.2, A4)') 'input_nest', n, '.nml'
-         f_unit = open_namelist_file(Atm(n)%nml_filename)
-      endif
+   if (Atm(1)%grid_number==1) then
+      f_unit = open_namelist_file()
+   else 
+      write(Atm(1)%nml_filename,'(A10, I2.2, A4)') 'input_nest', Atm(1)%grid_number, '.nml'
+      f_unit = open_namelist_file(Atm(1)%nml_filename)
+   endif
 
    ! Read FVCORE namelist 
-      read (f_unit,fv_core_nml,iostat=ios)
-      ierr = check_nml_error(ios,'fv_core_nml')
+   read (f_unit,fv_core_nml,iostat=ios)
+   ierr = check_nml_error(ios,'fv_core_nml')
 
    ! Read Test_Case namelist
-      rewind (f_unit)
-      read (f_unit,test_case_nml,iostat=ios)
-      ierr = check_nml_error(ios,'test_case_nml')
-      call close_file(f_unit)
+   rewind (f_unit)
+   read (f_unit,test_case_nml,iostat=ios)
+   ierr = check_nml_error(ios,'test_case_nml')
+   call close_file(f_unit)
 #endif         
-      write(unit, nml=fv_core_nml)
-      write(unit, nml=test_case_nml)
+   write(unit, nml=fv_core_nml)
+   write(unit, nml=test_case_nml)
 
-      if (len_trim(grid_file) /= 0) Atm(n)%flagstruct%grid_file = grid_file
-      if (len_trim(grid_name) /= 0) Atm(n)%flagstruct%grid_name = grid_name
-      if (len_trim(res_latlon_dynamics) /= 0) Atm(n)%flagstruct%res_latlon_dynamics = res_latlon_dynamics
-      if (len_trim(res_latlon_tracers)  /= 0) Atm(n)%flagstruct%res_latlon_tracers = res_latlon_tracers
+   if (len_trim(grid_file) /= 0) Atm(1)%flagstruct%grid_file = grid_file
+   if (len_trim(grid_name) /= 0) Atm(1)%flagstruct%grid_name = grid_name
+   if (len_trim(res_latlon_dynamics) /= 0) Atm(1)%flagstruct%res_latlon_dynamics = res_latlon_dynamics
+   if (len_trim(res_latlon_tracers)  /= 0) Atm(1)%flagstruct%res_latlon_tracers = res_latlon_tracers
 
-      !*** single tile for Cartesian grids
-      if (grid_type>3) then
-         ntiles=1
-         non_ortho = .false.
-         nf_omega = 0
-      endif
+   !*** single tile for Cartesian grids
+   if (grid_type>3) then
+      ntiles=1
+      non_ortho = .false.
+      nf_omega = 0
+   endif
 
-      if (.not. nested) Atm(n)%neststruct%npx_global = npx
+   if (.not. nested) Atm(1)%neststruct%npx_global = npx
 
-      ! Define n_split if not in namelist
-      if (ntiles==6) then
-         dimx = 4.0*(npx-1)
-         if ( hydrostatic ) then
-            if ( npx >= 120 ) ns0 = 6
+   ! Define n_split if not in namelist
+   if (ntiles==6) then
+      dimx = 4.0*(npx-1)
+      if ( hydrostatic ) then
+         if ( npx >= 120 ) ns0 = 6
+      else
+         if ( npx <= 45 ) then
+            ns0 = 6
+         elseif ( npx <=90 ) then
+            ns0 = 7
          else
-            if ( npx <= 45 ) then
-               ns0 = 6
-            elseif ( npx <=90 ) then
-               ns0 = 7
-            else
-               ns0 = 8
-            endif
+            ns0 = 8
          endif
-      else
-         dimx = max ( npx, 2*(npy-1) )
       endif
+   else
+      dimx = max ( npx, 2*(npy-1) )
+   endif
           
-      if (grid_type < 4) then
-         n0split = nint ( ns0*abs(dt_atmos)*dimx/(dt0*dim0) + 0.49 )
-      elseif (grid_type == 4 .or. grid_type == 7) then
-         n0split = nint ( 2.*umax*dt_atmos/sqrt(dx_const**2 + dy_const**2) + 0.49 )
-      elseif (grid_type == 5 .or. grid_type == 6) then
-         if (grid_type == 6) then
-            deglon_start = 0.; deglon_stop  = 360.
-         endif
-         dl = (deglon_stop-deglon_start)*pi/(180.*(npx-1))
-         dp = (deglat_stop-deglat_start)*pi/(180.*(npy-1))
+   if (grid_type < 4) then
+      n0split = nint ( ns0*abs(dt_atmos)*dimx/(dt0*dim0) + 0.49 )
+   elseif (grid_type == 4 .or. grid_type == 7) then
+      n0split = nint ( 2.*umax*dt_atmos/sqrt(dx_const**2 + dy_const**2) + 0.49 )
+   elseif (grid_type == 5 .or. grid_type == 6) then
+      if (grid_type == 6) then
+         deglon_start = 0.; deglon_stop  = 360.
+      endif
+      dl = (deglon_stop-deglon_start)*pi/(180.*(npx-1))
+      dp = (deglat_stop-deglat_start)*pi/(180.*(npy-1))
 
-         dxmin=dl*radius*min(cos(deglat_start*pi/180.-ng*dp),   &
-                             cos(deglat_stop *pi/180.+ng*dp))
-         dymin=dp*radius
-         n0split = nint ( 2.*umax*dt_atmos/sqrt(dxmin**2 + dymin**2) + 0.49 )
-      endif
-      n0split = max ( 1, n0split )
+      dxmin=dl*radius*min(cos(deglat_start*pi/180.-ng*dp),   &
+                          cos(deglat_stop *pi/180.+ng*dp))
+      dymin=dp*radius
+      n0split = nint ( 2.*umax*dt_atmos/sqrt(dxmin**2 + dymin**2) + 0.49 )
+   endif
+   n0split = max ( 1, n0split )
 
-      if ( n_split == 0 ) then
-           n_split = nint( real(n0split)/real(k_split*abs(p_split)) * stretch_fac + 0.5 )
-           if(is_master()) write(*,*) 'For k_split (remapping)=', k_split
-           if(is_master()) write(*,198) 'n_split is set to ', n_split, ' for resolution-dt=',npx,npy,ntiles,dt_atmos
-      else
-          if(is_master()) write(*,199) 'Using n_split from the namelist: ', n_split
-      endif
-      if (is_master() .and. n == 1 .and. abs(p_split) > 1) then
-         write(*,199) 'Using p_split = ', p_split
-      endif
+   if ( n_split == 0 ) then
+        n_split = nint( real(n0split)/real(k_split*abs(p_split)) * stretch_fac + 0.5 )
+        if(is_master()) write(*,*) 'For k_split (remapping)=', k_split
+        if(is_master()) write(*,198) 'n_split is set to ', n_split, ' for resolution-dt=',npx,npy,ntiles,dt_atmos
+   else
+       if(is_master()) write(*,199) 'Using n_split from the namelist: ', n_split
+   endif
+   if (is_master() .and. n == 1 .and. abs(p_split) > 1) then
+      write(*,199) 'Using p_split = ', p_split
+   endif
       
       if (Atm(n)%neststruct%nested) then
          do i=1,n-1
@@ -895,12 +895,13 @@ module fv_control_mod
     integer, intent(INOUT) :: p_split
     character(100) :: pe_list_name
     integer :: nest_pes(100)
-    integer :: n, npes, ntiles, pecounter, i
+    integer :: n, npes, ntiles, i
     integer, allocatable :: pelist(:)
     integer :: f_unit, ios, ierr
 
     !This is an OPTIONAL namelist, that needs to be read before everything else
-    namelist /nest_nml/ ngrids, ntiles, nest_pes, p_split
+    namelist /nest_nml/ ngrids, ntiles, nest_pes, p_split, nnest, nest_level, nest_pes, &
+                        twowaynest, parent_tile, refinement, ioffset, joffset, nestupdate
 
     call mp_assign_gid
 
@@ -918,27 +919,33 @@ module fv_control_mod
       call close_file(f_unit)
 #endif
 
-      if (ntiles /= -999) ngrids = ntiles
-      if (ngrids > 10) call mpp_error(FATAL, "More than 10 nested grids not supported")
+      if(nnest > MAX_NNEST) call mpp_error(FATAL, "fv_contrl_mod: nnest is greater than MAX_NNEST, increase MAX_NNEST")
+      ngrids = nnest + 1
+      my_ngrids = 1
+      npes = mpp_npes()
 
-      allocate(Atm(ngrids))
+      !---make sure the size of nest_pes equal to ngrids.
+      do n = 1, ngrids
+         if(nest_pes(n) .LE. 0) call mpp_error(FATAL, "fv_contrl_mod: nest_pes is 0 for some grid")
+      enddo
+      if(sum(nest_pes(1:ngrids)) .NE. npes) call mpp_error(FATAL, "fv_contrl_mod: sum(nest_pes) .NE. mpp_npes()")
+
+      allocate(Atm(my_ngrids))
     
       allocate(grids_on_this_pe(ngrids))
       grids_on_this_pe = .false. !initialization
 
-      npes = mpp_npes()
 
       ! Need to get a global pelist to send data around later?
       allocate( pelist_all(npes) )
       pelist_all = (/ (i,i=0,npes-1) /)
       pelist_all = pelist_all + mpp_root_pe()
 
-      if (ngrids == 1) then
+      if (nnest == 0) then
 
          !Set up the single pelist
          allocate(Atm(1)%pelist(npes))
-         Atm(1)%pelist = (/(i, i=0, npes-1)/)
-         Atm(1)%pelist = Atm(1)%pelist + mpp_root_pe()
+         Atm(1)%pelist = pelist_all
          call mpp_declare_pelist(Atm(1)%pelist)
          call mpp_set_current_pelist(Atm(1)%pelist)
          !Now set in domain_decomp
@@ -946,65 +953,51 @@ module fv_control_mod
          call setup_master(Atm(1)%pelist)
          grids_on_this_pe(1) = .true.
          Atm(1)%npes_this_grid = npes
-
+         Atm(1)%grid_number = 1
+         Atm(1)%nest_number = 0
       else
-
-         pecounter = mpp_root_pe()
-         do n=1,ngrids
+         !--- figure out the nest id of current processor and setup pelist for each grid
+         pe_start = mpp_root_pe()
+         do n = 1, ngrids
             if (n == 1) then
                pe_list_name = ''
             else
                write(pe_list_name,'(A4, I2.2)') 'nest', n
             endif
 
-            if (nest_pes(n) == 0) then
-               if (n < ngrids) call mpp_error(FATAL, 'Only nest_pes(ngrids) in nest_nml can be zero; preceeding values must be nonzero.')
-               allocate(Atm(n)%pelist(npes-pecounter))
-               Atm(n)%pelist = (/(i, i=pecounter, npes-1)/)
-               if (n > 1) then
-                  call mpp_declare_pelist(Atm(n)%pelist, trim(pe_list_name))
-                  !Make sure nested-grid input file exists
-                  if (.not. file_exist('input_'//trim(pe_list_name)//'.nml')) then
-                     call mpp_error(FATAL, "Could not find nested grid namelist input_"//trim(pe_list_name)//".nml")
-                  endif
-               endif
-               exit
-            else
-               allocate(Atm(n)%pelist(nest_pes(n)))
-               Atm(n)%pelist = (/ (i, i=pecounter, pecounter+nest_pes(n)-1) /)
-               if (Atm(n)%pelist(nest_pes(n)) >= npes) then
-                  call mpp_error(FATAL, 'PEs assigned by nest_pes in nest_nml exceeds number of available PEs.')
-               endif
-
-               call mpp_declare_pelist(Atm(n)%pelist, trim(pe_list_name))
-               !Make sure nested-grid input file exists
-               if (n > 1) then
-                  if (.not. file_exist('input_'//trim(pe_list_name)//'.nml')) then
-                     call mpp_error(FATAL, "Could not find nested grid namelist input_"//trim(pe_list_name)//".nml")
-                  endif
-               endif
-               pecounter = pecounter+nest_pes(n)
+            pe_end = pe_start + nest_pes(n) - 1
+            if(mpp_pe() .GE. pe_start .and. mpp_pe() .LE. pe_end) then
+               my_grid_id = n
             endif
+            allocate(pelist(nest_pes(n)))
+            pelist = (/i, i=pe_start, pe_end/)
+            call mpp_declare_pelist(pelist, trim(pe_list_name))
+            if(mpp_pe() .GE. pe_start .and. mpp_pe() .LE. pe_end) then
+               allocate(Atm(1)%pelist(nest_pes(n)))
+               allocate(Atm(1)%pelist = pelist
+               Atm(1)%npes_this_grid = nest_pes(n)
+               Atm(1)%grid_number = n
+            endif
+            deallocate(pelist)
+            pe_start = pe_end + 1
          enddo
 
-         !Set pelists
-         do n=1,ngrids
-            Atm(n)%npes_this_grid = size(Atm(n)%pelist)
-            if (ANY(gid == Atm(n)%pelist)) then
-                  call mpp_set_current_pelist(Atm(n)%pelist)
-                  !now set in domain_decomp
-                  !masterproc = Atm(n)%pelist(1)
-                  call setup_master(Atm(n)%pelist)
-                  grids_on_this_pe(n) = .true.
-                  exit
-               endif
-         enddo
+         call mpp_set_current_pelist(Atm(1)%pelist)
+         call setup_master(Atm(n)%pelist)
 
-         if (pecounter /= npes) then
-            call mpp_error(FATAL, 'nest_pes in nest_nml does not assign all of the available PEs.')
-         endif
       endif
-
+      Atm(1)%nest_number = Atm(1)%grid_number - 1
+      Atm(1)%neststruct%nested = Atm(1)%nest_number > 0
+      !--- figure out parent grid 
+      if(Atm(1)%nested) then
+         allocate(Atm(1)%parent_grid)
+         my_parent_tile = parent_tile(Atm(1)%nest_number)
+         if(my_parent_tile .LE. ntiles) then
+            Atm(1)%parent_grid%grid_number = 1
+         else
+            Atm(1)%parent_grid%grid_number = my_parent_tile - ntiles
+         endif
+      endif        
       !Layout is checked later, in fv_control
 
   end subroutine init_nesting

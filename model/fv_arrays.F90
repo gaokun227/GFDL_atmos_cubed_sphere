@@ -545,6 +545,14 @@ module fv_arrays_mod
 
   end type fv_nest_BC_type_4D
 
+  type nest_level_type
+     !Interpolation arrays for grid nesting
+     logical                                :: on_level ! indicate if current processor on this level.
+     logical                                :: do_remap_BC
+     integer, allocatable, dimension(:,:,:) :: ind_h, ind_u, ind_v, ind_b
+     real, allocatable, dimension(:,:,:) :: wt_h, wt_u, wt_v, wt_b
+  end type nest_level_type
+
   type fv_nest_type
 
 !nested grid flags:
@@ -571,11 +579,8 @@ module fv_arrays_mod
      logical, allocatable :: do_remap_BC(:)
 
      type(nest_domain_type) :: nest_domain !Structure holding link from this grid to its parent
-     type(nest_domain_type), allocatable :: nest_domain_all(:)
-
-     !Interpolation arrays for grid nesting
-     integer, allocatable, dimension(:,:,:) :: ind_h, ind_u, ind_v, ind_b
-     real, allocatable, dimension(:,:,:) :: wt_h, wt_u, wt_v, wt_b
+     integer                :: num_nest_level ! number of nest levels.
+     type(nest_level_tppe), allocatable :: nest(:) ! store data for each level.
 
      !These arrays are not allocated by allocate_fv_atmos_type; but instead
      !allocated for all grids, regardless of whether the grid is
