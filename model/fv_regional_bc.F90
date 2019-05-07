@@ -1515,24 +1515,9 @@ contains
                                 ,array_4d=tracers_input                 &
                                 ,tlev=liq_wat_index )
 
-!!
-!!------------------
-!!***  Ozone
-!!------------------
-!!
-!      nlev=klev_in
-!      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
-!                                ,nlev                                   &
-!                                ,ntracers                               &
-!!                               ,Atm%regional_bc_bounds                 &
-!                                ,'o3mr   '                              &
-!                                ,array_4d=tracers_input                 &
-!                                ,tlev=o3mr_index )
-
-
 !
 !------------------
-!***  Ice water
+!***  Ozone
 !------------------
 !
       nlev=klev_in
@@ -1540,53 +1525,9 @@ contains
                                 ,nlev                                   &
                                 ,ntracers                               &
 !                               ,Atm%regional_bc_bounds                 &
-                                ,'ice_wat'                              &
+                                ,'o3mr   '                              &
                                 ,array_4d=tracers_input                 &
-                                ,tlev=ice_wat_index )
-
-!
-!------------------
-!***  Rain water
-!------------------
-!
-      nlev=klev_in
-      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
-                                ,nlev                                   &
-                                ,ntracers                               &
-!                               ,Atm%regional_bc_bounds                 &
-                                ,'rainwat'                              &
-                                ,array_4d=tracers_input                 &
-                                ,tlev=rainwat_index )
-
-
-!
-!------------------
-!***  Snow water
-!------------------
-!
-      nlev=klev_in
-      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
-                                ,nlev                                   &
-                                ,ntracers                               &
-!                               ,Atm%regional_bc_bounds                 &
-                                ,'snowwat'                              &
-                                ,array_4d=tracers_input                 &
-                                ,tlev=snowwat_index )
-
-!
-!------------------
-!***  Graupel water
-!------------------
-!
-      nlev=klev_in
-      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
-                                ,nlev                                   &
-                                ,ntracers                               &
-!                               ,Atm%regional_bc_bounds                 &
-                                ,'graupel'                              &
-                                ,array_4d=tracers_input                 &
-                                ,tlev=graupel_index )
-
+                                ,tlev=o3mr_index )
 
 
 !
@@ -1678,6 +1619,64 @@ if (Atm%flagstruct%hrrrv3_ic) then
                                 ,'pt     '                              &
                                 ,array_3d=pt_input)
 !
+
+!
+!------------------
+!***  Ice water
+!------------------
+!
+      nlev=klev_in
+      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
+                                ,nlev                                   &
+                                ,ntracers                               &
+!                               ,Atm%regional_bc_bounds                 &
+                                ,'ice_wat'                              &
+                                ,array_4d=tracers_input                 &
+                                ,tlev=ice_wat_index )
+
+!
+!------------------
+!***  Rain water
+!------------------
+!
+      nlev=klev_in
+      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
+                                ,nlev                                   &
+                                ,ntracers                               &
+!                               ,Atm%regional_bc_bounds                 &
+                                ,'rainwat'                              &
+                                ,array_4d=tracers_input                 &
+                                ,tlev=rainwat_index )
+
+
+!
+!------------------
+!***  Snow water
+!------------------
+!
+      nlev=klev_in
+      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
+                                ,nlev                                   &
+                                ,ntracers                               &
+!                               ,Atm%regional_bc_bounds                 &
+                                ,'snowwat'                              &
+                                ,array_4d=tracers_input                 &
+                                ,tlev=snowwat_index )
+
+!
+!------------------
+!***  Graupel water
+!------------------
+!
+      nlev=klev_in
+      call read_regional_bc_file(is_input,ie_input,js_input,je_input    &
+                                ,nlev                                   &
+                                ,ntracers                               &
+!                               ,Atm%regional_bc_bounds                 &
+                                ,'graupel'                              &
+                                ,array_4d=tracers_input                 &
+                                ,tlev=graupel_index )
+
 endif
 !-----------------------------------------------------------------------
 !***  We now have the boundary variables from the BC file on the
