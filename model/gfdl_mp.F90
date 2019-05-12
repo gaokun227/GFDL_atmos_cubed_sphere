@@ -174,16 +174,14 @@ module gfdl_mp_mod
     real :: tice = 273.16 ! set tice = 165. to trun off ice - phase phys (kessler emulator)
     real :: tice_mlt = 273.16 ! set ice melting temperature to 268.0 based on observation (kay et al., 2016, JC)
     
-    ! real :: t_min = 178. ! min temp to freeze - dry all water vapor
-    ! sjl 20181123
-    real :: t_min = 170. ! min temp to freeze - dry all water vapor
+    real :: t_min = 178. ! min temp to freeze - dry all water vapor
     real :: t_sub = 184. ! min temp for sublimation of cloud ice
     
     ! relative humidity increment
     
     real :: rh_inc = 0.25 ! rh increment for complete evaporation of cloud water and cloud ice
-    real :: rh_inr = 0.1 ! rh increment for minimum evaporation of rain
-    real :: rh_ins = 0.1 ! rh increment for sublimation of snow
+    real :: rh_inr = 0.25 ! rh increment for minimum evaporation of rain
+    real :: rh_ins = 0.25 ! rh increment for sublimation of snow
     
     ! conversion time scale
     
@@ -610,7 +608,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         rh_adj = 1. - h_var - rh_inc
-        rh_rain = max (0.6, rh_adj - rh_inr) ! rh_inr = 0.2
+        rh_rain = max (0.35, rh_adj - rh_inr) ! rh_inr = 0.25
         
         ! -----------------------------------------------------------------------
         ! fix all negative water species
@@ -1100,7 +1098,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             ! rain evaporation
             ! -----------------------------------------------------------------------
             
-            if (dqv > 0. .and. qsat > q_minus) then
+            if (dqv > qvmin .and. qsat > q_minus) then
                 if (qsat > q_plus) then
                     dq = qsat - qpz
                 else
@@ -1117,9 +1115,8 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
                 evap = min (qr (k), dt * fac_revp * evap, dqv / (1. + lcpk (k) * dqsdt))
                 ! -----------------------------------------------------------------------
                 ! alternative minimum evap in dry environmental air
-                ! sjl 20180831:
-                sink = min (qr (k), dim (rh_rain * qsat, qv (k)) / (1. + lcpk (k) * dqsdt))
-                evap = max (evap, sink)
+                ! sink = min (qr (k), dim (rh_rain * qsat, qv (k)) / (1. + lcpk (k) * dqsdt))
+                ! evap = max (evap, sink)
                 ! -----------------------------------------------------------------------
                 qr (k) = qr (k) - evap
                 qv (k) = qv (k) + evap
@@ -1132,7 +1129,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             ! -----------------------------------------------------------------------
             
             ! if (qr (k) > qrmin .and. ql (k) > 1.e-7 .and. qsat < q_plus) then
-            if (qr (k) > 1.e-6 .and. ql (k) > 2.e-6 .and. qsat < q_minus) then
+            if (qr (k) > qrmin .and. ql (k) > 1.e-6 .and. qsat < q_minus) then
                 sink = dt * denfac (k) * cracw * exp (0.95 * log (qr (k) * den (k)))
                 sink = sink / (1. + sink) * ql (k)
                 ql (k) = ql (k) - sink
@@ -1378,13 +1375,6 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                     den (k), denfac (k)))
                 sink = min (qs, dts * (psmlt + pracs), tc / icpk (k))
                 qs = qs - sink
-                
-                ! melt all snow if t > 12 c
-                if (qs > qcmin .and. tz > tice + 12.) then
-                    sink = sink + qs
-                    qs = 0.
-                endif
-                
                 tmp = min (sink, dim (qs_mlt, ql)) ! max ql due to snow melt
                 ql = ql + tmp
                 qr = qr + sink - tmp
@@ -1451,8 +1441,9 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             ! psaci: accretion of cloud ice by snow
             ! -----------------------------------------------------------------------
             
-            if (qi > 1.e-6) then ! cloud ice sink terms
-                if (qs > 1.e-6) then
+            if (qi > 3.e-7) then ! cloud ice sink terms
+                
+                if (qs > 1.e-7) then
                     ! -----------------------------------------------------------------------
                     ! sjl added (following lin eq. 23) the temperature dependency
                     ! to reduce accretion, use esi = exp (0.05 * tc) as in hong et al 2004
@@ -1512,7 +1503,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 ! pgaci: accretion of cloud ice by graupel
                 ! -----------------------------------------------------------------------
                 
-                if (qg > 3.e-6) then
+                if (qg > 1.e-6) then
                     ! -----------------------------------------------------------------------
                     ! factor = dts * cgaci / sqrt (den (k)) * exp (0.05 * tc + 0.875 * log (qg * den (k)))
                     ! simplified form: remove temp dependency & set the exponent "0.875" -- > 1
@@ -1535,7 +1526,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             
             tc = tz - tice
             
-            if (qr > 1.e-6 .and. tc < 0.) then
+            if (qr > 1.e-7 .and. tc < 0.) then
                 
                 ! -----------------------------------------------------------------------
                 ! * sink * terms to qr: psacr + pgfr
@@ -1547,7 +1538,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 ! psacr accretion of rain by snow
                 ! -----------------------------------------------------------------------
                 
-                if (qs > 1.e-6) then ! if snow exists
+                if (qs > 1.e-7) then ! if snow exists
                     psacr = dts * acr3d (vts (k), vtr (k), qr, qs, csacr, acco (1, 2), den (k))
                 else
                     psacr = 0.
@@ -1586,7 +1577,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
             ! graupel production terms:
             ! -----------------------------------------------------------------------
             
-            if (qs > 3.e-6) then
+            if (qs > 1.e-7) then
                 
                 ! -----------------------------------------------------------------------
                 ! accretion: snow -- > graupel
@@ -1613,7 +1604,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
                 
             endif ! snow existed
             
-            if (qg > 1.e-6 .and. tz < tice0) then
+            if (qg > 1.e-7 .and. tz < tice0) then
                 
                 ! -----------------------------------------------------------------------
                 ! pgacw: accretion of cloud water by graupel
@@ -1747,8 +1738,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! instant evaporation / sublimation of all clouds if rh < rh_adj -- > cloud free
         ! -----------------------------------------------------------------------
         ! rain water is handled in warm - rain process.
-        qpz = qv (k) + ql (k) + qi (k) + qs (k)
-        tin = (te8 (k) - lv00 * qpz + li00 * qg (k)) / (one_r8 + qpz * c1_vap + qr (k) * c1_liq + qg (k) * c1_ice)
+        qpz = qv (k) + ql (k) + qi (k)
+        tin = (te8 (k) - lv00 * qpz + li00 * (qs (k) + qg (k))) / (one_r8 + qpz * c1_vap + qr (k) * c1_liq + (qs (k) + qg (k)) * c1_ice)
         if (tin > t_sub + 6.) then
             rh = qpz / iqs1 (tin, den (k))
             if (rh < rh_adj) then ! qpz / rh_adj < qs
@@ -1756,7 +1747,6 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
                 qv (k) = qpz
                 ql (k) = 0.
                 qi (k) = 0.
-                qs (k) = 0.
                 cycle ! cloud free
             endif
         endif
@@ -1888,15 +1878,6 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
                     pssub = max (pssub, dq, (tz (k) - tice) / tcpk (k))
                 endif
             endif
-            
-            ! *******************************
-            ! evap all snow if tz (k) > 12. c
-            !s ******************************
-            if (tz (k) > tice + 12.) then
-                tmp = qs (k) - pssub
-                if (tmp > 0.) pssub = pssub + tmp
-            endif
-            
             qs (k) = qs (k) - pssub
             qv (k) = qv (k) + pssub
             q_sol (k) = q_sol (k) - pssub
@@ -1913,7 +1894,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             dq = (qv (k) - qsi) / (1. + tcpk (k) * dqsdt)
             pgsub = (qv (k) / qsi - 1.) * qg (k)
             if (pgsub > 0.) then ! deposition
-                if (tz (k) > tice .or. qg (k) < 1.e-6) then
+                if (tz (k) > tice) then
                     pgsub = 0. ! no deposition
                 else
                     pgsub = min (fac_v2g * pgsub, 0.2 * dq, ql (k) + qr (k), &
@@ -2024,7 +2005,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         if (xr_cloud) then
             if (rh >= 1.0) then
                 qa (k) = 1.0
-            elseif (rh > 0.80 .and. q_cond (k) > 1.e-6) then
+            elseif (rh > 0.75 .and. q_cond (k) > 1.e-6) then
                 qa (k) = rh ** xr_a * (1.0 - exp (- xr_b * max (0.0, q_cond (k)) / &
                     max (1.e-5, (max (1.e-10, 1.0 - rh) * qstar) ** xr_c)))
                 qa (k) = max (0.0, min (1., qa (k)))
@@ -2032,7 +2013,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
                 qa (k) = 0.0
             endif
         else
-            if (rh > 0.80 .and. qpz > 1.e-6) then
+            if (rh > 0.75 .and. qpz > 1.e-6) then
                 
                 dq = h_var * qpz
                 q_plus = qpz + dq
