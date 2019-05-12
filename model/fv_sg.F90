@@ -35,10 +35,10 @@ public  fv_subgrid_z, qsmith, neg_adj3
 
   real, parameter:: esl = 0.621971831
   real, parameter:: tice = 273.16
-  real, parameter:: c_ice = 2106.  ! Emanuel table, page 566
-! real, parameter:: c_ice = 1972.  !  -15 C
-! real, parameter:: c_liq = 4.1855e+3    ! GFS
-  real, parameter:: c_liq = 4218.        ! ECMWF-IFS
+! real, parameter:: c_ice = 2106.  ! Emanuel table, page 566
+  real, parameter:: c_ice = 1972.  !  -15 C
+  real, parameter:: c_liq = 4.1855e+3    ! GFS
+! real, parameter:: c_liq = 4218.        ! ECMWF-IFS
   real, parameter:: cv_vap = cp_vapor - rvgas  ! 1384.5
   real, parameter:: c_con = c_ice
 

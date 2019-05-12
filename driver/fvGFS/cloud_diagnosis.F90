@@ -175,7 +175,7 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
                 
                 ! frozen condensates:
                 ! cloud ice treated as snow above freezing and graupel exists
-#ifdef SJ_CLD_TEST
+#ifndef LZ_CLD_TEST
                 if (t (i, k) > tice) then
                     qms (i, k) = qmi (i, k) + qms (i, k)
                     qmi (i, k) = 0.
@@ -205,17 +205,20 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
         ! qmg (:, :) = 0. ! treating all graupel as "snow"
         do k = ks, ke
             do i = is, ie
+#ifndef LZ_CLD_TEST
                 ! step - 1: combine cloud ice & snow
-                ! qmi (i, k) = qmi (i, k) + qms (i, k)
+                qmi (i, k) = qmi (i, k) + qms (i, k)
                 ! step - 2: auto - convert cloud ice if > qi0_max
-                ! qms (i, k) = qmi (i, k) - qi0_max
-                ! if (qms (i, k) .gt. 0.) then
-                ! qmi (i, k) = qi0_max
-                ! else
-                ! qms (i, k) = 0.0
-                ! endif
+                qms (i, k) = qmi (i, k) - qi0_max
+                if (qms (i, k) .gt. 0.) then
+                    qmi (i, k) = qi0_max
+                else
+                    qms (i, k) = 0.0
+                endif
+#else
                 qms (i, k) = qms (i, k) + qmg (i, k)
                 qmg (i, k) = 0.0
+#endif
             enddo
         enddo
     endif
@@ -331,7 +334,7 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
                 
                 if (qmi (i, k) .gt. qmin) then
                     qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
-#ifdef SJ_CLD_TEST
+#ifndef LZ_CLD_TEST
                     rei_fac = log (1.0e3 * min (qi0_rei, qmi (i, k)) * rho)
 #else
                     rei_fac = log (1.0e3 * qmi (i, k) * rho)
@@ -394,7 +397,7 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
                 
                 if (qmi (i, k) .gt. qmin) then
                     qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
-#ifdef SJ_CLD_TEST
+#ifndef LZ_CLD_TEST
                     ! use fu2007 form below - 10 c
                     if (tc0 > - 10) then
                         ! tc = - 10, rei = 40.6

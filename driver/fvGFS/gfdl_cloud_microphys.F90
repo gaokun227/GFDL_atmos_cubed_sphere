@@ -51,12 +51,12 @@ module gfdl_cloud_microphys_mod
     real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume
     
     ! the following two are from emanuel's book "atmospheric convection"
-    real, parameter :: c_ice = 2106.0 ! heat capacity of ice at 0 deg c: c = c_ice + 7.3 * (t - tice)
+    ! real, parameter :: c_ice = 2106.0 ! heat capacity of ice at 0 deg c: c = c_ice + 7.3 * (t - tice)
     ! real, parameter :: c_liq = 4190.0 ! heat capacity of water at 0 deg c
     
-    ! real, parameter :: c_ice = 1972.0 ! gfdl: heat capacity of ice at - 15 deg c
-    ! real, parameter :: c_liq = 4185.5 ! gfdl: heat capacity of water at 15 deg c
-    real, parameter :: c_liq = 4218.0 ! ifs: heat capacity of liquid at 0 deg c
+    real, parameter :: c_ice = 1972.0 ! gfdl: heat capacity of ice at - 15 deg c
+    real, parameter :: c_liq = 4185.5 ! gfdl: heat capacity of water at 15 deg c
+    ! real, parameter :: c_liq = 4218.0 ! ifs: heat capacity of liquid at 0 deg c
     
     real, parameter :: eps = rdgas / rvgas ! 0.6219934995
     real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077338443
