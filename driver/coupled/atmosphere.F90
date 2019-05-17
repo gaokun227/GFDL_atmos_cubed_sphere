@@ -51,7 +51,7 @@ use  atmos_global_diag_mod, only: atmos_global_diag_init, &
 ! FV core modules:
 !-----------------
 use fv_arrays_mod,      only: fv_atmos_type
-use fv_control_mod,     only: fv_init, fv_end, ngrids
+use fv_control_mod,     only: fv_control_init, fv_end, ngrids
 use fv_eta_mod,         only: get_eta_level
 use fv_io_mod,          only: fv_io_register_nudge_restart
 use fv_dynamics_mod,    only: fv_dynamics
@@ -135,6 +135,7 @@ character(len=7)   :: mod_name = 'atmos'
   integer :: p_split = 1
   integer, allocatable :: pelist(:)
   logical, allocatable :: grids_on_this_pe(:)
+  integer :: this_grid
   type(fv_atmos_type), allocatable, target :: Atm(:)
 
   integer :: id_udt_dyn, id_vdt_dyn
@@ -187,7 +188,7 @@ contains
    !NOTE do we still need the second file_exist call?
    cold_start = (.not.file_exist('INPUT/fv_core.res.nc') .and. .not.file_exist('INPUT/fv_core.res.tile1.nc'))
 
-   call fv_init( Atm, dt_atmos, grids_on_this_pe, p_split )  ! allocates Atm components
+   call fv_control_init( Atm, dt_atmos, this_grid, grids_on_this_pe, p_split )  ! allocates Atm components
 
    do n=1,ngrids
       if (grids_on_this_pe(n)) mytile = n

@@ -38,8 +38,7 @@ module fv_treat_da_inc_mod
                                mid_pt_sphere, get_unit_vect2, &
                                get_latlon_vector, inner_prod, &
                                cubed_to_latlon
-  use fv_mp_mod,         only: ng, &
-                               is_master, &
+  use fv_mp_mod,         only: is_master, &
                                fill_corners, &
                                YDir, &
                                mp_reduce_min, &

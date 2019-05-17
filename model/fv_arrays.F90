@@ -559,11 +559,11 @@ module fv_arrays_mod
 
   end type fv_nest_BC_type_4D
 
-  type nest_level_type
+  type nest_level_type 
      !Interpolation arrays for grid nesting
      logical                                :: on_level ! indicate if current processor on this level.
      logical                                :: do_remap_BC
-     integer, allocatable, dimension(:,:,:) :: ind_h, ind_u, ind_v, ind_b
+     integer, allocatable, dimension(:,:,:) :: ind_h, ind_u, ind_v, ind_b ! I don't think these are necessary since BC interpolation is done locally
      real, allocatable, dimension(:,:,:) :: wt_h, wt_u, wt_v, wt_b
   end type nest_level_type
 
@@ -580,6 +580,7 @@ module fv_arrays_mod
      integer :: nestupdate = 0       
      logical :: twowaynest = .false. 
      integer :: ioffset, joffset !Position of nest within parent grid
+     integer :: nlevel = 0 ! levels down from top-most domain
 
      integer :: nest_timestep = 0 !Counter for nested-grid timesteps
      integer :: tracer_nest_timestep = 0 !Counter for nested-grid timesteps
@@ -593,8 +594,13 @@ module fv_arrays_mod
      logical, allocatable :: do_remap_BC(:)
 
      type(nest_domain_type) :: nest_domain !Structure holding link from this grid to its parent
+     !type(nest_domain_type), allocatable :: nest_domain_all(:)
      integer                :: num_nest_level ! number of nest levels.
-     type(nest_level_tppe), allocatable :: nest(:) ! store data for each level.
+     type(nest_level_type), allocatable :: nest(:) ! store data for each level.
+
+     !Interpolation arrays for grid nesting
+     integer, allocatable, dimension(:,:,:) :: ind_h, ind_u, ind_v, ind_b
+     real, allocatable, dimension(:,:,:) :: wt_h, wt_u, wt_v, wt_b
 
      !These arrays are not allocated by allocate_fv_atmos_type; but instead
      !allocated for all grids, regardless of whether the grid is
@@ -652,7 +658,7 @@ module fv_arrays_mod
      integer :: isd, ied, jsd, jed
      integer :: isc, iec, jsc, jec
 
-     integer :: ng
+     integer :: ng = 3 !default
 
   end type fv_grid_bounds_type
 
@@ -821,7 +827,7 @@ module fv_arrays_mod
 contains
 
   subroutine allocate_fv_atmos_type(Atm, isd_in, ied_in, jsd_in, jed_in, is_in, ie_in, js_in, je_in, &
-       npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, ng_in, dummy, alloc_2d, ngrids_in)
+       npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, dummy, alloc_2d, ngrids_in)
 
     !WARNING: Before calling this routine, be sure to have set up the
     ! proper domain parameters from the namelists (as is done in
@@ -830,7 +836,7 @@ contains
     implicit none
     type(fv_atmos_type), intent(INOUT), target :: Atm
     integer, intent(IN) :: isd_in, ied_in, jsd_in, jed_in, is_in, ie_in, js_in, je_in
-    integer, intent(IN) :: npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, ng_in
+    integer, intent(IN) :: npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in
     logical, intent(IN) :: dummy, alloc_2d
     integer, intent(IN) :: ngrids_in
     integer:: isd, ied, jsd, jed, is, ie, js, je
@@ -859,7 +865,6 @@ contains
        ndims=   1 
        ncnst=   1 
        nq=   1
-       ng     =   1   
     else
        isd     =  isd_in   
        ied=   ied_in   
@@ -875,7 +880,6 @@ contains
        ndims=   ndims_in 
        ncnst=   ncnst_in 
        nq=   nq_in
-       ng     =   ng_in    
     endif
 
     if ((.not. dummy) .or. alloc_2d) then
@@ -893,7 +897,6 @@ contains
        ndims_2d=   ndims_in 
        ncnst_2d=   ncnst_in 
        nq_2d=   nq_in 
-       ng_2d     =   ng_in 
     else
        isd_2d     =  0   
        ied_2d=   -1   
@@ -909,7 +912,6 @@ contains
        ndims_2d=   1 
        ncnst_2d=   1 
        nq_2d=   1 
-       ng_2d     =   1        
     endif
 
 !This should be set up in fv_mp_mod
@@ -927,8 +929,6 @@ contains
 !!$    Atm%bd%iec = Atm%bd%ie
 !!$    Atm%bd%jsc = Atm%bd%js
 !!$    Atm%bd%jec = Atm%bd%je
-
-    Atm%bd%ng  = ng
 
     !Convenience pointers
     Atm%npx => Atm%flagstruct%npx
@@ -1015,7 +1015,6 @@ contains
       allocate ( Atm%q_con(isd:isd,jsd:jsd,1) )
 #endif
 
-#ifndef NO_TOUCH_MEM
 ! Notes by SJL
 ! Place the memory in the optimal shared mem space
 ! This will help the scaling with OpenMP
@@ -1031,13 +1030,13 @@ contains
         enddo
         do j=jsd, jed+1
            do i=isd, ied
-               Atm%u(i,j,k) = real_big
+               Atm%u(i,j,k) = 0.
               Atm%vc(i,j,k) = real_big
            enddo
         enddo
         do j=jsd, jed
            do i=isd, ied+1
-               Atm%v(i,j,k) = real_big
+               Atm%v(i,j,k) = 0.
               Atm%uc(i,j,k) = real_big
            enddo
         enddo
@@ -1074,9 +1073,11 @@ contains
            Atm%inline_mp%prei(i,j) = real_big
            Atm%inline_mp%pres(i,j) = real_big
            Atm%inline_mp%preg(i,j) = real_big
+
+           Atm%ts(i,j) = 300.
+           Atm%phis(i,j) = real_big
         enddo
      enddo
-#endif
 
     allocate ( Atm%gridstruct% area(isd_2d:ied_2d  ,jsd_2d:jed_2d  ) )   ! Cell Centered
     allocate ( Atm%gridstruct% area_64(isd_2d:ied_2d  ,jsd_2d:jed_2d  ) ) ! Cell Centered
@@ -1214,6 +1215,7 @@ contains
 
     if (Atm%neststruct%nested) then
 
+
        allocate(Atm%neststruct%ind_h(isd:ied,jsd:jed,4))
        allocate(Atm%neststruct%ind_u(isd:ied,jsd:jed+1,4))
        allocate(Atm%neststruct%ind_v(isd:ied+1,jsd:jed,4))
@@ -1262,12 +1264,20 @@ contains
     if( ngrids_in > 1 ) then
        if (Atm%flagstruct%grid_type < 4) then
           if (Atm%neststruct%nested) then
-             allocate(Atm%grid_global(1-ng_2d:npx_2d  +ng_2d,1-ng_2d:npy_2d  +ng_2d,2,1))
+             allocate(Atm%grid_global(1-Atm%ng:npx_2d  +Atm%ng,1-Atm%ng:npy_2d  +Atm%ng,2,1))
           else
-             allocate(Atm%grid_global(1-ng_2d:npx_2d  +ng_2d,1-ng_2d:npy_2d  +ng_2d,2,1:6))
+             allocate(Atm%grid_global(1-Atm%ng:npx_2d  +Atm%ng,1-Atm%ng:npy_2d  +Atm%ng,2,1:6))
           endif
        end if
     endif
+
+
+    !!Convenience pointers
+    Atm%gridstruct%nested    => Atm%neststruct%nested
+    Atm%gridstruct%grid_type => Atm%flagstruct%grid_type
+    Atm%flagstruct%grid_number => Atm%grid_number
+    Atm%gridstruct%regional  => Atm%flagstruct%regional
+    Atm%gridstruct%bounded_domain = Atm%flagstruct%regional .or. Atm%neststruct%nested
 
     Atm%allocated = .true.
     if (dummy) Atm%dummy = .true.

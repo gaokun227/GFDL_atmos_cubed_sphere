@@ -31,7 +31,7 @@
  use fv_arrays_mod,   only: fv_atmos_type, fv_grid_type, fv_grid_bounds_type, &
                             R_GRID
  use fv_eta_mod,      only: set_eta
- use fv_mp_mod,       only: ng, is_master
+ use fv_mp_mod,       only: is_master
  use fv_mp_mod,       only: mp_reduce_sum, mp_reduce_min, mp_reduce_max
  use fv_mp_mod,       only: fill_corners, XDir, YDir
  use fv_timing_mod,   only: timing_on, timing_off
@@ -735,7 +735,7 @@
 ! Initialize cubed_sphere to lat-lon transformation:
      call init_cubed_to_latlon( Atm%gridstruct, Atm%flagstruct%hydrostatic, agrid, grid_type, c2l_order, Atm%bd )
 
-     call global_mx(area, ng, Atm%gridstruct%da_min, Atm%gridstruct%da_max, Atm%bd)
+     call global_mx(area, Atm%ng, Atm%gridstruct%da_min, Atm%gridstruct%da_max, Atm%bd)
      if( is_master() ) write(*,*) 'da_max/da_min=', Atm%gridstruct%da_max/Atm%gridstruct%da_min
 
      call global_mx_c(area_c(is:ie,js:je), is, ie, js, je, Atm%gridstruct%da_min_c, Atm%gridstruct%da_max_c)
@@ -3160,12 +3160,13 @@
   real, allocatable:: pem(:,:)
   real(kind=4) :: p4
   integer k, i, j
-  integer :: is,  ie,  js,  je
+  integer :: is,  ie,  js,  je, ng
 
   is  = bd%is
   ie  = bd%ie
   js  = bd%js
   je  = bd%je
+  ng  = bd%ng
 
      allocate ( pem(is:ie,js:je) )
 

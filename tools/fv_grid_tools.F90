@@ -27,8 +27,8 @@ module fv_grid_tools_mod
                            direct_transform, cube_transform, dist2side_latlon, &
                            spherical_linear_interpolation, big_number
   use fv_timing_mod,  only: timing_on, timing_off
-  use fv_mp_mod,      only: ng, is_master, fill_corners, XDir, YDir
-  use fv_mp_mod,      only: mp_gather, mp_bcst, mp_reduce_max, mp_stop
+  use fv_mp_mod,      only: is_master, fill_corners, XDir, YDir
+  use fv_mp_mod,      only: mp_gather, mp_bcst, mp_reduce_max, mp_stop, grids_master_procs
   use sorted_index_mod,  only: sorted_inta, sorted_intb
   use mpp_mod,           only: mpp_error, FATAL, get_unit, mpp_chksum, mpp_pe, stdout, &
                                mpp_send, mpp_recv, mpp_sync_self, EVENT_RECV, mpp_npes, &
@@ -427,7 +427,7 @@ contains
 
   end subroutine get_symmetry
 
-  subroutine init_grid(Atm, grid_name, grid_file, npx, npy, npz, ndims, nregions, ng)
+  subroutine init_grid(Atm, grid_name, grid_file, npx, npy, npz, ndims, nregions, ng, parent_tile_nums)
  
 !     init_grid :: read grid from input file and setup grid descriptors
  
@@ -439,6 +439,7 @@ contains
     integer,      intent(IN) :: ndims
     integer,      intent(IN) :: nregions
     integer,      intent(IN) :: ng
+    integer,      intent(IN) :: parent_tile_nums(:)
 !--------------------------------------------------------
     real(kind=R_GRID)   ::  xs(npx,npy)
     real(kind=R_GRID)   ::  ys(npx,npy)
@@ -778,6 +779,7 @@ contains
 
           end if !if nested
 
+
 !       do j=js,je
 !          do i=is,ie+1
        do j=jsd,jed
@@ -912,7 +914,7 @@ contains
              p4(1:2) = grid(i,j,1:2)
              area_c(i,j) = 3.*get_area(p1, p4, p2, p3, radius)
        endif
-   endif
+    endif
 !-----------------
 
        call mpp_update_domains( dxc, dyc, Atm%domain, flags=SCALAR_PAIR,   &
@@ -1058,6 +1060,7 @@ contains
           write(*,*) ' REDUCED EARTH: Radius is ', radius, ', omega is ', omega
 #endif
           write(*,*  ) ' Cubed-Sphere Grid Stats : ', npx,'x',npy,'x',nregions
+          print*, dxN, dxM, dxAV, dxN, dxM
           write(*,201) '      Grid Length               : min: ', dxN,' max: ', dxM,' avg: ', dxAV, ' min/max: ',dxN/dxM
           write(*,200) '      Deviation from Orthogonal : min: ',angN,' max: ',angM,' avg: ',angAV
           write(*,200) '      Aspect Ratio              : min: ',aspN,' max: ',aspM,' avg: ',aspAV
@@ -1065,8 +1068,23 @@ contains
        endif
     endif!if gridtype > 3
 
+    !SEND grid global if any child nests
+    !Matching receive in setup_aligned_nest
+    do n=1,size(Atm%neststruct%child_grids)
+       if (Atm%neststruct%child_grids(n) .and. is_master()) then
+          !need to get parent_tile_nums AND determine local number for tile
+          if (ntiles_g > 1) then ! coarse grid only!!
+             call mpp_send(grid_global(:,:,:,parent_tile_nums(n)), &
+                  size(grid_global)/Atm%flagstruct%ntiles,grids_master_procs(n))
+          else
+             call mpp_send(grid_global(:,:,:,1),size(grid_global),grids_master_procs(n))
+          endif
+          call mpp_sync_self()
+       endif
+    enddo
+
     if (Atm%neststruct%nested .or. ANY(Atm%neststruct%child_grids)) then
-    nullify(grid_global)
+       nullify(grid_global)
     else if( trim(grid_file) .NE. 'INPUT/grid_spec.nc') then
        deallocate(grid_global)
     endif
@@ -1228,9 +1246,9 @@ contains
 
 
       parent_tile => Atm%neststruct%parent_tile
-      refinement => Atm%neststruct%refinement
-      ioffset => Atm%neststruct%ioffset
-      joffset => Atm%neststruct%joffset
+      refinement  => Atm%neststruct%refinement
+      ioffset     => Atm%neststruct%ioffset
+      joffset     => Atm%neststruct%joffset
 
       ind_h => Atm%neststruct%ind_h
       ind_u => Atm%neststruct%ind_u
@@ -1262,15 +1280,16 @@ contains
 
          call mpp_recv(p_grid( isg-ng:ieg+1+ng, jsg-ng:jeg+1+ng,1:2), size(p_grid( isg-ng:ieg+1+ng, jsg-ng:jeg+1+ng,1:2)), &
                        Atm%parent_grid%pelist(1))
+         !NOTE : Grid now allowed to lie outside of parent
          !Check that the grid does not lie outside its parent
          !3aug15: allows halo of nest to lie within halo of coarse grid.
-         !  NOTE: will this then work with the mpp_update_nest_fine?
-         if ( joffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
-              ioffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
-              joffset + floor( real(npy+ng) / real(refinement) ) > Atm%parent_grid%npy+ng .or. &
-              ioffset + floor( real(npx+ng) / real(refinement) ) > Atm%parent_grid%npx+ng ) then
-            call mpp_error(FATAL, 'nested grid lies outside its parent')
-         end if
+!!$         !  NOTE: will this then work with the mpp_update_nest_fine?
+!!$         if ( joffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
+!!$              ioffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
+!!$              joffset + floor( real(npy+ng) / real(refinement) ) > Atm%parent_grid%npy+ng .or. &
+!!$              ioffset + floor( real(npx+ng) / real(refinement) ) > Atm%parent_grid%npx+ng ) then
+!!$            call mpp_error(FATAL, 'nested grid lies outside its parent')
+!!$         end if
 
          do j=1-ng,npy+ng
             jc = joffset + (j-1)/refinement !int( real(j-1) / real(refinement) )
@@ -1347,6 +1366,8 @@ contains
 
       end if
 
+      !TODO: can we just send around ONE grid and re-calculate
+      ! staggered grids from that??
       call mpp_broadcast(grid_global(1-ng:npx+ng,  1-ng:npy+ng  ,:,1), &
            ((npx+ng)-(1-ng)+1)*((npy+ng)-(1-ng)+1)*ndims, mpp_root_pe() )
       call mpp_broadcast(      p_ind(1-ng:npx+ng,  1-ng:npy+ng  ,1:4),   &
@@ -2001,7 +2022,7 @@ contains
          real(kind=R_GRID),    pointer, dimension(:,:)   :: area, area_c
          
          integer :: is,  ie,  js,  je
-         integer :: isd, ied, jsd, jed
+         integer :: isd, ied, jsd, jed, ng
 
          is  = bd%is
          ie  = bd%ie
@@ -2011,6 +2032,7 @@ contains
          ied = bd%ied
          jsd = bd%jsd
          jed = bd%jed
+         ng  = bd%ng
 
          grid  => gridstruct%grid_64
          agrid => gridstruct%agrid_64

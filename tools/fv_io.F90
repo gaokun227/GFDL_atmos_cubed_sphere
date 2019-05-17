@@ -55,7 +55,7 @@ module fv_io_mod
   use fv_arrays_mod,           only: fv_atmos_type, fv_nest_BC_type_3D
   use fv_eta_mod,              only: set_external_eta
 
-  use fv_mp_mod,               only: ng, mp_gather, is_master
+  use fv_mp_mod,               only: mp_gather, is_master
   use fms_io_mod,              only: set_domain
   use fv_treat_da_inc_mod,     only: read_da_inc
 

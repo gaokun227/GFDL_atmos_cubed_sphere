@@ -22,7 +22,6 @@ module tp_core_mod
 !
 ! !MODULE: tp_core --- A collection of routines to support FV transport
 !
- use fv_mp_mod,         only: ng 
  use fv_grid_utils_mod, only: big_number
  use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type
 
@@ -222,7 +221,9 @@ contains
  integer, intent(in):: npx, npy, dir
  real, intent(inout):: q(bd%isd:bd%ied,bd%jsd:bd%jed)
  logical, intent(IN) :: bounded_domain, sw_corner, se_corner, nw_corner, ne_corner
- integer  i,j
+ integer  i,j, ng
+
+ ng = bd%ng
 
  if (bounded_domain) return
 
@@ -1214,7 +1215,7 @@ endif
    integer, intent(in):: nord            ! del-n
    integer, intent(in):: is,ie,js,je, npx, npy
    real, intent(in):: damp
-   real, intent(in):: q(bd%is-ng:bd%ie+ng, bd%js-ng:bd%je+ng)  ! q ghosted on input
+   real, intent(in):: q(bd%isd:bd%ied, bd%jsd:bd%jed)  ! q ghosted on input
    type(fv_grid_type), intent(IN), target :: gridstruct
    real, optional, intent(in):: mass(bd%isd:bd%ied, bd%jsd:bd%jed)  ! q ghosted on input
 ! diffusive fluxes:

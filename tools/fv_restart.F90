@@ -41,12 +41,12 @@ module fv_restart_mod
   use mpp_mod,             only: mpp_chksum, stdout, mpp_error, FATAL, NOTE
   use mpp_mod,             only: get_unit, mpp_sum, mpp_broadcast
   use mpp_mod,             only: mpp_get_current_pelist, mpp_npes, mpp_set_current_pelist
-  use test_cases_mod,      only: test_case, alpha, init_case, init_double_periodic, init_latlon
-  use fv_mp_mod,           only: is_master, switch_current_Atm, mp_reduce_min, mp_reduce_max
+  use test_cases_mod,      only: alpha, init_case, init_double_periodic!, init_latlon
+  use fv_mp_mod,           only: is_master, mp_reduce_min, mp_reduce_max
   use fv_surf_map_mod,     only: sgh_g, oro_g
   use tracer_manager_mod,  only: get_tracer_names
   use field_manager_mod,   only: MODEL_ATMOS
-  use external_ic_mod,     only: get_external_ic, get_cubed_sphere_terrain
+  use external_ic_mod,     only: get_external_ic
   use fv_eta_mod,          only: compute_dz_var, compute_dz_L32, set_hybrid_z
   use fv_surf_map_mod,     only: del2_cubed_sphere, del4_cubed_sphere
   use boundary_mod,        only: fill_nested_grid, nested_grid_BC, update_coarse_grid
@@ -130,7 +130,14 @@ contains
     ntileMe = size(Atm(:))
 
     cold_start_grids(:) = cold_start
+    !! TODO TODO TODO
+    ! need to start working on re-factoring this code to NOT need to know what every other grids' namelist items are
     do n = 1, ntileMe
+
+       isd = Atm(n)%bd%isd
+       ied = Atm(n)%bd%ied
+       jsd = Atm(n)%bd%jsd
+       jed = Atm(n)%bd%jed
 
        if (is_master()) then
           print*, 'FV_RESTART: ', n, cold_start_grids(n)
@@ -190,7 +197,7 @@ contains
 
        endif
        !This call still appears to be necessary to get isd, etc. correct
-       call switch_current_Atm(Atm(n))
+       !call switch_current_Atm(Atm(n)) !TODO should NOT be necessary now that we manually set isd, etc.
 
     !--- call fv_io_register_restart to register restart field to be written out in fv_io_write_restart
     call fv_io_register_restart(Atm(n)%domain,Atm(n:n))
@@ -245,7 +252,7 @@ contains
     endif
     if ( Atm(n)%flagstruct%external_ic ) then
          if( is_master() ) write(*,*) 'Calling get_external_ic'
-         call get_external_ic(Atm(n:n), Atm(n)%domain, cold_start_grids(n)) 
+         call get_external_ic(Atm(n), Atm(n)%domain, cold_start_grids(n)) 
          if( is_master() ) write(*,*) 'IC generated from the specified external source'
     endif
 
@@ -372,7 +379,7 @@ contains
        endif
          if (grid_type < 4) then
             if ( .not. Atm(n)%flagstruct%external_ic ) then
-            call init_case(Atm(n)%u,Atm(n)%v,Atm(n)%w,Atm(n)%pt,Atm(n)%delp,Atm(n)%q, &
+               call init_case(Atm(n)%u,Atm(n)%v,Atm(n)%w,Atm(n)%pt,Atm(n)%delp,Atm(n)%q, &
                            Atm(n)%phis, Atm(n)%ps,Atm(n)%pe, Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
                            Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        & 
                            Atm(n)%ak, Atm(n)%bk, Atm(n)%gridstruct, Atm(n)%flagstruct,&
@@ -402,17 +409,18 @@ contains
                                       Atm(n)%domain, Atm(n)%tile, Atm(n)%bd)
             if( is_master() ) write(*,*) 'Doubly Periodic IC generated'
          elseif (grid_type == 5 .or. grid_type == 6) then
-            call init_latlon(Atm(n)%u,Atm(n)%v,Atm(n)%pt,Atm(n)%delp,Atm(n)%q,&
-                             Atm(n)%phis, Atm(n)%ps,Atm(n)%pe, &
-                             Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
-                             Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        &
-                             Atm(n)%ak, Atm(n)%bk, Atm(n)%gridstruct, &
-                             Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, ncnst, &
-                             Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
-                             Atm(n)%flagstruct%dry_mass, &
-                             Atm(n)%flagstruct%mountain,       &
-                             Atm(n)%flagstruct%moist_phys, hybrid, Atm(n)%delz, &
-                             Atm(n)%ze0, Atm(n)%domain, Atm(n)%tile)
+!!$            call init_latlon(Atm(n)%u,Atm(n)%v,Atm(n)%pt,Atm(n)%delp,Atm(n)%q,&
+!!$                             Atm(n)%phis, Atm(n)%ps,Atm(n)%pe, &
+!!$                             Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
+!!$                             Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        &
+!!$                             Atm(n)%ak, Atm(n)%bk, Atm(n)%gridstruct, &
+!!$                             Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, ncnst, &
+!!$                             Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
+!!$                             Atm(n)%flagstruct%dry_mass, &
+!!$                             Atm(n)%flagstruct%mountain,       &
+!!$                             Atm(n)%flagstruct%moist_phys, hybrid, Atm(n)%delz, &
+!!$                             Atm(n)%ze0, Atm(n)%domain, Atm(n)%tile)
+            call mpp_error(FATAL, "Idealized test cases for grid_type == 5,6 (global lat-lon) grid not supported")
          endif
 
          !Turn this off on the nested grid if you are just interpolating topography from the coarse grid!
@@ -1178,11 +1186,11 @@ contains
           call update_coarse_grid(Atm%parent_grid%phis, &
                Atm%phis, Atm%neststruct%nest_domain, &
                Atm%gridstruct%dx, Atm%gridstruct%dy, Atm%gridstruct%area, &
-               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+               Atm%bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
                Atm%neststruct%isu, Atm%neststruct%ieu, Atm%neststruct%jsu, Atm%neststruct%jeu, &
                Atm%npx, Atm%npy, 0, 0, &
                Atm%neststruct%refinement, Atm%neststruct%nestupdate, 0, 0, &
-               Atm%neststruct%parent_proc, Atm%neststruct%child_proc, Atm%parent_grid)
+               Atm%neststruct%parent_proc, Atm%neststruct%child_proc, Atm%parent_grid, Atm%grid_number-1)
           Atm%parent_grid%neststruct%parent_of_twoway = .true.
           !NOTE: mpp_update_nest_coarse (and by extension, update_coarse_grid) does **NOT** pass data
           !allowing a two-way update into the halo of the coarse grid. It only passes data so that the INTERIOR

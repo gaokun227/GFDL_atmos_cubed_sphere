@@ -28,7 +28,6 @@
 
       use fv_grid_utils_mod, only: great_circle_dist, latlon2xyz, v_prod, normalize_vect
       use fv_grid_utils_mod, only: g_sum, global_mx, vect_cross
-      use fv_mp_mod,         only: ng
       use fv_mp_mod,         only: mp_stop, mp_reduce_min, mp_reduce_max, is_master
       use fv_timing_mod,     only: timing_on, timing_off
       use fv_arrays_mod,     only: fv_grid_bounds_type, R_GRID
@@ -95,15 +94,15 @@
 
     ! INPUT arrays
       type(fv_grid_bounds_type), intent(IN) :: bd
-      real(kind=R_GRID), intent(in)::area(bd%is-ng:bd%ie+ng, bd%js-ng:bd%je+ng)
-      real, intent(in):: dx(bd%is-ng:bd%ie+ng, bd%js-ng:bd%je+ng+1)
-      real, intent(in):: dy(bd%is-ng:bd%ie+ng+1, bd%js-ng:bd%je+ng)
-      real, intent(in), dimension(bd%is-ng:bd%ie+ng, bd%js-ng:bd%je+ng)::dxa, dya
-      real, intent(in)::dxc(bd%is-ng:bd%ie+ng+1, bd%js-ng:bd%je+ng)
-      real, intent(in)::dyc(bd%is-ng:bd%ie+ng, bd%js-ng:bd%je+ng+1)
+      real(kind=R_GRID), intent(in)::area(bd%isd:bd%ied, bd%jsd:bd%jed)
+      real, intent(in):: dx(bd%isd:bd%ied, bd%jsd:bd%jed+1)
+      real, intent(in):: dy(bd%isd:bd%ied+1, bd%jsd:bd%jed)
+      real, intent(in), dimension(bd%isd:bd%ied, bd%jsd:bd%jed)::dxa, dya
+      real, intent(in)::dxc(bd%isd:bd%ied+1, bd%jsd:bd%jed)
+      real, intent(in)::dyc(bd%isd:bd%ied, bd%jsd:bd%jed+1)
 
-      real(kind=R_GRID), intent(in):: grid(bd%is-ng:bd%ie+ng+1, bd%js-ng:bd%je+ng+1,2)
-      real(kind=R_GRID), intent(in):: agrid(bd%is-ng:bd%ie+ng, bd%js-ng:bd%je+ng,2)
+      real(kind=R_GRID), intent(in):: grid(bd%isd:bd%ied+1, bd%jsd:bd%jed+1,2)
+      real(kind=R_GRID), intent(in):: agrid(bd%isd:bd%ied, bd%jsd:bd%jed,2)
       real, intent(IN):: sin_sg(bd%isd:bd%ied,bd%jsd:bd%jed,9)
       real(kind=R_GRID), intent(IN):: stretch_fac
       logical, intent(IN) :: nested, bounded_domain
@@ -112,7 +111,7 @@
       integer, intent(IN) :: grid_number
 
     ! OUTPUT arrays
-      real, intent(out):: phis(bd%is-ng:bd%ie+ng, bd%js-ng:bd%je+ng)
+      real, intent(out):: phis(bd%isd:bd%ied, bd%jsd:bd%jed)
 ! Local:
       real, allocatable :: z2(:,:)
 ! Position of edges of the box containing the original data point:
@@ -132,7 +131,7 @@
       integer status
 
       integer :: is,  ie,  js,  je
-      integer :: isd, ied, jsd, jed
+      integer :: isd, ied, jsd, jed, ng
       real phis_coarse(bd%isd:bd%ied, bd%jsd:bd%jed)
       real wt
 
@@ -144,6 +143,7 @@
       ied = bd%ied
       jsd = bd%jsd
       jed = bd%jed
+      ng  = bd%ng
       if (nested) then
       !Divide all by grav
          rgrav = 1./grav
@@ -488,7 +488,7 @@
       if (is_master()) print*, ' Calling FV3_zs_filter...'
 
       if (.not. namelist_read) call read_namelist !when calling from external_ic
-      call global_mx(area, ng, da_min, da_max, bd)
+      call global_mx(area, bd%ng, da_min, da_max, bd)
 
       mdim = nint( real(npx_global) * min(10., stretch_fac) )
 
@@ -829,13 +829,14 @@
       logical, intent(IN) :: bounded_domain
       type(domain2d), intent(INOUT) :: domain
     ! OUTPUT arrays
-      real, intent(inout):: q(bd%is-ng:bd%ie+ng, bd%js-ng:bd%je+ng)
+      real, intent(inout):: q(bd%isd:bd%ied, bd%jsd:bd%jed)
 ! Local:
       real ddx(bd%is:bd%ie+1,bd%js:bd%je), ddy(bd%is:bd%ie,bd%js:bd%je+1)
       integer i,j,n
 
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
+      integer :: ng
 
       is  = bd%is
       ie  = bd%ie
@@ -845,7 +846,7 @@
       ied = bd%ied
       jsd = bd%jsd
       jed = bd%jed
-
+      ng  = bd%ng
 
       call mpp_update_domains(q,domain,whalo=ng,ehalo=ng,shalo=ng,nhalo=ng)
 
@@ -925,7 +926,7 @@
       real, intent(in):: dxc(bd%isd:bd%ied+1,bd%jsd:bd%jed)
       real, intent(in):: dyc(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
       real, intent(IN):: sin_sg(bd%isd:bd%ied,bd%jsd:bd%jed,9)
-      real, intent(inout):: q(bd%is-ng:bd%ie+ng, bd%js-ng:bd%je+ng)
+      real, intent(inout):: q(bd%isd:bd%ied, bd%jsd:bd%jed)
       logical, intent(IN) :: bounded_domain
       type(domain2d), intent(INOUT) :: domain
 ! diffusivity
