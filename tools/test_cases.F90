@@ -100,10 +100,10 @@
       integer :: sphum, theta_d
       real(kind=R_GRID), parameter :: radius = cnst_radius
       real(kind=R_GRID), parameter :: one = 1.d0
-      integer :: test_case
-      logical :: bubble_do
-      real    :: alpha
-      integer :: Nsolitons
+      integer :: test_case = 11
+      logical :: bubble_do = .false.
+      real    :: alpha = 0.0
+      integer :: Nsolitons = 1
       real    :: soliton_size = 750.e3, soliton_Umax = 50.
 
 ! Case 0 parameters

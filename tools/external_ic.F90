@@ -201,12 +201,13 @@ contains
         call prt_maxmin('O3MR',    Atm%q(:,:,:,o3mr),    is, ie, js, je, ng, Atm%npz, 1.)
       endif
 
-      call p_var(Atm%npz,  is, ie, js, je, Atm%ak(1),  ptop_min,         &
-                 Atm%delp, Atm%delz, Atm%pt, Atm%ps,               & 
-                 Atm%pe,   Atm%peln, Atm%pk, Atm%pkz,              &
-                 kappa, Atm%q, ng, Atm%ncnst, Atm%gridstruct%area_64, Atm%flagstruct%dry_mass,           &
-                 Atm%flagstruct%adjust_dry_mass, Atm%flagstruct%mountain, Atm%flagstruct%moist_phys,   &
-                 Atm%flagstruct%hydrostatic, Atm%flagstruct%nwat, Atm%domain, Atm%flagstruct%adiabatic, Atm%flagstruct%make_nh)
+!Now in fv_restart
+!!$      call p_var(Atm%npz,  is, ie, js, je, Atm%ak(1),  ptop_min,         &
+!!$                 Atm%delp, Atm%delz, Atm%pt, Atm%ps,               & 
+!!$                 Atm%pe,   Atm%peln, Atm%pk, Atm%pkz,              &
+!!$                 kappa, Atm%q, ng, Atm%ncnst, Atm%gridstruct%area_64, Atm%flagstruct%dry_mass,           &
+!!$                 Atm%flagstruct%adjust_dry_mass, Atm%flagstruct%mountain, Atm%flagstruct%moist_phys,   &
+!!$                 Atm%flagstruct%hydrostatic, Atm%flagstruct%nwat, Atm%domain, Atm%flagstruct%adiabatic, Atm%flagstruct%make_nh)
 
   end subroutine get_external_ic
 
@@ -218,7 +219,7 @@ contains
     integer :: tile_id(1)
     character(len=64)    :: fname
     character(len=7)  :: gn
-    integer              ::  n
+    integer              ::  n=1
     integer              ::  jbeg, jend
     real ftop
     real, allocatable :: g_dat2(:,:,:)
@@ -247,15 +248,15 @@ contains
 
     tile_id = mpp_get_tile_id( fv_domain )
 
-       call get_tile_string(fname, 'INPUT/fv_core.res'//trim(gn)//'.tile', tile_id(n), '.nc' )
-       if (mpp_pe() == mpp_root_pe()) print*, 'external_ic: looking for ', fname
-
+    call get_tile_string(fname, 'INPUT/fv_core.res'//trim(gn)//'.tile', tile_id(n), '.nc' )
+    if (mpp_pe() == mpp_root_pe()) print*, 'external_ic: looking for ', fname
+    
        
-       if( file_exist(fname) ) then
-          call read_data(fname, 'phis', Atm%phis(is:ie,js:je),      &
-                         domain=fv_domain, tile_count=n)
-       else
-          call surfdrv(  Atm%npx, Atm%npy, Atm%gridstruct%grid_64, Atm%gridstruct%agrid_64,   &
+    if( file_exist(fname) ) then
+       call read_data(fname, 'phis', Atm%phis(is:ie,js:je),      &
+            domain=fv_domain, tile_count=n)
+    else
+       call surfdrv(  Atm%npx, Atm%npy, Atm%gridstruct%grid_64, Atm%gridstruct%agrid_64,   &
                          Atm%gridstruct%area_64, Atm%gridstruct%dx, Atm%gridstruct%dy, &
                          Atm%gridstruct%dxa, Atm%gridstruct%dya, &
                          Atm%gridstruct%dxc, Atm%gridstruct%dyc, Atm%gridstruct%sin_sg, &
@@ -263,11 +264,11 @@ contains
                          Atm%neststruct%nested, Atm%gridstruct%bounded_domain, &
                          Atm%neststruct%npx_global, Atm%domain, &
                          Atm%flagstruct%grid_number, Atm%bd )
-          call mpp_error(NOTE,'terrain datasets generated using USGS data')
-       endif
+       call mpp_error(NOTE,'terrain datasets generated using USGS data')
+    endif
 
 
-	!Needed for reproducibility. DON'T REMOVE THIS!!
+    !Needed for reproducibility. DON'T REMOVE THIS!!
     call mpp_update_domains( Atm%phis, Atm%domain ) 
     ftop = g_sum(Atm%domain, Atm%phis(is:ie,js:je), is, ie, js, je, ng, Atm%gridstruct%area_64, 1)
  
@@ -339,6 +340,8 @@ contains
       integer:: liq_wat, ice_wat, rainwat, snowwat, graupel, tke, ntclamt
       namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds, &
                                  checker_tr, nt_checker
+
+      n = 1 !??
 
       call mpp_error(NOTE,'Using external_IC::get_nggps_ic which is valid only for data which has been &
                           &horizontally interpolated to the current cubed-sphere grid')

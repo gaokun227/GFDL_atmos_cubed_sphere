@@ -46,6 +46,7 @@
       use mpp_domains_mod, only : mpp_group_update_initialized, mpp_do_group_update
       use mpp_domains_mod, only : mpp_create_group_update,mpp_reset_group_update_field
       use mpp_domains_mod, only : group_halo_update_type => mpp_group_update_type
+      use mpp_domains_mod, only: nest_domain_type
       use mpp_parameter_mod, only : WUPDATE, EUPDATE, SUPDATE, NUPDATE, XUPDATE, YUPDATE
       use fv_arrays_mod, only: fv_atmos_type, fv_grid_bounds_type
       use fms_io_mod, only: set_domain
@@ -57,6 +58,7 @@
       private
 
       integer, parameter:: ng    = 3     ! Number of ghost zones required
+      integer, parameter :: MAX_NNEST=20, MAX_NTILE=50
 
 #include "mpif.h"
       integer, parameter :: XDir=1
@@ -87,6 +89,8 @@
       integer :: isc, iec, jsc, jec
 
       integer, allocatable :: grids_master_procs(:)
+      integer, dimension(MAX_NNEST) :: tile_fine = 0 !Global index of LAST tile in a mosaic
+      type(nest_domain_type) :: global_nest_domain !ONE structure for ALL levels of nesting
 
       public mp_start, mp_assign_gid, mp_barrier, mp_stop!, npes
       public domain_decomp, mp_bcst, mp_reduce_max, mp_reduce_sum, mp_gather
@@ -95,7 +99,8 @@
       public switch_current_domain, switch_current_Atm, broadcast_domains
       public is_master, setup_master
       public start_group_halo_update, complete_group_halo_update
-      public group_halo_update_type, grids_master_procs
+      public group_halo_update_type, grids_master_procs, tile_fine
+      public global_nest_domain, MAX_NNEST, MAX_NTILE
 
       interface start_group_halo_update
         module procedure start_var_group_update_2d

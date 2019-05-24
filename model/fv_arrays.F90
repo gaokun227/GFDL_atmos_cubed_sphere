@@ -23,7 +23,6 @@ module fv_arrays_mod
   use fms_io_mod,            only: restart_file_type
   use time_manager_mod,      only: time_type
   use horiz_interp_type_mod, only: horiz_interp_type
-  use mpp_domains_mod,       only: nest_domain_type
   use mpp_mod,               only: mpp_broadcast
   use platform_mod,          only: r8_kind
   public
@@ -593,7 +592,8 @@ module fv_arrays_mod
      real    :: update_blend = 1. ! option for controlling how much "blending" is done during two-way update
      logical, allocatable :: do_remap_BC(:)
 
-     type(nest_domain_type) :: nest_domain !Structure holding link from this grid to its parent
+     !nest_domain now a global structure defined in fv_mp_mod
+     !type(nest_domain_type) :: nest_domain !Structure holding link from this grid to its parent
      !type(nest_domain_type), allocatable :: nest_domain_all(:)
      integer                :: num_nest_level ! number of nest levels.
      type(nest_level_type), allocatable :: nest(:) ! store data for each level.
@@ -782,7 +782,8 @@ module fv_arrays_mod
 
      type(domain2D) :: domain_for_coupler ! domain used in coupled model with halo = 1.
 
-     integer :: num_contact, npes_per_tile, tile, npes_this_grid
+     !global tile and tile_of_mosaic only have a meaning for the CURRENT pe
+     integer :: num_contact, npes_per_tile, global_tile, tile_of_mosaic, npes_this_grid
      integer :: layout(2), io_layout(2) = (/ 1,1 /)
 
 #endif
@@ -1278,6 +1279,7 @@ contains
     Atm%flagstruct%grid_number => Atm%grid_number
     Atm%gridstruct%regional  => Atm%flagstruct%regional
     Atm%gridstruct%bounded_domain = Atm%flagstruct%regional .or. Atm%neststruct%nested
+    if (Atm%neststruct%nested) Atm%neststruct%parent_grid => Atm%parent_grid
 
     Atm%allocated = .true.
     if (dummy) Atm%dummy = .true.

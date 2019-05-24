@@ -95,6 +95,7 @@ module fv_diagnostics_mod
  integer, parameter :: nplev = 31
 #endif
  integer :: levs(nplev)
+ integer :: k100, k200, k500
 
  integer, parameter :: MAX_DIAG_COLUMN = 100
  logical, allocatable, dimension(:,:) :: do_debug_diag_column
@@ -320,8 +321,14 @@ contains
 ! do not add more to prevent the model from slowing down too much.
 #ifdef FEWER_PLEVS
     levs = (/50,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
+    k100 = 2
+    k200 = 3
+    k500 = 6
 #else
     levs = (/1,2,3,5,7,10,20,30,50,70,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,925,950,975,1000/)
+    k100 = 11
+    k200 = 13
+    k500 = 19
 #endif
     !
     
@@ -1953,13 +1960,13 @@ contains
              if( prt_minmax ) then
   
                 if(all(idiag%id_h(minloc(abs(levs-100)))>0))  &
-                call prt_mxm('Z100',a3(isc:iec,jsc:jec,11),isc,iec,jsc,jec,0,1,1.E-3,Atm(n)%gridstruct%area_64,Atm(n)%domain)
+                call prt_mxm('Z100',a3(isc:iec,jsc:jec,k100),isc,iec,jsc,jec,0,1,1.E-3,Atm(n)%gridstruct%area_64,Atm(n)%domain)
 
                 if(all(idiag%id_h(minloc(abs(levs-500)))>0))  then
                    if (Atm(n)%gridstruct%bounded_domain) then
-                      call prt_mxm('Z500',a3(isc:iec,jsc:jec,19),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
+                      call prt_mxm('Z500',a3(isc:iec,jsc:jec,k500),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
                    else
-                      call prt_gb_nh_sh('fv_GFS Z500', isc,iec, jsc,jec, a3(isc,jsc,19), Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
+                      call prt_gb_nh_sh('fv_GFS Z500', isc,iec, jsc,jec, a3(isc,jsc,k500), Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
                                         Atm(n)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
                    endif
                 endif
@@ -2167,7 +2174,7 @@ contains
              endif
           endif
           if ( all(idiag%id_t(minloc(abs(levs-200)))>0) .and. prt_minmax ) then
-             call prt_mxm('T200:', a3(isc:iec,jsc:jec,13), isc, iec, jsc, jec, 0, 1, 1.,   &
+             call prt_mxm('T200:', a3(isc:iec,jsc:jec,k200), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
              if (.not. Atm(n)%gridstruct%bounded_domain) then
                 tmp = 0.
@@ -2177,7 +2184,7 @@ contains
                       slat = Atm(n)%gridstruct%agrid(i,j,2)*rad2deg
                       if( (slat>-20 .and. slat<20) ) then
                          sar = sar + Atm(n)%gridstruct%area(i,j)
-                         tmp = tmp + a3(i,j,13)*Atm(n)%gridstruct%area(i,j)
+                         tmp = tmp + a3(i,j,k200)*Atm(n)%gridstruct%area(i,j)
                       endif
                    enddo
                 enddo

@@ -34,7 +34,7 @@ module fv_control_mod
                                   mpp_npes, mpp_get_current_pelist, &
                                   input_nml_file, get_unit, WARNING, &
                                   read_ascii_file, INPUT_STR_LENGTH
-   use mpp_domains_mod,     only: mpp_get_data_domain, mpp_get_compute_domain
+   use mpp_domains_mod,     only: mpp_get_data_domain, mpp_get_compute_domain, mpp_get_tile_id
    use tracer_manager_mod,  only: tm_get_number_tracers => get_number_tracers, &
                                   tm_get_tracer_index   => get_tracer_index,   &
                                   tm_get_tracer_indices => get_tracer_indices, &
@@ -50,8 +50,9 @@ module fv_control_mod
    use fv_grid_utils_mod,   only: grid_utils_init, grid_utils_end, ptop_min
    use fv_eta_mod,          only: set_eta
    use fv_grid_tools_mod,   only: init_grid
-   use fv_mp_mod,           only: mp_start, domain_decomp, mp_assign_gid
-   use fv_mp_mod,           only: broadcast_domains, mp_barrier, is_master, setup_master, grids_master_procs
+   use fv_mp_mod,           only: mp_start, domain_decomp, mp_assign_gid, global_nest_domain
+   use fv_mp_mod,           only: broadcast_domains, mp_barrier, is_master, setup_master, grids_master_procs, tile_fine
+   use fv_mp_mod,           only: MAX_NNEST, MAX_NTILE
    !use test_cases_mod,      only: test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size
    use fv_timing_mod,       only: timing_on, timing_off, timing_init, timing_prt
    use mpp_domains_mod,     only: domain2D
@@ -65,8 +66,6 @@ module fv_control_mod
 
    implicit none
    private
-
-   integer, parameter :: MAX_NNEST=20, MAX_NTILE=50
 
 #ifdef OVERLOAD_R4
    real    :: too_big  = 1.E8
@@ -109,7 +108,7 @@ module fv_control_mod
      integer, dimension(MAX_NNEST) :: all_npy = 0
      integer, dimension(MAX_NNEST) :: all_npz = 0
      integer, dimension(MAX_NNEST) :: all_ntiles = 0
-     integer, dimension(MAX_NNEST) :: tile_fine = 0
+     !integer, dimension(MAX_NNEST) :: tile_fine = 0
      integer, dimension(MAX_NNEST) :: icount_coarse = 1
      integer, dimension(MAX_NNEST) :: jcount_coarse = 1
      integer, dimension(MAX_NNEST) :: nest_level = 0
@@ -117,7 +116,7 @@ module fv_control_mod
      integer, dimension(MAX_NTILE) :: npes_nest_tile = 0
 
      real :: sdt
-     integer :: unit, ens_root_pe
+     integer :: unit, ens_root_pe, tile_id(1)
 
      !!!!!!!!!! POINTERS FOR READING NAMELISTS !!!!!!!!!!
 
@@ -349,6 +348,7 @@ module fv_control_mod
            pecounter = pecounter + 1
            Atm(n)%npes_this_grid = grid_pes(n)
         enddo
+        Atm(n)%grid_number = n
 
         !TODO: we are required to use PE name for reading INTERNAL namelist
         ! and the actual file name for EXTERNAL namelists. Need to clean up this code
@@ -385,6 +385,28 @@ module fv_control_mod
            grids_on_this_pe(n) = .true.
         endif
         Atm(n)%neststruct%nested = ( grid_coarse(n) > 0 )
+
+        if (Atm(n)%neststruct%nested) then
+           if ( grid_coarse(n) > ngrids .or. grid_coarse(n) == n .or. grid_coarse(n) < 1) then
+              write(errstring,'(2(A,I3))')  "Could not find parent grid #", grid_coarse(n), ' for grid #', n
+              call mpp_error(FATAL, errstring)
+           endif
+           Atm(n)%parent_grid => Atm(grid_coarse(n))
+
+           Atm(n)%neststruct%ioffset                = nest_ioffsets(n)
+           Atm(n)%neststruct%joffset                = nest_joffsets(n)
+           Atm(n)%neststruct%parent_tile            = tile_coarse(n)  
+           Atm(n)%neststruct%refinement             = nest_refine(n)
+
+        else
+
+           Atm(n)%neststruct%ioffset                = -999
+           Atm(n)%neststruct%joffset                = -999   
+           Atm(n)%neststruct%parent_tile            = -1      
+           Atm(n)%neststruct%refinement             = -1
+
+        endif
+
      enddo
 !!! DEBUG CODE
      print*, mpp_pe(), ' this_grid = ', this_grid, ', ngrids = ', ngrids, Atm(this_grid)%nml_filename
@@ -429,17 +451,6 @@ module fv_control_mod
      !!!! TODO TEMPORARY location for this code
      if (Atm(this_grid)%neststruct%nested) then
 
-        if ( grid_coarse(this_grid) > ngrids .or. grid_coarse(this_grid) == this_grid .or. grid_coarse(this_grid) < 1) then
-           write(errstring,'(2(A,I3))')  "Could not find parent grid #", grid_coarse(this_grid), ' for grid #', this_grid
-           call mpp_error(FATAL, errstring)
-        endif
-        Atm(this_grid)%parent_grid => Atm(grid_coarse(this_grid))
-        
-        Atm(this_grid)%neststruct%ioffset                = nest_ioffsets(this_grid)
-        Atm(this_grid)%neststruct%joffset                = nest_joffsets(this_grid)
-        Atm(this_grid)%neststruct%parent_tile            = tile_coarse(this_grid)  
-        Atm(this_grid)%neststruct%refinement             = nest_refine(this_grid)
-
         if ( Atm(this_grid)%flagstruct%consv_te > 0.) then
            call mpp_error(FATAL, 'The global energy fixer cannot be used on a nested grid. consv_te must be set to 0.')
         end if
@@ -448,14 +459,6 @@ module fv_control_mod
             mod(Atm(this_grid)%flagstruct%npy-1, Atm(this_grid)%neststruct%refinement) /= 0) then
            call mpp_error(FATAL, 'npx or npy not an even refinement of its coarse grid.')
         endif
-
-
-     else
-
-        Atm(this_grid)%neststruct%ioffset                = -999
-        Atm(this_grid)%neststruct%joffset                = -999   
-        Atm(this_grid)%neststruct%parent_tile            = -1      
-        Atm(this_grid)%neststruct%refinement             = -1
 
      endif
 
@@ -523,11 +526,16 @@ module fv_control_mod
      !!! END DEBUG CODE
      call domain_decomp(Atm(this_grid)%flagstruct%npx,Atm(this_grid)%flagstruct%npy,Atm(this_grid)%flagstruct%ntiles,&
           Atm(this_grid)%flagstruct%grid_type,Atm(this_grid)%neststruct%nested, &
-          Atm(this_grid)%layout,Atm(this_grid)%io_layout,Atm(this_grid)%bd,Atm(this_grid)%tile, &
+          Atm(this_grid)%layout,Atm(this_grid)%io_layout,Atm(this_grid)%bd,Atm(this_grid)%tile_of_mosaic, &
           Atm(this_grid)%gridstruct%square_domain,Atm(this_grid)%npes_per_tile,Atm(this_grid)%domain, &
           Atm(this_grid)%domain_for_coupler,Atm(this_grid)%num_contact,Atm(this_grid)%pelist)
      call set_domain(Atm(this_grid)%domain)
      call broadcast_domains(Atm,Atm(this_grid)%pelist,size(Atm(this_grid)%pelist))
+     do n=1,ngrids
+        tile_id = mpp_get_tile_id(Atm(n)%domain)       
+        Atm(n)%global_tile = tile_id(1) ! only meaningful locally
+        Atm(n)%npes_per_tile = size(Atm(n)%pelist)/Atm(n)%flagstruct%ntiles ! domain decomp doesn't set this globally
+     enddo
 
      ! 5. Set up domain and Atm structure
      call tm_register_tracers (MODEL_ATMOS, Atm(this_grid)%flagstruct%ncnst, Atm(this_grid)%flagstruct%nt_prog, &
@@ -564,13 +572,13 @@ module fv_control_mod
         !reset to universal pelist
         call mpp_set_current_pelist( global_pelist )
         !Except for npes_nest_tile all arrays should be just the nests and should NOT include the top level
-        call mpp_define_nest_domains(Atm(this_grid)%neststruct%nest_domain, Atm(this_grid)%domain, &
+        call mpp_define_nest_domains(global_nest_domain, Atm(this_grid)%domain, &
              ngrids-1, nest_level=nest_level(2:ngrids) , &
              istart_coarse=nest_ioffsets(2:ngrids), jstart_coarse=nest_joffsets(2:ngrids), &
              icount_coarse=icount_coarse(2:ngrids), jcount_coarse=jcount_coarse(2:ngrids), &
              npes_nest_tile=npes_nest_tile(1:ntiles_nest_all), &
              tile_fine=tile_fine(2:ngrids), tile_coarse=tile_coarse(2:ngrids), &
-             x_refine=nest_refine(2:ngrids), y_refine=nest_refine(2:ngrids), name="nest_domain")
+             x_refine=nest_refine(2:ngrids), y_refine=nest_refine(2:ngrids), name="global_nest_domain")
         call mpp_set_current_pelist(Atm(this_grid)%pelist)
 
      endif
@@ -578,8 +586,13 @@ module fv_control_mod
      allocate(Atm(this_grid)%neststruct%child_grids(ngrids)) !only temporary?
      do n=1,ngrids
         Atm(this_grid)%neststruct%child_grids(n) = (grid_coarse(n) == this_grid)
+        allocate(Atm(n)%neststruct%do_remap_bc(ngrids))
+        Atm(n)%neststruct%do_remap_bc(:) = .false.
      enddo
-     Atm(this_grid)%neststruct%parent_proc = ANY(tile_coarse == Atm(this_grid)%tile)
+!!! DEBUG CODE
+     print*, 'parent_proc: ', Atm(this_grid)%global_tile, mpp_pe(), tile_coarse
+!!! END DEBUG CODE
+     Atm(this_grid)%neststruct%parent_proc = ANY(tile_coarse == Atm(this_grid)%global_tile)
       !Atm(this_grid)%neststruct%child_proc = ANY(Atm(this_grid)%pelist == gid) !this means a nested grid
 !!$         if (Atm(this_grid)%neststruct%nestbctype > 1) then
 !!$            call mpp_error(FATAL, 'nestbctype > 1 not yet implemented')
@@ -1067,17 +1080,17 @@ module fv_control_mod
 
 !-------------------------------------------------------------------------------
          
- subroutine fv_end(Atm, grids_on_this_pe)
+ subroutine fv_end(Atm, this_grid)
 
     type(fv_atmos_type), intent(inout) :: Atm(:)
-    logical, intent(INOUT) :: grids_on_this_pe(:)
+    integer, intent(IN) :: this_grid
 
     integer :: n
 
     call timing_off('TOTAL')
     call timing_prt( mpp_pe() )
 
-    call fv_restart_end(Atm, grids_on_this_pe)
+    call fv_restart_end(Atm(this_grid))
     call fv_io_exit()
 
   ! Free temporary memory from sw_core routines

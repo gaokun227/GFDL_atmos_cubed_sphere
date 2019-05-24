@@ -39,7 +39,7 @@ module fv_nesting_mod
    use fv_mapz_mod,         only: mappm, remap_2d
    use fv_timing_mod,       only: timing_on, timing_off
    use fv_mp_mod,           only: is_master
-   use fv_mp_mod,           only: mp_reduce_sum
+   use fv_mp_mod,           only: mp_reduce_sum, global_nest_domain
    use fv_diagnostics_mod,  only: sphum_ll_fix, range_check
    use sw_core_mod,         only: divergence_corner, divergence_corner_nest
    use time_manager_mod,    only: time_type
@@ -203,35 +203,35 @@ contains
           allocate(q_buf(ncnst))
        endif
 
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz_coarse, bd, &
+       call nested_grid_BC_recv(global_nest_domain, 0, 0,  npz_coarse, bd, &
             delp_buf, nnest)
        do n=1,ncnst
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, &
+          call nested_grid_BC_recv(global_nest_domain, 0, 0, npz_coarse, bd, &
                q_buf(n), nnest)
        enddo
 #ifndef SW_DYNAMICS
-       call nested_grid_BC_recv(neststruct%nest_domain, 0, 0, npz_coarse, bd, &
+       call nested_grid_BC_recv(global_nest_domain, 0, 0, npz_coarse, bd, &
             pt_buf, nnest)
 
        if (.not. flagstruct%hydrostatic) then
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz_coarse, bd, &
+          call nested_grid_BC_recv(global_nest_domain, 0, 0,  npz_coarse, bd, &
                w_buf, nnest)
-          call nested_grid_BC_recv(neststruct%nest_domain, 0, 0,  npz_coarse, bd, &
+          call nested_grid_BC_recv(global_nest_domain, 0, 0,  npz_coarse, bd, &
                delz_buf, nnest)
        endif
 #endif
        if (neststruct%do_remap_BC(flagstruct%grid_number)) then
-          call nested_grid_BC_recv(neststruct%nest_domain, npz_coarse+1, bd, &
+          call nested_grid_BC_recv(global_nest_domain, npz_coarse+1, bd, &
                pe_u_buf, pe_v_buf, nnest, gridtype=DGRID_NE)
-          call nested_grid_BC_recv(neststruct%nest_domain, 1, 1,  npz_coarse+1, bd, &
+          call nested_grid_BC_recv(global_nest_domain, 1, 1,  npz_coarse+1, bd, &
                pe_b_buf, nnest)
        endif
 
-       call nested_grid_BC_recv(neststruct%nest_domain, npz_coarse, bd, &
+       call nested_grid_BC_recv(global_nest_domain, npz_coarse, bd, &
                u_buf, v_buf, nnest, gridtype=DGRID_NE)
-       call nested_grid_BC_recv(neststruct%nest_domain, npz_coarse, bd, &
+       call nested_grid_BC_recv(global_nest_domain, npz_coarse, bd, &
                uc_buf, vc_buf, nnest, gridtype=CGRID_NE)
-       call nested_grid_BC_recv(neststruct%nest_domain, 1, 1,  npz_coarse, bd, &
+       call nested_grid_BC_recv(global_nest_domain, 1, 1,  npz_coarse, bd, &
             divg_buf, nnest)
     endif
 
@@ -240,16 +240,16 @@ contains
 
     do p=1,size(child_grids)
        if (child_grids(p)) then
-          call nested_grid_BC_send(delp, neststruct%nest_domain, 0, 0, p-1)
+          call nested_grid_BC_send(delp, global_nest_domain, 0, 0, p-1)
           do n=1,ncnst
-             call nested_grid_BC_send(q(:,:,:,n), neststruct%nest_domain, 0, 0, p-1)
+             call nested_grid_BC_send(q(:,:,:,n), global_nest_domain, 0, 0, p-1)
           enddo
 #ifndef SW_DYNAMICS
-          call nested_grid_BC_send(pt, neststruct%nest_domain, 0, 0, p-1)
+          call nested_grid_BC_send(pt, global_nest_domain, 0, 0, p-1)
 
           if (.not. flagstruct%hydrostatic) then
-             call nested_grid_BC_send(w, neststruct%nest_domain, 0, 0, p-1)
-             call nested_grid_BC_send(delz, neststruct%nest_domain, 0, 0, p-1) 
+             call nested_grid_BC_send(w, global_nest_domain, 0, 0, p-1)
+             call nested_grid_BC_send(delz, global_nest_domain, 0, 0, p-1) 
           endif          
 #endif
 
@@ -283,7 +283,7 @@ contains
              enddo
              enddo
              enddo
-             call nested_grid_BC_send(pe_ustag, pe_vstag, neststruct%nest_domain, p-1, gridtype=DGRID_NE)
+             call nested_grid_BC_send(pe_ustag, pe_vstag, global_nest_domain, p-1, gridtype=DGRID_NE)
 
              !b points
 !$OMP parallel do default(none) shared(ak,pe_bstag,delp, &
@@ -325,13 +325,13 @@ contains
              enddo
              enddo
              enddo
-             call nested_grid_BC_send(pe_bstag, neststruct%nest_domain, 1, 1, p-1)
+             call nested_grid_BC_send(pe_bstag, global_nest_domain, 1, 1, p-1)
 
           endif
 
-          call nested_grid_BC_send(u, v, neststruct%nest_domain, p-1, gridtype=DGRID_NE)
-          call nested_grid_BC_send(uc, vc, neststruct%nest_domain, p-1, gridtype=CGRID_NE)
-          call nested_grid_BC_send(divg, neststruct%nest_domain, 1, 1, p-1)
+          call nested_grid_BC_send(u, v, global_nest_domain, p-1, gridtype=DGRID_NE)
+          call nested_grid_BC_send(uc, vc, global_nest_domain, p-1, gridtype=CGRID_NE)
+          call nested_grid_BC_send(divg, global_nest_domain, 1, 1, p-1)
        endif
     enddo
     
@@ -348,20 +348,20 @@ contains
           call allocate_fv_nest_BC_type(pe_lag_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz_coarse+1,ng,0,0,0,.false.)
           call allocate_fv_nest_BC_type(pe_eul_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz+1,ng,0,0,0,.false.)
           
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_h, neststruct%wt_h, 0, 0,  npx, npy, npz_coarse, bd, &
                delp_lag_BC, delp_buf, pd_in=do_pd)
           !The incoming delp is on the coarse grid's lagrangian coordinate. Re-create the reference coordinate
           call setup_eul_delp_BC(delp_lag_BC, neststruct%delp_BC, pe_lag_BC, pe_eul_BC, ak, bk, npx, npy, npz, npz_coarse, parent_grid%ptop, bd)
 
        else
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_h, neststruct%wt_h, 0, 0,  npx, npy, npz_coarse, bd, &
                neststruct%delp_BC, delp_buf, pd_in=do_pd)
        endif
 
 !!$       do n=1,ncnst
-!!$          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+!!$          call nested_grid_BC_save_proc(global_nest_domain, &
 !!$               neststruct%ind_h, neststruct%wt_h, 0, 0, npx,  npy,  npz_coarse, bd, &
 !!$               lag_BC, q_buf(n), pd_in=do_pd)
 !!$          !This remapping appears to have some trouble with rounding error random noise
@@ -370,14 +370,14 @@ contains
 #ifndef SW_DYNAMICS
        if (neststruct%do_remap_BC(flagstruct%grid_number)) then
 
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_h, neststruct%wt_h, 0, 0, npx,  npy,  npz_coarse, bd, &
                lag_BC, pt_buf) 
           !NOTE: need to remap using peln, not pe
           call remap_BC(pe_lag_BC, pe_eul_BC, lag_BC, neststruct%pt_BC, npx, npy, npz, npz_coarse, bd, 0, 0, 1, abs(flagstruct%kord_tm), 'pt', do_log_pe=.true.)
 
        else
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_h, neststruct%wt_h, 0, 0, npx,  npy,  npz_coarse, bd, &
                neststruct%pt_BC, pt_buf) 
        endif
@@ -386,14 +386,14 @@ contains
        !For whatever reason moving the calls for q BC remapping here avoids problems with cross-restart reproducibility. 
        if (neststruct%do_remap_BC(flagstruct%grid_number)) then
           do n=1,ncnst
-             call nested_grid_BC_save_proc(neststruct%nest_domain, &
+             call nested_grid_BC_save_proc(global_nest_domain, &
                   neststruct%ind_h, neststruct%wt_h, 0, 0, npx,  npy,  npz_coarse, bd, &
                   lag_BC, q_buf(n), pd_in=do_pd)
              call remap_BC(pe_lag_BC, pe_eul_BC, lag_BC, neststruct%q_BC(n), npx, npy, npz, npz_coarse, bd, 0, 0, 0, flagstruct%kord_tr, 'q2')
           enddo
        else
           do n=1,ncnst
-             call nested_grid_BC_save_proc(neststruct%nest_domain, &
+             call nested_grid_BC_save_proc(global_nest_domain, &
                   neststruct%ind_h, neststruct%wt_h, 0, 0, npx,  npy,  npz_coarse, bd, &
                   neststruct%q_BC(n), q_buf(n), pd_in=do_pd)
           enddo
@@ -405,20 +405,20 @@ contains
        else
           if (neststruct%do_remap_BC(flagstruct%grid_number)) then
 
-             call nested_grid_BC_save_proc(neststruct%nest_domain, &
+             call nested_grid_BC_save_proc(global_nest_domain, &
                   neststruct%ind_h, neststruct%wt_h, 0, 0,  npx,  npy,  npz_coarse, bd, &
                   lag_BC, w_buf)
              call remap_BC(pe_lag_BC, pe_eul_BC, lag_BC, neststruct%w_BC, npx, npy, npz, npz_coarse, bd, 0, 0, -1, flagstruct%kord_wz, 'w')
-             call nested_grid_BC_save_proc(neststruct%nest_domain, &
+             call nested_grid_BC_save_proc(global_nest_domain, &
                   neststruct%ind_h, neststruct%wt_h, 0, 0,  npx,  npy, npz_coarse, bd, &
                   lag_BC, delz_buf) !Need a negative-definite method? 
              call remap_delz_BC(pe_lag_BC, pe_eul_BC, delp_lag_BC, lag_BC, neststruct%delp_BC, neststruct%delz_BC, npx, npy, npz, npz_coarse, bd, 0, 0, 1, flagstruct%kord_wz)
           
           else
-             call nested_grid_BC_save_proc(neststruct%nest_domain, &
+             call nested_grid_BC_save_proc(global_nest_domain, &
                   neststruct%ind_h, neststruct%wt_h, 0, 0,  npx,  npy,  npz_coarse, bd, &
                   neststruct%w_BC, w_buf)
-             call nested_grid_BC_save_proc(neststruct%nest_domain, &
+             call nested_grid_BC_save_proc(global_nest_domain, &
                   neststruct%ind_h, neststruct%wt_h, 0, 0,  npx,  npy, npz_coarse, bd, &
                   neststruct%delz_BC, delz_buf) !Need a negative-definite method? 
           endif
@@ -451,36 +451,36 @@ contains
           call allocate_fv_nest_BC_type(pe_b_eul_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz+1       ,ng,0,1,1,.false.)
           call allocate_fv_nest_BC_type(lag_b_BC,   is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz_coarse  ,ng,0,1,1,.false.)
 
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_u, neststruct%wt_u, 0, 1,  npx,  npy,  npz_coarse+1, bd, &
                pe_u_lag_BC, pe_u_buf)
           call setup_eul_pe_BC(pe_u_lag_BC, pe_u_eul_BC, ak, bk, npx, npy, npz, npz_coarse, 0, 1, bd)
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_v, neststruct%wt_v, 1, 0,  npx,  npy,  npz_coarse+1, bd, &
                pe_v_lag_BC, pe_v_buf)
           call setup_eul_pe_BC(pe_v_lag_BC, pe_v_eul_BC, ak, bk, npx, npy, npz, npz_coarse, 1, 0, bd)
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_b, neststruct%wt_b, 1, 1,  npx,  npy,  npz_coarse+1, bd, &
                pe_b_lag_BC, pe_b_buf)
           call setup_eul_pe_BC(pe_b_lag_BC, pe_b_eul_BC, ak, bk, npx, npy, npz, npz_coarse, 1, 1, bd)
 
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_u, neststruct%wt_u, 0, 1,  npx,  npy,  npz_coarse, bd, &
                lag_u_BC, u_buf)
           call remap_BC(pe_u_lag_BC, pe_u_eul_BC, lag_u_BC, neststruct%u_BC, npx, npy, npz, npz_coarse, bd, 0, 1, -1, flagstruct%kord_mt, 'u')
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_u, neststruct%wt_u, 0, 1,  npx,  npy,  npz_coarse, bd, &
                lag_u_BC, vc_buf)
           call remap_BC(pe_u_lag_BC, pe_u_eul_BC, lag_u_BC, neststruct%vc_BC, npx, npy, npz, npz_coarse, bd, 0, 1, -1, flagstruct%kord_mt, 'vc')
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_v, neststruct%wt_v, 1, 0,  npx,  npy,  npz_coarse, bd, &
                lag_v_BC, v_buf)
           call remap_BC(pe_v_lag_BC, pe_v_eul_BC, lag_v_BC, neststruct%v_BC, npx, npy, npz, npz_coarse, bd, 1, 0, -1, flagstruct%kord_mt, 'v')
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_v, neststruct%wt_v, 1, 0,  npx,  npy,  npz_coarse, bd, &
                lag_v_BC, uc_buf)
           call remap_BC(pe_v_lag_BC, pe_v_eul_BC, lag_v_BC, neststruct%uc_BC, npx, npy, npz, npz_coarse, bd, 1, 0, -1, flagstruct%kord_mt, 'uc')
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_b, neststruct%wt_b, 1, 1,  npx,  npy,  npz_coarse, bd, &
                lag_b_BC, divg_buf)
           call remap_BC(pe_b_lag_BC, pe_b_eul_BC, lag_b_BC, neststruct%divg_BC, npx, npy, npz, npz_coarse, bd, 1, 1, -1, flagstruct%kord_mt, 'divg')
@@ -502,19 +502,19 @@ contains
 
        else
 
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_u, neststruct%wt_u, 0, 1,  npx,  npy,  npz_coarse, bd, &
                neststruct%u_BC, u_buf)
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_u, neststruct%wt_u, 0, 1,  npx,  npy,  npz_coarse, bd, &
                neststruct%vc_BC, vc_buf)
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_v, neststruct%wt_v, 1, 0,  npx,  npy,  npz_coarse, bd, &
                neststruct%v_BC, v_buf)
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_v, neststruct%wt_v, 1, 0,  npx,  npy,  npz_coarse, bd, &
                neststruct%uc_BC, uc_buf)
-          call nested_grid_BC_save_proc(neststruct%nest_domain, &
+          call nested_grid_BC_save_proc(global_nest_domain, &
                neststruct%ind_b, neststruct%wt_b, 1, 1,  npx,  npy,  npz_coarse, bd, &
                neststruct%divg_BC, divg_buf)
 
@@ -638,9 +638,9 @@ contains
          !Both nested and coarse grids assumed on Eulerian coordinates at this point
          !Only need to fetch ps to form pressure levels
          !Note also u_dt and v_dt are unstaggered
-         call nested_grid_BC(ps, parent_ps, neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
+         call nested_grid_BC(ps, parent_ps, global_nest_domain, neststruct%ind_h, neststruct%wt_h, 0, 0, &
               npx, npy, bd, 1, npx-1, 1, npy-1)
-         call nested_grid_BC_recv(neststruct%nest_domain, npz_coarse, bd, u_dt_buf, v_dt_buf, nnest, gridtype=AGRID)
+         call nested_grid_BC_recv(global_nest_domain, npz_coarse, bd, u_dt_buf, v_dt_buf, nnest, gridtype=AGRID)
 
          call allocate_fv_nest_BC_type(pe_src_BC, is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz_coarse+1,ng,0,0,0,.false.)
          call allocate_fv_nest_BC_type(pe_dst_BC, is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz+1,ng,0,0,0,.false.)
@@ -658,7 +658,7 @@ contains
          call deallocate_fv_nest_BC_type(pe_dst_BC)
 
       else
-         call nested_grid_BC(u_dt, v_dt, dum, dum, neststruct%nest_domain, neststruct%ind_h, neststruct%ind_h, &
+         call nested_grid_BC(u_dt, v_dt, dum, dum, global_nest_domain, neststruct%ind_h, neststruct%ind_h, &
               neststruct%wt_h, neststruct%wt_h, 0, 0, 0, 0, npx, npy, npz, bd, 1, npx-1, 1, npy-1, nnest, gridtype=AGRID)
       endif
 
@@ -666,8 +666,8 @@ contains
    do n=1,size(neststruct%child_grids)
       if (neststruct%child_grids(n)) then
          if (neststruct%do_remap_BC(n)) &
-              call nested_grid_BC(ps, neststruct%nest_domain, 0, 0, n-1)
-         call nested_grid_BC_send(u_dt, v_dt, neststruct%nest_domain, n-1, gridtype=AGRID)
+              call nested_grid_BC(ps, global_nest_domain, 0, 0, n-1)
+         call nested_grid_BC_send(u_dt, v_dt, global_nest_domain, n-1, gridtype=AGRID)
       endif
    enddo
 
@@ -686,7 +686,7 @@ contains
 
    call allocate_fv_nest_BC_type(var_BC,bd%is,bd%ie,bd%js,bd%je,bd%isd,bd%ied,bd%jsd,bd%jed,npx,npy,npz_coarse,ng,0,istag,jstag,.false.)
 
-   call nested_grid_BC_save_proc(neststruct%nest_domain, neststruct%ind_h, neststruct%wt_h, istag, jstag, &
+   call nested_grid_BC_save_proc(global_nest_domain, neststruct%ind_h, neststruct%wt_h, istag, jstag, &
         npx, npy, npz_coarse, bd, var_BC, buf)
    call remap_BC_direct(pe_src_BC, pe_dst_BC, var_BC, var, npx, npy, npz, npz_coarse, bd, istag, jstag, iv, kord)
    
@@ -2226,10 +2226,10 @@ end subroutine d2a_setup
 !!  unless flux nested grid BCs are specified, or if a quantity is
 !!  not updated at all. This ability has not been implemented.
 
-subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
+subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time, this_grid)
 
    type(fv_atmos_type), intent(INOUT) :: Atm(ngrids)
-   integer, intent(IN) :: ngrids
+   integer, intent(IN) :: ngrids, this_grid
    logical, intent(IN) :: grids_on_this_pe(ngrids)
    real, intent(IN) :: zvir
    type(time_type), intent(IN) :: Time
@@ -2241,20 +2241,20 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
 
 ! Re-compute pressures on each grid
 
-      do n=1,ngrids
-         call p_var(Atm(n)%npz, Atm(n)%bd%is, Atm(n)%bd%ie, Atm(n)%bd%js, Atm(n)%bd%je, Atm(n)%ptop, ptop_min,  &
-              Atm(n)%delp, Atm(n)%delz, Atm(n)%pt, Atm(n)%ps, Atm(n)%pe, Atm(n)%peln, Atm(n)%pk, Atm(n)%pkz, kappa, &
-              Atm(n)%q, Atm(n)%ng, Atm(n)%flagstruct%ncnst,  Atm(n)%gridstruct%area_64, 0.,  &
-              .false.,  .false., & 
-              Atm(n)%flagstruct%moist_phys,  Atm(n)%flagstruct%hydrostatic, &
-              Atm(n)%flagstruct%nwat, Atm(n)%domain, Atm(n)%flagstruct%adiabatic, .false.)
-      enddo
+      call p_var(Atm(this_grid)%npz, Atm(this_grid)%bd%is, Atm(this_grid)%bd%ie, Atm(this_grid)%bd%js, Atm(this_grid)%bd%je, &
+           Atm(this_grid)%ptop, ptop_min, Atm(this_grid)%delp, Atm(this_grid)%delz, Atm(this_grid)%pt, &
+           Atm(this_grid)%ps, Atm(this_grid)%pe, Atm(this_grid)%peln, Atm(this_grid)%pk, Atm(this_grid)%pkz, kappa, &
+           Atm(this_grid)%q, Atm(this_grid)%ng, Atm(this_grid)%flagstruct%ncnst,  Atm(this_grid)%gridstruct%area_64, 0.,  &
+           .false.,  .false., & 
+           Atm(this_grid)%flagstruct%moist_phys,  Atm(this_grid)%flagstruct%hydrostatic, &
+           Atm(this_grid)%flagstruct%nwat, Atm(this_grid)%domain, Atm(this_grid)%flagstruct%adiabatic, .false.)
 
       do n=ngrids,2,-1 !loop backwards to allow information to propagate from finest to coarsest grids
 
          !two-way updating    
          if (Atm(n)%neststruct%twowaynest ) then
-            if  (grids_on_this_pe(n) .or. grids_on_this_pe(Atm(n)%parent_grid%grid_number)) then
+            !if  (grids_on_this_pe(n) .or. grids_on_this_pe(Atm(n)%parent_grid%grid_number)) then
+            if (n==this_grid .or. Atm(n)%parent_grid%grid_number==this_grid) then
                sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
                call twoway_nest_update(Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, zvir, &
                     Atm(n)%ncnst, sphum, Atm(n)%u, Atm(n)%v, Atm(n)%w, &
@@ -2268,17 +2268,16 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
       end do
 
       !NOTE: these routines need to be used with any grid which has been updated to, not just the coarsest grid.
-      do n=1,ngrids
-         if (Atm(n)%neststruct%parent_of_twoway .and. grids_on_this_pe(n)) then
-            call after_twoway_nest_update( Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%ng, Atm(n)%ncnst,   &
-                 Atm(n)%u,  Atm(n)%v,  Atm(n)%w,  Atm(n)%delz, &
-                 Atm(n)%pt,  Atm(n)%delp,  Atm(n)%q,   &
-                 Atm(n)%ps,  Atm(n)%pe,  Atm(n)%pk,  Atm(n)%peln,  Atm(n)%pkz, &
-                 Atm(n)%phis,  Atm(n)%ua,  Atm(n)%va,  &
-                 Atm(n)%ptop, Atm(n)%gridstruct, Atm(n)%flagstruct, &
-                 Atm(n)%domain, Atm(n)%bd, Time)
-         endif
-      enddo
+      if (Atm(this_grid)%neststruct%parent_of_twoway .and. grids_on_this_pe(n)) then
+            call after_twoway_nest_update( Atm(this_grid)%npx, Atm(this_grid)%npy, Atm(this_grid)%npz, &
+                 Atm(this_grid)%ng,     Atm(this_grid)%ncnst,   &
+                 Atm(this_grid)%u,      Atm(this_grid)%v,     Atm(this_grid)%w,    Atm(this_grid)%delz, &
+                 Atm(this_grid)%pt,     Atm(this_grid)%delp,  Atm(this_grid)%q,   &
+                 Atm(this_grid)%ps,     Atm(this_grid)%pe,    Atm(this_grid)%pk,   Atm(this_grid)%peln,  Atm(this_grid)%pkz, &
+                 Atm(this_grid)%phis,   Atm(this_grid)%ua,    Atm(this_grid)%va,  &
+                 Atm(this_grid)%ptop,   Atm(this_grid)%gridstruct, Atm(this_grid)%flagstruct, &
+                 Atm(this_grid)%domain, Atm(this_grid)%bd, Time)
+      endif
 
    endif ! ngrids > 1
 
@@ -2452,7 +2451,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
 !!$         endif
 !!$
 !!$            call mpp_update_domains(qdp, domain)
-!!$            call update_coarse_grid(var_src, qdp, neststruct%nest_domain, &
+!!$            call update_coarse_grid(var_src, qdp, global_nest_domain, &
 !!$                 gridstruct%dx, gridstruct%dy, gridstruct%area, &
 !!$                 bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
 !!$                 neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
@@ -2555,7 +2554,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
          endif
 
          call update_coarse_grid(pt_src, &
-              t_nest, neststruct%nest_domain, &
+              t_nest, global_nest_domain, &
               gridstruct%dx, gridstruct%dy, gridstruct%area, &
               bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
@@ -2567,7 +2566,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
          if (neststruct%child_proc)  call mpp_update_domains(pt, domain, complete=.true.)
 
          call update_coarse_grid(pt_src, &
-              pt, neststruct%nest_domain, &
+              pt, global_nest_domain, &
               gridstruct%dx, gridstruct%dy, gridstruct%area, &
               bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
@@ -2584,7 +2583,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
 
          allocate(w_src(isd_p:ied_p,jsd_p:jed_p,npz))
          w_src = -999.
-         call update_coarse_grid(w_src, w, neststruct%nest_domain, &
+         call update_coarse_grid(w_src, w, global_nest_domain, &
               gridstruct%dx, gridstruct%dy, gridstruct%area, &
               bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
@@ -2596,7 +2595,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
             !Updating for delz not yet implemented; 
             ! may need to think very carefully how one would do this!!!
             ! consider updating specific volume instead?
-!!$            call update_coarse_grid(parent_grid%delz, delz, neststruct%nest_domain, &
+!!$            call update_coarse_grid(parent_grid%delz, delz, global_nest_domain, &
 !!$                 bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, npz, 0, 0, &
 !!$                 neststruct%refinement, neststruct%nestupdate, upoff, 0, neststruct%parent_proc, neststruct%child_proc)
 
@@ -2610,7 +2609,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
    allocate(v_src(isd_p:ied_p+1,jsd_p:jed_p,npz))
    u_src = -999.
    v_src = -999.
-   call update_coarse_grid(u_src, v_src, u, v, neststruct%nest_domain, &
+   call update_coarse_grid(u_src, v_src, u, v, global_nest_domain, &
         gridstruct%dx, gridstruct%dy, gridstruct%area, &
         bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
         neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
@@ -2658,7 +2657,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
          end do
       endif
 
-      call update_coarse_grid(ps0, ps, neststruct%nest_domain, &
+      call update_coarse_grid(ps0, ps, global_nest_domain, &
               gridstruct%dx, gridstruct%dy, gridstruct%area, &
               bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
               neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
@@ -2676,7 +2675,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time)
 
       call mpp_sync!self
 
-      if (parent_grid%tile == neststruct%parent_tile) then 
+      if (parent_grid%global_tile == neststruct%parent_tile) then 
 
          if (neststruct%parent_proc) then
 

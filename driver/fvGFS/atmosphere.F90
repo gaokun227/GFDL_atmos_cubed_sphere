@@ -262,7 +262,7 @@ contains
      call cloud_diagnosis_init(nlunit, input_nml_file, stdlog(), fn_nml)
    endif
 
-   call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mygrid)%gridstruct%grid_type, grids_on_this_pe)
+   call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mygrid)%gridstruct%grid_type, mygrid)
 
    fv_time = Time
 
@@ -422,7 +422,7 @@ contains
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
        call mpp_sync()
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time, mygrid)
        call timing_off('TWOWAY_UPDATE')
     endif
 
@@ -491,7 +491,7 @@ contains
       call timing_off('FV_DIAG')
    endif
 
-   call fv_end(Atm, grids_on_this_pe)
+   call fv_end(Atm, mygrid)
    deallocate (Atm)
 
    deallocate( u_dt, v_dt, t_dt, pref, dum1d )
@@ -508,7 +508,7 @@ contains
   subroutine atmosphere_restart(timestamp)
     character(len=*),  intent(in) :: timestamp
 
-    call fv_write_restart(Atm, grids_on_this_pe, timestamp)
+    call fv_write_restart(Atm(mygrid), timestamp)
 
   end subroutine atmosphere_restart
   ! </SUBROUTINE>
@@ -1146,7 +1146,7 @@ contains
     if (ngrids > 1 .and. p_split > 0) then
        call mpp_sync()
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time, mygrid)
        call timing_off('TWOWAY_UPDATE')
     endif   
    call nullify_domain()

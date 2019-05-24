@@ -554,7 +554,7 @@ contains
     have_north_pole               => Atm%gridstruct%have_north_pole
     stretched_grid                => Atm%gridstruct%stretched_grid
 
-    tile                          => Atm%tile
+    tile                          => Atm%tile_of_mosaic
 
     domain                        => Atm%domain
 
@@ -711,7 +711,7 @@ contains
                 enddo
              else
                 call get_symmetry(dx(is:ie,js:je+1), dy(is:ie+1,js:je), 0, 1, Atm%layout(1), Atm%layout(2), &
-                     Atm%domain, Atm%tile, Atm%gridstruct%npx_g, Atm%bd)
+                     Atm%domain, Atm%tile_of_mosaic, Atm%gridstruct%npx_g, Atm%bd)
              endif
 
              call mpp_get_boundary( dy, dx, Atm%domain, ebufferx=ebuffer, wbufferx=wbuffer, sbuffery=sbuffer, nbuffery=nbuffer,&
@@ -1719,7 +1719,7 @@ contains
             ic = p_ind(npx,1,1) ; jc = p_ind(npx,1,1)
             write(*,'(A, 2I5, 4F10.4)') 'SE CORNER: ', ic, jc, grid_global(npx,1,:,1)*90./pi
          else         
-            write(*,*) 'PARENT GRID ', Atm%parent_grid%grid_number, Atm%parent_grid%tile
+            write(*,*) 'PARENT GRID ', Atm%parent_grid%grid_number, Atm%parent_grid%global_tile
             ic = p_ind(1,1,1) ; jc = p_ind(1,1,1)
             write(*,'(A, 2I5, 4F10.4)') 'SW CORNER: ', ic, jc, Atm%parent_grid%grid_global(ic,jc,:,parent_tile)*90./pi
             ic = p_ind(1,npy,1) ; jc = p_ind(1,npy,1)

@@ -128,7 +128,7 @@ contains
 
                    call timing_on('fv_restart')
     call fv_restart(Atm(1)%domain, Atm, dt_atmos, seconds, days, cold_start, &
-         Atm(1)%flagstruct%grid_type, grids_on_this_pe)
+         Atm(1)%flagstruct%grid_type, mytile)
                    call timing_off('fv_restart')
 
      fv_time = time
@@ -461,7 +461,7 @@ contains
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time, mytile)
        call timing_off('TWOWAY_UPDATE')
     endif
 
@@ -497,7 +497,7 @@ contains
 
     if (ngrids > 1 .and. p_split > 0) then
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time, mytile)
        call timing_off('TWOWAY_UPDATE')
     endif
 
@@ -538,7 +538,7 @@ contains
        if ( Atm(n)%flagstruct%moist_phys .and. Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(N)) call gfdl_cloud_microphys_end
     enddo
 
-    call fv_end(Atm, grids_on_this_pe)
+    call fv_end(Atm, mytile)
     deallocate(Atm)
 
   end subroutine atmosphere_end
