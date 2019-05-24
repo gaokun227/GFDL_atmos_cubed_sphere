@@ -427,7 +427,7 @@ contains
 
   end subroutine get_symmetry
 
-  subroutine init_grid(Atm, grid_name, grid_file, npx, npy, npz, ndims, nregions, ng, parent_tile_nums)
+  subroutine init_grid(Atm, grid_name, grid_file, npx, npy, npz, ndims, nregions, ng, tile_coarse)
  
 !     init_grid :: read grid from input file and setup grid descriptors
  
@@ -439,7 +439,7 @@ contains
     integer,      intent(IN) :: ndims
     integer,      intent(IN) :: nregions
     integer,      intent(IN) :: ng
-    integer,      intent(IN) :: parent_tile_nums(:)
+    integer,      intent(IN) :: tile_coarse(:)
 !--------------------------------------------------------
     real(kind=R_GRID)   ::  xs(npx,npy)
     real(kind=R_GRID)   ::  ys(npx,npy)
@@ -1072,9 +1072,12 @@ contains
     !Matching receive in setup_aligned_nest
     do n=1,size(Atm%neststruct%child_grids)
        if (Atm%neststruct%child_grids(n) .and. is_master()) then
-          !need to get parent_tile_nums AND determine local number for tile
+          !need to get tile_coarse AND determine local number for tile
           if (ntiles_g > 1) then ! coarse grid only!!
-             call mpp_send(grid_global(:,:,:,parent_tile_nums(n)), &
+             !!! DEBUG CODE
+             print*, 'SENDING GRID_GLOBAL: ', mpp_pe(), tile_coarse(n), grids_master_procs(n), grid_global(1,npy,:,tile_coarse(n))
+             !!! END DEBUG CODE
+             call mpp_send(grid_global(:,:,:,tile_coarse(n)), &
                   size(grid_global)/Atm%flagstruct%ntiles,grids_master_procs(n))
           else
              call mpp_send(grid_global(:,:,:,1),size(grid_global),grids_master_procs(n))
@@ -1280,6 +1283,9 @@ contains
 
          call mpp_recv(p_grid( isg-ng:ieg+1+ng, jsg-ng:jeg+1+ng,1:2), size(p_grid( isg-ng:ieg+1+ng, jsg-ng:jeg+1+ng,1:2)), &
                        Atm%parent_grid%pelist(1))
+         !!!! DEBUG CODE
+         print*, 'RECEIVING GRID GLOBAL: ', mpp_pe(), Atm%parent_grid%pelist(1), p_grid(1,jeg+1,:)
+         !!!! END DEBUG CODE
          !NOTE : Grid now allowed to lie outside of parent
          !Check that the grid does not lie outside its parent
          !3aug15: allows halo of nest to lie within halo of coarse grid.
@@ -1709,6 +1715,7 @@ contains
       if (is_master()) then
          if (Atm%neststruct%nested) then
             !Nesting position information
+            !BUG multiply by 180 not 90....
             write(*,*) 'NESTED GRID ', Atm%grid_number
             ic = p_ind(1,1,1) ; jc = p_ind(1,1,1)
             write(*,'(A, 2I5, 4F10.4)') 'SW CORNER: ', ic, jc, grid_global(1,1,:,1)*90./pi
