@@ -20,7 +20,7 @@ module cloud_diagnosis_mod
     real :: tice = 273.16 ! set tice = 165. to trun off ice - phase phys (kessler emulator)
     
     real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain)
-    real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources)
+    real :: qi0_max = 2.0e-4 ! max cloud ice value (by other sources)
     real :: qi0_rei = 0.8e-4 ! max cloud ice value (by other sources)
     
     real :: ccn_o = 100. ! ccn over ocean (cm^ - 3)
@@ -233,11 +233,11 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
                 ! cloud water (martin et al., 1994)
                 ! -----------------------------------------------------------------------
                 
-#ifdef MARTIN_CCN
+#ifdef GFDL_MP_CCN
+                ccnw = ccn_o * abs (mask - 1.0) + ccn_l * (1.0 - abs (mask - 1.0))
+#else
                 ccnw = 0.80 * (- 1.15e-3 * (ccn_o ** 2) + 0.963 * ccn_o + 5.30) * abs (mask - 1.0) + &
                 0.67 * (- 2.10e-4 * (ccn_l ** 2) + 0.568 * ccn_l - 27.9) * (1.0 - abs (mask - 1.0))
-#else
-                ccnw = ccn_o * abs (mask - 1.0) + ccn_l * (1.0 - abs (mask - 1.0))
 #endif
                 
                 if (qmw (i, k) .gt. qmin) then
