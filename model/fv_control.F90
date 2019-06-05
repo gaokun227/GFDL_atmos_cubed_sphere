@@ -357,9 +357,6 @@ module fv_control_mod
         else
            write(pe_list_name,'(A4, I2.2)') 'nest', n
         endif
-!!! DEBUG CODE
-        if (mpp_pe() == 0) print*, 'PELIST: ', pe_list_name, Atm(n)%pelist
-!!! END DEBUG CODE
         call mpp_declare_pelist(Atm(n)%pelist, pe_list_name)
         !If nest need to re-initialize internal NML
         if (n > 1) then
@@ -408,9 +405,6 @@ module fv_control_mod
         endif
 
      enddo
-!!! DEBUG CODE
-     print*, mpp_pe(), ' this_grid = ', this_grid, ', ngrids = ', ngrids, Atm(this_grid)%nml_filename
-!!! END DEBUG CODE
 
      if (pecounter /= npes) then
         if (mpp_pe() == 0) then
@@ -426,6 +420,7 @@ module fv_control_mod
      ! 3. Read namelists, do option processing and I/O
 
      call set_namelist_pointers(Atm(this_grid))
+     call fv_diag_init_gn(Atm(this_grid))
 #ifdef INTERNAL_FILE_NML
      if (this_grid .gt. 1) then
         write(Atm(this_grid)%nml_filename,'(A4, I2.2)') 'nest', this_grid
@@ -435,9 +430,6 @@ module fv_control_mod
      else
         Atm(this_grid)%nml_filename = ''
      endif
-     !!! DEBUG CODE
-     print*, 'read_input_nml: ', mpp_pe(), Atm(this_grid)%nml_filename
-     !!! END DEBUG CODE
      call read_input_nml(Atm(this_grid)%nml_filename) !re-reads into internal namelist
 #endif
      call read_namelist_fv_grid_nml
@@ -518,12 +510,6 @@ module fv_control_mod
 
 
      ! 4. domain_decomp()
-     !!! DEBUG CODE
-     print*, mpp_pe(), 'this_grid = ', this_grid
-     print*, mpp_pe(), 'before domain_decomp:', npx, npy, ntiles
-     print*, mpp_pe(), 'before domain_decomp 2:', Atm(this_grid)%layout
-     print*, mpp_pe(), 'before domain_decomp 3:', Atm(this_grid)%flagstruct%npx, Atm(this_grid)%flagstruct%npy, Atm(this_grid)%flagstruct%ntiles
-     !!! END DEBUG CODE
      call domain_decomp(Atm(this_grid)%flagstruct%npx,Atm(this_grid)%flagstruct%npy,Atm(this_grid)%flagstruct%ntiles,&
           Atm(this_grid)%flagstruct%grid_type,Atm(this_grid)%neststruct%nested, &
           Atm(this_grid)%layout,Atm(this_grid)%io_layout,Atm(this_grid)%bd,Atm(this_grid)%tile_of_mosaic, &
@@ -589,9 +575,6 @@ module fv_control_mod
         allocate(Atm(n)%neststruct%do_remap_bc(ngrids))
         Atm(n)%neststruct%do_remap_bc(:) = .false.
      enddo
-!!! DEBUG CODE
-     print*, 'parent_proc: ', Atm(this_grid)%global_tile, mpp_pe(), tile_coarse
-!!! END DEBUG CODE
      Atm(this_grid)%neststruct%parent_proc = ANY(tile_coarse == Atm(this_grid)%global_tile)
       !Atm(this_grid)%neststruct%child_proc = ANY(Atm(this_grid)%pelist == gid) !this means a nested grid
 !!$         if (Atm(this_grid)%neststruct%nestbctype > 1) then
