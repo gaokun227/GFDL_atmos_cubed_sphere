@@ -1037,10 +1037,6 @@ contains
 
     sending_proc = (Atm%parent_grid%pelist(1)) + &
          (Atm%neststruct%parent_tile-tile_fine(Atm%parent_grid%grid_number)+Atm%parent_grid%flagstruct%ntiles-1)*Atm%parent_grid%npes_per_tile
-    !!! DEBUG CODE
-    print*, 'fill_nested_grid_topo', Atm%neststruct%parent_proc, Atm%neststruct%parent_tile, Atm%parent_grid%global_tile, &
-         Atm%parent_grid%tile_of_mosaic, tile_fine(Atm%parent_grid%grid_number), sending_proc
-    !!! END DEBUG CODE
     if (Atm%neststruct%parent_tile == Atm%parent_grid%global_tile) then
     !if (Atm%neststruct%parent_proc .and. Atm%neststruct%parent_tile == Atm%parent_grid%global_tile) then
        call mpp_global_field( &
@@ -1667,7 +1663,9 @@ subroutine pmaxmn_g(qname, q, is, ie, js, je, km, fac, area, domain)
       do k=1,km
       do j=js,je
          do i=is,ie
-            if( q(i,j,k) < qmin ) then
+            if ( (q(i,j,k) >= 1e30) .eqv. (q(i,j,k) < 1e30) ) then !NAN checking
+               print*, ' NAN found for ', qname, mpp_pe(), i,j,k
+            elseif( q(i,j,k) < qmin) then
                 qmin = q(i,j,k)
             elseif( q(i,j,k) > qmax ) then
                 qmax = q(i,j,k)

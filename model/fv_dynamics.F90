@@ -561,6 +561,7 @@ contains
                      flagstruct%moist_phys)
 
      if ( flagstruct%fv_debug ) then
+        if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split
        call prt_mxm('T_dyn_a3',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
        call prt_mxm('SPHUM_dyn',   q(isd,jsd,1,sphum  ), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
        call prt_mxm('liq_wat_dyn', q(isd,jsd,1,liq_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)

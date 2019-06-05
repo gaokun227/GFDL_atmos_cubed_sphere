@@ -1234,9 +1234,6 @@ contains
 
    if (PRESENT(nest_level)) then
       nl = nest_level
-      !!! DEBUG CODE
-      print*, 'NEST_LEVEL = ', mpp_pe(), nl
-      !!! END DEBUG CODE
    endif
 
    if (istag == 1 .and. jstag == 1) then

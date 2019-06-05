@@ -561,9 +561,6 @@ contains
                   tile_id(n) = n
                enddo
             endif
-            !!! DEBUG CODE
-            print*, mpp_pe(), 'MPP_DEFINE_MOSAIC:', tile_id, nested, nregions
-            !!! END DEBUG CODE 
             call mpp_define_mosaic(global_indices, layout2D, domain, nregions, num_contact, tile1, tile2, &
                  istart1, iend1, jstart1, jend1, istart2, iend2, jstart2, jend2,      &
                  pe_start=pe_start, pe_end=pe_end, symmetry=is_symmetry,              &
