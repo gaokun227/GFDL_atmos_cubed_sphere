@@ -50,7 +50,7 @@ module gfdl_mp_mod
     ! real, parameter :: cv_vap = 1410.0 ! emanuel value
     real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume
     
-#ifndef TEST_ICE0
+#ifdef TEST_ICE0
     real, parameter :: c_ice = 1972. ! gfdl: heat capacity of ice at - 15 deg c
     real, parameter :: c_liq = 4.1855e+3 ! gfs: heat capacity of water at 15 c
     ! c_liq - c_ice = 2213
