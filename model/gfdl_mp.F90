@@ -288,6 +288,7 @@ module gfdl_mp_mod
     logical :: mp_print = .false. ! cloud microphysics debugging printout
     logical :: do_hail = .false. ! use hail parameters instead of graupel
     logical :: xr_cloud = .false. ! use xu and randall, 1996's cloud diagnosis
+    logical :: hd_icefall = .false. ! use heymsfield and donner, 1990's fall speed of cloud ice
     
     ! real :: global_area = - 1.
     
@@ -308,7 +309,7 @@ module gfdl_mp_mod
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
-        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt
+        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall
     
 contains
 
@@ -2817,8 +2818,14 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
                 vti (k) = vf_min
             else
                 tc (k) = tk (k) - tice
-                vti (k) = (3. + log10 (qi (k) * den (k))) * (tc (k) * (aa * tc (k) + bb) + cc) + dd * tc (k) + ee
-                vti (k) = vi0 * exp (log_10 * vti (k))
+                if (hd_icefall) then
+                    ! Heymsfield and Donner, 1990, JAS
+                    vti (k) = vi_fac * 3.29 * (qi (k) * den (k)) ** 0.16
+                else
+                    ! Deng and Mace, 2008, GRL
+                    vti (k) = (3. + log10 (qi (k) * den (k))) * (tc (k) * (aa * tc (k) + bb) + cc) + dd * tc (k) + ee
+                    vti (k) = vi0 * exp (log_10 * vti (k))
+                endif
                 vti (k) = min (vi_max, max (vf_min, vti (k)))
             endif
         enddo
