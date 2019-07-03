@@ -37,18 +37,20 @@ module cloud_diagnosis_mod
     ! real :: rermin = 25.0, rermax = 225.0
     ! real :: resmin = 300, resmax = 1000.0
     ! real :: regmin = 1000.0, regmax = 1.0e5
-    ! lz
+
+#ifdef SJ_CLD_TEST
+    real :: rewmin = 4.0, rewmax = 10.0
+    real :: reimin = 4.0, reimax = 250.0
+    real :: rermin = 5.0, rermax = 2000.0
+    real :: resmin = 5.0, resmax = 2000.0
+    real :: regmin = 5.0, regmax = 2000.0
+#else
     real :: rewmin = 5.0, rewmax = 10.0
     real :: reimin = 10.0, reimax = 150.0
     real :: rermin = 0.0, rermax = 10000.0
     real :: resmin = 0.0, resmax = 10000.0
     real :: regmin = 0.0, regmax = 10000.0
-    ! sjl
-    ! real :: rewmin = 4.0, rewmax = 10.0
-    ! real :: reimin = 4.0, reimax = 250.0
-    ! real :: rermin = 5.0, rermax = 2000.0
-    ! real :: resmin = 5.0, resmax = 2000.0
-    ! real :: regmin = 5.0, regmax = 2000.0
+#endif
     
     real :: betaw = 1.0
     real :: betai = 1.0
@@ -100,9 +102,9 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
     real, intent (in), dimension (is:ie, ks:ke), optional :: cnvw, cnvi ! convective cloud water, cloud ice mass mixing ratio (kg / kg)
     real, intent (in), dimension (is:ie, ks:ke), optional :: cnvc ! convective cloud fraction
     
-    real, intent (out), dimension (is:ie, ks:ke) :: qcw, qci, qcr, qcs, qcg ! units: g / m^2
-    real, intent (out), dimension (is:ie, ks:ke) :: rew, rei, rer, res, reg ! radii (micron)
-    real, intent (out), dimension (is:ie, ks:ke) :: cld ! total cloud fraction
+    real, intent (inout), dimension (is:ie, ks:ke) :: qcw, qci, qcr, qcs, qcg ! units: g / m^2
+    real, intent (inout), dimension (is:ie, ks:ke) :: rew, rei, rer, res, reg ! radii (micron)
+    real, intent (inout), dimension (is:ie, ks:ke) :: cld ! total cloud fraction
     
     ! local variables
     
@@ -173,6 +175,8 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
         do k = ks, ke
             do i = is, ie
 #ifdef SJ_CLD_TEST
+                ! frozen condensates:
+                ! cloud ice treated as snow above freezing and graupel exists
                 if (t (i, k) > tice) then
                     qms (i, k) = qmi (i, k) + qms (i, k)
                     qmi (i, k) = 0.
@@ -195,6 +199,26 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
 #endif
             enddo
         enddo
+#ifdef SJ_CLD_TEST
+    else
+        ! treating snow as ice, graupel as snow
+        ! qmi (:, :) = qmi (:, :) + qms (:, :)
+        ! qms (:, :) = qmg (:, :)
+        ! qmg (:, :) = 0. ! treating all graupel as "snow"
+        do k = ks, ke
+            do i = is, ie
+                ! step - 1: combine cloud ice & snow
+                qmi (i, k) = qmi (i, k) + qms (i, k)
+                ! step - 2: auto - convert cloud ice if > qi0_max
+                qms (i, k) = qmi (i, k) - qi0_max
+                if (qms (i, k) .gt. 0.) then
+                    qmi (i, k) = qi0_max
+                else
+                    qms (i, k) = 0.0
+                endif
+            enddo
+        enddo
+#endif
     endif
     
     if (snow_grauple_combine) then
@@ -206,6 +230,24 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
         enddo
     endif
     
+! liquid condensates:
+! sjl: 20180825
+#ifdef COMBINE_QR
+    do k = ks, ke
+        do i = is, ie
+            ! step - 1: combine cloud water & rain
+            qmw (i, k) = qmw (i, k) + qmr (i, k)
+            ! step - 2: auto - convert cloud wat if > ql0_max
+            qmr (i, k) = qmw (i, k) - ql0_max
+            if (qmr (i, k) .gt. 0.) then
+                qmw (i, k) = ql0_max
+            else
+                qmr (i, k) = 0.0
+            endif
+        enddo
+    enddo
+#endif
+
     do k = ks, ke
         
         do i = is, ie
