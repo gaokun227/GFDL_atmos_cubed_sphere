@@ -172,7 +172,7 @@ module gfdl_mp_mod
     real :: cld_fac = 1.0 ! multiplication factor for cloud fraction
     real :: cld_min = 0.05 ! minimum cloud fraction
     real :: tice = 273.16 ! set tice = 165. to trun off ice - phase phys (kessler emulator)
-    real :: tice_mlt = 273.16 ! set ice melting temperature to 268.0 based on observation (kay et al., 2016, JC)
+    real :: tice_mlt = 273.16 ! set ice melting temperature to 268.0 based on observation (kay et al., 2016, jc)
     
     real :: t_min = 178. ! min temp to freeze - dry all water vapor
     real :: t_sub = 184. ! min temp for sublimation of cloud ice
@@ -270,7 +270,7 @@ module gfdl_mp_mod
     real :: vs_max = 5.0 ! max fall speed for snow
     real :: vg_max = 8.0 ! max fall speed for graupel
     real :: vr_max = 12. ! max fall speed for rain
-
+    
     real :: xr_a = 0.25 ! p value in xu and randall, 1996
     real :: xr_b = 100. ! alpha_0 value in xu and randall, 1996
     real :: xr_c = 0.49 ! gamma value in xu and randall, 1996
@@ -1060,12 +1060,12 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
     
     integer :: k
     
-    if (tau_revp .gt. 1.E-6) then
+    if (tau_revp .gt. 1.e-6) then
         fac_revp = 1. - exp (- dt / tau_revp)
     else
         fac_revp = 1.
     endif
-
+    
     do k = ks, ke
         
         if (tz (k) > t_wfr .and. qr (k) > qrmin) then
@@ -1739,7 +1739,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! -----------------------------------------------------------------------
         ! rain water is handled in warm - rain process.
         qpz = qv (k) + ql (k) + qi (k)
-        tin = (te8 (k) - lv00 * qpz + li00 * (qs (k) + qg (k))) / (one_r8 + qpz * c1_vap + qr (k) * c1_liq + (qs (k) + qg (k)) * c1_ice)
+        tin = (te8 (k) - lv00 * qpz + li00 * (qs (k) + qg (k))) / &
+            (one_r8 + qpz * c1_vap + qr (k) * c1_liq + (qs (k) + qg (k)) * c1_ice)
         if (tin > t_sub + 6.) then
             rh = qpz / iqs1 (tin, den (k))
             if (rh < rh_adj) then ! qpz / rh_adj < qs
