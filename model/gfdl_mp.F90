@@ -147,6 +147,7 @@ module gfdl_mp_mod
     logical :: fix_negative = .false. ! fix negative water species
     logical :: do_setup = .true. ! setup constants and parameters
     logical :: disp_heat = .false. ! dissipative heating due to sedimentation
+    logical :: do_cond_timescale = .false. ! whether to apply a timescale to condensation
     
     real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
     real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
@@ -309,7 +310,8 @@ module gfdl_mp_mod
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
-        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall
+        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
+        do_cond_timescale
     
 contains
 
@@ -1692,7 +1694,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
     real :: q_plus, q_minus
     real :: evap, sink, tc, dtmp
     real :: pssub, pgsub, tsq, qden
-    real :: fac_l2v, fac_g2v, fac_v2g
+    real :: fac_l2v, fac_v2l, fac_g2v, fac_v2g
     integer :: k
     
     ! -----------------------------------------------------------------------
@@ -1700,6 +1702,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
     ! -----------------------------------------------------------------------
     
     fac_l2v = 1. - exp (- dts / tau_l2v)
+    fac_v2l = 1. - exp (- dts / tau_v2l)
     fac_g2v = 1. - exp (- dts / tau_g2v)
     fac_v2g = 1. - exp (- dts / tau_v2g)
     
@@ -1763,6 +1766,9 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         if (dq0 > 0.) then ! evaporation
             factor = min (1., fac_l2v * (10. * dq0 / qsw)) ! the rh dependent factor = 1 at 90%
             evap = min (ql (k), factor * dq0 / (1. + tcp3 (k) * dwsdt))
+        elseif (do_cond_timescale) then
+            factor = min (1., fac_v2l * (10. * (- dq0) / qsw))
+            evap = - min (qv (k), factor * (- dq0) / (1. + tcp3 (k) * dwsdt))
         else ! condensate all excess vapor into cloud water
             evap = dq0 / (1. + tcp3 (k) * dwsdt)
         endif
