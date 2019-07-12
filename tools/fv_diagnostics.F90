@@ -56,6 +56,10 @@ module fv_diagnostics_mod
  implicit none
  private
 
+ interface range_check
+    module procedure  range_check_3d
+    module procedure  range_check_2d
+ end interface range_check
 
  real, parameter:: missing_value = -1.e10
  real, parameter:: missing_value2 = -1.e3 ! for variables with many missing values
@@ -119,6 +123,9 @@ module fv_diagnostics_mod
  character(100) :: runname = 'test'
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
 
+ real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
+
+
 
  namelist /fv_diag_column_nml/ do_diag_debug, do_diag_sonde, sound_freq, &
       diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, &
@@ -139,7 +146,6 @@ contains
 
     real, allocatable :: grid_xt(:), grid_yt(:), grid_xe(:), grid_ye(:), grid_xn(:), grid_yn(:)
     real, allocatable :: grid_x(:),  grid_y(:)
-    real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
     real, allocatable :: a3(:,:,:)
     real              :: pfull(npz)
     real              :: hyam(npz), hybm(npz)
@@ -1909,6 +1915,11 @@ contains
           allocate ( slp(isc:iec,jsc:jec) )
           call get_pressure_given_height(isc, iec, jsc, jec, ngc, npz, wz, 1, height(2),   &
                                         Atm(n)%pt(:,:,npz), Atm(n)%peln, slp, 0.01)
+          
+          if ( Atm(n)%flagstruct%range_warn ) then
+             call range_check('SLP', slp, isc, iec, jsc, jec, 0, Atm(n)%gridstruct%agrid,    &
+                  slprange(1), slprange(2), bad_range, Time)
+          endif
           used = send_data (idiag%id_slp, slp, Time)
              if( prt_minmax ) then
              call prt_maxmin('SLP', slp, isc, iec, jsc, jec, 0, 1, 1.)
@@ -3379,7 +3390,7 @@ contains
 
  end subroutine get_height_field
 
- subroutine range_check(qname, q, is, ie, js, je, n_g, km, pos, q_low, q_hi, bad_range, Time)
+ subroutine range_check_3d(qname, q, is, ie, js, je, n_g, km, pos, q_low, q_hi, bad_range, Time)
       character(len=*), intent(in)::  qname
       integer, intent(in):: is, ie, js, je
       integer, intent(in):: n_g, km
@@ -3431,9 +3442,12 @@ contains
             do j=js,je
                do i=is,ie
                   if( q(i,j,k)<q_low .or. q(i,j,k)>q_hi ) then
-                      write(*,*) 'Warn_K=',k,'(i,j)=',i,j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, q(i,j,k)
-                      if ( k/= 1 ) write(*,*) k-1, q(i,j,k-1)
-                      if ( k/=km ) write(*,*) k+1, q(i,j,k+1)
+                      write(*,998) k,i,j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, qname, q(i,j,k)
+!                      write(*,*) 'Warn_K=',k,'(i,j)=',i,j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, q(i,j,k)
+998                   format('Warn_K=',I4,' (i,j)=',2I5,' (lon,lat)=',f7.3,1x,f7.3,1x, A,' =',f10.5)
+997                   format('     K=',I4,3x,f10.5)
+                      if ( k/= 1 ) write(*,997) k-1, q(i,j,k-1)
+                      if ( k/=km ) write(*,997) k+1, q(i,j,k+1)
                   endif
                enddo
             enddo
@@ -3441,7 +3455,65 @@ contains
          call mpp_error(NOTE,'==> Error from range_check: data out of bound')
       endif
 
- end subroutine range_check
+ end subroutine range_check_3d
+
+ subroutine range_check_2d(qname, q, is, ie, js, je, n_g, pos, q_low, q_hi, bad_range, Time)
+      character(len=*), intent(in)::  qname
+      integer, intent(in):: is, ie, js, je
+      integer, intent(in):: n_g
+      real, intent(in)::    q(is-n_g:ie+n_g, js-n_g:je+n_g)
+      real, intent(in):: pos(is-n_g:ie+n_g, js-n_g:je+n_g,2)
+      real, intent(in):: q_low, q_hi
+      logical, optional, intent(out):: bad_range
+      type(time_type), optional, intent(IN) :: Time
+!
+      real qmin, qmax
+      integer i,j
+      integer year, month, day, hour, minute, second
+
+      if ( present(bad_range) ) bad_range = .false. 
+      qmin = q(is,js)
+      qmax = qmin
+
+      do j=js,je
+         do i=is,ie
+            if( q(i,j) < qmin ) then
+                qmin = q(i,j)
+            elseif( q(i,j) > qmax ) then
+                qmax = q(i,j)
+            endif
+          enddo
+      enddo
+
+      call mp_reduce_min(qmin)
+      call mp_reduce_max(qmax)
+
+      if( qmin<q_low .or. qmax>q_hi ) then
+          if(master) write(*,*) 'Range_check Warning:', qname, ' max = ', qmax, ' min = ', qmin
+          if (present(Time)) then
+             call get_date(Time, year, month, day, hour, minute, second)
+             if (master) write(*,999) year, month, day, hour, minute, second
+999          format(' Range violation on: ', I4, '/', I02, '/', I02, ' ', I02, ':', I02, ':', I02)
+          endif
+          if ( present(bad_range) ) then
+               bad_range = .true. 
+          endif
+      endif
+
+      if ( present(bad_range) ) then
+! Print out where the bad value(s) is (are)
+         if ( bad_range .EQV. .false. ) return
+         do j=js,je
+            do i=is,ie
+               if( q(i,j)<q_low .or. q(i,j)>q_hi ) then
+                   write(*,*) 'Warn_(i,j)=',i,j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, q(i,j)
+               endif
+            enddo
+         enddo
+         call mpp_error(NOTE,'==> Error from range_check: data out of bound')
+      endif
+
+ end subroutine range_check_2d
 
  subroutine prt_maxmin(qname, q, is, ie, js, je, n_g, km, fac)
       character(len=*), intent(in)::  qname
