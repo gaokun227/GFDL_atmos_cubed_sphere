@@ -37,7 +37,7 @@ module cloud_diagnosis_mod
     ! real :: rermin = 25.0, rermax = 225.0
     ! real :: resmin = 300, resmax = 1000.0
     ! real :: regmin = 1000.0, regmax = 1.0e5
-
+    
 #ifdef SJ_CLD_TEST
     real :: rewmin = 4.0, rewmax = 10.0
     real :: reimin = 4.0, reimax = 250.0
@@ -230,8 +230,8 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
         enddo
     endif
     
-! liquid condensates:
-! sjl: 20180825
+    ! liquid condensates:
+    ! sjl: 20180825
 #ifdef COMBINE_QR
     do k = ks, ke
         do i = is, ie
@@ -247,7 +247,7 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
         enddo
     enddo
 #endif
-
+    
     do k = ks, ke
         
         do i = is, ie

@@ -2820,10 +2820,10 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
             else
                 tc (k) = tk (k) - tice
                 if (hd_icefall) then
-                    ! Heymsfield and Donner, 1990, JAS
+                    ! heymsfield and donner, 1990, jas
                     vti (k) = vi_fac * 3.29 * (qi (k) * den (k)) ** 0.16
                 else
-                    ! Deng and Mace, 2008, GRL
+                    ! deng and mace, 2008, grl
                     vti (k) = (3. + log10 (qi (k) * den (k))) * (tc (k) * (aa * tc (k) + bb) + cc) + dd * tc (k) + ee
                     vti (k) = vi0 * exp (log_10 * vti (k))
                 endif
