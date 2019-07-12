@@ -438,7 +438,7 @@ module fv_control_mod
      call mpp_get_current_pelist(Atm(this_grid)%pelist, commID=commID) ! for commID
      call mp_start(commID,halo_update_type)
 
-     ! 6. Set up domains
+     ! 4. Set up domains
      !    This should make use of new fv_nest_nml namelists
      !!!! TODO TEMPORARY location for this code
      if (Atm(this_grid)%neststruct%nested) then
@@ -507,9 +507,7 @@ module fv_control_mod
         print*, ''
      endif
 
-
-
-     ! 4. domain_decomp()
+     ! 5. domain_decomp()
      call domain_decomp(Atm(this_grid)%flagstruct%npx,Atm(this_grid)%flagstruct%npy,Atm(this_grid)%flagstruct%ntiles,&
           Atm(this_grid)%flagstruct%grid_type,Atm(this_grid)%neststruct%nested, &
           Atm(this_grid)%layout,Atm(this_grid)%io_layout,Atm(this_grid)%bd,Atm(this_grid)%tile_of_mosaic, &
@@ -523,7 +521,7 @@ module fv_control_mod
         Atm(n)%npes_per_tile = size(Atm(n)%pelist)/Atm(n)%flagstruct%ntiles ! domain decomp doesn't set this globally
      enddo
 
-     ! 5. Set up domain and Atm structure
+     ! 6. Set up domain and Atm structure
      call tm_register_tracers (MODEL_ATMOS, Atm(this_grid)%flagstruct%ncnst, Atm(this_grid)%flagstruct%nt_prog, &
           Atm(this_grid)%flagstruct%pnats, num_family)
      if(is_master()) then
@@ -932,7 +930,7 @@ module fv_control_mod
             c2l_ord, dx_const, dy_const, umax, deglat,      &
             deglon_start, deglon_stop, deglat_start, deglat_stop, &
             phys_hydrostatic, use_hydro_pressure, make_hybrid_z, old_divg_damp, add_noise, &
-            nested, twowaynest,nudge_qv, &
+            nested, twowaynest, nudge_qv, &
             nestbctype, nestupdate, nsponge, s_weight, &
             check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
             do_uni_zfull, adj_mass_vmr, update_blend, regional, bc_update_interval
