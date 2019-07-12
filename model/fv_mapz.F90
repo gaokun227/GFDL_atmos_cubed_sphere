@@ -689,9 +689,9 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
       E_Flux = dtmp / (grav*pdt*4.*pi*radius**2)    ! unit: W/m**2
                                                    ! Note pdt is "phys" time step
       if ( hydrostatic ) then
-           dtmp = dtmp / (cp*    g_sum(domain, zsum0, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+           dtmp = dtmp / g_sum(domain, zsum0, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       else
-           dtmp = dtmp / (cv_air*g_sum(domain, zsum1, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+           dtmp = dtmp / g_sum(domain, zsum1, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       endif
 !$OMP end single
 
@@ -718,10 +718,10 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 !$OMP single
       if ( hydrostatic ) then
            dtmp = E_flux*(grav*pdt*4.*pi*radius**2) /    &
-                 (cp*g_sum(domain, zsum0,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+                 g_sum(domain, zsum0,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       else
            dtmp = E_flux*(grav*pdt*4.*pi*radius**2) /    &
-                 (cv_air*g_sum(domain, zsum1,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+                 g_sum(domain, zsum1,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       endif
 !$OMP end single
   endif        ! end consv check
@@ -856,32 +856,25 @@ endif        ! end last_step check
 !$OMP do
         do k=1,km
            do j=js,je
-#ifdef USE_COND
-              if ( nwat==2 ) then
+              if (hydrostatic) then
                  do i=is,ie
-                    gz(i) = max(0., q(i,j,k,liq_wat))
-                    qv(i) = max(0., q(i,j,k,sphum)) 
-                    pt(i,j,k) = (pt(i,j,k)+dtmp*pkz(i,j,k)) / ((1.+r_vir*qv(i))*(1.-gz(i)))
-                 enddo
-              elseif ( nwat==6 ) then
-                 do i=is,ie
-                    gz(i) = q(i,j,k,liq_wat)+q(i,j,k,rainwat)+q(i,j,k,ice_wat)+q(i,j,k,snowwat)+q(i,j,k,graupel)
-                    pt(i,j,k) = (pt(i,j,k)+dtmp*pkz(i,j,k))/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i)))
+                    pt(i,j,k) = (pt(i,j,k)+dtmp/cp*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum))
                  enddo
               else
+#ifdef USE_COND
                  call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
                                ice_wat, snowwat, graupel, q, gz, cvm)
                  do i=is,ie
-                    pt(i,j,k) = (pt(i,j,k)+dtmp*pkz(i,j,k)) / ((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i)))
+                    pt(i,j,k) = (pt(i,j,k)+dtmp/cvm(i)*pkz(i,j,k))/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i)))
                  enddo
-              endif
-#else
-              if ( .not. adiabatic ) then
-                 do i=is,ie
-                    pt(i,j,k) = (pt(i,j,k)+dtmp*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum))
-                 enddo
-              endif
+#else          
+                 if ( .not. adiabatic ) then
+                    do i=is,ie
+                       pt(i,j,k) = (pt(i,j,k)+dtmp/cv_air*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum))
+                    enddo
+                 endif
 #endif
+              endif
            enddo   ! j-loop
         enddo  ! k-loop
   else  ! not last_step
