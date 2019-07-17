@@ -55,7 +55,7 @@ module fv_io_mod
   use fv_arrays_mod,           only: fv_atmos_type, fv_nest_BC_type_3D
   use fv_eta_mod,              only: set_external_eta
 
-  use fv_mp_mod,               only: ng, mp_gather, is_master
+  use fv_mp_mod,               only: mp_gather, is_master
   use fms_io_mod,              only: set_domain
   use fv_treat_da_inc_mod,     only: read_da_inc
 
@@ -567,6 +567,10 @@ contains
                        domain=fv_domain, mandatory=.false., tile_count=n)
        enddo
 
+       if ( Atm(n)%neststruct%nested ) then
+          call fv_io_register_restart_BCs(Atm(n)) !TODO put into fv_io_register_restart
+       endif
+
     enddo
 
   end subroutine  fv_io_register_restart
@@ -580,39 +584,31 @@ contains
   ! <DESCRIPTION>
   ! Write the fv core restart quantities 
   ! </DESCRIPTION>
-  subroutine  fv_io_write_restart(Atm, grids_on_this_pe, timestamp)
+  subroutine  fv_io_write_restart(Atm, timestamp)
 
-    type(fv_atmos_type),        intent(inout) :: Atm(:)
-    logical, intent(IN) :: grids_on_this_pe(:)
+    type(fv_atmos_type),        intent(inout) :: Atm
     character(len=*), optional, intent(in) :: timestamp
-    integer                                :: n, ntileMe
 
-    ntileMe = size(Atm(:))  ! This will need mods for more than 1 tile per pe
-
-    if ( use_ncep_sst .or. Atm(1)%flagstruct%nudge .or. Atm(1)%flagstruct%ncep_ic ) then
+    if ( use_ncep_sst .or. Atm%flagstruct%nudge .or. Atm%flagstruct%ncep_ic ) then
        call mpp_error(NOTE, 'READING FROM SST_RESTART DISABLED')
-       !call save_restart(Atm(1)%SST_restart, timestamp)
+       !call save_restart(Atm%SST_restart, timestamp)
     endif
  
-    do n = 1, ntileMe
-       if (.not. grids_on_this_pe(n)) cycle
+    if ( (use_ncep_sst .or. Atm%flagstruct%nudge) .and. .not. Atm%gridstruct%nested ) then
+       call save_restart(Atm%SST_restart, timestamp)
+    endif
 
-       if ( (use_ncep_sst .or. Atm(n)%flagstruct%nudge) .and. .not. Atm(n)%gridstruct%nested ) then
-          call save_restart(Atm(n)%SST_restart, timestamp)
-       endif
- 
-       call save_restart(Atm(n)%Fv_restart, timestamp)
-       call save_restart(Atm(n)%Fv_tile_restart, timestamp)
-       call save_restart(Atm(n)%Rsf_restart, timestamp)
+    call save_restart(Atm%Fv_restart, timestamp)
+    call save_restart(Atm%Fv_tile_restart, timestamp)
+    call save_restart(Atm%Rsf_restart, timestamp)
 
-       if ( Atm(n)%flagstruct%fv_land ) then
-          call save_restart(Atm(n)%Mg_restart, timestamp)
-          call save_restart(Atm(n)%Lnd_restart, timestamp)
-       endif
+    if ( Atm%flagstruct%fv_land ) then
+       call save_restart(Atm%Mg_restart, timestamp)
+       call save_restart(Atm%Lnd_restart, timestamp)
+    endif
 
-       call save_restart(Atm(n)%Tra_restart, timestamp)
+    call save_restart(Atm%Tra_restart, timestamp)
 
-    end do
 
   end subroutine  fv_io_write_restart
 

@@ -20,7 +20,7 @@
 module fv_tracer2d_mod
    use tp_core_mod,       only: fv_tp_2d, copy_corners
    use fv_mp_mod,         only: mp_reduce_max
-   use fv_mp_mod,         only: ng, mp_gather, is_master
+   use fv_mp_mod,         only: mp_gather, is_master
    use fv_mp_mod,         only: group_halo_update_type
    use fv_mp_mod,         only: start_group_halo_update, complete_group_halo_update
    use mpp_domains_mod,   only: mpp_update_domains, CGRID_NE, domain2d

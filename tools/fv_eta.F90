@@ -587,11 +587,22 @@ module fv_eta_mod
          ptop = 1.
          stretch_fac = 1.03
          auto_routine = 1
+      case (75)   ! HS-SGO test configuration
+         pint = 100.E2
+         ptop = 10.E2
+         stretch_fac = 1.035
+         auto_routine = 6
       case (79)               ! N = 10, M=5
-         ptop = 1.
-         stretch_fac = 1.03
-         auto_routine = 1
-
+         if (trim(npz_type) == 'gcrm') then
+           pint = 100.E2
+           ptop = 3.E2
+           stretch_fac = 1.035
+           auto_routine = 6	
+         else
+           ptop = 1.
+           stretch_fac = 1.03
+           auto_routine = 1
+         endif
       case (90)          ! super-duper cell
          ptop = 40.e2
          stretch_fac = 1.025
@@ -608,7 +619,7 @@ module fv_eta_mod
          ! Mid-top settings:
          pint = 100.E2
          ptop = 20.
-         stretch_fac = 1.028
+         stretch_fac = 1.029
          auto_routine = 6
 
       case (96)

@@ -52,7 +52,7 @@ module fv_mapz_mod
 
   real, parameter :: w_max = 60.
   real, parameter :: w_min = -30.
-  logical, parameter :: w_limiter = .true.
+  logical, parameter :: w_limiter = .false. ! doesn't work so well??
 
   real(kind=4) :: E_Flux = 0.
   private
@@ -68,7 +68,7 @@ contains
                       akap, cappa, kord_mt, kord_wz, kord_tr, kord_tm,  peln, te0_2d,        &
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
-                      hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
+                      hydrostatic, phys_hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
                       do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
                       moist_phys)
   logical, intent(in):: last_step
@@ -125,7 +125,7 @@ contains
                                                      ! as input; output: temperature
   real, intent(inout), dimension(isd:,jsd:,1:)::q_con, cappa
   real, intent(inout), dimension(is:,js:,1:)::delz
-  logical, intent(in):: hydrostatic
+  logical, intent(in):: hydrostatic, phys_hydrostatic
   logical, intent(in):: hybrid_z
   logical, intent(in):: out_dt
   logical, intent(in):: moist_phys
@@ -370,10 +370,12 @@ contains
                     gz(i) = (w2(i,k)-w_max) * dp2(i,k)
                     w2(i,k  ) = w_max
                     w2(i,k+1) = w2(i,k+1) + gz(i)/dp2(i,k+1)
+                    print*, ' W_LIMITER down: ', i,j,k, w2(i,k:k+1), w(i,j,k:k+1)
                  elseif ( w2(i,k) < w_min ) then
                     gz(i) = (w2(i,k)-w_min) * dp2(i,k)
                     w2(i,k  ) = w_min
                     w2(i,k+1) = w2(i,k+1) + gz(i)/dp2(i,k+1)
+                    print*, ' W_LIMITER down: ', i,j,k, w2(i,k:k+1), w(i,j,k:k+1)
                  endif
               enddo
            enddo
@@ -383,12 +385,23 @@ contains
                     gz(i) = (w2(i,k)-w_max) * dp2(i,k)
                     w2(i,k  ) = w_max
                     w2(i,k-1) = w2(i,k-1) + gz(i)/dp2(i,k-1)
+                    print*, ' W_LIMITER up: ', i,j,k, w2(i,k-1:k), w(i,j,k-1:k)
                  elseif ( w2(i,k) < w_min ) then
                     gz(i) = (w2(i,k)-w_min) * dp2(i,k)
                     w2(i,k  ) = w_min
                     w2(i,k-1) = w2(i,k-1) + gz(i)/dp2(i,k-1)
+                    print*, ' W_LIMITER up: ', i,j,k, w2(i,k-1:k), w(i,j,k-1:k)
                  endif
               enddo
+           enddo
+           do i=is,ie
+              if (w2(i,1) > w_max*2. ) then
+                 w2(i,1) = w_max*2 ! sink out of the top of the domain
+                 print*, ' W_LIMITER top limited: ', i,j,1, w2(i,1), w(i,j,1)
+              elseif (w2(i,1) < w_min*2. ) then
+                 w2(i,1) = w_min*2.
+                 print*, ' W_LIMITER top limited: ', i,j,1, w2(i,1), w(i,j,1)
+              endif
            enddo
            do k=1,km
               do i=is,ie
@@ -587,7 +600,7 @@ contains
   endif
 
 !$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,va,isd,ied,jsd,jed,kord_mt, &
-!$OMP                               te_2d,te,delp,hydrostatic,hs,rg,pt,peln, adiabatic, &
+!$OMP                               te_2d,te,delp,hydrostatic,phys_hydrostatic,hs,rg,pt,peln,adiabatic, &
 !$OMP                               cp,delz,nwat,rainwat,liq_wat,ice_wat,snowwat,       &
 !$OMP                               graupel,q_con,r_vir,sphum,w,pk,pkz,last_step,consv, &
 !$OMP                               do_adiabatic_init,zsum1,zsum0,te0_2d,domain,        &
@@ -813,7 +826,8 @@ endif        ! end last_step check
                        pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
                        delz(is:ie,j,:), delp(is:ie,j,:), gsize, abs(mdt), &
                        hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
-                       inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), hydrostatic, &
+                       inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), &
+                       hydrostatic, phys_hydrostatic, &
                        is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:), consv>consv_min, &
                        te(is:ie,j,:), last_step)
 #endif

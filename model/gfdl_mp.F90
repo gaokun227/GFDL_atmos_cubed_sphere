@@ -236,13 +236,13 @@ module gfdl_mp_mod
     real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources)
     real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold (was 1.e-4)
     ! qi0_crt if negative, its magnitude is used as the mixing ration threshold; otherwise, used as density
-    real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold
+    real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold (not used)
     ! lfo used * mixing ratio * = 1.e-4 (hail in lfo)
     real :: qs0_crt = 1.0e-3 ! snow to graupel density threshold (0.6e-3 in purdue lin scheme)
     
     real :: c_paut = 0.55 ! autoconversion cloud water to rain (use 0.5 to reduce autoconversion)
     real :: c_psaci = 0.02 ! accretion: cloud ice to snow (was 0.1 in zetac)
-    real :: c_piacr = 5.0 ! accretion: rain to ice:
+    real :: c_piacr = 5.0 ! accretion: rain to ice: (not used)
     real :: c_cracw = 0.9 ! rain accretion efficiency
     real :: c_pgacs = 2.0e-3 ! snow to graupel "accretion" eff. (was 0.1 in zetac)
     
@@ -321,12 +321,12 @@ contains
 
 subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
-        graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
+        graupel, hydrostatic, phys_hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
         te, last_step)
     
     implicit none
     
-    logical, intent (in) :: hydrostatic
+    logical, intent (in) :: hydrostatic, phys_hydrostatic
     logical, intent (in) :: last_step
     logical, intent (in) :: consv_te
     
@@ -364,10 +364,10 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     ! define heat capacity of dry air and water vapor based on hydrostatical property
     ! -----------------------------------------------------------------------
     
-    if (hydrostatic) then
+    if (hydrostatic .or. phys_hydrostatic) then
         c_air = cp_air
         c_vap = cp_vap
-        do_sedi_w = .false.
+        if (hydrostatic) do_sedi_w = .false.
     else
         c_air = cv_air
         c_vap = cv_vap
@@ -3336,6 +3336,10 @@ real function wqs1 (ta, den)
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
+    !NOTE: a crash here usually means NaN
+    !if (it < 1 .or. it > 2621) then
+    !   write(*,*), 'WQS1: table range violation', it, ta, tmin, den
+    !endif
     es = tablew (it) + (ap1 - it) * desw (it)
     wqs1 = es / (rvgas * ta * den)
     
@@ -3364,6 +3368,10 @@ real function wqs2 (ta, den, dqdt)
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
+    !NOTE: a crash here usually means NaN
+    !if (it < 1 .or. it > 2621) then
+    !   write(*,*), 'WQS2: table range violation', it, ta, tmin, den
+    !endif
     es = tablew (it) + (ap1 - it) * desw (it)
     wqs2 = es / (rvgas * ta * den)
     it = ap1 - 0.5

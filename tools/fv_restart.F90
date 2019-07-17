@@ -41,12 +41,12 @@ module fv_restart_mod
   use mpp_mod,             only: mpp_chksum, stdout, mpp_error, FATAL, NOTE
   use mpp_mod,             only: get_unit, mpp_sum, mpp_broadcast
   use mpp_mod,             only: mpp_get_current_pelist, mpp_npes, mpp_set_current_pelist
-  use test_cases_mod,      only: test_case, alpha, init_case, init_double_periodic, init_latlon
-  use fv_mp_mod,           only: is_master, switch_current_Atm, mp_reduce_min, mp_reduce_max
+  use test_cases_mod,      only: alpha, init_case, init_double_periodic!, init_latlon
+  use fv_mp_mod,           only: is_master, mp_reduce_min, mp_reduce_max, corners_YDir => YDir, fill_corners, tile_fine, global_nest_domain
   use fv_surf_map_mod,     only: sgh_g, oro_g
   use tracer_manager_mod,  only: get_tracer_names
   use field_manager_mod,   only: MODEL_ATMOS
-  use external_ic_mod,     only: get_external_ic, get_cubed_sphere_terrain
+  use external_ic_mod,     only: get_external_ic
   use fv_eta_mod,          only: compute_dz_var, compute_dz_L32, set_hybrid_z
   use fv_surf_map_mod,     only: del2_cubed_sphere, del4_cubed_sphere
   use boundary_mod,        only: fill_nested_grid, nested_grid_BC, update_coarse_grid
@@ -92,16 +92,14 @@ contains
   ! The fv core restart facility
   ! </DESCRIPTION>
   !
-  subroutine fv_restart(fv_domain, Atm, dt_atmos, seconds, days, cold_start, grid_type, grids_on_this_pe)
+  subroutine fv_restart(fv_domain, Atm, dt_atmos, seconds, days, cold_start, grid_type, this_grid)
     type(domain2d),      intent(inout) :: fv_domain
     type(fv_atmos_type), intent(inout) :: Atm(:)
     real,                intent(in)    :: dt_atmos
     integer,             intent(out)   :: seconds
     integer,             intent(out)   :: days
     logical,             intent(inout)    :: cold_start
-    integer,             intent(in)    :: grid_type
-    logical, intent(INOUT) :: grids_on_this_pe(:)
-
+    integer,             intent(in)    :: grid_type, this_grid
 
     integer :: i, j, k, n, ntileMe, nt, iq
     integer :: isc, iec, jsc, jec, ncnst, ntprog, ntdiag
@@ -113,366 +111,298 @@ contains
     real, allocatable :: dz1(:)
     real rgrav, f00, ztop, pertn, ph
     logical :: hybrid
-    logical :: cold_start_grids(size(Atm))
     character(len=128):: tname, errstring, fname, tracer_name
     character(len=120):: fname_ne, fname_sw
     character(len=3) :: gn
 
     integer :: npts, sphum
-    integer, allocatable :: pelist(:)
+    integer, allocatable :: pelist(:), smoothed_topo(:)
     real    :: sumpertn
     real    :: zvir
+
+    logical :: do_read_restart = .false.
+    logical :: do_read_restart_bc = .false.
+    integer, allocatable :: ideal_test_case(:), new_nest_topo(:)
 
     rgrav = 1. / grav
 
     if(.not.module_is_initialized) call mpp_error(FATAL, 'You must call fv_restart_init.')
 
     ntileMe = size(Atm(:))
+    allocate(smoothed_topo(ntileme))
+    smoothed_topo(:) = 0
+    allocate(ideal_test_case(ntileme))
+    ideal_test_case(:) = 0
+    allocate(new_nest_topo(ntileme))
+    new_nest_topo(:) = 0
 
-    cold_start_grids(:) = cold_start
     do n = 1, ntileMe
-
-       if (is_master()) then
-          print*, 'FV_RESTART: ', n, cold_start_grids(n)
-       endif
-
-       if (Atm(n)%neststruct%nested) then
-          write(fname,'(A, I2.2, A)') 'INPUT/fv_core.res.nest', Atm(n)%grid_number, '.nc'
-          write(fname_ne,'(A, I2.2, A)') 'INPUT/fv_BC_ne.res.nest', Atm(n)%grid_number, '.nc'
-          write(fname_sw,'(A, I2.2, A)') 'INPUT/fv_BC_sw.res.nest', Atm(n)%grid_number, '.nc'
-          if (Atm(n)%flagstruct%external_ic) then
-             if (is_master()) print*, 'External IC set on grid', Atm(n)%grid_number, ', re-initializing grid'
-             cold_start_grids(n) = .true.
-             Atm(n)%flagstruct%warm_start = .false. !resetting warm_start flag to avoid FATAL error below
-          else
-             if (is_master()) print*, 'Searching for nested grid restart file ', trim(fname)
-             cold_start_grids(n) = .not. file_exist(fname, Atm(n)%domain)
-             Atm(n)%flagstruct%warm_start = file_exist(fname, Atm(n)%domain)!resetting warm_start flag to avoid FATAL error below
-          endif
-       endif
-
-       if (.not. grids_on_this_pe(n)) then
-          
-          !Even if this grid is not on this PE, if it has child grids we must send
-          !along the data that is needed. 
-          !This is a VERY complicated bit of code that attempts to follow the entire decision tree
-          ! of the initialization without doing anything. This could very much be cleaned up.
-
-          if (Atm(n)%neststruct%nested) then
-             if (cold_start_grids(n)) then
-                if (Atm(n)%parent_grid%flagstruct%n_zs_filter > 0) call fill_nested_grid_topo_halo(Atm(n), .false.)
-                if (Atm(n)%flagstruct%nggps_ic) then
-                   call fill_nested_grid_topo(Atm(n), .false.)
-                   call fill_nested_grid_topo_halo(Atm(n), .false.)
-                   call mpp_get_data_domain( Atm(n)%parent_grid%domain, isd, ied, jsd, jed)
-                   call nested_grid_BC(Atm(n)%ps, Atm(n)%parent_grid%ps, Atm(n)%neststruct%nest_domain, &
-                        Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-                        Atm(n)%npx, Atm(n)%npy,Atm(n)%bd, isd, ied, jsd, jed, proc_in=.false.)         
-                else
-                   call fill_nested_grid_topo(Atm(n), .false.)
-                   if ( Atm(n)%flagstruct%external_ic .and. grid_type < 4 ) call fill_nested_grid_data(Atm(n:n), .false.)
-                endif
-             else
-                if (is_master()) print*, 'Searching for nested grid BC files ', trim(fname_ne), ' ', trim (fname_sw)
-
-                !!!! PROBLEM: file_exist doesn't know to look for fv_BC_ne.res.nest02.nc instead of fv_BC_ne.res.nc on coarse grid
-                if (file_exist(fname_ne, Atm(n)%domain) .and. file_exist(fname_sw, Atm(n)%domain)) then
-                else
-                   if ( is_master() ) write(*,*) 'BC files not found, re-generating nested grid boundary conditions'
-                   call fill_nested_grid_topo_halo(Atm(n), .false.)
-                   Atm(N)%neststruct%first_step = .true.                   
-                endif
-             end if
-
-          endif
-
-          cycle
-
-       endif
-       !This call still appears to be necessary to get isd, etc. correct
-       call switch_current_Atm(Atm(n))
-
-    !--- call fv_io_register_restart to register restart field to be written out in fv_io_write_restart
-    call fv_io_register_restart(Atm(n)%domain,Atm(n:n))
-    if (Atm(n)%neststruct%nested) call fv_io_register_restart_BCs(Atm(n))
-    if( .not.cold_start_grids(n) .and. (.not. Atm(n)%flagstruct%external_ic) ) then
-
-
-        if ( Atm(n)%flagstruct%npz_rst /= 0 .and. Atm(n)%flagstruct%npz_rst /= Atm(n)%npz ) then
-!            Remap vertically the prognostic variables for the chosen vertical resolution
-             if( is_master() ) then
-                 write(*,*) ' '
-                 write(*,*) '***** Important Note from FV core ********************'
-                 write(*,*) 'Remapping dynamic IC from', Atm(n)%flagstruct%npz_rst, 'levels to ', Atm(n)%npz,'levels'
-                 write(*,*) '***** End Note from FV core **************************'
-                 write(*,*) ' '
-             endif
-             call remap_restart( Atm(n)%domain, Atm(n:n) )
-             if( is_master() ) write(*,*) 'Done remapping dynamical IC'
-        else
-             if( is_master() ) write(*,*) 'Warm starting, calling fv_io_restart'
-             call fv_io_read_restart(Atm(n)%domain,Atm(n:n))
-!            ====== PJP added DA functionality ======
-             if (Atm(n)%flagstruct%read_increment) then
-                ! print point in middle of domain for a sanity check
-                i = (Atm(n)%bd%isc + Atm(n)%bd%iec)/2
-                j = (Atm(n)%bd%jsc + Atm(n)%bd%jec)/2
-                k = Atm(n)%npz/2
-                if( is_master() ) write(*,*) 'Calling read_da_inc',Atm(n)%pt(i,j,k)
-                call read_da_inc(Atm(n), Atm(n)%domain, Atm(n)%bd, Atm(n)%npz, Atm(n)%ncnst, &
-                     Atm(n)%u, Atm(n)%v, Atm(n)%q, Atm(n)%delp, Atm(n)%pt, isd, jsd, ied, jed)
-                if( is_master() ) write(*,*) 'Back from read_da_inc',Atm(n)%pt(i,j,k)
-             endif
-!            ====== end PJP added DA functionailty======
-        endif
-    endif
-
-!---------------------------------------------------------------------------------------------
-! Read, interpolate (latlon to cubed), then remap vertically with terrain adjustment if needed
-!---------------------------------------------------------------------------------------------
-    if (Atm(n)%neststruct%nested) then
-          if (cold_start_grids(n)) call fill_nested_grid_topo(Atm(n), .true.)
-          !if (cold_start_grids(n) .and. .not. Atm(n)%flagstruct%nggps_ic) call fill_nested_grid_topo(Atm(n), .true.)
-       if (cold_start_grids(n)) then
-          if (Atm(n)%parent_grid%flagstruct%n_zs_filter > 0 .or. Atm(n)%flagstruct%nggps_ic) call fill_nested_grid_topo_halo(Atm(n), .true.)
-       end if
-       if (Atm(n)%flagstruct%external_ic .and. Atm(n)%flagstruct%nggps_ic) then
-          !Fill nested grid halo with ps
-          call nested_grid_BC(Atm(n)%ps, Atm(n)%parent_grid%ps, Atm(n)%neststruct%nest_domain, &
-               Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
-               Atm(n)%npx, Atm(n)%npy,Atm(n)%bd, isg, ieg, jsg, jeg, proc_in=.true.)         
-       endif
-    endif
-    if ( Atm(n)%flagstruct%external_ic ) then
-         if( is_master() ) write(*,*) 'Calling get_external_ic'
-         call get_external_ic(Atm(n:n), Atm(n)%domain, cold_start_grids(n)) 
-         if( is_master() ) write(*,*) 'IC generated from the specified external source'
-    endif
-
-    seconds = 0; days = 0   ! Restart needs to be modified to record seconds and days.
-
-! Notes by Jeff D.
-  ! This logic doesn't work very well.
-  ! Shouldn't have read for all tiles then loop over tiles
 
        isd = Atm(n)%bd%isd
        ied = Atm(n)%bd%ied
        jsd = Atm(n)%bd%jsd
        jed = Atm(n)%bd%jed
+       isc = Atm(n)%bd%isc
+       iec = Atm(n)%bd%iec
+       jsc = Atm(n)%bd%jsc
+       jec = Atm(n)%bd%jec
        ncnst = Atm(n)%ncnst
        if( is_master() ) write(*,*) 'in fv_restart ncnst=', ncnst
-       isc = Atm(n)%bd%isc; iec = Atm(n)%bd%iec; jsc = Atm(n)%bd%jsc; jec = Atm(n)%bd%jec
        npz = Atm(n)%npz
+       ntprog = size(Atm(n)%q,4)
+       ntdiag = size(Atm(n)%qdiag,4)
 
-    ! Init model data
-       if(.not.cold_start_grids(n))then
-          Atm(N)%neststruct%first_step = .false.
-          if (Atm(n)%neststruct%nested) then
-             if ( Atm(n)%flagstruct%npz_rst /= 0 .and. Atm(n)%flagstruct%npz_rst /= npz ) then
-             else
-                !If BC file is found, then read them in. Otherwise we need to initialize the BCs.
-                if (is_master()) print*, 'Searching for nested grid BC files ', trim(fname_ne), ' ', trim (fname_sw)
-                if (file_exist(fname_ne, Atm(n)%domain) .and. file_exist(fname_sw, Atm(n)%domain)) then
-                   call fv_io_read_BCs(Atm(n))
-                else
-                   if ( is_master() ) write(*,*) 'BC files not found, re-generating nested grid boundary conditions'
-                   call fill_nested_grid_topo_halo(Atm(n), .true.)
-                   Atm(N)%neststruct%first_step = .true.
+!!$       if (is_master()) then
+!!$          print*, 'FV_RESTART: ', n, cold_start_grids(n)
+!!$       endif
+
+       !1. sort out restart, external_ic, and cold-start (idealized)
+       if (Atm(n)%neststruct%nested) then
+          write(fname,   '(A, I2.2, A)') 'INPUT/fv_core.res.nest', Atm(n)%grid_number, '.nc'
+          write(fname_ne,'(A, I2.2, A)') 'INPUT/fv_BC_ne.res.nest', Atm(n)%grid_number, '.nc'
+          write(fname_sw,'(A, I2.2, A)') 'INPUT/fv_BC_sw.res.nest', Atm(n)%grid_number, '.nc'
+          if (is_master()) print*, 'Searching for nested grid BC files ', trim(fname_ne), ' ', trim (fname_sw)
+          do_read_restart = file_exist(fname, Atm(n)%domain)
+          do_read_restart_bc = file_exist(fname_ne, Atm(n)%domain) .and. file_exist(fname_sw, Atm(n)%domain)
+          if (is_master()) then
+             print*, 'FV_RESTART: ', n, do_read_restart, do_read_restart_bc
+             if (.not. do_read_restart_bc) write(*,*) 'BC files not found, re-generating nested grid boundary conditions'
+          endif
+          Atm(N)%neststruct%first_step = .not. do_read_restart_bc
+       else
+          fname='INPUT/fv_core.res.nc'
+          do_read_restart = file_exist('INPUT/fv_core.res.nc') .or. file_exist('INPUT/fv_core.res.tile1.nc') 
+          if (is_master()) print*, 'FV_RESTART: ', n, do_read_restart, do_read_restart_bc
+       endif
+
+       !2. Register restarts
+       !--- call fv_io_register_restart to register restart field to be written out in fv_io_write_restart
+       if ( n==this_grid ) call fv_io_register_restart(Atm(n)%domain,Atm(n:n))
+       !if (Atm(n)%neststruct%nested) call fv_io_register_restart_BCs(Atm(n)) !TODO put into fv_io_register_restart
+
+
+       !3preN. Topography BCs for nest, including setup for blending
+       
+       if (Atm(n)%neststruct%nested) then
+          if (.not. allocated(pelist)) then
+             allocate(pelist(0:mpp_npes()-1))
+             call mpp_get_current_pelist(pelist)      
+          endif
+          call mpp_set_current_pelist() !global
+          call mpp_broadcast(Atm(n)%flagstruct%external_ic,Atm(n)%pelist(1))
+          call mpp_sync()
+          call mpp_set_current_pelist(pelist)
+          if ( ( smoothed_topo(Atm(n)%parent_grid%grid_number) > 0 .or. &
+                 .not. do_read_restart_bc .or. &
+                 Atm(n)%flagstruct%external_ic  ) ) then
+             new_nest_topo(n) = 1
+             if (n==this_grid) then
+                
+                call fill_nested_grid_topo(Atm(n), n==this_grid)
+                call fill_nested_grid_topo_halo(Atm(n), n==this_grid) !TODO can we combine these?
+                call nested_grid_BC(Atm(n)%ps, Atm(n)%parent_grid%ps, global_nest_domain, &
+                     Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
+                     Atm(n)%npx, Atm(n)%npy, Atm(n)%bd, 1, Atm(n)%npx-1, 1, Atm(n)%npy-1)
+                
+             elseif (this_grid==Atm(n)%parent_grid%grid_number) then !this_grid is grid n's parent
+                
+                call fill_nested_grid_topo(Atm(n), n==this_grid)
+                call fill_nested_grid_topo_halo(Atm(n), n==this_grid) !TODO can we combine these?
+                !call mpp_get_data_domain( Atm(n)%parent_grid%domain, isd, ied, jsd, jed)
+                call nested_grid_BC(Atm(n)%parent_grid%ps, global_nest_domain, 0, 0, n-1)
+                !Atm(n)%ps, Atm(n)%parent_grid%ps, global_nest_domain, &
+                !Atm(n)%neststruct%ind_h, Atm(n)%neststruct%wt_h, 0, 0, &
+                !Atm(n)%npx, Atm(n)%npy, Atm(n)%bd, isd, ied, jsd, jed, proc_in=n==this_grid)         
+
+             endif
+
+          endif
+       endif
+
+       !This call still appears to be necessary to get isd, etc. correct
+       !call switch_current_Atm(Atm(n)) !TODO should NOT be necessary now that we manually set isd, etc.
+
+       !--- call fv_io_register_restart to register restart field to be written out in fv_io_write_restart
+       !if (n==this_grid) call fv_io_register_restart(Atm(n)%domain,Atm(n:n))
+       !if (Atm(n)%neststruct%nested) call fv_io_register_restart_BCs(Atm(n)) !TODO put into fv_io_register_restart
+
+       if (n==this_grid) then
+       
+          !3. External_ic
+          if (Atm(n)%flagstruct%external_ic) then
+             if( is_master() ) write(*,*) 'Calling get_external_ic'
+             call get_external_ic(Atm(n), Atm(n)%domain, .not. do_read_restart) 
+             if( is_master() ) write(*,*) 'IC generated from the specified external source'
+
+             !4. Restart
+          elseif (do_read_restart) then
+
+             if ( Atm(n)%flagstruct%npz_rst /= 0 .and. Atm(n)%flagstruct%npz_rst /= Atm(n)%npz ) then
+                !Remap vertically the prognostic variables for the chosen vertical resolution
+                if( is_master() ) then
+                   write(*,*) ' '
+                   write(*,*) '***** Important Note from FV core ********************'
+                   write(*,*) 'Remapping dynamic IC from', Atm(n)%flagstruct%npz_rst, 'levels to ', Atm(n)%npz,'levels'
+                   write(*,*) '***** End Note from FV core **************************'
+                   write(*,*) ' '
                 endif
-                !Following line to make sure u and v are consistent across processor subdomains
+                call remap_restart( Atm(n)%domain, Atm(n:n) )
+                if( is_master() ) write(*,*) 'Done remapping dynamical IC'
+             else
+                if( is_master() ) write(*,*) 'Warm starting, calling fv_io_restart'
+                call fv_io_read_restart(Atm(n)%domain,Atm(n:n))
+                !====== PJP added DA functionality ======
+                if (Atm(n)%flagstruct%read_increment) then
+                   ! print point in middle of domain for a sanity check
+                   i = (Atm(n)%bd%isc + Atm(n)%bd%iec)/2
+                   j = (Atm(n)%bd%jsc + Atm(n)%bd%jec)/2
+                   k = Atm(n)%npz/2
+                   if( is_master() ) write(*,*) 'Calling read_da_inc',Atm(n)%pt(i,j,k)
+                   call read_da_inc(Atm(n), Atm(n)%domain, Atm(n)%bd, Atm(n)%npz, Atm(n)%ncnst, &
+                        Atm(n)%u, Atm(n)%v, Atm(n)%q, Atm(n)%delp, Atm(n)%pt, isd, jsd, ied, jed)
+                   if( is_master() ) write(*,*) 'Back from read_da_inc',Atm(n)%pt(i,j,k)
+                endif
+                !====== end PJP added DA functionailty======
+             endif
+             
+             seconds = 0; days = 0   ! Restart needs to be modified to record seconds and days.
+
+             if (Atm(n)%neststruct%nested) then
+                if ( Atm(n)%flagstruct%npz_rst /= 0 .and. Atm(n)%flagstruct%npz_rst /= npz ) then
+                   call mpp_error(FATAL, "Remap-restart not implemented for nests.")
+                endif
+                if (do_read_restart_BC) call fv_io_read_BCs(Atm(n))
                 call mpp_update_domains(Atm(n)%u, Atm(n)%v, Atm(n)%domain, gridtype=DGRID_NE, complete=.true.)
              endif
-          endif
 
-        if ( Atm(n)%flagstruct%mountain ) then
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! !!! Additional terrain filter -- should not be called repeatedly !!!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            if ( Atm(n)%flagstruct%n_zs_filter > 0 ) then
-              if ( Atm(n)%flagstruct%nord_zs_filter == 2 ) then
-                   call del2_cubed_sphere(Atm(n)%npx, Atm(n)%npy, Atm(n)%phis, &
-                                          Atm(n)%gridstruct%area_64, Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
-                                          Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
-                                          Atm(n)%flagstruct%n_zs_filter, cnst_0p20*Atm(n)%gridstruct%da_min, &
-                                          .false., oro_g, Atm(n)%gridstruct%bounded_domain, Atm(n)%domain, Atm(n)%bd)
-                   if ( is_master() ) write(*,*) 'Warning !!! del-2 terrain filter has been applied ', &
-                        Atm(n)%flagstruct%n_zs_filter, ' times'
-              else if( Atm(n)%flagstruct%nord_zs_filter == 4 ) then
-                   call del4_cubed_sphere(Atm(n)%npx, Atm(n)%npy, Atm(n)%phis, Atm(n)%gridstruct%area_64, &
-                                          Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
-                                          Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
-                                          Atm(n)%flagstruct%n_zs_filter, .false., oro_g, Atm(n)%gridstruct%bounded_domain, &
-                                          Atm(n)%domain, Atm(n)%bd)
-                 if ( is_master() ) write(*,*) 'Warning !!! del-4 terrain filter has been applied ', &
-                      Atm(n)%flagstruct%n_zs_filter, ' times'
-              endif
-            endif
-
-            call mpp_update_domains( Atm(n)%phis, Atm(n)%domain, complete=.true. )
-        else
-             Atm(n)%phis = 0.
-            if( is_master() ) write(*,*) 'phis set to zero'
-         endif !mountain
+             if ( Atm(n)%flagstruct%mountain ) then
+                ! !!! Additional terrain filter -- should not be called repeatedly !!!
+                if ( Atm(n)%flagstruct%n_zs_filter > 0 ) then
+                   if ( Atm(n)%flagstruct%nord_zs_filter == 2 ) then
+                      !!! TODO: move this block into its own routine or CLEAN UP these subroutine calls
+                      call del2_cubed_sphere(Atm(n)%npx, Atm(n)%npy, Atm(n)%phis, &
+                           Atm(n)%gridstruct%area_64, Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
+                           Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
+                           Atm(n)%flagstruct%n_zs_filter, cnst_0p20*Atm(n)%gridstruct%da_min, &
+                           .false., oro_g, Atm(n)%gridstruct%bounded_domain, Atm(n)%domain, Atm(n)%bd)
+                      if ( is_master() ) write(*,*) 'Warning !!! del-2 terrain filter has been applied ', &
+                           Atm(n)%flagstruct%n_zs_filter, ' times'
+                   else if( Atm(n)%flagstruct%nord_zs_filter == 4 ) then
+                      call del4_cubed_sphere(Atm(n)%npx, Atm(n)%npy, Atm(n)%phis, Atm(n)%gridstruct%area_64, &
+                           Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy,   &
+                           Atm(n)%gridstruct%dxc, Atm(n)%gridstruct%dyc, Atm(n)%gridstruct%sin_sg, &
+                           Atm(n)%flagstruct%n_zs_filter, .false., oro_g, Atm(n)%gridstruct%bounded_domain, &
+                           Atm(n)%domain, Atm(n)%bd)
+                      if ( is_master() ) write(*,*) 'Warning !!! del-4 terrain filter has been applied ', &
+                           Atm(n)%flagstruct%n_zs_filter, ' times'
+                   endif
+                endif
+                call mpp_update_domains( Atm(n)%phis, Atm(n)%domain, complete=.true. )
+             else
+                Atm(n)%phis = 0.
+                if( is_master() ) write(*,*) 'phis set to zero'
+             endif !mountain
 
 
-#ifdef SW_DYNAMICS
-        Atm(n)%pt(:,:,:)=1.
-#else
-        if ( .not.Atm(n)%flagstruct%hybrid_z ) then
-           if(Atm(n)%ptop/=Atm(n)%ak(1)) call mpp_error(FATAL,'FV restart: ptop not equal Atm(n)%ak(1)')
-        else
-           Atm(n)%ptop = Atm(n)%ak(1);  Atm(n)%ks = 0
-        endif
-        call p_var(npz,         isc,         iec,       jsc,     jec,   Atm(n)%ptop,     ptop_min,  &
-                   Atm(n)%delp, Atm(n)%delz, Atm(n)%pt, Atm(n)%ps, Atm(n)%pe, Atm(n)%peln,   &
-                   Atm(n)%pk,   Atm(n)%pkz, kappa, Atm(n)%q, Atm(n)%ng, &
-                   ncnst,  Atm(n)%gridstruct%area_64, Atm(n)%flagstruct%dry_mass,  &
-                   Atm(n)%flagstruct%adjust_dry_mass,  Atm(n)%flagstruct%mountain, &
-                   Atm(n)%flagstruct%moist_phys,  Atm(n)%flagstruct%hydrostatic, &
-                   Atm(n)%flagstruct%nwat, Atm(n)%domain, Atm(1)%flagstruct%adiabatic, Atm(n)%flagstruct%make_nh)
 
-#endif
-        if ( grid_type < 7 .and. grid_type /= 4 ) then
-! Fill big values in the non-existing corner regions:
-!          call fill_ghost(Atm(n)%phis, Atm(n)%npx, Atm(n)%npy, big_number)
-           do j=jsd,jed+1
-           do i=isd,ied+1
-              Atm(n)%gridstruct%fc(i,j) = 2.*omega*( -cos(Atm(n)%gridstruct%grid(i,j,1))*cos(Atm(n)%gridstruct%grid(i,j,2))*sin(alpha) + &
-                                    sin(Atm(n)%gridstruct%grid(i,j,2))*cos(alpha) )
-           enddo
-           enddo
-           do j=jsd,jed
-           do i=isd,ied
-             Atm(n)%gridstruct%f0(i,j) = 2.*omega*( -cos(Atm(n)%gridstruct%agrid(i,j,1))*cos(Atm(n)%gridstruct%agrid(i,j,2))*sin(alpha) + &
-                                    sin(Atm(n)%gridstruct%agrid(i,j,2))*cos(alpha) )
-           enddo
-           enddo
-        else
-           f00 = 2.*omega*sin(Atm(n)%flagstruct%deglat/180.*pi)
-           do j=jsd,jed+1
-              do i=isd,ied+1
-                 Atm(n)%gridstruct%fc(i,j) = f00
-              enddo
-           enddo
-           do j=jsd,jed
-              do i=isd,ied
-                 Atm(n)%gridstruct%f0(i,j) = f00
-              enddo
-           enddo
-        endif
-     else
-       if ( Atm(n)%flagstruct%warm_start ) then
-         call mpp_error(FATAL, 'FV restart files not found; set warm_start = .F. if cold_start is desired.')
-      endif
-! Cold start
-       if ( Atm(n)%flagstruct%make_hybrid_z ) then
-         hybrid = .false.
-       else
-         hybrid = Atm(n)%flagstruct%hybrid_z
-       endif
-         if (grid_type < 4) then
-            if ( .not. Atm(n)%flagstruct%external_ic ) then
-            call init_case(Atm(n)%u,Atm(n)%v,Atm(n)%w,Atm(n)%pt,Atm(n)%delp,Atm(n)%q, &
-                           Atm(n)%phis, Atm(n)%ps,Atm(n)%pe, Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
-                           Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        & 
-                           Atm(n)%ak, Atm(n)%bk, Atm(n)%gridstruct, Atm(n)%flagstruct,&
-                           Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, &
-                           ncnst, Atm(n)%flagstruct%nwat,  &
-                           Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
-                           Atm(n)%flagstruct%dry_mass, &
-                           Atm(n)%flagstruct%mountain,       &
-                           Atm(n)%flagstruct%moist_phys, Atm(n)%flagstruct%hydrostatic, &
-                           hybrid, Atm(n)%delz, Atm(n)%ze0, &
-                           Atm(n)%flagstruct%adiabatic, Atm(n)%ks, Atm(n)%neststruct%npx_global, &
-                           Atm(n)%ptop, Atm(n)%domain, Atm(n)%tile, Atm(n)%bd)
-            endif
-         elseif (grid_type == 4) then
-            call init_double_periodic(Atm(n)%u,Atm(n)%v,Atm(n)%w,Atm(n)%pt, &
-                                      Atm(n)%delp,Atm(n)%q,Atm(n)%phis, Atm(n)%ps,Atm(n)%pe, &
-                                      Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
-                                      Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        & 
-                                      Atm(n)%ak, Atm(n)%bk, &
-                                      Atm(n)%gridstruct, Atm(n)%flagstruct, &
-                                      Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, &
-                                      ncnst, Atm(n)%flagstruct%nwat,  &
-                                      Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
-                                      Atm(n)%flagstruct%dry_mass, Atm(n)%flagstruct%mountain, &
-                                      Atm(n)%flagstruct%moist_phys, Atm(n)%flagstruct%hydrostatic, &
-                                      hybrid, Atm(n)%delz, Atm(n)%ze0, Atm(n)%ks, Atm(n)%ptop, &
-                                      Atm(n)%domain, Atm(n)%tile, Atm(n)%bd)
-            if( is_master() ) write(*,*) 'Doubly Periodic IC generated'
-         elseif (grid_type == 5 .or. grid_type == 6) then
-            call init_latlon(Atm(n)%u,Atm(n)%v,Atm(n)%pt,Atm(n)%delp,Atm(n)%q,&
-                             Atm(n)%phis, Atm(n)%ps,Atm(n)%pe, &
-                             Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
-                             Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        &
-                             Atm(n)%ak, Atm(n)%bk, Atm(n)%gridstruct, &
-                             Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, ncnst, &
-                             Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
-                             Atm(n)%flagstruct%dry_mass, &
-                             Atm(n)%flagstruct%mountain,       &
-                             Atm(n)%flagstruct%moist_phys, hybrid, Atm(n)%delz, &
-                             Atm(n)%ze0, Atm(n)%domain, Atm(n)%tile)
-         endif
+             !5. Idealized test case
+          else
+             
+             ideal_test_case(n) = 1
 
-         !Turn this off on the nested grid if you are just interpolating topography from the coarse grid!
-        if ( Atm(n)%flagstruct%fv_land ) then
-             do j=jsc,jec
-                do i=isc,iec
-                   Atm(n)%sgh(i,j) = sgh_g(i,j)
-                   Atm(n)%oro(i,j) = oro_g(i,j)
+             if ( Atm(n)%flagstruct%make_hybrid_z ) then
+                hybrid = .false.
+             else
+                hybrid = Atm(n)%flagstruct%hybrid_z
+             endif
+             if (grid_type < 4) then
+                if ( .not. Atm(n)%flagstruct%external_ic ) then
+                   call init_case(Atm(n)%u,Atm(n)%v,Atm(n)%w,Atm(n)%pt,Atm(n)%delp,Atm(n)%q, &
+                        Atm(n)%phis, Atm(n)%ps,Atm(n)%pe, Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
+                        Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        & 
+                        Atm(n)%ak, Atm(n)%bk, Atm(n)%gridstruct, Atm(n)%flagstruct,&
+                        Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, &
+                        ncnst, Atm(n)%flagstruct%nwat,  &
+                        Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
+                        Atm(n)%flagstruct%dry_mass, &
+                        Atm(n)%flagstruct%mountain,       &
+                        Atm(n)%flagstruct%moist_phys, Atm(n)%flagstruct%hydrostatic, &
+                        hybrid, Atm(n)%delz, Atm(n)%ze0, &
+                        Atm(n)%flagstruct%adiabatic, Atm(n)%ks, Atm(n)%neststruct%npx_global, &
+                        Atm(n)%ptop, Atm(n)%domain, Atm(n)%tile_of_mosaic, Atm(n)%bd)
+                endif
+             elseif (grid_type == 4) then
+                call init_double_periodic(Atm(n)%u,Atm(n)%v,Atm(n)%w,Atm(n)%pt, &
+                     Atm(n)%delp,Atm(n)%q,Atm(n)%phis, Atm(n)%ps,Atm(n)%pe, &
+                     Atm(n)%peln,Atm(n)%pk,Atm(n)%pkz, &
+                     Atm(n)%uc,Atm(n)%vc, Atm(n)%ua,Atm(n)%va,        & 
+                     Atm(n)%ak, Atm(n)%bk, &
+                     Atm(n)%gridstruct, Atm(n)%flagstruct, &
+                     Atm(n)%npx, Atm(n)%npy, npz, Atm(n)%ng, &
+                     ncnst, Atm(n)%flagstruct%nwat,  &
+                     Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles, &
+                     Atm(n)%flagstruct%dry_mass, Atm(n)%flagstruct%mountain, &
+                     Atm(n)%flagstruct%moist_phys, Atm(n)%flagstruct%hydrostatic, &
+                     hybrid, Atm(n)%delz, Atm(n)%ze0, Atm(n)%ks, Atm(n)%ptop, &
+                     Atm(n)%domain, Atm(n)%tile_of_mosaic, Atm(n)%bd)
+                if( is_master() ) write(*,*) 'Doubly Periodic IC generated'
+             elseif (grid_type == 5 .or. grid_type == 6) then
+                call mpp_error(FATAL, "Idealized test cases for grid_type == 5,6 (global lat-lon) grid not supported")
+             endif
+
+             !Turn this off on the nested grid if you are just interpolating topography from the coarse grid!
+             !These parameters are needed in LM3/LM4, and are communicated through restart files 
+             if ( Atm(n)%flagstruct%fv_land ) then
+                do j=jsc,jec
+                   do i=isc,iec
+                      Atm(n)%sgh(i,j) = sgh_g(i,j)
+                      Atm(n)%oro(i,j) = oro_g(i,j)
+                   enddo
                 enddo
-             enddo
-          endif
+             endif
+
+          endif !external_ic vs. restart vs. idealized
 
 
-          !Set up nested grids
+       endif !n==this_grid
+
+
+          !!!! NOT NEEDED??
           !Currently even though we do fill in the nested-grid IC from
           ! init_case or external_ic we appear to overwrite it using
           !  coarse-grid data
-          !if (Atm(n)%neststruct%nested) then
-          ! Only fill nested-grid data if external_ic is called for the cubed-sphere grid
-          if (Atm(n)%neststruct%nested) then
-             if (Atm(n)%flagstruct%external_ic .and.  .not. Atm(n)%flagstruct%nggps_ic .and. grid_type < 4 ) then
-                call fill_nested_grid_data(Atm(n:n))
-             endif
-          end if
+!!$          if (Atm(n)%neststruct%nested) then
+!!$             if (.not. Atm(n)%flagstruct%external_ic .and.  .not. Atm(n)%flagstruct%nggps_ic .and. grid_type < 4 ) then
+!!$                call fill_nested_grid_data(Atm(n:n))
+!!$             endif
+!!$          end if
 
-       endif  !end cold_start check
+!       endif  !end cold_start check
 
-    end do
+       !5n. Nesting setup (part I)
 
+       !Broadcast data for nesting
+       if (ntileMe > 1) then
+          if (.not. allocated(pelist)) then
+             allocate(pelist(0:mpp_npes()-1))
+             call mpp_get_current_pelist(pelist)      
+          endif
 
-    do n = ntileMe,1,-1
-       if (Atm(n)%neststruct%nested .and. Atm(n)%flagstruct%external_ic .and. &
-            Atm(n)%flagstruct%grid_type < 4 .and. cold_start_grids(n)) then
-          call fill_nested_grid_data_end(Atm(n), grids_on_this_pe(n))
-       endif
-    end do
-
-    allocate(pelist(0:mpp_npes()-1))
-    call mpp_get_current_pelist(pelist)      
-    call mpp_set_current_pelist()
-
-    if (ntileMe > 1) then
-       do n=1, ntileMe
-          !Send ptop for each grid, needed for remap BCs
+          call mpp_set_current_pelist()!global
+          !for remap BCs
           call mpp_broadcast(Atm(n)%ptop,Atm(n)%pelist(1))
           call mpp_broadcast(Atm(n)%ak,Atm(n)%npz+1,Atm(n)%pelist(1))
           call mpp_broadcast(Atm(n)%bk,Atm(n)%npz+1,Atm(n)%pelist(1))
-       enddo
-       call mpp_sync()
-       call mpp_set_current_pelist(pelist)
-    endif
+          !smoothed_topo
+          call mpp_broadcast(smoothed_topo(n),Atm(n)%pelist(1))
 
-    do n = 1, ntileMe
+          call mpp_sync()
+          call mpp_set_current_pelist(pelist)
 
-       if (ntileMe > 1) then
-          allocate(Atm(n)%neststruct%do_remap_BC(ntileMe))
-
-          Atm(n)%neststruct%do_remap_BC(ntileMe) = .false.
 
           if (Atm(n)%neststruct%nested) then
+             Atm(n)%neststruct%do_remap_BC(ntileMe) = .false.
+
              if (Atm(n)%npz /= Atm(n)%parent_grid%npz) then
                 Atm(n)%neststruct%do_remap_BC(n) = .true.
              else
@@ -488,37 +418,103 @@ contains
                 enddo
              endif
 
-             Atm(n)%neststruct%parent_grid%neststruct%do_remap_BC(n) = Atm(n)%neststruct%do_remap_BC(n)
-             if (Atm(n)%neststruct%do_remap_BC(n)) then
-                if (is_master() .and. grids_on_this_pe(n)) print*, ' Remapping BCs ENABLED on grid', n
-             else
-                if (is_master() .and. grids_on_this_pe(n)) print*, ' Remapping BCs DISABLED (not necessary) on grid', n             
-             endif
-          endif
-
-
-          if (.not. grids_on_this_pe(n)) cycle
-
-          if (Atm(n)%neststruct%nested) then
-             if (is_master()) then
+             Atm(n)%parent_grid%neststruct%do_remap_BC(n) = Atm(n)%neststruct%do_remap_BC(n)
+             if (is_master() .and. n==this_grid) then
+                if (Atm(n)%neststruct%do_remap_BC(n)) then
+                   print*, ' Remapping BCs ENABLED on grid', n
+                else
+                   print*, ' Remapping BCs DISABLED (not necessary) on grid', n             
+                endif
                 write(*,'(A, I3, A, F8.2, A)') ' Nested grid ', n, ',  ptop = ', Atm(n)%ak(1), ' Pa'
                 write(*,'(A, I3, A, F8.2, A)') ' Parent grid ', n, ',  ptop = ', Atm(n)%parent_grid%ak(1), ' Pa'
                 if (Atm(n)%ak(1) < Atm(n)%parent_Grid%ak(1)) then
                    print*, ' WARNING nested grid top above parent grid top. May have problems with remapping BCs.'
                 endif
              endif
-
           endif
+
        endif
+
+    end do !break cycling loop to finish nesting setup
+
+
+    do n = ntileMe,1,-1
+       if (new_nest_topo(n)) then
+          call twoway_topo_update(Atm(n), n==this_grid)
+       endif
+    end do
+
+    !6. Data Setup
+    do n = 1, ntileMe
+
+       if (n/=this_grid) cycle
 
        isd = Atm(n)%bd%isd
        ied = Atm(n)%bd%ied
        jsd = Atm(n)%bd%jsd
        jed = Atm(n)%bd%jed
+       isc = Atm(n)%bd%isc
+       iec = Atm(n)%bd%iec
+       jsc = Atm(n)%bd%jsc
+       jec = Atm(n)%bd%jec
        ncnst = Atm(n)%ncnst
+       if( is_master() ) write(*,*) 'in fv_restart ncnst=', ncnst
+       npz = Atm(n)%npz
        ntprog = size(Atm(n)%q,4)
        ntdiag = size(Atm(n)%qdiag,4)
-       isc = Atm(n)%bd%isc; iec = Atm(n)%bd%iec; jsc = Atm(n)%bd%jsc; jec = Atm(n)%bd%jec
+
+
+       if (.not. ideal_test_case(n)) then
+#ifdef SW_DYNAMICS
+          Atm(n)%pt(:,:,:)=1.
+#else
+          if ( .not.Atm(n)%flagstruct%hybrid_z ) then
+             if(Atm(n)%ptop/=Atm(n)%ak(1)) call mpp_error(FATAL,'FV restart: ptop not equal Atm(n)%ak(1)')
+          else
+             Atm(n)%ptop = Atm(n)%ak(1);  Atm(n)%ks = 0
+          endif
+          call p_var(npz,         isc,         iec,       jsc,     jec,   Atm(n)%ptop,     ptop_min,  &
+               Atm(n)%delp, Atm(n)%delz, Atm(n)%pt, Atm(n)%ps, Atm(n)%pe, Atm(n)%peln,   &
+               Atm(n)%pk,   Atm(n)%pkz, kappa, Atm(n)%q, Atm(n)%ng, &
+               ncnst,  Atm(n)%gridstruct%area_64, Atm(n)%flagstruct%dry_mass,  &
+               Atm(n)%flagstruct%adjust_dry_mass,  Atm(n)%flagstruct%mountain, &
+               Atm(n)%flagstruct%moist_phys,  Atm(n)%flagstruct%hydrostatic, &
+               Atm(n)%flagstruct%nwat, Atm(n)%domain, Atm(1)%flagstruct%adiabatic, Atm(n)%flagstruct%make_nh)
+#endif
+          if ( grid_type < 7 .and. grid_type /= 4 ) then
+             ! Fill big values in the non-existing corner regions:
+             !          call fill_ghost(Atm(n)%phis, Atm(n)%npx, Atm(n)%npy, big_number)
+             do j=jsd,jed+1
+                do i=isd,ied+1
+                   Atm(n)%gridstruct%fc(i,j) = 2.*omega*( -cos(Atm(n)%gridstruct%grid(i,j,1))*cos(Atm(n)%gridstruct%grid(i,j,2))*sin(alpha) + &
+                        sin(Atm(n)%gridstruct%grid(i,j,2))*cos(alpha) )
+                enddo
+             enddo
+             do j=jsd,jed
+                do i=isd,ied
+                   Atm(n)%gridstruct%f0(i,j) = 2.*omega*( -cos(Atm(n)%gridstruct%agrid(i,j,1))*cos(Atm(n)%gridstruct%agrid(i,j,2))*sin(alpha) + &
+                        sin(Atm(n)%gridstruct%agrid(i,j,2))*cos(alpha) )
+                enddo
+             enddo
+          else
+             f00 = 2.*omega*sin(Atm(n)%flagstruct%deglat/180.*pi)
+             do j=jsd,jed+1
+                do i=isd,ied+1
+                   Atm(n)%gridstruct%fc(i,j) = f00
+                enddo
+             enddo
+             do j=jsd,jed
+                do i=isd,ied
+                   Atm(n)%gridstruct%f0(i,j) = f00
+                enddo
+             enddo
+          endif
+          call mpp_update_domains( Atm(n)%gridstruct%f0, Atm(n)%domain )
+          if ( Atm(n)%gridstruct%cubed_sphere .and. (.not. Atm(n)%gridstruct%bounded_domain))then
+             call fill_corners(Atm(n)%gridstruct%f0, Atm(n)%npx, Atm(n)%npy, Corners_YDir)
+          endif
+       endif
+
 
 !---------------------------------------------------------------------------------------------
 ! Transform the (starting) Eulerian vertical coordinate from sigma-p to hybrid_z
@@ -603,20 +599,7 @@ contains
         call get_tracer_names(MODEL_ATMOS, iq, tracer_name)
         write(unit,*) 'fv_restart '//trim(tracer_name)//' = ', mpp_chksum(Atm(n)%q(isc:iec,jsc:jec,:,iq))
       enddo
-!!$      !!!! DEBUG CODE !!! checksum testing in 
-!!$      allocate(g_dat(isd:ied,jsd:jed,1))
-!!$      g_dat(isd:ied,jsd:jed,1) = cos(real(mpp_pe())) ! halo fill
-!!$      do j=jsc,jec
-!!$      do i=isc,iec
-!!$         g_dat(isc:iec,jsc:jec,1) = real(i + j*Atm(n)%npx)
-!!$      enddo
-!!$      enddo
-!!$      write(unit,*) ' TEST array', trim(gn), ' =', mpp_chksum(g_dat(isc:iec,jsc:jec,1))
-!!$      deallocate(g_dat)
-!!$      call mpp_get_current_pelist(pelist)      
-!!$      write(unit,*) ' PElist: len = ', size(pelist), mpp_npes()
-!!$      write(unit,*) pelist
-!!$      !!!! END DEBUG CODE
+
 !---------------
 ! Check Min/Max:
 !---------------
@@ -696,14 +679,15 @@ contains
 
     !This is 2D and doesn't need remapping
     if (is_master()) print*, '  FILLING NESTED GRID HALO WITH INTERPOLATED TERRAIN'
-    call nested_grid_BC(Atm%phis, Atm%parent_grid%phis, Atm%neststruct%nest_domain, &
+    call nested_grid_BC(Atm%phis, Atm%parent_grid%phis, global_nest_domain, &
          Atm%neststruct%ind_h, Atm%neststruct%wt_h, 0, 0, &
-         Atm%npx, Atm%npy, Atm%bd, isd, ied, jsd, jed, proc_in=proc_in)
+         Atm%npx, Atm%npy, Atm%bd, isd, ied, jsd, jed, proc_in=proc_in, nest_level=Atm%grid_number-1)
     
   end subroutine fill_nested_grid_topo_halo
 
 !!! We call this routine to fill the nested grid with topo so that we can do the boundary smoothing.
 !!! Interior topography is then over-written in get_external_ic.
+!!! Input grid is the nest; use Atm%parent_grid% to reference parent
   subroutine fill_nested_grid_topo(Atm, proc_in) 
 
     type(fv_atmos_type), intent(INOUT) :: Atm
@@ -737,8 +721,10 @@ contains
 
     if (is_master() .and. .not. Atm%flagstruct%external_ic ) print*, ' FILLING NESTED GRID INTERIOR WITH INTERPOLATED TERRAIN'
 
-    sending_proc = Atm%parent_grid%pelist(1) + (Atm%neststruct%parent_tile-1)*Atm%parent_grid%npes_per_tile
-    if (Atm%neststruct%parent_proc .and. Atm%neststruct%parent_tile == Atm%parent_grid%tile) then
+    sending_proc = (Atm%parent_grid%pelist(1)) + &
+         (Atm%neststruct%parent_tile-tile_fine(Atm%parent_grid%grid_number)+Atm%parent_grid%flagstruct%ntiles-1)*Atm%parent_grid%npes_per_tile
+    if (Atm%neststruct%parent_tile == Atm%parent_grid%global_tile) then
+    !if (Atm%neststruct%parent_proc .and. Atm%neststruct%parent_tile == Atm%parent_grid%global_tile) then
        call mpp_global_field( &
             Atm%parent_grid%domain, &
             Atm%parent_grid%phis(isd_p:ied_p,jsd_p:jed_p), g_dat(isg:,jsg:,1), position=CENTER)
@@ -765,6 +751,9 @@ contains
 
   end subroutine fill_nested_grid_topo
 
+  !This will still probably be needed for moving nests
+  !NOTE: this has NOT been maintained and so %global_tile is now meaningless if not referring to data on the current PE
+  !      needs to be re-coded to follow method in fill_nested_grid_Topo
   subroutine fill_nested_grid_data(Atm, proc_in)
 
     type(fv_atmos_type), intent(INOUT) :: Atm(:) !Only intended to be one element; needed for cubed_sphere_terrain
@@ -825,7 +814,7 @@ contains
 
     !Call mpp_global_field on the procs that have the required data.
        !Then broadcast from the head PE to the receiving PEs
-       if (Atm(1)%neststruct%parent_proc .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%tile) then
+       if (Atm(1)%neststruct%parent_proc .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
           call mpp_global_field( &
                Atm(1)%parent_grid%domain, &
                Atm(1)%parent_grid%delp(isd_p:ied_p,jsd_p:jed_p,:), g_dat, position=CENTER)
@@ -851,7 +840,7 @@ contains
 
        call timing_on('COMM_TOTAL')
 
-          if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%tile) then
+          if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
              call mpp_global_field( &
                Atm(1)%parent_grid%domain, &
                Atm(1)%parent_grid%q(isd_p:ied_p,jsd_p:jed_p,:,nq), g_dat, position=CENTER)
@@ -883,7 +872,7 @@ contains
 
     call timing_on('COMM_TOTAL')
 
-       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%tile) then
+       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
              call mpp_global_field( &
                Atm(1)%parent_grid%domain, &
                Atm(1)%parent_grid%pt(isd_p:ied_p,jsd_p:jed_p,:), g_dat, position=CENTER)
@@ -918,7 +907,7 @@ contains
 
     call timing_on('COMM_TOTAL')
 
-       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%tile) then
+       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
              call mpp_global_field( &
                Atm(1)%parent_grid%domain, &
                Atm(1)%parent_grid%pkz(isc_p:iec_p,jsc_p:jec_p,:), g_dat, position=CENTER)
@@ -1012,7 +1001,7 @@ contains
        !delz
        call timing_on('COMM_TOTAL')
 
-          if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%tile) then
+          if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
              call mpp_global_field( &
                Atm(1)%parent_grid%domain, &
                Atm(1)%parent_grid%delz(isd_p:ied_p,jsd_p:jed_p,:), g_dat, position=CENTER)
@@ -1037,7 +1026,7 @@ contains
 
        call timing_on('COMM_TOTAL')
 
-          if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%tile) then
+          if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
              call mpp_global_field( &
                Atm(1)%parent_grid%domain, &
                Atm(1)%parent_grid%w(isd_p:ied_p,jsd_p:jed_p,:), g_dat, position=CENTER)
@@ -1071,7 +1060,7 @@ contains
 
     call timing_on('COMM_TOTAL')
 
-       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%tile) then
+       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
              call mpp_global_field( &
                Atm(1)%parent_grid%domain, &
                Atm(1)%parent_grid%u(isd_p:ied_p,jsd_p:jed_p+1,:), g_dat, position=NORTH)
@@ -1101,7 +1090,7 @@ contains
 
     call timing_on('COMM_TOTAL')
 
-       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%tile) then
+       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
              call mpp_global_field( &
                Atm(1)%parent_grid%domain, &
                Atm(1)%parent_grid%v(isd_p:ied_p+1,jsd_p:jed_p,:), g_dat, position=EAST)
@@ -1127,7 +1116,7 @@ contains
   end subroutine fill_nested_grid_data
 
   !This routine actually sets up the coarse-grid TOPOGRAPHY.
-  subroutine fill_nested_grid_data_end(Atm, proc_in)
+  subroutine twoway_topo_update(Atm, proc_in)
 
     type(fv_atmos_type), intent(INOUT) :: Atm  
     logical, intent(IN), OPTIONAL :: proc_in
@@ -1156,15 +1145,15 @@ contains
     isc = Atm%bd%isc; iec = Atm%bd%iec; jsc = Atm%bd%jsc; jec = Atm%bd%jec
     npz     = Atm%npz    
     
-          isd_p = Atm%parent_grid%bd%isd
-          ied_p = Atm%parent_grid%bd%ied
-          jsd_p = Atm%parent_grid%bd%jsd
-          jed_p = Atm%parent_grid%bd%jed
-          isc_p = Atm%parent_grid%bd%isc
-          iec_p = Atm%parent_grid%bd%iec
-          jsc_p = Atm%parent_grid%bd%jsc
-          jec_p = Atm%parent_grid%bd%jec
-       sending_proc = Atm%parent_grid%pelist(1) + (Atm%neststruct%parent_tile-1)*Atm%parent_grid%npes_per_tile
+    isd_p = Atm%parent_grid%bd%isd
+    ied_p = Atm%parent_grid%bd%ied
+    jsd_p = Atm%parent_grid%bd%jsd
+    jed_p = Atm%parent_grid%bd%jed
+    isc_p = Atm%parent_grid%bd%isc
+    iec_p = Atm%parent_grid%bd%iec
+    jsc_p = Atm%parent_grid%bd%jsc
+    jec_p = Atm%parent_grid%bd%jec
+    sending_proc = Atm%parent_grid%pelist(1) + (Atm%neststruct%parent_tile-1)*Atm%parent_grid%npes_per_tile
 
     call mpp_get_global_domain( Atm%parent_grid%domain, &
          isg, ieg, jsg, jeg, xsize=npx_p, ysize=npy_p)
@@ -1176,13 +1165,13 @@ contains
     if (Atm%neststruct%twowaynest) then
        if (ANY(Atm%parent_grid%pelist == mpp_pe()) .or. Atm%neststruct%child_proc) then
           call update_coarse_grid(Atm%parent_grid%phis, &
-               Atm%phis, Atm%neststruct%nest_domain, &
+               Atm%phis, global_nest_domain, &
                Atm%gridstruct%dx, Atm%gridstruct%dy, Atm%gridstruct%area, &
-               isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
+               Atm%bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
                Atm%neststruct%isu, Atm%neststruct%ieu, Atm%neststruct%jsu, Atm%neststruct%jeu, &
                Atm%npx, Atm%npy, 0, 0, &
                Atm%neststruct%refinement, Atm%neststruct%nestupdate, 0, 0, &
-               Atm%neststruct%parent_proc, Atm%neststruct%child_proc, Atm%parent_grid)
+               Atm%neststruct%parent_proc, Atm%neststruct%child_proc, Atm%parent_grid, Atm%grid_number-1)
           Atm%parent_grid%neststruct%parent_of_twoway = .true.
           !NOTE: mpp_update_nest_coarse (and by extension, update_coarse_grid) does **NOT** pass data
           !allowing a two-way update into the halo of the coarse grid. It only passes data so that the INTERIOR
@@ -1192,8 +1181,6 @@ contains
        end if
 
     end if
-
-
 
 
 #ifdef SW_DYNAMICS
@@ -1209,7 +1196,7 @@ contains
 !!$    end do
 !!$    endif
 #else
-    !Sets up flow to be initially hydrostatic (shouldn't be the case for all ICs?)
+    !Reset p_var after updating topography
     if (process) call p_var(npz, isc, iec, jsc, jec, Atm%ptop, ptop_min, Atm%delp, &
          Atm%delz, Atm%pt, Atm%ps,   &
          Atm%pe, Atm%peln, Atm%pk, Atm%pkz, kappa, Atm%q, &
@@ -1219,7 +1206,7 @@ contains
 
  
 
-  end subroutine fill_nested_grid_data_end
+  end subroutine twoway_topo_update
 
 
   !#######################################################################
@@ -1227,18 +1214,14 @@ contains
   ! <DESCRIPTION>
   !  Write out restart files registered through register_restart_file
   ! </DESCRIPTION>
-  subroutine fv_write_restart(Atm, grids_on_this_pe, timestamp)
-    type(fv_atmos_type), intent(inout) :: Atm(:)
+  subroutine fv_write_restart(Atm, timestamp)
+    type(fv_atmos_type), intent(inout) :: Atm
     character(len=*),    intent(in)    :: timestamp
-    logical, intent(IN) :: grids_on_this_pe(:)
-    integer n
 
-    call fv_io_write_restart(Atm, grids_on_this_pe, timestamp)
-    do n=1,size(Atm)
-       if (Atm(n)%neststruct%nested .and. grids_on_this_pe(n)) then
-          call fv_io_write_BCs(Atm(n))
-       endif
-    enddo
+    call fv_io_write_restart(Atm, timestamp)
+    if (Atm%neststruct%nested) then
+       call fv_io_write_BCs(Atm)
+    endif
 
   end subroutine fv_write_restart
   ! </SUBROUTINE>
@@ -1252,12 +1235,11 @@ contains
   ! Initialize the fv core restart facilities
   ! </DESCRIPTION>
   !
-  subroutine fv_restart_end(Atm, grids_on_this_pe)
-    type(fv_atmos_type), intent(inout) :: Atm(:)
-    logical, intent(INOUT) :: grids_on_this_pe(:)
+  subroutine fv_restart_end(Atm)
+    type(fv_atmos_type), intent(inout) :: Atm
 
     integer :: isc, iec, jsc, jec
-    integer :: iq, n, ntileMe, ncnst, ntprog, ntdiag
+    integer :: iq, ncnst, ntprog, ntdiag
     integer :: isd, ied, jsd, jed, npz
     integer :: unit
     integer :: file_unit
@@ -1266,95 +1248,83 @@ contains
     character(len=3):: gn
 
 
-    ntileMe = size(Atm(:))
+    call mpp_set_current_pelist(Atm%pelist)
 
-    do n = 1, ntileMe
+    isc = Atm%bd%isc; iec = Atm%bd%iec; jsc = Atm%bd%jsc; jec = Atm%bd%jec
 
-      if (.not. grids_on_this_pe(n)) then
-         cycle
-      endif
+    isd = Atm%bd%isd
+    ied = Atm%bd%ied
+    jsd = Atm%bd%jsd
+    jed = Atm%bd%jed
+    npz = Atm%npz
+    ncnst = Atm%ncnst
+    ntprog = size(Atm%q,4)
+    ntdiag = size(Atm%qdiag,4)
 
-      call mpp_set_current_pelist(Atm(n)%pelist)
+    if (Atm%grid_number > 1) then
+       write(gn,'(A2, I1)') " g", Atm%grid_number
+    else
+       gn = ''
+    end if
 
-      isc = Atm(n)%bd%isc; iec = Atm(n)%bd%iec; jsc = Atm(n)%bd%jsc; jec = Atm(n)%bd%jec
-
-      isd = Atm(n)%bd%isd
-      ied = Atm(n)%bd%ied
-      jsd = Atm(n)%bd%jsd
-      jed = Atm(n)%bd%jed
-      npz = Atm(n)%npz
-      ncnst = Atm(n)%ncnst
-      ntprog = size(Atm(n)%q,4)
-      ntdiag = size(Atm(n)%qdiag,4)
-
-      if (Atm(n)%grid_number > 1) then
-         write(gn,'(A2, I1)') " g", Atm(n)%grid_number
-      else
-         gn = ''
-      end if
-
-      unit = stdout()
-      write(unit,*)
-      write(unit,*) 'fv_restart_end u   ', trim(gn),' = ', mpp_chksum(Atm(n)%u(isc:iec,jsc:jec,:))
-      write(unit,*) 'fv_restart_end v   ', trim(gn),' = ', mpp_chksum(Atm(n)%v(isc:iec,jsc:jec,:))
-      if ( .not. Atm(n)%flagstruct%hydrostatic )    &
-         write(unit,*) 'fv_restart_end w   ', trim(gn),' = ', mpp_chksum(Atm(n)%w(isc:iec,jsc:jec,:))
-      write(unit,*) 'fv_restart_end delp', trim(gn),' = ', mpp_chksum(Atm(n)%delp(isc:iec,jsc:jec,:))
-      write(unit,*) 'fv_restart_end phis', trim(gn),' = ', mpp_chksum(Atm(n)%phis(isc:iec,jsc:jec))
+    unit = stdout()
+    write(unit,*)
+    write(unit,*) 'fv_restart_end u   ', trim(gn),' = ', mpp_chksum(Atm%u(isc:iec,jsc:jec,:))
+    write(unit,*) 'fv_restart_end v   ', trim(gn),' = ', mpp_chksum(Atm%v(isc:iec,jsc:jec,:))
+    if ( .not. Atm%flagstruct%hydrostatic )    &
+         write(unit,*) 'fv_restart_end w   ', trim(gn),' = ', mpp_chksum(Atm%w(isc:iec,jsc:jec,:))
+    write(unit,*) 'fv_restart_end delp', trim(gn),' = ', mpp_chksum(Atm%delp(isc:iec,jsc:jec,:))
+    write(unit,*) 'fv_restart_end phis', trim(gn),' = ', mpp_chksum(Atm%phis(isc:iec,jsc:jec))
 #ifndef SW_DYNAMICS
-      write(unit,*) 'fv_restart_end pt  ', trim(gn),' = ', mpp_chksum(Atm(n)%pt(isc:iec,jsc:jec,:))
-      if (ntprog>0) &
-           write(unit,*) 'fv_restart_end q(prog) nq  ', trim(gn),' =',ntprog, mpp_chksum(Atm(n)%q(isc:iec,jsc:jec,:,:))
-      if (ntdiag>0) &
-           write(unit,*) 'fv_restart_end q(diag) nq  ', trim(gn),' =',ntdiag, mpp_chksum(Atm(n)%qdiag(isc:iec,jsc:jec,:,:))
-      do iq=1,min(17, ntprog)     ! Check up to 17 tracers
-        call get_tracer_names(MODEL_ATMOS, iq, tracer_name)
-        write(unit,*) 'fv_restart_end '//trim(tracer_name)// trim(gn),' = ', mpp_chksum(Atm(n)%q(isc:iec,jsc:jec,:,iq))
-      enddo
+    write(unit,*) 'fv_restart_end pt  ', trim(gn),' = ', mpp_chksum(Atm%pt(isc:iec,jsc:jec,:))
+    if (ntprog>0) &
+         write(unit,*) 'fv_restart_end q(prog) nq  ', trim(gn),' =',ntprog, mpp_chksum(Atm%q(isc:iec,jsc:jec,:,:))
+    if (ntdiag>0) &
+         write(unit,*) 'fv_restart_end q(diag) nq  ', trim(gn),' =',ntdiag, mpp_chksum(Atm%qdiag(isc:iec,jsc:jec,:,:))
+    do iq=1,min(17, ntprog)     ! Check up to 17 tracers
+       call get_tracer_names(MODEL_ATMOS, iq, tracer_name)
+       write(unit,*) 'fv_restart_end '//trim(tracer_name)// trim(gn),' = ', mpp_chksum(Atm%q(isc:iec,jsc:jec,:,iq))
+    enddo
 
-!---------------
-! Check Min/Max:
-!---------------
-!     call prt_maxmin('ZS', Atm(n)%phis, isc, iec, jsc, jec, Atm(n)%ng, 1, 1./grav)
-      call pmaxmn_g('ZS', Atm(n)%phis, isc, iec, jsc, jec, 1, 1./grav, Atm(n)%gridstruct%area_64, Atm(n)%domain)
-      call pmaxmn_g('PS ', Atm(n)%ps,   isc, iec, jsc, jec, 1, 0.01   , Atm(n)%gridstruct%area_64, Atm(n)%domain)
-      call prt_maxmin('PS*', Atm(n)%ps, isc, iec, jsc, jec, Atm(n)%ng, 1, 0.01)
-      call prt_maxmin('U ', Atm(n)%u(isd:ied,jsd:jed,1:npz), isc, iec, jsc, jec, Atm(n)%ng, npz, 1.)
-      call prt_maxmin('V ', Atm(n)%v(isd:ied,jsd:jed,1:npz), isc, iec, jsc, jec, Atm(n)%ng, npz, 1.)
-      if ( .not. Atm(n)%flagstruct%hydrostatic )    &
-      call prt_maxmin('W ', Atm(n)%w , isc, iec, jsc, jec, Atm(n)%ng, npz, 1.)
-      call prt_maxmin('T ', Atm(n)%pt, isc, iec, jsc, jec, Atm(n)%ng, npz, 1.)
-      do iq=1, ntprog
-          call get_tracer_names ( MODEL_ATMOS, iq, tracer_name )
-          call pmaxmn_g(trim(tracer_name), Atm(n)%q(isd:ied,jsd:jed,1:npz,iq:iq), isc, iec, jsc, jec, npz, &
-                        1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-      enddo
-! Write4 energy correction term
+    !---------------
+    ! Check Min/Max:
+    !---------------
+    !     call prt_maxmin('ZS', Atm%phis, isc, iec, jsc, jec, Atm%ng, 1, 1./grav)
+    call pmaxmn_g('ZS', Atm%phis, isc, iec, jsc, jec, 1, 1./grav, Atm%gridstruct%area_64, Atm%domain)
+    call pmaxmn_g('PS ', Atm%ps,   isc, iec, jsc, jec, 1, 0.01   , Atm%gridstruct%area_64, Atm%domain)
+    call prt_maxmin('PS*', Atm%ps, isc, iec, jsc, jec, Atm%ng, 1, 0.01)
+    call prt_maxmin('U ', Atm%u(isd:ied,jsd:jed,1:npz), isc, iec, jsc, jec, Atm%ng, npz, 1.)
+    call prt_maxmin('V ', Atm%v(isd:ied,jsd:jed,1:npz), isc, iec, jsc, jec, Atm%ng, npz, 1.)
+    if ( .not. Atm%flagstruct%hydrostatic )    &
+         call prt_maxmin('W ', Atm%w , isc, iec, jsc, jec, Atm%ng, npz, 1.)
+    call prt_maxmin('T ', Atm%pt, isc, iec, jsc, jec, Atm%ng, npz, 1.)
+    do iq=1, ntprog
+       call get_tracer_names ( MODEL_ATMOS, iq, tracer_name )
+       call pmaxmn_g(trim(tracer_name), Atm%q(isd:ied,jsd:jed,1:npz,iq:iq), isc, iec, jsc, jec, npz, &
+            1., Atm%gridstruct%area_64, Atm%domain)
+    enddo
+    ! Write4 energy correction term
 #endif
 
-   enddo
+ call fv_io_write_restart(Atm)
+ if (Atm%neststruct%nested) call fv_io_write_BCs(Atm)
 
-   call fv_io_write_restart(Atm, grids_on_this_pe)
-   do n=1,ntileMe
-      if (Atm(n)%neststruct%nested .and. grids_on_this_pe(n)) call fv_io_write_BCs(Atm(n))
-    end do
-
-    module_is_initialized = .FALSE.
+ module_is_initialized = .FALSE.
 
 #ifdef EFLUX_OUT
-    if( is_master() ) then
-        write(*,*) steps, 'Mean equivalent Heat flux for this integration period=',Atm(1)%idiag%efx_sum/real(max(1,Atm(1)%idiag%steps)), &
-                          'Mean nesting-related flux for this integration period=',Atm(1)%idiag%efx_sum_nest/real(max(1,Atm(1)%idiag%steps)), &
-                          'Mean mountain torque=',Atm(1)%idiag%mtq_sum/real(max(1,Atm(1)%idiag%steps))
-        file_unit = get_unit()
-        open (unit=file_unit, file='e_flux.data', form='unformatted',status='unknown', access='sequential')
-        do n=1,steps
-           write(file_unit) Atm(1)%idiag%efx(n)
-           write(file_unit) Atm(1)%idiag%mtq(n)    ! time series global mountain torque
-           !write(file_unit) Atm(1)%idiag%efx_nest(n)  
-        enddo
-        close(unit=file_unit)
-    endif
+ if( is_master() ) then
+    write(*,*) steps, 'Mean equivalent Heat flux for this integration period=',Atm(1)%idiag%efx_sum/real(max(1,Atm(1)%idiag%steps)), &
+         'Mean nesting-related flux for this integration period=',Atm(1)%idiag%efx_sum_nest/real(max(1,Atm(1)%idiag%steps)), &
+         'Mean mountain torque=',Atm(1)%idiag%mtq_sum/real(max(1,Atm(1)%idiag%steps))
+    file_unit = get_unit()
+    open (unit=file_unit, file='e_flux.data', form='unformatted',status='unknown', access='sequential')
+    do n=1,steps
+       write(file_unit) Atm(1)%idiag%efx(n)
+       write(file_unit) Atm(1)%idiag%mtq(n)    ! time series global mountain torque
+       !write(file_unit) Atm(1)%idiag%efx_nest(n)  
+    enddo
+    close(unit=file_unit)
+ endif
 #endif
 
   end subroutine fv_restart_end
@@ -1379,7 +1349,10 @@ subroutine pmaxmn_g(qname, q, is, ie, js, je, km, fac, area, domain)
       do k=1,km
       do j=js,je
          do i=is,ie
-            if( q(i,j,k) < qmin ) then
+            !if ( (q(i,j,k) >= 1e30) .eqv. (q(i,j,k) < 1e30) ) then !NAN checking
+            !   print*, ' NAN found for ', qname, mpp_pe(), i,j,k
+            !else
+            if( q(i,j,k) < qmin) then
                 qmin = q(i,j,k)
             elseif( q(i,j,k) > qmax ) then
                 qmax = q(i,j,k)

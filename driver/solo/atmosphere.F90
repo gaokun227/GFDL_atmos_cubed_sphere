@@ -43,7 +43,7 @@ use mpp_mod,          only: input_nml_file
 ! FV specific codes:
 !------------------
 use fv_arrays_mod,      only: fv_atmos_type
-use fv_control_mod,     only: fv_init, fv_end, ngrids
+use fv_control_mod,     only: fv_control_init, fv_end, ngrids
 use fv_phys_mod,        only: fv_phys, fv_nudge, fv_phys_init
 use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time, eqv_pot
 use fv_timing_mod,      only: timing_on, timing_off
@@ -79,6 +79,7 @@ real, allocatable:: lprec(:,:), fprec(:,:), f_land(:,:)
 type(fv_atmos_type), allocatable, target :: Atm(:)
 
 logical, allocatable :: grids_on_this_pe(:)
+integer :: this_grid !not used yet
 integer :: axes(4)
 integer:: isd, ied, jsd, jed, ngc
 !-----------------------------------------------------------------------
@@ -119,7 +120,7 @@ contains
   !----- initialize FV dynamical core -----
     cold_start = (.not.file_exist('INPUT/fv_core.res.nc') .and. .not.file_exist('INPUT/fv_core.res.tile1.nc'))
 
-    call fv_init(Atm, dt_atmos, grids_on_this_pe, p_split)  ! allocates Atm components
+    call fv_control_init(Atm, dt_atmos, this_grid, grids_on_this_pe, p_split)  ! allocates Atm components
 
     do n=1,ngrids
        if (grids_on_this_pe(n)) mytile = n
@@ -127,7 +128,7 @@ contains
 
                    call timing_on('fv_restart')
     call fv_restart(Atm(1)%domain, Atm, dt_atmos, seconds, days, cold_start, &
-         Atm(1)%flagstruct%grid_type, grids_on_this_pe)
+         Atm(1)%flagstruct%grid_type, mytile)
                    call timing_off('fv_restart')
 
      fv_time = time
@@ -460,7 +461,7 @@ contains
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time, mytile)
        call timing_off('TWOWAY_UPDATE')
     endif
 
@@ -496,7 +497,7 @@ contains
 
     if (ngrids > 1 .and. p_split > 0) then
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time, mytile)
        call timing_off('TWOWAY_UPDATE')
     endif
 
@@ -537,7 +538,7 @@ contains
        if ( Atm(n)%flagstruct%moist_phys .and. Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(N)) call gfdl_cloud_microphys_end
     enddo
 
-    call fv_end(Atm, grids_on_this_pe)
+    call fv_end(Atm, mytile)
     deallocate(Atm)
 
   end subroutine atmosphere_end
