@@ -1186,11 +1186,11 @@ contains
       integer :: ierr, ios
       real, allocatable :: wk2(:,:)
 !
-      logical :: filtered_terrain
-      logical :: gfs_dwinds
-      integer :: levp
-      logical :: checker_tr
-      integer :: nt_checker
+      logical :: filtered_terrain = .true.
+      logical :: gfs_dwinds       = .true.
+      integer :: levp             = 64
+      logical :: checker_tr       = .false.
+      integer :: nt_checker       = 0
       namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds     &
                                 ,checker_tr, nt_checker
 !-----------------------------------------------------------------------
@@ -2699,6 +2699,7 @@ endif
 !
       integer :: i,ie,is,j,je,js,k
 !
+#ifdef USE_COND
 !-----------------------------------------------------------------------
 !***********************************************************************
 !-----------------------------------------------------------------------
@@ -2771,6 +2772,7 @@ endif
 !
 !-----------------------------------------------------------------------
 !
+#endif USE_COND
       end subroutine fill_q_con_BC
 !
 !-----------------------------------------------------------------------
@@ -2798,6 +2800,7 @@ endif
 !***********************************************************************
 !-----------------------------------------------------------------------
 !
+#ifdef MOIST_CAPPA
       if(north_bc)then
         i1=lbound(BC_t1%north%cappa_BC,1)
         i2=ubound(BC_t1%north%cappa_BC,1)
@@ -2848,6 +2851,7 @@ endif
 !
 !-----------------------------------------------------------------------
 !
+#endif MOIST_CAPPA
       end subroutine fill_cappa_BC
 !
 !-----------------------------------------------------------------------
@@ -4340,7 +4344,7 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
 #ifdef MOIST_CAPPA
       real,dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz),intent(out) :: cappa
 #else
-      real,dimension(isd:isd,jsd:jsd,1),intent(out) :: cappa
+      real,dimension(bd%isd:bd%isd,bd%jsd:bd%jsd,1),intent(out) :: cappa
 #endif
 !
       real,dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz),intent(out) :: u,vc
@@ -4544,9 +4548,11 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
 !!$          delz(i,j,k)=side_t0%delz_BC(i,j,k)                            &
 !!$                     +(side_t1%delz_BC(i,j,k)-side_t0%delz_BC(i,j,k))   &
 !!$                      *fraction_interval
+#ifdef USE_COND
           q_con(i,j,k)=side_t0%q_con_BC(i,j,k)                          &
                      +(side_t1%q_con_BC(i,j,k)-side_t0%q_con_BC(i,j,k)) &
                       *fraction_interval
+#endif
           w(i,j,k)=side_t0%w_BC(i,j,k)                                  &
                      +(side_t1%w_BC(i,j,k)-side_t0%w_BC(i,j,k))         &
                       *fraction_interval
@@ -4856,12 +4862,16 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
         case ('divgd')
           bc_t0=>bc_side_t0%divgd_BC
           bc_t1=>bc_side_t1%divgd_BC
+#ifdef USE_COND
+#ifdef MOIST_CAPPA
         case ('cappa')
           bc_t0=>bc_side_t0%cappa_BC
           bc_t1=>bc_side_t1%cappa_BC
+#endif
         case ('q_con')
           bc_t0=>bc_side_t0%q_con_BC
           bc_t1=>bc_side_t1%q_con_BC
+#endif
         case ('q')
           if(iq<1)then
             write(0,101)
@@ -5520,10 +5530,14 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
         j1=regional_bounds%js_north
         j2=regional_bounds%je_north
         q    =>BC_t1%north%q_BC
-        q_con=>BC_t1%north%q_con_BC
         delp =>BC_t1%north%delp_BC
         delz =>BC_t1%north%delz_BC
+#ifdef USE_COND
+        q_con=>BC_t1%north%q_con_BC
+#ifdef MOIST_CAPPA
         cappa=>BC_t1%north%cappa_BC
+#endif
+#endif
         pt   =>BC_t1%north%pt_BC
         call compute_vpt             !<-- Compute the virtual potential temperature.
       endif
@@ -5534,10 +5548,14 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
         j1=regional_bounds%js_south
         j2=regional_bounds%je_south
         q    =>BC_t1%south%q_BC
-        q_con=>BC_t1%south%q_con_BC
         delp =>BC_t1%south%delp_BC
         delz =>BC_t1%south%delz_BC
+#ifdef USE_COND
+        q_con=>BC_t1%south%q_con_BC
+#ifdef MOIST_CAPPA
         cappa=>BC_t1%south%cappa_BC
+#endif
+#endif
         pt   =>BC_t1%south%pt_BC
         call compute_vpt             !<-- Compute the virtual potential temperature.
       endif
@@ -5548,10 +5566,14 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
         j1=regional_bounds%js_east
         j2=regional_bounds%je_east
         q    =>BC_t1%east%q_BC
-        q_con=>BC_t1%east%q_con_BC
         delp =>BC_t1%east%delp_BC
         delz =>BC_t1%east%delz_BC
+#ifdef USE_COND
+        q_con=>BC_t1%east%q_con_BC
+#ifdef MOIST_CAPPA
         cappa=>BC_t1%east%cappa_BC
+#endif
+#endif
         pt   =>BC_t1%east%pt_BC
         call compute_vpt             !<-- Compute the virtual potential temperature.
       endif
@@ -5562,10 +5584,14 @@ subroutine remap_scalar_regional_bc_nh(Atm                            &
         j1=regional_bounds%js_west
         j2=regional_bounds%je_west
         q    =>BC_t1%west%q_BC
-        q_con=>BC_t1%west%q_con_BC
         delp =>BC_t1%west%delp_BC
         delz =>BC_t1%west%delz_BC
+#ifdef USE_COND
+        q_con=>BC_t1%west%q_con_BC
+#ifdef MOIST_CAPPA
         cappa=>BC_t1%west%cappa_BC
+#endif
+#endif
         pt   =>BC_t1%west%pt_BC
         call compute_vpt             !<-- Compute the virtual potential temperature.
       endif

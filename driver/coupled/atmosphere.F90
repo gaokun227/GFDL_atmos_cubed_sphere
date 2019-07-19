@@ -51,7 +51,7 @@ use  atmos_global_diag_mod, only: atmos_global_diag_init, &
 ! FV core modules:
 !-----------------
 use fv_arrays_mod,      only: fv_atmos_type
-use fv_control_mod,     only: fv_init, fv_end, ngrids
+use fv_control_mod,     only: fv_control_init, fv_end, ngrids
 use fv_eta_mod,         only: get_eta_level
 use fv_io_mod,          only: fv_io_register_nudge_restart
 use fv_dynamics_mod,    only: fv_dynamics
@@ -135,6 +135,7 @@ character(len=7)   :: mod_name = 'atmos'
   integer :: p_split = 1
   integer, allocatable :: pelist(:)
   logical, allocatable :: grids_on_this_pe(:)
+  integer :: this_grid
   type(fv_atmos_type), allocatable, target :: Atm(:)
 
   integer :: id_udt_dyn, id_vdt_dyn
@@ -187,7 +188,7 @@ contains
    !NOTE do we still need the second file_exist call?
    cold_start = (.not.file_exist('INPUT/fv_core.res.nc') .and. .not.file_exist('INPUT/fv_core.res.tile1.nc'))
 
-   call fv_init( Atm, dt_atmos, grids_on_this_pe, p_split )  ! allocates Atm components
+   call fv_control_init( Atm, dt_atmos, this_grid, grids_on_this_pe, p_split )  ! allocates Atm components
 
    do n=1,ngrids
       if (grids_on_this_pe(n)) mytile = n
@@ -254,7 +255,7 @@ contains
     allocate(pref(npz+1,2), dum1d(npz+1))
 
    call set_domain ( Atm(mytile)%domain )
-   call fv_restart(Atm(mytile)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mytile)%gridstruct%grid_type, grids_on_this_pe)
+   call fv_restart(Atm(mytile)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mytile)%gridstruct%grid_type, mytile)
 
    fv_time = Time
 
@@ -426,7 +427,7 @@ contains
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time, mytile)
        call timing_off('TWOWAY_UPDATE')
     endif
 
@@ -468,15 +469,6 @@ contains
                                                            Time)
      endif
    enddo
-
-#ifdef TWOWAY_UPDATE_BEFORE_PHYSICS
-    if (ngrids > 1) then
-       call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, kappa, cp_air, zvir, fv_time)
-       call timing_off('TWOWAY_UPDATE')
-    endif
-   call nullify_domain()
-#endif
 
 !-----------------------------------------------------
 !--- COMPUTE SUBGRID Z
@@ -544,7 +536,7 @@ contains
 #endif
    call fv_cmip_diag_end
    call nullify_domain ( )
-   call fv_end(Atm, grids_on_this_pe)
+   call fv_end(Atm, mytile)
    deallocate (Atm)
 
    deallocate( u_dt, v_dt, t_dt, q_dt, pref, dum1d )
@@ -561,7 +553,7 @@ contains
   subroutine atmosphere_restart(timestamp)
     character(len=*),  intent(in) :: timestamp
 
-    call fv_write_restart(Atm, grids_on_this_pe, timestamp)
+    call fv_write_restart(Atm(mytile), timestamp)
 
   end subroutine atmosphere_restart
   ! </SUBROUTINE>
@@ -905,7 +897,7 @@ contains
 !--- physics tendencies
     if (ngrids > 1 .and. p_split > 0) then
        call timing_on('TWOWAY_UPDATE')
-       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time)
+       call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time, mytile)
        call timing_off('TWOWAY_UPDATE')
     endif   
 

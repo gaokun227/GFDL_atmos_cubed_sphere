@@ -19,7 +19,6 @@
 !***********************************************************************
  module sw_core_mod
 
- use fv_mp_mod,         only: ng
  use tp_core_mod,       only: fv_tp_2d, pert_ppm, copy_corners
  use fv_mp_mod, only: fill_corners, XDir, YDir
  use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_flags_type
@@ -566,7 +565,7 @@
 
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
-      integer :: npx, npy
+      integer :: npx, npy, ng
       logical :: bounded_domain
 
       is  = bd%is
@@ -577,6 +576,7 @@
       ied = bd%ied
       jsd = bd%jsd
       jed = bd%jed
+      ng  = bd%ng
 
       npx      = flagstruct%npx
       npy      = flagstruct%npy

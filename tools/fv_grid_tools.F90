@@ -27,8 +27,8 @@ module fv_grid_tools_mod
                            direct_transform, cube_transform, dist2side_latlon, &
                            spherical_linear_interpolation, big_number
   use fv_timing_mod,  only: timing_on, timing_off
-  use fv_mp_mod,      only: ng, is_master, fill_corners, XDir, YDir
-  use fv_mp_mod,      only: mp_gather, mp_bcst, mp_reduce_max, mp_stop
+  use fv_mp_mod,      only: is_master, fill_corners, XDir, YDir
+  use fv_mp_mod,      only: mp_gather, mp_bcst, mp_reduce_max, mp_stop, grids_master_procs
   use sorted_index_mod,  only: sorted_inta, sorted_intb
   use mpp_mod,           only: mpp_error, FATAL, get_unit, mpp_chksum, mpp_pe, stdout, &
                                mpp_send, mpp_recv, mpp_sync_self, EVENT_RECV, mpp_npes, &
@@ -135,7 +135,7 @@ contains
 
     !FIXME: Doesn't work for a nested grid
     ntiles = get_mosaic_ntiles(atm_mosaic)
-    if( .not. Atm%flagstruct%regional) then  !<-- The regional setup has only 1 tile so do not shutdown in that case.
+    if( .not. Atm%gridstruct%bounded_domain) then  !<-- The regional setup has only 1 tile so do not shutdown in that case.
     if(ntiles .NE. 6) call mpp_error(FATAL, &
        'fv_grid_tools(read_grid): ntiles should be 6 in mosaic file '//trim(atm_mosaic) )
     if(nregions .NE. 6) call mpp_error(FATAL, &
@@ -147,7 +147,7 @@ contains
     !--- get the geographical coordinates of super-grid.
     isc2 = 2*is-1; iec2 = 2*ie+1
     jsc2 = 2*js-1; jec2 = 2*je+1  
-    if( Atm%flagstruct%regional) then
+    if( Atm%gridstruct%bounded_domain ) then
       isc2 = 2*(isd+halo)-1; iec2 = 2*(ied+1+halo)-1   ! For the regional domain the cell corner locations must be transferred
       jsc2 = 2*(jsd+halo)-1; jec2 = 2*(jed+1+halo)-1   ! from the entire supergrid to the compute grid, including the halo region. 
     endif
@@ -167,7 +167,7 @@ contains
     if(len_trim(units) < 6) call mpp_error(FATAL, &
           "fv_grid_tools_mod(read_grid): the length of units must be no less than 6")
     if(units(1:6) == 'degree') then
-    if( .not. Atm%flagstruct%regional) then
+    if( .not. Atm%gridstruct%bounded_domain) then
        do j = js, je+1
           do i = is, ie+1
              grid(i,j,1) = tmpx(2*i-1,2*j-1)*pi/180.
@@ -427,7 +427,7 @@ contains
 
   end subroutine get_symmetry
 
-  subroutine init_grid(Atm, grid_name, grid_file, npx, npy, npz, ndims, nregions, ng)
+  subroutine init_grid(Atm, grid_name, grid_file, npx, npy, npz, ndims, nregions, ng, tile_coarse)
  
 !     init_grid :: read grid from input file and setup grid descriptors
  
@@ -439,6 +439,7 @@ contains
     integer,      intent(IN) :: ndims
     integer,      intent(IN) :: nregions
     integer,      intent(IN) :: ng
+    integer,      intent(IN) :: tile_coarse(:)
 !--------------------------------------------------------
     real(kind=R_GRID)   ::  xs(npx,npy)
     real(kind=R_GRID)   ::  ys(npx,npy)
@@ -553,7 +554,7 @@ contains
     have_north_pole               => Atm%gridstruct%have_north_pole
     stretched_grid                => Atm%gridstruct%stretched_grid
 
-    tile                          => Atm%tile
+    tile                          => Atm%tile_of_mosaic
 
     domain                        => Atm%domain
 
@@ -584,6 +585,8 @@ contains
           cubed_sphere = .true.
           
           if (Atm%neststruct%nested) then
+             !Read grid if it exists
+             ! still need to set up 
              call setup_aligned_nest(Atm)
           else
              if(trim(grid_file) == 'INPUT/grid_spec.nc') then  
@@ -679,7 +682,7 @@ contains
              endif
              
              !--- dx and dy         
-             if( .not. Atm%flagstruct%regional) then
+             if( .not. Atm%gridstruct%bounded_domain) then
                 istart=is
                 iend=ie
                 jstart=js
@@ -700,7 +703,7 @@ contains
                 dx(i,j) = great_circle_dist( p2, p1, radius )
              enddo
              enddo
-             if( stretched_grid .or. Atm%flagstruct%regional ) then
+             if( stretched_grid .or. Atm%gridstruct%bounded_domain ) then
                 do j = jstart, jend
                 do i = istart, iend+1
                    p1(1) = grid(i,j,  1)
@@ -712,12 +715,12 @@ contains
                 enddo
              else
                 call get_symmetry(dx(is:ie,js:je+1), dy(is:ie+1,js:je), 0, 1, Atm%layout(1), Atm%layout(2), &
-                     Atm%domain, Atm%tile, Atm%gridstruct%npx_g, Atm%bd)
+                     Atm%domain, Atm%tile_of_mosaic, Atm%gridstruct%npx_g, Atm%bd)
              endif
 
              call mpp_get_boundary( dy, dx, Atm%domain, ebufferx=ebuffer, wbufferx=wbuffer, sbuffery=sbuffer, nbuffery=nbuffer,&
                   flags=SCALAR_PAIR+XUPDATE, gridtype=CGRID_NE_PARAM)
-             if( .not. Atm%flagstruct%regional ) then
+             if( .not. Atm%gridstruct%bounded_domain ) then
                 if(is == 1 .AND. mod(tile,2) .NE. 0) then ! on the west boundary
                    dy(is, js:je) = wbuffer(js:je)
                 endif
@@ -779,6 +782,7 @@ contains
              
 
           end if !if nested
+
 
 !       do j=js,je
 !          do i=is,ie+1
@@ -1060,12 +1064,31 @@ contains
           write(*,*) ' REDUCED EARTH: Radius is ', radius, ', omega is ', omega
 #endif
           write(*,*  ) ' Cubed-Sphere Grid Stats : ', npx,'x',npy,'x',nregions
+          print*, dxN, dxM, dxAV, dxN, dxM
           write(*,201) '      Grid Length               : min: ', dxN,' max: ', dxM,' avg: ', dxAV, ' min/max: ',dxN/dxM
           write(*,200) '      Deviation from Orthogonal : min: ',angN,' max: ',angM,' avg: ',angAV
           write(*,200) '      Aspect Ratio              : min: ',aspN,' max: ',aspM,' avg: ',aspAV
           write(*,*  ) ''
        endif
     endif!if gridtype > 3
+
+    !SEND grid global if any child nests
+    !Matching receive in setup_aligned_nest
+    do n=1,size(Atm%neststruct%child_grids)
+       if (Atm%neststruct%child_grids(n) .and. is_master()) then
+          !need to get tile_coarse AND determine local number for tile
+          if (ntiles_g > 1) then ! coarse grid only!!
+!!$             !!! DEBUG CODE
+!!$             print*, 'SENDING GRID_GLOBAL: ', mpp_pe(), tile_coarse(n), grids_master_procs(n), grid_global(1,npy,:,tile_coarse(n))
+!!$             !!! END DEBUG CODE
+             call mpp_send(grid_global(:,:,:,tile_coarse(n)), &
+                  size(grid_global)/Atm%flagstruct%ntiles,grids_master_procs(n))
+          else
+             call mpp_send(grid_global(:,:,:,1),size(grid_global),grids_master_procs(n))
+          endif
+          call mpp_sync_self()
+       endif
+    enddo
 
     if (Atm%neststruct%nested .or. ANY(Atm%neststruct%child_grids)) then
     nullify(grid_global)
@@ -1504,7 +1527,21 @@ contains
       
     end subroutine setup_orthogonal_grid
 	
-	
+
+    !This routine currently does two things:
+    ! 1) Create the nested grid on-the-fly from the parent
+    ! 2) Compute the weights and indices for the boundary conditions
+    ! We should split these into two routines in case we can
+    !   read the nest from the input mosaic. Then we only need
+    !   to set up the weights.
+    ! When creating the nest on-the-fly we need the global parent grid,
+    !   as we are doing now. For nests crossing a cube edge
+    !   new code is needed.
+    ! Creating the indices should be relatvely straightforward procedure
+    !   since we will always know ioffset and joffset, which are needed
+    !   to initialize the mpp nesting structure
+    ! Computing the weights can be simplified by simply retreiving the 
+    !   BC agrid/grid structures?
     subroutine setup_aligned_nest(Atm)
 
       type(fv_atmos_type), intent(INOUT), target :: Atm
@@ -1574,21 +1611,31 @@ contains
       allocate(p_grid( isg-ng:ieg+1+ng, jsg-ng:jeg+1+ng,1:2) )
       p_grid = 1.e25
 
-         !Need to RECEIVE grid_global; matching mpp_send of grid_global from parent grid is in fv_control
+         !Need to RECEIVE parent grid_global; 
+      !matching mpp_send of grid_global from parent grid is in init_grid()
       if( is_master() ) then
-         p_ind = -1000000000
 
          call mpp_recv(p_grid( isg-ng:ieg+1+ng, jsg-ng:jeg+1+ng,1:2), size(p_grid( isg-ng:ieg+1+ng, jsg-ng:jeg+1+ng,1:2)), &
                        Atm%parent_grid%pelist(1))
+!!$         !!!! DEBUG CODE
+!!$         print*, 'RECEIVING GRID GLOBAL: ', mpp_pe(), Atm%parent_grid%pelist(1), p_grid(1,jeg+1,:)
+!!$         !!!! END DEBUG CODE
+
+      endif
+
+      call mpp_broadcast( p_grid(isg-ng:ieg+ng+1, jsg-ng:jeg+ng+1, :), &
+           (ieg-isg+2+2*ng)*(jeg-jsg+2+2*ng)*ndims, mpp_root_pe() )
+
+         !NOTE : Grid now allowed to lie outside of parent
          !Check that the grid does not lie outside its parent
          !3aug15: allows halo of nest to lie within halo of coarse grid.
-         !  NOTE: will this then work with the mpp_update_nest_fine?
-         if ( joffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
-              ioffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
-              joffset + floor( real(npy+ng) / real(refinement) ) > Atm%parent_grid%npy+ng .or. &
-              ioffset + floor( real(npx+ng) / real(refinement) ) > Atm%parent_grid%npx+ng ) then
-            call mpp_error(FATAL, 'nested grid lies outside its parent')
-         end if
+!!$         !  NOTE: will this then work with the mpp_update_nest_fine?
+!!$         if ( joffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
+!!$              ioffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
+!!$              joffset + floor( real(npy+ng) / real(refinement) ) > Atm%parent_grid%npy+ng .or. &
+!!$              ioffset + floor( real(npx+ng) / real(refinement) ) > Atm%parent_grid%npx+ng ) then
+!!$            call mpp_error(FATAL, 'nested grid lies outside its parent')
+!!$         end if
 
          do j=1-ng,npy+ng
             jc = joffset + (j-1)/refinement !int( real(j-1) / real(refinement) )
@@ -1663,21 +1710,18 @@ contains
             end do
          end do
 
-      end if
-
-      call mpp_broadcast(grid_global(1-ng:npx+ng,  1-ng:npy+ng  ,:,1), &
-           ((npx+ng)-(1-ng)+1)*((npy+ng)-(1-ng)+1)*ndims, mpp_root_pe() )
-      call mpp_broadcast(      p_ind(1-ng:npx+ng,  1-ng:npy+ng  ,1:4),   &
-           ((npx+ng)-(1-ng)+1)*((npy+ng)-(1-ng)+1)*4, mpp_root_pe() )
-      call mpp_broadcast(    pa_grid( isg:ieg  , jsg:jeg  , :), &
-           ((ieg-isg+1))*(jeg-jsg+1)*ndims, mpp_root_pe())
-      call mpp_broadcast(  p_grid_u( isg:ieg  , jsg:jeg+1, :), &
-           (ieg-isg+1)*(jeg-jsg+2)*ndims, mpp_root_pe())
-      call mpp_broadcast(  p_grid_v( isg:ieg+1, jsg:jeg  , :), &
-           (ieg-isg+2)*(jeg-jsg+1)*ndims, mpp_root_pe())
-
-      call mpp_broadcast( p_grid(isg-ng:ieg+ng+1, jsg-ng:jeg+ng+1, :), &
-           (ieg-isg+2+2*ng)*(jeg-jsg+2+2*ng)*ndims, mpp_root_pe() )
+!!$      !TODO: can we just send around ONE grid and re-calculate
+!!$      ! staggered grids from that??
+!!$      call mpp_broadcast(grid_global(1-ng:npx+ng,  1-ng:npy+ng  ,:,1), &
+!!$           ((npx+ng)-(1-ng)+1)*((npy+ng)-(1-ng)+1)*ndims, mpp_root_pe() )
+!!$      call mpp_broadcast(      p_ind(1-ng:npx+ng,  1-ng:npy+ng  ,1:4),   &
+!!$           ((npx+ng)-(1-ng)+1)*((npy+ng)-(1-ng)+1)*4, mpp_root_pe() )
+!!$      call mpp_broadcast(    pa_grid( isg:ieg  , jsg:jeg  , :), &
+!!$           ((ieg-isg+1))*(jeg-jsg+1)*ndims, mpp_root_pe())
+!!$      call mpp_broadcast(  p_grid_u( isg:ieg  , jsg:jeg+1, :), &
+!!$           (ieg-isg+1)*(jeg-jsg+2)*ndims, mpp_root_pe())
+!!$      call mpp_broadcast(  p_grid_v( isg:ieg+1, jsg:jeg  , :), &
+!!$           (ieg-isg+2)*(jeg-jsg+1)*ndims, mpp_root_pe())
 
       do n=1,ndims
          do j=jsd,jed+1
@@ -1732,8 +1776,6 @@ contains
          ind_b(i,j,4) = jmod
       enddo
       enddo
-
-         !In a concurrent simulation, p_ind was passed off to the parent processes above, so they can create ind_update_h
 
       ind_u = -99999999
       !New BCs for wind components:
@@ -2006,6 +2048,7 @@ contains
       if (is_master()) then
          if (Atm%neststruct%nested) then
             !Nesting position information
+            !BUG multiply by 180 not 90....
             write(*,*) 'NESTED GRID ', Atm%grid_number
             ic = p_ind(1,1,1) ; jc = p_ind(1,1,1)
             write(*,'(A, 2I5, 4F10.4)') 'SW CORNER: ', ic, jc, grid_global(1,1,:,1)*90./pi
@@ -2016,7 +2059,7 @@ contains
             ic = p_ind(npx,1,1) ; jc = p_ind(npx,1,1)
             write(*,'(A, 2I5, 4F10.4)') 'SE CORNER: ', ic, jc, grid_global(npx,1,:,1)*90./pi
          else         
-            write(*,*) 'PARENT GRID ', Atm%parent_grid%grid_number, Atm%parent_grid%tile
+            write(*,*) 'PARENT GRID ', Atm%parent_grid%grid_number, Atm%parent_grid%global_tile
             ic = p_ind(1,1,1) ; jc = p_ind(1,1,1)
             write(*,'(A, 2I5, 4F10.4)') 'SW CORNER: ', ic, jc, Atm%parent_grid%grid_global(ic,jc,:,parent_tile)*90./pi
             ic = p_ind(1,npy,1) ; jc = p_ind(1,npy,1)
@@ -2319,7 +2362,7 @@ contains
          real(kind=R_GRID),    pointer, dimension(:,:)   :: area, area_c
          
          integer :: is,  ie,  js,  je
-         integer :: isd, ied, jsd, jed
+         integer :: isd, ied, jsd, jed, ng
 
          is  = bd%is
          ie  = bd%ie
@@ -2329,6 +2372,7 @@ contains
          ied = bd%ied
          jsd = bd%jsd
          jed = bd%jed
+         ng  = bd%ng
 
          grid  => gridstruct%grid_64
          agrid => gridstruct%agrid_64

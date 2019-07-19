@@ -19,7 +19,7 @@
 !***********************************************************************
 module boundary_mod
 
-  use fv_mp_mod,         only: ng, isc,jsc,iec,jec, isd,jsd,ied,jed, is,js,ie,je, is_master
+  use fv_mp_mod,         only: is_master
   use constants_mod,     only: grav
 
   use mpp_domains_mod,    only: mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
@@ -571,7 +571,7 @@ contains
 !!$ end subroutine nested_grid_BC_mpp_2d
  
  subroutine nested_grid_BC_mpp_3d(var_nest, var_coarse, nest_domain, ind, wt, istag, jstag, &
-      npx, npy, npz, bd, isg, ieg, jsg, jeg, nstep_in, nsplit_in, proc_in)
+      npx, npy, npz, bd, isg, ieg, jsg, jeg, nest_level, nstep_in, nsplit_in, proc_in)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
    real, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,npz), intent(INOUT) :: var_nest
@@ -580,6 +580,7 @@ contains
    integer, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,2), intent(IN) :: ind
    real, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,4), intent(IN) :: wt
    integer, intent(IN) :: istag, jstag, npx, npy, npz, isg, ieg, jsg, jeg
+   integer, intent(IN) :: nest_level
    integer, intent(IN), OPTIONAL :: nstep_in, nsplit_in
    logical, intent(IN), OPTIONAL :: proc_in
 
@@ -626,13 +627,13 @@ contains
    end if
 
    call mpp_get_C2F_index(nest_domain, isw_f, iew_f, jsw_f, jew_f, isw_c, iew_c, jsw_c, jew_c, &
-        WEST,  position=position)
+        WEST, nest_level=nest_level, position=position)
    call mpp_get_C2F_index(nest_domain, ise_f, iee_f, jse_f, jee_f, ise_c, iee_c, jse_c, jee_c, &
-        EAST,  position=position)
+        EAST, nest_level=nest_level, position=position)
    call mpp_get_C2F_index(nest_domain, iss_f, ies_f, jss_f, jes_f, iss_c, ies_c, jss_c, jes_c, &
-        SOUTH,  position=position)
+        SOUTH, nest_level=nest_level, position=position)
    call mpp_get_C2F_index(nest_domain, isn_f, ien_f, jsn_f, jen_f, isn_c, ien_c, jsn_c, jen_c, &
-        NORTH,  position=position)
+        NORTH, nest_level=nest_level, position=position)
 
    if( iew_c .GE. isw_c .AND. jew_c .GE. jsw_c ) then
       allocate(wbuffer(isw_c:iew_c, jsw_c:jew_c,npz))
@@ -664,7 +665,8 @@ contains
 
 
        call timing_on ('COMM_TOTAL')
-   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer,  position=position)
+   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer, &
+        nest_level=nest_level, position=position)
        call timing_off('COMM_TOTAL')
 
    if (process) then
@@ -811,23 +813,23 @@ contains
 
  end subroutine get_vector_position
 
- subroutine init_buffer(nest_domain, wbuffer, sbuffer, ebuffer, nbuffer, npz, position)
+ subroutine init_buffer(nest_domain, wbuffer, sbuffer, ebuffer, nbuffer, npz, nest_level, position)
    type(nest_domain_type),            intent(INOUT) :: nest_domain
    real, allocatable, dimension(:,:,:), intent(OUT) :: wbuffer, sbuffer, ebuffer, nbuffer    
-   integer,                             intent(IN)  :: npz, position
+   integer,                             intent(IN)  :: npz, position, nest_level
    integer :: isw_f, iew_f, jsw_f, jew_f, isw_c, iew_c, jsw_c, jew_c
    integer :: ise_f, iee_f, jse_f, jee_f, ise_c, iee_c, jse_c, jee_c
    integer :: iss_f, ies_f, jss_f, jes_f, iss_c, ies_c, jss_c, jes_c
    integer :: isn_f, ien_f, jsn_f, jen_f, isn_c, ien_c, jsn_c, jen_c
 
    call mpp_get_C2F_index(nest_domain, isw_f, iew_f, jsw_f, jew_f, isw_c, iew_c, jsw_c, jew_c, &
-        WEST,  position=position)
+        WEST, nest_level=nest_level, position=position)
    call mpp_get_C2F_index(nest_domain, ise_f, iee_f, jse_f, jee_f, ise_c, iee_c, jse_c, jee_c, &
-        EAST,  position=position)
+        EAST, nest_level=nest_level, position=position)
    call mpp_get_C2F_index(nest_domain, iss_f, ies_f, jss_f, jes_f, iss_c, ies_c, jss_c, jes_c, &
-        SOUTH,  position=position)
+        SOUTH, nest_level=nest_level, position=position)
    call mpp_get_C2F_index(nest_domain, isn_f, ien_f, jsn_f, jen_f, isn_c, ien_c, jsn_c, jen_c, &
-        NORTH,  position=position)
+        NORTH, nest_level=nest_level, position=position)
 
    if( iew_c .GE. isw_c .AND. jew_c .GE. jsw_c ) then
       allocate(wbuffer(isw_c:iew_c, jsw_c:jew_c,npz))
@@ -861,7 +863,8 @@ contains
 
 
  subroutine nested_grid_BC_mpp_3d_vector(u_nest, v_nest, u_coarse, v_coarse, nest_domain, ind_u, ind_v, wt_u, wt_v, &
-      istag_u, jstag_u, istag_v, jstag_v, npx, npy, npz, bd, isg, ieg, jsg, jeg, nstep_in, nsplit_in, proc_in, flags, gridtype)
+      istag_u, jstag_u, istag_v, jstag_v, npx, npy, npz, bd, isg, ieg, jsg, jeg, nest_level, nstep_in, nsplit_in, proc_in, &
+      flags, gridtype)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: istag_u, jstag_u, istag_v, jstag_v, npx, npy, npz, isg, ieg, jsg, jeg
@@ -874,6 +877,7 @@ contains
    integer, dimension(bd%isd:bd%ied+istag_v,bd%jsd:bd%jed+jstag_v,2), intent(IN) :: ind_v
    real, dimension(bd%isd:bd%ied+istag_u,bd%jsd:bd%jed+jstag_u,4), intent(IN) :: wt_u
    real, dimension(bd%isd:bd%ied+istag_v,bd%jsd:bd%jed+jstag_v,4), intent(IN) :: wt_v
+   integer, intent(IN)           :: nest_level
    integer, intent(IN), OPTIONAL :: nstep_in, nsplit_in
    logical, intent(IN), OPTIONAL :: proc_in
    integer, intent(IN), OPTIONAL :: flags, gridtype
@@ -907,12 +911,12 @@ contains
    endif
 
    call get_vector_position(position_x, position_y, gridtype)
-   call init_buffer(nest_domain, wbufferx, sbufferx, ebufferx, nbufferx, npz, position_x)
-   call init_buffer(nest_domain, wbuffery, sbuffery, ebuffery, nbuffery, npz, position_y)
+   call init_buffer(nest_domain, wbufferx, sbufferx, ebufferx, nbufferx, npz, nest_level, position_x)
+   call init_buffer(nest_domain, wbuffery, sbuffery, ebuffery, nbuffery, npz, nest_level, position_x)
 
        call timing_on ('COMM_TOTAL')
    call mpp_update_nest_fine(u_coarse, v_coarse, nest_domain, wbufferx, wbuffery, sbufferx, sbuffery, &
-                             ebufferx, ebuffery, nbufferx, nbuffery, flags, gridtype)
+                             ebufferx, ebuffery, nbufferx, nbuffery, flags=flags, nest_level=nest_level, gridtype=gridtype)
        call timing_off('COMM_TOTAL')
 
    if (process) then
@@ -1089,11 +1093,12 @@ contains
  end subroutine nested_grid_BC_mpp_3d_vector
 
 
- subroutine nested_grid_BC_mpp_send_3d(var_coarse, nest_domain, istag, jstag)
+ subroutine nested_grid_BC_mpp_send_3d(var_coarse, nest_domain, istag, jstag, nest_level)
 
    real, dimension(:,:,:), intent(IN) :: var_coarse
    type(nest_domain_type), intent(INOUT) :: nest_domain
    integer, intent(IN) :: istag, jstag
+   integer, intent(IN) :: nest_level
 
    real,    allocatable         :: wbuffer(:,:,:)
    real,    allocatable         :: ebuffer(:,:,:)
@@ -1126,7 +1131,7 @@ contains
 
 
        call timing_on ('COMM_TOTAL')
-   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer,  position=position)
+   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer, nest_level=nest_level, position=position)
        call timing_off('COMM_TOTAL')
 
 
@@ -1134,11 +1139,12 @@ contains
 
  end subroutine nested_grid_BC_mpp_send_3d
 
- subroutine nested_grid_BC_mpp_send_2d(var_coarse, nest_domain, istag, jstag)
+ subroutine nested_grid_BC_mpp_send_2d(var_coarse, nest_domain, istag, jstag, nest_level)
 
    real, dimension(:,:), intent(IN) :: var_coarse
    type(nest_domain_type), intent(INOUT) :: nest_domain
    integer, intent(IN) :: istag, jstag
+   integer, intent(IN) :: nest_level
 
    real,    allocatable         :: wbuffer(:,:)
    real,    allocatable         :: ebuffer(:,:)
@@ -1171,7 +1177,7 @@ contains
 
 
        call timing_on ('COMM_TOTAL')
-   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer,  position=position)
+   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer, nest_level=nest_level, position=position)
        call timing_off('COMM_TOTAL')
 
 
@@ -1180,7 +1186,7 @@ contains
  end subroutine nested_grid_BC_mpp_send_2d
 
  subroutine nested_grid_BC_2D_mpp(var_nest, var_coarse, nest_domain, ind, wt, istag, jstag, &
-      npx, npy, bd, isg, ieg, jsg, jeg, nstep_in, nsplit_in, proc_in)
+      npx, npy, bd, isg, ieg, jsg, jeg, nest_level, nstep_in, nsplit_in, proc_in)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
    real, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag), intent(INOUT) :: var_nest
@@ -1189,6 +1195,7 @@ contains
    integer, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,2), intent(IN) :: ind
    real, dimension(bd%isd:bd%ied+istag,bd%jsd:bd%jed+jstag,4), intent(IN) :: wt
    integer, intent(IN) :: istag, jstag, npx, npy, isg, ieg, jsg, jeg
+   integer, intent(IN), OPTIONAL :: nest_level
    integer, intent(IN), OPTIONAL :: nstep_in, nsplit_in
    logical, intent(IN), OPTIONAL :: proc_in
 
@@ -1202,6 +1209,7 @@ contains
    real,    allocatable         :: nbuffer(:,:)
 
    integer :: i,j, ic, jc, istart, iend, k
+   integer :: nl = 1 !nest_level
 
    integer :: position
    logical :: process
@@ -1224,6 +1232,10 @@ contains
       process = .true.
    endif
 
+   if (PRESENT(nest_level)) then
+      nl = nest_level
+   endif
+
    if (istag == 1 .and. jstag == 1) then
       position = CORNER
    else if (istag == 0 .and. jstag == 1) then
@@ -1235,13 +1247,13 @@ contains
    end if
 
    call mpp_get_C2F_index(nest_domain, isw_f, iew_f, jsw_f, jew_f, isw_c, iew_c, jsw_c, jew_c, &
-        WEST,  position=position)
+        WEST, nest_level=nl, position=position)
    call mpp_get_C2F_index(nest_domain, ise_f, iee_f, jse_f, jee_f, ise_c, iee_c, jse_c, jee_c, &
-        EAST,  position=position)
+        EAST, nest_level=nl, position=position)
    call mpp_get_C2F_index(nest_domain, iss_f, ies_f, jss_f, jes_f, iss_c, ies_c, jss_c, jes_c, &
-        SOUTH,  position=position)
+        SOUTH, nest_level=nl, position=position)
    call mpp_get_C2F_index(nest_domain, isn_f, ien_f, jsn_f, jen_f, isn_c, ien_c, jsn_c, jen_c, &
-        NORTH,  position=position)
+        NORTH, nest_level=nl, position=position)
 
    if( iew_c .GE. isw_c .AND. jew_c .GE. jsw_c ) then
       allocate(wbuffer(isw_c:iew_c, jsw_c:jew_c))
@@ -1272,7 +1284,7 @@ contains
    nbuffer = 0
 
        call timing_on ('COMM_TOTAL')
-   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer,  position=position)
+   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer, nest_level=nl, position=position)
        call timing_off('COMM_TOTAL')
 
    if (process) then
@@ -1659,11 +1671,12 @@ contains
 
  end subroutine nested_grid_BC_3D
 
- subroutine nested_grid_BC_send_scalar(var_coarse, nest_domain, istag, jstag)
+ subroutine nested_grid_BC_send_scalar(var_coarse, nest_domain, istag, jstag, nest_level)
 
    real, dimension(:,:,:), intent(IN) :: var_coarse
    type(nest_domain_type), intent(INOUT) :: nest_domain
    integer, intent(IN) :: istag, jstag
+   integer, intent(IN) :: nest_level
 
    integer                      :: position
 
@@ -1684,17 +1697,18 @@ contains
    end if
 
        call timing_on ('COMM_TOTAL')
-   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer,  position=position)
+   call mpp_update_nest_fine(var_coarse, nest_domain, wbuffer, sbuffer, ebuffer, nbuffer, nest_level=nest_level, position=position)
        call timing_off('COMM_TOTAL')
 
  end subroutine nested_grid_BC_send_scalar
 
  subroutine nested_grid_BC_recv_scalar(nest_domain, istag, jstag, npz, &
-      bd, nest_BC_buffers)
+      bd, nest_BC_buffers, nest_level)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
    type(nest_domain_type), intent(INOUT) :: nest_domain
    integer, intent(IN) :: istag, jstag, npz
+   integer, intent(IN) :: nest_level
 
    type(fv_nest_BC_type_3d), intent(INOUT), target :: nest_BC_buffers
 
@@ -1720,19 +1734,20 @@ contains
    end if
 
    if (.not. allocated(nest_BC_buffers%west_t1) ) then
-      call init_nest_bc_type(nest_domain, nest_BC_buffers, npz, position)
+      call init_nest_bc_type(nest_domain, nest_BC_buffers, npz, nest_level, position)
    endif
 
        call timing_on ('COMM_TOTAL')
    call mpp_update_nest_fine(var_coarse_dummy, nest_domain, nest_BC_buffers%west_t1, nest_BC_buffers%south_t1, &
-            nest_BC_buffers%east_t1, nest_BC_buffers%north_t1,  position=position)
+            nest_BC_buffers%east_t1, nest_BC_buffers%north_t1, nest_level=nest_level, position=position)
        call timing_off('COMM_TOTAL')
 
  end subroutine nested_grid_BC_recv_scalar
 
- subroutine nested_grid_BC_send_vector(u_coarse, v_coarse, nest_domain, flags, gridtype)
+ subroutine nested_grid_BC_send_vector(u_coarse, v_coarse, nest_domain, nest_level, flags, gridtype)
    real, dimension(:,:,:), intent(IN)    :: u_coarse, v_coarse
    type(nest_domain_type), intent(INOUT) :: nest_domain
+   integer,                intent(IN)    :: nest_level
    integer, optional,      intent(IN)    :: flags, gridtype
 
    real :: wbufferx(1,1,1), wbuffery(1,1,1)
@@ -1740,17 +1755,19 @@ contains
    real :: sbufferx(1,1,1), sbuffery(1,1,1)
    real :: nbufferx(1,1,1), nbuffery(1,1,1)
 
+   integer :: nl = 1
+
        call timing_on ('COMM_TOTAL')
    call mpp_update_nest_fine(u_coarse, v_coarse, nest_domain, wbufferx,wbuffery, sbufferx, sbuffery,  &
-                             ebufferx, ebuffery, nbufferx, nbuffery, flags, gridtype)
+                             ebufferx, ebuffery, nbufferx, nbuffery, nest_level=nest_level, flags=flags, gridtype=gridtype)
        call timing_off('COMM_TOTAL')
 
  end subroutine nested_grid_BC_send_vector
 
- subroutine init_nest_bc_type(nest_domain, nest_BC_buffers, npz, position)
+ subroutine init_nest_bc_type(nest_domain, nest_BC_buffers, npz, nest_level, position)
    type(nest_domain_type),   intent(INOUT) :: nest_domain
    type(fv_nest_BC_type_3d), intent(INOUT) :: nest_BC_buffers
-   integer,                  intent(IN)    :: npz, position
+   integer,                  intent(IN)    :: npz, position, nest_level
 
    integer                      :: isw_f, iew_f, jsw_f, jew_f, isw_c, iew_c, jsw_c, jew_c
    integer                      :: ise_f, iee_f, jse_f, jee_f, ise_c, iee_c, jse_c, jee_c
@@ -1759,13 +1776,13 @@ contains
    integer                      :: i, j, k
 
       call mpp_get_C2F_index(nest_domain, isw_f, iew_f, jsw_f, jew_f, isw_c, iew_c, jsw_c, jew_c, &
-           WEST,  position=position)
+           WEST, nest_level=nest_level, position=position)
       call mpp_get_C2F_index(nest_domain, ise_f, iee_f, jse_f, jee_f, ise_c, iee_c, jse_c, jee_c, &
-           EAST,  position=position)
+           EAST, nest_level=nest_level, position=position)
       call mpp_get_C2F_index(nest_domain, iss_f, ies_f, jss_f, jes_f, iss_c, ies_c, jss_c, jes_c, &
-           SOUTH,  position=position)
+           SOUTH, nest_level=nest_level, position=position)
       call mpp_get_C2F_index(nest_domain, isn_f, ien_f, jsn_f, jen_f, isn_c, ien_c, jsn_c, jen_c, &
-           NORTH,  position=position)
+           NORTH, nest_level=nest_level, position=position)
 
       if( iew_c .GE. isw_c .AND. jew_c .GE. jsw_c ) then
          If (.not. allocated(nest_BC_buffers%west_t1)) allocate(nest_BC_buffers%west_t1(isw_c:iew_c, jsw_c:jew_c,npz))
@@ -1831,12 +1848,13 @@ contains
 
  end subroutine init_nest_bc_type
 
- subroutine nested_grid_BC_recv_vector(nest_domain, npz, bd, nest_BC_u_buffers, nest_BC_v_buffers, flags, gridtype)
+ subroutine nested_grid_BC_recv_vector(nest_domain, npz, bd, nest_BC_u_buffers, nest_BC_v_buffers, nest_level, flags, gridtype)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
    type(nest_domain_type), intent(INOUT) :: nest_domain
    integer, intent(IN) :: npz
    type(fv_nest_BC_type_3d), intent(INOUT), target :: nest_BC_u_buffers, nest_BC_v_buffers
+   integer,                  intent(IN)  :: nest_level
    integer, optional, intent(IN) :: flags, gridtype  
 
    real, dimension(1,1,npz) :: u_coarse_dummy, v_coarse_dummy
@@ -1847,17 +1865,17 @@ contains
    call get_vector_position(position_x, position_y, gridtype)
 
    if (.not. allocated(nest_BC_u_buffers%west_t1) ) then
-      call init_nest_bc_type(nest_domain, nest_BC_u_buffers, npz, position_x)
+      call init_nest_bc_type(nest_domain, nest_BC_u_buffers, npz, nest_level, position_x)
    endif
    if (.not. allocated(nest_BC_v_buffers%west_t1) ) then
-      call init_nest_bc_type(nest_domain, nest_BC_v_buffers, npz, position_y)
+      call init_nest_bc_type(nest_domain, nest_BC_v_buffers, npz, nest_level, position_y)
    endif
 
        call timing_on ('COMM_TOTAL')
    call mpp_update_nest_fine(u_coarse_dummy, v_coarse_dummy, nest_domain, &
         nest_BC_u_buffers%west_t1, nest_BC_v_buffers%west_t1, nest_BC_u_buffers%south_t1, nest_BC_v_buffers%south_t1,  &
         nest_BC_u_buffers%east_t1, nest_BC_v_buffers%east_t1, nest_BC_u_buffers%north_t1, nest_BC_v_buffers%north_t1,  &
-        flags, gridtype)
+        nest_level, flags, gridtype)
        call timing_off('COMM_TOTAL')
 
  end subroutine nested_grid_BC_recv_vector
@@ -2209,61 +2227,65 @@ contains
  end subroutine nested_grid_BC_apply_intT
 
  subroutine update_coarse_grid_mpp_2d(var_coarse, var_nest, nest_domain, dx, dy, area, &
-      isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, isu, ieu, jsu, jeu, npx, npy, &
-      istag, jstag, r, nestupdate, upoff, nsponge, parent_proc, child_proc, parent_grid)
+      bd, isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, isu, ieu, jsu, jeu, npx, npy, &
+      istag, jstag, r, nestupdate, upoff, nsponge, parent_proc, child_proc, parent_grid, nest_level)
 
+   type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n
    integer, intent(IN) :: isu, ieu, jsu, jeu
    integer, intent(IN) :: istag, jstag, r, nestupdate, upoff, nsponge
    integer, intent(IN) :: npx, npy
-   real, intent(IN)    :: var_nest(is_n:ie_n+istag,js_n:je_n+jstag)
-   real, intent(INOUT) :: var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag)
-   real, intent(IN)    :: dx(isd:ied,jsd:jed+1)
-   real, intent(IN)    :: dy(isd:ied+1,jsd:jed)
-   real, intent(IN)    :: area(isd:ied,jsd:jed)
+   real, intent(IN), target    :: var_nest(is_n:ie_n+istag,js_n:je_n+jstag)
+   real, intent(INOUT), target :: var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag)
+   real, intent(IN)    :: dx(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
+   real, intent(IN)    :: dy(bd%isd:bd%ied+1,bd%jsd:bd%jed)
+   real, intent(IN)    :: area(bd%isd:bd%ied,bd%jsd:bd%jed)
    logical, intent(IN) :: parent_proc, child_proc
    type(fv_atmos_type), pointer, intent(IN) :: parent_grid
    type(nest_domain_type), intent(INOUT) :: nest_domain
+   integer, intent(IN) :: nest_level
 
    real :: var_nest_3d(is_n:ie_n+istag,js_n:je_n+jstag,1)
    real :: var_coarse_3d(isd_p:ied_p+istag,jsd_p:jed_p+jstag,1)
+   pointer(ptr_nest, var_nest_3d)
+   pointer(ptr_coarse, var_coarse_3d)
 
-   if (child_proc .and. size(var_nest) > 1) var_nest_3d(is_n:ie_n+istag,js_n:je_n+jstag,1) = var_nest(is_n:ie_n+istag,js_n:je_n+jstag)
-   if (parent_proc .and. size(var_coarse) > 1) var_coarse_3d(isd_p:ied_p+istag,jsd_p:jed_p,1) = var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag)
+   if (child_proc .and. size(var_nest) > 1) ptr_nest = LOC(var_nest)
+   if (parent_proc .and. size(var_coarse) > 1) ptr_coarse = LOC(var_coarse)
 
    call update_coarse_grid_mpp(var_coarse_3d, var_nest_3d, &
         nest_domain, dx, dy, area, &
-        isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
+        bd, isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
         isu, ieu, jsu, jeu, npx, npy, 1, &
         istag, jstag, r, nestupdate, upoff, nsponge, &
-        parent_proc, child_proc, parent_grid )
-
-   if (size(var_coarse) > 1 .and. parent_proc) var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag) = var_coarse_3d(isd_p:ied_p+istag,jsd_p:jed_p,1)
+        parent_proc, child_proc, parent_grid, nest_level )
 
  end subroutine update_coarse_grid_mpp_2d
 
 
   subroutine update_coarse_grid_mpp(var_coarse, var_nest, nest_domain, dx, dy, area, &
-      isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
+      bd, isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
       isu, ieu, jsu, jeu, npx, npy, npz, &
       istag, jstag, r, nestupdate, upoff, nsponge, &
-      parent_proc, child_proc, parent_grid)
+      parent_proc, child_proc, parent_grid, nest_level)
 
    !This routine assumes the coarse and nested grids are properly
    ! aligned, and that in particular for odd refinement ratios all
    ! coarse-grid cells (faces) coincide with nested-grid cells (faces)
 
+   type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n
    integer, intent(IN) :: isu, ieu, jsu, jeu
    integer, intent(IN) :: istag, jstag, npx, npy, npz, r, nestupdate, upoff, nsponge
    real, intent(IN)    :: var_nest(is_n:ie_n+istag,js_n:je_n+jstag,npz)
    real, intent(INOUT) :: var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag,npz)
-   real, intent(IN)    :: area(isd:ied,jsd:jed)
-   real, intent(IN)    :: dx(isd:ied,jsd:jed+1)
-   real, intent(IN)    :: dy(isd:ied+1,jsd:jed)
+   real, intent(IN)    :: area(bd%isd:bd%ied,bd%jsd:bd%jed)
+   real, intent(IN)    :: dx(bd%isd:bd%ied,bd%jsd:bd%jed+1)
+   real, intent(IN)    :: dy(bd%isd:bd%ied+1,bd%jsd:bd%jed)
    logical, intent(IN) :: parent_proc, child_proc
    type(fv_atmos_type), pointer, intent(IN) :: parent_grid
    type(nest_domain_type), intent(INOUT) :: nest_domain
+   integer, intent(IN) :: nest_level
 
    integer :: in, jn, ini, jnj, s, qr
    integer :: is_c, ie_c, js_c, je_c, is_f, ie_f, js_f, je_f
@@ -2283,7 +2305,7 @@ contains
       position = CENTER
    end if
 
-   call mpp_get_F2C_index(nest_domain, is_c, ie_c, js_c, je_c, is_f, ie_f, js_f, je_f, position=position)
+   call mpp_get_F2C_index(nest_domain, is_c, ie_c, js_c, je_c, is_f, ie_f, js_f, je_f, nest_level=nest_level, position=position)
    if (child_proc) then
       allocate(coarse_dat_send(is_c:ie_c, js_c:je_c,npz))
       coarse_dat_send = -1200.
@@ -2292,12 +2314,13 @@ contains
 
    if (child_proc) then
       call fill_coarse_data_send(coarse_dat_send, var_nest, dx, dy, area, &
-            is_c, ie_c, js_c, je_c, is_f, js_f, is_n, ie_n, js_n, je_n, &
+            bd, is_c, ie_c, js_c, je_c, is_f, js_f, is_n, ie_n, js_n, je_n, &
             npx, npy, npz, istag, jstag, r, nestupdate)
    endif
 
       call timing_on('COMM_TOTAL')
-   call mpp_update_nest_coarse(field_in=coarse_dat_send, nest_domain=nest_domain, field_out=coarse_dat_recv, position=position)
+   call mpp_update_nest_coarse(field_in=coarse_dat_send, nest_domain=nest_domain, field_out=coarse_dat_recv, &
+        nest_level=nest_level, position=position)
 
    if (allocated(coarse_dat_send)) then
       deallocate(coarse_dat_send)
@@ -2308,9 +2331,9 @@ contains
    s = r/2 !rounds down (since r > 0)
    qr = r*upoff + nsponge - s
 
-   if (parent_proc .and. .not. (ieu < isu .or. jeu < jsu)) then
+   if (parent_proc .and. .not. (ie_c < is_c .or. je_c < js_c)) then
       call fill_var_coarse(var_coarse, coarse_dat_recv, isd_p, ied_p, jsd_p, jed_p, &
-           isu, ieu, jsu, jeu, npx, npy, npz, istag, jstag, nestupdate, parent_grid)
+           is_c, ie_c, js_c, je_c, npx, npy, npz, istag, jstag, nestupdate, parent_grid)
    endif
 
    if (allocated(coarse_dat_recv)) deallocate(coarse_dat_recv)
@@ -2318,17 +2341,18 @@ contains
  end subroutine update_coarse_grid_mpp
 
  subroutine fill_coarse_data_send(coarse_dat_send, var_nest, dx, dy, area, &
-      is_c, ie_c, js_c, je_c, is_f, js_f, is_n, ie_n, js_n, je_n, &
+      bd, is_c, ie_c, js_c, je_c, is_f, js_f, is_n, ie_n, js_n, je_n, &
       npx, npy, npz, istag, jstag, r, nestupdate)
+   type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: is_c, ie_c, js_c, je_c, is_n, ie_n, js_n, je_n
    integer, intent(IN) :: is_f, js_f
    integer, intent(IN) :: istag, jstag
    integer, intent(IN) :: npx, npy, npz, r, nestupdate
    real, intent(INOUT) :: coarse_dat_send(is_c:ie_c,js_c:je_c,npz)
    real, intent(IN)    :: var_nest(is_n:ie_n+istag,js_n:je_n+jstag,npz)
-   real, intent(IN)    :: area(isd:ied,jsd:jed)
-   real, intent(IN)    :: dx(isd:ied,jsd:jed+1)
-   real, intent(IN)    :: dy(isd:ied+1,jsd:jed)
+   real, intent(IN)    :: area(bd%isd:bd%ied,bd%jsd:bd%jed)
+   real, intent(IN)    :: dx(bd%isd:bd%ied,bd%jsd:bd%jed+1)
+   real, intent(IN)    :: dy(bd%isd:bd%ied+1,bd%jsd:bd%jed)
    integer :: in, jn, ini, jnj, k, j, i
    real :: val
 
@@ -2429,19 +2453,19 @@ contains
  end subroutine fill_coarse_data_send
 
  subroutine fill_var_coarse(var_coarse, coarse_dat_recv, isd_p, ied_p, jsd_p, jed_p, &
-      isu, ieu, jsu, jeu, npx, npy, npz, istag, jstag, nestupdate, parent_grid)
+      is_c, ie_c, js_c, je_c, npx, npy, npz, istag, jstag, nestupdate, parent_grid)
 
    !This routine assumes the coarse and nested grids are properly
    ! aligned, and that in particular for odd refinement ratios all
    ! coarse-grid cells (faces) coincide with nested-grid cells (faces)
 
    integer, intent(IN) :: isd_p, ied_p, jsd_p, jed_p
-   integer, intent(IN) :: isu, ieu, jsu, jeu
+   integer, intent(IN) :: is_c, ie_c, js_c, je_c
    integer, intent(IN) :: istag, jstag
    integer, intent(IN) :: npx, npy, npz, nestupdate
    real, intent(INOUT) :: var_coarse(isd_p:ied_p+istag,jsd_p:jed_p+jstag,npz)
    real, intent(INOUT) :: coarse_dat_recv(isd_p:ied_p+istag,jsd_p:jed_p+jstag,npz)
-   type(fv_atmos_type), pointer, intent(IN) :: parent_grid
+   type(fv_atmos_type), intent(IN) :: parent_grid
 
    integer :: i, j, k
 
@@ -2450,10 +2474,10 @@ contains
       select case (nestupdate) 
       case (1,2,6,7,8) ! 1 = Conserving update on all variables; 2 = conserving update for cell-centered values; 6 = conserving remap-update
 
-!$OMP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,coarse_dat_recv,parent_grid,var_coarse) 
+!$OMP parallel do default(none) shared(npz,js_c,je_c,is_c,ie_c,coarse_dat_recv,parent_grid,var_coarse) 
          do k=1,npz
-         do j=jsu,jeu
-         do i=isu,ieu
+         do j=js_c,je_c
+         do i=is_c,ie_c
             var_coarse(i,j,k) = coarse_dat_recv(i,j,k)*parent_grid%gridstruct%rarea(i,j)
          end do
          end do
@@ -2473,10 +2497,10 @@ contains
       select case (nestupdate) 
       case (1,6,7,8)
 
-!$OMP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,coarse_dat_recv,parent_grid,var_coarse) 
+!$OMP parallel do default(none) shared(npz,js_c,je_c,is_c,ie_c,coarse_dat_recv,parent_grid,var_coarse) 
          do k=1,npz
-         do j=jsu,jeu+1
-         do i=isu,ieu
+         do j=js_c,je_c+1
+         do i=is_c,ie_c
             var_coarse(i,j,k) = coarse_dat_recv(i,j,k)*parent_grid%gridstruct%rdx(i,j)
          end do
          end do
@@ -2493,10 +2517,10 @@ contains
       select case (nestupdate) 
       case (1,6,7,8)   !averaging update; in-line average for face-averaged values instead of areal average
 
-!$OMP parallel do default(none) shared(npz,jsu,jeu,isu,ieu,coarse_dat_recv,parent_grid,var_coarse) 
+!$OMP parallel do default(none) shared(npz,js_c,je_c,is_c,ie_c,coarse_dat_recv,parent_grid,var_coarse) 
          do k=1,npz
-         do j=jsu,jeu
-         do i=isu,ieu+1
+         do j=js_c,je_c
+         do i=is_c,ie_c+1
             var_coarse(i,j,k) = coarse_dat_recv(i,j,k)*parent_grid%gridstruct%rdy(i,j)
          end do
          end do
@@ -2514,15 +2538,16 @@ contains
  end subroutine fill_var_coarse
 
   subroutine update_coarse_grid_mpp_vector(u_coarse, v_coarse, u_nest, v_nest, nest_domain, dx, dy, area, &
-      isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
+      bd, isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n, &
       isu, ieu, jsu, jeu, npx, npy, npz, istag_u, jstag_u, istag_v, jstag_v, &
       r, nestupdate, upoff, nsponge, &
-      parent_proc, child_proc, parent_grid, flags, gridtype)
+      parent_proc, child_proc, parent_grid, nest_level, flags, gridtype)
 
    !This routine assumes the coarse and nested grids are properly
    ! aligned, and that in particular for odd refinement ratios all
    ! coarse-grid cells (faces) coincide with nested-grid cells (faces)
 
+   type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: isd_p, ied_p, jsd_p, jed_p, is_n, ie_n, js_n, je_n
    integer, intent(IN) :: isu, ieu, jsu, jeu
    integer, intent(IN) :: istag_u, jstag_u, istag_v, jstag_v
@@ -2531,11 +2556,12 @@ contains
    real, intent(INOUT) :: u_coarse(isd_p:ied_p+istag_u,jsd_p:jed_p+jstag_u,npz)
    real, intent(IN)    :: v_nest(is_n:ie_n+istag_v,js_n:je_n+jstag_v,npz)
    real, intent(INOUT) :: v_coarse(isd_p:ied_p+istag_v,jsd_p:jed_p+jstag_v,npz)
-   real, intent(IN)    :: area(isd:ied,jsd:jed)
-   real, intent(IN)    :: dx(isd:ied,jsd:jed+1)
-   real, intent(IN)    :: dy(isd:ied+1,jsd:jed)
+   real, intent(IN)    :: area(bd%isd:bd%ied,bd%jsd:bd%jed)
+   real, intent(IN)    :: dx(bd%isd:bd%ied,bd%jsd:bd%jed+1)
+   real, intent(IN)    :: dy(bd%isd:bd%ied+1,bd%jsd:bd%jed)
    logical, intent(IN) :: parent_proc, child_proc
-   type(fv_atmos_type), pointer, intent(IN) :: parent_grid
+   type(fv_atmos_type), intent(INOUT) :: parent_grid
+   integer, intent(IN) :: nest_level
    type(nest_domain_type), intent(INOUT) :: nest_domain
    integer, optional,      intent(IN)    :: flags, gridtype
 
@@ -2550,8 +2576,10 @@ contains
 
    call get_vector_position(position_x, position_y, gridtype)
 
-   call mpp_get_F2C_index(nest_domain, is_cx, ie_cx, js_cx, je_cx, is_fx, ie_fx, js_fx, je_fx, position=position_x)
-   call mpp_get_F2C_index(nest_domain, is_cy, ie_cy, js_cy, je_cy, is_fy, ie_fy, js_fy, je_fy, position=position_y)
+   call mpp_get_F2C_index(nest_domain, is_cx, ie_cx, js_cx, je_cx, is_fx, ie_fx, js_fx, je_fx, &
+        nest_level=nest_level, position=position_x)
+   call mpp_get_F2C_index(nest_domain, is_cy, ie_cy, js_cy, je_cy, is_fy, ie_fy, js_fy, je_fy, &
+        nest_level=nest_level, position=position_y)
    if (child_proc) then
       allocate(coarse_dat_send_u(is_cx:ie_cx, js_cx:je_cx,npz))
       allocate(coarse_dat_send_v(is_cy:ie_cy, js_cy:je_cy,npz))
@@ -2563,16 +2591,16 @@ contains
 
    if (child_proc) then
       call fill_coarse_data_send(coarse_dat_send_u, u_nest, dx, dy, area, &
-      is_cx, ie_cx, js_cx, je_cx, is_fx, js_fx, is_n, ie_n, js_n, je_n, &
-      npx, npy, npz, istag_u, jstag_u, r, nestupdate)
+           bd, is_cx, ie_cx, js_cx, je_cx, is_fx, js_fx, is_n, ie_n, js_n, je_n, &
+           npx, npy, npz, istag_u, jstag_u, r, nestupdate)
       call fill_coarse_data_send(coarse_dat_send_v, v_nest, dx, dy, area, &
-      is_cy, ie_cy, js_cy, je_cy, is_fy, js_fy, is_n, ie_n, js_n, je_n, &
-      npx, npy, npz, istag_v, jstag_v, r, nestupdate)
+           bd, is_cy, ie_cy, js_cy, je_cy, is_fy, js_fy, is_n, ie_n, js_n, je_n, &
+           npx, npy, npz, istag_v, jstag_v, r, nestupdate)
    endif
 
       call timing_on('COMM_TOTAL')
    call mpp_update_nest_coarse(coarse_dat_send_u, coarse_dat_send_v, nest_domain, coarse_dat_recv_u, &
-                               coarse_dat_recv_v, flags, gridtype)
+                               coarse_dat_recv_v, nest_level, flags, gridtype)
 
    if (allocated(coarse_dat_send_u)) deallocate(coarse_dat_send_u)
    if (allocated(coarse_dat_send_v)) deallocate(coarse_dat_send_v)
@@ -2582,11 +2610,13 @@ contains
    s = r/2 !rounds down (since r > 0)
    qr = r*upoff + nsponge - s
 
-   if (parent_proc .and. .not. (ieu < isu .or. jeu < jsu)) then
+   if (parent_proc .and. .not. (ie_cx < is_cx .or. je_cx < js_cx)) then
       call fill_var_coarse(u_coarse, coarse_dat_recv_u, isd_p, ied_p, jsd_p, jed_p, &
-           isu, ieu, jsu, jeu, npx, npy, npz, istag_u, jstag_u, nestupdate, parent_grid)
+           is_cx, ie_cx, js_cx, je_cx, npx, npy, npz, istag_u, jstag_u, nestupdate, parent_grid)
+   endif
+   if (parent_proc .and. .not. (ie_cy < is_cy .or. je_cy < js_cy)) then
       call fill_var_coarse(v_coarse, coarse_dat_recv_v, isd_p, ied_p, jsd_p, jed_p, &
-           isu, ieu, jsu, jeu, npx, npy, npz, istag_v, jstag_v, nestupdate, parent_grid)
+           is_cy, ie_cy, js_cy, je_cy, npx, npy, npz, istag_v, jstag_v, nestupdate, parent_grid)
    endif
 
    if (allocated(coarse_dat_recv_u)) deallocate(coarse_dat_recv_u)
