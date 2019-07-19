@@ -321,12 +321,12 @@ contains
 
 subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
-        graupel, hydrostatic, phys_hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
+        graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
         te, last_step)
     
     implicit none
     
-    logical, intent (in) :: hydrostatic, phys_hydrostatic
+    logical, intent (in) :: hydrostatic
     logical, intent (in) :: last_step
     logical, intent (in) :: consv_te
     
@@ -364,10 +364,10 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     ! define heat capacity of dry air and water vapor based on hydrostatical property
     ! -----------------------------------------------------------------------
     
-    if (hydrostatic .or. phys_hydrostatic) then
+    if (hydrostatic) then
         c_air = cp_air
         c_vap = cp_vap
-        if (hydrostatic) do_sedi_w = .false.
+        do_sedi_w = .false.
     else
         c_air = cv_air
         c_vap = cv_vap
