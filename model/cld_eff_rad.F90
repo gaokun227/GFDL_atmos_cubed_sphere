@@ -2,13 +2,13 @@
 ! cloud radii diagnosis built for gfdl cloud microphysics
 ! authors: linjiong zhou and shian - jiann lin
 ! =======================================================================
-module cloud_diagnosis_mod
+module cld_eff_rad_mod
     
     implicit none
     
     private
     
-    public cloud_diagnosis, cloud_diagnosis_init
+    public cld_eff_rad, cld_eff_rad_init
     
     real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
     real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
@@ -72,7 +72,7 @@ module cloud_diagnosis_mod
     ! 4: kristjansson et al., 2000
     ! 5: wyser, 1998
     
-    namelist / cloud_diagnosis_nml / &
+    namelist / cld_eff_rad_nml / &
         ql0_max, qi0_max, qi0_rei, ccn_o, ccn_l, qmin, beta, liq_ice_combine, rewflag, reiflag, &
         rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, regmin, regmax, &
         betaw, betai, betar, betas, betag
@@ -83,7 +83,7 @@ contains
 ! radius of cloud species diagnosis
 ! =======================================================================
 
-subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
+subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
         qcw, qci, qcr, qcs, qcg, rew, rei, rer, res, reg, &
         cld, cloud, snowd, cnvw, cnvi, cnvc)
     
@@ -506,9 +506,9 @@ subroutine cloud_diagnosis (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg,
         
     enddo
     
-end subroutine cloud_diagnosis
+end subroutine cld_eff_rad
 
-subroutine cloud_diagnosis_init (nlunit, input_nml_file, logunit, fn_nml)
+subroutine cld_eff_rad_init (nlunit, input_nml_file, logunit, fn_nml)
     
     implicit none
     
@@ -522,20 +522,20 @@ subroutine cloud_diagnosis_init (nlunit, input_nml_file, logunit, fn_nml)
     logical :: exists
     
 #ifdef INTERNAL_FILE_NML
-    read (input_nml_file, nml = cloud_diagnosis_nml, iostat = ios)
+    read (input_nml_file, nml = cld_eff_rad_nml, iostat = ios)
 #else
     inquire (file = trim (fn_nml), exist = exists)
     if (.not. exists) then
-        write (6, *) 'cloud_diagnosis :: namelist file: ', trim (fn_nml), ' does not exist'
+        write (6, *) 'cld_eff_rad :: namelist file: ', trim (fn_nml), ' does not exist'
         stop
     else
         open (unit = nlunit, file = fn_nml, readonly, status = 'old', iostat = ios)
     endif
     rewind (nlunit)
-    read (nlunit, nml = cloud_diagnosis_nml)
+    read (nlunit, nml = cld_eff_rad_nml)
     close (nlunit)
 #endif
     
-end subroutine cloud_diagnosis_init
+end subroutine cld_eff_rad_init
 
-end module cloud_diagnosis_mod
+end module cld_eff_rad_mod

@@ -227,7 +227,7 @@ module gfdl_mp_mod
     real :: ql_mlt = 2.0e-3 ! max value of cloud water allowed from melted cloud ice
     real :: qs_mlt = 1.0e-6 ! max cloud water due to snow melt
     
-    real :: ql_gen = 1.0e-3 ! max cloud water generation during remapping step if fast_sat_adj = .t.
+    real :: ql_gen = 1.0e-3 ! max cloud water generation during remapping step if do_sat_adj = .t.
     real :: qi_gen = 1.82e-6 ! max cloud ice generation during remapping step
     
     ! cloud condensate upper bounds: "safety valves" for ql & qi
@@ -279,7 +279,7 @@ module gfdl_mp_mod
     ! cloud microphysics switchers
     
     ! this should be removed with the inline code
-    logical :: fast_sat_adj = .false. ! has fast saturation adjustments
+    logical :: do_sat_adj = .false. ! has fast saturation adjustments
     logical :: z_slope_liq = .true. ! use linear mono slope for autocconversions
     logical :: z_slope_ice = .false. ! use linear mono slope for autocconversions
     logical :: use_ccn = .false. ! must be true when prog_ccn is false
@@ -303,7 +303,7 @@ module gfdl_mp_mod
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
         vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
-        qi0_crt, fast_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
+        qi0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
         const_vs, const_vg, const_vr, use_ccn, rthresh, ccn_l, ccn_o, qc_crt, &
         tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &

@@ -3,21 +3,21 @@
 ! developer: shian - jiann lin, linjiong zhou
 ! =======================================================================
 
-module fv_cmp_mod
+module fast_sat_adj_mod
     
     use constants_mod, only: rvgas, rdgas, grav, hlv, hlf, cp_air
     !use fv_mp_mod, only: is_master
     use fv_arrays_mod, only: r_grid
-    use gfdl_cloud_microphys_mod, only: ql_gen, qi_gen, qi0_max, ql_mlt, ql0_max, qi_lim, qs_mlt
-    use gfdl_cloud_microphys_mod, only: icloud_f, sat_adj0, t_sub, cld_min
-    use gfdl_cloud_microphys_mod, only: tau_r2g, tau_smlt, tau_i2s, tau_v2l, tau_l2v, tau_imlt, tau_l2r
-    use gfdl_cloud_microphys_mod, only: rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
+    use gfdl_cld_mp_mod, only: ql_gen, qi_gen, qi0_max, ql_mlt, ql0_max, qi_lim, qs_mlt
+    use gfdl_cld_mp_mod, only: icloud_f, sat_adj0, t_sub, cld_min
+    use gfdl_cld_mp_mod, only: tau_r2g, tau_smlt, tau_i2s, tau_v2l, tau_l2v, tau_imlt, tau_l2r
+    use gfdl_cld_mp_mod, only: rad_rain, rad_snow, rad_graupel, dw_ocean, dw_land
     
     implicit none
     
     private
     
-    public fv_sat_adj, qs_init
+    public fast_sat_adj, qs_init
     
     ! real, parameter :: cp_air = cp_air ! 1004.6, heat capacity of dry air at constant pressure, come from constants_mod
     real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0, heat capacity of water vapor at constant pressure
@@ -70,7 +70,7 @@ contains
 ! handles the heat release due to in situ phase changes
 ! =======================================================================
 
-subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
+subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         te0, qv, ql, qi, qr, qs, qg, hs, dpln, delz, pt, dp, q_con, cappa, &
         area, dtdt, out_dt, last_step, do_qa, qa)
     
@@ -756,7 +756,7 @@ subroutine fv_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         
     enddo ! end j loop
     
-end subroutine fv_sat_adj
+end subroutine fast_sat_adj
 
 ! =======================================================================
 ! compute the saturated specific humidity for table ii
@@ -1095,4 +1095,4 @@ subroutine qs_table2 (n)
     
 end subroutine qs_table2
 
-end module fv_cmp_mod
+end module fast_sat_adj_mod

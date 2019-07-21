@@ -50,8 +50,8 @@ use fv_timing_mod,      only: timing_on, timing_off
 use fv_restart_mod,     only: fv_restart
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
-use gfdl_cloud_microphys_mod, only: gfdl_cloud_microphys_init, gfdl_cloud_microphys_end
-use cloud_diagnosis_mod,only: cloud_diagnosis_init
+use gfdl_cld_mp_mod,    only: gfdl_cld_mp_init, gfdl_cld_mp_end
+use cld_eff_rad_mod,    only: cld_eff_rad_init
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
 use fv_mp_mod,          only: switch_current_Atm
 use field_manager_mod,  only: MODEL_ATMOS
@@ -164,9 +164,9 @@ contains
            if ( grids_on_this_pe(n) ) then
                 call fv_phys_init(isc,iec,jsc,jec,Atm(n)%flagstruct%nwat, Atm(n)%ts,   &
                              Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
-                if ( Atm(n)%flagstruct%nwat==6) call gfdl_cloud_microphys_init(mpp_pe(),  &
+                if ( Atm(n)%flagstruct%nwat==6) call gfdl_cld_mp_init(mpp_pe(),  &
                                                 mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml) 
-                if ( Atm(n)%flagstruct%nwat==6) call cloud_diagnosis_init(nlunit, input_nml_file, stdlog(), fn_nml)
+                if ( Atm(n)%flagstruct%nwat==6) call cld_eff_rad_init(nlunit, input_nml_file, stdlog(), fn_nml)
            endif
         endif
 
@@ -535,7 +535,7 @@ contains
     call get_time (fv_time, seconds,  days)
 
     do n=1,ngrids
-       if ( Atm(n)%flagstruct%moist_phys .and. Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(N)) call gfdl_cloud_microphys_end
+       if ( Atm(n)%flagstruct%moist_phys .and. Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(N)) call gfdl_cld_mp_end
     enddo
 
     call fv_end(Atm, mytile)
