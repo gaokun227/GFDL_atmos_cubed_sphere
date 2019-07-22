@@ -36,8 +36,6 @@ module gfdl_mp_mod
     logical :: module_is_initialized = .false.
     logical :: qsmith_tables_initialized = .false.
     
-    character (len = 17) :: mod_name = 'gfdl_mp'
-    
     real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
     real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
     real, parameter :: rvgas = 461.50 ! gfs: gas constant for water vapor
@@ -3158,7 +3156,6 @@ end subroutine setupm
 ! initialization of gfdl cloud microphysics
 ! =======================================================================
 
-!subroutine gfdl_mp_init (id, jd, kd, axes, time)
 subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
     
     implicit none
