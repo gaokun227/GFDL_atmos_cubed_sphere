@@ -5,7 +5,6 @@
 ! bears little to no similarity to the original lin mp in zetac.
 ! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
 ! developer: shian - jiann lin, linjiong zhou
-! revision: inline gfdl cloud microphysics, 9 / 8 / 2017
 ! =======================================================================
 
 module gfdl_mp_mod
@@ -23,11 +22,14 @@ module gfdl_mp_mod
     
     private
     
-    public gfdl_mp_driver, gfdl_mp_init, gfdl_mp_end, wqs1, do_hail, wqs2, iqs1, iqs2
-    public mpdrv, sedi_heat, warm_rain, revap_racc, linear_prof, icloud, subgrid_z_proc, &
-        terminal_fall, check_column, implicit_fall, lagrangian_fall_ppm, cs_profile, &
-        cs_limiters, fall_speed, setupm, setup_con, qsmith_init, qs_tablew, qs_table2, &
-        qs_table3, qs_table, neg_adj, acr3d, smlt, gmlt, wet_bulb
+    public gfdl_mp_driver, gfdl_mp_init, gfdl_mp_end
+    public wqs1, wqs2, iqs1, iqs2, mpdrv, sedi_heat, warm_rain, revap_racc, &
+        linear_prof, icloud, subgrid_z_proc, terminal_fall, check_column, implicit_fall, &
+        lagrangian_fall_ppm, cs_profile, cs_limiters, fall_speed, setupm, setup_con, &
+        qsmith_init, qs_tablew, qs_table2, qs_table3, qs_table, neg_adj, acr3d, smlt, gmlt, &
+        wet_bulb, qsmith, qs_blend, es3_table1d, es2_table1d, esw_table1d, es2_table, &
+        esw_table, d_sat, qs1d_m, wqsat_moist, wqsat2_moist, qs1d_moist, revap_rac1
+    public rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh
     
     real :: missing_value = - 1.e10
     
@@ -135,7 +137,6 @@ module gfdl_mp_mod
     integer :: icloud_f = 0 ! cloud scheme
     integer :: irain_f = 0 ! cloud water to rain auto conversion scheme
     
-    logical :: de_ice = .false. ! to prevent excessive build - up of cloud ice from external sources
     logical :: sedi_transport = .true. ! transport of momentum in sedimentation
     logical :: do_sedi_w = .true. ! transport of vertical momentum during sedimentation
     logical :: do_sedi_heat = .true. ! transport of heat in sedimentation
@@ -177,6 +178,7 @@ module gfdl_mp_mod
     
     real :: t_min = 178. ! min temp to freeze - dry all water vapor
     real :: t_sub = 184. ! min temp for sublimation of cloud ice
+    real :: mp_time = 150. ! maximum micro - physics time step (sec)
     
     ! relative humidity increment
     
@@ -309,9 +311,23 @@ module gfdl_mp_mod
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
-        do_sedi_heat, sedi_transport, do_sedi_w, de_ice, icloud_f, irain_f, mp_print, &
+        do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, mp_print, &
         ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
-        do_cond_timescale
+        do_cond_timescale, mp_time
+    
+    public &
+        t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
+        vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
+        vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
+        qi0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
+        const_vs, const_vg, const_vr, use_ccn, rthresh, ccn_l, ccn_o, qc_crt, &
+        tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
+        tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
+        z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
+        rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
+        do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, mp_print, &
+        ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
+        do_cond_timescale, mp_time
     
 contains
 
@@ -476,7 +492,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     integer :: i, k, n
     
-    dts = dt_in / real (ntimes)
+    dts = dt_in / real (max (ntimes, int (dt_in / min (dt_in, mp_time))))
     
     dt_rain = dts * 0.5
     rdt = one_r8 / dts
@@ -2063,6 +2079,99 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
 end subroutine subgrid_z_proc
 
 ! =======================================================================
+! rain evaporation
+! =======================================================================
+
+subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den, hvar)
+    
+    implicit none
+    
+    logical, intent (in) :: hydrostatic
+    
+    integer, intent (in) :: is, ie
+    
+    real, intent (in) :: dt ! time step (s)
+    
+    real, intent (in), dimension (is:ie) :: den, hvar, qi, qs, qg
+    
+    real, intent (inout), dimension (is:ie) :: tz, qv, qr, ql
+    
+    real, dimension (is:ie) :: lcp2, denfac, q_liq, q_sol, cvm, lhl
+    
+    real :: dqv, qsat, dqsdt, evap, qden, q_plus, q_minus, sink
+    real :: tin, t2, qpz, dq, dqh
+    
+    integer :: i
+    
+    ! -----------------------------------------------------------------------
+    ! define latend heat coefficient
+    ! -----------------------------------------------------------------------
+    
+    do i = is, ie
+        lhl (i) = lv00 + d0_vap * tz (i)
+        q_liq (i) = ql (i) + qr (i)
+        q_sol (i) = qi (i) + qs (i) + qg (i)
+        cvm (i) = c_air + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
+        lcp2 (i) = lhl (i) / cvm (i)
+        ! denfac (i) = sqrt (sfcrho / den (i))
+    enddo
+    
+    do i = is, ie
+        if (qr (i) > qrmin .and. tz (i) > t_wfr) then
+            qpz = qv (i) + ql (i)
+            tin = tz (i) - lcp2 (i) * ql (i) ! presence of clouds suppresses the rain evap
+            qsat = wqs2 (tin, den (i), dqsdt)
+            dqh = max (ql (i), hvar (i) * max (qpz, qcmin))
+            dqv = qsat - qv (i)
+            q_minus = qpz - dqh
+            q_plus = qpz + dqh
+            
+            ! -----------------------------------------------------------------------
+            ! qsat must be > q_minus to activate evaporation
+            ! qsat must be < q_plus to activate accretion
+            ! -----------------------------------------------------------------------
+            
+            ! -----------------------------------------------------------------------
+            ! rain evaporation
+            ! -----------------------------------------------------------------------
+            
+            if (dqv > qvmin .and. qsat > q_minus) then
+                if (qsat > q_plus) then
+                    dq = qsat - qpz
+                else
+                    ! q_minus < qsat < q_plus
+                    ! dq == dqh if qsat == q_minus
+                    dq = 0.25 * (q_minus - qsat) ** 2 / dqh
+                endif
+                qden = qr (i) * den (i)
+                t2 = tin * tin
+                evap = crevp (1) * t2 * dq * (crevp (2) * sqrt (qden) + crevp (3) * exp (0.725 * log (qden))) &
+                     / (crevp (4) * t2 + crevp (5) * qsat * den (i))
+                evap = min (qr (i), dt * evap, dqv / (1. + lcp2 (i) * dqsdt))
+                qr (i) = qr (i) - evap
+                qv (i) = qv (i) + evap
+                q_liq (i) = q_liq (i) - evap
+                cvm (i) = c_air + qv (i) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
+                tz (i) = tz (i) - evap * lhl (i) / cvm (i)
+            endif
+            
+            ! -----------------------------------------------------------------------
+            ! accretion: pracc
+            ! -----------------------------------------------------------------------
+            
+            if (qr (i) > qrmin .and. ql (i) > 1.e-8 .and. qsat < q_plus) then
+                denfac (i) = sqrt (sfcrho / den (i))
+                sink = dt * denfac (i) * cracw * exp (0.95 * log (qr (i) * den (i)))
+                sink = sink / (1. + sink) * ql (i)
+                ql (i) = ql (i) - sink
+                qr (i) = qr (i) + sink
+            endif
+        endif
+    enddo
+    
+end subroutine revap_rac1
+
+! =======================================================================
 ! compute terminal fall speed
 ! consider cloud ice, snow, and graupel's melting during fall
 ! =======================================================================
@@ -3065,35 +3174,8 @@ subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
     integer :: ios
     logical :: exists
     
-    ! integer, intent (in) :: id, jd, kd
-    ! integer, intent (in) :: axes (4)
-    ! type (time_type), intent (in) :: time
-    
-    ! integer :: unit, io, ierr, k, logunit
-    ! logical :: flag
-    ! real :: tmp, q1, q2
-    
-    ! master = (mpp_pe () .eq.mpp_root_pe ())
-    
-    !#ifdef internal_file_nml
-    ! read (input_nml_file, nml = gfdl_mp_nml, iostat = io)
-    ! ierr = check_nml_error (io, 'gfdl_mp_nml')
-    !#else
-    ! if (file_exist ('input.nml')) then
-    ! unit = open_namelist_file ()
-    ! io = 1
-    ! do while (io .ne. 0)
-    ! read (unit, nml = gfdl_mp_nml, iostat = io, end = 10)
-    ! ierr = check_nml_error (io, 'gfdl_mp_nml')
-    ! enddo
-    !10 call close_file (unit)
-    ! endif
-    !#endif
-    ! call write_version_number ('gfdl_mp_mod', version)
-    ! logunit = stdlog ()
-    
 #ifdef INTERNAL_FILE_NML
-    read (input_nml_file, nml = gfdl_mp_nml)
+    read (input_nml_file, nml = gfdl_mp_nml, iostat = ios)
 #else
     inquire (file = trim (fn_nml), exist = exists)
     if (.not. exists) then
@@ -3103,7 +3185,7 @@ subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
         open (unit = nlunit, file = fn_nml, readonly, status = 'old', iostat = ios)
     endif
     rewind (nlunit)
-    read (nlunit, nml = gfdl_mp_nml)
+    read (nlunit, nml = gfdl_mp_nml, iostat = ios)
     close (nlunit)
 #endif
     
@@ -3126,29 +3208,6 @@ subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
     
     tice0 = tice - 0.01
     t_wfr = tice - 40.0 ! supercooled water can exist down to - 48 c, which is the "absolute"
-    
-    ! if (master) write (logunit, nml = gfdl_mp_nml)
-    
-    ! if (master) write (*, *) 'prec_lin diagnostics initialized.', id_prec
-    
-    ! call qsmith_init
-    
-    ! testing the water vapor tables
-    
-    ! if (mp_debug .and. master) then
-    ! write (*, *) 'testing water vapor tables in gfdl_mp'
-    ! tmp = tice - 90.
-    ! do k = 1, 25
-    ! q1 = wqsat_moist (tmp, 0., 1.e5)
-    ! q2 = qs1d_m (tmp, 0., 1.e5)
-    ! write (*, *) nint (tmp - tice), q1, q2, 'dq = ', q1 - q2
-    ! tmp = tmp + 5.
-    ! enddo
-    ! endif
-    
-    ! if (master) write (*, *) 'gfdl_cloud_micrphys diagnostics initialized.'
-    
-    ! gfdl_mp_clock = mpp_clock_id ('gfdl_mp', grain = clock_routine)
     
     module_is_initialized = .true.
     
@@ -3460,6 +3519,262 @@ real function iqs2 (ta, den, dqdt)
     
 end function iqs2
 
+! =======================================================================
+! compute the gradient of saturated specific humidity for table iii
+! =======================================================================
+
+real function qs1d_moist (ta, qv, pa, dqdt)
+    
+    implicit none
+    
+    real, intent (in) :: ta, pa, qv
+    
+    real, intent (out) :: dqdt
+    
+    real :: es, ap1, tmin, eps10
+    
+    integer :: it
+    
+    tmin = table_ice - 160.
+    eps10 = 10. * eps
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = table2 (it) + (ap1 - it) * des2 (it)
+    qs1d_moist = eps * es * (1. + zvir * qv) / pa
+    it = ap1 - 0.5
+    dqdt = eps10 * (des2 (it) + (ap1 - it) * (des2 (it + 1) - des2 (it))) * (1. + zvir * qv) / pa
+    
+end function qs1d_moist
+
+! =======================================================================
+! compute the gradient of saturated specific humidity for table ii
+! =======================================================================
+
+real function wqsat2_moist (ta, qv, pa, dqdt)
+    
+    implicit none
+    
+    real, intent (in) :: ta, pa, qv
+    
+    real, intent (out) :: dqdt
+    
+    real :: es, ap1, tmin, eps10
+    
+    integer :: it
+    
+    tmin = table_ice - 160.
+    eps10 = 10. * eps
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = tablew (it) + (ap1 - it) * desw (it)
+    wqsat2_moist = eps * es * (1. + zvir * qv) / pa
+    it = ap1 - 0.5
+    dqdt = eps10 * (desw (it) + (ap1 - it) * (desw (it + 1) - desw (it))) * (1. + zvir * qv) / pa
+    
+end function wqsat2_moist
+
+! =======================================================================
+! compute the saturated specific humidity for table ii
+! =======================================================================
+
+real function wqsat_moist (ta, qv, pa)
+    
+    implicit none
+    
+    real, intent (in) :: ta, pa, qv
+    
+    real :: es, ap1, tmin
+    
+    integer :: it
+    
+    tmin = table_ice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = tablew (it) + (ap1 - it) * desw (it)
+    wqsat_moist = eps * es * (1. + zvir * qv) / pa
+    
+end function wqsat_moist
+
+! =======================================================================
+! compute the saturated specific humidity for table iii
+! =======================================================================
+
+real function qs1d_m (ta, qv, pa)
+    
+    implicit none
+    
+    real, intent (in) :: ta, pa, qv
+    
+    real :: es, ap1, tmin
+    
+    integer :: it
+    
+    tmin = table_ice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = table2 (it) + (ap1 - it) * des2 (it)
+    qs1d_m = eps * es * (1. + zvir * qv) / pa
+    
+end function qs1d_m
+
+! =======================================================================
+! computes the difference in saturation vapor * density * between water and ice
+! =======================================================================
+
+real function d_sat (ta, den)
+    
+    implicit none
+    
+    real, intent (in) :: ta, den
+    
+    real :: es_w, es_i, ap1, tmin
+    
+    integer :: it
+    
+    tmin = table_ice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es_w = tablew (it) + (ap1 - it) * desw (it)
+    es_i = table2 (it) + (ap1 - it) * des2 (it)
+    d_sat = dim (es_w, es_i) / (rvgas * ta * den) ! take positive difference
+    
+end function d_sat
+
+! =======================================================================
+! compute the saturated water vapor pressure for table ii
+! =======================================================================
+
+real function esw_table (ta)
+    
+    implicit none
+    
+    real, intent (in) :: ta
+    
+    real :: ap1, tmin
+    
+    integer :: it
+    
+    tmin = table_ice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    esw_table = tablew (it) + (ap1 - it) * desw (it)
+    
+end function esw_table
+
+! =======================================================================
+! compute the saturated water vapor pressure for table iii
+! =======================================================================
+
+real function es2_table (ta)
+    
+    implicit none
+    
+    real, intent (in) :: ta
+    
+    real :: ap1, tmin
+    
+    integer :: it
+    
+    tmin = table_ice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es2_table = table2 (it) + (ap1 - it) * des2 (it)
+    
+end function es2_table
+
+! =======================================================================
+! compute the saturated water vapor pressure for table ii
+! =======================================================================
+
+subroutine esw_table1d (ta, es, n)
+    
+    implicit none
+    
+    integer, intent (in) :: n
+    
+    real, intent (in) :: ta (n)
+    
+    real, intent (out) :: es (n)
+    
+    real :: ap1, tmin
+    
+    integer :: i, it
+    
+    tmin = table_ice - 160.
+    
+    do i = 1, n
+        ap1 = 10. * dim (ta (i), tmin) + 1.
+        ap1 = min (2621., ap1)
+        it = ap1
+        es (i) = tablew (it) + (ap1 - it) * desw (it)
+    enddo
+    
+end subroutine esw_table1d
+
+! =======================================================================
+! compute the saturated water vapor pressure for table iii
+! =======================================================================
+
+subroutine es2_table1d (ta, es, n)
+    
+    implicit none
+    
+    integer, intent (in) :: n
+    
+    real, intent (in) :: ta (n)
+    
+    real, intent (out) :: es (n)
+    
+    real :: ap1, tmin
+    
+    integer :: i, it
+    
+    tmin = table_ice - 160.
+    
+    do i = 1, n
+        ap1 = 10. * dim (ta (i), tmin) + 1.
+        ap1 = min (2621., ap1)
+        it = ap1
+        es (i) = table2 (it) + (ap1 - it) * des2 (it)
+    enddo
+    
+end subroutine es2_table1d
+
+! =======================================================================
+! compute the saturated water vapor pressure for table iv
+! =======================================================================
+
+subroutine es3_table1d (ta, es, n)
+    
+    implicit none
+    
+    integer, intent (in) :: n
+    
+    real, intent (in) :: ta (n)
+    
+    real, intent (out) :: es (n)
+    
+    real :: ap1, tmin
+    
+    integer :: i, it
+    
+    tmin = table_ice - 160.
+    
+    do i = 1, n
+        ap1 = 10. * dim (ta (i), tmin) + 1.
+        ap1 = min (2621., ap1)
+        it = ap1
+        es (i) = table3 (it) + (ap1 - it) * des3 (it)
+    enddo
+    
+end subroutine es3_table1d
 
 ! =======================================================================
 ! saturation water vapor pressure table ii
@@ -3605,6 +3920,29 @@ subroutine qs_table3 (n)
     
 end subroutine qs_table3
 
+! =======================================================================
+! compute the saturated specific humidity for table
+! note: this routine is based on "moist" mixing ratio
+! =======================================================================
+
+real function qs_blend (t, p, q)
+    
+    implicit none
+    
+    real, intent (in) :: t, p, q
+    
+    real :: es, ap1, tmin
+    
+    integer :: it
+    
+    tmin = table_ice - 160.
+    ap1 = 10. * dim (t, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = table (it) + (ap1 - it) * des (it)
+    qs_blend = eps * es * (1. + zvir * q) / p
+    
+end function qs_blend
 
 ! =======================================================================
 ! saturation water vapor pressure table i
@@ -3668,6 +4006,58 @@ subroutine qs_table (n)
     
 end subroutine qs_table
 
+! =======================================================================
+! compute the saturated specific humidity and the gradient of saturated specific humidity
+! input t in deg k, p in pa; p = rho rdry tv, moist pressure
+! =======================================================================
+
+subroutine qsmith (im, km, ks, t, p, q, qs, dqdt)
+    
+    implicit none
+    
+    integer, intent (in) :: im, km, ks
+    
+    real, intent (in), dimension (im, km) :: t, p, q
+    
+    real, intent (out), dimension (im, km) :: qs
+    
+    real, intent (out), dimension (im, km), optional :: dqdt
+    
+    real :: eps10, ap1, tmin
+    
+    real, dimension (im, km) :: es
+    
+    integer :: i, k, it
+    
+    tmin = table_ice - 160.
+    eps10 = 10. * eps
+    
+    if (.not. tables_are_initialized) then
+        call qsmith_init
+    endif
+    
+    do k = ks, km
+        do i = 1, im
+            ap1 = 10. * dim (t (i, k), tmin) + 1.
+            ap1 = min (2621., ap1)
+            it = ap1
+            es (i, k) = table (it) + (ap1 - it) * des (it)
+            qs (i, k) = eps * es (i, k) * (1. + zvir * q (i, k)) / p (i, k)
+        enddo
+    enddo
+    
+    if (present (dqdt)) then
+        do k = ks, km
+            do i = 1, im
+                ap1 = 10. * dim (t (i, k), tmin) + 1.
+                ap1 = min (2621., ap1) - 0.5
+                it = ap1
+                dqdt (i, k) = eps10 * (des (it) + (ap1 - it) * (des (it + 1) - des (it))) * (1. + zvir * q (i, k)) / p (i, k)
+            enddo
+        enddo
+    endif
+    
+end subroutine qsmith
 
 ! =======================================================================
 ! fix negative water species
@@ -3733,8 +4123,39 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg)
             ql (k) = ql (k) + qr (k)
             qr (k) = 0.
         endif
+#ifdef GFDL_CLD_MP
+        ! if cloud water < 0, borrow from water vapor
+        if (ql (k) < 0.) then
+            qv (k) = qv (k) + ql (k)
+            pt (k) = pt (k) - ql (k) * lcpk (k) ! heating
+            ql (k) = 0.
+        endif
+#endif
         
     enddo
+    
+#ifdef GFDL_CLD_MP
+    ! -----------------------------------------------------------------------
+    ! fix water vapor; borrow from below
+    ! -----------------------------------------------------------------------
+    
+    do k = ktop, kbot - 1
+        if (qv (k) < 0.) then
+            qv (k + 1) = qv (k + 1) + qv (k) * dp (k) / dp (k + 1)
+            qv (k) = 0.
+        endif
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! bottom layer; borrow from above
+    ! -----------------------------------------------------------------------
+    
+    if (qv (kbot) < 0. .and. qv (kbot - 1) > 0.) then
+        dq = min (- qv (kbot) * dp (kbot), qv (kbot - 1) * dp (kbot - 1))
+        qv (kbot - 1) = qv (kbot - 1) - dq / dp (kbot - 1)
+        qv (kbot) = qv (kbot) + dq / dp (kbot)
+    endif
+#endif
     
 end subroutine neg_adj
 
