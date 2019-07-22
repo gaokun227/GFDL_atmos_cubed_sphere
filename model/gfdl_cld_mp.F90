@@ -1769,7 +1769,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! rain water is handled in warm - rain process.
         qpz = qv (k) + ql (k) + qi (k)
         tin = (te8 (k) - lv00 * qpz + li00 * (qs (k) + qg (k))) / &
-            (one_r8 + qpz * c1_vap + qr (k) * c1_liq + (qs (k) + qg (k)) * c1_ice)
+             (one_r8 + qpz * c1_vap + qr (k) * c1_liq + (qs (k) + qg (k)) * c1_ice)
         if (tin > t_sub + 6.) then
             rh = qpz / iqs1 (tin, den (k))
             if (rh < rh_adj) then ! qpz / rh_adj < qs
@@ -3403,9 +3403,9 @@ real function wqs1 (ta, den)
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
-    !NOTE: a crash here usually means NaN
+    ! note: a crash here usually means nan
     !if (it < 1 .or. it > 2621) then
-    !   write(*,*), 'WQS1: table range violation', it, ta, tmin, den
+    ! write (*, *), 'wqs1: table range violation', it, ta, tmin, den
     !endif
     es = tablew (it) + (ap1 - it) * desw (it)
     wqs1 = es / (rvgas * ta * den)
@@ -3435,9 +3435,9 @@ real function wqs2 (ta, den, dqdt)
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
-    !NOTE: a crash here usually means NaN
+    ! note: a crash here usually means nan
     !if (it < 1 .or. it > 2621) then
-    !   write(*,*), 'WQS2: table range violation', it, ta, tmin, den
+    ! write (*, *), 'wqs2: table range violation', it, ta, tmin, den
     !endif
     es = tablew (it) + (ap1 - it) * desw (it)
     wqs2 = es / (rvgas * ta * den)
