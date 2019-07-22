@@ -207,7 +207,7 @@ contains
 
 !Now in fv_restart
 !!$      call p_var(Atm%npz,  is, ie, js, je, Atm%ak(1),  ptop_min,         &
-!!$                 Atm%delp, Atm%delz, Atm%pt, Atm%ps,               & 
+!!$                 Atm%delp, Atm%delz, Atm%pt, Atm%ps,               &
 !!$                 Atm%pe,   Atm%peln, Atm%pk, Atm%pkz,              &
 !!$                 kappa, Atm%q, ng, Atm%ncnst, Atm%gridstruct%area_64, Atm%flagstruct%dry_mass,           &
 !!$                 Atm%flagstruct%adjust_dry_mass, Atm%flagstruct%mountain, Atm%flagstruct%moist_phys,   &
@@ -273,7 +273,7 @@ contains
 
 
 	!Needed for reproducibility. DON'T REMOVE THIS!!
-    call mpp_update_domains( Atm%phis, Atm%domain ) 
+    call mpp_update_domains( Atm%phis, Atm%domain )
     ftop = g_sum(Atm%domain, Atm%phis(is:ie,js:je), is, ie, js, je, ng, Atm%gridstruct%area_64, 1)
 
     call prt_maxmin('ZS', Atm%phis,  is, ie, js, je, ng, 1, 1./grav)
@@ -321,7 +321,7 @@ contains
       real, dimension(:,:,:,:), allocatable:: q
       real, dimension(:,:), allocatable :: phis_coarse ! lmh
       real rdg, wt, qt, m_fac, pe1
-      integer:: n, npx, npy, npz, itoa, nt, ntprog, ntdiag, ntracers, ntrac, iq
+      integer:: npx, npy, npz, itoa, nt, ntprog, ntdiag, ntracers, ntrac, iq
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
       integer :: ios, ierr, unit, id_res
@@ -571,7 +571,7 @@ contains
 !***  objects.  Then we need to read the first two regional BC files so the integration
 !***  can begin interpolating between those two times as the forecast proceeds.
 
-        if (n==1.and.Atm%flagstruct%regional) then     !<-- Select the parent regional domain.
+        if (Atm%flagstruct%regional) then     !<-- Select the parent regional domain.
 
           call start_regional_cold_start(Atm, ak, bk, levp, &
                                          is, ie, js, je, &
@@ -807,7 +807,7 @@ contains
       real, dimension(:,:,:,:), allocatable:: q
       real, dimension(:,:), allocatable :: phis_coarse ! lmh
       real rdg, wt, qt, m_fac, pe1
-      integer:: n, npx, npy, npz, itoa, nt, ntprog, ntdiag, ntracers, ntrac, iq
+      integer:: npx, npy, npz, itoa, nt, ntprog, ntdiag, ntracers, ntrac, iq
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
       integer :: ios, ierr, unit, id_res
@@ -1027,7 +1027,7 @@ contains
 !***  objects.  Then we need to read the first two regional BC files so the integration
 !***  can begin interpolating between those two times as the forecast proceeds.
 
-        if (n==1.and.Atm%flagstruct%regional) then     !<-- Select the parent regional domain.
+        if (Atm%flagstruct%regional) then     !<-- Select the parent regional domain.
 
           call start_regional_cold_start(Atm, ak, bk, levp, &
                                          is, ie, js, je, &
