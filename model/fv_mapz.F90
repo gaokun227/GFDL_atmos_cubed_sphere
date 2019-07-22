@@ -829,7 +829,7 @@ endif        ! end last_step check
                        inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), &
                        hydrostatic, &
                        is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:), consv>consv_min, &
-                       te(is:ie,j,:), last_step)
+                       te(is:ie,j,:), last_step, do_inline_mp)
 #endif
  
         ! compute wind tendency at A grid fori D grid wind update

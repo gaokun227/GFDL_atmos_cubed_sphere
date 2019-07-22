@@ -336,7 +336,7 @@ contains
 subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
         graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
-        te, last_step)
+        te, last_step, do_inline_mp)
     
     implicit none
     
@@ -490,7 +490,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     integer :: i, k, n
     
-    dts = dt_in / real (max (ntimes, int (dt_in / min (dt_in, mp_time))))
+    ntimes = max (ntimes, int (dt_in / min (dt_in, mp_time)))
+    dts = dt_in / real (ntimes)
     
     dt_rain = dts * 0.5
     rdt = one_r8 / dts
@@ -505,11 +506,15 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     do i = is, ie
         
         do k = ks, ke
+            if (do_inline_mp) then
 #ifdef MOIST_CAPPA
-            tz (k) = pt (i, k) / ((1. + zvir * qv (i, k)) * (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k))))
+                tz (k) = pt (i, k) / ((1. + zvir * qv (i, k)) * (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k))))
 #else
-            tz (k) = pt (i, k) / (1. + zvir * qv (i, k))
+                tz (k) = pt (i, k) / (1. + zvir * qv (i, k))
 #endif
+            else
+                tz (k) = pt (i, k)
+            endif
             dp0 (k) = delp (i, k)
             ! -----------------------------------------------------------------------
             ! convert moist mixing ratios to dry mixing ratios
@@ -774,11 +779,15 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             cvm (k) = (one_r8 - (qvz (k) + q_con (i, k))) * c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
             tmp = rdgas * (1. + zvir * qvz (k))
             cappa (i, k) = tmp / (tmp + cvm (k))
+            if (do_inline_mp) then
 #ifdef MOIST_CAPPA
-            pt (i, k) = tz (k) * (1. + zvir * qvz (k)) * (1. - q_con (i, k))
+                pt (i, k) = tz (k) * (1. + zvir * qvz (k)) * (1. - q_con (i, k))
 #else
-            pt (i, k) = tz (k) * (1. + zvir * qvz (k))
+                pt (i, k) = tz (k) * (1. + zvir * qvz (k))
 #endif
+            else
+                pt (i, k) = pt (i, k) + (tz (k) - pt (i, k)) * cvm (k) / cp_air
+            endif
         enddo
         
         ! -----------------------------------------------------------------------
@@ -1748,7 +1757,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             q_sol (k) = q_sol (k) + sink
             tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / &
                  (one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice)
-            if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
+            if (do_qa .and. do_inline_mp) qa (k) = 1. ! air fully saturated; 100 % cloud cover
             cycle
         endif
         
@@ -1947,7 +1956,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! combine water species
         ! -----------------------------------------------------------------------
         
-        if (.not. (do_qa .and. last_step)) cycle
+        if (.not. (do_qa .and. last_step .and. do_inline_mp)) cycle
         
         ice = q_sol (k)
         if (rad_snow) then
