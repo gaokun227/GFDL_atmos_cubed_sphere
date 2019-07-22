@@ -343,6 +343,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     logical, intent (in) :: hydrostatic
     logical, intent (in) :: last_step
     logical, intent (in) :: consv_te
+    logical, intent (in) :: do_inline_mp
     
     integer, intent (in) :: is, ie ! physics window
     integer, intent (in) :: ks, ke ! vertical dimension
@@ -421,7 +422,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
         qa, qn, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, consv_te, te, &
-        last_step)
+        last_step, do_inline_mp)
     
     ! call mpp_clock_end (gfdl_mp_clock)
     
@@ -446,13 +447,14 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qn, dz, is, ie, ks, ke, dt_in, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, consv_te, te, &
-        last_step)
+        last_step, do_inline_mp)
     
     implicit none
     
     logical, intent (in) :: hydrostatic
     logical, intent (in) :: last_step
     logical, intent (in) :: consv_te
+    logical, intent (in) :: do_inline_mp
     integer, intent (in) :: is, ie, ks, ke
     real, intent (in) :: dt_in
     real, intent (in), dimension (is:ie) :: gsize
@@ -1757,7 +1759,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             q_sol (k) = q_sol (k) + sink
             tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / &
                  (one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice)
-            if (do_qa .and. do_inline_mp) qa (k) = 1. ! air fully saturated; 100 % cloud cover
+            if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
             cycle
         endif
         
@@ -1956,7 +1958,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
         ! combine water species
         ! -----------------------------------------------------------------------
         
-        if (.not. (do_qa .and. last_step .and. do_inline_mp)) cycle
+        if (.not. (do_qa .and. last_step)) cycle
         
         ice = q_sol (k)
         if (rad_snow) then
