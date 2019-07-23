@@ -9,13 +9,6 @@
 
 module gfdl_cld_mp_mod
     
-    ! use mpp_mod, only: stdlog, mpp_pe, mpp_root_pe, mpp_clock_id, &
-    ! mpp_clock_begin, mpp_clock_end, clock_routine, &
-    ! input_nml_file
-    ! use time_manager_mod, only: time_type
-    ! use constants_mod, only: grav, rdgas, rvgas, cp_air, hlv, hlf, pi => pi_8
-    ! use fms_mod, only: write_version_number, open_namelist_file, &
-    ! check_nml_error, file_exist, close_file
     use machine, only: r_grid => kind_phys
     
     implicit none
@@ -29,13 +22,9 @@ module gfdl_cld_mp_mod
         qsmith_init, qs_tablew, qs_table2, qs_table3, qs_table, neg_adj, acr3d, smlt, gmlt, &
         wet_bulb, qsmith, qs_blend, es3_table1d, es2_table1d, esw_table1d, es2_table, &
         esw_table, d_sat, qs1d_m, wqsat_moist, wqsat2_moist, qs1d_moist, revap_rac1, &
-        wqs2_vect
-    public rhow, rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh
-    public rvgas, rdgas, grav, hlv, hlf, cp_air
-    public cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, t_ice, &
-        t_wfr, e00, pi, zvir
-    
-    real :: missing_value = - 1.e10
+        wqs2_vect, rhow, rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh, rvgas, rdgas, &
+        grav, hlv, hlf, cp_air, cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, &
+        t_ice, t_wfr, e00, pi, zvir
     
     logical :: module_is_initialized = .false.
     logical :: qsmith_tables_initialized = .false.
@@ -43,83 +32,93 @@ module gfdl_cld_mp_mod
     real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
     real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
     real, parameter :: rvgas = 461.50 ! gfs: gas constant for water vapor
-    real, parameter :: cp_air = 1004.6 ! gfs: heat capacity of dry air at constant pressure
+    real, parameter :: cp_air = 1.0046e3 ! gfs: heat capacity of dry air at constant pressure
     real, parameter :: hlv = 2.5e6 ! gfs: latent heat of evaporation
     real, parameter :: hlf = 3.3358e5 ! gfs: latent heat of fusion
     real, parameter :: pi = 3.1415926535897931 ! gfs: ratio of circle circumference to diameter
+
     ! real, parameter :: cp_air = rdgas * 7. / 2. ! 1004.675, heat capacity of dry air at constant pressure
     real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0, heat capacity of water vapore at constnat pressure
-    ! real, parameter :: cv_air = 717.56 ! satoh value
+    ! real, parameter :: cv_air = 717.56 ! Satoh value, heat capacity of dry air at constant volume
     real, parameter :: cv_air = cp_air - rdgas ! 717.55, heat capacity of dry air at constant volume
-    ! real, parameter :: cv_vap = 1410.0 ! emanuel value
+    ! real, parameter :: cv_vap = 1410.0 ! Emanuel value, heat capacity of water vapor at constant volume
     real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume
     
-#ifdef TEST_ICE0
-    real, parameter :: c_ice = 1972. ! gfdl: heat capacity of ice at - 15 deg c
-    real, parameter :: c_liq = 4.1855e+3 ! gfs: heat capacity of water at 15 c
-    ! c_liq - c_ice = 2213
-#else
-    real, parameter :: c_ice = 2106. ! heat capacity of ice at 0. deg c
-    ! ifs documentation:
-    real, parameter :: c_liq = 4218. ! c_liq - c_ice = 2112
-    ! emanual's book:
-    ! real, parameter :: c_liq = 4190.0 ! heat capacity of water at 0 deg c
-#endif
+    ! http://www.engineeringtoolbox.com/ice-thermal-properties-d_576.html
+    ! c_ice = 2050.0 at 0 deg C
+    ! c_ice = 2000.0 at - 10 deg C
+    ! c_ice = 1943.0 at - 20 deg C
+    ! c_ice = 1882.0 at - 30 deg C
+    ! c_ice = 1818.0 at - 40 deg C
+
+    ! https://www.engineeringtoolbox.com/specific-heat-capacity-water-d_660.html
+    ! c_liq = 4219.9 at 0.01 deg C
+    ! c_liq = 4195.5 at 10 deg C
+    ! c_liq = 4184.4 at 20 deg C
+    ! c_liq = 4180.1 at 30 deg C
+    ! c_liq = 4179.6 at 40 deg C
+    
+    ! the following two are from emanuel's book "atmospheric convection"
+    ! real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg c: c = c_ice + 7.3 * (t - tice)
+    ! real, parameter :: c_liq = 4.190e3 ! heat capacity of water at 0 deg c
+    ! real, parameter :: c_ice = 1.972e3 ! gfdl: heat capacity of ice at - 15 deg c
+    ! real, parameter :: c_liq = 4.1855e3 ! gfdl: heat capacity of water at 15 deg c
+    ! real, parameter :: c_ice = 2.106e3 ! gfs: heat capacity of ice at 0 deg C
+    ! real, parameter :: c_liq = 4.1855e3 ! gfs: heat capacity of liquid at 15 deg C
+    real, parameter :: c_ice = 2.106e3 ! ifs: heat capacity of ice at 0 deg c
+    real, parameter :: c_liq = 4.218e3 ! ifs: heat capacity of water at 0 deg c
     
     real, parameter :: eps = rdgas / rvgas ! 0.6219934995
     real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077338443
     
+    real, parameter :: dc_vap = cp_vap - c_liq ! - 2.372e3, isobaric heating / cooling
+    real, parameter :: dc_ice = c_liq - c_ice ! 2.112e3, isobaric heating / colling
+    
     real, parameter :: t_ice = 273.16 ! freezing temperature
     real, parameter :: table_ice = 273.16 ! freezing point for qs table
+    real, parameter :: t_wfr = t_ice - 40.0 ! freezing point for qs table
     
-    ! real, parameter :: e00 = 610.71 ! gfdl: saturation vapor pressure at 0 deg c
-    real (kind = r_grid), parameter :: e00 = 611.21 ! ifs: saturation vapor pressure at 0 deg c
+    real (kind = r_grid), parameter :: e00 = 611.21 ! ifs: saturation vapor pressure at 0 deg C
+    ! real (kind = r_grid), parameter :: e00 = 610.71 ! gfdl: saturation vapor pressure at 0 deg C
     
-    real, parameter :: dc_vap = cp_vap - c_liq ! - 2339.5, isobaric heating / cooling
-    real, parameter :: dc_ice = c_liq - c_ice ! 2213.5, isobaric heating / colling
+    real, parameter :: hlv0 = hlv ! gfs: evaporation latent heat coefficient at 0 deg C
+    ! real, parameter :: hlv0 = 2.501e6 ! Emanuel value
+    real, parameter :: hlf0 = hlf ! gfs: fussion latent heat coefficient at 0 deg C
+    ! real, parameter :: hlf0 = 3.337e5 ! Emanuel value
     
-    real, parameter :: hlv0 = hlv ! gfs: evaporation latent heat coefficient at 0 deg c
-    ! real, parameter :: hlv0 = 2.501e6 ! emanuel appendix - 2
-    real, parameter :: hlf0 = hlf ! gfs: fussion latent heat coefficient at 0 deg c
-    ! real, parameter :: hlf0 = 3.337e5 ! emanuel
+    real, parameter :: lv0 = hlv0 - dc_vap * t_ice ! 3.14893552e6, evaporation latent heat coefficient at 0 deg K
+    real, parameter :: li0 = hlf0 - dc_ice * t_ice ! - 2.2691392e5, fussion latend heat coefficient at 0 deg K
     
-    real, parameter :: lv0 = hlv0 - dc_vap * t_ice! 3.13905782e6, evaporation latent heat coefficient at 0 deg k
-    real, parameter :: li0 = hlf0 - dc_ice * t_ice! - 2.7105966e5, fussion latend heat coefficient at 0 deg k
+    real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling
+    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coefficient at 0 deg K
     
-    ! real (kind = r_grid), parameter :: d2ice = dc_vap + dc_ice ! - 126, isobaric heating / cooling
-    real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice
-    ! d2ice = cp_vap - c_ice
-    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.86799816e6, sublimation latent heat coefficient at 0 deg k
-    
-    real, parameter :: qrmin = 1.e-8 ! min value for ???
+    real, parameter :: qrmin = 1.e-8 ! min value for cloud condensates
     real, parameter :: qvmin = 1.e-20 ! min value for water vapor (treated as zero)
     real, parameter :: qcmin = 1.e-12 ! min value for cloud condensates
     
     real, parameter :: vr_min = 1.e-3 ! min fall speed for rain
     real, parameter :: vf_min = 1.e-5 ! min fall speed for cloud ice, snow, graupel
     
-    real, parameter :: dz_min = 1.e-2 ! use for correcting flipped height
+    real, parameter :: dz_min = 1.e-2 ! used for correcting flipped height
     
     real, parameter :: sfcrho = 1.2 ! surface air density
     
-    ! intercept parameters
+    real, parameter :: rnzr = 8.0e6 ! Lin et al. 1983
+    real, parameter :: rnzs = 3.0e6 ! Lin et al. 1983
+    real, parameter :: rnzg = 4.0e6 ! Rutledge and Hobbs 1984
+    ! lmh, 20170929
+    real, parameter :: rnzh = 4.0e4 ! Lin et al. 1983
     
-    real, parameter :: rnzr = 8.0e6 ! lin83
-    real, parameter :: rnzs = 3.0e6 ! lin83
-    real, parameter :: rnzg = 4.0e6 ! rh84
-    real, parameter :: rnzh = 4.0e4 ! lin83 --- lmh 29 sep 17
-    
-    ! density parameters
-    
-    real, parameter :: rhow = 1.e3 ! density of cloud water
-    real, parameter :: rhor = 1.e3 ! density of rain water, lin83
-    real, parameter :: rhos = 0.1e3 ! lin83 (snow density; 1 / 10 of water)
-    real, parameter :: rhog = 0.4e3 ! rh84 (graupel density)
-    real, parameter :: rhoh = 0.917e3 ! lin83 --- lmh 29 sep 17
+    real, parameter :: rhow = 1.0e3 ! density of cloud water
+    real, parameter :: rhor = 1.0e3 ! Lin et al. 1983
+    real, parameter :: rhos = 0.1e3 ! Lin et al. 1983
+    real, parameter :: rhog = 0.4e3 ! Rutledge and Hobbs 1984
+    ! lmh, 20170929
+    real, parameter :: rhoh = 0.917e3 ! Lin et al. 1983
     
     real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw ! constants for accretions
     real :: acco (3, 4) ! constants for accretions
-    real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5)
+    real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5) ! constants for sublimation/deposition, freezing/melting, condensation/evaporation
     
     real :: es0, ces0
     real :: pie, rgrav, fac_rc
@@ -129,13 +128,26 @@ module gfdl_cld_mp_mod
     
     real :: d0_vap ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
     real (kind = r_grid) :: lv00, li00, li20
-    ! scaled constants:
     real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
     real (kind = r_grid), parameter :: one_r8 = 1.
     
-    integer :: ntimes = 1 ! cloud microphysics sub cycles
+    real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
+    real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
     
-    ! cloud microphysics switchers
+    logical :: tables_are_initialized = .false.
+    
+    real, parameter :: dt_fr = 8. ! homogeneous freezing of all cloud water at t_wfr - dt_fr
+    ! minimum temperature water can exist (moore & molinero nov. 2011, nature)
+    ! dt_fr can be considered as the error bar
+    
+    real, parameter :: p0_min = 100. ! minimum pressure (pascal) for mp to operate
+    real :: p_min
+    
+    ! -----------------------------------------------------------------------
+    ! namelist parameters
+    ! -----------------------------------------------------------------------
+    
+    integer :: ntimes = 1 ! cloud microphysics sub cycles
     
     integer :: icloud_f = 0 ! cloud scheme
     integer :: irain_f = 0 ! cloud water to rain auto conversion scheme
@@ -153,27 +165,6 @@ module gfdl_cld_mp_mod
     logical :: disp_heat = .false. ! dissipative heating due to sedimentation
     logical :: do_cond_timescale = .false. ! whether to apply a timescale to condensation
     
-    real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
-    real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
-    
-    logical :: tables_are_initialized = .false.
-    
-    ! logical :: master
-    ! integer :: id_rh, id_vtr, id_vts, id_vtg, id_vti, id_rain, id_snow, id_graupel, &
-    ! id_ice, id_prec, id_cond, id_var, id_droplets
-    ! integer :: gfdl_mp_clock ! clock for timing of driver routine
-    
-    real, parameter :: dt_fr = 8. ! homogeneous freezing of all cloud water at t_wfr - dt_fr
-    ! minimum temperature water can exist (moore & molinero nov. 2011, nature)
-    ! dt_fr can be considered as the error bar
-    
-    real, parameter :: p0_min = 100. ! minimum pressure (pascal) for mp to operate
-    real :: p_min
-    
-    ! -----------------------------------------------------------------------
-    ! namelist parameters
-    ! -----------------------------------------------------------------------
-    
     real :: cld_fac = 1.0 ! multiplication factor for cloud fraction
     real :: cld_min = 0.05 ! minimum cloud fraction
     real :: tice = 273.16 ! set tice = 165. to trun off ice - phase phys (kessler emulator)
@@ -183,13 +174,9 @@ module gfdl_cld_mp_mod
     real :: t_sub = 184. ! min temp for sublimation of cloud ice
     real :: mp_time = 150. ! maximum micro - physics time step (sec)
     
-    ! relative humidity increment
-    
     real :: rh_inc = 0.25 ! rh increment for complete evaporation of cloud water and cloud ice
     real :: rh_inr = 0.25 ! rh increment for minimum evaporation of rain
     real :: rh_ins = 0.25 ! rh increment for sublimation of snow
-    
-    ! conversion time scale
     
     real :: tau_r2g = 900. ! rain freezing during fast_sat
     real :: tau_smlt = 900. ! snow melting
@@ -203,17 +190,13 @@ module gfdl_cld_mp_mod
     real :: tau_v2g = 21600. ! grapuel deposition -- make it a slow process
     real :: tau_revp = 0. ! rain evaporation
     
-    ! horizontal subgrid variability
-    
     real :: dw_land = 0.20 ! base value for subgrid deviation / variability over land
     real :: dw_ocean = 0.10 ! base value for ocean
     
-    ! prescribed ccn
+    real :: ccn_o = 90. ! ccn over ocean (cm^-3)
+    real :: ccn_l = 270. ! ccn over land (cm^-3)
     
-    real :: ccn_o = 90. ! ccn over ocean (cm^ - 3)
-    real :: ccn_l = 270. ! ccn over land (cm^ - 3)
-    
-    real :: rthresh = 10.0e-6 ! critical cloud drop radius (micro m)
+    real :: rthresh = 10.0e-6 ! critical cloud drop radius (micron)
     
     ! -----------------------------------------------------------------------
     ! wrf / wsm6 scheme: qi_gen = 4.92e-11 * (1.e3 * exp (0.1 * tmp)) ** 1.33
@@ -239,10 +222,11 @@ module gfdl_cld_mp_mod
     
     real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain)
     real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources)
+
     real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold (was 1.e-4)
     ! qi0_crt if negative, its magnitude is used as the mixing ration threshold; otherwise, used as density
-    real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold (not used)
-    ! lfo used * mixing ratio * = 1.e-4 (hail in lfo)
+    real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold
+    ! Lin et al. (1983) used * mixing ratio * = 1.e-4 (hail)
     real :: qs0_crt = 1.0e-3 ! snow to graupel density threshold (0.6e-3 in purdue lin scheme)
     
     real :: c_paut = 0.55 ! autoconversion cloud water to rain (use 0.5 to reduce autoconversion)
@@ -253,24 +237,18 @@ module gfdl_cld_mp_mod
     
     ! decreasing clin to reduce csacw (so as to reduce cloud water --- > snow)
     
-    real :: alin = 842.0 ! "a" in lin1983
-    real :: clin = 4.8 ! "c" in lin 1983, 4.8 -- > 6. (to ehance ql -- > qs)
-    
-    ! fall velocity tuning constants:
+    real :: alin = 842.0 ! "a" in Lin et al. (1983)
+    real :: clin = 4.8 ! "c" in Lin et al. (1983), 4.8 -- > 6. (to ehance ql -- > qs)
     
     logical :: const_vi = .false. ! if .t. the constants are specified by v * _fac
     logical :: const_vs = .false. ! if .t. the constants are specified by v * _fac
     logical :: const_vg = .false. ! if .t. the constants are specified by v * _fac
     logical :: const_vr = .false. ! if .t. the constants are specified by v * _fac
     
-    ! good values:
-    
-    real :: vi_fac = 1. ! if const_vi: 1 / 3
-    real :: vs_fac = 1. ! if const_vs: 1.
-    real :: vg_fac = 1. ! if const_vg: 2.
-    real :: vr_fac = 1. ! if const_vr: 4.
-    
-    ! upper bounds of fall speed (with variable speed option)
+    real :: vi_fac = 1. ! ifs: if const_vi: 1 / 3
+    real :: vs_fac = 1. ! ifs: if const_vs: 1.
+    real :: vg_fac = 1. ! ifs: if const_vg: 2.
+    real :: vr_fac = 1. ! ifs: if const_vr: 4.
     
     real :: vi_max = 0.5 ! max fall speed for ice
     real :: vs_max = 5.0 ! max fall speed for snow
@@ -281,9 +259,6 @@ module gfdl_cld_mp_mod
     real :: xr_b = 100. ! alpha_0 value in xu and randall, 1996
     real :: xr_c = 0.49 ! gamma value in xu and randall, 1996
     
-    ! cloud microphysics switchers
-    
-    ! this should be removed with the inline code
     logical :: do_sat_adj = .false. ! has fast saturation adjustments
     logical :: z_slope_liq = .true. ! use linear mono slope for autocconversions
     logical :: z_slope_ice = .false. ! use linear mono slope for autocconversions
@@ -296,9 +271,7 @@ module gfdl_cld_mp_mod
     logical :: xr_cloud = .false. ! use xu and randall, 1996's cloud diagnosis
     logical :: hd_icefall = .false. ! use heymsfield and donner, 1990's fall speed of cloud ice
     
-    ! real :: global_area = - 1.
-    
-    real :: g2, log_10, tice0, t_wfr
+    real :: g2, log_10, tice0
     
     ! -----------------------------------------------------------------------
     ! namelist
@@ -371,8 +344,6 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, dimension (is:ie) :: w_var
     real, dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
     real, dimension (is:ie, ks:ke) :: m2_rain, m2_sol
-    
-    ! call mpp_clock_begin (gfdl_mp_clock)
     
     if (last_step) then
         p_min = p0_min ! final clean - up
@@ -3220,7 +3191,6 @@ subroutine gfdl_cld_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml
     log_10 = log (10.)
     
     tice0 = tice - 0.01
-    t_wfr = tice - 40.0 ! supercooled water can exist down to - 48 c, which is the "absolute"
     
     module_is_initialized = .true.
     
@@ -3397,10 +3367,6 @@ real function wqs1 (ta, den)
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
-    ! note: a crash here usually means nan
-    !if (it < 1 .or. it > 2621) then
-    ! write (*, *), 'wqs1: table range violation', it, ta, tmin, den
-    !endif
     es = tablew (it) + (ap1 - it) * desw (it)
     wqs1 = es / (rvgas * ta * den)
     
@@ -3429,10 +3395,6 @@ real function wqs2 (ta, den, dqdt)
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
-    ! note: a crash here usually means nan
-    !if (it < 1 .or. it > 2621) then
-    ! write (*, *), 'wqs2: table range violation', it, ta, tmin, den
-    !endif
     es = tablew (it) + (ap1 - it) * desw (it)
     wqs2 = es / (rvgas * ta * den)
     it = ap1 - 0.5
@@ -4197,51 +4159,5 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg)
 #endif
     
 end subroutine neg_adj
-
-! =======================================================================
-! compute global sum
-! quick local sum algorithm
-! =======================================================================
-
-!real function g_sum (p, ifirst, ilast, jfirst, jlast, area, mode)
-!
-! use mpp_mod, only: mpp_sum
-!
-! implicit none
-!
-! integer, intent (in) :: ifirst, ilast, jfirst, jlast
-! integer, intent (in) :: mode ! if == 1 divided by area
-!
-! real, intent (in), dimension (ifirst:ilast, jfirst:jlast) :: p, area
-!
-! integer :: i, j
-!
-! real :: gsum
-!
-! if (global_area < 0.) then
-! global_area = 0.
-! do j = jfirst, jlast
-! do i = ifirst, ilast
-! global_area = global_area + area (i, j)
-! enddo
-! enddo
-! call mpp_sum (global_area)
-! endif
-!
-! gsum = 0.
-! do j = jfirst, jlast
-! do i = ifirst, ilast
-! gsum = gsum + p (i, j) * area (i, j)
-! enddo
-! enddo
-! call mpp_sum (gsum)
-!
-! if (mode == 1) then
-! g_sum = gsum / global_area
-! else
-! g_sum = gsum
-! endif
-!
-!end function g_sum
 
 end module gfdl_cld_mp_mod
