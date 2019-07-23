@@ -30,10 +30,10 @@ module gfdl_mp_mod
         wet_bulb, qsmith, qs_blend, es3_table1d, es2_table1d, esw_table1d, es2_table, &
         esw_table, d_sat, qs1d_m, wqsat_moist, wqsat2_moist, qs1d_moist, revap_rac1, &
         wqs2_vect
-    public rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh
+    public rhow, rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh
     public rvgas, rdgas, grav, hlv, hlf, cp_air
     public cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, t_ice, &
-        t_wfr, e00
+        t_wfr, e00, pi, zvir
     
     real :: missing_value = - 1.e10
     
@@ -111,6 +111,7 @@ module gfdl_mp_mod
     
     ! density parameters
     
+    real, parameter :: rhow = 1.e3 ! density of cloud water
     real, parameter :: rhor = 1.e3 ! density of rain water, lin83
     real, parameter :: rhos = 0.1e3 ! lin83 (snow density; 1 / 10 of water)
     real, parameter :: rhog = 0.4e3 ! rh84 (graupel density)
