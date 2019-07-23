@@ -28,8 +28,12 @@ module gfdl_mp_mod
         lagrangian_fall_ppm, cs_profile, cs_limiters, fall_speed, setupm, setup_con, &
         qsmith_init, qs_tablew, qs_table2, qs_table3, qs_table, neg_adj, acr3d, smlt, gmlt, &
         wet_bulb, qsmith, qs_blend, es3_table1d, es2_table1d, esw_table1d, es2_table, &
-        esw_table, d_sat, qs1d_m, wqsat_moist, wqsat2_moist, qs1d_moist, revap_rac1
+        esw_table, d_sat, qs1d_m, wqsat_moist, wqsat2_moist, qs1d_moist, revap_rac1, &
+        wqs2_vect
     public rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh
+    public rvgas, rdgas, grav, hlv, hlf, cp_air
+    public cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, t_ice, &
+        t_wfr, e00
     
     real :: missing_value = - 1.e10
     
@@ -3340,17 +3344,6 @@ subroutine qsmith_init
     
     if (.not. tables_are_initialized) then
         
-        ! master = (mpp_pe () .eq. mpp_root_pe ())
-        ! if (master) print *, ' gfdl mp: initializing qs tables'
-        
-        ! debug code
-        ! print *, mpp_pe (), allocated (table), allocated (table2), &
-        ! allocated (table3), allocated (tablew), allocated (des), &
-        ! allocated (des2), allocated (des3), allocated (desw)
-        ! end debug code
-        
-        ! generate es table (dt = 0.1 deg. c)
-        
         allocate (table (length))
         allocate (table2 (length))
         allocate (table3 (length))
@@ -3446,6 +3439,43 @@ real function wqs2 (ta, den, dqdt)
     dqdt = 10. * (desw (it) + (ap1 - it) * (desw (it + 1) - desw (it))) / (rvgas * ta * den)
     
 end function wqs2
+
+! =======================================================================
+! compute the gradient of saturated specific humidity for table ii
+! it is the same as "wqs2", but written as vector function
+! =======================================================================
+
+subroutine wqs2_vect (is, ie, ta, den, wqsat, dqdt)
+    
+    implicit none
+    
+    ! pure water phase; universal dry / moist formular using air density
+    ! input "den" can be either dry or moist air density
+    
+    integer, intent (in) :: is, ie
+    
+    real, intent (in), dimension (is:ie) :: ta, den
+    
+    real, intent (out), dimension (is:ie) :: wqsat, dqdt
+    
+    real :: es, ap1, tmin
+    
+    integer :: i, it
+    
+    tmin = t_ice - 160.
+    
+    do i = is, ie
+        ap1 = 10. * dim (ta (i), tmin) + 1.
+        ap1 = min (2621., ap1)
+        it = ap1
+        es = tablew (it) + (ap1 - it) * desw (it)
+        wqsat (i) = es / (rvgas * ta (i) * den (i))
+        it = ap1 - 0.5
+        ! finite diff, del_t = 0.1:
+        dqdt (i) = 10. * (desw (it) + (ap1 - it) * (desw (it + 1) - desw (it))) / (rvgas * ta (i) * den (i))
+    enddo
+    
+end subroutine wqs2_vect
 
 ! =======================================================================
 ! compute wet buld temperature

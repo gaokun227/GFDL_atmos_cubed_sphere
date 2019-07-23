@@ -3,6 +3,9 @@
 ! authors: linjiong zhou and shian - jiann lin
 ! =======================================================================
 module cld_eff_rad_mod
+
+    use gfdl_cld_mp_mod, only: rvgas, rdgas, grav, pi, zvir, t_ice, ql0_max, ql0_max, &
+        ccn_o, ccn_l, rhow, rhor, rhos, rhog
     
     implicit none
     
@@ -10,33 +13,10 @@ module cld_eff_rad_mod
     
     public cld_eff_rad, cld_eff_rad_init
     
-    real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
-    real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
-    real, parameter :: rvgas = 461.50 ! gfs: gas constant for water vapor
-    real, parameter :: pi = 3.1415926535897931 ! gfs: ratio of circle circumference to diameter
-    
-    real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077338443
-    
-    real :: tice = 273.16 ! set tice = 165. to trun off ice - phase phys (kessler emulator)
-    
-    real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain)
-    real :: qi0_max = 2.0e-4 ! max cloud ice value (by other sources)
     real :: qi0_rei = 0.8e-4 ! max cloud ice value (by other sources)
-    
-    real :: ccn_o = 100. ! ccn over ocean (cm^ - 3)
-    real :: ccn_l = 300. ! ccn over land (cm^ - 3)
-    
-    ! cloud diagnosis
     
     real :: qmin = 1.0e-12 ! minimum mass mixing ratio (kg / kg)
     real :: beta = 1.22 ! defined in heymsfield and mcfarquhar, 1996
-    ! real :: beta = 0.5 ! testing
-    
-    ! real :: rewmin = 1.0, rewmax = 25.0
-    ! real :: reimin = 10.0, reimax = 300.0
-    ! real :: rermin = 25.0, rermax = 225.0
-    ! real :: resmin = 300, resmax = 1000.0
-    ! real :: regmin = 1000.0, regmax = 1.0e5
     
 #ifdef SJ_CLD_TEST
     real :: rewmin = 4.0, rewmax = 10.0
@@ -73,9 +53,9 @@ module cld_eff_rad_mod
     ! 5: wyser, 1998
     
     namelist / cld_eff_rad_nml / &
-        ql0_max, qi0_max, qi0_rei, ccn_o, ccn_l, qmin, beta, liq_ice_combine, rewflag, reiflag, &
-        rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, regmin, regmax, &
-        betaw, betai, betar, betas, betag
+        qi0_rei, qmin, beta, liq_ice_combine, rewflag, reiflag, rewmin, rewmax, reimin, &
+        reimax, rermin, rermax, resmin, resmax, regmin, regmax, betaw, betai, betar, betas, &
+        betag
     
 contains
 
@@ -123,10 +103,9 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     real :: lambdar, lambdas, lambdag
     real :: rei_fac
     
-    real :: rhow = 1.0e3, rhor = 1.0e3, rhos = 1.0e2, rhog = 4.0e2 ! density (kg / m^3)
-    real :: n0r = 8.0e6, n0s = 3.0e6, n0g = 4.0e6 ! intercept parameters (m^ - 4)
-    real :: alphar = 0.8, alphas = 0.25, alphag = 0.5 ! parameters in terminal equation in lin et al., 1983
-    real :: gammar = 17.837789, gammas = 8.2850630, gammag = 11.631769 ! gamma values as a result of different alpha
+    real, parameter :: n0r = 8.0e6, n0s = 3.0e6, n0g = 4.0e6 ! intercept parameters (m^ - 4) in lin et al. (1983)
+    real, parameter :: alphar = 0.8, alphas = 0.25, alphag = 0.5 ! parameters in terminal equation in lin et al., (1983)
+    real, parameter :: gammar = 17.837789, gammas = 8.2850630, gammag = 11.631769 ! gamma values as a result of different alpha
     real, parameter :: rho_0 = 50.e-3
     
     real :: retab (138) = (/ &
@@ -177,7 +156,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
 #ifdef SJ_CLD_TEST
                 ! frozen condensates:
                 ! cloud ice treated as snow above freezing and graupel exists
-                if (t (i, k) > tice) then
+                if (t (i, k) > t_ice) then
                     qms (i, k) = qmi (i, k) + qms (i, k)
                     qmi (i, k) = 0.
                 else
@@ -267,7 +246,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             rho = p (i, k) / (rdgas * t (i, k))
             ! use rho = dpg / delz ! needs delz
             
-            tc0 = t (i, k) - tice
+            tc0 = t (i, k) - t_ice
             
             if (rewflag .eq. 1) then
                 
