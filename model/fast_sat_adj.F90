@@ -1,8 +1,8 @@
 ! =======================================================================
-! Fast saturation adjustment is part of the GFDL cloud microphysics.
-! It mainly consists of melting/freezing, condensation/evaporation,
-! sublimation/deposition, and autoconversion processes.
-! Developer: Shian-Jiann Lin, Linjiong Zhou
+! fast saturation adjustment is part of the gfdl cloud microphysics.
+! it mainly consists of melting / freezing, condensation / evaporation,
+! sublimation / deposition, and autoconversion processes.
+! developer: shian - jiann lin, linjiong zhou
 ! =======================================================================
 
 module fast_sat_adj_mod
@@ -33,8 +33,8 @@ module fast_sat_adj_mod
 contains
 
 ! =======================================================================
-! Fast saturation adjustments
-! This is designed for single-moment 6-class cloud microphysics schemes
+! fast saturation adjustments
+! this is designed for single - moment 6 - class cloud microphysics schemes
 ! handles the heat release due to in situ phase changes.
 ! =======================================================================
 
@@ -64,7 +64,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
     real (kind = r_grid), intent (in), dimension (is - ng:ie + ng, js - ng:je + ng) :: area
     
     real, dimension (is:ie, js:je) :: te_beg, te_end, tw_beg, tw_end
-
+    
     real, dimension (is:ie) :: wqsat, dq2dt, qpz, cvm, t0, pt1, qstar
     real, dimension (is:ie) :: icp2, lcp2, tcp2, tcp3
     real, dimension (is:ie) :: den, q_liq, q_sol, q_cond, src, sink, hvar
@@ -189,7 +189,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
             te_beg (i, j) = rgrav * (cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)) * delp (i, j) * area (i, j)
             tw_beg (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * delp (i, j) * area (i, j)
         enddo
-
+        
         ! -----------------------------------------------------------------------
         ! fix negative cloud ice with snow
         ! -----------------------------------------------------------------------
@@ -262,8 +262,8 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! enforce complete freezing of cloud water to cloud ice below - 48 C
-        ! it can be - 50 C, Straka, 2009
+        ! enforce complete freezing of cloud water to cloud ice below - 48 c
+        ! it can be - 50 c, straka, 2009
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -380,8 +380,8 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! homogeneous freezing of cloud water to cloud ice, -40 C to -48 C
-        ! it can be - 50 C, Straka, 2009
+        ! homogeneous freezing of cloud water to cloud ice, - 40 c to - 48 c
+        ! it can be - 50 c, straka, 2009
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -435,7 +435,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! freezing of rain to graupel, complete freezing below -40 C
+        ! freezing of rain to graupel, complete freezing below - 40 c
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -462,7 +462,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! melting of snow to rain or cloud water, complete melting above 10 C
+        ! melting of snow to rain or cloud water, complete melting above 10 c
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -580,7 +580,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
             te_end (i, j) = rgrav * (cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)) * delp (i, j) * area (i, j)
             tw_end (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * delp (i, j) * area (i, j)
         enddo
-
+        
         ! -----------------------------------------------------------------------
         ! update virtual temperature
         ! -----------------------------------------------------------------------
@@ -672,7 +672,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
             enddo
             
             ! -----------------------------------------------------------------------
-            ! use the "liquid - frozen water temperature" (tin) to compute saturated 
+            ! use the "liquid - frozen water temperature" (tin) to compute saturated
             ! specific humidity
             ! -----------------------------------------------------------------------
             
@@ -700,7 +700,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
                 endif
                 
                 ! -----------------------------------------------------------------------
-                ! compute sub-grid variability
+                ! compute sub - grid variability
                 ! -----------------------------------------------------------------------
                 
                 dw = dw_ocean + (dw_land - dw_ocean) * min (1., abs (hs (i, j)) / (10. * grav))
@@ -743,7 +743,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
                                     qa (i, j) = (q_plus - qstar (i)) / (dq + dq)
                                 else
                                     qa (i, j) = (q_plus - qstar (i)) / &
-                                        (2. * dq * (1. - q_cond (i)))
+                                         (2. * dq * (1. - q_cond (i)))
                                 endif
                             else
                                 qa (i, j) = 0.
@@ -763,19 +763,19 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         endif
         
     enddo
-
+    
     ! -----------------------------------------------------------------------
     ! total energy checker
     ! -----------------------------------------------------------------------
-        
-    if (abs (sum (te_end) - sum (te_beg)) / sum (te_beg) .gt. 1.E-14) then
-        print*, "fast_sat_adj te: ", sum (te_beg) / sum (area), sum (te_end) / sum (area), &
-            abs (sum (te_end) - sum (te_beg)) / sum (te_beg)
-    endif
-    if (abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg) .gt. 1.E-14) then
-        print*, "fast_sat_adj tw: ", sum (tw_beg) / sum (area), sum (tw_end) / sum (area), &
-            abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg)
-    endif
+    
+    ! if (abs (sum (te_end) - sum (te_beg)) / sum (te_beg) .gt. 1.e-14) then
+    ! print *, "fast_sat_adj te: ", sum (te_beg) / sum (area), sum (te_end) / sum (area), &
+    ! abs (sum (te_end) - sum (te_beg)) / sum (te_beg)
+    ! endif
+    ! if (abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg) .gt. 1.e-14) then
+    ! print *, "fast_sat_adj tw: ", sum (tw_beg) / sum (area), sum (tw_end) / sum (area), &
+    ! abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg)
+    ! endif
     
 end subroutine fast_sat_adj
 
@@ -895,7 +895,7 @@ subroutine wqs2_vect (is, ie, ta, den, wqsat, dqdt)
         it = ap1 - 0.5
         ! finite diff, del_t = 0.1:
         dqdt (i) = 10. * (desw (it) + (ap1 - it) * (desw (it + 1) - desw (it))) / &
-            (rvgas * ta (i) * den (i))
+             (rvgas * ta (i) * den (i))
     enddo
     
 end subroutine wqs2_vect

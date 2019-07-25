@@ -36,35 +36,35 @@ module gfdl_mp_mod
     real, parameter :: hlv = 2.5e6 ! gfs: latent heat of evaporation
     real, parameter :: hlf = 3.3358e5 ! gfs: latent heat of fusion
     real, parameter :: pi = 3.1415926535897931 ! gfs: ratio of circle circumference to diameter
-
+    
     ! real, parameter :: cp_air = rdgas * 7. / 2. ! 1004.675, heat capacity of dry air at constant pressure
     real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0, heat capacity of water vapore at constnat pressure
-    ! real, parameter :: cv_air = 717.56 ! Satoh value, heat capacity of dry air at constant volume
+    ! real, parameter :: cv_air = 717.56 ! satoh value, heat capacity of dry air at constant volume
     real, parameter :: cv_air = cp_air - rdgas ! 717.55, heat capacity of dry air at constant volume
-    ! real, parameter :: cv_vap = 1410.0 ! Emanuel value, heat capacity of water vapor at constant volume
+    ! real, parameter :: cv_vap = 1410.0 ! emanuel value, heat capacity of water vapor at constant volume
     real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume
     
-    ! http://www.engineeringtoolbox.com/ice-thermal-properties-d_576.html
-    ! c_ice = 2050.0 at 0 deg C
-    ! c_ice = 2000.0 at - 10 deg C
-    ! c_ice = 1943.0 at - 20 deg C
-    ! c_ice = 1882.0 at - 30 deg C
-    ! c_ice = 1818.0 at - 40 deg C
-
-    ! https://www.engineeringtoolbox.com/specific-heat-capacity-water-d_660.html
-    ! c_liq = 4219.9 at 0.01 deg C
-    ! c_liq = 4195.5 at 10 deg C
-    ! c_liq = 4184.4 at 20 deg C
-    ! c_liq = 4180.1 at 30 deg C
-    ! c_liq = 4179.6 at 40 deg C
+    ! http: // www.engineeringtoolbox.com / ice - thermal - properties - d_576.html
+    ! c_ice = 2050.0 at 0 deg c
+    ! c_ice = 2000.0 at - 10 deg c
+    ! c_ice = 1943.0 at - 20 deg c
+    ! c_ice = 1882.0 at - 30 deg c
+    ! c_ice = 1818.0 at - 40 deg c
+    
+    ! https: // www.engineeringtoolbox.com / specific - heat - capacity - water - d_660.html
+    ! c_liq = 4219.9 at 0.01 deg c
+    ! c_liq = 4195.5 at 10 deg c
+    ! c_liq = 4184.4 at 20 deg c
+    ! c_liq = 4180.1 at 30 deg c
+    ! c_liq = 4179.6 at 40 deg c
     
     ! the following two are from emanuel's book "atmospheric convection"
     ! real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg c: c = c_ice + 7.3 * (t - tice)
     ! real, parameter :: c_liq = 4.190e3 ! heat capacity of water at 0 deg c
     ! real, parameter :: c_ice = 1.972e3 ! gfdl: heat capacity of ice at - 15 deg c
     ! real, parameter :: c_liq = 4.1855e3 ! gfdl: heat capacity of water at 15 deg c
-    ! real, parameter :: c_ice = 2.106e3 ! gfs: heat capacity of ice at 0 deg C
-    ! real, parameter :: c_liq = 4.1855e3 ! gfs: heat capacity of liquid at 15 deg C
+    ! real, parameter :: c_ice = 2.106e3 ! gfs: heat capacity of ice at 0 deg c
+    ! real, parameter :: c_liq = 4.1855e3 ! gfs: heat capacity of liquid at 15 deg c
     real, parameter :: c_ice = 2.106e3 ! ifs: heat capacity of ice at 0 deg c
     real, parameter :: c_liq = 4.218e3 ! ifs: heat capacity of water at 0 deg c
     
@@ -78,19 +78,19 @@ module gfdl_mp_mod
     real, parameter :: table_ice = 273.16 ! freezing point for qs table
     real, parameter :: t_wfr = t_ice - 40.0 ! complete freezing temperature
     
-    real (kind = r_grid), parameter :: e00 = 611.21 ! ifs: saturation vapor pressure at 0 deg C
-    ! real (kind = r_grid), parameter :: e00 = 610.71 ! gfdl: saturation vapor pressure at 0 deg C
+    real (kind = r_grid), parameter :: e00 = 611.21 ! ifs: saturation vapor pressure at 0 deg c
+    ! real (kind = r_grid), parameter :: e00 = 610.71 ! gfdl: saturation vapor pressure at 0 deg c
     
-    real, parameter :: hlv0 = hlv ! gfs: evaporation latent heat coefficient at 0 deg C
-    ! real, parameter :: hlv0 = 2.501e6 ! Emanuel value
-    real, parameter :: hlf0 = hlf ! gfs: fussion latent heat coefficient at 0 deg C
-    ! real, parameter :: hlf0 = 3.337e5 ! Emanuel value
+    real, parameter :: hlv0 = hlv ! gfs: evaporation latent heat coefficient at 0 deg c
+    ! real, parameter :: hlv0 = 2.501e6 ! emanuel value
+    real, parameter :: hlf0 = hlf ! gfs: fussion latent heat coefficient at 0 deg c
+    ! real, parameter :: hlf0 = 3.337e5 ! emanuel value
     
-    real, parameter :: lv0 = hlv0 - dc_vap * t_ice ! 3.14893552e6, evaporation latent heat coefficient at 0 deg K
-    real, parameter :: li0 = hlf0 - dc_ice * t_ice ! - 2.2691392e5, fussion latend heat coefficient at 0 deg K
+    real, parameter :: lv0 = hlv0 - dc_vap * t_ice ! 3.14893552e6, evaporation latent heat coefficient at 0 deg k
+    real, parameter :: li0 = hlf0 - dc_ice * t_ice ! - 2.2691392e5, fussion latend heat coefficient at 0 deg k
     
     real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling
-    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coefficient at 0 deg K
+    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coefficient at 0 deg k
     
     real, parameter :: qrmin = 1.e-8 ! min value for cloud condensates
     real, parameter :: qvmin = 1.e-20 ! min value for water vapor (treated as zero)
@@ -103,24 +103,24 @@ module gfdl_mp_mod
     
     real, parameter :: sfcrho = 1.2 ! surface air density
     
-    real, parameter :: rnzr = 8.0e6 ! Lin et al. 1983
-    real, parameter :: rnzs = 3.0e6 ! Lin et al. 1983
-    real, parameter :: rnzg = 4.0e6 ! Rutledge and Hobbs 1984
+    real, parameter :: rnzr = 8.0e6 ! lin et al. 1983
+    real, parameter :: rnzs = 3.0e6 ! lin et al. 1983
+    real, parameter :: rnzg = 4.0e6 ! rutledge and hobbs 1984
     ! lmh, 20170929
-    real, parameter :: rnzh = 4.0e4 ! Lin et al. 1983
+    real, parameter :: rnzh = 4.0e4 ! lin et al. 1983
     
     real, parameter :: rhow = 1.0e3 ! density of cloud water
-    real, parameter :: rhor = 1.0e3 ! Lin et al. 1983
-    real, parameter :: rhos = 0.1e3 ! Lin et al. 1983
-    real, parameter :: rhog = 0.4e3 ! Rutledge and Hobbs 1984
+    real, parameter :: rhor = 1.0e3 ! lin et al. 1983
+    real, parameter :: rhos = 0.1e3 ! lin et al. 1983
+    real, parameter :: rhog = 0.4e3 ! rutledge and hobbs 1984
     ! lmh, 20170929
-    real, parameter :: rhoh = 0.917e3 ! Lin et al. 1983
+    real, parameter :: rhoh = 0.917e3 ! lin et al. 1983
     
     real, parameter :: rgrav = 1. / grav
     
     real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw ! constants for accretions
     real :: acco (3, 4) ! constants for accretions
-    real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5) ! constants for sublimation/deposition, freezing/melting, condensation/evaporation
+    real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5) ! constants for sublimation / deposition, freezing / melting, condensation / evaporation
     
     real :: es0, ces0
     real :: pie, fac_rc
@@ -196,8 +196,8 @@ module gfdl_mp_mod
     real :: dw_land = 0.20 ! base value for subgrid deviation / variability over land
     real :: dw_ocean = 0.10 ! base value for ocean
     
-    real :: ccn_o = 90. ! ccn over ocean (cm^-3)
-    real :: ccn_l = 270. ! ccn over land (cm^-3)
+    real :: ccn_o = 90. ! ccn over ocean (cm^ - 3)
+    real :: ccn_l = 270. ! ccn over land (cm^ - 3)
     
     real :: rthresh = 10.0e-6 ! critical cloud drop radius (micron)
     
@@ -225,11 +225,11 @@ module gfdl_mp_mod
     
     real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain)
     real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources)
-
+    
     real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold (was 1.e-4)
     ! qi0_crt if negative, its magnitude is used as the mixing ration threshold; otherwise, used as density
     real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold
-    ! Lin et al. (1983) used * mixing ratio * = 1.e-4 (hail)
+    ! lin et al. (1983) used * mixing ratio * = 1.e-4 (hail)
     real :: qs0_crt = 1.0e-3 ! snow to graupel density threshold (0.6e-3 in purdue lin scheme)
     
     real :: c_paut = 0.55 ! autoconversion cloud water to rain (use 0.5 to reduce autoconversion)
@@ -240,8 +240,8 @@ module gfdl_mp_mod
     
     ! decreasing clin to reduce csacw (so as to reduce cloud water --- > snow)
     
-    real :: alin = 842.0 ! "a" in Lin et al. (1983)
-    real :: clin = 4.8 ! "c" in Lin et al. (1983), 4.8 -- > 6. (to ehance ql -- > qs)
+    real :: alin = 842.0 ! "a" in lin et al. (1983)
+    real :: clin = 4.8 ! "c" in lin et al. (1983), 4.8 -- > 6. (to ehance ql -- > qs)
     
     logical :: const_vi = .false. ! if .t. the constants are specified by v * _fac
     logical :: const_vs = .false. ! if .t. the constants are specified by v * _fac
@@ -460,7 +460,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     real, dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
     real, dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end
-
+    
     real :: cpaut, rh_adj, rh_rain
     real :: r1, s1, i1, g1, rdt, ccn0
     real :: dt_rain
@@ -579,7 +579,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             tw_beg (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
             tw_b_beg (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
         enddo
-
+        
         ! -----------------------------------------------------------------------
         ! calculate cloud condensation nuclei (ccn)
         ! the following is based on klein eq. 15
@@ -760,7 +760,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             tw_end (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
             tw_b_end (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
         enddo
-
+        
         ! -----------------------------------------------------------------------
         ! update moist air mass (actually hydrostatic pressure)
         ! convert to dry mixing ratios
@@ -835,15 +835,15 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     ! -----------------------------------------------------------------------
     ! total energy checker
     ! -----------------------------------------------------------------------
-        
-    if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg)) .gt. 1.E-14) then
-        print*, "gfdl_mp te: ", sum (te_beg) / sum (gsize ** 2) + sum (te_b_beg) / sum (gsize ** 2), sum (te_end) / sum (gsize ** 2) + sum (te_b_end) / sum (gsize ** 2), &
-            abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg))
-    endif
-    if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg)) .gt. 1.E-14) then
-        print*, "gfdl_mp tw: ", sum (tw_beg) / sum (gsize ** 2) + sum (tw_b_beg) / sum (gsize ** 2), sum (tw_end) / sum (gsize ** 2) + sum (tw_b_end) / sum (gsize ** 2), &
-            abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg))
-    endif
+    
+    ! if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg)) .gt. 1.e-14) then
+    ! print *, "gfdl_mp te: ", sum (te_beg) / sum (gsize ** 2) + sum (te_b_beg) / sum (gsize ** 2), sum (te_end) / sum (gsize ** 2) + sum (te_b_end) / sum (gsize ** 2), &
+    ! abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg))
+    ! endif
+    ! if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg)) .gt. 1.e-14) then
+    ! print *, "gfdl_mp tw: ", sum (tw_beg) / sum (gsize ** 2) + sum (tw_b_beg) / sum (gsize ** 2), sum (tw_end) / sum (gsize ** 2) + sum (tw_b_end) / sum (gsize ** 2), &
+    ! abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg))
+    ! endif
     
 end subroutine mpdrv
 
@@ -1152,7 +1152,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
             lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
             tin = (tz (k) * cvm (k) - lv00 * ql (k)) / (1. + (qv (k) + ql (k)) * c1_vap + qr (k) * c1_liq + q_sol (k) * c1_ice)
-
+            
             qpz = qv (k) + ql (k)
             qsat = wqs2 (tin, den (k), dqsdt)
             dqh = max (ql (k), h_var * max (qpz, qcmin))

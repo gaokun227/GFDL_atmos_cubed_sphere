@@ -3,7 +3,7 @@
 ! authors: linjiong zhou and shian - jiann lin
 ! =======================================================================
 module cld_eff_rad_mod
-
+    
     use gfdl_cld_mp_mod, only: rvgas, rdgas, grav, pi, zvir, t_ice, ql0_max, ql0_max, &
         ccn_o, ccn_l, rhow, rhor, rhos, rhog
     
