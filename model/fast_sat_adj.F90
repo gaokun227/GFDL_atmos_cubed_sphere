@@ -12,7 +12,7 @@ module fast_sat_adj_mod
         ql_mlt, ql0_max, qi_lim, qs_mlt, icloud_f, sat_adj0, t_sub, cld_min, tau_r2g, tau_smlt, &
         tau_i2s, tau_v2l, tau_l2v, tau_imlt, tau_l2r, rad_rain, rad_snow, rad_graupel, &
         dw_ocean, dw_land, cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, t_ice, &
-        t_wfr, e00
+        t_wfr, e00, rgrav
     
     implicit none
     
@@ -63,6 +63,8 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
     
     real (kind = r_grid), intent (in), dimension (is - ng:ie + ng, js - ng:je + ng) :: area
     
+    real, dimension (is:ie, js:je) :: te_beg, te_end, tw_beg, tw_end
+
     real, dimension (is:ie) :: wqsat, dq2dt, qpz, cvm, t0, pt1, qstar
     real, dimension (is:ie) :: icp2, lcp2, tcp2, tcp3
     real, dimension (is:ie) :: den, q_liq, q_sol, q_cond, src, sink, hvar
@@ -179,6 +181,15 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
             endif
         endif
         
+        ! -----------------------------------------------------------------------
+        ! total energy checker
+        ! -----------------------------------------------------------------------
+        
+        do i = is, ie
+            te_beg (i, j) = rgrav * (cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)) * delp (i, j) * area (i, j)
+            tw_beg (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * delp (i, j) * area (i, j)
+        enddo
+
         ! -----------------------------------------------------------------------
         ! fix negative cloud ice with snow
         ! -----------------------------------------------------------------------
@@ -537,22 +548,6 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! update virtual temperature
-        ! -----------------------------------------------------------------------
-        
-        do i = is, ie
-#ifdef USE_COND
-            q_con (i, j) = q_liq (i) + q_sol (i)
-            tmp = 1. + zvir * qv (i, j)
-            pt (i, j) = pt1 (i) * tmp * (1. - q_con (i, j))
-            tmp = rdgas * tmp
-            cappa (i, j) = tmp / (tmp + cvm (i))
-#else
-            pt (i, j) = pt1 (i) * (1. + zvir * qv (i, j))
-#endif
-        enddo
-        
-        ! -----------------------------------------------------------------------
         ! fix negative graupel with available cloud ice
         ! -----------------------------------------------------------------------
         
@@ -575,6 +570,31 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
                 qi (i, j) = qi (i, j) - sink (i)
                 qs (i, j) = qs (i, j) + sink (i)
             endif
+        enddo
+        
+        ! -----------------------------------------------------------------------
+        ! total energy checker
+        ! -----------------------------------------------------------------------
+        
+        do i = is, ie
+            te_end (i, j) = rgrav * (cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)) * delp (i, j) * area (i, j)
+            tw_end (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * delp (i, j) * area (i, j)
+        enddo
+
+        ! -----------------------------------------------------------------------
+        ! update virtual temperature
+        ! -----------------------------------------------------------------------
+        
+        do i = is, ie
+#ifdef USE_COND
+            q_con (i, j) = q_liq (i) + q_sol (i)
+            tmp = 1. + zvir * qv (i, j)
+            pt (i, j) = pt1 (i) * tmp * (1. - q_con (i, j))
+            tmp = rdgas * tmp
+            cappa (i, j) = tmp / (tmp + cvm (i))
+#else
+            pt (i, j) = pt1 (i) * (1. + zvir * qv (i, j))
+#endif
         enddo
         
         if (out_dt) then
@@ -743,6 +763,19 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         endif
         
     enddo
+
+    ! -----------------------------------------------------------------------
+    ! total energy checker
+    ! -----------------------------------------------------------------------
+        
+    if (abs (sum (te_end) - sum (te_beg)) / sum (te_beg) .gt. 1.E-14) then
+        print*, "fast_sat_adj te: ", sum (te_beg) / sum (area), sum (te_end) / sum (area), &
+            abs (sum (te_end) - sum (te_beg)) / sum (te_beg)
+    endif
+    if (abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg) .gt. 1.E-14) then
+        print*, "fast_sat_adj tw: ", sum (tw_beg) / sum (area), sum (tw_end) / sum (area), &
+            abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg)
+    endif
     
 end subroutine fast_sat_adj
 
