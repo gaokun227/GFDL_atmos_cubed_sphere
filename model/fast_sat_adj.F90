@@ -180,11 +180,11 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
                 enddo
             endif
         endif
-
+        
         ! -----------------------------------------------------------------------
         ! total energy checker
         ! -----------------------------------------------------------------------
-            
+        
         if (consv_checker) then
             do i = is, ie
                 te_beg (i, j) = rgrav * (cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)) * delp (i, j) * area (i, j)
@@ -577,7 +577,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! -----------------------------------------------------------------------
         ! total energy checker
         ! -----------------------------------------------------------------------
-            
+        
         if (consv_checker) then
             do i = is, ie
                 te_end (i, j) = rgrav * (cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)) * delp (i, j) * area (i, j)
@@ -771,17 +771,17 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
     ! -----------------------------------------------------------------------
     ! total energy checker
     ! -----------------------------------------------------------------------
-        
+    
     if (consv_checker) then
         if (abs (sum (te_end) - sum (te_beg)) / sum (te_beg) .gt. 1.e-14) then
             print *, "fast_sat_adj te: ", sum (te_beg) / sum (area), &
                 sum (te_end) / sum (area), &
-                abs (sum (te_end) - sum (te_beg)) / sum (te_beg)
+                 (sum (te_end) - sum (te_beg)) / sum (te_beg)
         endif
         if (abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg) .gt. 1.e-14) then
             print *, "fast_sat_adj tw: ", sum (tw_beg) / sum (area), &
                 sum (tw_end) / sum (area), &
-                abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg)
+                 (sum (tw_end) - sum (tw_beg)) / sum (tw_beg)
         endif
     endif
     
