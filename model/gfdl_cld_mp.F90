@@ -272,6 +272,7 @@ module gfdl_cld_mp_mod
     logical :: do_hail = .false. ! use hail parameters instead of graupel
     logical :: xr_cloud = .false. ! use xu and randall, 1996's cloud diagnosis
     logical :: hd_icefall = .false. ! use heymsfield and donner, 1990's fall speed of cloud ice
+    logical :: consv_checker = .false. ! turn on energy and water conservation checker, turn off to save time, turn on only in C48 64bit
     
     real :: g2, log_10, tice0
     
@@ -291,7 +292,7 @@ module gfdl_cld_mp_mod
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, mp_print, &
         ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
-        do_cond_timescale, mp_time
+        do_cond_timescale, mp_time, consv_checker
     
     public &
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
@@ -305,7 +306,7 @@ module gfdl_cld_mp_mod
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, mp_print, &
         ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
-        do_cond_timescale, mp_time
+        do_cond_timescale, mp_time, consv_checker
     
 contains
 
@@ -459,6 +460,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     real, dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
     real, dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte
+    real, dimension (ks:ke) :: te1, te2
     
     real :: cpaut, rh_adj, rh_rain
     real :: r1, s1, i1, g1, rdt, ccn0
@@ -569,17 +571,19 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         ! total energy checker
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            q_liq (k) = qlz (k) + qrz (k)
-            q_sol (k) = qiz (k) + qsz (k) + qgz (k)
-            cvm (k) = c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            te_beg (i, k) = rgrav * (cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
-            te_beg (i, k) = te_beg (i, k) + rgrav * 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2) * dp1 (k) * gsize (i) ** 2.0
-            tw_beg (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
-        enddo
-        te_b_beg (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
-        tw_b_beg (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
+            
+        if (consv_checker) then
+            do k = ks, ke
+                q_liq (k) = qlz (k) + qrz (k)
+                q_sol (k) = qiz (k) + qsz (k) + qgz (k)
+                cvm (k) = c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                te_beg (i, k) = rgrav * (cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
+                te_beg (i, k) = te_beg (i, k) + rgrav * 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2) * dp1 (k) * gsize (i) ** 2.0
+                tw_beg (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
+            enddo
+            te_b_beg (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
+            tw_b_beg (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
+        endif
         
         ! -----------------------------------------------------------------------
         ! calculate cloud condensation nuclei (ccn)
@@ -671,6 +675,17 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ice (i) = ice (i) + i1 * convt
             
             ! -----------------------------------------------------------------------
+            ! energy loss during sedimentation heating
+            ! -----------------------------------------------------------------------
+                
+            if (consv_checker) then
+                do k = ks, ke
+                    te1 (k) = one_r8 + qvz (k) * c1_vap + (qlz (k) + qrz (k)) * c1_liq + (qiz (k) + qsz (k) + qgz (k)) * c1_ice
+                    te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp1 (k)
+                enddo
+            endif
+        
+            ! -----------------------------------------------------------------------
             ! heat transportation during sedimentation
             ! -----------------------------------------------------------------------
             
@@ -679,6 +694,18 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 qsz, qgz, c_ice)
             endif
             
+            ! -----------------------------------------------------------------------
+            ! energy loss during sedimentation heating
+            ! -----------------------------------------------------------------------
+                
+            if (consv_checker) then
+                do k = ks, ke
+                    te2 (k) = one_r8 + qvz (k) * c1_vap + (qlz (k) + qrz (k)) * c1_liq + (qiz (k) + qsz (k) + qgz (k)) * c1_ice
+                    te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp1 (k)
+                enddo
+                dte (i) = dte (i) + sum (te1) - sum (te2)
+            endif
+        
             ! -----------------------------------------------------------------------
             ! time - split warm rain processes: 2nd pass
             ! -----------------------------------------------------------------------
@@ -751,17 +778,19 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         ! total energy checker
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            q_liq (k) = qlz (k) + qrz (k)
-            q_sol (k) = qiz (k) + qsz (k) + qgz (k)
-            cvm (k) = c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-            te_end (i, k) = rgrav * (cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
-            te_end (i, k) = te_end (i, k) + rgrav * 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2) * dp1 (k) * gsize (i) ** 2.0
-            tw_end (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
-        enddo
-        te_b_end (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
-        tw_b_end (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
+            
+        if (consv_checker) then
+            do k = ks, ke
+                q_liq (k) = qlz (k) + qrz (k)
+                q_sol (k) = qiz (k) + qsz (k) + qgz (k)
+                cvm (k) = c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+                te_end (i, k) = rgrav * (cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
+                te_end (i, k) = te_end (i, k) + rgrav * 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2) * dp1 (k) * gsize (i) ** 2.0
+                tw_end (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
+            enddo
+            te_b_end (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
+            tw_b_end (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
+        endif
         
         ! -----------------------------------------------------------------------
         ! update moist air mass (actually hydrostatic pressure)
@@ -837,15 +866,19 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     ! -----------------------------------------------------------------------
     ! total energy checker
     ! -----------------------------------------------------------------------
-    
-    ! if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg)) .gt. 1.e-14) then
-    ! print *, "gfdl_mp te: ", sum (te_beg) / sum (gsize ** 2) + sum (te_b_beg) / sum (gsize ** 2), sum (te_end) / sum (gsize ** 2) + sum (te_b_end) / sum (gsize ** 2), &
-    ! abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg))
-    ! endif
-    ! if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg)) .gt. 1.e-14) then
-    ! print *, "gfdl_mp tw: ", sum (tw_beg) / sum (gsize ** 2) + sum (tw_b_beg) / sum (gsize ** 2), sum (tw_end) / sum (gsize ** 2) + sum (tw_b_end) / sum (gsize ** 2), &
-    ! abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg))
-    ! endif
+        
+    if (consv_checker) then
+        if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg)) .gt. 1.e-14) then
+            print *, "gfdl_mp te: ", sum (te_beg) / sum (gsize ** 2) + sum (te_b_beg) / sum (gsize ** 2), &
+                sum (te_end) / sum (gsize ** 2) + sum (te_b_end) / sum (gsize ** 2), &
+                abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg))
+        endif
+        if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg)) .gt. 1.e-14) then
+            print *, "gfdl_mp tw: ", sum (tw_beg) / sum (gsize ** 2) + sum (tw_b_beg) / sum (gsize ** 2), &
+                sum (tw_end) / sum (gsize ** 2) + sum (tw_b_end) / sum (gsize ** 2), &
+                abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg))
+        endif
+    endif
     
 end subroutine mpdrv
 
@@ -971,13 +1004,15 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! temperature change during sedimentation based on energy conservation
+        ! energy loss during sedimentation
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-            te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
-        enddo
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
+            enddo
+        endif
         
         ! -----------------------------------------------------------------------
         ! mass flux induced by falling rain
@@ -999,14 +1034,16 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! temperature change during sedimentation based on energy conservation
+        ! energy loss during sedimentation
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-            te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
-        enddo
-        dte = dte + sum (te1) - sum (te2)
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
+            enddo
+            dte = dte + sum (te1) - sum (te2)
+        endif
         
         ! -----------------------------------------------------------------------
         ! vertical velocity transportation during sedimentation
@@ -1022,6 +1059,17 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         endif
         
         ! -----------------------------------------------------------------------
+        ! energy loss during sedimentation heating
+        ! -----------------------------------------------------------------------
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
+            enddo
+        endif
+        
+        ! -----------------------------------------------------------------------
         ! heat exchanges during sedimentation
         ! -----------------------------------------------------------------------
         
@@ -1029,6 +1077,19 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
             call sedi_heat (ks, ke, dp, m1_rain, dz, tz, qv, ql, qr, qi, qs, qg, c_liq)
         endif
         
+        ! -----------------------------------------------------------------------
+        ! energy loss during sedimentation heating
+        ! -----------------------------------------------------------------------
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
+            enddo
+            dte = dte + sum (te1) - sum (te2)
+        endif
+        
+
         ! -----------------------------------------------------------------------
         ! evaporation and accretion of rain for the remaing 1 / 2 time step
         ! -----------------------------------------------------------------------
@@ -2366,13 +2427,15 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! temperature change during sedimentation based on energy conservation
+        ! energy loss during sedimentation
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-            te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
-        enddo
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
+            enddo
+        endif
         
         if (use_ppm_ice) then
             call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qi, i1, m1_sol, mono_prof)
@@ -2381,14 +2444,16 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! temperature change during sedimentation based on energy conservation
+        ! energy loss during sedimentation
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-            te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
-        enddo
-        dte = dte + sum (te1) - sum (te2)
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
+            enddo
+            dte = dte + sum (te1) - sum (te2)
+        endif
         
         if (do_sedi_w) then
             w1 (ks) = w1 (ks) + m1_sol (ks) * vti (ks) / dm (ks)
@@ -2452,13 +2517,15 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! temperature change during sedimentation based on energy conservation
+        ! energy loss during sedimentation
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-            te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
-        enddo
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
+            enddo
+        endif
         
         if (use_ppm) then
             call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qs, s1, m1, mono_prof)
@@ -2467,14 +2534,16 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! temperature change during sedimentation based on energy conservation
+        ! energy loss during sedimentation
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-            te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
-        enddo
-        dte = dte + sum (te1) - sum (te2)
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
+            enddo
+            dte = dte + sum (te1) - sum (te2)
+        endif
         
         do k = ks, ke
             m1_sol (k) = m1_sol (k) + m1 (k)
@@ -2539,13 +2608,15 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! temperature change during sedimentation based on energy conservation
+        ! energy loss during sedimentation
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-            te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
-        enddo
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
+            enddo
+        endif
         
         if (use_ppm) then
             call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qg, g1, m1, mono_prof)
@@ -2554,14 +2625,16 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! temperature change during sedimentation based on energy conservation
+        ! energy loss during sedimentation
         ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-            te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
-        enddo
-        dte = dte + sum (te1) - sum (te2)
+            
+        if (consv_checker) then
+            do k = ks, ke
+                te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
+            enddo
+            dte = dte + sum (te1) - sum (te2)
+        endif
         
         do k = ks, ke
             m1_sol (k) = m1_sol (k) + m1 (k)
