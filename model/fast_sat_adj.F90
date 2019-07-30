@@ -12,13 +12,14 @@ module fast_sat_adj_mod
         ql_mlt, ql0_max, qi_lim, qs_mlt, icloud_f, sat_adj0, t_sub, cld_min, tau_r2g, tau_smlt, &
         tau_i2s, tau_v2l, tau_l2v, tau_imlt, tau_l2r, rad_rain, rad_snow, rad_graupel, &
         dw_ocean, dw_land, cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, t_ice, &
-        t_wfr, e00, rgrav, consv_checker
+        t_wfr, e00, rgrav, consv_checker, zvir, do_qa, te_err
     
     implicit none
     
     private
     
     public fast_sat_adj, qsmith_init
+    public wqs2_vect, qs_table, qs_tablew, qs_table2, wqs1, iqs1, wqs2, iqs2
     
     real, parameter :: lv0 = hlv - dc_vap * t_ice
     real, parameter :: li00 = hlf - dc_ice * t_ice
@@ -38,32 +39,32 @@ contains
 ! handles the heat release due to in situ phase changes.
 ! =======================================================================
 
-subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
-        te, qv, ql, qi, qr, qs, qg, hs, dpln, delz, pt, delp, q_con, cappa, &
-        area, dtdt, out_dt, last_step, do_qa, qa)
+subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
+        te, qv, ql, qi, qr, qs, qg, qa, hs, dpln, delz, pt, delp, q_con, cappa, &
+        gsize, dtdt, out_dt, last_step)
     
     implicit none
     
-    logical, intent (in) :: hydrostatic, consv_te, out_dt, last_step, do_qa
+    logical, intent (in) :: hydrostatic, consv_te, out_dt, last_step
     
     integer, intent (in) :: is, ie, js, je, ng
     
-    real, intent (in) :: zvir, mdt
+    real, intent (in) :: mdt
     
     real, intent (in), dimension (is - ng:ie + ng, js - ng:je + ng) :: delp, hs
     real, intent (in), dimension (is:ie, js:je) :: dpln
     real, intent (in), dimension (is:, js:) :: delz
+    
+    real (kind = r_grid), intent (in), dimension (is:ie, js:je) :: gsize
     
     real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: pt, qv, ql, qr
     real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: qi, qs, qg
     real, intent (inout), dimension (is - ng:, js - ng:) :: q_con, cappa
     real, intent (inout), dimension (is:ie, js:je) :: dtdt
     
-    real, intent (out), dimension (is - ng:ie + ng, js - ng:je + ng) :: qa, te
+    real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: qa, te
     
-    real (kind = r_grid), intent (in), dimension (is - ng:ie + ng, js - ng:je + ng) :: area
-    
-    real, dimension (is:ie, js:je) :: te_beg, te_end, tw_beg, tw_end
+    real (kind = r_grid), dimension (is:ie, js:je) :: te_beg, te_end, tw_beg, tw_end
     
     real, dimension (is:ie) :: wqsat, dq2dt, qpz, cvm, t0, pt1, qstar
     real, dimension (is:ie) :: icp2, lcp2, tcp2, tcp3
@@ -187,8 +188,9 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         
         if (consv_checker) then
             do i = is, ie
-                te_beg (i, j) = rgrav * (cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)) * delp (i, j) * area (i, j)
-                tw_beg (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * delp (i, j) * area (i, j)
+                te_beg (i, j) = cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)
+                te_beg (i, j) = rgrav * te_beg (i, j) * delp (i, j) * gsize (i, j) ** 2.0
+                tw_beg (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * delp (i, j) * gsize (i, j) ** 2.0
             enddo
         endif
         
@@ -580,8 +582,9 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
         
         if (consv_checker) then
             do i = is, ie
-                te_end (i, j) = rgrav * (cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)) * delp (i, j) * area (i, j)
-                tw_end (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * delp (i, j) * area (i, j)
+                te_end (i, j) = cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)
+                te_end (i, j) = rgrav * te_end (i, j) * delp (i, j) * gsize (i, j) ** 2.0
+                tw_end (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * delp (i, j) * gsize (i, j) ** 2.0
             enddo
         endif
         
@@ -708,7 +711,7 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
                 ! -----------------------------------------------------------------------
                 
                 dw = dw_ocean + (dw_land - dw_ocean) * min (1., abs (hs (i, j)) / (10. * grav))
-                hvar (i) = min (0.2, max (0.01, dw * sqrt (sqrt (area (i, j)) / 100.e3)))
+                hvar (i) = min (0.2, max (0.01, dw * sqrt (gsize (i, j) / 100.e3)))
                 
                 ! -----------------------------------------------------------------------
                 ! partial cloudiness by pdf:
@@ -773,14 +776,14 @@ subroutine fast_sat_adj (mdt, zvir, is, ie, js, je, ng, hydrostatic, consv_te, &
     ! -----------------------------------------------------------------------
     
     if (consv_checker) then
-        if (abs (sum (te_end) - sum (te_beg)) / sum (te_beg) .gt. 1.e-14) then
-            print *, "fast_sat_adj te: ", sum (te_beg) / sum (area), &
-                sum (te_end) / sum (area), &
+        if (abs (sum (te_end) - sum (te_beg)) / sum (te_beg) .gt. te_err) then
+            print *, "fast_sat_adj te: ", sum (te_beg) / sum (gsize ** 2.0), &
+                sum (te_end) / sum (gsize ** 2.0), &
                  (sum (te_end) - sum (te_beg)) / sum (te_beg)
         endif
-        if (abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg) .gt. 1.e-14) then
-            print *, "fast_sat_adj tw: ", sum (tw_beg) / sum (area), &
-                sum (tw_end) / sum (area), &
+        if (abs (sum (tw_end) - sum (tw_beg)) / sum (tw_beg) .gt. te_err) then
+            print *, "fast_sat_adj tw: ", sum (tw_beg) / sum (gsize ** 2.0), &
+                sum (tw_end) / sum (gsize ** 2.0), &
                  (sum (tw_end) - sum (tw_beg)) / sum (tw_beg)
         endif
     endif

@@ -4,7 +4,7 @@
 ! =======================================================================
 module cld_eff_rad_mod
     
-    use gfdl_cld_mp_mod, only: rvgas, rdgas, grav, pi, zvir, t_ice, ql0_max, ql0_max, &
+    use gfdl_cld_mp_mod, only: rdgas, grav, pi, zvir, t_ice, ql0_max, &
         ccn_o, ccn_l, rhow, rhor, rhos, rhog
     
     implicit none
@@ -79,7 +79,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     real, intent (in), dimension (is:ie, ks:ke) :: cloud ! cloud fraction
     real, intent (in), dimension (is:ie, ks:ke) :: qw, qi, qr, qs, qg ! mass mixing ratio (kg / kg)
     
-    real, intent (in), dimension (is:ie, ks:ke), optional :: cnvw, cnvi ! convective cloud water, cloud ice mass mixing ratio (kg / kg)
+    real, intent (in), dimension (is:ie, ks:ke), optional :: cnvw, cnvi ! convective cloud water / ice mass mixing ratio (kg / kg)
     real, intent (in), dimension (is:ie, ks:ke), optional :: cnvc ! convective cloud fraction
     
     real, intent (inout), dimension (is:ie, ks:ke) :: qcw, qci, qcr, qcs, qcg ! units: g / m^2
@@ -497,18 +497,17 @@ subroutine cld_eff_rad_init (nlunit, input_nml_file, logunit, fn_nml)
     character (len = 64), intent (in) :: fn_nml
     character (len = *), intent (in) :: input_nml_file (:)
     
-    integer :: ios
     logical :: exists
     
 #ifdef INTERNAL_FILE_NML
-    read (input_nml_file, nml = cld_eff_rad_nml, iostat = ios)
+    read (input_nml_file, nml = cld_eff_rad_nml)
 #else
     inquire (file = trim (fn_nml), exist = exists)
     if (.not. exists) then
         write (6, *) 'cld_eff_rad :: namelist file: ', trim (fn_nml), ' does not exist'
         stop
     else
-        open (unit = nlunit, file = fn_nml, readonly, status = 'old', iostat = ios)
+        open (unit = nlunit, file = fn_nml, readonly, status = 'old')
     endif
     rewind (nlunit)
     read (nlunit, nml = cld_eff_rad_nml)

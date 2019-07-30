@@ -752,12 +752,14 @@ endif        ! end last_step check
                     dpln(i,j) = peln(i,k+1,j) - peln(i,k,j)
                  enddo
               enddo
-              call fast_sat_adj(abs(mdt), r_vir, is, ie, js, je, ng, hydrostatic, fast_mp_consv, &
+              call fast_sat_adj(abs(mdt), is, ie, js, je, ng, hydrostatic, fast_mp_consv, &
                              te(isd,jsd,k), q(isd,jsd,k,sphum), q(isd,jsd,k,liq_wat),   &
                              q(isd,jsd,k,ice_wat), q(isd,jsd,k,rainwat),    &
                              q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel),    &
-                             hs ,dpln, delz(is:ie,js:je,k), pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), & ! TEMPORARY
-              cappa(isd:,jsd:,k), gridstruct%area_64, dtdt(is,js,k), out_dt, last_step, cld_amt>0, q(isd,jsd,k,cld_amt))
+                             q(isd,jsd,k,cld_amt), hs ,dpln, delz(is:ie,js:je,k), &
+                             pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), & ! TEMPORARY
+                             cappa(isd:,jsd:,k), sqrt(gridstruct%area_64(is:ie,js:je)), &
+                             dtdt(is,js,k), out_dt, last_step)
               if ( .not. hydrostatic  ) then
                  do j=js,je
                     do i=is,ie

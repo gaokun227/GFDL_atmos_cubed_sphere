@@ -120,7 +120,8 @@ module gfdl_mp_mod
     
     real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw ! constants for accretions
     real :: acco (3, 4) ! constants for accretions
-    real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5) ! constants for sublimation / deposition, freezing / melting, condensation / evaporation
+    ! constants for sublimation / deposition, freezing / melting, condensation / evaporation
+    real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5)
     
     real :: es0, ces0
     real :: pie, fac_rc
@@ -260,6 +261,8 @@ module gfdl_mp_mod
     real :: xr_a = 0.25 ! p value in xu and randall, 1996
     real :: xr_b = 100. ! alpha_0 value in xu and randall, 1996
     real :: xr_c = 0.49 ! gamma value in xu and randall, 1996
+
+    real :: te_err = 1.e-14 ! 64bit: 1.e-14, 32bit: 1.e-7
     
     logical :: do_sat_adj = .false. ! has fast saturation adjustments
     logical :: z_slope_liq = .true. ! use linear mono slope for autocconversions
@@ -272,7 +275,8 @@ module gfdl_mp_mod
     logical :: do_hail = .false. ! use hail parameters instead of graupel
     logical :: xr_cloud = .false. ! use xu and randall, 1996's cloud diagnosis
     logical :: hd_icefall = .false. ! use heymsfield and donner, 1990's fall speed of cloud ice
-    logical :: consv_checker = .false. ! turn on energy and water conservation checker, turn off to save time, turn on only in c48 64bit
+    logical :: consv_checker = .false. ! turn on energy and water conservation checker
+    ! turn off to save time, turn on only in c48 64bit
     
     real :: g2, log_10, tice0
     
@@ -292,7 +296,7 @@ module gfdl_mp_mod
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, mp_print, &
         ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
-        do_cond_timescale, mp_time, consv_checker
+        do_cond_timescale, mp_time, consv_checker, te_err
     
     public &
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
@@ -306,7 +310,7 @@ module gfdl_mp_mod
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, mp_print, &
         ntimes, disp_heat, do_hail, xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
-        do_cond_timescale, mp_time, consv_checker
+        do_cond_timescale, mp_time, consv_checker, te_err
     
 contains
 
@@ -458,9 +462,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, dimension (ks:ke) :: ccn, c_praut, m1_rain, m1_sol, m1
     real, dimension (ks:ke) :: u0, v0, u1, v1, w1
     
-    real, dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
-    real, dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
-    real, dimension (ks:ke) :: te1, te2
+    real (kind = r_grid), dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
+    real (kind = r_grid), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
+    real (kind = r_grid), dimension (ks:ke) :: te1, te2
     
     real :: cpaut, rh_adj, rh_rain
     real :: r1, s1, i1, g1, rdt, ccn0
@@ -577,8 +581,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 q_liq (k) = qlz (k) + qrz (k)
                 q_sol (k) = qiz (k) + qsz (k) + qgz (k)
                 cvm (k) = c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                te_beg (i, k) = rgrav * (cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
-                te_beg (i, k) = te_beg (i, k) + rgrav * 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2) * dp1 (k) * gsize (i) ** 2.0
+                te_beg (i, k) = cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)
+                te_beg (i, k) = te_beg (i, k) + 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2)
+                te_beg (i, k) = rgrav * te_beg (i, k) * dp1 (k) * gsize (i) ** 2.0
                 tw_beg (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
             enddo
             te_b_beg (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
@@ -784,8 +789,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 q_liq (k) = qlz (k) + qrz (k)
                 q_sol (k) = qiz (k) + qsz (k) + qgz (k)
                 cvm (k) = c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
-                te_end (i, k) = rgrav * (cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
-                te_end (i, k) = te_end (i, k) + rgrav * 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2) * dp1 (k) * gsize (i) ** 2.0
+                te_end (i, k) = cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)
+                te_end (i, k) = te_end (i, k) + 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2)
+                te_end (i, k) = rgrav * te_end (i, k) * dp1 (k) * gsize (i) ** 2.0
                 tw_end (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
             enddo
             te_b_end (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
@@ -870,12 +876,12 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     ! -----------------------------------------------------------------------
     
     if (consv_checker) then
-        if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg)) .gt. 1.e-14) then
+        if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg)) .gt. te_err) then
             print *, "gfdl_mp te: ", sum (te_beg) / sum (gsize ** 2) + sum (te_b_beg) / sum (gsize ** 2), &
                 sum (te_end) / sum (gsize ** 2) + sum (te_b_end) / sum (gsize ** 2), &
                  (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg))
         endif
-        if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg)) .gt. 1.e-14) then
+        if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg)) .gt. te_err) then
             print *, "gfdl_mp tw: ", sum (tw_beg) / sum (gsize ** 2) + sum (tw_b_beg) / sum (gsize ** 2), &
                 sum (tw_end) / sum (gsize ** 2) + sum (tw_b_end) / sum (gsize ** 2), &
                  (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg))
@@ -937,7 +943,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
     real, intent (inout), dimension (ks:ke) :: vtr, qv, ql, qr, qi, qs, qg, m1_rain, w1
-    real, intent (inout) :: dte
+    real (kind = r_grid), intent (inout) :: dte
     real, intent (out) :: r1
     real, parameter :: so3 = 7. / 3.
     ! fall velocity constants:
@@ -945,7 +951,8 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     real, parameter :: normr = 25132741228.7183
     real, parameter :: thr = 1.e-8
     
-    real, dimension (ks:ke) :: dl, dm, te1, te2
+    real, dimension (ks:ke) :: dl, dm
+    real (kind = r_grid), dimension (ks:ke) :: te1, te2
     real, dimension (ks:ke + 1) :: ze, zt
     real :: sink, dq, qc0, qc
     real :: qden
@@ -2296,7 +2303,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     real, intent (in), dimension (ks:ke) :: vtg, vts, vti, den, dp, dz
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, m1_sol, w1
-    real, intent (inout) :: dte
+    real (kind = r_grid), intent (inout) :: dte
     real, intent (out) :: r1, g1, s1, i1
     ! local:
     real, dimension (ks:ke + 1) :: ze, zt
@@ -2304,7 +2311,8 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     real :: factor, frac
     real :: tmp, precip, tc, sink
     real, dimension (ks:ke) :: lcpk, icpk, cvm, q_liq, q_sol
-    real, dimension (ks:ke) :: m1, dm, te1, te2
+    real, dimension (ks:ke) :: m1, dm
+    real (kind = r_grid), dimension (ks:ke) :: te1, te2
     real :: zs = 0.
     real :: fac_imlt
     
@@ -3350,21 +3358,20 @@ subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
     character (len = 64), intent (in) :: fn_nml
     character (len = *), intent (in) :: input_nml_file (:)
     
-    integer :: ios
     logical :: exists
     
 #ifdef INTERNAL_FILE_NML
-    read (input_nml_file, nml = gfdl_mp_nml, iostat = ios)
+    read (input_nml_file, nml = gfdl_mp_nml)
 #else
     inquire (file = trim (fn_nml), exist = exists)
     if (.not. exists) then
         write (6, *) 'gfdl - mp :: namelist file: ', trim (fn_nml), ' does not exist'
         stop
     else
-        open (unit = nlunit, file = fn_nml, readonly, status = 'old', iostat = ios)
+        open (unit = nlunit, file = fn_nml, readonly, status = 'old')
     endif
     rewind (nlunit)
-    read (nlunit, nml = gfdl_mp_nml, iostat = ios)
+    read (nlunit, nml = gfdl_mp_nml)
     close (nlunit)
 #endif
     
