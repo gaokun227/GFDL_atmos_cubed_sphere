@@ -634,7 +634,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         if (prog_ccn) then
             do k = ks, ke
                 ! convert # / cc to # / m^3
-                ccn (k) = qn (i, k) * 1.e6
+                ccn (k) = max (10.0, qn (i, k)) * 1.e6
                 c_praut (k) = cpaut * (ccn (k) * rhor) ** (- 1. / 3.)
             enddo
             use_ccn = .false.
