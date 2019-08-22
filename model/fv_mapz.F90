@@ -819,6 +819,10 @@ endif        ! end last_step check
         dp2(is:ie,:) = q(is:ie,j,:,sphum)
         t0(is:ie,:) = pt(is:ie,j,:)
 
+        if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,:) = q(is:ie,j,:,liq_wat) + q(is:ie,j,:,rainwat) 
+        if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,:) = &
+             q(is:ie,j,:,ice_wat) + q(is:ie,j,:,snowwat) + q(is:ie,j,:,graupel)
+
 #ifndef DYCORE_SOLO
         call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
@@ -838,7 +842,14 @@ endif        ! end last_step check
 
         if (.not. do_adiabatic_init) then
            if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt(is:ie,j,:) = (q(is:ie,j,:,sphum) - dp2(is:ie,:)) / abs(mdt)
+           if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,:) = &
+                (q(is:ie,j,:,liq_wat) + q(is:ie,j,:,rainwat) - inline_mp%ql_dt(is:ie,j,:)) / abs(mdt)
+           if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,:) = &
+                (q(is:ie,j,:,ice_wat) + q(is:ie,j,:,snowwat) + q(is:ie,j,:,graupel) - inline_mp%qi_dt(is:ie,j,:)) / abs(mdt)
            if (allocated(inline_mp%t_dt))  inline_mp%t_dt(is:ie,j,:)  = (pt(is:ie,j,:)      -  t0(is:ie,:)) / abs(mdt)
+
+           if (allocated(inline_mp%u_dt)) inline_mp%u_dt(is:ie,j,:) = u_dt(is:ie,j,:)
+           if (allocated(inline_mp%v_dt)) inline_mp%v_dt(is:ie,j,:) = v_dt(is:ie,j,:)
         endif
 
         ! update pe, peln, pk, ps

@@ -1368,7 +1368,7 @@ module fv_nwp_nudge_mod
 
 
   if( .not. file_exist(fname) ) then
-     call mpp_error(FATAL,'==> Error from get_ncep_analysis: file not found')
+     call mpp_error(FATAL,'==> Error from get_ncep_analysis: file not found: '//fname)
   else
      call open_ncfile( fname, ncid )        ! open the file
      if(master) write(*,*) 'Reading NCEP anlysis file:', fname 
