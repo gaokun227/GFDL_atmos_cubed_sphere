@@ -512,6 +512,7 @@ contains
                                                                             domain=Atm%domain)
         ! prognostic tracers
         do nt = 1, ntracers
+           q(:,:,:,nt) = -999.99
           call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
           id_res = register_restart_field (GFS_restart, fn_gfs_ics, trim(tracer_name), q(:,:,:,nt), &
                                            mandatory=.false.,domain=Atm%domain)
@@ -2363,23 +2364,25 @@ contains
 
 ! map tracers
       do iq=1,ncnst
-         do k=1,km
-            do i=is,ie
-               qp(i,k) = qa(i,j,k,iq)
+         if (floor(qa(is,j,1,iq)) > -999) then !skip missing scalars
+            do k=1,km
+               do i=is,ie
+                  qp(i,k) = qa(i,j,k,iq)
+               enddo
             enddo
-         enddo
-         call mappm(km, pe0, qp, npz, pe1,  qn1, is,ie, 0, 8, Atm%ptop)
-         if ( iq==sphum ) then
-            call fillq(ie-is+1, npz, 1, qn1, dp2)
-         else
-            call fillz(ie-is+1, npz, 1, qn1, dp2)
+            call mappm(km, pe0, qp, npz, pe1,  qn1, is,ie, 0, 8, Atm%ptop)
+            if ( iq==sphum ) then
+               call fillq(ie-is+1, npz, 1, qn1, dp2)
+            else
+               call fillz(ie-is+1, npz, 1, qn1, dp2)
+            endif
+            ! The HiRam step of blending model sphum with NCEP data is obsolete because nggps is always cold starting...
+            do k=1,npz
+               do i=is,ie
+                  Atm%q(i,j,k,iq) = qn1(i,k)
+               enddo
+            enddo
          endif
-! The HiRam step of blending model sphum with NCEP data is obsolete because nggps is always cold starting...
-         do k=1,npz
-            do i=is,ie
-               Atm%q(i,j,k,iq) = qn1(i,k)
-            enddo
-         enddo
       enddo
 
 !---------------------------------------------------
