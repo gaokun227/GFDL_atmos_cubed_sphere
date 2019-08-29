@@ -271,7 +271,6 @@ module gfdl_mp_mod
     logical :: use_ppm = .false. ! use ppm fall scheme
     logical :: use_ppm_ice = .false. ! use ppm fall scheme for cloud ice
     logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
-    logical :: mp_print = .false. ! cloud microphysics debugging printout
     logical :: do_hail = .false. ! use hail parameters instead of graupel
     logical :: hd_icefall = .false. ! use heymsfield and donner, 1990's fall speed of cloud ice
     logical :: use_xr_cloud = .false. ! use xu and randall, 1996's cloud diagnosis
@@ -302,7 +301,7 @@ module gfdl_mp_mod
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
-        do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, mp_print, &
+        do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, &
         ntimes, disp_heat, do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_park_cloud, &
         use_gi_cloud, use_rhc_cevap, use_rhc_revap
@@ -317,7 +316,7 @@ module gfdl_mp_mod
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
-        do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, mp_print, &
+        do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, &
         ntimes, disp_heat, do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_park_cloud, &
         use_gi_cloud, use_rhc_cevap, use_rhc_revap
@@ -2247,8 +2246,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
                 qa (k) = 0.0
             endif
         elseif (use_park_cloud) then ! park et al. 2016 (mon. wea. review)
-            qa (k) = 1. / 50. * (5.77 * 75. * max (0.0, q_cond (k) * 1000.) ** 1.07 - &
-                4.82 * 25. * max (0.0, q_cond (k) * 1000.) ** 0.94)
+            qa (k) = 1. / 50. * (5.77 * (100. - gsize (i) / 1000.) * max (0.0, q_cond (k) * 1000.) ** 1.07 + &
+                4.82 * (gsize (i) / 1000. - 50.) * max (0.0, q_cond (k) * 1000.) ** 0.94)
             qa (k) = max (0.0, min (1., qa (k)))
         elseif (use_gi_cloud) then ! gultepe and isaac (2007)
             sigma = 0.28 + max (0.0, q_cond (k) * 1000.) ** 0.49
