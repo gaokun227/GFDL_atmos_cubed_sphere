@@ -764,7 +764,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, &
-                denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, last_step)
+                denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, gsize (i), &
+                last_step)
             
         enddo
         
@@ -1414,7 +1415,8 @@ end subroutine linear_prof
 ! =======================================================================
 
 subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
-        den, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, last_step)
+        den, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, gsize, &
+        last_step)
     
     implicit none
     
@@ -1423,7 +1425,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     real, intent (in), dimension (ks:ke) :: p1, dp1, den, denfac, vts, vtg, vtr
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tzk
     real, intent (inout), dimension (ks:ke) :: qvk, qlk, qrk, qik, qsk, qgk, qak
-    real, intent (in) :: rh_adj, rh_rain, dts, h_var
+    real, intent (in) :: rh_adj, rh_rain, dts, h_var, gsize
     ! local:
     real, dimension (ks:ke) :: icpk, di
     real, dimension (ks:ke) :: q_liq, q_sol
@@ -1857,7 +1859,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, &
     enddo
     
     call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tzk, qvk, &
-        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, te8, last_step)
+        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, te8, gsize, last_step)
     
 end subroutine icloud
 
@@ -1866,12 +1868,12 @@ end subroutine icloud
 ! =======================================================================
 
 subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
-        ql, qr, qi, qs, qg, qa, h_var, rh_rain, te8, last_step)
+        ql, qr, qi, qs, qg, qa, h_var, rh_rain, te8, gsize, last_step)
     
     implicit none
     
     integer, intent (in) :: ks, ke
-    real, intent (in) :: dts, rh_adj, h_var, rh_rain
+    real, intent (in) :: dts, rh_adj, h_var, rh_rain, gsize
     real, intent (in), dimension (ks:ke) :: p1, den, denfac
     real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
@@ -2246,8 +2248,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
                 qa (k) = 0.0
             endif
         elseif (use_park_cloud) then ! park et al. 2016 (mon. wea. review)
-            qa (k) = 1. / 50. * (5.77 * (100. - gsize (i) / 1000.) * max (0.0, q_cond (k) * 1000.) ** 1.07 + &
-                4.82 * (gsize (i) / 1000. - 50.) * max (0.0, q_cond (k) * 1000.) ** 0.94)
+            qa (k) = 1. / 50. * (5.77 * (100. - gsize / 1000.) * max (0.0, q_cond (k) * 1000.) ** 1.07 + &
+                4.82 * (gsize / 1000. - 50.) * max (0.0, q_cond (k) * 1000.) ** 0.94)
             qa (k) = max (0.0, min (1., qa (k)))
         elseif (use_gi_cloud) then ! gultepe and isaac (2007)
             sigma = 0.28 + max (0.0, q_cond (k) * 1000.) ** 0.49
