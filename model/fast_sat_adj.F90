@@ -12,7 +12,7 @@ module fast_sat_adj_mod
         ql_mlt, ql0_max, qi_lim, qs_mlt, icloud_f, sat_adj0, t_sub, cld_min, tau_r2g, tau_smlt, &
         tau_i2s, tau_v2l, tau_l2v, tau_imlt, tau_l2r, rad_rain, rad_snow, rad_graupel, &
         dw_ocean, dw_land, cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, t_ice, &
-        t_wfr, e00, rgrav, consv_checker, zvir, do_qa, te_err
+        t_wfr, e00, rgrav, consv_checker, zvir, do_qa, te_err, prog_ccn, ccn_l, ccn_o, rhow
     
     implicit none
     
@@ -40,7 +40,7 @@ contains
 ! =======================================================================
 
 subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
-        te, qv, ql, qi, qr, qs, qg, qa, hs, dpln, delz, pt, delp, q_con, cappa, &
+        te, qv, ql, qi, qr, qs, qg, qa, qn, hs, dpln, delz, pt, delp, q_con, cappa, &
         gsize, dtdt, out_dt, last_step)
     
     implicit none
@@ -62,30 +62,28 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     real, intent (inout), dimension (is - ng:, js - ng:) :: q_con, cappa
     real, intent (inout), dimension (is:ie, js:je) :: dtdt
     
-    real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: qa, te
+    real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: qa, te, qn
     
     real (kind = r_grid), dimension (is:ie, js:je) :: te_beg, te_end, tw_beg, tw_end
     
     real, dimension (is:ie) :: wqsat, dq2dt, qpz, cvm, t0, pt1, qstar
     real, dimension (is:ie) :: icp2, lcp2, tcp2, tcp3
     real, dimension (is:ie) :: den, q_liq, q_sol, q_cond, src, sink, hvar
-    real, dimension (is:ie) :: mc_air, lhl, lhi
+    real, dimension (is:ie) :: mc_air, lhl, lhi, ccn
     
     real :: d0_vap ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
     real :: lv00 ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
-    real :: qsw, rh, lat2
+    real :: qsw, rh, lat2, ccn0
     real :: tc, qsi, dqsdt, dq, dq0, pidep, qi_crt, tmp, dtmp
     real :: tin, rqi, q_plus, q_minus
     real :: sdt, dt_bigg, adj_fac
     real :: fac_smlt, fac_r2g, fac_i2s, fac_imlt, fac_l2r, fac_v2l, fac_l2v
-    real :: factor, qim, tice0, c_air, c_vap, dw
+    real :: factor, qim, c_air, c_vap, dw
     
     integer :: i, j
     
     sdt = 0.5 * mdt
     dt_bigg = mdt
-    
-    tice0 = t_ice - 0.01
     
     ! -----------------------------------------------------------------------
     ! conversion scalar / factor
@@ -152,6 +150,24 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         endif
         
         ! -----------------------------------------------------------------------
+        ! calculate cloud condensation nuclei (ccn)
+        ! the following is based on klein eq. 15
+        ! -----------------------------------------------------------------------
+        
+        if (prog_ccn) then
+            do i = is, ie
+                ccn (i) = max (10.0, qn (i, j)) * 1.e6
+                ccn (i) = ccn (i) / den (i)
+            enddo
+        else
+            ccn0 = (ccn_l * min (1., abs (hs (i, j)) / (10. * grav)) + &
+                ccn_o * (1. - min (1., abs (hs (i, j)) / (10. * grav)))) * 1.e6
+            do i = is, ie
+                ccn (i) = ccn0 / den (i)
+            enddo
+        endif
+        
+        ! -----------------------------------------------------------------------
         ! moist heat capacity and latend heat coefficient
         ! -----------------------------------------------------------------------
         
@@ -213,11 +229,9 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
             if (qi (i, j) > 1.e-8 .and. pt1 (i) > t_ice) then
                 sink (i) = min (qi (i, j), fac_imlt * (pt1 (i) - t_ice) / icp2 (i))
                 qi (i, j) = qi (i, j) - sink (i)
-                ! sjl, 20170517
-                ! tmp = min (sink (i), dim (ql_mlt, ql (i, j))) ! max ql amount
-                ! ql (i, j) = ql (i, j) + tmp
-                ! qr (i, j) = qr (i, j) + sink (i) - tmp
-                ql (i, j) = ql (i, j) + sink (i)
+                tmp = min (sink (i), dim (ql_mlt, ql (i, j)))
+                ql (i, j) = ql (i, j) + tmp
+                qr (i, j) = qr (i, j) + sink (i) - tmp
                 q_liq (i) = q_liq (i) + sink (i)
                 q_sol (i) = q_sol (i) - sink (i)
                 cvm (i) = mc_air (i) + qv (i, j) * c_vap + q_liq (i) * c_liq + q_sol (i) * c_ice
@@ -305,12 +319,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         do i = is, ie
             dq0 = (qv (i, j) - wqsat (i)) / (1. + tcp3 (i) * dq2dt (i))
             if (dq0 > 0.) then
-#ifdef GFDL_MP_CORR
-                ! ljz, 20190716
                 src (i) = min (adj_fac * dq0, min (dim (ql_gen, ql (i, j)), fac_v2l * dq0))
-#else
-                src (i) = min (adj_fac * dq0, max (ql_gen - ql (i, j), fac_v2l * dq0))
-#endif
             else
                 ! sjl, 20170703
                 ! factor = - min (1., fac_l2v * sqrt (max (0., ql (i, j)) / 1.e-5) * &
@@ -415,10 +424,9 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! -----------------------------------------------------------------------
         
         do i = is, ie
-            tc = tice0 - pt1 (i)
+            tc = t_ice - pt1 (i)
             if (ql (i, j) > 0.0 .and. tc > 0.) then
-                sink (i) = 3.3333e-10 * dt_bigg * (exp (0.66 * tc) - 1.) * &
-                    den (i) * ql (i, j) ** 2
+                sink (i) = 100. / (rhow * ccn (i)) * dt_bigg * (exp (0.66 * tc) - 1.) * ql (i, j) ** 2
                 sink (i) = min (ql (i, j), tc / icp2 (i), sink (i))
                 ql (i, j) = ql (i, j) - sink (i)
                 qi (i, j) = qi (i, j) + sink (i)
@@ -519,7 +527,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
             src (i) = 0.
             if (pt1 (i) < t_sub) then
                 src (i) = dim (qv (i, j), 1.e-6)
-            elseif (pt1 (i) < tice0) then
+            elseif (pt1 (i) < t_ice) then
                 qsi = iqs2 (pt1 (i), den (i), dqsdt)
                 dq = qv (i, j) - qsi
                 sink (i) = adj_fac * dq / (1. + tcp2 (i) * dqsdt)
@@ -532,13 +540,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 if (dq > 0.) then
                     tmp = t_ice - pt1 (i)
                     qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den (i)
-#ifdef GFDL_MP_CORR
-                    ! ljz, 20190716
-                    src (i) = min (sink (i), min (dim (qi_crt, qi (i, j)), pidep), &
-                        tmp / tcp2 (i))
-#else
-                    src (i) = min (sink (i), max (qi_crt - qi (i, j), pidep), tmp / tcp2 (i))
-#endif
+                    src (i) = min (sink (i), min (dim (qi_crt, qi (i, j)), pidep), tmp / tcp2 (i))
                 else
                     pidep = pidep * min (1., dim (pt1 (i), t_sub) * 0.2)
                     src (i) = max (pidep, sink (i), - qi (i, j))

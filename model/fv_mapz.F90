@@ -154,6 +154,7 @@ contains
   real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gsize, gz, cvm, qv
+  real, dimension(isd:ied,jsd:jed,km):: qn
 
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
@@ -608,7 +609,7 @@ contains
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
 !$OMP                               npx,npy,ccn_cm3,inline_mp,u_dt,v_dt,   &
-!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps) &
+!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,qn) &
 !$OMP                       private(q2,pe0,pe1,pe2,pe3,qv,cvm,gz,gsize,phis,dpln,dp2,t0)
 
 !$OMP do
@@ -750,13 +751,14 @@ endif        ! end last_step check
               do j=js,je
                  do i=is,ie
                     dpln(i,j) = peln(i,k+1,j) - peln(i,k,j)
+                    qn(i,j,k) = 0.0
                  enddo
               enddo
               call fast_sat_adj(abs(mdt), is, ie, js, je, ng, hydrostatic, fast_mp_consv, &
                              te(isd,jsd,k), q(isd,jsd,k,sphum), q(isd,jsd,k,liq_wat),   &
                              q(isd,jsd,k,ice_wat), q(isd,jsd,k,rainwat),    &
                              q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel),    &
-                             q(isd,jsd,k,cld_amt), hs ,dpln, delz(is:ie,js:je,k), &
+                             q(isd,jsd,k,cld_amt), qn(isd,jsd,k), hs ,dpln, delz(is:ie,js:je,k), &
                              pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), & ! TEMPORARY
                              cappa(isd:,jsd:,k), sqrt(gridstruct%area_64(is:ie,js:je)), &
                              dtdt(is,js,k), out_dt, last_step)
