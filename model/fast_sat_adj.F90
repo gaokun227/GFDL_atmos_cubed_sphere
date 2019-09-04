@@ -319,7 +319,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         do i = is, ie
             dq0 = (qv (i, j) - wqsat (i)) / (1. + tcp3 (i) * dq2dt (i))
             if (dq0 > 0.) then
-                src (i) = min (adj_fac * dq0, min (dim (ql_gen, ql (i, j)), fac_v2l * dq0))
+                src (i) = min (adj_fac * dq0, max (ql_gen - ql (i, j), fac_v2l * dq0))
             else
                 ! sjl, 20170703
                 ! factor = - min (1., fac_l2v * sqrt (max (0., ql (i, j)) / 1.e-5) * &
@@ -539,8 +539,9 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 endif
                 if (dq > 0.) then
                     tmp = t_ice - pt1 (i)
+                    ! qi_crt = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp))) / den (i)
                     qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den (i)
-                    src (i) = min (sink (i), min (dim (qi_crt, qi (i, j)), pidep), tmp / tcp2 (i))
+                    src (i) = min (sink (i), max (qi_crt - qi (i, j), pidep), tmp / tcp2 (i))
                 else
                     pidep = pidep * min (1., dim (pt1 (i), t_sub) * 0.2)
                     src (i) = max (pidep, sink (i), - qi (i, j))

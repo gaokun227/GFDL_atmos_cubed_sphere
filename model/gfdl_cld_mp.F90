@@ -634,6 +634,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             do k = ks, ke
                 ! convert # / cm^3 to # / m^3
                 ccn (k) = max (10.0, qn (i, k)) * 1.e6
+                ccn (k) = ccn (k) / den (k)
                 c_praut (k) = cpaut * (ccn (k) * rhor) ** (- 1. / 3.)
             enddo
         else
@@ -1404,7 +1405,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     real, intent (inout), dimension (ks:ke) :: qvk, qlk, qrk, qik, qsk, qgk, qak
     real, intent (in) :: rh_adj, rh_rain, dts, h_var, gsize
     ! local:
-    real, dimension (ks:ke) :: icpk, di
+    real, dimension (ks:ke) :: icpk, di, qim
     real, dimension (ks:ke) :: q_liq, q_sol
     real (kind = r_grid), dimension (ks:ke) :: cvm, te8
     real (kind = r_grid) :: tz
@@ -1412,7 +1413,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     real :: qv, ql, qr, qi, qs, qg, melt
     real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, praci, psaci
     real :: pgmlt, psmlt, pgfr, psaut
-    real :: tc, dqs0, qden, qim, qsm
+    real :: tc, dqs0, qden, qsm
     real :: dt5, factor, sink, qi_crt
     real :: tmp, qsw, qsi, dqsdt, dq
     real :: dtmp, qc, q_plus, q_minus
@@ -1443,6 +1444,19 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     enddo
     
     ! -----------------------------------------------------------------------
+    ! similar to lfo 1983: eq. 21 solved implicitly
+    ! threshold from wsm6 scheme, hong et al 2004, eq (13) : qi0_crt ~0.8e-4
+    ! -----------------------------------------------------------------------
+    
+    do k = ks, ke
+        if (qi0_crt < 0.) then
+            qim (k) = - qi0_crt
+        else
+            qim (k) = qi0_crt / den (k)
+        endif
+    enddo
+                
+    ! -----------------------------------------------------------------------
     ! sources of cloud ice: pihom, cold rain, and the sat_adj
     ! (initiation plus deposition)
     ! sources of snow: cold rain, auto conversion + accretion (from cloud ice)
@@ -1472,8 +1486,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
             dtmp = t_wfr - tzk (k)
             factor = min (1., dtmp / dt_fr)
             sink = min (qlk (k) * factor, dtmp / icpk (k))
-            qi_crt = qi_gen * min (qi_lim, 0.1 * (tice - tzk (k))) / den (k)
-            tmp = min (sink, dim (qi_crt, qik (k)))
+            tmp = min (sink, dim (qim (k), qik (k)))
             qlk (k) = qlk (k) - sink
             qsk (k) = qsk (k) + sink - tmp
             qik (k) = qik (k) + tmp
@@ -1638,17 +1651,6 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
                 endif
                 
                 ! -----------------------------------------------------------------------
-                ! similar to lfo 1983: eq. 21 solved implicitly
-                ! threshold from wsm6 scheme, hong et al 2004, eq (13) : qi0_crt ~0.8e-4
-                ! -----------------------------------------------------------------------
-                
-                if (qi0_crt < 0.) then
-                    qim = - qi0_crt
-                else
-                    qim = qi0_crt / den (k)
-                endif
-                
-                ! -----------------------------------------------------------------------
                 ! assuming linear subgrid vertical distribution of cloud ice
                 ! the mismatch computation following lin et al. 1994, mwr
                 ! -----------------------------------------------------------------------
@@ -1661,11 +1663,11 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
                 
                 di (k) = max (di (k), qrmin)
                 q_plus = qi + di (k)
-                if (q_plus > (qim + qrmin)) then
-                    if (qim > (qi - di (k))) then
-                        dq = (0.25 * (q_plus - qim) ** 2) / di (k)
+                if (q_plus > (qim (k) + qrmin)) then
+                    if (qim (k) > (qi - di (k))) then
+                        dq = (0.25 * (q_plus - qim (k)) ** 2) / di (k)
                     else
-                        dq = qi - qim
+                        dq = qi - qim (k)
                     endif
                     psaut = tmp * dq
                 else
@@ -2118,8 +2120,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
                 if (tz (k) > tice) then
                     pgsub = 0. ! no deposition
                 else
-                    pgsub = min (fac_v2g * pgsub, 0.2 * dq, ql (k) + qr (k), &
-                         (tice - tz (k)) / tcpk (k))
+                    pgsub = max (pgsub, dq, (tz (k) - tice) / tcpk (k))
                 endif
             endif
             qg (k) = qg (k) - pgsub
