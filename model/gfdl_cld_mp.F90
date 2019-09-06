@@ -3361,11 +3361,11 @@ subroutine setupm
     tcond = 2.36e-2
     
     visk = 1.259e-5
-    hlts = 2.83358e6
-    hltc = 2.5e6
-    hltf = 3.3358e5
+    hlts = hlv + hlf
+    hltc = hlv
+    hltf = hlf
     
-    ch2o = 4.218e3
+    ch2o = c_liq
     ri50 = 1.e-4
     
     pisq = pie * pie
@@ -3472,7 +3472,7 @@ subroutine setupm
     cgmlt (4) = cgsub (3)
     cgmlt (5) = ch2o / hltf
     
-    es0 = 6.107799961e2 ! ~6.1 mb
+    es0 = e00
     ces0 = eps * es0
     
 end subroutine setupm
