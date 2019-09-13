@@ -29,8 +29,7 @@ module fv_diagnostics_mod
                                register_static_field, send_data, diag_grid_init
  use fv_arrays_mod,      only: fv_atmos_type, fv_grid_type, fv_diag_type, fv_grid_bounds_type, & 
                                R_GRID
- !!! CLEANUP needs removal?
- use fv_mapz_mod,        only: E_Flux, moist_cv
+ use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp
  use fv_mp_mod,          only: mp_reduce_sum, mp_reduce_min, mp_reduce_max, is_master
  use fv_eta_mod,         only: get_eta_level, gw_1d
  use fv_grid_utils_mod,  only: g_sum
@@ -78,7 +77,7 @@ module fv_diagnostics_mod
  logical :: prt_minmax =.false.
  logical :: m_calendar
  integer  sphum, liq_wat, ice_wat, cld_amt    ! GFDL physics
- integer  rainwat, snowwat, graupel
+ integer  rainwat, snowwat, graupel, o3mr
  integer :: istep, mp_top
  real    :: ptop
  real, parameter    ::     rad2deg = 180./pi
@@ -192,6 +191,7 @@ contains
     rainwat = get_tracer_index (MODEL_ATMOS, 'rainwat')
     snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat')
     graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
+    o3mr    = get_tracer_index (MODEL_ATMOS, 'o3mr')
     cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
 
 ! valid range for some fields
@@ -526,17 +526,50 @@ contains
        idiag%id_preg = register_diag_field ( trim(field), 'preg', axes(1:2), Time,           &
             'graupel precipitation', 'mm/day', missing_value=missing_value )
 !-------------------
-!! 3D Tendency terms from GFDL MP
+!! 3D Tendency terms from GFDL MP and physics
 !-------------------
        if (Atm(n)%flagstruct%write_3d_diags) then
 
           idiag%id_qv_dt_gfdlmp = register_diag_field ( trim(field), 'qv_dt_gfdlmp', axes(1:3), Time,           &
                'water vapor specific humidity tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qv_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,npz))
+          idiag%id_ql_dt_gfdlmp = register_diag_field ( trim(field), 'ql_dt_gfdlmp', axes(1:3), Time,           &
+               'total liquid water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_ql_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%ql_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qi_dt_gfdlmp = register_diag_field ( trim(field), 'qi_dt_gfdlmp', axes(1:3), Time,           &
+               'total ice water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qi_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qi_dt(isc:iec,jsc:jec,npz))
           idiag%id_T_dt_gfdlmp = register_diag_field ( trim(field), 'T_dt_gfdlmp', axes(1:3), Time,           &
                'temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
           if (idiag%id_T_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%T_dt(isc:iec,jsc:jec,npz))
+          idiag%id_u_dt_gfdlmp = register_diag_field ( trim(field), 'u_dt_gfdlmp', axes(1:3), Time,           &
+               'zonal wind tendency from GFDL MP', 'm/s/s', missing_value=missing_value )
+          if (idiag%id_u_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%u_dt(isc:iec,jsc:jec,npz))
+          idiag%id_v_dt_gfdlmp = register_diag_field ( trim(field), 'v_dt_gfdlmp', axes(1:3), Time,           &
+               'meridional wind tendency from GFDL MP', 'm/s/s', missing_value=missing_value )
+          if (idiag%id_v_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%v_dt(isc:iec,jsc:jec,npz))
+
+          idiag%id_T_dt_phys = register_diag_field ( trim(field), 'T_dt_phys', axes(1:3), Time,           &
+               'temperature tendency from physics', 'K/s', missing_value=missing_value )
+          if (idiag%id_T_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,npz))
+          idiag%id_u_dt_phys = register_diag_field ( trim(field), 'u_dt_phys', axes(1:3), Time,           &
+               'zonal wind tendency from physics', 'm/s/s', missing_value=missing_value )
+          if (idiag%id_u_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_u_dt(isc:iec,jsc:jec,npz))
+          idiag%id_v_dt_phys = register_diag_field ( trim(field), 'v_dt_phys', axes(1:3), Time,           &
+               'meridional wind tendency from physics', 'm/s/s', missing_value=missing_value )
+          if (idiag%id_v_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_v_dt(isc:iec,jsc:jec,npz))
+
+          idiag%id_qv_dt_phys = register_diag_field ( trim(field), 'qv_dt_phys', axes(1:3), Time,           &
+               'water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qv_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,npz))
+          idiag%id_ql_dt_phys = register_diag_field ( trim(field), 'ql_dt_phys', axes(1:3), Time,           &
+               'total liquid water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_ql_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_ql_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qi_dt_phys = register_diag_field ( trim(field), 'qi_dt_phys', axes(1:3), Time,           &
+               'total ice water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qi_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qi_dt(isc:iec,jsc:jec,npz))
        endif
+
 !
       do i=1,nplev
         write(plev,'(I5)') levs(i)
@@ -699,6 +732,24 @@ contains
           idiag%id_pv = register_diag_field ( trim(field), 'pv', axes(1:3), Time,       &
                'potential vorticity', '1/s', missing_value=missing_value )
 
+          ! -------------------
+          ! Vertical flux correlation terms (good for averages)
+          ! -------------------
+          idiag%id_uw = register_diag_field ( trim(field), 'uw', axes(1:3), Time, &
+               'vertical zonal momentum flux', 'N/m**2', missing_value=missing_value )
+          idiag%id_vw = register_diag_field ( trim(field), 'vw', axes(1:3), Time, &
+               'vertical meridional momentum flux', 'N/m**', missing_value=missing_value )
+          idiag%id_hw = register_diag_field ( trim(field), 'hw', axes(1:3), Time, &
+               'vertical heat flux', 'W/m**2', missing_value=missing_value )
+          idiag%id_qvw = register_diag_field ( trim(field), 'qvw', axes(1:3), Time, &
+               'vertical water vapor flux', 'kg/m**2/s', missing_value=missing_value )
+          idiag%id_qlw = register_diag_field ( trim(field), 'qlw', axes(1:3), Time, &
+               'vertical liquid water flux', 'kg/m**2/s', missing_value=missing_value )
+          idiag%id_qiw = register_diag_field ( trim(field), 'qiw', axes(1:3), Time, &
+               'vertical ice water flux', 'kg/m**2/s', missing_value=missing_value )
+          idiag%id_o3w = register_diag_field ( trim(field), 'o3w', axes(1:3), Time, &
+               'vertical ozone flux', 'kg/m**2/s', missing_value=missing_value )
+
        endif
 
 ! Total energy (only when moist_phys = .T.)
@@ -721,7 +772,7 @@ contains
                 'Reflectivity at -10C level', 'm', missing_value=missing_value)
 
 !--------------------------
-! Extra surface diagnistics:
+! Extra surface diagnostics:
 !--------------------------
 ! Surface (lowest layer) vorticity: for tropical cyclones diag.
        idiag%id_vorts = register_diag_field ( trim(field), 'vorts', axes(1:2), Time,       &
@@ -1253,7 +1304,8 @@ contains
     real, parameter:: ws_1 = 20.
     real, parameter:: vort_c0= 2.2e-5 
     logical, allocatable :: storm(:,:), cat_crt(:,:)
-    real :: tmp2, pvsum, e2, einf, qm, mm, maxdbz, allmax, rgrav
+    real :: tmp2, pvsum, e2, einf, qm, mm, maxdbz, allmax, rgrav, cv_vapor
+    real, allocatable :: cvm(:)
     integer :: Cl, Cl2, k1, k2
 
     !!! CLEANUP: does it really make sense to have this routine loop over Atm% anymore? We assume n=1 below anyway
@@ -1469,7 +1521,18 @@ contains
        if(idiag%id_preg > 0) used=send_data(idiag%id_preg, Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
 
        if (idiag%id_qv_dt_gfdlmp > 0) used=send_data(idiag%id_qv_dt_gfdlmp, Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_ql_dt_gfdlmp > 0) used=send_data(idiag%id_ql_dt_gfdlmp, Atm(n)%inline_mp%ql_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_qi_dt_gfdlmp > 0) used=send_data(idiag%id_qi_dt_gfdlmp, Atm(n)%inline_mp%qi_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_t_dt_gfdlmp > 0)  used=send_data(idiag%id_t_dt_gfdlmp,  Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_u_dt_gfdlmp > 0)  used=send_data(idiag%id_u_dt_gfdlmp,  Atm(n)%inline_mp%u_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_v_dt_gfdlmp > 0)  used=send_data(idiag%id_v_dt_gfdlmp,  Atm(n)%inline_mp%v_dt(isc:iec,jsc:jec,1:npz), Time)
+
+       if (idiag%id_qv_dt_phys > 0) used=send_data(idiag%id_qv_dt_phys, Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_ql_dt_phys > 0) used=send_data(idiag%id_ql_dt_phys, Atm(n)%phys_diag%phys_ql_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_qi_dt_phys > 0) used=send_data(idiag%id_qi_dt_phys, Atm(n)%phys_diag%phys_qi_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_t_dt_phys > 0)  used=send_data(idiag%id_t_dt_phys,  Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_u_dt_phys > 0)  used=send_data(idiag%id_u_dt_phys,  Atm(n)%phys_diag%phys_u_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_v_dt_phys > 0)  used=send_data(idiag%id_v_dt_phys,  Atm(n)%phys_diag%phys_v_dt(isc:iec,jsc:jec,1:npz), Time)
 
        if(idiag%id_c15>0 .or. idiag%id_c25>0 .or. idiag%id_c35>0 .or. idiag%id_c45>0) then
           call wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, Atm(n)%ua(isc:iec,jsc:jec,npz),   &
@@ -2636,6 +2699,112 @@ contains
 
        if(idiag%id_ua > 0) used=send_data(idiag%id_ua, Atm(n)%ua(isc:iec,jsc:jec,:), Time)
        if(idiag%id_va > 0) used=send_data(idiag%id_va, Atm(n)%va(isc:iec,jsc:jec,:), Time)
+
+       if(idiag%id_uw > 0 .or. idiag%id_vw > 0 .or. idiag%id_hw > 0 .or. idiag%id_qvw > 0 .or. &
+            idiag%id_qlw > 0 .or. idiag%id_qiw > 0 .or. idiag%id_o3w > 0 ) then
+          allocate( a3(isc:iec,jsc:jec,npz) )
+
+          do k=1,npz
+          do j=jsc,jec
+          do i=isc,iec
+             wk(i,j,k) = Atm(n)%w(i,j,k)*Atm(n)%delp(i,j,k)*ginv
+          enddo
+          enddo
+          enddo
+
+          if (idiag%id_uw > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = Atm(n)%ua(i,j,k)*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(idiag%id_uw, a3, Time)
+          endif
+          if (idiag%id_vw > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = Atm(n)%va(i,j,k)*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(idiag%id_vw, a3, Time)
+          endif
+
+          if (idiag%id_hw > 0) then
+             allocate(cvm(isc:iec))
+             do k=1,npz
+             do j=jsc,jec
+#ifdef USE_COND
+                call moist_cv(isc,iec,isd,ied,jsd,jed,npz,j,k,Atm(n)%flagstruct%nwat,sphum,liq_wat,rainwat, &
+                     ice_wat,snowwat,graupel,Atm(n)%q,Atm(n)%q_con(isc:iec,j,k),cvm)
+                do i=isc,iec
+                   a3(i,j,k) = Atm(n)%pt(i,j,k)*cvm(i)*wk(i,j,k)
+                enddo
+#else
+                cv_vapor = cp_vapor - rvgas
+                do i=isc,iec
+                   a3(i,j,k) = Atm(n)%pt(i,j,k)*cv_vapor*wk(i,j,k)
+                enddo
+#endif
+             enddo
+             enddo
+             used = send_data(idiag%id_hw, a3, Time)
+             deallocate(cvm)
+          endif
+
+          if (idiag%id_qvw > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = Atm(n)%q(i,j,k,sphum)*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(idiag%id_qvw, a3, Time)
+          endif
+          if (idiag%id_qlw > 0) then
+             if (liq_wat < 0 .or. rainwat < 0) call mpp_error(FATAL, 'qlw does not work without liq_wat and rainwat defined')
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = (Atm(n)%q(i,j,k,liq_wat)+Atm(n)%q(i,j,k,rainwat))*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(idiag%id_qlw, a3, Time)
+          endif
+          if (idiag%id_qiw > 0) then
+             if (ice_wat < 0 .or. snowwat < 0 .or. graupel < 0) then
+                call mpp_error(FATAL, 'qiw does not work without ice_wat, snowwat, and graupel defined')
+             endif
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = (Atm(n)%q(i,j,k,ice_wat)+Atm(n)%q(i,j,k,snowwat)+Atm(n)%q(i,j,k,graupel))*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(idiag%id_qiw, a3, Time)
+          endif
+          if (idiag%id_o3w > 0) then
+             if (o3mr < 0) then
+                call mpp_error(FATAL, 'o3w does not work without o3mr defined')
+             endif
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = Atm(n)%q(i,j,k,o3mr)*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(idiag%id_o3w, a3, Time)
+          endif
+
+          deallocate(a3)
+       endif
 
        if(idiag%id_ke > 0) then
           a2(:,:) = 0.
