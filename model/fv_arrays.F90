@@ -96,8 +96,12 @@ module fv_arrays_mod
      real, allocatable :: pt1(:)
 
      integer :: id_prer, id_prei, id_pres, id_preg
-     integer :: id_qv_dt_gfdlmp, id_T_dt_gfdlmp
+     integer :: id_qv_dt_gfdlmp, id_T_dt_gfdlmp, id_ql_dt_gfdlmp, id_qi_dt_gfdlmp
+     integer :: id_u_dt_gfdlmp, id_v_dt_gfdlmp
+     integer :: id_t_dt_phys, id_qv_dt_phys, id_ql_dt_phys, id_qi_dt_phys, id_u_dt_phys, id_v_dt_phys
      integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
+
+     integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w
 
      logical :: initialized = .false.
      real  sphum, liq_wat, ice_wat       ! GFDL physics
@@ -640,8 +644,23 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: preg(:,:)     _NULL
 
     real, _ALLOCATABLE :: qv_dt(:,:,:)
+    real, _ALLOCATABLE :: ql_dt(:,:,:)
+    real, _ALLOCATABLE :: qi_dt(:,:,:)
     real, _ALLOCATABLE :: t_dt(:,:,:)
+    real, _ALLOCATABLE :: u_dt(:,:,:)
+    real, _ALLOCATABLE :: v_dt(:,:,:)
   end type inline_mp_type
+
+  type phys_diag_type
+
+     real, _ALLOCATABLE :: phys_t_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_qv_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_ql_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_qi_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_u_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_v_dt(:,:,:)
+
+  end type phys_diag_type
 
   interface allocate_fv_nest_BC_type
      module procedure allocate_fv_nest_BC_type_3D
@@ -821,6 +840,7 @@ module fv_arrays_mod
   integer :: atmos_axes(4)
 
      type(inline_mp_type) :: inline_mp
+     type(phys_diag_type) :: phys_diag
 
 
   end type fv_atmos_type

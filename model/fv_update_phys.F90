@@ -24,12 +24,12 @@ module fv_update_phys_mod
   use mpp_domains_mod,    only: mpp_update_domains, domain2d
   use mpp_parameter_mod,  only: AGRID_PARAM=>AGRID
   use mpp_mod,            only: FATAL, mpp_error
-  use mpp_mod,            only: mpp_error, NOTE, WARNING
+  use mpp_mod,            only: mpp_error, NOTE, WARNING, mpp_pe
   use time_manager_mod,   only: time_type
   use tracer_manager_mod, only: get_tracer_index, adjust_mass, get_tracer_names
   use fv_mp_mod,          only: start_group_halo_update, complete_group_halo_update
   use fv_mp_mod,          only: group_halo_update_type
-  use fv_arrays_mod,      only: fv_flags_type, fv_nest_type, R_GRID
+  use fv_arrays_mod,      only: fv_flags_type, fv_nest_type, R_GRID, phys_diag_type
   use boundary_mod,       only: nested_grid_BC
   use boundary_mod,       only: extrapolation_BC
   use fv_eta_mod,         only: get_eta_level
@@ -63,7 +63,7 @@ module fv_update_phys_mod
                               ak, bk, phis, u_srf, v_srf, ts, delz, hydrostatic,  &
                               u_dt, v_dt, t_dt, moist_phys, Time, nudge,    &
                               gridstruct, lona, lata, npx, npy, npz, flagstruct,  &
-                              neststruct, bd, domain, ptop, q_dt)
+                              neststruct, bd, domain, ptop, phys_diag, q_dt)
     real, intent(in)   :: dt, ptop
     integer, intent(in):: is,  ie,  js,  je, ng
     integer, intent(in):: isd, ied, jsd, jed
@@ -91,6 +91,7 @@ module fv_update_phys_mod
     real, intent(inout), dimension(isd:ied,jsd:jed,npz):: u_dt, v_dt
     real, intent(inout):: t_dt(is:ie,js:je,npz)
     real, intent(inout), optional :: q_dt(is:ie,js:je,npz,nq)
+    type(phys_diag_type), intent(inout) :: phys_diag
 
 ! Saved Bottom winds for GFDL Physics Interface
     real, intent(out), dimension(is:ie,js:je):: u_srf, v_srf, ts
@@ -120,6 +121,8 @@ module fv_update_phys_mod
     type(fv_grid_type) :: gridstruct
     type(fv_nest_type) :: neststruct
 
+    real :: q_dt_nudge(is:ie,js:je,npz,nq)
+
     integer, intent(IN) :: npx, npy, npz
 
 !***********
@@ -142,7 +145,7 @@ module fv_update_phys_mod
     integer  sphum, liq_wat, ice_wat, cld_amt   ! GFDL AM physics
     integer  rainwat, snowwat, graupel          ! GFDL Cloud Microphysics
     integer  w_diff                             ! w-tracer for PBL diffusion
-    real:: qstar, dbk, rdg, zvir, p_fac, cv_air, gama_dt
+    real:: qstar, dbk, rdg, zvir, p_fac, cv_air, gama_dt, tbad
     logical :: bad_range
 
 !f1p                                                                                                                                                                                                                                        
@@ -216,13 +219,32 @@ module fv_update_phys_mod
        call set_physics_BCs(ps, u_dt, v_dt, flagstruct, gridstruct, neststruct, npx, npy, npz, ng, ak, bk, bd)
     endif
 
+    if (allocated(phys_diag%phys_t_dt)) phys_diag%phys_t_dt = pt(is:ie,js:je,:)
+    if (present(q_dt)) then
+       if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = q(is:ie,js:je,:,sphum)
+       if (allocated(phys_diag%phys_ql_dt)) then
+          if (liq_wat < 0) call mpp_error(FATAL, " phys_ql_dt needs at least one liquid water tracer defined")
+          phys_diag%phys_ql_dt = q(is:ie,js:je,:,liq_wat) 
+          if (rainwat > 0) phys_diag%phys_ql_dt = q(is:ie,js:je,:,rainwat) + phys_diag%phys_ql_dt
+       endif
+       if (allocated(phys_diag%phys_qi_dt)) then
+          if (ice_wat < 0) then
+             call mpp_error(WARNING, " phys_qi_dt needs at least one ice water tracer defined")
+             phys_diag%phys_qi_dt = 0.
+          endif
+          phys_diag%phys_qi_dt = q(is:ie,js:je,:,ice_wat)
+          if (snowwat > 0) phys_diag%phys_qi_dt = q(is:ie,js:je,:,snowwat) + phys_diag%phys_qi_dt
+          if (graupel > 0) phys_diag%phys_qi_dt = q(is:ie,js:je,:,graupel) + phys_diag%phys_qi_dt
+       endif
+    endif
+
 !$OMP parallel do default(none) &
 !$OMP             shared(is,ie,js,je,npz,flagstruct,pfull,q_dt,sphum,q,qdiag,  &
 !$OMP                    nq,w_diff,dt,nwat,liq_wat,rainwat,ice_wat,snowwat,    &
 !$OMP                    graupel,delp,cld_amt,hydrostatic,pt,t_dt,delz,adj_vmr,&
-!$OMP                    gama_dt,cv_air,ua,u_dt,va,v_dt,isd,ied,jsd,jed,       &
-!$OMP                    conv_vmr_mmr,pe,ptop)                                 &
-!$OMP             private(cvm, qc, qstar, ps_dt, p_fac)
+!$OMP                    gama_dt,cv_air,ua,u_dt,va,v_dt,isd,ied,jsd,jed,          &
+!$OMP                    conv_vmr_mmr,pe,ptop,gridstruct,phys_diag)            &
+!$OMP             private(cvm, qc, qstar, ps_dt, p_fac, tbad)
     do k=1, npz
 
        if (present(q_dt)) then
@@ -352,8 +374,14 @@ module fv_update_phys_mod
 !!!                  pt(i,j,k) = pt(i,j,k) + t_dt(i,j,k)*dt*con_cp/cv_air
                      pt(i,j,k) = pt(i,j,k) + t_dt(i,j,k)*dt*con_cp/cvm(i)
 !-- Limiter (sjl):  to deal with excessively high temp from PBL (YSU) ------------------------------------------------
-                     delz(i,j,k) = delz(i,j,k) - delp(i,j,k)*dim(pt(i,j,k), tmax)*cvm(i) / (grav*(pe(i,k+1,j)-ptop))
-                     pt(i,j,k) = min(tmax, pt(i,j,k))
+                     tbad = pt(i,j,k)
+                     delz(i,j,k) = delz(i,j,k) - delp(i,j,k)*dim(tbad, tmax)*cvm(i) / (grav*(pe(i,k+1,j)-ptop))
+                     pt(i,j,k) = min(tmax, tbad)
+                     !!! DEBUG CODE
+                     if (tbad > tmax) then
+                        print*, ' fv_update_phys: Limited temp', i, j, k, mpp_pe(), gridstruct%agrid(i,j,:)*180./pi, tbad, pt(i,j,k), delz(i,j,k)
+                     endif
+                     !!! END DEBUG CODE
 !-- Limiter (sjl): ---------------------------------------------------------------------------------------------------
                   enddo
                enddo
@@ -372,6 +400,27 @@ module fv_update_phys_mod
 
    enddo ! k-loop
 
+   if (allocated(phys_diag%phys_t_dt)) phys_diag%phys_t_dt = (pt(is:ie,js:je,:) - phys_diag%phys_t_dt) / dt
+   if (present(q_dt)) then
+      if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = (q(is:ie,js:je,:,sphum) - phys_diag%phys_qv_dt) / dt
+      if (allocated(phys_diag%phys_ql_dt)) then
+         if (liq_wat < 0) call mpp_error(FATAL, " phys_ql_dt needs at least one liquid water tracer defined")
+         phys_diag%phys_ql_dt = q(is:ie,js:je,:,liq_wat) - phys_diag%phys_qv_dt
+         if (rainwat > 0) phys_diag%phys_ql_dt = q(is:ie,js:je,:,rainwat) + phys_diag%phys_ql_dt
+         phys_diag%phys_ql_dt = phys_diag%phys_ql_dt / dt
+      endif
+      if (allocated(phys_diag%phys_qi_dt)) then
+         if (ice_wat < 0) then
+            call mpp_error(WARNING, " phys_qi_dt needs at least one ice water tracer defined")
+            phys_diag%phys_qi_dt = 0.
+         endif
+         phys_diag%phys_qi_dt = q(is:ie,js:je,:,ice_wat) - phys_diag%phys_qi_dt
+         if (snowwat > 0) phys_diag%phys_qi_dt = q(is:ie,js:je,:,snowwat) + phys_diag%phys_qi_dt
+         if (graupel > 0) phys_diag%phys_qi_dt = q(is:ie,js:je,:,graupel) + phys_diag%phys_qi_dt
+         phys_diag%phys_qi_dt = phys_diag%phys_qi_dt / dt
+      endif
+   endif
+    
    if ( flagstruct%range_warn ) then
       call range_check('PT UPDATE', pt, is, ie, js, je, ng, npz, gridstruct%agrid,    &
                           tcmin+TFREEZE, tcmax+TFREEZE, bad_range, Time)
@@ -403,7 +452,7 @@ module fv_update_phys_mod
              va(is:ie,js:je,:), pt(is:ie,js:je,:), &
              q(is:ie,js:je,:,:), ps_dt(is:ie,js:je), u_dt(is:ie,js:je,:),  & 
              v_dt(is:ie,js:je,:), t_dt(is:ie,js:je,:), &
-             q_dt(is:ie,js:je,:,:) )
+             q_dt_nudge(is:ie,js:je,:,:) )
 
 !--------------
 ! Update delp
@@ -430,7 +479,7 @@ module fv_update_phys_mod
              pt(is:ie,js:je,:), q(is:ie,js:je,:,sphum:sphum),   &
              ps_dt(is:ie,js:je), u_dt(is:ie,js:je,:),  &
              v_dt(is:ie,js:je,:), t_dt(is:ie,js:je,:), &
-             q_dt(is:ie,js:je,:,sphum:sphum) )
+             q_dt_nudge(is:ie,js:je,:,sphum:sphum) )
 
 !--------------
 ! Update delp
@@ -459,7 +508,7 @@ module fv_update_phys_mod
            ps(i,j) = pe(i,npz+1,j)
          enddo
         enddo
-        call fv_ada_nudge ( Time, dt, npx, npy, npz,  ps_dt, u_dt, v_dt, t_dt, q_dt,   &
+        call fv_ada_nudge ( Time, dt, npx, npy, npz,  ps_dt, u_dt, v_dt, t_dt, q_dt_nudge,   &
                             zvir, ptop, ak, bk, ts, ps, delp, ua, va, pt,    &
                             nwat, q,  phis, gridstruct, bd, domain )
 #else
@@ -475,10 +524,11 @@ module fv_update_phys_mod
            ps(i,j) = pe(i,npz+1,j)
          enddo
         enddo
-        call fv_nwp_nudge ( Time, dt, npx, npy, npz,  ps_dt, u_dt, v_dt, t_dt, q_dt,   &
+        call fv_nwp_nudge ( Time, dt, npx, npy, npz,  ps_dt, u_dt, v_dt, t_dt, q_dt_nudge,   &
                             zvir, ptop, ak, bk, ts, ps, delp, ua, va, pt,    &
                             nwat, q,  phis, gridstruct, bd, domain )
 #endif
+
   endif         ! end nudging       
 
   if ( .not.flagstruct%dwind_2d ) then
@@ -611,6 +661,25 @@ module fv_update_phys_mod
 
   if ( flagstruct%fv_debug ) then
        call prt_maxmin('PS_a_update', ps, is, ie, js, je, ng,   1, 0.01)
+  endif
+
+  if (allocated(phys_diag%phys_u_dt)) then
+     do k=1,npz
+     do j=js,je
+     do i=is,ie
+        phys_diag%phys_u_dt(i,j,k) = u_dt(i,j,k)
+     enddo
+     enddo
+     enddo
+  endif
+  if (allocated(phys_diag%phys_v_dt)) then
+     do k=1,npz
+     do j=js,je
+     do i=is,ie
+        phys_diag%phys_v_dt(i,j,k) = v_dt(i,j,k)
+     enddo
+     enddo
+     enddo
   endif
 
   end subroutine fv_update_phys
