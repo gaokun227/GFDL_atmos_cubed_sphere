@@ -51,6 +51,7 @@ module fv_diagnostics_mod
                                     column_diagnostics_header, &
                                     close_column_diagnostics_units
 
+ use fv_coarse_grained_diagnostics_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
 
  implicit none
  private
@@ -243,11 +244,11 @@ contains
     jsc = Atm(n)%bd%jsc; jec = Atm(n)%bd%jec
 
     ! Send diag_manager the grid informtaion
-    call diag_grid_init(DOMAIN=Atm(n)%domain, &
-         &              GLO_LON=rad2deg*Atm(n)%gridstruct%grid(isc:iec+1,jsc:jec+1,1), &
-         &              GLO_LAT=rad2deg*Atm(n)%gridstruct%grid(isc:iec+1,jsc:jec+1,2), &
-         &              AGLO_LON=rad2deg*Atm(n)%gridstruct%agrid(isc-1:iec+1,jsc-1:jec+1,1), &
-         &              AGLO_LAT=rad2deg*Atm(n)%gridstruct%agrid(isc-1:iec+1,jsc-1:jec+1,2))
+    ! call diag_grid_init(DOMAIN=Atm(n)%domain, &
+    !      &              GLO_LON=rad2deg*Atm(n)%gridstruct%grid(isc:iec+1,jsc:jec+1,1), &
+    !      &              GLO_LAT=rad2deg*Atm(n)%gridstruct%grid(isc:iec+1,jsc:jec+1,2), &
+    !      &              AGLO_LON=rad2deg*Atm(n)%gridstruct%agrid(isc-1:iec+1,jsc-1:jec+1,1), &
+    !      &              AGLO_LAT=rad2deg*Atm(n)%gridstruct%agrid(isc-1:iec+1,jsc-1:jec+1,2))
 
     ntileMe = size(Atm(:))
     if (ntileMe > 1) call mpp_error(FATAL, "fv_diag_init can only be called with one grid at a time.")
@@ -1201,6 +1202,9 @@ contains
 #ifndef GFS_PHYS
     if(idiag%id_theta_e >0 ) call qsmith_init
 #endif
+
+    call fv_coarse_grained_diagnostics_init(Atm, Time)
+    
  end subroutine fv_diag_init
 
 
@@ -3451,7 +3455,8 @@ contains
 
     call nullify_domain()
 
-
+    call fv_coarse_grained_diagnostics(Atm, Time)
+    
  end subroutine fv_diag
 
  subroutine wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, us, vs, ws_max, domain)
