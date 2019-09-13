@@ -4,7 +4,6 @@ module fv_coarse_grained_diagnostics_mod
   use fv_arrays_mod,   only: fv_atmos_type, fv_grid_bounds_type
   use fv_grid_tools_mod, only: init_grid
   use fv_mp_mod,       only: domain_decomp
-  ! use fv_control_mod,   only: layout, npx
   use mpp_mod,         only: mpp_npes
   use mpp_domains_mod, only : mpp_get_compute_domain, mpp_define_mosaic, domain2d, mpp_define_io_domain
   use time_manager_mod, only: time_type
@@ -17,9 +16,6 @@ module fv_coarse_grained_diagnostics_mod
   real, parameter:: missing_value = -1.e10
   integer :: id_ps_coarse
   integer :: coarsening_factor = 2  ! TODO: convert to namelist parameter
-  integer :: layout(2) = (/2, 2/)  ! TODO: obtain from model
-  integer :: io_layout(2) = (/1, 1/)  ! TODO: obtain from model
-  ! integer :: npx = 49  ! TODO: obtain from model (use Atm(n)%gridstruct%npx_g?)
   integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse
 
   contains
@@ -27,82 +23,53 @@ module fv_coarse_grained_diagnostics_mod
   subroutine fv_coarse_grained_diagnostics_init(Atm, Time)
     type(time_type), intent(in) :: Time
     type(fv_atmos_type), intent(in) :: Atm(:)
-    type(domain2d)     :: coarse_domain, coarse_coupler_domain
-    type(fv_grid_bounds_type) :: bd
+    type(domain2d)     :: coarse_domain
     integer :: coarse_axes(2)
     integer :: npx, target_resolution
     integer :: i, j, n, id_coarse_xt, id_coarse_yt, npx_target, npy_target
-    integer :: npes_per_tile, num_contact, tile
-    logical :: square_domain
-    integer :: nregions = 6
-    integer :: grid_type = 6
-    logical :: nested = .false.
+    integer :: layout(2), io_layout(2)
     
-    integer, allocatable :: pelist(:)
-    real, allocatable :: grid_xt(:), grid_yt(:)
-    ! type(fv_atmos_type), allocatable, target :: Atm_coarse(:)
+    real, allocatable :: grid_xt_coarse(:), grid_yt_coarse(:)
     
     n = 1
+    call mpp_get_compute_domain(Atm(n)%domain, is, ie, js, je)
     
     ! TODO: add checks to make sure the coarsening factor is compatible with
     ! both the original resolution and the domain decomposition.
-    ! TODO: check that grid_type is equal to 6 (this is not implemented for
-    ! other kinds of grids).
     npx = Atm(n)%gridstruct%npx_g
+    layout = Atm(n)%layout
+    io_layout = Atm(n)%io_layout
+    
     target_resolution = (npx - 1) / coarsening_factor
     npx_target = target_resolution + 1
     npy_target = target_resolution + 1
 
-    allocate(grid_xt(target_resolution), grid_yt(target_resolution))
-    grid_xt = (/ (i, i=1, target_resolution) /)
-    grid_yt = (/ (j, j=1, target_resolution) /)
+    allocate(grid_xt_coarse(target_resolution), grid_yt_coarse(target_resolution))
+    grid_xt_coarse = (/ (i, i=1, target_resolution) /)
+    grid_yt_coarse = (/ (j, j=1, target_resolution) /)
     
-    ! Initialize values of is, ie, js, and je
-    bd = Atm(n)%bd
-    is = bd%is
-    ie = bd%ie
-    js = bd%js
-    je = bd%je
-    
-    ! Initialize value of coarse_domain and *[se]_coarse
-    ! allocate(pelist(lbound(Atm(n)%pelist,1):ubound(Atm(n)%pelist,1)))
-    ! pelist = Atm(n)%pelist
-    ! tile = Atm(n)%tile_of_mosaic
-
-    ! This might be the more canonical way of creating the domain; it
-    ! automatically handles setting the io_domain appropriately
-    ! call domain_decomp(npx_target, npy_target, nregions, grid_type, nested,&
-    !     layout, io_layout, bd, tile, square_domain, npes_per_tile,&
-    !     coarse_domain, coarse_coupler_domain, num_contact, pelist)
-    ! deallocate(pelist)
-
-    ! -------------------- Alternate code path for creating the cubic domain
     call define_cubic_mosaic(coarse_domain, target_resolution, target_resolution, layout)
     call mpp_define_io_domain(coarse_domain, io_layout)
-    ! --------------------
-    
     call mpp_get_compute_domain(coarse_domain, is_coarse, ie_coarse, &
          js_coarse, je_coarse)
     
-    ! Create diagnostic axes
     ! TODO: Add static fields to contain the actual longitude and latitude
     ! coordinates.
-    id_coarse_xt = diag_axis_init('grid_xt_coarse', grid_xt, &
+    id_coarse_xt = diag_axis_init('grid_xt_coarse', grid_xt_coarse, &
          'degrees_E', 'x', 'T-cell longitude', set_name='coarse_grid', &
          Domain2=coarse_domain, tile_count=n)
-    id_coarse_yt = diag_axis_init('grid_yt_coarse', grid_yt, &
+    id_coarse_yt = diag_axis_init('grid_yt_coarse', grid_yt_coarse, &
          'degrees_N', 'y', 'T-cell latitude', set_name='coarse_grid', &
          Domain2=coarse_domain, tile_count=n)
 
     coarse_axes(1) = id_coarse_xt
     coarse_axes(2) = id_coarse_yt
     
-    ! Register coarse diagnostics
     id_ps_coarse = register_diag_field('dynamics', 'ps_coarse', &
          coarse_axes(1:2), Time, 'surface pressure', 'Pa', &
          missing_value=missing_value)
     
-    deallocate(grid_xt, grid_yt)
+    deallocate(grid_xt_coarse, grid_yt_coarse)
     
   end subroutine fv_coarse_grained_diagnostics_init
 
@@ -114,13 +81,6 @@ module fv_coarse_grained_diagnostics_mod
  
     real, allocatable :: area_weighted_variable(:,:)
     integer :: i, j, n, i_coarse, j_coarse, a
-
-    ! write(*,*) 'FINES', lbound(variable,1), ubound(variable,1), 'COARSES',&
-    !      & lbound(coarse_grained_variable,1), ubound(coarse_grained_variable&
-    !      &,1), 'BOUNDS', is, ie
-    ! write(*,*) 'FINES', lbound(variable,2), ubound(variable,2), 'COARSES',&
-    !      & lbound(coarse_grained_variable,2), ubound(coarse_grained_variable&
-    !      &,2), 'BOUNDS', js, je
 
     allocate(area_weighted_variable(is:ie,js:je))
     area_weighted_variable = area * variable
@@ -148,14 +108,15 @@ module fv_coarse_grained_diagnostics_mod
     integer :: n = 1
 
     allocate(ps_coarse(is_coarse:ie_coarse, js_coarse:je_coarse))
-    ! write(*,*) 'FINE', lbound(Atm(n)%ps,1), ubound(Atm(n)%ps,1), 'COARSE', lbound(ps_coarse,1), ubound(ps_coarse,1)
-    ! write(*,*) 'FINE', lbound(Atm(n)%ps,2), ubound(Atm(n)%ps,2), 'COARSE', lbound(ps_coarse,2), ubound(ps_coarse,2)
     call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%ps(is:ie,js:je), ps_coarse)
     if( id_ps_coarse > 0 ) used = send_data(id_ps_coarse, ps_coarse, Time)
     deallocate(ps_coarse)
     
   end subroutine fv_coarse_grained_diagnostics
 
+  ! This subroutine is copied from fms/horiz_interp/horiz_interp_test.F90;
+  ! domain_decomp in fv_mp_mod.F90 does something similar, but it does a
+  ! few other unnecessary things (and requires more arguments).
   subroutine define_cubic_mosaic(domain, ni, nj, layout)
     type(domain2d), intent(inout) :: domain
     integer,        intent(in)    :: layout(:)
