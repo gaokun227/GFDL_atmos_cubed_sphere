@@ -5,7 +5,7 @@ module fv_coarse_grained_diagnostics_mod
   use fv_arrays_mod,   only: fv_atmos_type, fv_grid_bounds_type, R_GRID
   use fv_grid_utils_mod, only: gnomonic_grids, cell_center2
   use fv_mp_mod,       only: domain_decomp
-  use mpp_mod,         only: mpp_npes
+  use mpp_mod,         only: mpp_error, mpp_npes, FATAL
   use mpp_domains_mod, only : mpp_get_compute_domain, mpp_define_mosaic, domain2d, mpp_define_io_domain
   use time_manager_mod, only: time_type
 
@@ -29,10 +29,12 @@ module fv_coarse_grained_diagnostics_mod
     integer, intent(in) :: cf
     type(domain2d)     :: coarse_domain
     integer :: coarse_axes(2), coarse_axes_t(2)
-    integer :: npx, npy, target_resolution
+    integer :: npx, npy, target_resolution, native_resolution
     integer :: i, j, n, id_coarse_x, id_coarse_y, id_coarse_xt, id_coarse_yt, npx_target, npy_target
+    integer :: offset
     integer :: layout(2), io_layout(2)
-    
+    character(len=256) :: errmsg
+
     real, allocatable :: grid_x_coarse(:), grid_y_coarse(:), grid_xt_coarse(:), grid_yt_coarse(:)
     
     n = 1
@@ -45,11 +47,28 @@ module fv_coarse_grained_diagnostics_mod
     npy = Atm(n)%gridstruct%npy_g
     layout = Atm(n)%layout
     io_layout = Atm(n)%io_layout
+    native_resolution = npx - 1
     
-    target_resolution = (npx - 1) / coarsening_factor
+    ! Check that the coarsening factor evenly divides the native domain
+    if (mod(native_resolution, coarsening_factor) .ne. 0) then
+       write(errmsg, *) 'fv_coarse_grained_diagnostics_init: coarsening factor ',&
+            coarsening_factor, ' does not evenly divide native resolution',&
+            native_resolution, '.'
+       call mpp_error(FATAL, errmsg)
+    endif
+    
+    target_resolution = native_resolution / coarsening_factor
     npx_target = target_resolution + 1
     npy_target = target_resolution + 1
 
+    ! Check that the coarsening factor is appropriate for the domain
+    ! decomposition
+    if (mod(native_resolution, layout(1)) > 0 .or. mod(target_resolution, layout(1)) > 0) then
+       write(errmsg, *) 'fv_coarse_grained_diagnostics_init: domain decomposition layout ',&
+            layout(1), ' does not evenly divide both the native and coarse grid.'
+       call mpp_error(FATAL, errmsg)
+    endif
+    
     allocate(grid_x_coarse(target_resolution + 1), grid_y_coarse(target_resolution + 1))
     grid_x_coarse = (/ (i, i=1, target_resolution + 1) /)
     grid_y_coarse = (/ (j, j=1, target_resolution + 1) /)
@@ -63,8 +82,6 @@ module fv_coarse_grained_diagnostics_mod
     call mpp_get_compute_domain(coarse_domain, is_coarse, ie_coarse, &
          js_coarse, je_coarse)
     
-    ! TODO: Add static fields to contain the actual longitude and latitude
-    ! coordinates.
     id_coarse_x = diag_axis_init('grid_x_coarse', grid_x_coarse, &
          'degrees_E', 'x', 'Corner longitude', set_name='coarse_grid', &
          Domain2=coarse_domain, tile_count=n)
@@ -94,10 +111,20 @@ module fv_coarse_grained_diagnostics_mod
     
     allocate(grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1, 1:2))
     allocate(agrid_coarse(is_coarse:ie_coarse,js_coarse:je_coarse, 1:2))
-    
-    grid_coarse = Atm(n)%gridstruct%grid(is:ie+1:coarsening_factor,js:je+1:coarsening_factor,:)
-    agrid_coarse = Atm(n)%gridstruct%grid(is+coarsening_factor/2:ie+1:coarsening_factor,js+coarsening_factor/2:je+1:coarsening_factor,:)
 
+    grid_coarse = Atm(n)%gridstruct%grid(is:ie+1:coarsening_factor,js:je+1:coarsening_factor,:)
+
+    ! agrid_coarse is constructed differently depending on whether coarsening
+    ! factor is even or odd (in the even case the values are taken from the
+    ! native grid corners; in the odd case the values are taken from the native
+    ! grid centers).
+    offset = coarsening_factor / 2
+    if (mod(coarsening_factor, 2) .eq. 0) then
+       agrid_coarse = Atm(n)%gridstruct%grid(is+offset:ie+1:coarsening_factor,js+offset:je+1:coarsening_factor,:)
+    else
+       agrid_coarse = Atm(n)%gridstruct%agrid(is+offset:ie:coarsening_factor,js+offset:je:coarsening_factor,:)
+    endif
+    
     id_coarse_lon = register_static_field('dynamics', 'grid_lon_coarse', coarse_axes(1:2),  &
          'longitude', 'degrees_E')
     id_coarse_lat = register_static_field('dynamics', 'grid_lat_coarse', coarse_axes(1:2),  &
