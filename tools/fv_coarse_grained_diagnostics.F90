@@ -1,8 +1,9 @@
 module fv_coarse_grained_diagnostics_mod
 
-  use diag_manager_mod, only: diag_axis_init, register_diag_field, send_data
-  use fv_arrays_mod,   only: fv_atmos_type, fv_grid_bounds_type
-  use fv_grid_tools_mod, only: init_grid
+  use constants_mod,   only: pi=>pi_8
+  use diag_manager_mod, only: diag_axis_init, register_diag_field, register_static_field, send_data
+  use fv_arrays_mod,   only: fv_atmos_type, fv_grid_bounds_type, R_GRID
+  use fv_grid_utils_mod, only: gnomonic_grids, cell_center2
   use fv_mp_mod,       only: domain_decomp
   use mpp_mod,         only: mpp_npes
   use mpp_domains_mod, only : mpp_get_compute_domain, mpp_define_mosaic, domain2d, mpp_define_io_domain
@@ -14,29 +15,34 @@ module fv_coarse_grained_diagnostics_mod
   public :: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
   
   real, parameter:: missing_value = -1.e10
-  integer :: id_ps_coarse
-  integer :: coarsening_factor = 2  ! TODO: convert to namelist parameter
+  real, parameter    ::     rad2deg = 180./pi
+  integer :: id_ps_coarse, id_coarse_lon, id_coarse_lat, id_coarse_lont, id_coarse_latt
+  integer :: coarsening_factor
   integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse
 
+  real(kind=R_GRID), allocatable :: grid_coarse(:,:,:), agrid_coarse(:,:,:)
   contains
   
-  subroutine fv_coarse_grained_diagnostics_init(Atm, Time)
+  subroutine fv_coarse_grained_diagnostics_init(Atm, Time, cf)
     type(time_type), intent(in) :: Time
     type(fv_atmos_type), intent(in) :: Atm(:)
+    integer, intent(in) :: cf
     type(domain2d)     :: coarse_domain
-    integer :: coarse_axes(2)
-    integer :: npx, target_resolution
-    integer :: i, j, n, id_coarse_xt, id_coarse_yt, npx_target, npy_target
+    integer :: coarse_axes(2), coarse_axes_t(2)
+    integer :: npx, npy, target_resolution
+    integer :: i, j, n, id_coarse_x, id_coarse_y, id_coarse_xt, id_coarse_yt, npx_target, npy_target
     integer :: layout(2), io_layout(2)
     
-    real, allocatable :: grid_xt_coarse(:), grid_yt_coarse(:)
+    real, allocatable :: grid_x_coarse(:), grid_y_coarse(:), grid_xt_coarse(:), grid_yt_coarse(:)
     
     n = 1
     call mpp_get_compute_domain(Atm(n)%domain, is, ie, js, je)
+    coarsening_factor = cf
     
     ! TODO: add checks to make sure the coarsening factor is compatible with
     ! both the original resolution and the domain decomposition.
     npx = Atm(n)%gridstruct%npx_g
+    npy = Atm(n)%gridstruct%npy_g
     layout = Atm(n)%layout
     io_layout = Atm(n)%io_layout
     
@@ -44,6 +50,10 @@ module fv_coarse_grained_diagnostics_mod
     npx_target = target_resolution + 1
     npy_target = target_resolution + 1
 
+    allocate(grid_x_coarse(target_resolution + 1), grid_y_coarse(target_resolution + 1))
+    grid_x_coarse = (/ (i, i=1, target_resolution + 1) /)
+    grid_y_coarse = (/ (j, j=1, target_resolution + 1) /)
+    
     allocate(grid_xt_coarse(target_resolution), grid_yt_coarse(target_resolution))
     grid_xt_coarse = (/ (i, i=1, target_resolution) /)
     grid_yt_coarse = (/ (j, j=1, target_resolution) /)
@@ -55,6 +65,13 @@ module fv_coarse_grained_diagnostics_mod
     
     ! TODO: Add static fields to contain the actual longitude and latitude
     ! coordinates.
+    id_coarse_x = diag_axis_init('grid_x_coarse', grid_x_coarse, &
+         'degrees_E', 'x', 'Corner longitude', set_name='coarse_grid', &
+         Domain2=coarse_domain, tile_count=n)
+    id_coarse_y = diag_axis_init('grid_y_coarse', grid_y_coarse, &
+         'degrees_N', 'y', 'Corner latitude', set_name='coarse_grid', &
+         Domain2=coarse_domain, tile_count=n)
+    
     id_coarse_xt = diag_axis_init('grid_xt_coarse', grid_xt_coarse, &
          'degrees_E', 'x', 'T-cell longitude', set_name='coarse_grid', &
          Domain2=coarse_domain, tile_count=n)
@@ -62,12 +79,34 @@ module fv_coarse_grained_diagnostics_mod
          'degrees_N', 'y', 'T-cell latitude', set_name='coarse_grid', &
          Domain2=coarse_domain, tile_count=n)
 
-    coarse_axes(1) = id_coarse_xt
-    coarse_axes(2) = id_coarse_yt
+    coarse_axes(1) = id_coarse_x
+    coarse_axes(2) = id_coarse_y
+    
+    coarse_axes_t(1) = id_coarse_xt
+    coarse_axes_t(2) = id_coarse_yt
     
     id_ps_coarse = register_diag_field('dynamics', 'ps_coarse', &
-         coarse_axes(1:2), Time, 'surface pressure', 'Pa', &
+         coarse_axes_t(1:2), Time, 'surface pressure', 'Pa', &
          missing_value=missing_value)
+
+    ! Compute the longitude and latitude of the coarse grid based on values
+    ! from fine grid.
+    
+    allocate(grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1, 1:2))
+    allocate(agrid_coarse(is_coarse:ie_coarse,js_coarse:je_coarse, 1:2))
+    
+    grid_coarse = Atm(n)%gridstruct%grid(is:ie+1:coarsening_factor,js:je+1:coarsening_factor,:)
+    agrid_coarse = Atm(n)%gridstruct%grid(is+coarsening_factor/2:ie+1:coarsening_factor,js+coarsening_factor/2:je+1:coarsening_factor,:)
+
+    id_coarse_lon = register_static_field('dynamics', 'grid_lon_coarse', coarse_axes(1:2),  &
+         'longitude', 'degrees_E')
+    id_coarse_lat = register_static_field('dynamics', 'grid_lat_coarse', coarse_axes(1:2),  &
+         'latitude', 'degrees_N')
+    
+    id_coarse_lont = register_static_field('dynamics', 'grid_lont_coarse', coarse_axes_t(1:2),  &
+         'longitude', 'degrees_E')
+    id_coarse_latt = register_static_field('dynamics', 'grid_latt_coarse', coarse_axes_t(1:2),  &
+         'latitude', 'degrees_N')
     
     deallocate(grid_xt_coarse, grid_yt_coarse)
     
@@ -111,7 +150,13 @@ module fv_coarse_grained_diagnostics_mod
     call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%ps(is:ie,js:je), ps_coarse)
     if( id_ps_coarse > 0 ) used = send_data(id_ps_coarse, ps_coarse, Time)
     deallocate(ps_coarse)
+
+    if (id_coarse_lon > 0) used = send_data(id_coarse_lon, rad2deg *grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1,1), Time)
+    if (id_coarse_lat > 0) used = send_data(id_coarse_lat, rad2deg *grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1,2), Time)
     
+    if (id_coarse_lont > 0) used = send_data(id_coarse_lont, rad2deg * agrid_coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1), Time)
+    if (id_coarse_latt > 0) used = send_data(id_coarse_latt, rad2deg * agrid_coarse(is_coarse:ie_coarse,js_coarse:je_coarse,2), Time)    
+
   end subroutine fv_coarse_grained_diagnostics
 
   ! This subroutine is copied from fms/horiz_interp/horiz_interp_test.F90;

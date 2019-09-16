@@ -121,6 +121,7 @@ module fv_diagnostics_mod
  integer :: num_diag_debug = 0
  integer :: num_diag_sonde = 0
  character(100) :: runname = 'test'
+ integer :: coarsening_factor = 2
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
 
  real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
@@ -129,7 +130,7 @@ module fv_diagnostics_mod
 
  namelist /fv_diag_column_nml/ do_diag_debug, do_diag_sonde, sound_freq, &
       diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, &
-      diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname
+      diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname, coarsening_factor
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -244,11 +245,11 @@ contains
     jsc = Atm(n)%bd%jsc; jec = Atm(n)%bd%jec
 
     ! Send diag_manager the grid informtaion
-    ! call diag_grid_init(DOMAIN=Atm(n)%domain, &
-    !      &              GLO_LON=rad2deg*Atm(n)%gridstruct%grid(isc:iec+1,jsc:jec+1,1), &
-    !      &              GLO_LAT=rad2deg*Atm(n)%gridstruct%grid(isc:iec+1,jsc:jec+1,2), &
-    !      &              AGLO_LON=rad2deg*Atm(n)%gridstruct%agrid(isc-1:iec+1,jsc-1:jec+1,1), &
-    !      &              AGLO_LAT=rad2deg*Atm(n)%gridstruct%agrid(isc-1:iec+1,jsc-1:jec+1,2))
+    call diag_grid_init(DOMAIN=Atm(n)%domain, &
+         &              GLO_LON=rad2deg*Atm(n)%gridstruct%grid(isc:iec+1,jsc:jec+1,1), &
+         &              GLO_LAT=rad2deg*Atm(n)%gridstruct%grid(isc:iec+1,jsc:jec+1,2), &
+         &              AGLO_LON=rad2deg*Atm(n)%gridstruct%agrid(isc-1:iec+1,jsc-1:jec+1,1), &
+         &              AGLO_LAT=rad2deg*Atm(n)%gridstruct%agrid(isc-1:iec+1,jsc-1:jec+1,2))
 
     ntileMe = size(Atm(:))
     if (ntileMe > 1) call mpp_error(FATAL, "fv_diag_init can only be called with one grid at a time.")
@@ -1203,7 +1204,7 @@ contains
     if(idiag%id_theta_e >0 ) call qsmith_init
 #endif
 
-    call fv_coarse_grained_diagnostics_init(Atm, Time)
+    call fv_coarse_grained_diagnostics_init(Atm, Time, coarsening_factor)
     
  end subroutine fv_diag_init
 
