@@ -13,22 +13,28 @@ module fv_coarse_grained_diagnostics_mod
   private
   
   public :: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
+
+  interface coarse_grain_variable
+     module procedure coarse_grain_variable_3d
+     module procedure coarse_grain_variable_2d
+  end interface coarse_grain_variable
   
   real, parameter:: missing_value = -1.e10
   real, parameter    ::     rad2deg = 180./pi
-  integer :: id_ps_coarse, id_coarse_lon, id_coarse_lat, id_coarse_lont, id_coarse_latt
+  integer :: id_ps_coarse, id_vort_coarse, id_coarse_lon, id_coarse_lat, id_coarse_lont, id_coarse_latt
   integer :: coarsening_factor
-  integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse
+  integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
 
   real(kind=R_GRID), allocatable :: grid_coarse(:,:,:), agrid_coarse(:,:,:)
   contains
   
-  subroutine fv_coarse_grained_diagnostics_init(Atm, Time, cf)
+  subroutine fv_coarse_grained_diagnostics_init(Atm, Time, cf, id_pfull)
     type(time_type), intent(in) :: Time
     type(fv_atmos_type), intent(in) :: Atm(:)
     integer, intent(in) :: cf
+    integer, intent(in) :: id_pfull
     type(domain2d)     :: coarse_domain
-    integer :: coarse_axes(2), coarse_axes_t(2)
+    integer :: coarse_axes(3), coarse_axes_t(3)
     integer :: npx, npy, target_resolution, native_resolution
     integer :: i, j, n, id_coarse_x, id_coarse_y, id_coarse_xt, id_coarse_yt, npx_target, npy_target
     integer :: offset
@@ -45,6 +51,7 @@ module fv_coarse_grained_diagnostics_mod
     ! both the original resolution and the domain decomposition.
     npx = Atm(n)%gridstruct%npx_g
     npy = Atm(n)%gridstruct%npy_g
+    npz = Atm(n)%npz
     layout = Atm(n)%layout
     io_layout = Atm(n)%io_layout
     native_resolution = npx - 1
@@ -98,12 +105,18 @@ module fv_coarse_grained_diagnostics_mod
 
     coarse_axes(1) = id_coarse_x
     coarse_axes(2) = id_coarse_y
+    coarse_axes(3) = id_pfull
     
     coarse_axes_t(1) = id_coarse_xt
     coarse_axes_t(2) = id_coarse_yt
+    coarse_axes_t(3) = id_pfull
     
     id_ps_coarse = register_diag_field('dynamics', 'ps_coarse', &
          coarse_axes_t(1:2), Time, 'surface pressure', 'Pa', &
+         missing_value=missing_value)
+
+    id_vort_coarse = register_diag_field('dynamics', 'vort_coarse', &
+         coarse_axes_t(1:3), Time, 'vorticity', 'per s', &
          missing_value=missing_value)
 
     ! Compute the longitude and latitude of the coarse grid based on values
@@ -138,8 +151,8 @@ module fv_coarse_grained_diagnostics_mod
     deallocate(grid_xt_coarse, grid_yt_coarse)
     
   end subroutine fv_coarse_grained_diagnostics_init
-
-  subroutine coarse_grain_variable(area, variable, coarse_grained_variable)
+  
+  subroutine coarse_grain_variable_2d(area, variable, coarse_grained_variable)
 
     real, intent(in) :: area(is:ie,js:je)
     real, intent(in) :: variable(is:ie,js:je)
@@ -163,21 +176,57 @@ module fv_coarse_grained_diagnostics_mod
 
     deallocate(area_weighted_variable)
     
-  end subroutine coarse_grain_variable
+  end subroutine coarse_grain_variable_2d
 
-  subroutine fv_coarse_grained_diagnostics(Atm, Time)
+  subroutine coarse_grain_variable_3d(area, variable, coarse_grained_variable)
+
+    real, intent(in) :: area(is:ie,js:je)
+    real, intent(in) :: variable(is:ie,js:je,1:npz)
+    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz)
+ 
+    real, allocatable :: area_weighted_variable(:,:)
+    integer :: k
+    
+    ! a = coarsening_factor - 1
+    ! do k = 1, npz
+    !    area_weighted_variable = area * variable(is:ie,js:je,k)
+    !    do i = is, ie, coarsening_factor
+    !       i_coarse = (i - 1) / coarsening_factor + 1
+    !       do j = js, je, coarsening_factor
+    !          j_coarse = (j - 1) / coarsening_factor + 1
+    !          coarse_grained_variable(i_coarse,j_coarse,k) = sum(area_weighted_variable(i:i + a,j:j + a)) / sum(area(i:i + a,j:j + a))
+    !       enddo
+    !    enddo
+    ! enddo
+
+    do k = 1, npz
+       call coarse_grain_variable_2d(area, variable(is:ie,js:je,k),&
+            coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse,k))
+    enddo
+    
+  end subroutine coarse_grain_variable_3d
+  
+  subroutine fv_coarse_grained_diagnostics(Atm, Time, vort)
 
     type(fv_atmos_type), intent(in), target :: Atm(:)
     type(time_type), intent(in) :: Time
+    real, intent(in) :: vort(:,:,:)
     logical :: used
     real, allocatable :: ps_coarse(:,:)
+    real, allocatable :: vort_coarse(:,:,:)
     integer :: n = 1
 
-    allocate(ps_coarse(is_coarse:ie_coarse, js_coarse:je_coarse))
+    allocate(ps_coarse(is_coarse:ie_coarse, js_coarse:je_coarse),&
+         vort_coarse(is_coarse:ie_coarse, js_coarse:je_coarse, 1:npz))
+    
     call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%ps(is:ie,js:je), ps_coarse)
     if( id_ps_coarse > 0 ) used = send_data(id_ps_coarse, ps_coarse, Time)
     deallocate(ps_coarse)
 
+    call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), vort(is:ie,js:je,1:npz), vort_coarse)
+    if( id_vort_coarse > 0 ) used = send_data(id_vort_coarse, vort_coarse, Time)
+    deallocate(vort_coarse)
+    
     if (id_coarse_lon > 0) used = send_data(id_coarse_lon, rad2deg *grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1,1), Time)
     if (id_coarse_lat > 0) used = send_data(id_coarse_lat, rad2deg *grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1,2), Time)
     

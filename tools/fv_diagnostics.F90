@@ -1204,7 +1204,7 @@ contains
     if(idiag%id_theta_e >0 ) call qsmith_init
 #endif
 
-    call fv_coarse_grained_diagnostics_init(Atm, Time, coarsening_factor)
+    call fv_coarse_grained_diagnostics_init(Atm, Time, coarsening_factor, id_pfull)
     
  end subroutine fv_diag_init
 
@@ -1312,6 +1312,8 @@ contains
     real, allocatable :: cvm(:)
     integer :: Cl, Cl2, k1, k2
 
+    real, allocatable :: vort_for_coarse(:,:,:)
+    
     !!! CLEANUP: does it really make sense to have this routine loop over Atm% anymore? We assume n=1 below anyway
 
 ! cat15: SLP<1000; srf_wnd>ws_0; vort>vort_c0
@@ -1559,6 +1561,10 @@ contains
           call get_vorticity(isc, iec, jsc, jec, isd, ied, jsd, jed, npz, Atm(n)%u, Atm(n)%v, wk, &
                Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy, Atm(n)%gridstruct%rarea)
 
+          ! Coarse vorticity
+          allocate(vort_for_coarse(isc:iec,jsc:jec,1:npz))
+          vort_for_coarse = wk
+          
           if(idiag%id_vort >0) used=send_data(idiag%id_vort,  wk, Time)
           if(idiag%id_vorts>0) used=send_data(idiag%id_vorts, wk(isc:iec,jsc:jec,npz), Time)
 
@@ -3456,7 +3462,8 @@ contains
 
     call nullify_domain()
 
-    call fv_coarse_grained_diagnostics(Atm, Time)
+    call fv_coarse_grained_diagnostics(Atm, Time, vort_for_coarse)
+    deallocate(vort_for_coarse)
     
  end subroutine fv_diag
 
