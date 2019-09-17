@@ -47,8 +47,6 @@ module fv_coarse_grained_diagnostics_mod
     call mpp_get_compute_domain(Atm(n)%domain, is, ie, js, je)
     coarsening_factor = cf
     
-    ! TODO: add checks to make sure the coarsening factor is compatible with
-    ! both the original resolution and the domain decomposition.
     npx = Atm(n)%gridstruct%npx_g
     npy = Atm(n)%gridstruct%npy_g
     npz = Atm(n)%npz
@@ -184,21 +182,8 @@ module fv_coarse_grained_diagnostics_mod
     real, intent(in) :: variable(is:ie,js:je,1:npz)
     real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz)
  
-    real, allocatable :: area_weighted_variable(:,:)
     integer :: k
     
-    ! a = coarsening_factor - 1
-    ! do k = 1, npz
-    !    area_weighted_variable = area * variable(is:ie,js:je,k)
-    !    do i = is, ie, coarsening_factor
-    !       i_coarse = (i - 1) / coarsening_factor + 1
-    !       do j = js, je, coarsening_factor
-    !          j_coarse = (j - 1) / coarsening_factor + 1
-    !          coarse_grained_variable(i_coarse,j_coarse,k) = sum(area_weighted_variable(i:i + a,j:j + a)) / sum(area(i:i + a,j:j + a))
-    !       enddo
-    !    enddo
-    ! enddo
-
     do k = 1, npz
        call coarse_grain_variable_2d(area, variable(is:ie,js:je,k),&
             coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse,k))
