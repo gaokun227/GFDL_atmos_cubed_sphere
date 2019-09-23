@@ -161,9 +161,9 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 ccn (i) = ccn (i) / den (i)
             enddo
         else
-            ccn0 = (ccn_l * min (1., abs (hs (i, j)) / (10. * grav)) + &
-                ccn_o * (1. - min (1., abs (hs (i, j)) / (10. * grav)))) * 1.e6
             do i = is, ie
+                ccn0 = (ccn_l * min (1., abs (hs (i, j)) / (10. * grav)) + &
+                    ccn_o * (1. - min (1., abs (hs (i, j)) / (10. * grav)))) * 1.e6
                 ccn (i) = ccn0 / den (i)
             enddo
         endif
