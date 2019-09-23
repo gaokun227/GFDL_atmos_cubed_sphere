@@ -149,18 +149,18 @@ contains
   real, allocatable, dimension(:,:,:) :: dp0, u0, v0
   real, allocatable, dimension(:,:,:) :: u_dt, v_dt
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
-  real, dimension(is:ie,km)  :: q2, dp2, t0, w2
+  real, dimension(is:ie,km)  :: q2, dp2, t0, w2, q3
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
   real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
   real, dimension(is:ie):: gsize, gz, cvm, qv
-  real, dimension(isd:ied,jsd:jed,km):: qn
+  real, dimension(isd:ied,jsd:jed,km):: qnl, qni
 
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
   integer:: i,j,k 
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
-  integer:: ccn_cm3
+  integer:: ccn_cm3, cin_cm3
 
        k1k = rdgas/cv_air   ! akap / (1.-akap) = rg/Cv=0.4
         rg = rdgas
@@ -174,6 +174,7 @@ contains
        graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
        cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
        ccn_cm3 = get_tracer_index (MODEL_ATMOS, 'ccn_cm3')
+       cin_cm3 = get_tracer_index (MODEL_ATMOS, 'cin_cm3')
 
        if ( do_adiabatic_init .or. do_sat_adj ) then
             fast_mp_consv = (.not.do_adiabatic_init) .and. consv>consv_min
@@ -608,9 +609,9 @@ contains
 !$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
 !$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
 !$OMP                               fast_mp_consv,kord_tm,pe4, &
-!$OMP                               npx,npy,ccn_cm3,inline_mp,u_dt,v_dt,   &
-!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,qn) &
-!$OMP                       private(q2,pe0,pe1,pe2,pe3,qv,cvm,gz,gsize,phis,dpln,dp2,t0)
+!$OMP                               npx,npy,ccn_cm3,cin_cm3,inline_mp,u_dt,v_dt,   &
+!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,qnl,qni) &
+!$OMP                       private(q2,q3,pe0,pe1,pe2,pe3,qv,cvm,gz,gsize,phis,dpln,dp2,t0)
 
 !$OMP do
   do k=2,km
@@ -751,14 +752,15 @@ endif        ! end last_step check
               do j=js,je
                  do i=is,ie
                     dpln(i,j) = peln(i,k+1,j) - peln(i,k,j)
-                    qn(i,j,k) = 0.0
+                    qnl(i,j,k) = 0.0
+                    qni(i,j,k) = 0.0
                  enddo
               enddo
               call fast_sat_adj(abs(mdt), is, ie, js, je, ng, hydrostatic, fast_mp_consv, &
                              te(isd,jsd,k), q(isd,jsd,k,sphum), q(isd,jsd,k,liq_wat),   &
                              q(isd,jsd,k,ice_wat), q(isd,jsd,k,rainwat),    &
-                             q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel),    &
-                             q(isd,jsd,k,cld_amt), qn(isd,jsd,k), hs ,dpln, delz(is:ie,js:je,k), &
+                             q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel), q(isd,jsd,k,cld_amt), &
+                             qnl(isd,jsd,k), qni(isd,jsd,k), hs ,dpln, delz(is:ie,js:je,k), &
                              pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), & ! TEMPORARY
                              cappa(isd:,jsd:,k), sqrt(gridstruct%area_64(is:ie,js:je)), &
                              dtdt(is,js,k), out_dt, last_step)
@@ -805,13 +807,18 @@ endif        ! end last_step check
         else
           q2(is:ie,:) = 0.0
         endif
+        if (cin_cm3 .gt. 0) then
+          q3(is:ie,:) = q(is:ie,j,:,cin_cm3)
+        else
+          q3(is:ie,:) = 0.0
+        endif
  
         ! note: ua and va are A-grid variables
         ! note: pt is virtual temperature at this point
         ! note: w is vertical velocity (m/s)
         ! note: delz is negative, delp is positive, delz doesn't change in constant volume situation
         ! note: hs is geopotential height (m^2/s^2)
-        ! note: the unit of q2 is #/cc
+        ! note: the unit of q2 or q3 is #/cm^3
         ! note: the unit of area is m^2
         ! note: the unit of prer, prei, pres, preg is mm/day
 
@@ -830,7 +837,7 @@ endif        ! end last_step check
 #ifndef DYCORE_SOLO
         call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
-                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), &
+                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), q3(is:ie,:),  &
                        pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
                        delz(is:ie,j,:), delp(is:ie,j,:), gsize, abs(mdt), &
                        hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &

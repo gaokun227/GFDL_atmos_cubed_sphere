@@ -40,8 +40,8 @@ contains
 ! =======================================================================
 
 subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
-        te, qv, ql, qi, qr, qs, qg, qa, qn, hs, dpln, delz, pt, delp, q_con, cappa, &
-        gsize, dtdt, out_dt, last_step)
+        te, qv, ql, qi, qr, qs, qg, qa, qnl, qni, hs, dpln, delz, pt, delp, &
+        q_con, cappa, gsize, dtdt, out_dt, last_step)
     
     implicit none
     
@@ -62,14 +62,14 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     real, intent (inout), dimension (is - ng:, js - ng:) :: q_con, cappa
     real, intent (inout), dimension (is:ie, js:je) :: dtdt
     
-    real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: qa, te, qn
+    real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: qa, te, qnl, qni
     
     real (kind = r_grid), dimension (is:ie, js:je) :: te_beg, te_end, tw_beg, tw_end
     
     real, dimension (is:ie) :: wqsat, dq2dt, qpz, cvm, t0, pt1, qstar
     real, dimension (is:ie) :: icp2, lcp2, tcp2, tcp3
     real, dimension (is:ie) :: den, q_liq, q_sol, q_cond, src, sink, hvar
-    real, dimension (is:ie) :: mc_air, lhl, lhi, ccn
+    real, dimension (is:ie) :: mc_air, lhl, lhi, ccn, cin
     
     real :: d0_vap ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
     real :: lv00 ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
@@ -156,7 +156,8 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         
         if (prog_ccn) then
             do i = is, ie
-                ccn (i) = max (10.0, qn (i, j)) * 1.e6
+                ccn (i) = max (10.0, qnl (i, j)) * 1.e6
+                cin (i) = max (10.0, qni (i, j)) * 1.e6
                 ccn (i) = ccn (i) / den (i)
             enddo
         else
@@ -532,7 +533,10 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 dq = qv (i, j) - qsi
                 sink (i) = adj_fac * dq / (1. + tcp2 (i) * dqsdt)
                 if (qi (i, j) > 1.e-8) then
-                    pidep = sdt * dq * 349138.78 * exp (0.875 * log (qi (i, j) * den (i))) &
+                    if (.not. prog_ccn) then
+                        cin (i) = 5.38e7 * exp (0.75 * log (qi (i, j) * den (i)))
+                    endif
+                    pidep = sdt * dq * 4.0 * 11.9 * exp (0.5 * log (qi (i, j) * den (i) * cin (i))) &
                          / (qsi * den (i) * lat2 / (0.0243 * rvgas * pt1 (i) ** 2) + 4.42478e4)
                 else
                     pidep = 0.

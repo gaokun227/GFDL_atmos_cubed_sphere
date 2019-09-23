@@ -327,7 +327,7 @@ contains
 ! the driver of the gfdl cloud microphysics
 ! -----------------------------------------------------------------------
 
-subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
+subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
         graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
         te, last_step, do_inline_mp)
@@ -347,7 +347,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (in), dimension (is:ie) :: hs, gsize
     
     real, intent (in), dimension (is:ie, ks:ke) :: dz
-    real, intent (in), dimension (is:ie, ks:ke) :: qn
+    real, intent (in), dimension (is:ie, ks:ke) :: qnl, qni
     
     real, intent (inout), dimension (is:ie, ks:ke) :: delp
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
@@ -358,7 +358,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     real, intent (inout), dimension (is:ie, ks:ke) :: te
     ! logical :: used
     real, dimension (is:ie) :: w_var
-    real, dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
+    real, dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i
     real, dimension (is:ie, ks:ke) :: m2_rain, m2_sol
     
     if (last_step) then
@@ -411,9 +411,9 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qn, &
     ! -----------------------------------------------------------------------
     
     call mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, qg, &
-        qa, qn, dz, is, ie, ks, ke, dts, &
+        qa, qnl, qni, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, consv_te, te, &
+        w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
         last_step, do_inline_mp)
     
 end subroutine gfdl_mp_driver
@@ -434,9 +434,9 @@ end subroutine gfdl_mp_driver
 ! -----------------------------------------------------------------------
 
 subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
-        qg, qa, qn, dz, is, ie, ks, ke, dt_in, &
+        qg, qa, qnl, qni, dz, is, ie, ks, ke, dt_in, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, qn2, q_con, cappa, consv_te, te, &
+        w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
         last_step, do_inline_mp)
     
     implicit none
@@ -450,7 +450,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (in), dimension (is:ie) :: gsize
     real, intent (in), dimension (is:ie) :: hs
     real, intent (in), dimension (is:ie, ks:ke) :: dz
-    real, intent (in), dimension (is:ie, ks:ke) :: qn
+    real, intent (in), dimension (is:ie, ks:ke) :: qnl, qni
     
     real, intent (inout), dimension (is:ie, ks:ke) :: delp
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
@@ -459,7 +459,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     
     real, intent (out), dimension (is:ie) :: w_var
-    real, intent (out), dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i, qn2
+    real, intent (out), dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i
     real, intent (out), dimension (is:ie, ks:ke) :: m2_rain, m2_sol
     real, intent (out), dimension (is:ie, ks:ke) :: te
     ! local:
@@ -468,7 +468,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, dimension (ks:ke) :: vtiz, vtsz, vtgz, vtrz
     real, dimension (ks:ke) :: dp1, dz1
     real, dimension (ks:ke) :: den, p1, denfac
-    real, dimension (ks:ke) :: ccn, c_praut, m1_rain, m1_sol, m1
+    real, dimension (ks:ke) :: ccn, cin, c_praut, m1_rain, m1_sol, m1
     real, dimension (ks:ke) :: u0, v0, u1, v1, w1
     
     real (kind = r_grid), dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
@@ -633,7 +633,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         if (prog_ccn) then
             do k = ks, ke
                 ! convert # / cm^3 to # / m^3
-                ccn (k) = max (10.0, qn (i, k)) * 1.e6
+                ccn (k) = max (10.0, qnl (i, k)) * 1.e6
+                cin (k) = max (10.0, qni (i, k)) * 1.e6
                 ccn (k) = ccn (k) / den (k)
                 c_praut (k) = cpaut * (ccn (k) * rhor) ** (- 1. / 3.)
             enddo
@@ -759,7 +760,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, ccn, &
-                denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, gsize (i), &
+                cin, denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, gsize (i), &
                 last_step)
             
         enddo
@@ -1394,7 +1395,8 @@ end subroutine linear_prof
 ! =======================================================================
 
 subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
-        ccn, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, gsize, last_step)
+        ccn, cin, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, &
+        gsize, last_step)
     
     implicit none
     
@@ -1403,6 +1405,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     real, intent (in), dimension (ks:ke) :: p1, dp1, den, denfac, vts, vtg, vtr, ccn
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tzk
     real, intent (inout), dimension (ks:ke) :: qvk, qlk, qrk, qik, qsk, qgk, qak
+    real, intent (inout), dimension (ks:ke) :: cin
     real, intent (in) :: rh_adj, rh_rain, dts, h_var, gsize
     ! local:
     real, dimension (ks:ke) :: icpk, di, qim
@@ -1838,7 +1841,8 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     enddo
     
     call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tzk, qvk, &
-        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, te8, ccn, gsize, last_step)
+        qlk, qrk, qik, qsk, qgk, qak, h_var, rh_rain, te8, ccn, cin, gsize, &
+        last_step)
     
 end subroutine icloud
 
@@ -1847,7 +1851,7 @@ end subroutine icloud
 ! =======================================================================
 
 subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
-        ql, qr, qi, qs, qg, qa, h_var, rh_rain, te8, ccn, gsize, last_step)
+        ql, qr, qi, qs, qg, qa, h_var, rh_rain, te8, ccn, cin, gsize, last_step)
     
     implicit none
     
@@ -1857,6 +1861,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
     real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
+    real, intent (inout), dimension (ks:ke) :: cin
     logical, intent (in) :: last_step
     ! local:
     real, dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
@@ -2041,7 +2046,10 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             if (qi (k) > qrmin) then
                 ! eq 9, hong et al. 2004, mwr
                 ! for a and b, see dudhia 1989: page 3103 eq (b7) and (b8)
-                pidep = dt_pisub * dq * 349138.78 * exp (0.875 * log (qi (k) * den (k))) &
+                if (.not. prog_ccn) then
+                    cin (k) = 5.38e7 * exp (0.75 * log (qi (k) * den (k)))
+                endif
+                pidep = dt_pisub * dq * 4.0 * 11.9 * exp (0.5 * log (qi (k) * den (k) * cin (k))) &
                      / (qsi * den (k) * lat2 / (0.0243 * rvgas * tz (k) ** 2) + 4.42478e4)
             else
                 pidep = 0.
