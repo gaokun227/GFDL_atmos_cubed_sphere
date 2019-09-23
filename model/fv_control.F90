@@ -638,7 +638,9 @@ module fv_control_mod
 !!$     Atm(this_grid)%inline_mp%preg = too_big
 
      !Initialize restart
-     call fv_restart_init()
+     ! TODO: thread in the coarsening factor here too; currently I have just
+     ! hard-coded it.
+     call fv_restart_init(Atm, 8)
 !     if ( reset_eta ) then
 !         do n=1, ntilesMe
 !            call set_eta(npz, Atm(this_grid)%ks, ptop, Atm(this_grid)%ak, Atm(this_grid)%bk, Atm(this_grid)%flagstruct%npz_type)

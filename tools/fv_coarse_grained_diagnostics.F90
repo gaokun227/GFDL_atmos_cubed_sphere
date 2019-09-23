@@ -12,26 +12,37 @@ module fv_coarse_grained_diagnostics_mod
   implicit none
   private
   
-  public :: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
-
+  public :: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics, define_cubic_mosaic
+  public :: coarse_grain_variable, zonal_block_edge_coarse_grain_variable, meridional_block_edge_coarse_grain_variable
+  
   interface coarse_grain_variable
-     module procedure coarse_grain_variable_3d
      module procedure coarse_grain_variable_2d
+     module procedure coarse_grain_variable_3d
   end interface coarse_grain_variable
+
+  interface zonal_block_edge_coarse_grain_variable
+     module procedure zonal_block_edge_coarse_grain_variable_2d
+     module procedure zonal_block_edge_coarse_grain_variable_3d
+  end interface zonal_block_edge_coarse_grain_variable
+
+  interface meridional_block_edge_coarse_grain_variable
+     module procedure meridional_block_edge_coarse_grain_variable_2d
+     module procedure meridional_block_edge_coarse_grain_variable_3d
+  end interface meridional_block_edge_coarse_grain_variable
   
   real, parameter:: missing_value = -1.e10
   real, parameter    ::     rad2deg = 180./pi
   integer :: id_ps_coarse, id_vort_coarse, id_coarse_lon, id_coarse_lat, id_coarse_lont, id_coarse_latt
-  integer :: coarsening_factor
-  integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
+  integer :: id_d_grid_ucomp_coarse, id_d_grid_vcomp_coarse, id_c_grid_ucomp_coarse, id_c_grid_vcomp_coarse
+  integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz, ntracers
 
   real(kind=R_GRID), allocatable :: grid_coarse(:,:,:), agrid_coarse(:,:,:)
   contains
   
-  subroutine fv_coarse_grained_diagnostics_init(Atm, Time, cf, id_pfull)
+  subroutine fv_coarse_grained_diagnostics_init(Atm, Time, coarsening_factor, id_pfull)
     type(time_type), intent(in) :: Time
     type(fv_atmos_type), intent(in) :: Atm(:)
-    integer, intent(in) :: cf
+    integer, intent(in) :: coarsening_factor
     integer, intent(in) :: id_pfull
     type(domain2d)     :: coarse_domain
     integer :: coarse_axes(3), coarse_axes_t(3)
@@ -45,7 +56,6 @@ module fv_coarse_grained_diagnostics_mod
     
     n = 1
     call mpp_get_compute_domain(Atm(n)%domain, is, ie, js, je)
-    coarsening_factor = cf
     
     npx = Atm(n)%gridstruct%npx_g
     npy = Atm(n)%gridstruct%npy_g
@@ -117,6 +127,22 @@ module fv_coarse_grained_diagnostics_mod
          coarse_axes_t(1:3), Time, 'vorticity', 'per s', &
          missing_value=missing_value)
 
+    id_d_grid_ucomp_coarse = register_diag_field('dynamics', &
+         'd_grid_ucomp_coarse', (/ id_coarse_xt, id_coarse_y, id_pfull /), &
+         Time, 'D grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    id_d_grid_vcomp_coarse = register_diag_field('dynamics', &
+         'd_grid_vcomp_coarse', (/ id_coarse_x, id_coarse_yt, id_pfull /), &
+         Time, 'D grid meridional velocity', 'm/s', missing_value=missing_value)
+
+    id_c_grid_ucomp_coarse = register_diag_field('dynamics', &
+         'c_grid_ucomp_coarse', (/ id_coarse_x, id_coarse_yt, id_pfull /), &
+         Time, 'C grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    id_c_grid_vcomp_coarse = register_diag_field('dynamics', &
+         'c_grid_vcomp_coarse', (/ id_coarse_xt, id_coarse_y, id_pfull /), &
+         Time, 'C grid meridional velocity', 'm/s', missing_value=missing_value)
+    
     ! Compute the longitude and latitude of the coarse grid based on values
     ! from fine grid.
     
@@ -150,19 +176,19 @@ module fv_coarse_grained_diagnostics_mod
     
   end subroutine fv_coarse_grained_diagnostics_init
   
-  subroutine coarse_grain_variable_2d(area, variable, coarse_grained_variable)
+  subroutine coarse_grain_variable_2d(area, variable, coarse_grained_variable, coarsening_factor)
 
     real, intent(in) :: area(is:ie,js:je)
     real, intent(in) :: variable(is:ie,js:je)
     real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse)
- 
+    integer, intent(in) :: coarsening_factor
+    
     real, allocatable :: area_weighted_variable(:,:)
-    integer :: i, j, n, i_coarse, j_coarse, a
+    integer :: i, j, i_coarse, j_coarse, a
 
     allocate(area_weighted_variable(is:ie,js:je))
     area_weighted_variable = area * variable
     
-    n = 1
     a = coarsening_factor - 1
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
@@ -176,41 +202,158 @@ module fv_coarse_grained_diagnostics_mod
     
   end subroutine coarse_grain_variable_2d
 
-  subroutine coarse_grain_variable_3d(area, variable, coarse_grained_variable)
+  subroutine coarse_grain_variable_3d(area, variable, coarse_grained_variable, coarsening_factor)
 
     real, intent(in) :: area(is:ie,js:je)
     real, intent(in) :: variable(is:ie,js:je,1:npz)
     real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz)
- 
+    integer, intent(in) :: coarsening_factor
+    
     integer :: k
     
     do k = 1, npz
        call coarse_grain_variable_2d(area, variable(is:ie,js:je,k),&
-            coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse,k))
+            coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse,k),coarsening_factor)
     enddo
     
   end subroutine coarse_grain_variable_3d
   
-  subroutine fv_coarse_grained_diagnostics(Atm, Time, vort)
+  ! For now we always assume that the variables passed to this function are
+  ! staggered in the j dimension, but unstaggered in the i dimension.  This
+  ! assumption holds for winds either on the C or D grid, which is what I
+  ! anticipate this subroutine will exclusively be used for.
+  subroutine zonal_block_edge_coarse_grain_variable_2d(dx, variable, coarse_grained_variable, coarsening_factor)
+
+    real, intent(in) :: dx(is:ie,js:je)
+    real, intent(in) :: variable(is:ie,js:je+1)
+    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse+1)
+    integer, intent(in) :: coarsening_factor
+    
+    integer :: i, j, i_coarse, j_coarse, a
+
+    a = coarsening_factor - 1
+    do i = is, ie, coarsening_factor
+       i_coarse = (i - 1) / coarsening_factor + 1
+       do j = js, je + 1, coarsening_factor
+          j_coarse = (j - 1) / coarsening_factor + 1
+          coarse_grained_variable(i_coarse,j_coarse) = sum(dx(i:i+a,j) * variable(i:i+a,j)) / sum(dx(i:i+a,j))
+       enddo
+    enddo
+    
+  end subroutine zonal_block_edge_coarse_grain_variable_2d
+
+  ! For now we always assume that the variables passed to this function are
+  ! staggered in the j dimension, but unstaggered in the i dimension.  This
+  ! assumption holds for winds either on the C or D grid, which is what I
+  ! anticipate this subroutine will exclusively be used for.
+  subroutine zonal_block_edge_coarse_grain_variable_3d(dx, variable, coarse_grained_variable, coarsening_factor)
+
+    real, intent(in) :: dx(is:ie,js:je)
+    real, intent(in) :: variable(is:ie,js:je+1,1:npz)
+    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse+1,1:npz)
+    integer, intent(in) :: coarsening_factor
+    
+    integer :: k
+    
+    do k = 1, npz
+       call zonal_block_edge_coarse_grain_variable_2d(dx, variable(is:ie,js:je+1,k),&
+            coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse+1,k), coarsening_factor)
+    enddo
+    
+  end subroutine zonal_block_edge_coarse_grain_variable_3d
+  
+  ! For now we always assume that the variables passed to this function are
+  ! staggered in the i dimension, but unstaggered in the j dimension.  This
+  ! assumption holds for winds either on the C or D grid, which is what I
+  ! anticipate this subroutine will exclusively be used for.
+  subroutine meridional_block_edge_coarse_grain_variable_2d(dy, variable, coarse_grained_variable, coarsening_factor)
+
+    real, intent(in) :: dy(is:ie,js:je)
+    real, intent(in) :: variable(is:ie,js:je+1)
+    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse+1)
+    integer, intent(in) :: coarsening_factor
+    
+    integer :: i, j, i_coarse, j_coarse, a
+
+    a = coarsening_factor - 1
+    do i = is, ie, coarsening_factor + 1
+       i_coarse = (i - 1) / coarsening_factor
+       do j = js, je + 1, coarsening_factor
+          j_coarse = (j - 1) / coarsening_factor + 1
+          coarse_grained_variable(i_coarse,j_coarse) = sum(dy(i,j:j+a) * variable(i,j:j+a)) / sum(dy(i,j:j+a))
+       enddo
+    enddo
+    
+  end subroutine meridional_block_edge_coarse_grain_variable_2d
+
+  ! For now we always assume that the variables passed to this function are
+  ! staggered in the i dimension, but unstaggered in the j dimension.  This
+  ! assumption holds for winds either on the C or D grid, which is what I
+  ! anticipate this subroutine will exclusively be used for.
+  subroutine meridional_block_edge_coarse_grain_variable_3d(dy, variable, coarse_grained_variable, coarsening_factor)
+
+    real, intent(in) :: dy(is:ie,js:je)
+    real, intent(in) :: variable(is:ie,js:je+1,1:npz)
+    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse+1,1:npz)
+    integer, intent(in) :: coarsening_factor
+    
+    integer :: k
+
+    do k = 1, npz
+       call meridional_block_edge_coarse_grain_variable_2d(dy, variable(is:ie+1,js:je,k),&
+            coarse_grained_variable(is_coarse:ie_coarse+1,js_coarse:je_coarse,k), coarsening_factor)
+    enddo
+    
+  end subroutine meridional_block_edge_coarse_grain_variable_3d
+  
+  subroutine fv_coarse_grained_diagnostics(Atm, Time, vort, coarsening_factor)
 
     type(fv_atmos_type), intent(in), target :: Atm(:)
     type(time_type), intent(in) :: Time
     real, intent(in) :: vort(:,:,:)
+    integer, intent(in) :: coarsening_factor
+    
     logical :: used
     real, allocatable :: ps_coarse(:,:)
-    real, allocatable :: vort_coarse(:,:,:)
+    real, allocatable :: vort_coarse(:,:,:), u_coarse(:,:,:), v_coarse(:,:,:), uc_coarse(:,:,:), vc_coarse(:,:,:)
     integer :: n = 1
 
-    allocate(ps_coarse(is_coarse:ie_coarse, js_coarse:je_coarse),&
-         vort_coarse(is_coarse:ie_coarse, js_coarse:je_coarse, 1:npz))
+    allocate(ps_coarse(is_coarse:ie_coarse,js_coarse:je_coarse), &
+         vort_coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz), &
+         u_coarse(is_coarse:ie_coarse,js_coarse:je_coarse+1,1:npz), &
+         v_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse,1:npz), &
+         uc_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse,1:npz), &
+         vc_coarse(is_coarse:ie_coarse,js_coarse:je_coarse+1,1:npz))
     
-    call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%ps(is:ie,js:je), ps_coarse)
+    call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%ps(is:ie,js:je), ps_coarse, coarsening_factor)
     if( id_ps_coarse > 0 ) used = send_data(id_ps_coarse, ps_coarse, Time)
     deallocate(ps_coarse)
 
-    call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), vort(is:ie,js:je,1:npz), vort_coarse)
+    call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), vort(is:ie,js:je,1:npz), vort_coarse, coarsening_factor)
     if( id_vort_coarse > 0 ) used = send_data(id_vort_coarse, vort_coarse, Time)
     deallocate(vort_coarse)
+
+    ! D grid winds
+    call zonal_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dx(is:ie,js:je), &
+         Atm(n)%u(is:ie,js:je+1,1:npz), u_coarse, coarsening_factor)
+    if( id_d_grid_ucomp_coarse > 0 ) used = send_data(id_d_grid_ucomp_coarse, u_coarse, Time)
+    deallocate(u_coarse)
+    
+    call meridional_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dy(is:ie,js:je), &
+         Atm(n)%v(is:ie+1,js:je,1:npz), v_coarse, coarsening_factor)
+    if( id_d_grid_vcomp_coarse > 0 ) used = send_data(id_d_grid_vcomp_coarse, v_coarse, Time)
+    deallocate(v_coarse)
+
+    ! C grid winds
+    call meridional_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dy(is:ie,js:je), &
+         Atm(n)%uc(is:ie+1,js:je,1:npz), uc_coarse, coarsening_factor)
+    if( id_c_grid_ucomp_coarse > 0 ) used = send_data(id_c_grid_ucomp_coarse, uc_coarse, Time)
+    deallocate(uc_coarse)
+    
+    call zonal_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dx(is:ie,js:je), &
+         Atm(n)%vc(is:ie,js:je+1,1:npz), vc_coarse, coarsening_factor)
+    if( id_c_grid_vcomp_coarse > 0 ) used = send_data(id_c_grid_vcomp_coarse, vc_coarse, Time)
+    deallocate(vc_coarse)
     
     if (id_coarse_lon > 0) used = send_data(id_coarse_lon, rad2deg *grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1,1), Time)
     if (id_coarse_lat > 0) used = send_data(id_coarse_lat, rad2deg *grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1,2), Time)

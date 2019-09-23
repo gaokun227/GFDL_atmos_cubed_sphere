@@ -126,8 +126,9 @@ module fv_diagnostics_mod
 
  real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
 
-
-
+ integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
+ integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
+ 
  namelist /fv_diag_column_nml/ do_diag_debug, do_diag_sonde, sound_freq, &
       diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, &
       diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname, coarsening_factor
@@ -1204,6 +1205,22 @@ contains
     if(idiag%id_theta_e >0 ) call qsmith_init
 #endif
 
+    id_d_grid_ucomp = register_diag_field('dynamics', &
+         'd_grid_ucomp', (/ id_xt, id_y, id_pfull /), &
+         Time, 'D grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    id_d_grid_vcomp = register_diag_field('dynamics', &
+         'd_grid_vcomp', (/ id_x, id_yt, id_pfull /), &
+         Time, 'D grid meridional velocity', 'm/s', missing_value=missing_value)
+
+    id_c_grid_ucomp = register_diag_field('dynamics', &
+         'c_grid_ucomp', (/ id_x, id_yt, id_pfull /), &
+         Time, 'C grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    id_c_grid_vcomp = register_diag_field('dynamics', &
+         'c_grid_vcomp', (/ id_xt, id_y, id_pfull /), &
+         Time, 'C grid meridional velocity', 'm/s', missing_value=missing_value)
+    
     call fv_coarse_grained_diagnostics_init(Atm, Time, coarsening_factor, id_pfull)
     
  end subroutine fv_diag_init
@@ -1516,6 +1533,14 @@ contains
 !    do n = 1, ntileMe
     n = 1
 
+    ! D grid wind diagnostics
+    if (id_d_grid_ucomp > 0) used = send_data(id_d_grid_ucomp, Atm(n)%u(isc:iec,jsc:jec+1,1:npz), Time)
+    if (id_d_grid_vcomp > 0) used = send_data(id_d_grid_vcomp, Atm(n)%v(isc:iec+1,jsc:jec,1:npz), Time)
+
+    ! C grid wind diagnostics
+    if (id_c_grid_ucomp > 0) used = send_data(id_c_grid_ucomp, Atm(n)%uc(isc:iec+1,jsc:jec,1:npz), Time)
+    if (id_c_grid_vcomp > 0) used = send_data(id_c_grid_vcomp, Atm(n)%vc(isc:iec,jsc:jec+1,1:npz), Time)
+    
 #ifdef DYNAMICS_ZS
        if(idiag%id_zsurf > 0)  used=send_data(idiag%id_zsurf, idiag%zsurf, Time)
 #endif
@@ -3462,7 +3487,7 @@ contains
 
     call nullify_domain()
 
-    call fv_coarse_grained_diagnostics(Atm, Time, vort_for_coarse)
+    call fv_coarse_grained_diagnostics(Atm, Time, vort_for_coarse, coarsening_factor)
     deallocate(vort_for_coarse)
     
  end subroutine fv_diag
