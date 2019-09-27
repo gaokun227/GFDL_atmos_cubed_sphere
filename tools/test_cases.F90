@@ -158,6 +158,7 @@
       public :: case9_forcing1, case9_forcing2, case51_forcing
       public :: init_double_periodic
       public :: checker_tracers
+      public :: read_namelist_test_case_nml
 
   INTERFACE mp_update_dwinds
      MODULE PROCEDURE mp_update_dwinds_2d
