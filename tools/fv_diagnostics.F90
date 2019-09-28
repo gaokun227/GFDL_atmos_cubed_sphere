@@ -123,7 +123,8 @@ module fv_diagnostics_mod
  character(100) :: runname = 'test'
  integer :: coarsening_factor = 2
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
-
+ integer :: id_dx, id_dy
+ 
  real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
 
  integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
@@ -173,7 +174,8 @@ contains
     logical :: exists
     integer :: nlunit, ios
 
-
+    real, allocatable :: dx(:,:), dy(:,:)
+    
     call write_version_number ( 'FV_DIAGNOSTICS_MOD', version )
     idiag => Atm(1)%idiag
 
@@ -363,6 +365,10 @@ contains
                                          'latitude', 'degrees_N' )
        id_area = register_static_field ( trim(field), 'area', axes(1:2),  &
                                          'cell area', 'm**2' )
+       id_dx = register_static_field( trim(field), 'dx', (/id_x,id_y/), &
+            'dx', 'm')
+       id_dy = register_static_field( trim(field), 'dy', (/id_x,id_y/), &
+            'dy', 'm')
 #ifndef DYNAMICS_ZS
        idiag%id_zsurf = register_static_field ( trim(field), 'zsurf', axes(1:2),  &
                                          'surface height', 'm' )
@@ -420,6 +426,14 @@ contains
        if (id_lont > 0) used = send_data(id_lont, rad2deg*Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,1), Time)
        if (id_latt > 0) used = send_data(id_latt, rad2deg*Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2), Time)
        if (id_area > 0) used = send_data(id_area, Atm(n)%gridstruct%area(isc:iec,jsc:jec), Time)
+
+       allocate(dx(isc:iec+1,jsc:jec+1), dy(isc:iec+1,jsc:jec+1))
+       dx(isc:iec,jsc:jec+1) = Atm(n)%gridstruct%dx(isc:iec,jsc:jec+1)
+       dy(isc:iec+1,jsc:jec) = Atm(n)%gridstruct%dy(isc:iec+1,jsc:jec)
+       if (id_dx > 0) used = send_data(id_dx, dx, Time)
+       if (id_dy > 0) used = send_data(id_dy, dy, Time)
+       deallocate(dx, dy)
+       
 #ifndef DYNAMICS_ZS
        if (idiag%id_zsurf > 0) used = send_data(idiag%id_zsurf, idiag%zsurf, Time)
 #endif
@@ -566,11 +580,22 @@ contains
                'water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qv_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,npz))
           idiag%id_ql_dt_phys = register_diag_field ( trim(field), 'ql_dt_phys', axes(1:3), Time,           &
-               'total liquid water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+               'liquid water tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_ql_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_ql_dt(isc:iec,jsc:jec,npz))
           idiag%id_qi_dt_phys = register_diag_field ( trim(field), 'qi_dt_phys', axes(1:3), Time,           &
-               'total ice water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+               'ice water tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qi_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qi_dt(isc:iec,jsc:jec,npz))
+
+          idiag%id_qr_dt_phys = register_diag_field ( trim(field), 'qr_dt_phys', axes(1:3), Time,           &
+               'rain water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qr_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qr_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qg_dt_phys = register_diag_field ( trim(field), 'qg_dt_phys', axes(1:3), Time,           &
+               'graupel tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qg_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qg_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qs_dt_phys = register_diag_field ( trim(field), 'qs_dt_phys', axes(1:3), Time,           &
+               'snow water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qs_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qs_dt(isc:iec,jsc:jec,npz))
+          
        endif
 
 !
@@ -1329,7 +1354,7 @@ contains
     real, allocatable :: cvm(:)
     integer :: Cl, Cl2, k1, k2
 
-    real, allocatable :: vort_for_coarse(:,:,:)
+    real, allocatable :: vort_for_coarse(:,:,:), pv_for_coarse(:,:,:)
     
     !!! CLEANUP: does it really make sense to have this routine loop over Atm% anymore? We assume n=1 below anyway
 
@@ -1745,6 +1770,9 @@ contains
               call pv_entropy(isc, iec, jsc, jec, ngc, npz, wk,    &
                               Atm(n)%gridstruct%f0, Atm(n)%pt, Atm(n)%pkz, Atm(n)%delp, grav)
               used = send_data ( idiag%id_pv, wk, Time )
+              ! Coarse potential vorticity
+              allocate(pv_for_coarse(isc:iec,jsc:jec,1:npz))
+              pv_for_coarse = wk
               if (prt_minmax) call prt_maxmin('PV', wk, isc, iec, jsc, jec, 0, 1, 1.)
           endif
 
@@ -3487,8 +3515,8 @@ contains
 
     call nullify_domain()
 
-    call fv_coarse_grained_diagnostics(Atm, Time, vort_for_coarse, coarsening_factor)
-    deallocate(vort_for_coarse)
+    call fv_coarse_grained_diagnostics(Atm, Time, vort_for_coarse, pv_for_coarse, coarsening_factor)
+    deallocate(vort_for_coarse, pv_for_coarse)
     
  end subroutine fv_diag
 

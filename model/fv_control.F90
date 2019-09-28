@@ -35,6 +35,7 @@ module fv_control_mod
                                   input_nml_file, get_unit, WARNING, &
                                   read_ascii_file, INPUT_STR_LENGTH
    use mpp_domains_mod,     only: mpp_get_data_domain, mpp_get_compute_domain, mpp_get_tile_id
+   use mpp_domains_mod,     only: mpp_define_io_domain
    use tracer_manager_mod,  only: tm_get_number_tracers => get_number_tracers, &
                                   tm_get_tracer_index   => get_tracer_index,   &
                                   tm_get_tracer_indices => get_tracer_indices, &
@@ -46,7 +47,7 @@ module fv_control_mod
    use fv_io_mod,           only: fv_io_exit
    use fv_restart_mod,      only: fv_restart_init, fv_restart_end
    use fv_arrays_mod,       only: fv_atmos_type, allocate_fv_atmos_type, deallocate_fv_atmos_type, &
-                                  R_GRID
+                                  R_GRID, allocate_coarse_restart_type, deallocate_coarse_restart_type
    use fv_grid_utils_mod,   only: grid_utils_init, grid_utils_end, ptop_min
    use fv_eta_mod,          only: set_eta
    use fv_grid_tools_mod,   only: init_grid
@@ -63,7 +64,7 @@ module fv_control_mod
                                   mpp_declare_pelist, mpp_root_pe, mpp_recv, mpp_sync_self, read_input_nml, &
                                   mpp_max
    use fv_diagnostics_mod,  only: fv_diag_init_gn
-
+   use fv_coarse_grained_diagnostics_mod, only: define_cubic_mosaic
    implicit none
    private
 
@@ -290,6 +291,14 @@ module fv_control_mod
      real, pointer :: s_weight, update_blend
 
      integer, pointer :: layout(:), io_layout(:)
+     
+     ! For coarsening
+     logical, pointer :: make_coarse_restart_files
+     integer, pointer :: coarsening_factor
+
+     integer :: target_resolution, native_resolution
+     type(domain2d) :: coarse_domain
+     integer :: is_coarse, ie_coarse, js_coarse, je_coarse
 
      !!!!!!!!!! END POINTERS !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -530,7 +539,7 @@ module fv_control_mod
         print*, ''
      endif
      if (dnrts < 0) dnrts = dnats
-
+     
      do n=1,ngrids
         !FIXME still setting up dummy structures for other grids for convenience reasons
         !isc, etc. set in domain_decomp
@@ -542,6 +551,21 @@ module fv_control_mod
              Atm(n)%flagstruct%npx,    Atm(n)%flagstruct%npy,   Atm(n)%flagstruct%npz, &
              Atm(n)%flagstruct%ndims,  Atm(n)%flagstruct%ncnst, Atm(n)%flagstruct%ncnst-Atm(n)%flagstruct%pnats, &
              n/=this_grid, n==this_grid, ngrids) !TODO don't need both of the last arguments
+        if (make_coarse_restart_files) then
+           native_resolution = npx - 1
+           target_resolution = native_resolution / coarsening_factor
+           
+           write(*,*) 'resolution', target_resolution, 'layout', layout
+           call define_cubic_mosaic(coarse_domain, target_resolution, target_resolution, layout)
+           call mpp_define_io_domain(coarse_domain, io_layout)
+           call mpp_get_compute_domain(coarse_domain, is_coarse, ie_coarse, js_coarse, je_coarse)
+           call allocate_coarse_restart_type(Atm(n), is_coarse, ie_coarse, &
+                js_coarse, je_coarse, npz, nt_prog, nt_phys)
+           
+           Atm(n)%coarse_restart%coarsening_factor = coarsening_factor
+           Atm(n)%coarse_restart%coarse_domain = coarse_domain
+           
+        endif
      enddo
      if ( (Atm(this_grid)%bd%iec-Atm(this_grid)%bd%isc+1).lt.4 .or. (Atm(this_grid)%bd%jec-Atm(this_grid)%bd%jsc+1).lt.4 ) then
         if (is_master()) write(*,'(6I6)') Atm(this_grid)%bd%isc, Atm(this_grid)%bd%iec, Atm(this_grid)%bd%jsc, Atm(this_grid)%bd%jec, this_grid
@@ -638,9 +662,7 @@ module fv_control_mod
 !!$     Atm(this_grid)%inline_mp%preg = too_big
 
      !Initialize restart
-     ! TODO: thread in the coarsening factor here too; currently I have just
-     ! hard-coded it.
-     call fv_restart_init(Atm, 8)
+     call fv_restart_init(Atm)
 !     if ( reset_eta ) then
 !         do n=1, ntilesMe
 !            call set_eta(npz, Atm(this_grid)%ks, ptop, Atm(this_grid)%ak, Atm(this_grid)%bk, Atm(this_grid)%flagstruct%npz_type)
@@ -822,6 +844,9 @@ module fv_control_mod
        joffset                       => Atm%neststruct%joffset
        update_blend                  => Atm%neststruct%update_blend
 
+       make_coarse_restart_files     => Atm%flagstruct%make_coarse_restart_files
+       coarsening_factor             => Atm%flagstruct%coarsening_factor
+       
        layout                        => Atm%layout
        io_layout                     => Atm%io_layout
      end subroutine set_namelist_pointers
@@ -935,7 +960,8 @@ module fv_control_mod
             nested, twowaynest, nudge_qv, &
             nestbctype, nestupdate, nsponge, s_weight, &
             check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
-            do_uni_zfull, adj_mass_vmr, update_blend, regional, bc_update_interval
+            do_uni_zfull, adj_mass_vmr, update_blend, regional,&
+            bc_update_interval, make_coarse_restart_files, coarsening_factor
 
 #ifdef INTERNAL_FILE_NML
        ! Read FVCORE namelist 

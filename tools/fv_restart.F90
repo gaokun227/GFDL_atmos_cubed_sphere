@@ -81,12 +81,11 @@ contains
   ! Initialize the fv core restart facilities
   ! </DESCRIPTION>
   !
-  subroutine fv_restart_init(Atm, coarsening_factor)
+  subroutine fv_restart_init(Atm)
     type(fv_atmos_type), intent(in) :: Atm(:)
-    integer, intent(in) :: coarsening_factor
     
     call fv_io_init()
-    call fv_io_init_coarse(Atm, coarsening_factor)
+    call fv_io_init_coarse(Atm)
     module_is_initialized = .TRUE.
     
   end subroutine fv_restart_init
@@ -187,8 +186,8 @@ contains
        !--- call fv_io_register_restart to register restart field to be written out in fv_io_write_restart
        if ( n==this_grid ) call fv_io_register_restart(Atm(n)%domain,Atm(n:n))
 
-       ! TODO: thread coarsening factor down to here; right now I've hard-coded it.
-       if ( n==this_grid ) call fv_io_register_restart_coarse(Atm(n:n), 8)
+       ! For coarse restart
+       if ( n==this_grid ) call fv_io_register_restart_coarse(Atm(n:n))       
        !if (Atm(n)%neststruct%nested) call fv_io_register_restart_BCs(Atm(n)) !TODO put into fv_io_register_restart
 
 
@@ -1229,8 +1228,8 @@ contains
     type(fv_atmos_type), intent(inout) :: Atm
     character(len=*),    intent(in)    :: timestamp
 
-    call fv_io_write_restart(Atm, timestamp)
     call fv_io_write_restart_coarse(Atm, timestamp)
+    call fv_io_write_restart(Atm, timestamp)
     if (Atm%neststruct%nested) then
        call fv_io_write_BCs(Atm)
     endif

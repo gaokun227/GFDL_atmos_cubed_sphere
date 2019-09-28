@@ -8,18 +8,25 @@ module fv_coarse_grained_diagnostics_mod
   use mpp_mod,         only: mpp_error, mpp_npes, FATAL
   use mpp_domains_mod, only : mpp_get_compute_domain, mpp_define_mosaic, domain2d, mpp_define_io_domain
   use time_manager_mod, only: time_type
-
+  use tracer_manager_mod, only: get_tracer_index
+  use field_manager_mod,  only: MODEL_ATMOS
+  
   implicit none
   private
   
   public :: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics, define_cubic_mosaic
-  public :: coarse_grain_variable, zonal_block_edge_coarse_grain_variable, meridional_block_edge_coarse_grain_variable
+  public :: coarse_grain_variable, area_and_delp_coarse_grain_variable, zonal_block_edge_coarse_grain_variable, meridional_block_edge_coarse_grain_variable
   
   interface coarse_grain_variable
      module procedure coarse_grain_variable_2d
      module procedure coarse_grain_variable_3d
   end interface coarse_grain_variable
 
+  interface area_and_delp_coarse_grain_variable
+     module procedure area_and_delp_coarse_grain_variable_2d
+     module procedure area_and_delp_coarse_grain_variable_3d
+  end interface area_and_delp_coarse_grain_variable
+  
   interface zonal_block_edge_coarse_grain_variable
      module procedure zonal_block_edge_coarse_grain_variable_2d
      module procedure zonal_block_edge_coarse_grain_variable_3d
@@ -34,6 +41,16 @@ module fv_coarse_grained_diagnostics_mod
   real, parameter    ::     rad2deg = 180./pi
   integer :: id_ps_coarse, id_vort_coarse, id_coarse_lon, id_coarse_lat, id_coarse_lont, id_coarse_latt
   integer :: id_d_grid_ucomp_coarse, id_d_grid_vcomp_coarse, id_c_grid_ucomp_coarse, id_c_grid_vcomp_coarse
+  integer :: id_pv_coarse, id_liq_wat_coarse
+  
+  ! TODO: Implement coarse-grain wind tendencies from physics
+  integer :: id_qv_dt_phys_coarse, id_ql_dt_phys_coarse, id_qi_dt_phys_coarse, &
+       id_qr_dt_phys_coarse, id_qg_dt_phys_coarse, id_qs_dt_phys_coarse, id_t_dt_phys_coarse
+  integer :: id_u_dt_phys_coarse, id_v_dt_phys_coarse
+  
+  ! TODO: Implement coarse-grain wind tendencies from nudging
+  integer :: id_t_dt_nudge_coarse, id_ps_dt_nudge_coarse, id_delp_dt_nudge_coarse
+  integer :: id_u_dt_nudge_coarse, id_v_dt_nudge_coarse
   integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz, ntracers
 
   real(kind=R_GRID), allocatable :: grid_coarse(:,:,:), agrid_coarse(:,:,:)
@@ -41,7 +58,7 @@ module fv_coarse_grained_diagnostics_mod
   
   subroutine fv_coarse_grained_diagnostics_init(Atm, Time, coarsening_factor, id_pfull)
     type(time_type), intent(in) :: Time
-    type(fv_atmos_type), intent(in) :: Atm(:)
+    type(fv_atmos_type), intent(inout) :: Atm(:)
     integer, intent(in) :: coarsening_factor
     integer, intent(in) :: id_pfull
     type(domain2d)     :: coarse_domain
@@ -127,6 +144,72 @@ module fv_coarse_grained_diagnostics_mod
          coarse_axes_t(1:3), Time, 'vorticity', 'per s', &
          missing_value=missing_value)
 
+    id_pv_coarse = register_diag_field('dynamics', 'pv_coarse', &
+         coarse_axes_t(1:3), Time, 'potential vorticity', 'per s', &
+         missing_value=missing_value)
+
+    id_liq_wat_coarse = register_diag_field('dynamics', 'liq_wat_coarse', &
+         coarse_axes_t(1:3), Time, 'liquid water', 'kg/kg', &
+         missing_value=missing_value)
+    
+    id_qv_dt_phys_coarse = register_diag_field ( 'dynamics', 'qv_dt_phys_coarse', coarse_axes(1:3), Time,           &
+         'water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
+    if ((id_qv_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qv_dt))) allocate (Atm(n)%phys_diag%phys_qv_dt(is:ie,js:je,npz))
+
+    id_ql_dt_phys_coarse = register_diag_field ( 'dynamics', 'ql_dt_phys_coarse', coarse_axes(1:3), Time,           &
+         'liquid water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+    if ((id_ql_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_ql_dt))) allocate (Atm(n)%phys_diag%phys_ql_dt(is:ie,js:je,npz))
+
+    id_qi_dt_phys_coarse = register_diag_field ( 'dynamics', 'qi_dt_phys_coarse', coarse_axes(1:3), Time,           &
+         'ice water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+    if ((id_qi_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qi_dt))) allocate (Atm(n)%phys_diag%phys_qi_dt(is:ie,js:je,npz))
+
+    id_qr_dt_phys_coarse = register_diag_field ( 'dynamics', 'qr_dt_phys_coarse', coarse_axes(1:3), Time,           &
+         'rain water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+    if ((id_qr_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qr_dt))) allocate (Atm(n)%phys_diag%phys_qr_dt(is:ie,js:je,npz))
+
+    id_qg_dt_phys_coarse = register_diag_field ( 'dynamics', 'qg_dt_phys_coarse', coarse_axes(1:3), Time,           &
+         'graupel tendency from physics', 'kg/kg/s', missing_value=missing_value )
+    if ((id_qg_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qg_dt))) allocate (Atm(n)%phys_diag%phys_qg_dt(is:ie,js:je,npz))
+
+    id_qs_dt_phys_coarse = register_diag_field ('dynamics', 'qs_dt_phys_coarse', coarse_axes(1:3), Time,           &
+         'snow water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+    if ((id_qs_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qs_dt))) allocate (Atm(n)%phys_diag%phys_qs_dt(is:ie,js:je,npz))
+
+    id_t_dt_phys_coarse = register_diag_field ('dynamics', 't_dt_phys_coarse', coarse_axes(1:3), Time,           &
+         'temperature tendency from physics', 'K/s', missing_value=missing_value )
+    if ((id_t_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_t_dt))) allocate (Atm(n)%phys_diag%phys_t_dt(is:ie,js:je,npz))
+
+    id_u_dt_phys_coarse = register_diag_field ('dynamics', 'u_dt_phys_coarse', coarse_axes(1:3), Time,           &
+         'zonal wind tendency from physics', 'm/s/s', missing_value=missing_value )
+    if ((id_u_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_u_dt))) allocate (Atm(n)%phys_diag%phys_u_dt(is:ie,js:je,npz))
+
+    id_v_dt_phys_coarse = register_diag_field ('dynamics', 'v_dt_phys_coarse', coarse_axes(1:3), Time,           &
+         'meridional wind tendency from physics', 'm/s/s', missing_value=missing_value )
+    if ((id_v_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_v_dt))) allocate (Atm(n)%phys_diag%phys_v_dt(is:ie,js:je,npz))
+    
+    ! Add coarse-grain tendencies from nudging
+    id_t_dt_nudge_coarse = register_diag_field ('dynamics', 't_dt_nudge_coarse', coarse_axes(1:3), Time,           &
+         'temperature tendency from nudging', 'K/s', missing_value=missing_value )
+    if (id_t_dt_nudge_coarse > 0) allocate (Atm(n)%nudge_diag%nudge_t_dt(is:ie,js:je,npz))
+
+    id_ps_dt_nudge_coarse = register_diag_field ('dynamics', 'ps_dt_nudge_coarse', coarse_axes(1:2), Time,           &
+         'surface pressure tendency from nudging', 'Pa/s', missing_value=missing_value )
+    if (id_ps_dt_nudge_coarse > 0) allocate (Atm(n)%nudge_diag%nudge_ps_dt(is:ie,js:je))
+
+    id_delp_dt_nudge_coarse = register_diag_field ('dynamics', 'delp_dt_nudge_coarse', coarse_axes(1:3), Time,           &
+         'pressure thickness tendency from nudging', 'Pa/s', missing_value=missing_value )
+    if (id_delp_dt_nudge_coarse > 0) allocate (Atm(n)%nudge_diag%nudge_delp_dt(is:ie,js:je,npz))
+
+    id_u_dt_nudge_coarse = register_diag_field ('dynamics', 'u_dt_nudge_coarse', coarse_axes(1:3), Time,           &
+         'zonal wind tendency from nudging', 'm/s/s', missing_value=missing_value )
+    if (id_u_dt_nudge_coarse > 0) allocate (Atm(n)%nudge_diag%nudge_u_dt(is:ie,js:je,npz))
+
+    id_v_dt_nudge_coarse = register_diag_field ('dynamics', 'v_dt_nudge_coarse', coarse_axes(1:3), Time,           &
+         'meridional wind tendency from nudging', 'm/s/s', missing_value=missing_value )
+    if (id_v_dt_nudge_coarse > 0) allocate (Atm(n)%nudge_diag%nudge_v_dt(is:ie,js:je,npz))
+    
+    ! Staggered grid winds - note these do not work with current FMS codebase
     id_d_grid_ucomp_coarse = register_diag_field('dynamics', &
          'd_grid_ucomp_coarse', (/ id_coarse_xt, id_coarse_y, id_pfull /), &
          Time, 'D grid zonal velocity', 'm/s', missing_value=missing_value)
@@ -217,6 +300,53 @@ module fv_coarse_grained_diagnostics_mod
     enddo
     
   end subroutine coarse_grain_variable_3d
+
+  subroutine area_and_delp_coarse_grain_variable_2d(area, delp, variable, coarse_grained_variable, coarsening_factor)
+
+    real, intent(in) :: area(is:ie,js:je)
+    real, intent(in) :: variable(is:ie,js:je), delp(is:ie,js:je)
+    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse)
+    integer, intent(in) :: coarsening_factor
+
+    real, allocatable :: weights(:,:)
+    real, allocatable :: weighted_variable(:,:)
+    integer :: i, j, i_coarse, j_coarse, a
+
+    allocate(weights(is:ie,js:je))
+    allocate(weighted_variable(is:ie,js:je))
+    weights = area * delp
+    weighted_variable = weights * variable
+    
+    a = coarsening_factor - 1
+    do i = is, ie, coarsening_factor
+       i_coarse = (i - 1) / coarsening_factor + 1
+       do j = js, je, coarsening_factor
+          j_coarse = (j - 1) / coarsening_factor + 1
+          coarse_grained_variable(i_coarse,j_coarse) = sum(weighted_variable(i:i + a,j:j + a)) / sum(weights(i:i + a,j:j + a))
+       enddo
+    enddo
+
+    deallocate(weights, weighted_variable)
+    
+  end subroutine area_and_delp_coarse_grain_variable_2d
+
+  subroutine area_and_delp_coarse_grain_variable_3d(area, delp, variable, coarse_grained_variable, coarsening_factor)
+
+    real, intent(in) :: area(is:ie,js:je)
+    real, intent(in) :: variable(is:ie,js:je,1:npz), delp(is:ie,js:je,1:npz)
+    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz)
+    integer, intent(in) :: coarsening_factor
+    
+    integer :: k
+    
+    do k = 1, npz
+       call area_and_delp_coarse_grain_variable_2d(area, &
+       delp(is:ie,js:je,k), &
+       variable(is:ie,js:je,k), &
+       coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse,k),coarsening_factor)
+    enddo
+    
+  end subroutine area_and_delp_coarse_grain_variable_3d
   
   ! For now we always assume that the variables passed to this function are
   ! staggered in the j dimension, but unstaggered in the i dimension.  This
@@ -224,13 +354,13 @@ module fv_coarse_grained_diagnostics_mod
   ! anticipate this subroutine will exclusively be used for.
   subroutine zonal_block_edge_coarse_grain_variable_2d(dx, variable, coarse_grained_variable, coarsening_factor)
 
-    real, intent(in) :: dx(is:ie,js:je)
+    real, intent(in) :: dx(is:ie,js:je+1)
     real, intent(in) :: variable(is:ie,js:je+1)
     real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse+1)
     integer, intent(in) :: coarsening_factor
     
     integer :: i, j, i_coarse, j_coarse, a
-
+    
     a = coarsening_factor - 1
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
@@ -248,7 +378,7 @@ module fv_coarse_grained_diagnostics_mod
   ! anticipate this subroutine will exclusively be used for.
   subroutine zonal_block_edge_coarse_grain_variable_3d(dx, variable, coarse_grained_variable, coarsening_factor)
 
-    real, intent(in) :: dx(is:ie,js:je)
+    real, intent(in) :: dx(is:ie,js:je+1)
     real, intent(in) :: variable(is:ie,js:je+1,1:npz)
     real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse+1,1:npz)
     integer, intent(in) :: coarsening_factor
@@ -268,17 +398,17 @@ module fv_coarse_grained_diagnostics_mod
   ! anticipate this subroutine will exclusively be used for.
   subroutine meridional_block_edge_coarse_grain_variable_2d(dy, variable, coarse_grained_variable, coarsening_factor)
 
-    real, intent(in) :: dy(is:ie,js:je)
-    real, intent(in) :: variable(is:ie,js:je+1)
-    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse+1)
+    real, intent(in) :: dy(is:ie+1,js:je)
+    real, intent(in) :: variable(is:ie+1,js:je)
+    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse+1,js_coarse:je_coarse)
     integer, intent(in) :: coarsening_factor
     
     integer :: i, j, i_coarse, j_coarse, a
 
     a = coarsening_factor - 1
-    do i = is, ie, coarsening_factor + 1
-       i_coarse = (i - 1) / coarsening_factor
-       do j = js, je + 1, coarsening_factor
+    do i = is, ie + 1, coarsening_factor
+       i_coarse = (i - 1) / coarsening_factor + 1
+       do j = js, je, coarsening_factor
           j_coarse = (j - 1) / coarsening_factor + 1
           coarse_grained_variable(i_coarse,j_coarse) = sum(dy(i,j:j+a) * variable(i,j:j+a)) / sum(dy(i,j:j+a))
        enddo
@@ -292,9 +422,9 @@ module fv_coarse_grained_diagnostics_mod
   ! anticipate this subroutine will exclusively be used for.
   subroutine meridional_block_edge_coarse_grain_variable_3d(dy, variable, coarse_grained_variable, coarsening_factor)
 
-    real, intent(in) :: dy(is:ie,js:je)
-    real, intent(in) :: variable(is:ie,js:je+1,1:npz)
-    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse,js_coarse:je_coarse+1,1:npz)
+    real, intent(in) :: dy(is:ie+1,js:je)
+    real, intent(in) :: variable(is:ie+1,js:je,1:npz)
+    real, intent(out) :: coarse_grained_variable(is_coarse:ie_coarse+1,js_coarse:je_coarse,1:npz)
     integer, intent(in) :: coarsening_factor
     
     integer :: k
@@ -306,53 +436,183 @@ module fv_coarse_grained_diagnostics_mod
     
   end subroutine meridional_block_edge_coarse_grain_variable_3d
   
-  subroutine fv_coarse_grained_diagnostics(Atm, Time, vort, coarsening_factor)
+  subroutine fv_coarse_grained_diagnostics(Atm, Time, vort, pv, coarsening_factor)
 
     type(fv_atmos_type), intent(in), target :: Atm(:)
     type(time_type), intent(in) :: Time
-    real, intent(in) :: vort(:,:,:)
+    real, intent(in) :: vort(:,:,:), pv(:,:,:)
     integer, intent(in) :: coarsening_factor
     
     logical :: used
     real, allocatable :: ps_coarse(:,:)
     real, allocatable :: vort_coarse(:,:,:), u_coarse(:,:,:), v_coarse(:,:,:), uc_coarse(:,:,:), vc_coarse(:,:,:)
+    real, allocatable :: tracer_tendency_coarse(:,:,:), nudge_tendency_coarse(:,:,:), nudge_tendency_coarse_2d(:,:)
     integer :: n = 1
+    integer :: liq_wat
 
     allocate(ps_coarse(is_coarse:ie_coarse,js_coarse:je_coarse), &
          vort_coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz), &
          u_coarse(is_coarse:ie_coarse,js_coarse:je_coarse+1,1:npz), &
          v_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse,1:npz), &
          uc_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse,1:npz), &
-         vc_coarse(is_coarse:ie_coarse,js_coarse:je_coarse+1,1:npz))
+         vc_coarse(is_coarse:ie_coarse,js_coarse:je_coarse+1,1:npz), &
+         tracer_tendency_coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz), &
+         nudge_tendency_coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz), &
+         nudge_tendency_coarse_2d(is_coarse:ie_coarse,js_coarse:je_coarse))    
     
     call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%ps(is:ie,js:je), ps_coarse, coarsening_factor)
     if( id_ps_coarse > 0 ) used = send_data(id_ps_coarse, ps_coarse, Time)
-    deallocate(ps_coarse)
 
     call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), vort(is:ie,js:je,1:npz), vort_coarse, coarsening_factor)
     if( id_vort_coarse > 0 ) used = send_data(id_vort_coarse, vort_coarse, Time)
-    deallocate(vort_coarse)
 
+    call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), pv(is:ie,js:je,1:npz), vort_coarse, coarsening_factor)
+    if( id_pv_coarse > 0 ) used = send_data(id_pv_coarse, vort_coarse, Time)
+        
+    if( id_u_dt_phys_coarse > 0 ) then
+       call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%phys_diag%phys_u_dt(is:ie,js:je,1:npz), vort_coarse,&
+            coarsening_factor)
+       used = send_data(id_u_dt_phys_coarse, vort_coarse, Time)
+    endif
+
+    if( id_v_dt_phys_coarse > 0 ) then
+       call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%phys_diag%phys_v_dt(is:ie,js:je,1:npz), vort_coarse, coarsening_factor)
+       used = send_data(id_v_dt_phys_coarse, vort_coarse, Time)
+    endif
+ 
+   
+    if( id_u_dt_nudge_coarse > 0 ) then
+       call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%nudge_diag%nudge_u_dt(is:ie,js:je,1:npz), vort_coarse, coarsening_factor)
+       used = send_data(id_u_dt_nudge_coarse, vort_coarse, Time)
+    endif
+    
+    if( id_v_dt_nudge_coarse > 0 ) then
+       call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), Atm(n)%nudge_diag%nudge_v_dt(is:ie,js:je,1:npz), vort_coarse, coarsening_factor)
+       used = send_data(id_v_dt_nudge_coarse, vort_coarse, Time)
+    endif
+    
+    liq_wat = get_tracer_index (MODEL_ATMOS, 'liq_wat')
+    call area_and_delp_coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%delp(is:ie,js:je,1:npz), &
+         Atm(n)%q(is:ie,js:je,1:npz,liq_wat), &
+         vort_coarse, coarsening_factor)
+    if ( id_liq_wat_coarse > 0) used = send_data(id_liq_wat_coarse,&
+         vort_coarse, Time)
+    deallocate(vort_coarse)
+    
+    ! Temperature tendency from physics
+    if ( id_t_dt_phys_coarse > 0) then
+       call area_and_delp_coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%delp(is:ie,js:je,1:npz), &
+         Atm(n)%phys_diag%phys_t_dt(is:ie,js:je,1:npz), &
+         tracer_tendency_coarse, coarsening_factor)
+       used = send_data(id_t_dt_phys_coarse,&
+            tracer_tendency_coarse, Time)
+    endif
+    
+    ! Tracer tendencies from physics
+    if ( id_qv_dt_phys_coarse > 0) then
+       call area_and_delp_coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%delp(is:ie,js:je,1:npz), &
+         Atm(n)%phys_diag%phys_qv_dt(is:ie,js:je,1:npz), &
+         tracer_tendency_coarse, coarsening_factor)
+       used = send_data(id_qv_dt_phys_coarse,&
+            tracer_tendency_coarse, Time)
+    endif
+    
+    if ( id_ql_dt_phys_coarse > 0) then
+       call area_and_delp_coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%delp(is:ie,js:je,1:npz), &
+         Atm(n)%phys_diag%phys_ql_dt(is:ie,js:je,1:npz), &
+         tracer_tendency_coarse, coarsening_factor)
+       used = send_data(id_ql_dt_phys_coarse,&
+            tracer_tendency_coarse, Time)
+    endif
+
+    if ( id_qi_dt_phys_coarse > 0) then
+       call area_and_delp_coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%delp(is:ie,js:je,1:npz), &
+         Atm(n)%phys_diag%phys_qi_dt(is:ie,js:je,1:npz), &
+         tracer_tendency_coarse, coarsening_factor)
+       used = send_data(id_qi_dt_phys_coarse,&
+            tracer_tendency_coarse, Time)
+    endif
+
+    if ( id_qr_dt_phys_coarse > 0) then
+       call area_and_delp_coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%delp(is:ie,js:je,1:npz), &
+         Atm(n)%phys_diag%phys_qr_dt(is:ie,js:je,1:npz), &
+         tracer_tendency_coarse, coarsening_factor)
+       used = send_data(id_qr_dt_phys_coarse,&
+            tracer_tendency_coarse, Time)
+    endif
+    
+    if ( id_qg_dt_phys_coarse > 0) then
+       call area_and_delp_coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%delp(is:ie,js:je,1:npz), &
+         Atm(n)%phys_diag%phys_qg_dt(is:ie,js:je,1:npz), &
+         tracer_tendency_coarse, coarsening_factor)
+       used = send_data(id_qg_dt_phys_coarse,&
+            tracer_tendency_coarse, Time)
+    endif
+
+    if ( id_qs_dt_phys_coarse > 0) then
+       call area_and_delp_coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%delp(is:ie,js:je,1:npz), &
+         Atm(n)%phys_diag%phys_qs_dt(is:ie,js:je,1:npz), &
+         tracer_tendency_coarse, coarsening_factor)
+       used = send_data(id_qs_dt_phys_coarse,&
+            tracer_tendency_coarse, Time)
+    endif
+    deallocate(tracer_tendency_coarse)
+    
+    ! Tendencies from nudging
+    if( id_ps_dt_nudge_coarse > 0 ) then
+       call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%nudge_diag%nudge_ps_dt(is:ie,js:je), &
+         nudge_tendency_coarse_2d, coarsening_factor)
+       used = send_data(id_ps_dt_nudge_coarse, nudge_tendency_coarse_2d, Time)
+    endif
+
+    if( id_delp_dt_nudge_coarse > 0 ) then
+       call coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+         Atm(n)%nudge_diag%nudge_delp_dt(is:ie,js:je,1:npz), &
+         nudge_tendency_coarse, coarsening_factor)
+       used = send_data(id_delp_dt_nudge_coarse, nudge_tendency_coarse, Time)
+    endif
+
+    if ( id_t_dt_nudge_coarse > 0) then
+       call area_and_delp_coarse_grain_variable(Atm(n)%gridstruct%area(is:ie,js:je), &
+            Atm(n)%delp(is:ie,js:je,1:npz), &
+         Atm(n)%nudge_diag%nudge_t_dt(is:ie,js:je,1:npz), &
+         nudge_tendency_coarse, coarsening_factor)
+       used = send_data(id_t_dt_nudge_coarse,&
+            nudge_tendency_coarse, Time)
+    endif
+
+    deallocate(nudge_tendency_coarse)
+    deallocate(nudge_tendency_coarse_2d)
+    
     ! D grid winds
-    call zonal_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dx(is:ie,js:je), &
-         Atm(n)%u(is:ie,js:je+1,1:npz), u_coarse, coarsening_factor)
-    if( id_d_grid_ucomp_coarse > 0 ) used = send_data(id_d_grid_ucomp_coarse, u_coarse, Time)
+    ! call zonal_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dx(is:ie,js:je), &
+    !      Atm(n)%u(is:ie,js:je+1,1:npz), u_coarse, coarsening_factor)
+    ! if( id_d_grid_ucomp_coarse > 0 ) used = send_data(id_d_grid_ucomp_coarse, u_coarse, Time)
     deallocate(u_coarse)
     
-    call meridional_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dy(is:ie,js:je), &
-         Atm(n)%v(is:ie+1,js:je,1:npz), v_coarse, coarsening_factor)
-    if( id_d_grid_vcomp_coarse > 0 ) used = send_data(id_d_grid_vcomp_coarse, v_coarse, Time)
+    ! call meridional_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dy(is:ie,js:je), &
+    !      Atm(n)%v(is:ie+1,js:je,1:npz), v_coarse, coarsening_factor)
+    ! if( id_d_grid_vcomp_coarse > 0 ) used = send_data(id_d_grid_vcomp_coarse, v_coarse, Time)
     deallocate(v_coarse)
 
-    ! C grid winds
-    call meridional_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dy(is:ie,js:je), &
-         Atm(n)%uc(is:ie+1,js:je,1:npz), uc_coarse, coarsening_factor)
-    if( id_c_grid_ucomp_coarse > 0 ) used = send_data(id_c_grid_ucomp_coarse, uc_coarse, Time)
+    ! ! C grid winds
+    ! call meridional_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dy(is:ie,js:je), &
+    !      Atm(n)%uc(is:ie+1,js:je,1:npz), uc_coarse, coarsening_factor)
+    ! if( id_c_grid_ucomp_coarse > 0 ) used = send_data(id_c_grid_ucomp_coarse, uc_coarse, Time)
     deallocate(uc_coarse)
     
-    call zonal_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dx(is:ie,js:je), &
-         Atm(n)%vc(is:ie,js:je+1,1:npz), vc_coarse, coarsening_factor)
-    if( id_c_grid_vcomp_coarse > 0 ) used = send_data(id_c_grid_vcomp_coarse, vc_coarse, Time)
+    ! call zonal_block_edge_coarse_grain_variable(Atm(n)%gridstruct%dx(is:ie,js:je), &
+    !      Atm(n)%vc(is:ie,js:je+1,1:npz), vc_coarse, coarsening_factor)
+    ! if( id_c_grid_vcomp_coarse > 0 ) used = send_data(id_c_grid_vcomp_coarse, vc_coarse, Time)
     deallocate(vc_coarse)
     
     if (id_coarse_lon > 0) used = send_data(id_coarse_lon, rad2deg *grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1,1), Time)

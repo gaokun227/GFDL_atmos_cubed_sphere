@@ -19,7 +19,7 @@
 !***********************************************************************
 module fv_arrays_mod
 #include <fms_platform.h>
-  use mpp_domains_mod,       only: domain2d
+  use mpp_domains_mod,       only: domain2d, mpp_get_data_domain
   use fms_io_mod,            only: restart_file_type
   use time_manager_mod,      only: time_type
   use horiz_interp_type_mod, only: horiz_interp_type
@@ -99,6 +99,7 @@ module fv_arrays_mod
      integer :: id_qv_dt_gfdlmp, id_T_dt_gfdlmp, id_ql_dt_gfdlmp, id_qi_dt_gfdlmp
      integer :: id_u_dt_gfdlmp, id_v_dt_gfdlmp
      integer :: id_t_dt_phys, id_qv_dt_phys, id_ql_dt_phys, id_qi_dt_phys, id_u_dt_phys, id_v_dt_phys
+     integer :: id_qr_dt_phys, id_qg_dt_phys, id_qs_dt_phys
      integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
 
      integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w
@@ -530,7 +531,8 @@ module fv_arrays_mod
   !f1p
   logical  :: adj_mass_vmr = .false. !TER: This is to reproduce answers for verona patch.  This default can be changed
                                      !     to .true. in the next city release if desired
-  
+  logical :: make_coarse_restart_files = .false.
+  integer :: coarsening_factor = 8
   !integer, pointer :: test_case
   !real,    pointer :: alpha
 
@@ -657,11 +659,47 @@ module fv_arrays_mod
      real, _ALLOCATABLE :: phys_qv_dt(:,:,:)
      real, _ALLOCATABLE :: phys_ql_dt(:,:,:)
      real, _ALLOCATABLE :: phys_qi_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_qr_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_qg_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_qs_dt(:,:,:)
      real, _ALLOCATABLE :: phys_u_dt(:,:,:)
      real, _ALLOCATABLE :: phys_v_dt(:,:,:)
 
   end type phys_diag_type
 
+  type nudge_diag_type
+
+     real, _ALLOCATABLE :: nudge_t_dt(:,:,:)
+     real, _ALLOCATABLE :: nudge_ps_dt(:,:)
+     real, _ALLOCATABLE :: nudge_delp_dt(:,:,:)
+     real, _ALLOCATABLE :: nudge_u_dt(:,:,:)
+     real, _ALLOCATABLE :: nudge_v_dt(:,:,:)
+
+  end type nudge_diag_type
+
+  type coarse_restart_type
+
+     real, _ALLOCATABLE :: u(:,:,:)
+     real, _ALLOCATABLE :: v(:,:,:)
+     real, _ALLOCATABLE :: w(:,:,:)
+     real, _ALLOCATABLE :: pt(:,:,:)
+     real, _ALLOCATABLE :: q(:,:,:,:)
+     real, _ALLOCATABLE :: qdiag(:,:,:,:)
+     real, _ALLOCATABLE :: delz(:,:,:)
+     real, _ALLOCATABLE :: phis(:,:)
+     real, _ALLOCATABLE :: delp(:,:,:)
+     real, _ALLOCATABLE :: ua(:,:,:)
+     real, _ALLOCATABLE :: va(:,:,:)
+     real, _ALLOCATABLE :: u_srf(:,:)
+     real, _ALLOCATABLE :: v_srf(:,:)
+     real, _ALLOCATABLE :: sgh(:,:)
+     real, _ALLOCATABLE :: oro(:,:)
+
+     type(domain2d) :: coarse_domain
+     integer :: coarsening_factor
+     
+  end type coarse_restart_type
+  
   interface allocate_fv_nest_BC_type
      module procedure allocate_fv_nest_BC_type_3D
      module procedure allocate_fv_nest_BC_type_3D_Atm
@@ -831,7 +869,10 @@ module fv_arrays_mod
 !!!!!!!!!!!!!!
      type(restart_file_type) :: Fv_restart, SST_restart, Fv_tile_restart, &
           Rsf_restart, Mg_restart, Lnd_restart, Tra_restart
-
+     type(restart_file_type) :: Fv_restart_coarse, SST_restart_coarse, &
+          Fv_tile_restart_coarse, Rsf_restart_coarse, Mg_restart_coarse, &
+          Lnd_restart_coarse, Tra_restart_coarse
+     
      type(fv_nest_type) :: neststruct
 
      !Hold on to coarse-grid global grid, so we don't have to waste processor time getting it again when starting to do grid nesting
@@ -841,14 +882,61 @@ module fv_arrays_mod
 
      type(inline_mp_type) :: inline_mp
      type(phys_diag_type) :: phys_diag
-
-
+     type(nudge_diag_type) :: nudge_diag
+     type(coarse_restart_type) :: coarse_restart
+     ! real, _ALLOCATABLE :: pt_coarse(:,:,:)
+     
   end type fv_atmos_type
-
+  
 contains
 
+  subroutine allocate_coarse_restart_type(Atm, is_coarse, ie_coarse, js_coarse, &
+       je_coarse, npz, ntprog, ntdiag)
+    type(fv_atmos_type), intent(INOUT) :: Atm
+    integer, intent(IN) :: is_coarse, ie_coarse, js_coarse, je_coarse, npz, ntprog, ntdiag
+    
+    allocate (Atm%coarse_restart%u(is_coarse:ie_coarse,js_coarse:je_coarse+1,npz))
+    allocate (Atm%coarse_restart%v(is_coarse:ie_coarse+1,js_coarse:je_coarse,npz))
+    allocate (Atm%coarse_restart%ua(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
+    allocate (Atm%coarse_restart%va(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
+    allocate (Atm%coarse_restart%u_srf(is_coarse:ie_coarse,js_coarse:je_coarse))
+    allocate (Atm%coarse_restart%v_srf(is_coarse:ie_coarse,js_coarse:je_coarse))
+    allocate (Atm%coarse_restart%w(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
+    allocate (Atm%coarse_restart%delp(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
+    allocate (Atm%coarse_restart%delz(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
+    allocate (Atm%coarse_restart%pt(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
+    allocate (Atm%coarse_restart%q(is_coarse:ie_coarse,js_coarse:je_coarse,npz,ntprog))
+    allocate (Atm%coarse_restart%qdiag(is_coarse:ie_coarse,js_coarse:je_coarse,npz,ntprog+1:ntdiag + ntprog))
+    allocate (Atm%coarse_restart%sgh(is_coarse:ie_coarse,js_coarse:je_coarse))
+    allocate (Atm%coarse_restart%oro(is_coarse:ie_coarse,js_coarse:je_coarse))
+    allocate (Atm%coarse_restart%phis(is_coarse:ie_coarse,js_coarse:je_coarse))
+
+  end subroutine allocate_coarse_restart_type
+
+  subroutine deallocate_coarse_restart_type(Atm)
+    type(fv_atmos_type), intent(INOUT) :: Atm
+    
+    deallocate(Atm%coarse_restart%u)
+    deallocate(Atm%coarse_restart%v)
+    deallocate(Atm%coarse_restart%ua)
+    deallocate(Atm%coarse_restart%va)
+    deallocate(Atm%coarse_restart%u_srf)
+    deallocate(Atm%coarse_restart%v_srf)
+    deallocate(Atm%coarse_restart%w)
+    deallocate(Atm%coarse_restart%delp)
+    deallocate(Atm%coarse_restart%delz)
+    deallocate(Atm%coarse_restart%pt)
+    deallocate(Atm%coarse_restart%q)
+    deallocate(Atm%coarse_restart%qdiag)
+    deallocate(Atm%coarse_restart%sgh)
+    deallocate(Atm%coarse_restart%oro)
+    deallocate(Atm%coarse_restart%phis)
+    
+  end subroutine deallocate_coarse_restart_type
+  
   subroutine allocate_fv_atmos_type(Atm, isd_in, ied_in, jsd_in, jed_in, is_in, ie_in, js_in, je_in, &
-       npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, dummy, alloc_2d, ngrids_in)
+       npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, dummy, alloc_2d,&
+       ngrids_in)
 
     !WARNING: Before calling this routine, be sure to have set up the
     ! proper domain parameters from the namelists (as is done in
@@ -866,7 +954,7 @@ contains
     !For 2D utility arrays
     integer:: isd_2d, ied_2d, jsd_2d, jed_2d, is_2d, ie_2d, js_2d, je_2d
     integer:: npx_2d, npy_2d, npz_2d, ndims_2d, ncnst_2d, nq_2d, ng_2d
-
+    
     integer :: i,j,k, ns, n
 
     if (Atm%allocated) return
@@ -1303,6 +1391,9 @@ contains
 
     Atm%allocated = .true.
     if (dummy) Atm%dummy = .true.
+
+    ! Allocate coarse arrays
+    ! allocate (Atm%pt_coarse(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
     
   end subroutine allocate_fv_atmos_type
 
@@ -1315,6 +1406,9 @@ contains
 
     if (.not.Atm%allocated) return
 
+    ! Deallocate coarse arrays
+    ! deallocate (Atm%pt_coarse)
+    
     deallocate (    Atm%u )
     deallocate (    Atm%v )
     deallocate (   Atm%pt )
