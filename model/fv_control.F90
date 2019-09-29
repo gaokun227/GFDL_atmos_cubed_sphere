@@ -35,7 +35,6 @@ module fv_control_mod
                                   input_nml_file, get_unit, WARNING, &
                                   read_ascii_file, INPUT_STR_LENGTH
    use mpp_domains_mod,     only: mpp_get_data_domain, mpp_get_compute_domain, mpp_get_tile_id
-   use mpp_domains_mod,     only: mpp_define_io_domain
    use tracer_manager_mod,  only: tm_get_number_tracers => get_number_tracers, &
                                   tm_get_tracer_index   => get_tracer_index,   &
                                   tm_get_tracer_indices => get_tracer_indices, &
@@ -292,7 +291,6 @@ module fv_control_mod
      real, pointer :: s_weight, update_blend
 
      integer, pointer :: layout(:), io_layout(:)
-     
      !!!!!!!!!! END POINTERS !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
      this_grid = -1 ! default
@@ -531,7 +529,8 @@ module fv_control_mod
              ' num_family=',num_family         
         print*, ''
      endif
-     if (dnrts < 0) dnrts = dnats     
+     if (dnrts < 0) dnrts = dnats
+     
      do n=1,ngrids
         !FIXME still setting up dummy structures for other grids for convenience reasons
         !isc, etc. set in domain_decomp
@@ -938,8 +937,7 @@ module fv_control_mod
             nested, twowaynest, nudge_qv, &
             nestbctype, nestupdate, nsponge, s_weight, &
             check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
-            do_uni_zfull, adj_mass_vmr, update_blend, regional,&
-            bc_update_interval
+            do_uni_zfull, adj_mass_vmr, update_blend, regional, bc_update_interval
 
 #ifdef INTERNAL_FILE_NML
        ! Read FVCORE namelist 

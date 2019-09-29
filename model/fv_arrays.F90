@@ -25,7 +25,7 @@ module fv_arrays_mod
   use horiz_interp_type_mod, only: horiz_interp_type
   use mpp_mod,               only: mpp_broadcast
   use platform_mod,          only: r8_kind
-    public
+  public
 
   integer, public, parameter :: R_GRID = r8_kind
 
@@ -880,7 +880,6 @@ module fv_arrays_mod
 !!!!!!!!!!!!!!
      type(restart_file_type) :: Fv_restart, SST_restart, Fv_tile_restart, &
           Rsf_restart, Mg_restart, Lnd_restart, Tra_restart
-     
      type(fv_nest_type) :: neststruct
 
      !Hold on to coarse-grid global grid, so we don't have to waste processor time getting it again when starting to do grid nesting
@@ -893,10 +892,8 @@ module fv_arrays_mod
      type(nudge_diag_type) :: nudge_diag
      type(coarse_restart_type) :: coarse_restart
      
-  end type fv_atmos_type
-  
+  end type fv_atmos_type  
 contains
-  
   subroutine allocate_fv_atmos_type(Atm, isd_in, ied_in, jsd_in, jed_in, is_in, ie_in, js_in, je_in, &
        npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, dummy, alloc_2d, ngrids_in)
 
@@ -1363,7 +1360,6 @@ contains
     integer :: n
 
     if (.not.Atm%allocated) return
-    
     deallocate (    Atm%u )
     deallocate (    Atm%v )
     deallocate (   Atm%pt )
