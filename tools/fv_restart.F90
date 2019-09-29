@@ -1222,10 +1222,7 @@ contains
     type(fv_atmos_type), intent(inout) :: Atm
     character(len=*),    intent(in)    :: timestamp
 
-    write(*,*) 'Writing restart files'
     call fv_io_write_restart(Atm, timestamp)
-
-    write(*,*) 'WRITING COARSE RESTART fv_restart'
     call fv_io_write_restart_coarse(Atm, timestamp)
     
     if (Atm%neststruct%nested) then

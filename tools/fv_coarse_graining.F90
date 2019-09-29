@@ -536,9 +536,6 @@ contains
     allocate(grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1, 1:2))
     allocate(agrid_coarse(is_coarse:ie_coarse,js_coarse:je_coarse, 1:2))
 
-    write(*,*) 'is ie', is, ie, 'js je', js, je, 'isc iec', is_coarse,&
-         ie_coarse, 'jsc jec', js_coarse, je_coarse
-    
     grid_coarse = Atm(n)%gridstruct%grid(is:ie+1:coarsening_factor,js:je+1:coarsening_factor,:)
 
     ! agrid_coarse is constructed differently depending on whether coarsening
@@ -566,8 +563,6 @@ contains
          'grid_latt_coarse', coarse_axes_t(1:2), &
          'latitude', 'degrees_N')
 
-    write(*,*) 'grid', grid_coarse
-    
     if (id_coarse_lon  > 0) used = send_data(id_coarse_lon, &
          rad2deg * grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1,1), Time)
     if (id_coarse_lat  > 0) used = send_data(id_coarse_lat, &
