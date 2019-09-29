@@ -25,7 +25,7 @@ module fv_arrays_mod
   use horiz_interp_type_mod, only: horiz_interp_type
   use mpp_mod,               only: mpp_broadcast
   use platform_mod,          only: r8_kind
-  public
+    public
 
   integer, public, parameter :: R_GRID = r8_kind
 
@@ -694,9 +694,20 @@ module fv_arrays_mod
      real, _ALLOCATABLE :: v_srf(:,:)
      real, _ALLOCATABLE :: sgh(:,:)
      real, _ALLOCATABLE :: oro(:,:)
-
+     real, _ALLOCATABLE :: ze0(:,:,:)
+     
      type(domain2d) :: coarse_domain
      integer :: coarsening_factor
+
+     logical :: allocated = .false.
+     
+     type(restart_file_type) :: fv_restart_coarse
+     type(restart_file_type) :: sst_restart_coarse
+     type(restart_file_type) :: fv_tile_restart_coarse
+     type(restart_file_type) :: rsf_restart_coarse
+     type(restart_file_type) :: mg_restart_coarse
+     type(restart_file_type) :: lnd_restart_coarse
+     type(restart_file_type) :: tra_restart_coarse
      
   end type coarse_restart_type
   
@@ -869,9 +880,6 @@ module fv_arrays_mod
 !!!!!!!!!!!!!!
      type(restart_file_type) :: Fv_restart, SST_restart, Fv_tile_restart, &
           Rsf_restart, Mg_restart, Lnd_restart, Tra_restart
-     type(restart_file_type) :: Fv_restart_coarse, SST_restart_coarse, &
-          Fv_tile_restart_coarse, Rsf_restart_coarse, Mg_restart_coarse, &
-          Lnd_restart_coarse, Tra_restart_coarse
      
      type(fv_nest_type) :: neststruct
 
@@ -884,59 +892,13 @@ module fv_arrays_mod
      type(phys_diag_type) :: phys_diag
      type(nudge_diag_type) :: nudge_diag
      type(coarse_restart_type) :: coarse_restart
-     ! real, _ALLOCATABLE :: pt_coarse(:,:,:)
      
   end type fv_atmos_type
   
 contains
-
-  subroutine allocate_coarse_restart_type(Atm, is_coarse, ie_coarse, js_coarse, &
-       je_coarse, npz, ntprog, ntdiag)
-    type(fv_atmos_type), intent(INOUT) :: Atm
-    integer, intent(IN) :: is_coarse, ie_coarse, js_coarse, je_coarse, npz, ntprog, ntdiag
-    
-    allocate (Atm%coarse_restart%u(is_coarse:ie_coarse,js_coarse:je_coarse+1,npz))
-    allocate (Atm%coarse_restart%v(is_coarse:ie_coarse+1,js_coarse:je_coarse,npz))
-    allocate (Atm%coarse_restart%ua(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
-    allocate (Atm%coarse_restart%va(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
-    allocate (Atm%coarse_restart%u_srf(is_coarse:ie_coarse,js_coarse:je_coarse))
-    allocate (Atm%coarse_restart%v_srf(is_coarse:ie_coarse,js_coarse:je_coarse))
-    allocate (Atm%coarse_restart%w(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
-    allocate (Atm%coarse_restart%delp(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
-    allocate (Atm%coarse_restart%delz(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
-    allocate (Atm%coarse_restart%pt(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
-    allocate (Atm%coarse_restart%q(is_coarse:ie_coarse,js_coarse:je_coarse,npz,ntprog))
-    allocate (Atm%coarse_restart%qdiag(is_coarse:ie_coarse,js_coarse:je_coarse,npz,ntprog+1:ntdiag + ntprog))
-    allocate (Atm%coarse_restart%sgh(is_coarse:ie_coarse,js_coarse:je_coarse))
-    allocate (Atm%coarse_restart%oro(is_coarse:ie_coarse,js_coarse:je_coarse))
-    allocate (Atm%coarse_restart%phis(is_coarse:ie_coarse,js_coarse:je_coarse))
-
-  end subroutine allocate_coarse_restart_type
-
-  subroutine deallocate_coarse_restart_type(Atm)
-    type(fv_atmos_type), intent(INOUT) :: Atm
-    
-    deallocate(Atm%coarse_restart%u)
-    deallocate(Atm%coarse_restart%v)
-    deallocate(Atm%coarse_restart%ua)
-    deallocate(Atm%coarse_restart%va)
-    deallocate(Atm%coarse_restart%u_srf)
-    deallocate(Atm%coarse_restart%v_srf)
-    deallocate(Atm%coarse_restart%w)
-    deallocate(Atm%coarse_restart%delp)
-    deallocate(Atm%coarse_restart%delz)
-    deallocate(Atm%coarse_restart%pt)
-    deallocate(Atm%coarse_restart%q)
-    deallocate(Atm%coarse_restart%qdiag)
-    deallocate(Atm%coarse_restart%sgh)
-    deallocate(Atm%coarse_restart%oro)
-    deallocate(Atm%coarse_restart%phis)
-    
-  end subroutine deallocate_coarse_restart_type
   
   subroutine allocate_fv_atmos_type(Atm, isd_in, ied_in, jsd_in, jed_in, is_in, ie_in, js_in, je_in, &
-       npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, dummy, alloc_2d,&
-       ngrids_in)
+       npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, dummy, alloc_2d, ngrids_in)
 
     !WARNING: Before calling this routine, be sure to have set up the
     ! proper domain parameters from the namelists (as is done in
@@ -953,8 +915,7 @@ contains
 
     !For 2D utility arrays
     integer:: isd_2d, ied_2d, jsd_2d, jed_2d, is_2d, ie_2d, js_2d, je_2d
-    integer:: npx_2d, npy_2d, npz_2d, ndims_2d, ncnst_2d, nq_2d, ng_2d
-    
+    integer:: npx_2d, npy_2d, npz_2d, ndims_2d, ncnst_2d, nq_2d, ng_2d    
     integer :: i,j,k, ns, n
 
     if (Atm%allocated) return
@@ -1392,9 +1353,6 @@ contains
     Atm%allocated = .true.
     if (dummy) Atm%dummy = .true.
 
-    ! Allocate coarse arrays
-    ! allocate (Atm%pt_coarse(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
-    
   end subroutine allocate_fv_atmos_type
 
   subroutine deallocate_fv_atmos_type(Atm)
@@ -1405,9 +1363,6 @@ contains
     integer :: n
 
     if (.not.Atm%allocated) return
-
-    ! Deallocate coarse arrays
-    ! deallocate (Atm%pt_coarse)
     
     deallocate (    Atm%u )
     deallocate (    Atm%v )
@@ -1610,12 +1565,37 @@ contains
     if (Atm%flagstruct%grid_type < 4) then
        if(allocated(Atm%grid_global)) deallocate(Atm%grid_global)
     end if
+
+    call deallocate_coarse_restart_type(Atm)
     
     Atm%allocated = .false.
 
   end subroutine deallocate_fv_atmos_type
 
+  subroutine deallocate_coarse_restart_type(Atm)
+    type(fv_atmos_type), intent(INOUT) :: Atm
 
+    if (Atm%coarse_restart%allocated) then
+       deallocate(Atm%coarse_restart%u)
+       deallocate(Atm%coarse_restart%v)
+       deallocate(Atm%coarse_restart%ua)
+       deallocate(Atm%coarse_restart%va)
+       deallocate(Atm%coarse_restart%u_srf)
+       deallocate(Atm%coarse_restart%v_srf)
+       deallocate(Atm%coarse_restart%w)
+       deallocate(Atm%coarse_restart%delp)
+       deallocate(Atm%coarse_restart%delz)
+       deallocate(Atm%coarse_restart%pt)
+       deallocate(Atm%coarse_restart%q)
+       deallocate(Atm%coarse_restart%qdiag)
+       deallocate(Atm%coarse_restart%sgh)
+       deallocate(Atm%coarse_restart%oro)
+       deallocate(Atm%coarse_restart%phis)
+       deallocate(Atm%coarse_restart%ze0)
+    endif
+    
+  end subroutine deallocate_coarse_restart_type
+  
 subroutine allocate_fv_nest_BC_type_3D_Atm(BC,Atm,ns,istag,jstag,dummy)
 
   type(fv_nest_BC_type_3D), intent(INOUT) :: BC

@@ -51,7 +51,7 @@ module fv_diagnostics_mod
                                     column_diagnostics_header, &
                                     close_column_diagnostics_units
 
- use fv_coarse_grained_diagnostics_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
+ use fv_coarse_graining_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
 
  implicit none
  private
@@ -121,18 +121,17 @@ module fv_diagnostics_mod
  integer :: num_diag_debug = 0
  integer :: num_diag_sonde = 0
  character(100) :: runname = 'test'
- integer :: coarsening_factor = 2
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
  integer :: id_dx, id_dy
  
  real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
 
- integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
- integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
+ ! integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
+ ! integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
  
  namelist /fv_diag_column_nml/ do_diag_debug, do_diag_sonde, sound_freq, &
       diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, &
-      diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname, coarsening_factor
+      diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -1230,23 +1229,27 @@ contains
     if(idiag%id_theta_e >0 ) call qsmith_init
 #endif
 
-    id_d_grid_ucomp = register_diag_field('dynamics', &
-         'd_grid_ucomp', (/ id_xt, id_y, id_pfull /), &
-         Time, 'D grid zonal velocity', 'm/s', missing_value=missing_value)
+    ! These diagnostics do not work, because of an FMS issue.  Maybe we could
+    ! implement them by outputting them on the grid corners (and filling the
+    ! empty rows or columns with missing value flags)?
+    ! ---------------
+    ! id_d_grid_ucomp = register_diag_field('dynamics', &
+    !      'd_grid_ucomp', (/ id_xt, id_y, id_pfull /), &
+    !      Time, 'D grid zonal velocity', 'm/s', missing_value=missing_value)
 
-    id_d_grid_vcomp = register_diag_field('dynamics', &
-         'd_grid_vcomp', (/ id_x, id_yt, id_pfull /), &
-         Time, 'D grid meridional velocity', 'm/s', missing_value=missing_value)
+    ! id_d_grid_vcomp = register_diag_field('dynamics', &
+    !      'd_grid_vcomp', (/ id_x, id_yt, id_pfull /), &
+    !      Time, 'D grid meridional velocity', 'm/s', missing_value=missing_value)
 
-    id_c_grid_ucomp = register_diag_field('dynamics', &
-         'c_grid_ucomp', (/ id_x, id_yt, id_pfull /), &
-         Time, 'C grid zonal velocity', 'm/s', missing_value=missing_value)
+    ! id_c_grid_ucomp = register_diag_field('dynamics', &
+    !      'c_grid_ucomp', (/ id_x, id_yt, id_pfull /), &
+    !      Time, 'C grid zonal velocity', 'm/s', missing_value=missing_value)
 
-    id_c_grid_vcomp = register_diag_field('dynamics', &
-         'c_grid_vcomp', (/ id_xt, id_y, id_pfull /), &
-         Time, 'C grid meridional velocity', 'm/s', missing_value=missing_value)
+    ! id_c_grid_vcomp = register_diag_field('dynamics', &
+    !      'c_grid_vcomp', (/ id_xt, id_y, id_pfull /), &
+    !      Time, 'C grid meridional velocity', 'm/s', missing_value=missing_value)
     
-    call fv_coarse_grained_diagnostics_init(Atm, Time, coarsening_factor, id_pfull)
+    call fv_coarse_grained_diagnostics_init(Atm, Time, id_pfull)
     
  end subroutine fv_diag_init
 
@@ -1353,8 +1356,6 @@ contains
     real :: tmp2, pvsum, e2, einf, qm, mm, maxdbz, allmax, rgrav, cv_vapor
     real, allocatable :: cvm(:)
     integer :: Cl, Cl2, k1, k2
-
-    real, allocatable :: vort_for_coarse(:,:,:), pv_for_coarse(:,:,:)
     
     !!! CLEANUP: does it really make sense to have this routine loop over Atm% anymore? We assume n=1 below anyway
 
@@ -1558,13 +1559,13 @@ contains
 !    do n = 1, ntileMe
     n = 1
 
-    ! D grid wind diagnostics
-    if (id_d_grid_ucomp > 0) used = send_data(id_d_grid_ucomp, Atm(n)%u(isc:iec,jsc:jec+1,1:npz), Time)
-    if (id_d_grid_vcomp > 0) used = send_data(id_d_grid_vcomp, Atm(n)%v(isc:iec+1,jsc:jec,1:npz), Time)
+    ! ! D grid wind diagnostics
+    ! if (id_d_grid_ucomp > 0) used = send_data(id_d_grid_ucomp, Atm(n)%u(isc:iec,jsc:jec+1,1:npz), Time)
+    ! if (id_d_grid_vcomp > 0) used = send_data(id_d_grid_vcomp, Atm(n)%v(isc:iec+1,jsc:jec,1:npz), Time)
 
-    ! C grid wind diagnostics
-    if (id_c_grid_ucomp > 0) used = send_data(id_c_grid_ucomp, Atm(n)%uc(isc:iec+1,jsc:jec,1:npz), Time)
-    if (id_c_grid_vcomp > 0) used = send_data(id_c_grid_vcomp, Atm(n)%vc(isc:iec,jsc:jec+1,1:npz), Time)
+    ! ! C grid wind diagnostics
+    ! if (id_c_grid_ucomp > 0) used = send_data(id_c_grid_ucomp, Atm(n)%uc(isc:iec+1,jsc:jec,1:npz), Time)
+    ! if (id_c_grid_vcomp > 0) used = send_data(id_c_grid_vcomp, Atm(n)%vc(isc:iec,jsc:jec+1,1:npz), Time)
     
 #ifdef DYNAMICS_ZS
        if(idiag%id_zsurf > 0)  used=send_data(idiag%id_zsurf, idiag%zsurf, Time)
@@ -1610,10 +1611,6 @@ contains
             idiag%id_uh03>0 .or. idiag%id_uh25>0) then
           call get_vorticity(isc, iec, jsc, jec, isd, ied, jsd, jed, npz, Atm(n)%u, Atm(n)%v, wk, &
                Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy, Atm(n)%gridstruct%rarea)
-
-          ! Coarse vorticity
-          allocate(vort_for_coarse(isc:iec,jsc:jec,1:npz))
-          vort_for_coarse = wk
           
           if(idiag%id_vort >0) used=send_data(idiag%id_vort,  wk, Time)
           if(idiag%id_vorts>0) used=send_data(idiag%id_vorts, wk(isc:iec,jsc:jec,npz), Time)
@@ -1770,9 +1767,6 @@ contains
               call pv_entropy(isc, iec, jsc, jec, ngc, npz, wk,    &
                               Atm(n)%gridstruct%f0, Atm(n)%pt, Atm(n)%pkz, Atm(n)%delp, grav)
               used = send_data ( idiag%id_pv, wk, Time )
-              ! Coarse potential vorticity
-              allocate(pv_for_coarse(isc:iec,jsc:jec,1:npz))
-              pv_for_coarse = wk
               if (prt_minmax) call prt_maxmin('PV', wk, isc, iec, jsc, jec, 0, 1, 1.)
           endif
 
@@ -3515,8 +3509,7 @@ contains
 
     call nullify_domain()
 
-    call fv_coarse_grained_diagnostics(Atm, Time, vort_for_coarse, pv_for_coarse, coarsening_factor)
-    deallocate(vort_for_coarse, pv_for_coarse)
+    call fv_coarse_grained_diagnostics(Atm, Time)
     
  end subroutine fv_diag
 
