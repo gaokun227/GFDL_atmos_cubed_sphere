@@ -464,17 +464,11 @@ contains
     integer           :: id_restart
     integer           :: n, nt, ntracers, ntprog, ntdiag, ntileMe, ntiles
 
-    integer :: is, ie, js, je
-    real, allocatable :: dummy(:,:,:)
-    
     ntileMe = size(Atm(:)) 
     ntprog = size(Atm(1)%q,4) 
     ntdiag = size(Atm(1)%qdiag,4) 
     ntracers = ntprog+ntdiag
 
-    call mpp_get_compute_domain(Atm(1)%domain, is, ie, js, je)
-    if (.not. allocated(dummy)) allocate(dummy(is:ie,js:je,Atm(1)%npz))
-    dummy = 10.123
 !--- set the 'nestXX' appendix for all files using fms_io
     if (Atm(1)%grid_number > 1) then
        write(gn,'(A4, I2.2)') "nest", Atm(1)%grid_number
@@ -522,9 +516,7 @@ contains
           endif
        endif
        id_restart =  register_restart_field(Atm(n)%Fv_tile_restart, fname, 'T', Atm(n)%pt, &
-            domain=fv_domain, tile_count=n)
-!       id_restart =  register_restart_field(Atm(n)%Fv_tile_restart, fname, 'T', dummy, &
-!                     domain=fv_domain, tile_count=n)
+                     domain=fv_domain, tile_count=n)
        id_restart =  register_restart_field(Atm(n)%Fv_tile_restart, fname, 'delp', Atm(n)%delp, &
                      domain=fv_domain, tile_count=n)
        id_restart =  register_restart_field(Atm(n)%Fv_tile_restart, fname, 'phis', Atm(n)%phis, &
