@@ -49,6 +49,9 @@ module fv_coarse_graining_mod
   integer :: id_t_dt_phys_coarse, id_u_dt_phys_coarse, id_v_dt_phys_coarse
   integer :: id_t_dt_nudge_coarse, id_ps_dt_nudge_coarse, id_delp_dt_nudge_coarse
   integer :: id_u_dt_nudge_coarse, id_v_dt_nudge_coarse
+  integer :: id_qv_dt_gfdlmp_coarse, id_ql_dt_gfdlmp_coarse, id_qr_dt_gfdlmp_coarse
+  integer :: id_qg_dt_gfdlmp_coarse, id_qi_dt_gfdlmp_coarse, id_qs_dt_gfdlmp_coarse
+  integer :: id_t_dt_gfdlmp_coarse, id_u_dt_gfdlmp_coarse, id_v_dt_gfdlmp_coarse
   
   ! Namelist parameters (with default values)
   integer :: coarsening_factor = 8
@@ -56,8 +59,8 @@ module fv_coarse_graining_mod
   logical :: write_coarse_grained_diagnostics = .false.
   
   namelist /fv_coarse_graining_nml/ coarsening_factor,&
-       write_coarse_grained_restart_files, write_coarse_grained_diagnostics
-  
+       write_coarse_grained_restart_files, write_coarse_grained_diagnostics  
+
 contains
 
   subroutine fv_coarse_graining_init(Atm, n)
@@ -545,6 +548,79 @@ contains
        allocate (Atm(n)%nudge_diag%nudge_v_dt(is:ie,js:je,npz))
     endif
 
+    ! Add coarse-grained GFDL MP tendencies
+    id_qv_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'qv_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'water vapor tendency from GFDL MP', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_qv_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qv_dt))) then
+       allocate (Atm(n)%inline_mp%qv_dt(is:ie,js:je,npz))
+    endif
+
+    id_ql_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'ql_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'liquid water tendency from GFDL MP', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_ql_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%ql_dt))) then
+       allocate (Atm(n)%inline_mp%ql_dt(is:ie,js:je,npz))
+    endif
+
+    id_qi_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'qi_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'ice water tendency from GFDL MP', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_qi_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qi_dt))) then
+       allocate (Atm(n)%inline_mp%qi_dt(is:ie,js:je,npz))
+    endif
+
+    id_qr_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'qr_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'rain water tendency from GFDL MP', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_qr_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qr_dt))) then
+       allocate (Atm(n)%inline_mp%qr_dt(is:ie,js:je,npz))
+    endif
+
+    id_qg_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'qg_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'graupel tendency from GFDL MP', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_qg_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qg_dt))) then
+       allocate (Atm(n)%inline_mp%qg_dt(is:ie,js:je,npz))
+    endif
+
+    id_qs_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'qs_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'snow water tendency from GFDL MP', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_qs_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qs_dt))) then
+       allocate (Atm(n)%inline_mp%qs_dt(is:ie,js:je,npz))
+    endif
+    
+    id_t_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         't_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'temperature tendency from GFDL MP', &
+         'K/s', missing_value=missing_value)
+    if ((id_t_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%T_dt))) then
+       allocate (Atm(n)%inline_mp%T_dt(is:ie,js:je,npz))
+    endif
+    
+    id_u_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'u_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'zonal wind tendency from GFDL MP', &
+         'm/s/s', missing_value=missing_value)
+    if ((id_u_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%u_dt))) then
+       allocate (Atm(n)%inline_mp%u_dt(is:ie,js:je,npz))
+    endif
+
+    id_v_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'v_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'zonal wind tendency from GFDL MP', &
+         'm/s/s', missing_value=missing_value)
+    if ((id_v_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%v_dt))) then
+       allocate (Atm(n)%inline_mp%v_dt(is:ie,js:je,npz))
+    endif
+        
     ! Construct coarse latitude and longitude coordinates
     allocate(grid_coarse(is_coarse:ie_coarse+1,js_coarse:je_coarse+1, 1:2))
     allocate(agrid_coarse(is_coarse:ie_coarse,js_coarse:je_coarse, 1:2))
@@ -605,7 +681,7 @@ contains
     real, intent(in) :: zvir
 
     logical :: used
-    integer :: var_mass_weighted(8), var_2d(1), var_3d(14)
+    integer :: var_mass_weighted(15), var_2d(1), var_3d(23)
     integer :: k
     integer :: n = 1
     real, allocatable :: work_2d(:,:), work_3d(:,:,:), mass(:,:,:), nhpres(:,:,:)
@@ -626,6 +702,15 @@ contains
          id_u_dt_nudge_coarse, &
          id_v_dt_nudge_coarse, &
          id_delp_dt_nudge_coarse, &
+         id_qv_dt_gfdlmp_coarse, &
+         id_ql_dt_gfdlmp_coarse, &
+         id_qr_dt_gfdlmp_coarse, &
+         id_qi_dt_gfdlmp_coarse, &
+         id_qg_dt_gfdlmp_coarse, &
+         id_qs_dt_gfdlmp_coarse, &
+         id_t_dt_gfdlmp_coarse, &
+         id_u_dt_gfdlmp_coarse, &
+         id_v_dt_gfdlmp_coarse, &
          id_pfnh_coarse &
          /) 
     
@@ -637,7 +722,14 @@ contains
          id_qr_dt_phys_coarse, &
          id_qg_dt_phys_coarse, &
          id_qs_dt_phys_coarse, &
-         id_t_dt_nudge_coarse &
+         id_t_dt_nudge_coarse, &
+         id_qv_dt_gfdlmp_coarse, &
+         id_ql_dt_gfdlmp_coarse, &
+         id_qr_dt_gfdlmp_coarse, &
+         id_qi_dt_gfdlmp_coarse, &
+         id_qg_dt_gfdlmp_coarse, &
+         id_qs_dt_gfdlmp_coarse, &
+         id_t_dt_gfdlmp_coarse &
          /)
     
     if (any(var_2d > 0)) then
@@ -659,7 +751,7 @@ contains
        allocate(nhpres(is:ie,js:je,1:npz))
        call compute_nonhydrostatic_pressure(Atm(n), zvir, nhpres)
        call block_average(Atm(n)%gridstruct%area(is:ie,js:je), &
-            nhpres, work_3d)
+            nhpres(is:ie,js:je,1:npz), work_3d)
        used = send_data(id_pfnh_coarse, work_3d, Time)
        deallocate(nhpres)
     endif
@@ -748,6 +840,60 @@ contains
        used = send_data(id_ps_dt_nudge_coarse, work_2d, Time)
     endif
 
+    if (id_t_dt_gfdlmp_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%inline_mp%T_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_t_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+
+    if (id_qv_dt_gfdlmp_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%inline_mp%qv_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_qv_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+
+    if (id_ql_dt_gfdlmp_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%inline_mp%ql_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_ql_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+
+    if (id_qr_dt_gfdlmp_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%inline_mp%qr_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_qr_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+
+    if (id_qi_dt_gfdlmp_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%inline_mp%qi_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_qi_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+
+    if (id_qg_dt_gfdlmp_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%inline_mp%qg_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_qg_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+
+    if (id_qs_dt_gfdlmp_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%inline_mp%qs_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_qs_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+    
+    if (id_u_dt_gfdlmp_coarse > 0) then
+       call block_average(Atm(n)%gridstruct%area(is:ie,js:je), &
+            Atm(n)%inline_mp%u_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_u_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+    
+    if (id_v_dt_gfdlmp_coarse > 0) then
+       call block_average(Atm(n)%gridstruct%area(is:ie,js:je), &
+            Atm(n)%inline_mp%v_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_v_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+    
     if (allocated(work_2d)) deallocate(work_2d)
     if (allocated(work_3d)) deallocate(work_3d)
     if (allocated(mass)) deallocate(mass)

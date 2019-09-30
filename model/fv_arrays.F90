@@ -97,6 +97,7 @@ module fv_arrays_mod
 
      integer :: id_prer, id_prei, id_pres, id_preg
      integer :: id_qv_dt_gfdlmp, id_T_dt_gfdlmp, id_ql_dt_gfdlmp, id_qi_dt_gfdlmp
+     integer :: id_qr_dt_gfdlmp, id_qg_dt_gfdlmp, id_qs_dt_gfdlmp
      integer :: id_u_dt_gfdlmp, id_v_dt_gfdlmp
      integer :: id_t_dt_phys, id_qv_dt_phys, id_ql_dt_phys, id_qi_dt_phys, id_u_dt_phys, id_v_dt_phys
      integer :: id_qr_dt_phys, id_qg_dt_phys, id_qs_dt_phys
@@ -646,6 +647,9 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: qv_dt(:,:,:)
     real, _ALLOCATABLE :: ql_dt(:,:,:)
     real, _ALLOCATABLE :: qi_dt(:,:,:)
+    real, _ALLOCATABLE :: qr_dt(:,:,:)
+    real, _ALLOCATABLE :: qg_dt(:,:,:)
+    real, _ALLOCATABLE :: qs_dt(:,:,:)
     real, _ALLOCATABLE :: t_dt(:,:,:)
     real, _ALLOCATABLE :: u_dt(:,:,:)
     real, _ALLOCATABLE :: v_dt(:,:,:)
