@@ -262,6 +262,7 @@ module fv_arrays_mod
 !-----------------------------------------------------------------------
 ! Grid descriptor file setup
 !-----------------------------------------------------------------------
+   character(len=16) :: restart_resolution = 'both'
    character(len=80) :: grid_name = 'Gnomonic'
    character(len=120):: grid_file = 'Inline'
   integer      :: grid_type = 0     ! -1: read from file; 0: ED Gnomonic

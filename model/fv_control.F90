@@ -290,6 +290,7 @@ module fv_control_mod
      integer, pointer :: parent_tile, refinement, nestbctype, nestupdate, nsponge, ioffset, joffset
      real, pointer :: s_weight, update_blend
 
+     character(len=16), pointer :: restart_resolution
      integer, pointer :: layout(:), io_layout(:)
      !!!!!!!!!! END POINTERS !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -826,6 +827,8 @@ module fv_control_mod
 
        layout                        => Atm%layout
        io_layout                     => Atm%io_layout
+
+       restart_resolution            => Atm%flagstruct%restart_resolution
      end subroutine set_namelist_pointers
 
 
@@ -937,7 +940,8 @@ module fv_control_mod
             nested, twowaynest, nudge_qv, &
             nestbctype, nestupdate, nsponge, s_weight, &
             check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
-            do_uni_zfull, adj_mass_vmr, update_blend, regional, bc_update_interval
+            do_uni_zfull, adj_mass_vmr, update_blend, regional,&
+            & bc_update_interval, restart_resolution
 
 #ifdef INTERNAL_FILE_NML
        ! Read FVCORE namelist 

@@ -430,13 +430,13 @@ contains
 
     if( .not. Atm(n)%flagstruct%hydrostatic ) then
        id_pfnh_coarse = register_diag_field('dynamics', 'pfnh_coarse', &
-            coarse_axes(1:3), Time, &
+            coarse_axes_t(1:3), Time, &
             'non-hydrostatic pressure', &
             'pa', missing_value=missing_value)
     endif
     
     id_qv_dt_phys_coarse = register_diag_field('dynamics', &
-         'qv_dt_phys_coarse', coarse_axes(1:3), Time, &
+         'qv_dt_phys_coarse', coarse_axes_t(1:3), Time, &
          'water vapor specific humidity tendency from physics', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qv_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qv_dt))) then
@@ -444,7 +444,7 @@ contains
     endif
     
     id_ql_dt_phys_coarse = register_diag_field('dynamics', &
-         'ql_dt_phys_coarse', coarse_axes(1:3), Time, &
+         'ql_dt_phys_coarse', coarse_axes_t(1:3), Time, &
          'liquid water tendency from physics', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_ql_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_ql_dt))) then
@@ -452,7 +452,7 @@ contains
     endif
 
     id_qi_dt_phys_coarse = register_diag_field('dynamics', &
-         'qi_dt_phys_coarse', coarse_axes(1:3), Time, &
+         'qi_dt_phys_coarse', coarse_axes_t(1:3), Time, &
          'ice water tendency from physics', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qi_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qi_dt))) then
@@ -460,7 +460,7 @@ contains
     endif
     
     id_qr_dt_phys_coarse = register_diag_field('dynamics', &
-         'qr_dt_phys_coarse', coarse_axes(1:3), Time, &
+         'qr_dt_phys_coarse', coarse_axes_t(1:3), Time, &
          'rain water tendency from physics', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qr_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qr_dt))) then
@@ -468,7 +468,7 @@ contains
     endif
 
     id_qg_dt_phys_coarse = register_diag_field('dynamics', &
-         'qg_dt_phys_coarse', coarse_axes(1:3), Time, &
+         'qg_dt_phys_coarse', coarse_axes_t(1:3), Time, &
          'graupel tendency from physics', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qg_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qg_dt))) then
@@ -476,7 +476,7 @@ contains
     endif
 
     id_qs_dt_phys_coarse = register_diag_field('dynamics', &
-         'qs_dt_phys_coarse', coarse_axes(1:3), Time, &
+         'qs_dt_phys_coarse', coarse_axes_t(1:3), Time, &
          'snow water tendency from physics', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qs_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qs_dt))) then
@@ -484,7 +484,7 @@ contains
     endif
     
     id_t_dt_phys_coarse = register_diag_field('dynamics', &
-         't_dt_phys_coarse', coarse_axes(1:3), Time, &
+         't_dt_phys_coarse', coarse_axes_t(1:3), Time, &
          'temperature tendency from physics', &
          'K/s', missing_value=missing_value)
     if ((id_t_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_t_dt))) then
@@ -492,7 +492,7 @@ contains
     endif
     
     id_u_dt_phys_coarse = register_diag_field('dynamics', &
-         'u_dt_phys_coarse', coarse_axes(1:3), Time, &
+         'u_dt_phys_coarse', coarse_axes_t(1:3), Time, &
          'zonal wind tendency from physics', &
          'm/s/s', missing_value=missing_value)
     if ((id_u_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_u_dt))) then
@@ -500,7 +500,7 @@ contains
     endif
     
     id_v_dt_phys_coarse = register_diag_field('dynamics', &
-         'v_dt_phys_coarse', coarse_axes(1:3), Time, &
+         'v_dt_phys_coarse', coarse_axes_t(1:3), Time, &
          'meridional wind tendency from physics', &
          'm/s/s', missing_value=missing_value)
     if ((id_v_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_v_dt))) then
@@ -509,7 +509,7 @@ contains
     
     ! Add coarse-grain tendencies from nudging
     id_t_dt_nudge_coarse = register_diag_field('dynamics', &
-         't_dt_nudge_coarse', coarse_axes(1:3), Time, &
+         't_dt_nudge_coarse', coarse_axes_t(1:3), Time, &
          'temperature tendency from nudging', &
          'K/s', missing_value=missing_value)
     if ((id_t_dt_nudge_coarse > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_t_dt))) then
@@ -517,7 +517,7 @@ contains
     endif
 
     id_ps_dt_nudge_coarse = register_diag_field('dynamics', &
-         'ps_dt_nudge_coarse', coarse_axes(1:2), Time, &
+         'ps_dt_nudge_coarse', coarse_axes_t(1:2), Time, &
          'surface pressure tendency from nudging', &
          'Pa/s', missing_value=missing_value)
     if ((id_ps_dt_nudge_coarse > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_ps_dt))) then
@@ -525,7 +525,7 @@ contains
     endif
 
     id_delp_dt_nudge_coarse = register_diag_field('dynamics', &
-         'delp_dt_nudge_coarse', coarse_axes(1:3), Time, &
+         'delp_dt_nudge_coarse', coarse_axes_t(1:3), Time, &
          'pressure thickness tendency from nudging', &
          'Pa/s', missing_value=missing_value)
     if ((id_delp_dt_nudge_coarse > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_delp_dt))) then
@@ -533,7 +533,7 @@ contains
     endif
 
     id_u_dt_nudge_coarse = register_diag_field('dynamics', &
-         'u_dt_nudge_coarse', coarse_axes(1:3), Time, &
+         'u_dt_nudge_coarse', coarse_axes_t(1:3), Time, &
          'zonal wind tendency from nudging', &
          'm/s/s', missing_value=missing_value)
     if ((id_u_dt_nudge_coarse > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_u_dt))) then
@@ -541,7 +541,7 @@ contains
     endif
 
     id_v_dt_nudge_coarse = register_diag_field('dynamics', &
-         'v_dt_nudge_coarse', coarse_axes(1:3), Time, &
+         'v_dt_nudge_coarse', coarse_axes_t(1:3), Time, &
          'meridional wind tendency from nudging', &
          'm/s/s', missing_value=missing_value)
     if ((id_v_dt_nudge_coarse > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_v_dt))) then
@@ -550,7 +550,7 @@ contains
 
     ! Add coarse-grained GFDL MP tendencies
     id_qv_dt_gfdlmp_coarse = register_diag_field('dynamics', &
-         'qv_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'qv_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'water vapor tendency from GFDL MP', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qv_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qv_dt))) then
@@ -558,7 +558,7 @@ contains
     endif
 
     id_ql_dt_gfdlmp_coarse = register_diag_field('dynamics', &
-         'ql_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'ql_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'liquid water tendency from GFDL MP', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_ql_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%ql_dt))) then
@@ -566,7 +566,7 @@ contains
     endif
 
     id_qi_dt_gfdlmp_coarse = register_diag_field('dynamics', &
-         'qi_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'qi_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'ice water tendency from GFDL MP', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qi_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qi_dt))) then
@@ -574,7 +574,7 @@ contains
     endif
 
     id_qr_dt_gfdlmp_coarse = register_diag_field('dynamics', &
-         'qr_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'qr_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'rain water tendency from GFDL MP', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qr_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qr_dt))) then
@@ -582,7 +582,7 @@ contains
     endif
 
     id_qg_dt_gfdlmp_coarse = register_diag_field('dynamics', &
-         'qg_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'qg_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'graupel tendency from GFDL MP', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qg_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qg_dt))) then
@@ -590,7 +590,7 @@ contains
     endif
 
     id_qs_dt_gfdlmp_coarse = register_diag_field('dynamics', &
-         'qs_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'qs_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'snow water tendency from GFDL MP', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qs_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qs_dt))) then
@@ -598,7 +598,7 @@ contains
     endif
     
     id_t_dt_gfdlmp_coarse = register_diag_field('dynamics', &
-         't_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         't_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'temperature tendency from GFDL MP', &
          'K/s', missing_value=missing_value)
     if ((id_t_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%T_dt))) then
@@ -606,7 +606,7 @@ contains
     endif
     
     id_u_dt_gfdlmp_coarse = register_diag_field('dynamics', &
-         'u_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'u_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'zonal wind tendency from GFDL MP', &
          'm/s/s', missing_value=missing_value)
     if ((id_u_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%u_dt))) then
@@ -614,7 +614,7 @@ contains
     endif
 
     id_v_dt_gfdlmp_coarse = register_diag_field('dynamics', &
-         'v_dt_gfdlmp_coarse', coarse_axes(1:3), Time, &
+         'v_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'zonal wind tendency from GFDL MP', &
          'm/s/s', missing_value=missing_value)
     if ((id_v_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%v_dt))) then
