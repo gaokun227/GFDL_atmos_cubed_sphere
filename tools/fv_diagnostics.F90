@@ -51,6 +51,7 @@ module fv_diagnostics_mod
                                     column_diagnostics_header, &
                                     close_column_diagnostics_units
 
+ use fv_coarse_graining_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
 
  implicit none
  private
@@ -121,11 +122,13 @@ module fv_diagnostics_mod
  integer :: num_diag_sonde = 0
  character(100) :: runname = 'test'
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
-
+ integer :: id_dx, id_dy
+ 
  real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
 
-
-
+ ! integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
+ ! integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
+ 
  namelist /fv_diag_column_nml/ do_diag_debug, do_diag_sonde, sound_freq, &
       diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, &
       diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname
@@ -170,7 +173,8 @@ contains
     logical :: exists
     integer :: nlunit, ios
 
-
+    real, allocatable :: dx(:,:), dy(:,:)
+    
     call write_version_number ( 'FV_DIAGNOSTICS_MOD', version )
     idiag => Atm(1)%idiag
 
@@ -360,6 +364,10 @@ contains
                                          'latitude', 'degrees_N' )
        id_area = register_static_field ( trim(field), 'area', axes(1:2),  &
                                          'cell area', 'm**2' )
+       id_dx = register_static_field( trim(field), 'dx', (/id_x,id_y/), &
+            'dx', 'm')
+       id_dy = register_static_field( trim(field), 'dy', (/id_x,id_y/), &
+            'dy', 'm')
 #ifndef DYNAMICS_ZS
        idiag%id_zsurf = register_static_field ( trim(field), 'zsurf', axes(1:2),  &
                                          'surface height', 'm' )
@@ -417,6 +425,14 @@ contains
        if (id_lont > 0) used = send_data(id_lont, rad2deg*Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,1), Time)
        if (id_latt > 0) used = send_data(id_latt, rad2deg*Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2), Time)
        if (id_area > 0) used = send_data(id_area, Atm(n)%gridstruct%area(isc:iec,jsc:jec), Time)
+
+       allocate(dx(isc:iec+1,jsc:jec+1), dy(isc:iec+1,jsc:jec+1))
+       dx(isc:iec,jsc:jec+1) = Atm(n)%gridstruct%dx(isc:iec,jsc:jec+1)
+       dy(isc:iec+1,jsc:jec) = Atm(n)%gridstruct%dy(isc:iec+1,jsc:jec)
+       if (id_dx > 0) used = send_data(id_dx, dx, Time)
+       if (id_dy > 0) used = send_data(id_dy, dy, Time)
+       deallocate(dx, dy)
+       
 #ifndef DYNAMICS_ZS
        if (idiag%id_zsurf > 0) used = send_data(idiag%id_zsurf, idiag%zsurf, Time)
 #endif
@@ -563,11 +579,22 @@ contains
                'water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qv_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,npz))
           idiag%id_ql_dt_phys = register_diag_field ( trim(field), 'ql_dt_phys', axes(1:3), Time,           &
-               'total liquid water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+               'liquid water tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_ql_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_ql_dt(isc:iec,jsc:jec,npz))
           idiag%id_qi_dt_phys = register_diag_field ( trim(field), 'qi_dt_phys', axes(1:3), Time,           &
-               'total ice water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+               'ice water tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qi_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qi_dt(isc:iec,jsc:jec,npz))
+
+          idiag%id_qr_dt_phys = register_diag_field ( trim(field), 'qr_dt_phys', axes(1:3), Time,           &
+               'rain water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qr_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qr_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qg_dt_phys = register_diag_field ( trim(field), 'qg_dt_phys', axes(1:3), Time,           &
+               'graupel tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qg_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qg_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qs_dt_phys = register_diag_field ( trim(field), 'qs_dt_phys', axes(1:3), Time,           &
+               'snow water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qs_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qs_dt(isc:iec,jsc:jec,npz))
+          
        endif
 
 !
@@ -1202,6 +1229,29 @@ contains
 #ifndef GFS_PHYS
     if(idiag%id_theta_e >0 ) call qsmith_init
 #endif
+
+    ! These diagnostics do not work, because of an FMS issue.  Maybe we could
+    ! implement them by outputting them on the grid corners (and filling the
+    ! empty rows or columns with missing value flags)?
+    ! ---------------
+    ! id_d_grid_ucomp = register_diag_field('dynamics', &
+    !      'd_grid_ucomp', (/ id_xt, id_y, id_pfull /), &
+    !      Time, 'D grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    ! id_d_grid_vcomp = register_diag_field('dynamics', &
+    !      'd_grid_vcomp', (/ id_x, id_yt, id_pfull /), &
+    !      Time, 'D grid meridional velocity', 'm/s', missing_value=missing_value)
+
+    ! id_c_grid_ucomp = register_diag_field('dynamics', &
+    !      'c_grid_ucomp', (/ id_x, id_yt, id_pfull /), &
+    !      Time, 'C grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    ! id_c_grid_vcomp = register_diag_field('dynamics', &
+    !      'c_grid_vcomp', (/ id_xt, id_y, id_pfull /), &
+    !      Time, 'C grid meridional velocity', 'm/s', missing_value=missing_value)
+    
+    call fv_coarse_grained_diagnostics_init(Atm, Time, id_pfull)
+    
  end subroutine fv_diag_init
 
 
@@ -1307,7 +1357,7 @@ contains
     real :: tmp2, pvsum, e2, einf, qm, mm, maxdbz, allmax, rgrav, cv_vapor
     real, allocatable :: cvm(:)
     integer :: Cl, Cl2, k1, k2
-
+    
     !!! CLEANUP: does it really make sense to have this routine loop over Atm% anymore? We assume n=1 below anyway
 
 ! cat15: SLP<1000; srf_wnd>ws_0; vort>vort_c0
@@ -1510,6 +1560,14 @@ contains
 !    do n = 1, ntileMe
     n = 1
 
+    ! ! D grid wind diagnostics
+    ! if (id_d_grid_ucomp > 0) used = send_data(id_d_grid_ucomp, Atm(n)%u(isc:iec,jsc:jec+1,1:npz), Time)
+    ! if (id_d_grid_vcomp > 0) used = send_data(id_d_grid_vcomp, Atm(n)%v(isc:iec+1,jsc:jec,1:npz), Time)
+
+    ! ! C grid wind diagnostics
+    ! if (id_c_grid_ucomp > 0) used = send_data(id_c_grid_ucomp, Atm(n)%uc(isc:iec+1,jsc:jec,1:npz), Time)
+    ! if (id_c_grid_vcomp > 0) used = send_data(id_c_grid_vcomp, Atm(n)%vc(isc:iec,jsc:jec+1,1:npz), Time)
+    
 #ifdef DYNAMICS_ZS
        if(idiag%id_zsurf > 0)  used=send_data(idiag%id_zsurf, idiag%zsurf, Time)
 #endif
@@ -1554,7 +1612,7 @@ contains
             idiag%id_uh03>0 .or. idiag%id_uh25>0) then
           call get_vorticity(isc, iec, jsc, jec, isd, ied, jsd, jed, npz, Atm(n)%u, Atm(n)%v, wk, &
                Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy, Atm(n)%gridstruct%rarea)
-
+          
           if(idiag%id_vort >0) used=send_data(idiag%id_vort,  wk, Time)
           if(idiag%id_vorts>0) used=send_data(idiag%id_vorts, wk(isc:iec,jsc:jec,npz), Time)
 
@@ -3452,7 +3510,8 @@ contains
 
     call nullify_domain()
 
-
+    call fv_coarse_grained_diagnostics(Atm, Time, zvir)
+    
  end subroutine fv_diag
 
  subroutine wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, us, vs, ws_max, domain)
