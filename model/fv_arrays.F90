@@ -19,7 +19,7 @@
 !***********************************************************************
 module fv_arrays_mod
 #include <fms_platform.h>
-  use mpp_domains_mod,       only: domain2d, mpp_get_data_domain
+  use mpp_domains_mod,       only: domain2d
   use fms_io_mod,            only: restart_file_type
   use time_manager_mod,      only: time_type
   use horiz_interp_type_mod, only: horiz_interp_type
@@ -531,8 +531,6 @@ module fv_arrays_mod
   !f1p
   logical  :: adj_mass_vmr = .false. !TER: This is to reproduce answers for verona patch.  This default can be changed
                                      !     to .true. in the next city release if desired
-  logical :: make_coarse_restart_files = .false.
-  integer :: coarsening_factor = 8
   !integer, pointer :: test_case
   !real,    pointer :: alpha
 
@@ -696,9 +694,6 @@ module fv_arrays_mod
      real, _ALLOCATABLE :: oro(:,:)
      real, _ALLOCATABLE :: ze0(:,:,:)
      
-     type(domain2d) :: coarse_domain
-     integer :: coarsening_factor
-
      logical :: allocated = .false.
      
      type(restart_file_type) :: fv_restart_coarse

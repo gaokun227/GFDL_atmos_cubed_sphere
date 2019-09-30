@@ -154,10 +154,6 @@ contains
     allocate (Atm%coarse_restart%phis(is_coarse:ie_coarse,js_coarse:je_coarse))
     allocate (Atm%coarse_restart%ze0(is_coarse:ie_coarse,js_coarse:je_coarse,npz))
 
-    ! TODO: remove if we don't end up needing these
-    Atm%coarse_restart%coarse_domain = coarse_domain
-    Atm%coarse_restart%coarsening_factor = coarsening_factor
-
     Atm%coarse_restart%allocated = .true.
     
   end subroutine allocate_coarse_restart_type
@@ -200,7 +196,7 @@ contains
     
     id_restart = register_restart_field(Atm%coarse_restart%fv_tile_restart_coarse, &
          fname, 'T', Atm%coarse_restart%pt, &
-         domain=Atm%coarse_restart%coarse_domain, tile_count=n)
+         domain=coarse_domain, tile_count=n)
     id_restart = register_restart_field(Atm%coarse_restart%fv_tile_restart_coarse, &
          fname, 'delp', Atm%coarse_restart%delp, &
          domain=coarse_domain, tile_count=n)
