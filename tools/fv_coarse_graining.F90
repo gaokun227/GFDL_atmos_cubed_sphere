@@ -350,7 +350,7 @@ contains
        if (tracer_name .eq. 'cld_amt') then
           ! cld_amt is cloud fraction (and so is not mass-weighted)
           call block_average(Atm%gridstruct%area(is:ie,js:je), &
-               Atm%qdiag(is:ie,js:je,1:npz,nt), &
+               Atm%q(is:ie,js:je,1:npz,nt), &
                Atm%coarse_restart%q(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz,nt))
        else
           call block_average(mass(is:ie,js:je,1:npz), &
