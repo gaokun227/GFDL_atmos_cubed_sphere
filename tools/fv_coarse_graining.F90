@@ -291,6 +291,7 @@ contains
 
   subroutine coarse_grain_restart_data(Atm)
     type(fv_atmos_type), intent(inout) :: Atm
+    character(len=64) :: tracer_name
     integer :: k, nt
     real, allocatable :: mass(:,:,:)
 
@@ -344,9 +345,17 @@ contains
     endif
 
     do nt = 1, nt_prog
-       call block_average(mass(is:ie,js:je,1:npz), &
-            Atm%q(is:ie,js:je,1:npz,nt), &
-            Atm%coarse_restart%q(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz,nt))
+       call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
+       if (tracer_name .eq. 'cld_amt') then
+          ! cld_amt is cloud fraction (and so is not mass-weighted)
+          call block_average(Atm%gridstruct%area(is:ie,js:je), &
+               Atm%qdiag(is:ie,js:je,1:npz,nt), &
+               Atm%coarse_restart%qdiag(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz,nt))
+       else
+          call block_average(mass(is:ie,js:je,1:npz), &
+               Atm%q(is:ie,js:je,1:npz,nt), &
+               Atm%coarse_restart%q(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz,nt))
+       endif
     enddo
     
     do nt = nt_prog+1, ntracers
