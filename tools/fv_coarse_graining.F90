@@ -1,6 +1,6 @@
 module fv_coarse_graining_mod
   
-  use constants_mod,   only: pi=>pi_8
+  use constants_mod,   only: grav, rdgas, pi=>pi_8
   use diag_manager_mod, only: diag_axis_init, register_diag_field, register_static_field, send_data
   use fms_io_mod,      only: register_restart_field, save_restart
   use fv_arrays_mod,   only: fv_atmos_type
@@ -43,6 +43,7 @@ module fv_coarse_graining_mod
 
   ! Diagnostic IDs
   integer :: id_coarse_lon, id_coarse_lat, id_coarse_lont, id_coarse_latt
+  integer :: id_pfnh_coarse
   integer :: id_qv_dt_phys_coarse, id_ql_dt_phys_coarse, id_qi_dt_phys_coarse
   integer :: id_qr_dt_phys_coarse, id_qg_dt_phys_coarse, id_qs_dt_phys_coarse
   integer :: id_t_dt_phys_coarse, id_u_dt_phys_coarse, id_v_dt_phys_coarse
@@ -350,7 +351,7 @@ contains
           ! cld_amt is cloud fraction (and so is not mass-weighted)
           call block_average(Atm%gridstruct%area(is:ie,js:je), &
                Atm%qdiag(is:ie,js:je,1:npz,nt), &
-               Atm%coarse_restart%qdiag(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz,nt))
+               Atm%coarse_restart%q(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz,nt))
        else
           call block_average(mass(is:ie,js:je,1:npz), &
                Atm%q(is:ie,js:je,1:npz,nt), &
@@ -424,6 +425,13 @@ contains
     coarse_axes_t(2) = id_coarse_yt
     coarse_axes_t(3) = id_pfull
 
+    if( .not. Atm(n)%flagstruct%hydrostatic ) then
+       id_pfnh_coarse = register_diag_field('dynamics', 'pfnh_coarse', &
+            coarse_axes(1:3), Time, &
+            'non-hydrostatic pressure', &
+            'pa', missing_value=missing_value)
+    endif
+    
     id_qv_dt_phys_coarse = register_diag_field('dynamics', &
          'qv_dt_phys_coarse', coarse_axes(1:3), Time, &
          'water vapor specific humidity tendency from physics', &
@@ -581,24 +589,26 @@ contains
     
   end subroutine register_coarse_grained_diagnostics
 
-  subroutine fv_coarse_grained_diagnostics(Atm, Time)
+  subroutine fv_coarse_grained_diagnostics(Atm, Time, zvir)
     type(fv_atmos_type), intent(in), target :: Atm(:)
     type(time_type), intent(in) :: Time
+    real, intent(in) :: zvir
 
     if (write_coarse_grained_diagnostics) then
-       call compute_coarse_grained_diagnostics(Atm, Time)
+       call compute_coarse_grained_diagnostics(Atm, Time, zvir)
     endif
   end subroutine fv_coarse_grained_diagnostics
   
-  subroutine compute_coarse_grained_diagnostics(Atm, Time)
+  subroutine compute_coarse_grained_diagnostics(Atm, Time, zvir)
     type(fv_atmos_type), intent(in), target :: Atm(:)
     type(time_type), intent(in) :: Time
+    real, intent(in) :: zvir
 
     logical :: used
-    integer :: var_mass_weighted(8), var_2d(1), var_3d(13)
+    integer :: var_mass_weighted(8), var_2d(1), var_3d(14)
     integer :: k
     integer :: n = 1
-    real, allocatable :: work_2d(:,:), work_3d(:,:,:), mass(:,:,:)
+    real, allocatable :: work_2d(:,:), work_3d(:,:,:), mass(:,:,:), nhpres(:,:,:)
 
     var_2d = (/ id_ps_dt_nudge_coarse /)
     
@@ -615,7 +625,8 @@ contains
          id_t_dt_nudge_coarse, &
          id_u_dt_nudge_coarse, &
          id_v_dt_nudge_coarse, &
-         id_delp_dt_nudge_coarse &
+         id_delp_dt_nudge_coarse, &
+         id_pfnh_coarse &
          /) 
     
     var_mass_weighted = (/ &
@@ -644,6 +655,15 @@ contains
        enddo
     endif
 
+    if (id_pfnh_coarse > 0) then
+       allocate(nhpres(is:ie,js:je,1:npz))
+       call compute_nonhydrostatic_pressure(Atm(n), zvir, nhpres)
+       call block_average(Atm(n)%gridstruct%area(is:ie,js:je), &
+            nhpres, work_3d)
+       used = send_data(id_pfnh_coarse, work_3d, Time)
+       deallocate(nhpres)
+    endif
+    
     if (id_u_dt_phys_coarse > 0) then
        call block_average(Atm(n)%gridstruct%area(is:ie,js:je), &
             Atm(n)%phys_diag%phys_u_dt(is:ie,js:je,1:npz), work_3d)
@@ -944,4 +964,43 @@ contains
     
   end subroutine define_cubic_mosaic
 
+  subroutine compute_nonhydrostatic_pressure(Atm, zvir, nhpres)
+    type(fv_atmos_type), intent(in) :: Atm
+    real, intent(in) :: zvir
+    real, intent(out) :: nhpres(is:ie,js:je,1:npz)
+
+    integer ::  i, j, k
+    integer :: sphum
+
+    sphum = get_tracer_index(MODEL_ATMOS, 'sphum')
+    
+#ifdef GFS_PHYS
+    do k= 1, npz
+       do j=js, je
+          do i=is, ie         
+             nhpres(i,j,k) = Atm%delp(i,j,k)*(1.-sum(Atm%q(i,j,k,2:Atm%flagstruct%nwat)))
+          enddo
+       enddo
+    enddo
+      
+    do k = 1, npz
+       do j = js, je
+          do i = is, ie
+             nhpres(i,j,k) = -nhpres(i,j,k)/(Atm%delz(i,j,k)*grav)*rdgas*    &
+                  Atm%pt(i,j,k)*(1.+zvir*Atm%q(i,j,k,sphum))     
+          enddo
+       enddo
+    enddo
+#else
+      do k = 1, npz
+         do j = js, je
+            do i = is, ie
+               nhpres(i,j,k) = -Atm%delp(i,j,k)/(Atm%delz(i,j,k)*grav)*rdgas*  &
+                    Atm%pt(i,j,k)*(1.+zvir*Atm%q(i,j,k,sphum))
+            enddo
+         enddo
+      enddo
+#endif
+  end subroutine compute_nonhydrostatic_pressure
+  
 end module fv_coarse_graining_mod

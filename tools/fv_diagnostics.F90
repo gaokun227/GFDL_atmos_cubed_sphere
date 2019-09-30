@@ -3509,7 +3509,7 @@ contains
 
     call nullify_domain()
 
-    call fv_coarse_grained_diagnostics(Atm, Time)
+    call fv_coarse_grained_diagnostics(Atm, Time, zvir)
     
  end subroutine fv_diag
 
