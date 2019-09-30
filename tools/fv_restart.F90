@@ -1222,8 +1222,14 @@ contains
     type(fv_atmos_type), intent(inout) :: Atm
     character(len=*),    intent(in)    :: timestamp
 
-    call fv_io_write_restart(Atm, timestamp)
-    call fv_io_write_restart_coarse(Atm, timestamp)
+    if (Atm%flagstruct%restart_resolution .eq. 'both') then
+       call fv_io_write_restart(Atm, timestamp)
+       call fv_io_write_restart_coarse(Atm, timestamp)
+    else if (Atm%flagstruct%restart_resolution .eq. 'only_coarse') then
+       call fv_io_write_restart_coarse(Atm, timestamp)
+    else
+       call fv_io_write_restart(Atm, timestamp)
+    endif
     
     if (Atm%neststruct%nested) then
        call fv_io_write_BCs(Atm)
@@ -1312,9 +1318,15 @@ contains
     ! Write4 energy correction term
 #endif
 
-    call fv_io_write_restart(Atm)
-    call fv_io_write_restart_coarse(Atm)    
-
+    if (Atm%flagstruct%restart_resolution .eq. 'both') then
+       call fv_io_write_restart(Atm)
+       call fv_io_write_restart_coarse(Atm)
+    else if (Atm%flagstruct%restart_resolution .eq. 'only_coarse') then
+       call fv_io_write_restart_coarse(Atm)
+    else
+       call fv_io_write_restart(Atm)
+    endif
+    
  if (Atm%neststruct%nested) call fv_io_write_BCs(Atm)
 
  module_is_initialized = .FALSE.

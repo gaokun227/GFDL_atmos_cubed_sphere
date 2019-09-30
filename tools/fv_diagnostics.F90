@@ -550,11 +550,20 @@ contains
                'water vapor specific humidity tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qv_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,npz))
           idiag%id_ql_dt_gfdlmp = register_diag_field ( trim(field), 'ql_dt_gfdlmp', axes(1:3), Time,           &
-               'total liquid water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+               'liquid water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_ql_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%ql_dt(isc:iec,jsc:jec,npz))
           idiag%id_qi_dt_gfdlmp = register_diag_field ( trim(field), 'qi_dt_gfdlmp', axes(1:3), Time,           &
-               'total ice water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+               'ice water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qi_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qi_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qr_dt_gfdlmp = register_diag_field ( trim(field), 'qr_dt_gfdlmp', axes(1:3), Time,           &
+               'rain water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qr_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qr_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qg_dt_gfdlmp = register_diag_field ( trim(field), 'qg_dt_gfdlmp', axes(1:3), Time,           &
+               'graupel tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qg_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qg_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qs_dt_gfdlmp = register_diag_field ( trim(field), 'qs_dt_gfdlmp', axes(1:3), Time,           &
+               'snow water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qs_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qs_dt(isc:iec,jsc:jec,npz))
           idiag%id_T_dt_gfdlmp = register_diag_field ( trim(field), 'T_dt_gfdlmp', axes(1:3), Time,           &
                'temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
           if (idiag%id_T_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%T_dt(isc:iec,jsc:jec,npz))
@@ -1581,6 +1590,9 @@ contains
        if (idiag%id_qv_dt_gfdlmp > 0) used=send_data(idiag%id_qv_dt_gfdlmp, Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_ql_dt_gfdlmp > 0) used=send_data(idiag%id_ql_dt_gfdlmp, Atm(n)%inline_mp%ql_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_qi_dt_gfdlmp > 0) used=send_data(idiag%id_qi_dt_gfdlmp, Atm(n)%inline_mp%qi_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_qr_dt_gfdlmp > 0) used=send_data(idiag%id_qr_dt_gfdlmp, Atm(n)%inline_mp%qr_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_qg_dt_gfdlmp > 0) used=send_data(idiag%id_qg_dt_gfdlmp, Atm(n)%inline_mp%qg_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_qs_dt_gfdlmp > 0) used=send_data(idiag%id_qs_dt_gfdlmp, Atm(n)%inline_mp%qs_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_t_dt_gfdlmp > 0)  used=send_data(idiag%id_t_dt_gfdlmp,  Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_u_dt_gfdlmp > 0)  used=send_data(idiag%id_u_dt_gfdlmp,  Atm(n)%inline_mp%u_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_v_dt_gfdlmp > 0)  used=send_data(idiag%id_v_dt_gfdlmp,  Atm(n)%inline_mp%v_dt(isc:iec,jsc:jec,1:npz), Time)
