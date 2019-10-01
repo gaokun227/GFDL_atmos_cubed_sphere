@@ -107,12 +107,12 @@ contains
           call mpp_error(FATAL, errmsg)
        endif
 
-       ! Check that compute domains will be square (for simplicity)
-       if (Atm%layout(1) .ne. Atm%layout(2)) then
-          write(errmsg, *) 'fv_coarse_graining_init: domain decomposition layout ',&
-               Atm%layout, ' does not produce square subdomains.'
-          call mpp_error(FATAL, errmsg)
-       endif
+!!$       ! Check that compute domains will be square (for simplicity)
+!!$       if (Atm%layout(1) .ne. Atm%layout(2)) then
+!!$          write(errmsg, *) 'fv_coarse_graining_init: domain decomposition layout ',&
+!!$               Atm%layout, ' does not produce square subdomains.'
+!!$          call mpp_error(FATAL, errmsg)
+!!$       endif
     
        ! Check that the coarsening factor is appropriate for the domain
        ! decomposition

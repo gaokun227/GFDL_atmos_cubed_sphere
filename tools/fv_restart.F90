@@ -1318,14 +1318,14 @@ contains
     ! Write4 energy correction term
 #endif
 
-    if (Atm%flagstruct%restart_resolution .eq. 'both') then
+!    if (Atm%flagstruct%restart_resolution .eq. 'both') then
        call fv_io_write_restart(Atm)
        call fv_io_write_restart_coarse(Atm)
-    else if (Atm%flagstruct%restart_resolution .eq. 'only_coarse') then
-       call fv_io_write_restart_coarse(Atm)
-    else
-       call fv_io_write_restart(Atm)
-    endif
+!    else if (Atm%flagstruct%restart_resolution .eq. 'only_coarse') then
+!       call fv_io_write_restart_coarse(Atm)
+!    else
+!       call fv_io_write_restart(Atm)
+!    endif
     
  if (Atm%neststruct%nested) call fv_io_write_BCs(Atm)
 
