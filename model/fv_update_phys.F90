@@ -224,9 +224,25 @@ module fv_update_phys_mod
     if (allocated(phys_diag%phys_t_dt)) phys_diag%phys_t_dt = pt(is:ie,js:je,:)
     if (present(q_dt)) then
        if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = q(is:ie,js:je,:,sphum)
+	
+       if (allocated(phys_diag%phys_ql_dt)) then
+          if (liq_wat < 0) call mpp_error(FATAL, " phys_ql_dt needs at least one liquid water tracer defined")
+          phys_diag%phys_ql_dt = q(is:ie,js:je,:,liq_wat) 
+          if (rainwat > 0) phys_diag%phys_ql_dt = q(is:ie,js:je,:,rainwat) + phys_diag%phys_ql_dt
+       endif
 
+       if (allocated(phys_diag%phys_qi_dt)) then
+          if (ice_wat < 0) then
+             call mpp_error(WARNING, " phys_qi_dt needs at least one ice water tracer defined")
+             phys_diag%phys_qi_dt = 0.
+          endif
+          phys_diag%phys_qi_dt = q(is:ie,js:je,:,ice_wat)
+          if (snowwat > 0) phys_diag%phys_qi_dt = q(is:ie,js:je,:,snowwat) + phys_diag%phys_qi_dt
+          if (graupel > 0) phys_diag%phys_qi_dt = q(is:ie,js:je,:,graupel) + phys_diag%phys_qi_dt
+       endif
+       
        if (liq_wat > 0) then
-          if (allocated(phys_diag%phys_ql_dt)) phys_diag%phys_ql_dt = q(is:ie,js:je,:,liq_wat)
+          if (allocated(phys_diag%phys_liq_wat_dt)) phys_diag%phys_liq_wat_dt = q(is:ie,js:je,:,liq_wat)
        endif
        
        if (rainwat > 0) then
@@ -234,7 +250,7 @@ module fv_update_phys_mod
        endif
 
        if (ice_wat > 0) then
-          if (allocated(phys_diag%phys_qi_dt)) phys_diag%phys_qi_dt = q(is:ie,js:je,:,ice_wat)
+          if (allocated(phys_diag%phys_ice_wat_dt)) phys_diag%phys_ice_wat_dt = q(is:ie,js:je,:,ice_wat)
        endif
        
        if (graupel > 0) then
@@ -410,27 +426,45 @@ module fv_update_phys_mod
 
    if (allocated(phys_diag%phys_t_dt)) phys_diag%phys_t_dt = (pt(is:ie,js:je,:) - phys_diag%phys_t_dt) / dt
    if (present(q_dt)) then
-       if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = (q(is:ie,js:je,:,sphum) - phys_diag%phys_qv_dt) / dt
+      if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = (q(is:ie,js:je,:,sphum) - phys_diag%phys_qv_dt) / dt
 
-       if (liq_wat > 0) then
-          if (allocated(phys_diag%phys_ql_dt)) phys_diag%phys_ql_dt = (q(is:ie,js:je,:,liq_wat) - phys_diag%phys_ql_dt) / dt
-       endif
+      if (allocated(phys_diag%phys_ql_dt)) then
+         if (liq_wat < 0) call mpp_error(FATAL, " phys_ql_dt needs at least one liquid water tracer defined")
+         phys_diag%phys_ql_dt = q(is:ie,js:je,:,liq_wat) - phys_diag%phys_qv_dt
+         if (rainwat > 0) phys_diag%phys_ql_dt = q(is:ie,js:je,:,rainwat) + phys_diag%phys_ql_dt
+         phys_diag%phys_ql_dt = phys_diag%phys_ql_dt / dt
+      endif
+      
+      if (allocated(phys_diag%phys_qi_dt)) then
+         if (ice_wat < 0) then
+            call mpp_error(WARNING, " phys_qi_dt needs at least one ice water tracer defined")
+            phys_diag%phys_qi_dt = 0.
+         endif
+         phys_diag%phys_qi_dt = q(is:ie,js:je,:,ice_wat) - phys_diag%phys_qi_dt
+         if (snowwat > 0) phys_diag%phys_qi_dt = q(is:ie,js:je,:,snowwat) + phys_diag%phys_qi_dt
+         if (graupel > 0) phys_diag%phys_qi_dt = q(is:ie,js:je,:,graupel) + phys_diag%phys_qi_dt
+         phys_diag%phys_qi_dt = phys_diag%phys_qi_dt / dt
+      endif
+              
+      if (liq_wat > 0) then
+         if (allocated(phys_diag%phys_liq_wat_dt)) phys_diag%phys_liq_wat_dt = (q(is:ie,js:je,:,liq_wat) - phys_diag%phys_liq_wat_dt) / dt
+      endif
        
-       if (rainwat > 0) then
-          if (allocated(phys_diag%phys_qr_dt)) phys_diag%phys_qr_dt = (q(is:ie,js:je,:,rainwat) - phys_diag%phys_qr_dt) / dt
-       endif
+      if (rainwat > 0) then
+         if (allocated(phys_diag%phys_qr_dt)) phys_diag%phys_qr_dt = (q(is:ie,js:je,:,rainwat) - phys_diag%phys_qr_dt) / dt
+      endif
 
-       if (ice_wat > 0) then
-          if (allocated(phys_diag%phys_qi_dt)) phys_diag%phys_qi_dt = (q(is:ie,js:je,:,ice_wat) - phys_diag%phys_qi_dt) / dt
-       endif
+      if (ice_wat > 0) then
+         if (allocated(phys_diag%phys_ice_wat_dt)) phys_diag%phys_ice_wat_dt = (q(is:ie,js:je,:,ice_wat) - phys_diag%phys_ice_wat_dt) / dt
+      endif
        
-       if (graupel > 0) then
-          if (allocated(phys_diag%phys_qg_dt)) phys_diag%phys_qg_dt = (q(is:ie,js:je,:,graupel) - phys_diag%phys_qg_dt) / dt
-       endif
+      if (graupel > 0) then
+         if (allocated(phys_diag%phys_qg_dt)) phys_diag%phys_qg_dt = (q(is:ie,js:je,:,graupel) - phys_diag%phys_qg_dt) / dt
+      endif
 
-       if (snowwat > 0) then
-          if (allocated(phys_diag%phys_qs_dt)) phys_diag%phys_qs_dt = (q(is:ie,js:je,:,snowwat) - phys_diag%phys_qs_dt) / dt
-       endif      
+      if (snowwat > 0) then
+         if (allocated(phys_diag%phys_qs_dt)) phys_diag%phys_qs_dt = (q(is:ie,js:je,:,snowwat) - phys_diag%phys_qs_dt) / dt
+      endif
    endif
     
    if ( flagstruct%range_warn ) then
