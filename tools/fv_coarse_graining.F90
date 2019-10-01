@@ -52,6 +52,8 @@ module fv_coarse_graining_mod
   integer :: id_qv_dt_gfdlmp_coarse, id_ql_dt_gfdlmp_coarse, id_qr_dt_gfdlmp_coarse
   integer :: id_qg_dt_gfdlmp_coarse, id_qi_dt_gfdlmp_coarse, id_qs_dt_gfdlmp_coarse
   integer :: id_t_dt_gfdlmp_coarse, id_u_dt_gfdlmp_coarse, id_v_dt_gfdlmp_coarse
+  integer :: id_liq_wat_dt_phys_coarse, id_ice_wat_dt_phys_coarse
+  integer :: id_liq_wat_dt_gfdlmp_coarse, id_ice_wat_dt_gfdlmp_coarse
   
   ! Namelist parameters (with default values)
   integer :: coarsening_factor = 8
@@ -445,7 +447,7 @@ contains
     
     id_ql_dt_phys_coarse = register_diag_field('dynamics', &
          'ql_dt_phys_coarse', coarse_axes_t(1:3), Time, &
-         'liquid water tendency from physics', &
+         'total liquid water tendency from physics', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_ql_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_ql_dt))) then
        allocate (Atm(n)%phys_diag%phys_ql_dt(is:ie,js:je,npz))
@@ -453,10 +455,26 @@ contains
 
     id_qi_dt_phys_coarse = register_diag_field('dynamics', &
          'qi_dt_phys_coarse', coarse_axes_t(1:3), Time, &
-         'ice water tendency from physics', &
+         'total ice water tendency from physics', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qi_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_qi_dt))) then
        allocate (Atm(n)%phys_diag%phys_qi_dt(is:ie,js:je,npz))
+    endif
+
+    id_liq_wat_dt_phys_coarse = register_diag_field('dynamics', &
+         'liq_wat_dt_phys_coarse', coarse_axes_t(1:3), Time, &
+         'liquid water tracer tendency from physics', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_liq_wat_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_liq_wat_dt))) then
+       allocate (Atm(n)%phys_diag%phys_liq_wat_dt(is:ie,js:je,npz))
+    endif
+
+    id_ice_wat_dt_phys_coarse = register_diag_field('dynamics', &
+         'ice_wat_dt_phys_coarse', coarse_axes_t(1:3), Time, &
+         'ice water tendency from physics', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_ice_wat_dt_phys_coarse > 0) .and. (.not. allocated(Atm(n)%phys_diag%phys_ice_wat_dt))) then
+       allocate (Atm(n)%phys_diag%phys_ice_wat_dt(is:ie,js:je,npz))
     endif
     
     id_qr_dt_phys_coarse = register_diag_field('dynamics', &
@@ -559,7 +577,7 @@ contains
 
     id_ql_dt_gfdlmp_coarse = register_diag_field('dynamics', &
          'ql_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
-         'liquid water tendency from GFDL MP', &
+         'total liquid water tendency from GFDL MP', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_ql_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%ql_dt))) then
        allocate (Atm(n)%inline_mp%ql_dt(is:ie,js:je,npz))
@@ -567,12 +585,28 @@ contains
 
     id_qi_dt_gfdlmp_coarse = register_diag_field('dynamics', &
          'qi_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
-         'ice water tendency from GFDL MP', &
+         'total ice water tendency from GFDL MP', &
          'kg/kg/s', missing_value=missing_value)
     if ((id_qi_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%qi_dt))) then
        allocate (Atm(n)%inline_mp%qi_dt(is:ie,js:je,npz))
     endif
 
+    id_liq_wat_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'liq_wat_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
+         'liquid water tracer tendency from GFDL MP', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_liq_wat_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%liq_wat_dt))) then
+       allocate (Atm(n)%inline_mp%liq_wat_dt(is:ie,js:je,npz))
+    endif
+
+    id_ice_wat_dt_gfdlmp_coarse = register_diag_field('dynamics', &
+         'ice_wat_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
+         'ice water tracer tendency from GFDL MP', &
+         'kg/kg/s', missing_value=missing_value)
+    if ((id_ice_wat_dt_gfdlmp_coarse > 0) .and. (.not. allocated(Atm(n)%inline_mp%ice_wat_dt))) then
+       allocate (Atm(n)%inline_mp%ice_wat_dt(is:ie,js:je,npz))
+    endif
+    
     id_qr_dt_gfdlmp_coarse = register_diag_field('dynamics', &
          'qr_dt_gfdlmp_coarse', coarse_axes_t(1:3), Time, &
          'rain water tendency from GFDL MP', &
@@ -681,7 +715,7 @@ contains
     real, intent(in) :: zvir
 
     logical :: used
-    integer :: var_mass_weighted(15), var_2d(1), var_3d(23)
+    integer :: var_mass_weighted(19), var_2d(1), var_3d(27)
     integer :: k
     integer :: n = 1
     real, allocatable :: work_2d(:,:), work_3d(:,:,:), mass(:,:,:), nhpres(:,:,:)
@@ -711,6 +745,10 @@ contains
          id_t_dt_gfdlmp_coarse, &
          id_u_dt_gfdlmp_coarse, &
          id_v_dt_gfdlmp_coarse, &
+         id_liq_wat_dt_gfdlmp_coarse, &
+         id_ice_wat_dt_gfdlmp_coarse, &
+         id_liq_wat_dt_phys_coarse, &
+         id_ice_wat_dt_phys_coarse, &
          id_pfnh_coarse &
          /) 
     
@@ -729,7 +767,11 @@ contains
          id_qi_dt_gfdlmp_coarse, &
          id_qg_dt_gfdlmp_coarse, &
          id_qs_dt_gfdlmp_coarse, &
-         id_t_dt_gfdlmp_coarse &
+         id_t_dt_gfdlmp_coarse, &
+         id_liq_wat_dt_gfdlmp_coarse, &
+         id_ice_wat_dt_gfdlmp_coarse, &
+         id_liq_wat_dt_phys_coarse, &
+         id_ice_wat_dt_phys_coarse &
          /)
     
     if (any(var_2d > 0)) then
@@ -792,6 +834,18 @@ contains
        used = send_data(id_qi_dt_phys_coarse, work_3d, Time)
     endif
 
+    if (id_liq_wat_dt_phys_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%phys_diag%phys_liq_wat_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_liq_wat_dt_phys_coarse, work_3d, Time)
+    endif
+
+    if (id_ice_wat_dt_phys_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%phys_diag%phys_ice_wat_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_ice_wat_dt_phys_coarse, work_3d, Time)
+    endif
+    
     if (id_qr_dt_phys_coarse > 0) then
        call block_average(mass, &
             Atm(n)%phys_diag%phys_qr_dt(is:ie,js:je,1:npz), work_3d)
@@ -870,6 +924,18 @@ contains
        used = send_data(id_qi_dt_gfdlmp_coarse, work_3d, Time)
     endif
 
+    if (id_ice_wat_dt_gfdlmp_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%inline_mp%ice_wat_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_ice_wat_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+
+    if (id_liq_wat_dt_gfdlmp_coarse > 0) then
+       call block_average(mass, &
+            Atm(n)%inline_mp%liq_wat_dt(is:ie,js:je,1:npz), work_3d)
+       used = send_data(id_liq_wat_dt_gfdlmp_coarse, work_3d, Time)
+    endif
+    
     if (id_qg_dt_gfdlmp_coarse > 0) then
        call block_average(mass, &
             Atm(n)%inline_mp%qg_dt(is:ie,js:je,1:npz), work_3d)

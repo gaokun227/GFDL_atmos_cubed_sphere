@@ -1637,22 +1637,21 @@ contains
    graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
 
    if (begin) then
-      ! if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = q(isc:iec,jsc:jec,:,sphum)
-      ! if (allocated(phys_diag%phys_ql_dt)) then
-      !    if (liq_wat < 0) call mpp_error(FATAL, " phys_ql_dt needs at least one liquid water tracer defined")
-      !    phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,liq_wat) 
-      ! endif
-      ! if (allocated(phys_diag%phys_qi_dt)) then
-      !    if (ice_wat < 0) then
-      !       call mpp_error(WARNING, " phys_qi_dt needs at least one ice water tracer defined")
-      !       phys_diag%phys_qi_dt = 0.
-      !    endif
-      !    phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,ice_wat)
-      ! endif
       if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = q(isc:iec,jsc:jec,:,sphum)
-      
+      if (allocated(phys_diag%phys_ql_dt)) then
+         if (liq_wat < 0) call mpp_error(FATAL, " phys_ql_dt needs at least one liquid water tracer defined")
+         phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,liq_wat) 
+      endif
+      if (allocated(phys_diag%phys_qi_dt)) then
+         if (ice_wat < 0) then
+            call mpp_error(WARNING, " phys_qi_dt needs at least one ice water tracer defined")
+            phys_diag%phys_qi_dt = 0.
+         endif
+         phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,ice_wat)
+      endif
+            
       if (liq_wat > 0) then
-         if (allocated(phys_diag%phys_ql_dt)) phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,liq_wat)
+         if (allocated(phys_diag%phys_liq_wat_dt)) phys_diag%phys_liq_wat_dt = q(isc:iec,jsc:jec,:,liq_wat)
       endif
       
       if (rainwat > 0) then
@@ -1660,7 +1659,7 @@ contains
       endif
 
       if (ice_wat > 0) then
-         if (allocated(phys_diag%phys_qi_dt)) phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,ice_wat)
+         if (allocated(phys_diag%phys_ice_wat_dt)) phys_diag%phys_ice_wat_dt = q(isc:iec,jsc:jec,:,ice_wat)
       endif
        
       if (graupel > 0) then
@@ -1671,10 +1670,30 @@ contains
          if (allocated(phys_diag%phys_qs_dt)) phys_diag%phys_qs_dt = q(isc:iec,jsc:jec,:,snowwat)
       endif
    else
-      if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = (q(isc:iec,jsc:jec,:,sphum) - phys_diag%phys_qv_dt) / dt
+      if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = q(isc:iec,jsc:jec,:,sphum) - phys_diag%phys_qv_dt
+      if (allocated(phys_diag%phys_ql_dt)) then
+         phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,liq_wat) - phys_diag%phys_ql_dt
+      endif
+      if (allocated(phys_diag%phys_qi_dt)) then
+         phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,ice_wat) - phys_diag%phys_qv_dt  ! Should this be phys_qi_dt?
+      endif
+   endif
+	
+   if (allocated(phys_diag%phys_ql_dt)) then
+      if (rainwat > 0) phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,rainwat) + phys_diag%phys_ql_dt
+   endif
+   if (allocated(phys_diag%phys_qi_dt)) then
+      if (snowwat > 0) phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,snowwat) + phys_diag%phys_qi_dt
+      if (graupel > 0) phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,graupel) + phys_diag%phys_qi_dt
+   endif
       
+   if (.not. begin) then
+      if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = phys_diag%phys_qv_dt / dt
+      if (allocated(phys_diag%phys_ql_dt)) phys_diag%phys_ql_dt = phys_diag%phys_ql_dt / dt
+      if (allocated(phys_diag%phys_qi_dt)) phys_diag%phys_qi_dt = phys_diag%phys_qi_dt / dt
+   
       if (liq_wat > 0) then
-         if (allocated(phys_diag%phys_ql_dt)) phys_diag%phys_ql_dt = (q(isc:iec,jsc:jec,:,liq_wat) - phys_diag%phys_ql_dt) / dt
+         if (allocated(phys_diag%phys_liq_wat_dt)) phys_diag%phys_liq_wat_dt = (q(isc:iec,jsc:jec,:,liq_wat) - phys_diag%phys_liq_wat_dt) / dt
       endif
        
       if (rainwat > 0) then
@@ -1682,7 +1701,7 @@ contains
       endif
 
       if (ice_wat > 0) then
-         if (allocated(phys_diag%phys_qi_dt)) phys_diag%phys_qi_dt = (q(isc:iec,jsc:jec,:,ice_wat) - phys_diag%phys_qi_dt) / dt
+         if (allocated(phys_diag%phys_ice_wat_dt)) phys_diag%phys_ice_wat_dt = (q(isc:iec,jsc:jec,:,ice_wat) - phys_diag%phys_ice_wat_dt) / dt
       endif
       
       if (graupel > 0) then
@@ -1692,29 +1711,7 @@ contains
       if (snowwat > 0) then
          if (allocated(phys_diag%phys_qs_dt)) phys_diag%phys_qs_dt = (q(isc:iec,jsc:jec,:,snowwat) - phys_diag%phys_qs_dt) / dt
       endif
-      ! if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = q(isc:iec,jsc:jec,:,sphum) - phys_diag%phys_qv_dt
-      ! if (allocated(phys_diag%phys_ql_dt)) then
-      !    phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,liq_wat) - phys_diag%phys_ql_dt
-      ! endif
-      ! if (allocated(phys_diag%phys_qi_dt)) then
-      !    phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,ice_wat) - phys_diag%phys_qv_dt
-      ! endif
    endif
-
-   ! if (allocated(phys_diag%phys_ql_dt)) then
-   !    if (rainwat > 0) phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,rainwat) + phys_diag%phys_ql_dt
-   ! endif
-   ! if (allocated(phys_diag%phys_qi_dt)) then
-   !    if (snowwat > 0) phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,snowwat) + phys_diag%phys_qi_dt
-   !    if (graupel > 0) phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,graupel) + phys_diag%phys_qi_dt
-   ! endif
-      
-   ! if (.not. begin) then
-   !    if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = phys_diag%phys_qv_dt / dt
-   !    if (allocated(phys_diag%phys_ql_dt)) phys_diag%phys_ql_dt = phys_diag%phys_ql_dt / dt
-   !    if (allocated(phys_diag%phys_qi_dt)) phys_diag%phys_qi_dt = phys_diag%phys_qi_dt / dt
-   ! endif
-
 
  end subroutine atmos_phys_qdt_diag
 

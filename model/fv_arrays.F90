@@ -98,9 +98,11 @@ module fv_arrays_mod
      integer :: id_prer, id_prei, id_pres, id_preg
      integer :: id_qv_dt_gfdlmp, id_T_dt_gfdlmp, id_ql_dt_gfdlmp, id_qi_dt_gfdlmp
      integer :: id_qr_dt_gfdlmp, id_qg_dt_gfdlmp, id_qs_dt_gfdlmp
+     integer :: id_liq_wat_dt_gfdlmp, id_ice_wat_dt_gfdlmp
      integer :: id_u_dt_gfdlmp, id_v_dt_gfdlmp
      integer :: id_t_dt_phys, id_qv_dt_phys, id_ql_dt_phys, id_qi_dt_phys, id_u_dt_phys, id_v_dt_phys
      integer :: id_qr_dt_phys, id_qg_dt_phys, id_qs_dt_phys
+     integer :: id_liq_wat_dt_phys, id_ice_wat_dt_phys
      integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
 
      integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w
@@ -648,6 +650,8 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: qv_dt(:,:,:)
     real, _ALLOCATABLE :: ql_dt(:,:,:)
     real, _ALLOCATABLE :: qi_dt(:,:,:)
+    real, _ALLOCATABLE :: liq_wat_dt(:,:,:)
+    real, _ALLOCATABLE :: ice_wat_dt(:,:,:)
     real, _ALLOCATABLE :: qr_dt(:,:,:)
     real, _ALLOCATABLE :: qg_dt(:,:,:)
     real, _ALLOCATABLE :: qs_dt(:,:,:)
@@ -662,12 +666,14 @@ module fv_arrays_mod
      real, _ALLOCATABLE :: phys_qv_dt(:,:,:)
      real, _ALLOCATABLE :: phys_ql_dt(:,:,:)
      real, _ALLOCATABLE :: phys_qi_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_liq_wat_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_ice_wat_dt(:,:,:)
      real, _ALLOCATABLE :: phys_qr_dt(:,:,:)
      real, _ALLOCATABLE :: phys_qg_dt(:,:,:)
      real, _ALLOCATABLE :: phys_qs_dt(:,:,:)
      real, _ALLOCATABLE :: phys_u_dt(:,:,:)
      real, _ALLOCATABLE :: phys_v_dt(:,:,:)
-
+     
   end type phys_diag_type
 
   type nudge_diag_type
