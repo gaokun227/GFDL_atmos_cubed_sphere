@@ -318,7 +318,7 @@ contains
          case ( 1 )  ! Lat-Lon "cyclic"
 
             select case (grid_type)
-            case (0,1,2) !Gnomonic nested grid
+            case (-1,0,1,2) !Gnomonic nested grid
                if (nested) then
                   type = "Cubed-sphere nested grid"
                else
