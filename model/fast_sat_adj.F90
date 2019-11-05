@@ -12,7 +12,7 @@ module fast_sat_adj_mod
         ql_mlt, ql0_max, qi_lim, qs_mlt, icloud_f, sat_adj0, t_sub, cld_min, tau_r2g, tau_smlt, &
         tau_i2s, tau_v2l, tau_l2v, tau_imlt, tau_l2r, rad_rain, rad_snow, rad_graupel, &
         dw_ocean, dw_land, cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, t_ice, &
-        t_wfr, e00, rgrav, consv_checker, zvir, do_qa, te_err, prog_ccn, ccn_l, ccn_o, rhow
+        t_wfr, e00, rgrav, consv_checker, zvir, do_qa, te_err, prog_ccn, ccn_l, ccn_o, rhow, inflag
     
     implicit none
     
@@ -534,7 +534,21 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 sink (i) = adj_fac * dq / (1. + tcp2 (i) * dqsdt)
                 if (qi (i, j) > 1.e-8) then
                     if (.not. prog_ccn) then
-                        cin (i) = 5.38e7 * exp (0.75 * log (qi (i, j) * den (i)))
+                        if (inflag .eq. 1) &
+                            ! hong et al., 2004
+                            cin (i) = 5.38e7 * exp (0.75 * log (qi (i, j) * den (i)))
+                        if (inflag .eq. 2) &
+                            ! meyers et al., 1992
+                            cin (i) = exp (-2.80 + 0.262 * (t_ice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
+                        if (inflag .eq. 3) &
+                            ! meyers et al., 1992
+                            cin (i) = exp (-0.639 + 12.96 * (qv (i, j) / qsi - 1.0)) * 1000.0 ! convert from L^-1 to m^-3
+                        if (inflag .eq. 4) &
+                            ! cooper, 1986
+                            cin (i) = 5.e-3 * exp (0.304 * (t_ice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
+                        if (inflag .eq. 5) &
+                            ! flecther, 1962
+                            cin (i) = 1.e-5 * exp (0.5 * (t_ice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
                     endif
                     pidep = sdt * dq * 4.0 * 11.9 * exp (0.5 * log (qi (i, j) * den (i) * cin (i))) &
                          / (qsi * den (i) * lat2 / (0.0243 * rvgas * pt1 (i) ** 2) + 4.42478e4)

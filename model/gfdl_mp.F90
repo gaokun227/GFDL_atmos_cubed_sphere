@@ -286,6 +286,13 @@ module gfdl_mp_mod
     real :: rh_thres = 0.75
     real :: rhc_cevap = 0.85 ! cloud water
     real :: rhc_revap = 0.85 ! cloud water
+
+    integer :: inflag = 1 ! ice nucleation scheme
+    ! 1: hong et al., 2004
+    ! 2: meyers et al., 1992
+    ! 3: meyers et al., 1992
+    ! 4: cooper, 1986
+    ! 5: flecther, 1962
     
     ! -----------------------------------------------------------------------
     ! namelist
@@ -304,7 +311,7 @@ module gfdl_mp_mod
         do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, &
         ntimes, disp_heat, do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_park_cloud, &
-        use_gi_cloud, use_rhc_cevap, use_rhc_revap
+        use_gi_cloud, use_rhc_cevap, use_rhc_revap, inflag
     
     public &
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
@@ -319,7 +326,7 @@ module gfdl_mp_mod
         do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, &
         ntimes, disp_heat, do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_park_cloud, &
-        use_gi_cloud, use_rhc_cevap, use_rhc_revap
+        use_gi_cloud, use_rhc_cevap, use_rhc_revap, inflag
     
 contains
 
@@ -2044,10 +2051,22 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, &
             dq = qv (k) - qsi
             sink = dq / (1. + tcpk (k) * dqsdt)
             if (qi (k) > qrmin) then
-                ! eq 9, hong et al. 2004, mwr
-                ! for a and b, see dudhia 1989: page 3103 eq (b7) and (b8)
                 if (.not. prog_ccn) then
-                    cin (k) = 5.38e7 * exp (0.75 * log (qi (k) * den (k)))
+                    if (inflag .eq. 1) &
+                        ! hong et al., 2004
+                        cin (k) = 5.38e7 * exp (0.75 * log (qi (k) * den (k)))
+                    if (inflag .eq. 2) &
+                        ! meyers et al., 1992
+                        cin (k) = exp (-2.80 + 0.262 * (tice - tz (k))) * 1000.0 ! convert from L^-1 to m^-3
+                    if (inflag .eq. 3) &
+                        ! meyers et al., 1992
+                        cin (k) = exp (-0.639 + 12.96 * (qv (k) / qsi - 1.0)) * 1000.0 ! convert from L^-1 to m^-3
+                    if (inflag .eq. 4) &
+                        ! cooper, 1986
+                        cin (k) = 5.e-3 * exp (0.304 * (tice - tz (k))) * 1000.0 ! convert from L^-1 to m^-3
+                    if (inflag .eq. 5) &
+                        ! flecther, 1962
+                        cin (k) = 1.e-5 * exp (0.5 * (tice - tz (k))) * 1000.0 ! convert from L^-1 to m^-3
                 endif
                 pidep = dt_pisub * dq * 4.0 * 11.9 * exp (0.5 * log (qi (k) * den (k) * cin (k))) &
                      / (qsi * den (k) * lat2 / (0.0243 * rvgas * tz (k) ** 2) + 4.42478e4)
