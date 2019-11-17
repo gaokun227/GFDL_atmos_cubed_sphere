@@ -20,6 +20,8 @@
 ! SJL: Apr 12, 2012
 ! This revision may actually produce rounding level differences due to the elimination of KS to compute
 ! pressure level for remapping.
+! Linjiong Zhou: Nov 19, 2019
+! Revise the OpenMP code to avoid crash
 module fv_mapz_mod
 
   use constants_mod,     only: radius, pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
@@ -153,12 +155,12 @@ contains
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
   real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
-  real, dimension(is:ie):: gsize, gz, cvm, qv
+  real, dimension(is:ie):: gsize, gz, cvm
   real, dimension(isd:ied,jsd:jed,km):: qnl, qni
 
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
-  integer:: i,j,k 
+  integer:: i,j,k
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
   integer:: ccn_cm3, cin_cm3
 
@@ -191,7 +193,7 @@ contains
 !$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
 !$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,pe4)    &
-!$OMP                          private(qv,gz,cvm,kp,k_next,bkh,dp2,   &
+!$OMP                          private(gz,cvm,kp,k_next,bkh,dp2,   &
 !$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2,w2)
   do 1000 j=js,je+1
 
@@ -601,19 +603,7 @@ contains
 
   endif
 
-!$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,va,isd,ied,jsd,jed,kord_mt, &
-!$OMP                               te_2d,te,delp,hydrostatic,hs,rg,pt,peln,adiabatic, &
-!$OMP                               cp,delz,nwat,rainwat,liq_wat,ice_wat,snowwat,       &
-!$OMP                               graupel,q_con,r_vir,sphum,w,pk,pkz,last_step,consv, &
-!$OMP                               do_adiabatic_init,zsum1,zsum0,te0_2d,domain,        &
-!$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
-!$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
-!$OMP                               fast_mp_consv,kord_tm,pe4, &
-!$OMP                               npx,npy,ccn_cm3,cin_cm3,inline_mp,u_dt,v_dt,   &
-!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps,qnl,qni) &
-!$OMP                       private(q2,q3,pe0,pe1,pe2,pe3,qv,cvm,gz,gsize,phis,dpln,dp2,t0)
-
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,pe4,pe)
   do k=2,km
      do j=js,je
         do i=is,ie
@@ -627,7 +617,11 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 
   if ( consv > consv_min ) then
 
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,ptop,u,v,pe,isd,ied,jsd,jed,te_2d,delp, &
+!$OMP                                  hydrostatic,hs,rg,pt,peln,cp,delz,nwat,rainwat,liq_wat, &
+!$OMP                                  ice_wat,snowwat,graupel,q_con,r_vir,sphum,w,pk,pkz,zsum1, &
+!$OMP                                  zsum0,te0_2d,gridstruct,q) &
+!$OMP                          private(cvm,gz,phis)
     do j=js,je
        if ( hydrostatic ) then
             do i=is,ie
@@ -699,7 +693,6 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 
     enddo   ! j-loop
 
-!$OMP single
          dtmp = consv*g_sum(domain, te_2d, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       E_Flux = dtmp / (grav*pdt*4.*pi*radius**2)    ! unit: W/m**2
                                                    ! Note pdt is "phys" time step
@@ -708,11 +701,10 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
       else
            dtmp = dtmp / g_sum(domain, zsum1, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       endif
-!$OMP end single
 
   elseif ( consv < -consv_min ) then
 
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,pkz,delp,zsum1,zsum0,ptop,pk,hydrostatic)
       do j=js,je
          do i=is,ie
             zsum1(i,j) = pkz(i,j,1)*delp(i,j,1)
@@ -730,7 +722,6 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
       enddo
 
       E_Flux = consv
-!$OMP single
       if ( hydrostatic ) then
            dtmp = E_flux*(grav*pdt*4.*pi*radius**2) /    &
                  g_sum(domain, zsum0,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
@@ -738,7 +729,6 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
            dtmp = E_flux*(grav*pdt*4.*pi*radius**2) /    &
                  g_sum(domain, zsum1,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       endif
-!$OMP end single
   endif        ! end consv check
 endif        ! end last_step check
 
@@ -747,7 +737,11 @@ endif        ! end last_step check
   if (do_adiabatic_init .or. do_sat_adj) then
                                            call timing_on('sat_adj2')
 
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,kmp,isd,jsd,te,delp,hydrostatic,hs,pt,peln, &
+!$OMP                                  delz,rainwat,liq_wat,ice_wat,snowwat,graupel,q_con,r_vir, &
+!$OMP                                  sphum,pkz,last_step,ng,gridstruct,q,mdt,cld_amt,cappa,dtdt, &
+!$OMP                                  out_dt,rrg,akap,fast_mp_consv) &
+!$OMP                          private(qnl,qni,dpln)
            do k=kmp,km
               do j=js,je
                  do i=is,ie
@@ -778,7 +772,7 @@ endif        ! end last_step check
            enddo    ! OpenMP k-loop
 
            if ( fast_mp_consv ) then
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,kmp,te,te0_2d)
                 do j=js,je
                    do i=is,ie
                       do k=kmp,km
@@ -797,7 +791,16 @@ endif        ! end last_step check
 
   if ((.not. do_adiabatic_init) .and. do_inline_mp) then
 
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,pe,ua,va, &
+!$OMP                                  te,delp,hydrostatic,hs,pt,peln, &
+!$OMP                                  delz,rainwat,liq_wat,ice_wat,snowwat, &
+!$OMP                                  graupel,q_con,sphum,w,pk,pkz,last_step,consv, &
+!$OMP                                  do_adiabatic_init,te0_2d, &
+!$OMP                                  gridstruct,q, &
+!$OMP                                  mdt,cld_amt,cappa,rrg,akap, &
+!$OMP                                  ccn_cm3,cin_cm3,inline_mp, &
+!$OMP                                  do_inline_mp,ps) &
+!$OMP                          private(u_dt,v_dt,q2,q3,gsize,dp2,t0)
     do j = js, je
 
         gsize(is:ie) = sqrt(gridstruct%area_64(is:ie,j))
@@ -881,6 +884,14 @@ endif        ! end last_step check
 #endif
         endif
  
+        if (consv .gt. consv_min) then
+            do i = is, ie
+                do k = 1, km
+                    te0_2d(i, j) = te0_2d(i, j) + te(i, j, k)
+                enddo
+            enddo
+        endif
+
     enddo
 
   endif
@@ -889,7 +900,10 @@ endif        ! end last_step check
   if ( last_step ) then
        ! Output temperature if last_step
 !!!  if ( is_master() ) write(*,*) 'dtmp=', dtmp, nwat
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,isd,ied,jsd,jed,hydrostatic,pt,adiabatic,cp, &
+!$OMP                                  nwat,rainwat,liq_wat,ice_wat,snowwat,graupel,r_vir,&
+!$OMP                                  sphum,pkz,dtmp,q) &
+!$OMP                          private(cvm,gz)
         do k=1,km
            do j=js,je
               if (hydrostatic) then
@@ -915,7 +929,7 @@ endif        ! end last_step check
         enddo  ! k-loop
   else  ! not last_step
     if ( kord_tm < 0 ) then
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,pkz,pt)
        do k=1,km
           do j=js,je
              do i=is,ie
@@ -925,7 +939,6 @@ endif        ! end last_step check
        enddo
     endif
   endif
-!$OMP end parallel
 
 !-----------------------------------------------------------------------
 ! Inline GFDL MP
@@ -950,11 +963,13 @@ endif        ! end last_step check
 
     ! update dry total energy
     if (consv .gt. consv_min) then
+!$OMP parallel do default(none) shared(is,ie,js,je,km,te0_2d,hydrostatic,delp,gridstruct,u,v,dp0,u0,v0,hs,delz,w) &
+!$OMP                          private(phis)
       do j=js,je
         if (hydrostatic) then
           do k = 1, km
             do i=is,ie
-              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + delp(i,j,k) * &
+              te0_2d(i,j) = te0_2d(i,j) + delp(i,j,k) * &
                            (0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
                                                         v(i,j,k)**2+v(i+1,j,k)**2 -  &
                            (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))) &
@@ -975,7 +990,7 @@ endif        ! end last_step check
           enddo
           do k = 1, km
             do i=is,ie
-              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + delp(i,j,k) * &
+              te0_2d(i,j) = te0_2d(i,j) + delp(i,j,k) * &
                              (0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
                               u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
                              (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)))) &
