@@ -93,13 +93,14 @@ module fv_diagnostics_mod
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field
 
+ integer, parameter :: MAX_PLEVS = 31
 #ifdef FEWER_PLEVS
- integer, parameter :: nplev = 10 ! 31 ! lmh
+ integer :: nplev = 10 ! 31 ! lmh
 #else
- integer, parameter :: nplev = 31
+ integer :: nplev = 31
 #endif
- integer :: levs(nplev)
- integer :: k100, k200, k500
+ integer :: levs(MAX_PLEVS)
+ integer :: k100, k200, k300, k500
 
  integer, parameter :: MAX_DIAG_COLUMN = 100
  logical, allocatable, dimension(:,:) :: do_debug_diag_column
@@ -132,6 +133,8 @@ module fv_diagnostics_mod
  namelist /fv_diag_column_nml/ do_diag_debug, do_diag_sonde, sound_freq, &
       diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, &
       diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname
+
+ namelist /fv_diag_plevs_nml/ nplev, levs, k100, k200, k500
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -330,19 +333,60 @@ contains
 ! SJL note: 31 is enough here; if you need more levels you should do it OFF line
 ! do not add more to prevent the model from slowing down too much.
 #ifdef FEWER_PLEVS
-    levs = (/50,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
+    levs(1:nplev) = (/50,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
     k100 = 2
     k200 = 3
+    k300 = 5
     k500 = 6
 #else
-    levs = (/1,2,3,5,7,10,20,30,50,70,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,925,950,975,1000/)
+    levs(1:nplev) = (/1,2,3,5,7,10,20,30,50,70,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,925,950,975,1000/)
     k100 = 11
     k200 = 13
+    k300 = 15
     k500 = 19
 #endif
+#ifdef INTERNAL_FILE_NML
+    read(input_nml_file, nml=fv_diag_plevs_nml,iostat=ios)
+#else
+    inquire (file=trim(Atm(n)%nml_filename), exist=exists)
+    if (.not. exists) then
+      write(errmsg,*) 'fv_diag_plevs_nml: namelist file ',trim(Atm(n)%nml_filename),' does not exist'
+      call mpp_error(FATAL, errmsg)
+    else
+      open (unit=nlunit, file=Atm(n)%nml_filename, READONLY, status='OLD', iostat=ios)
+    endif
+    rewind(nlunit)
+    read (nlunit, nml=fv_diag_plevs_nml, iostat=ios)
+    close (nlunit)
+#endif    
+    if (nplev > MAX_PLEVS) then
+       if (is_master()) then
+          print*, ' fv_diagnostics: nplev = ', nplev, ' is too large'
+          print*, '                 If you need more than ', MAX_PLEVS, ' levels do vertical'
+          print*, '                 remapping OFF line to reduce load on the model.'
+          call mpp_error(FATAL, ' fv_diagnostics: Stopping model because nplev > MAX_PLEVS')
+       endif
+    endif
+    levs(nplev+1:MAX_PLEVS) = -1.
+    if (abs(levs(k100)-100.) > 1.0) then
+       call mpp_error(NOTE, "fv_diag_plevs_nml: k100 set incorrectly, finding closest entry in plevs")
+       k100 = minloc(abs(levs(1:nplev)-100),1)
+    endif
+    if (abs(levs(k200)-200.) > 1.0) then
+       call mpp_error(NOTE, "fv_diag_plevs_nml: k200 set incorrectly, finding closest entry in plevs")
+       k200 = minloc(abs(levs(1:nplev)-200),1)
+    endif
+    if (abs(levs(k300)-300.) > 1.0) then
+       call mpp_error(NOTE, "fv_diag_plevs_nml: k300 set incorrectly, finding closest entry in plevs")
+       k300 = minloc(abs(levs(1:nplev)-300),1)
+    endif
+    if (abs(levs(k500)-500.) > 1.0) then
+       call mpp_error(NOTE, "fv_diag_plevs_nml: k500 set incorrectly, finding closest entry in plevs")
+       k500 = minloc(abs(levs(1:nplev)-500),1)
+    endif
     !
     
-    id_plev = diag_axis_init('plev', levs(:)*1.0, 'mb', 'z', &
+    id_plev = diag_axis_init('plev', levs(1:nplev)*1.0, 'mb', 'z', &
             'actual pressure level', direction=-1, set_name="dynamics")
 
     axe2(1) = id_xt
@@ -2098,18 +2142,19 @@ contains
 
              idg(:) = idiag%id_h(:)
 
+             !Determine which levels have been registered and need writing out
              if ( idiag%id_tm>0 ) then
-                  idg(minloc(abs(levs-300))) = 1  ! 300-mb
-                  idg(minloc(abs(levs-500))) = 1  ! 500-mb
+                  idg(k300) = 1  ! 300-mb
+                  idg(k500) = 1  ! 500-mb
              else
-                  idg(minloc(abs(levs-300))) = idiag%id_h(minloc(abs(levs-300)))
-                  idg(minloc(abs(levs-500))) = idiag%id_h(minloc(abs(levs-500)))
+                  idg(k300) = idiag%id_h(k300)
+                  idg(k500) = idiag%id_h(k500)
              endif
 
              call get_height_given_pressure(isc, iec, jsc, jec, npz, wz, nplev, idg, plevs, Atm(n)%peln, a3)
              ! reset 
-             idg(minloc(abs(levs-300))) = idiag%id_h(minloc(abs(levs-300)))
-             idg(minloc(abs(levs-500))) = idiag%id_h(minloc(abs(levs-500)))
+             idg(k300) = idiag%id_h(k300)
+             idg(k500) = idiag%id_h(k500)
 
              do i=1,nplev
                 if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
@@ -2123,10 +2168,10 @@ contains
 
              if( prt_minmax ) then
   
-                if(all(idiag%id_h(minloc(abs(levs-100)))>0))  &
+                if(idiag%id_h(k100)>0 .or. (idiag%id_h_plev>0 .and. k100>0))  &
                 call prt_mxm('Z100',a3(isc:iec,jsc:jec,k100),isc,iec,jsc,jec,0,1,1.E-3,Atm(n)%gridstruct%area_64,Atm(n)%domain)
 
-                if(all(idiag%id_h(minloc(abs(levs-500)))>0))  then
+                if(idiag%id_h(k500)>0 .or. (idiag%id_h_plev>0 .and. k500>0))  then
                    if (Atm(n)%gridstruct%bounded_domain) then
                       call prt_mxm('Z500',a3(isc:iec,jsc:jec,k500),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
                    else
@@ -2139,30 +2184,16 @@ contains
 
              ! mean virtual temp 300mb to 500mb
              if( idiag%id_tm>0 ) then
-                k1 = -1
-                k2 = -1
-                do k=1,nplev
-                   if (abs(levs(k)-500.) < 1.) then
-                      k2 = k
-                      exit
-                   endif
-                enddo
-                do k=1,nplev
-                   if (abs(levs(k)-300.) < 1.) then
-                      k1 = k
-                      exit
-                   endif
-                enddo
-                if (k1 <= 0 .or. k2 <= 0) then
-                   call mpp_error(NOTE, "Could not find levs for 300--500 mb mean temperature, setting to -1")
-                   a2 = -1.
+                if ( (idiag%id_h(k500) <= 0 .or. idiag%id_h(k300) <= 0) .and. (idiag%id_h_plev>0 .and. (k300<=0 .or. k500<=0))) then
+                   call mpp_error(NOTE, "Could not find levs for 300--500 mb mean temperature, setting to missing_value")
+                   a2 = missing_value
                 else
                  do j=jsc,jec
                     do i=isc,iec
-                       a2(i,j) = grav*(a3(i,j,k2)-a3(i,j,k1))/(rdgas*(plevs(k1)-plevs(k2)))
+                       a2(i,j) = grav*(a3(i,j,k500)-a3(i,j,k300))/(rdgas*(plevs(k300)-plevs(k500)))
                     enddo
                  enddo
-                endif
+              endif
                 used = send_data ( idiag%id_tm, a2, Time )
              endif
 
@@ -2225,7 +2256,7 @@ contains
                 enddo
                 call prt_maxmin('ATL Deps', depress, isc, iec, jsc, jec, 0,   1, 1.)
              endif
-            endif
+          endif
 
 ! Cat 2-5:
             if(idiag%id_c25>0) then
@@ -2308,12 +2339,12 @@ contains
        if ( do_cs_intp ) then  ! log(pe) as the coordinaite for temp re-construction
           if(.not. allocated (a3) ) allocate( a3(isc:iec,jsc:jec,nplev) )
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%pt(isc:iec,jsc:jec,:), nplev,    &
-                                plevs, wz, Atm(n)%peln, idg, a3, 1)
+                                plevs(1:nplev), wz, Atm(n)%peln, idg, a3, 1)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
-          if ( all(idiag%id_t(minloc(abs(levs-100)))>0) .and. prt_minmax ) then
-             call prt_mxm('T100:', a3(isc:iec,jsc:jec,11), isc, iec, jsc, jec, 0, 1, 1.,   &
+          if ( idiag%id_t(k100)>0 .and. prt_minmax ) then
+             call prt_mxm('T100:', a3(isc:iec,jsc:jec,k100), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
              if (.not. Atm(n)%gridstruct%bounded_domain)  then
                 tmp = 0.
@@ -2324,7 +2355,7 @@ contains
                       slat = Atm(n)%gridstruct%agrid(i,j,2)*rad2deg
                       if( (slat>-10.0 .and. slat<10.) ) then
                          sar = sar + Atm(n)%gridstruct%area(i,j)
-                         tmp = tmp + a3(i,j,11)*Atm(n)%gridstruct%area(i,j)
+                         tmp = tmp + a3(i,j,k100)*Atm(n)%gridstruct%area(i,j)
                       endif
                    enddo
                 enddo
@@ -2366,7 +2397,7 @@ contains
          if(.not. allocated (a3) ) allocate( a3(isc:iec,jsc:jec,nplev) )
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%pt(isc:iec,jsc:jec,:), nplev,    &
-                               plevs, wz, Atm(n)%peln, id1, a3, 1)
+                               plevs(1:nplev), wz, Atm(n)%peln, id1, a3, 1)
          used=send_data(idiag%id_t_plev, a3(isc:iec,jsc:jec,:), Time)
          deallocate( a3 )
        endif
@@ -3195,8 +3226,8 @@ contains
 
        if ( do_cs_intp ) then
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%ua(isc:iec,jsc:jec,:), nplev,    &
-                               pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
-!                              plevs, Atm(n)%peln, idg, a3, -1)
+                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
+!                              plevs(1:nplev), Atm(n)%peln, idg, a3, -1)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
@@ -3205,7 +3236,7 @@ contains
        if (idiag%id_u_plev>0) then
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%ua(isc:iec,jsc:jec,:), nplev,    &
-                              pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
+                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
          used=send_data(idiag%id_u_plev, a3(isc:iec,jsc:jec,:), Time)
        endif
 
@@ -3222,8 +3253,8 @@ contains
 
        if ( do_cs_intp ) then
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%va(isc:iec,jsc:jec,:), nplev,    &
-                               pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
-!                              plevs, Atm(n)%peln, idg, a3, -1)
+                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
+!                              plevs(1:nplev), Atm(n)%peln, idg, a3, -1)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
@@ -3232,7 +3263,7 @@ contains
        if (idiag%id_v_plev>0) then
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%va(isc:iec,jsc:jec,:), nplev,    &
-                              pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
+                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
          used=send_data(idiag%id_v_plev, a3(isc:iec,jsc:jec,:), Time)
        endif
 
@@ -3249,8 +3280,8 @@ contains
 
        if ( do_cs_intp ) then
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,sphum), nplev, &
-                               pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
-!                              plevs, Atm(n)%peln, idg, a3, 0)
+                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
+!                              plevs(1:nplev), Atm(n)%peln, idg, a3, 0)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
@@ -3259,7 +3290,7 @@ contains
        if (idiag%id_q_plev>0) then
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,sphum), nplev, &
-                              pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
+                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
          used=send_data(idiag%id_q_plev, a3(isc:iec,jsc:jec,:), Time)
        endif
 
@@ -3275,8 +3306,8 @@ contains
        enddo
        if ( do_cs_intp ) then
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%omga(isc:iec,jsc:jec,:), nplev,    &
-                               pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
-!                              plevs, Atm(n)%peln, idg, a3)
+                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
+!                              plevs(1:nplev), Atm(n)%peln, idg, a3)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
@@ -3285,7 +3316,7 @@ contains
        if (idiag%id_omg_plev>0) then
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%omga(isc:iec,jsc:jec,:), nplev,    &
-                              pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
+                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
          used=send_data(idiag%id_omg_plev, a3(isc:iec,jsc:jec,:), Time)
        endif
 
