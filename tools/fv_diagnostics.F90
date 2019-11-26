@@ -17,6 +17,10 @@
 !*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
+
+!!This code is badly in need of refactoring as it has grown too
+!! complicated and the logic too cumbersome --- lmh 22nov19
+
 module fv_diagnostics_mod
 
  use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, radius, kappa, WTMAIR, WTMCO2, &
@@ -2319,11 +2323,11 @@ contains
 
             if(idiag%id_slp>0 )  deallocate( slp )
 
-!           deallocate( a3 )
-          endif
+           deallocate( a3 ) !needed because a3 may need to be re-allocated later with a different number of vertical levels
+        endif
 
-!        deallocate ( wz )
-      endif
+        deallocate ( wz )
+       endif
 
 ! Temperature:
        idg(:) = idiag%id_t(:)
@@ -2335,6 +2339,8 @@ contains
                exit
           endif
        enddo
+
+       if (.not. allocated(wz)) allocate ( wz(isc:iec,jsc:jec,npz+1) )
 
        if ( do_cs_intp ) then  ! log(pe) as the coordinaite for temp re-construction
           if(.not. allocated (a3) ) allocate( a3(isc:iec,jsc:jec,nplev) )
@@ -2368,7 +2374,7 @@ contains
                 endif
              endif
           endif
-          if ( all(idiag%id_t(minloc(abs(levs-200)))>0) .and. prt_minmax ) then
+          if ( idiag%id_t(k200) .and. prt_minmax ) then
              call prt_mxm('T200:', a3(isc:iec,jsc:jec,k200), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
              if (.not. Atm(n)%gridstruct%bounded_domain) then
