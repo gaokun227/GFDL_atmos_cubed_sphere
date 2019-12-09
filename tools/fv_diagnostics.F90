@@ -17,6 +17,10 @@
 !*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
+
+!!This code is badly in need of refactoring as it has grown too
+!! complicated and the logic too cumbersome --- lmh 22nov19
+
 module fv_diagnostics_mod
 
  use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, radius, kappa, WTMAIR, WTMCO2, &
@@ -52,7 +56,7 @@ module fv_diagnostics_mod
                                     close_column_diagnostics_units
 
  use rad_ref_mod, only: rad_ref
-
+ use fv_coarse_graining_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
 
  implicit none
  private
@@ -94,13 +98,14 @@ module fv_diagnostics_mod
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field
 
+ integer, parameter :: MAX_PLEVS = 31
 #ifdef FEWER_PLEVS
- integer, parameter :: nplev = 10 ! 31 ! lmh
+ integer :: nplev = 10 ! 31 ! lmh
 #else
- integer, parameter :: nplev = 31
+ integer :: nplev = 31
 #endif
- integer :: levs(nplev)
- integer :: k100, k200, k500
+ integer :: levs(MAX_PLEVS)
+ integer :: k100, k200, k300, k500
 
  integer, parameter :: MAX_DIAG_COLUMN = 100
  logical, allocatable, dimension(:,:) :: do_debug_diag_column
@@ -123,14 +128,18 @@ module fv_diagnostics_mod
  integer :: num_diag_sonde = 0
  character(100) :: runname = 'test'
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
-
+ integer :: id_dx, id_dy
+ 
  real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
 
-
-
+ ! integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
+ ! integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
+ 
  namelist /fv_diag_column_nml/ do_diag_debug, do_diag_sonde, sound_freq, &
       diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, &
       diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname
+
+ namelist /fv_diag_plevs_nml/ nplev, levs, k100, k200, k500
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -172,7 +181,8 @@ contains
     logical :: exists
     integer :: nlunit, ios
 
-
+    real, allocatable :: dx(:,:), dy(:,:)
+    
     call write_version_number ( 'FV_DIAGNOSTICS_MOD', version )
     idiag => Atm(1)%idiag
 
@@ -328,19 +338,60 @@ contains
 ! SJL note: 31 is enough here; if you need more levels you should do it OFF line
 ! do not add more to prevent the model from slowing down too much.
 #ifdef FEWER_PLEVS
-    levs = (/50,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
+    levs(1:nplev) = (/50,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
     k100 = 2
     k200 = 3
+    k300 = 5
     k500 = 6
 #else
-    levs = (/1,2,3,5,7,10,20,30,50,70,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,925,950,975,1000/)
+    levs(1:nplev) = (/1,2,3,5,7,10,20,30,50,70,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,925,950,975,1000/)
     k100 = 11
     k200 = 13
+    k300 = 15
     k500 = 19
 #endif
+#ifdef INTERNAL_FILE_NML
+    read(input_nml_file, nml=fv_diag_plevs_nml,iostat=ios)
+#else
+    inquire (file=trim(Atm(n)%nml_filename), exist=exists)
+    if (.not. exists) then
+      write(errmsg,*) 'fv_diag_plevs_nml: namelist file ',trim(Atm(n)%nml_filename),' does not exist'
+      call mpp_error(FATAL, errmsg)
+    else
+      open (unit=nlunit, file=Atm(n)%nml_filename, READONLY, status='OLD', iostat=ios)
+    endif
+    rewind(nlunit)
+    read (nlunit, nml=fv_diag_plevs_nml, iostat=ios)
+    close (nlunit)
+#endif    
+    if (nplev > MAX_PLEVS) then
+       if (is_master()) then
+          print*, ' fv_diagnostics: nplev = ', nplev, ' is too large'
+          print*, '                 If you need more than ', MAX_PLEVS, ' levels do vertical'
+          print*, '                 remapping OFF line to reduce load on the model.'
+          call mpp_error(FATAL, ' fv_diagnostics: Stopping model because nplev > MAX_PLEVS')
+       endif
+    endif
+    levs(nplev+1:MAX_PLEVS) = -1.
+    if (abs(levs(k100)-100.) > 1.0) then
+       call mpp_error(NOTE, "fv_diag_plevs_nml: k100 set incorrectly, finding closest entry in plevs")
+       k100 = minloc(abs(levs(1:nplev)-100),1)
+    endif
+    if (abs(levs(k200)-200.) > 1.0) then
+       call mpp_error(NOTE, "fv_diag_plevs_nml: k200 set incorrectly, finding closest entry in plevs")
+       k200 = minloc(abs(levs(1:nplev)-200),1)
+    endif
+    if (abs(levs(k300)-300.) > 1.0) then
+       call mpp_error(NOTE, "fv_diag_plevs_nml: k300 set incorrectly, finding closest entry in plevs")
+       k300 = minloc(abs(levs(1:nplev)-300),1)
+    endif
+    if (abs(levs(k500)-500.) > 1.0) then
+       call mpp_error(NOTE, "fv_diag_plevs_nml: k500 set incorrectly, finding closest entry in plevs")
+       k500 = minloc(abs(levs(1:nplev)-500),1)
+    endif
     !
     
-    id_plev = diag_axis_init('plev', levs(:)*1.0, 'mb', 'z', &
+    id_plev = diag_axis_init('plev', levs(1:nplev)*1.0, 'mb', 'z', &
             'actual pressure level', direction=-1, set_name="dynamics")
 
     axe2(1) = id_xt
@@ -362,6 +413,10 @@ contains
                                          'latitude', 'degrees_N' )
        id_area = register_static_field ( trim(field), 'area', axes(1:2),  &
                                          'cell area', 'm**2' )
+       id_dx = register_static_field( trim(field), 'dx', (/id_x,id_y/), &
+            'dx', 'm')
+       id_dy = register_static_field( trim(field), 'dy', (/id_x,id_y/), &
+            'dy', 'm')
 #ifndef DYNAMICS_ZS
        idiag%id_zsurf = register_static_field ( trim(field), 'zsurf', axes(1:2),  &
                                          'surface height', 'm' )
@@ -419,6 +474,14 @@ contains
        if (id_lont > 0) used = send_data(id_lont, rad2deg*Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,1), Time)
        if (id_latt > 0) used = send_data(id_latt, rad2deg*Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2), Time)
        if (id_area > 0) used = send_data(id_area, Atm(n)%gridstruct%area(isc:iec,jsc:jec), Time)
+
+       allocate(dx(isc:iec+1,jsc:jec+1), dy(isc:iec+1,jsc:jec+1))
+       dx(isc:iec,jsc:jec+1) = Atm(n)%gridstruct%dx(isc:iec,jsc:jec+1)
+       dy(isc:iec+1,jsc:jec) = Atm(n)%gridstruct%dy(isc:iec+1,jsc:jec)
+       if (id_dx > 0) used = send_data(id_dx, dx, Time)
+       if (id_dy > 0) used = send_data(id_dy, dy, Time)
+       deallocate(dx, dy)
+       
 #ifndef DYNAMICS_ZS
        if (idiag%id_zsurf > 0) used = send_data(idiag%id_zsurf, idiag%zsurf, Time)
 #endif
@@ -541,6 +604,23 @@ contains
           idiag%id_qi_dt_gfdlmp = register_diag_field ( trim(field), 'qi_dt_gfdlmp', axes(1:3), Time,           &
                'total ice water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qi_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qi_dt(isc:iec,jsc:jec,npz))
+
+          idiag%id_liq_wat_dt_gfdlmp = register_diag_field ( trim(field), 'liq_wat_dt_gfdlmp', axes(1:3), Time,           &
+               'liquid water tracer tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_liq_wat_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%liq_wat_dt(isc:iec,jsc:jec,npz))
+          idiag%id_ice_wat_dt_gfdlmp = register_diag_field ( trim(field), 'ice_dt_wat_gfdlmp', axes(1:3), Time,           &
+               'ice water tracer tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_ice_wat_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%ice_wat_dt(isc:iec,jsc:jec,npz))
+          
+          idiag%id_qr_dt_gfdlmp = register_diag_field ( trim(field), 'qr_dt_gfdlmp', axes(1:3), Time,           &
+               'rain water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qr_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qr_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qg_dt_gfdlmp = register_diag_field ( trim(field), 'qg_dt_gfdlmp', axes(1:3), Time,           &
+               'graupel tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qg_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qg_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qs_dt_gfdlmp = register_diag_field ( trim(field), 'qs_dt_gfdlmp', axes(1:3), Time,           &
+               'snow water tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qs_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%qs_dt(isc:iec,jsc:jec,npz))
           idiag%id_T_dt_gfdlmp = register_diag_field ( trim(field), 'T_dt_gfdlmp', axes(1:3), Time,           &
                'temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
           if (idiag%id_T_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%T_dt(isc:iec,jsc:jec,npz))
@@ -570,6 +650,24 @@ contains
           idiag%id_qi_dt_phys = register_diag_field ( trim(field), 'qi_dt_phys', axes(1:3), Time,           &
                'total ice water tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qi_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qi_dt(isc:iec,jsc:jec,npz))
+
+          idiag%id_liq_wat_dt_phys = register_diag_field ( trim(field), 'liq_wat_dt_phys', axes(1:3), Time,           &
+               'liquid water tracer tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_liq_wat_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_liq_wat_dt(isc:iec,jsc:jec,npz))
+          idiag%id_ice_wat_dt_phys = register_diag_field ( trim(field), 'ice_wat_dt_phys', axes(1:3), Time,           &
+               'ice water tracer tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_ice_wat_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_ice_wat_dt(isc:iec,jsc:jec,npz))
+          
+          idiag%id_qr_dt_phys = register_diag_field ( trim(field), 'qr_dt_phys', axes(1:3), Time,           &
+               'rain water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qr_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qr_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qg_dt_phys = register_diag_field ( trim(field), 'qg_dt_phys', axes(1:3), Time,           &
+               'graupel tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qg_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qg_dt(isc:iec,jsc:jec,npz))
+          idiag%id_qs_dt_phys = register_diag_field ( trim(field), 'qs_dt_phys', axes(1:3), Time,           &
+               'snow water tendency from physics', 'kg/kg/s', missing_value=missing_value )
+          if (idiag%id_qs_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qs_dt(isc:iec,jsc:jec,npz))
+          
        endif
 
 !
@@ -612,12 +710,12 @@ contains
 
 
       ! flag for calculation of geopotential
-      if ( all(idiag%id_h(minloc(abs(levs-10)))>0)  .or. all(idiag%id_h(minloc(abs(levs-50)))>0)  .or. &
-           all(idiag%id_h(minloc(abs(levs-100)))>0) .or. all(idiag%id_h(minloc(abs(levs-200)))>0) .or. &
-           all(idiag%id_h(minloc(abs(levs-250)))>0) .or. all(idiag%id_h(minloc(abs(levs-300)))>0) .or. &
-           all(idiag%id_h(minloc(abs(levs-500)))>0) .or. all(idiag%id_h(minloc(abs(levs-700)))>0) .or. &
-           all(idiag%id_h(minloc(abs(levs-850)))>0) .or. all(idiag%id_h(minloc(abs(levs-1000)))>0).or. &
-           idiag%id_h_plev>0 .or. idiag%id_hght3d>0) then
+!!$      if ( all(idiag%id_h(minloc(abs(levs-10)))>0)  .or. all(idiag%id_h(minloc(abs(levs-50)))>0)  .or. &
+!!$           all(idiag%id_h(minloc(abs(levs-100)))>0) .or. all(idiag%id_h(minloc(abs(levs-200)))>0) .or. &
+!!$           all(idiag%id_h(minloc(abs(levs-250)))>0) .or. all(idiag%id_h(minloc(abs(levs-300)))>0) .or. &
+!!$           all(idiag%id_h(minloc(abs(levs-500)))>0) .or. all(idiag%id_h(minloc(abs(levs-700)))>0) .or. &
+!!$           all(idiag%id_h(minloc(abs(levs-850)))>0) .or. all(idiag%id_h(minloc(abs(levs-1000)))>0).or. &
+      if ( any(idiag%id_h > 0) .or. idiag%id_h_plev>0 .or. idiag%id_hght3d>0) then
            idiag%id_any_hght = 1
       else
            idiag%id_any_hght = 0
@@ -1204,6 +1302,29 @@ contains
 #ifndef GFS_PHYS
     if(idiag%id_theta_e >0 ) call qsmith_init
 #endif
+
+    ! These diagnostics do not work, because of an FMS issue.  Maybe we could
+    ! implement them by outputting them on the grid corners (and filling the
+    ! empty rows or columns with missing value flags)?
+    ! ---------------
+    ! id_d_grid_ucomp = register_diag_field('dynamics', &
+    !      'd_grid_ucomp', (/ id_xt, id_y, id_pfull /), &
+    !      Time, 'D grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    ! id_d_grid_vcomp = register_diag_field('dynamics', &
+    !      'd_grid_vcomp', (/ id_x, id_yt, id_pfull /), &
+    !      Time, 'D grid meridional velocity', 'm/s', missing_value=missing_value)
+
+    ! id_c_grid_ucomp = register_diag_field('dynamics', &
+    !      'c_grid_ucomp', (/ id_x, id_yt, id_pfull /), &
+    !      Time, 'C grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    ! id_c_grid_vcomp = register_diag_field('dynamics', &
+    !      'c_grid_vcomp', (/ id_xt, id_y, id_pfull /), &
+    !      Time, 'C grid meridional velocity', 'm/s', missing_value=missing_value)
+    
+    call fv_coarse_grained_diagnostics_init(Atm, Time, id_pfull)
+    
  end subroutine fv_diag_init
 
 
@@ -1309,7 +1430,7 @@ contains
     real :: tmp2, pvsum, e2, einf, qm, mm, maxdbz, allmax, rgrav, cv_vapor
     real, allocatable :: cvm(:)
     integer :: Cl, Cl2, k1, k2
-
+    
     !!! CLEANUP: does it really make sense to have this routine loop over Atm% anymore? We assume n=1 below anyway
 
 ! cat15: SLP<1000; srf_wnd>ws_0; vort>vort_c0
@@ -1512,6 +1633,14 @@ contains
 !    do n = 1, ntileMe
     n = 1
 
+    ! ! D grid wind diagnostics
+    ! if (id_d_grid_ucomp > 0) used = send_data(id_d_grid_ucomp, Atm(n)%u(isc:iec,jsc:jec+1,1:npz), Time)
+    ! if (id_d_grid_vcomp > 0) used = send_data(id_d_grid_vcomp, Atm(n)%v(isc:iec+1,jsc:jec,1:npz), Time)
+
+    ! ! C grid wind diagnostics
+    ! if (id_c_grid_ucomp > 0) used = send_data(id_c_grid_ucomp, Atm(n)%uc(isc:iec+1,jsc:jec,1:npz), Time)
+    ! if (id_c_grid_vcomp > 0) used = send_data(id_c_grid_vcomp, Atm(n)%vc(isc:iec,jsc:jec+1,1:npz), Time)
+    
 #ifdef DYNAMICS_ZS
        if(idiag%id_zsurf > 0)  used=send_data(idiag%id_zsurf, idiag%zsurf, Time)
 #endif
@@ -1525,6 +1654,11 @@ contains
        if (idiag%id_qv_dt_gfdlmp > 0) used=send_data(idiag%id_qv_dt_gfdlmp, Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_ql_dt_gfdlmp > 0) used=send_data(idiag%id_ql_dt_gfdlmp, Atm(n)%inline_mp%ql_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_qi_dt_gfdlmp > 0) used=send_data(idiag%id_qi_dt_gfdlmp, Atm(n)%inline_mp%qi_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_liq_wat_dt_gfdlmp > 0) used=send_data(idiag%id_liq_wat_dt_gfdlmp, Atm(n)%inline_mp%liq_wat_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_ice_wat_dt_gfdlmp > 0) used=send_data(idiag%id_ice_wat_dt_gfdlmp, Atm(n)%inline_mp%ice_wat_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_qr_dt_gfdlmp > 0) used=send_data(idiag%id_qr_dt_gfdlmp, Atm(n)%inline_mp%qr_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_qg_dt_gfdlmp > 0) used=send_data(idiag%id_qg_dt_gfdlmp, Atm(n)%inline_mp%qg_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_qs_dt_gfdlmp > 0) used=send_data(idiag%id_qs_dt_gfdlmp, Atm(n)%inline_mp%qs_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_t_dt_gfdlmp > 0)  used=send_data(idiag%id_t_dt_gfdlmp,  Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_u_dt_gfdlmp > 0)  used=send_data(idiag%id_u_dt_gfdlmp,  Atm(n)%inline_mp%u_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_v_dt_gfdlmp > 0)  used=send_data(idiag%id_v_dt_gfdlmp,  Atm(n)%inline_mp%v_dt(isc:iec,jsc:jec,1:npz), Time)
@@ -1532,6 +1666,8 @@ contains
        if (idiag%id_qv_dt_phys > 0) used=send_data(idiag%id_qv_dt_phys, Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_ql_dt_phys > 0) used=send_data(idiag%id_ql_dt_phys, Atm(n)%phys_diag%phys_ql_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_qi_dt_phys > 0) used=send_data(idiag%id_qi_dt_phys, Atm(n)%phys_diag%phys_qi_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_liq_wat_dt_phys > 0) used=send_data(idiag%id_liq_wat_dt_phys, Atm(n)%phys_diag%phys_liq_wat_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (idiag%id_ice_wat_dt_phys > 0) used=send_data(idiag%id_ice_wat_dt_phys, Atm(n)%phys_diag%phys_ice_wat_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_t_dt_phys > 0)  used=send_data(idiag%id_t_dt_phys,  Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_u_dt_phys > 0)  used=send_data(idiag%id_u_dt_phys,  Atm(n)%phys_diag%phys_u_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_v_dt_phys > 0)  used=send_data(idiag%id_v_dt_phys,  Atm(n)%phys_diag%phys_v_dt(isc:iec,jsc:jec,1:npz), Time)
@@ -1556,7 +1692,7 @@ contains
             idiag%id_uh03>0 .or. idiag%id_uh25>0) then
           call get_vorticity(isc, iec, jsc, jec, isd, ied, jsd, jed, npz, Atm(n)%u, Atm(n)%v, wk, &
                Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy, Atm(n)%gridstruct%rarea)
-
+          
           if(idiag%id_vort >0) used=send_data(idiag%id_vort,  wk, Time)
           if(idiag%id_vorts>0) used=send_data(idiag%id_vorts, wk(isc:iec,jsc:jec,npz), Time)
 
@@ -2028,18 +2164,19 @@ contains
 
              idg(:) = idiag%id_h(:)
 
+             !Determine which levels have been registered and need writing out
              if ( idiag%id_tm>0 ) then
-                  idg(minloc(abs(levs-300))) = 1  ! 300-mb
-                  idg(minloc(abs(levs-500))) = 1  ! 500-mb
+                  idg(k300) = 1  ! 300-mb
+                  idg(k500) = 1  ! 500-mb
              else
-                  idg(minloc(abs(levs-300))) = idiag%id_h(minloc(abs(levs-300)))
-                  idg(minloc(abs(levs-500))) = idiag%id_h(minloc(abs(levs-500)))
+                  idg(k300) = idiag%id_h(k300)
+                  idg(k500) = idiag%id_h(k500)
              endif
 
              call get_height_given_pressure(isc, iec, jsc, jec, npz, wz, nplev, idg, plevs, Atm(n)%peln, a3)
              ! reset 
-             idg(minloc(abs(levs-300))) = idiag%id_h(minloc(abs(levs-300)))
-             idg(minloc(abs(levs-500))) = idiag%id_h(minloc(abs(levs-500)))
+             idg(k300) = idiag%id_h(k300)
+             idg(k500) = idiag%id_h(k500)
 
              do i=1,nplev
                 if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
@@ -2053,10 +2190,10 @@ contains
 
              if( prt_minmax ) then
   
-                if(all(idiag%id_h(minloc(abs(levs-100)))>0))  &
+                if(idiag%id_h(k100)>0 .or. (idiag%id_h_plev>0 .and. k100>0))  &
                 call prt_mxm('Z100',a3(isc:iec,jsc:jec,k100),isc,iec,jsc,jec,0,1,1.E-3,Atm(n)%gridstruct%area_64,Atm(n)%domain)
 
-                if(all(idiag%id_h(minloc(abs(levs-500)))>0))  then
+                if(idiag%id_h(k500)>0 .or. (idiag%id_h_plev>0 .and. k500>0))  then
                    if (Atm(n)%gridstruct%bounded_domain) then
                       call prt_mxm('Z500',a3(isc:iec,jsc:jec,k500),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
                    else
@@ -2069,30 +2206,16 @@ contains
 
              ! mean virtual temp 300mb to 500mb
              if( idiag%id_tm>0 ) then
-                k1 = -1
-                k2 = -1
-                do k=1,nplev
-                   if (abs(levs(k)-500.) < 1.) then
-                      k2 = k
-                      exit
-                   endif
-                enddo
-                do k=1,nplev
-                   if (abs(levs(k)-300.) < 1.) then
-                      k1 = k
-                      exit
-                   endif
-                enddo
-                if (k1 <= 0 .or. k2 <= 0) then
-                   call mpp_error(NOTE, "Could not find levs for 300--500 mb mean temperature, setting to -1")
-                   a2 = -1.
+                if ( (idiag%id_h(k500) <= 0 .or. idiag%id_h(k300) <= 0) .and. (idiag%id_h_plev>0 .and. (k300<=0 .or. k500<=0))) then
+                   call mpp_error(NOTE, "Could not find levs for 300--500 mb mean temperature, setting to missing_value")
+                   a2 = missing_value
                 else
                  do j=jsc,jec
                     do i=isc,iec
-                       a2(i,j) = grav*(a3(i,j,k2)-a3(i,j,k1))/(rdgas*(plevs(k1)-plevs(k2)))
+                       a2(i,j) = grav*(a3(i,j,k500)-a3(i,j,k300))/(rdgas*(plevs(k300)-plevs(k500)))
                     enddo
                  enddo
-                endif
+              endif
                 used = send_data ( idiag%id_tm, a2, Time )
              endif
 
@@ -2155,7 +2278,7 @@ contains
                 enddo
                 call prt_maxmin('ATL Deps', depress, isc, iec, jsc, jec, 0,   1, 1.)
              endif
-            endif
+          endif
 
 ! Cat 2-5:
             if(idiag%id_c25>0) then
@@ -2218,11 +2341,11 @@ contains
 
             if(idiag%id_slp>0 )  deallocate( slp )
 
-!           deallocate( a3 )
-          endif
+           deallocate( a3 ) !needed because a3 may need to be re-allocated later with a different number of vertical levels
+        endif
 
-!        deallocate ( wz )
-      endif
+        deallocate ( wz )
+       endif
 
 ! Temperature:
        idg(:) = idiag%id_t(:)
@@ -2235,15 +2358,17 @@ contains
           endif
        enddo
 
+       if (.not. allocated(wz)) allocate ( wz(isc:iec,jsc:jec,npz+1) )
+
        if ( do_cs_intp ) then  ! log(pe) as the coordinaite for temp re-construction
           if(.not. allocated (a3) ) allocate( a3(isc:iec,jsc:jec,nplev) )
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%pt(isc:iec,jsc:jec,:), nplev,    &
-                                plevs, wz, Atm(n)%peln, idg, a3, 1)
+                                plevs(1:nplev), wz, Atm(n)%peln, idg, a3, 1)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
-          if ( all(idiag%id_t(minloc(abs(levs-100)))>0) .and. prt_minmax ) then
-             call prt_mxm('T100:', a3(isc:iec,jsc:jec,11), isc, iec, jsc, jec, 0, 1, 1.,   &
+          if ( idiag%id_t(k100)>0 .and. prt_minmax ) then
+             call prt_mxm('T100:', a3(isc:iec,jsc:jec,k100), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
              if (.not. Atm(n)%gridstruct%bounded_domain)  then
                 tmp = 0.
@@ -2254,7 +2379,7 @@ contains
                       slat = Atm(n)%gridstruct%agrid(i,j,2)*rad2deg
                       if( (slat>-10.0 .and. slat<10.) ) then
                          sar = sar + Atm(n)%gridstruct%area(i,j)
-                         tmp = tmp + a3(i,j,11)*Atm(n)%gridstruct%area(i,j)
+                         tmp = tmp + a3(i,j,k100)*Atm(n)%gridstruct%area(i,j)
                       endif
                    enddo
                 enddo
@@ -2267,7 +2392,7 @@ contains
                 endif
              endif
           endif
-          if ( all(idiag%id_t(minloc(abs(levs-200)))>0) .and. prt_minmax ) then
+          if ( idiag%id_t(k200) .and. prt_minmax ) then
              call prt_mxm('T200:', a3(isc:iec,jsc:jec,k200), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
              if (.not. Atm(n)%gridstruct%bounded_domain) then
@@ -2296,7 +2421,7 @@ contains
          if(.not. allocated (a3) ) allocate( a3(isc:iec,jsc:jec,nplev) )
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%pt(isc:iec,jsc:jec,:), nplev,    &
-                               plevs, wz, Atm(n)%peln, id1, a3, 1)
+                               plevs(1:nplev), wz, Atm(n)%peln, id1, a3, 1)
          used=send_data(idiag%id_t_plev, a3(isc:iec,jsc:jec,:), Time)
          deallocate( a3 )
        endif
@@ -3126,8 +3251,8 @@ contains
 
        if ( do_cs_intp ) then
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%ua(isc:iec,jsc:jec,:), nplev,    &
-                               pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
-!                              plevs, Atm(n)%peln, idg, a3, -1)
+                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
+!                              plevs(1:nplev), Atm(n)%peln, idg, a3, -1)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
@@ -3136,7 +3261,7 @@ contains
        if (idiag%id_u_plev>0) then
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%ua(isc:iec,jsc:jec,:), nplev,    &
-                              pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
+                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
          used=send_data(idiag%id_u_plev, a3(isc:iec,jsc:jec,:), Time)
        endif
 
@@ -3153,8 +3278,8 @@ contains
 
        if ( do_cs_intp ) then
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%va(isc:iec,jsc:jec,:), nplev,    &
-                               pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
-!                              plevs, Atm(n)%peln, idg, a3, -1)
+                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
+!                              plevs(1:nplev), Atm(n)%peln, idg, a3, -1)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
@@ -3163,7 +3288,7 @@ contains
        if (idiag%id_v_plev>0) then
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%va(isc:iec,jsc:jec,:), nplev,    &
-                              pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
+                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
          used=send_data(idiag%id_v_plev, a3(isc:iec,jsc:jec,:), Time)
        endif
 
@@ -3180,8 +3305,8 @@ contains
 
        if ( do_cs_intp ) then
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,sphum), nplev, &
-                               pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
-!                              plevs, Atm(n)%peln, idg, a3, 0)
+                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
+!                              plevs(1:nplev), Atm(n)%peln, idg, a3, 0)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
@@ -3190,7 +3315,7 @@ contains
        if (idiag%id_q_plev>0) then
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,sphum), nplev, &
-                              pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
+                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
          used=send_data(idiag%id_q_plev, a3(isc:iec,jsc:jec,:), Time)
        endif
 
@@ -3206,8 +3331,8 @@ contains
        enddo
        if ( do_cs_intp ) then
           call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%omga(isc:iec,jsc:jec,:), nplev,    &
-                               pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
-!                              plevs, Atm(n)%peln, idg, a3)
+                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, -1)
+!                              plevs(1:nplev), Atm(n)%peln, idg, a3)
           do i=1,nplev
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
@@ -3216,7 +3341,7 @@ contains
        if (idiag%id_omg_plev>0) then
          id1(:) = 1
          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%omga(isc:iec,jsc:jec,:), nplev,    &
-                              pout, wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
+                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, -1)
          used=send_data(idiag%id_omg_plev, a3(isc:iec,jsc:jec,:), Time)
        endif
 
@@ -3472,7 +3597,8 @@ contains
 
     call nullify_domain()
 
-
+    call fv_coarse_grained_diagnostics(Atm, Time, zvir)
+    
  end subroutine fv_diag
 
  subroutine wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, us, vs, ws_max, domain)

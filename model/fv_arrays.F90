@@ -97,8 +97,12 @@ module fv_arrays_mod
 
      integer :: id_prer, id_prei, id_pres, id_preg
      integer :: id_qv_dt_gfdlmp, id_T_dt_gfdlmp, id_ql_dt_gfdlmp, id_qi_dt_gfdlmp
+     integer :: id_qr_dt_gfdlmp, id_qg_dt_gfdlmp, id_qs_dt_gfdlmp
+     integer :: id_liq_wat_dt_gfdlmp, id_ice_wat_dt_gfdlmp
      integer :: id_u_dt_gfdlmp, id_v_dt_gfdlmp
      integer :: id_t_dt_phys, id_qv_dt_phys, id_ql_dt_phys, id_qi_dt_phys, id_u_dt_phys, id_v_dt_phys
+     integer :: id_qr_dt_phys, id_qg_dt_phys, id_qs_dt_phys
+     integer :: id_liq_wat_dt_phys, id_ice_wat_dt_phys
      integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
 
      integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w
@@ -260,6 +264,7 @@ module fv_arrays_mod
 !-----------------------------------------------------------------------
 ! Grid descriptor file setup
 !-----------------------------------------------------------------------
+   character(len=16) :: restart_resolution = 'both'
    character(len=80) :: grid_name = 'Gnomonic'
    character(len=120):: grid_file = 'Inline'
   integer      :: grid_type = 0     ! -1: read from file; 0: ED Gnomonic
@@ -530,7 +535,6 @@ module fv_arrays_mod
   !f1p
   logical  :: adj_mass_vmr = .false. !TER: This is to reproduce answers for verona patch.  This default can be changed
                                      !     to .true. in the next city release if desired
-  
   !integer, pointer :: test_case
   !real,    pointer :: alpha
 
@@ -646,6 +650,11 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: qv_dt(:,:,:)
     real, _ALLOCATABLE :: ql_dt(:,:,:)
     real, _ALLOCATABLE :: qi_dt(:,:,:)
+    real, _ALLOCATABLE :: liq_wat_dt(:,:,:)
+    real, _ALLOCATABLE :: ice_wat_dt(:,:,:)
+    real, _ALLOCATABLE :: qr_dt(:,:,:)
+    real, _ALLOCATABLE :: qg_dt(:,:,:)
+    real, _ALLOCATABLE :: qs_dt(:,:,:)
     real, _ALLOCATABLE :: t_dt(:,:,:)
     real, _ALLOCATABLE :: u_dt(:,:,:)
     real, _ALLOCATABLE :: v_dt(:,:,:)
@@ -657,11 +666,57 @@ module fv_arrays_mod
      real, _ALLOCATABLE :: phys_qv_dt(:,:,:)
      real, _ALLOCATABLE :: phys_ql_dt(:,:,:)
      real, _ALLOCATABLE :: phys_qi_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_liq_wat_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_ice_wat_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_qr_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_qg_dt(:,:,:)
+     real, _ALLOCATABLE :: phys_qs_dt(:,:,:)
      real, _ALLOCATABLE :: phys_u_dt(:,:,:)
      real, _ALLOCATABLE :: phys_v_dt(:,:,:)
-
+     
   end type phys_diag_type
 
+  type nudge_diag_type
+
+     real, _ALLOCATABLE :: nudge_t_dt(:,:,:)
+     real, _ALLOCATABLE :: nudge_ps_dt(:,:)
+     real, _ALLOCATABLE :: nudge_delp_dt(:,:,:)
+     real, _ALLOCATABLE :: nudge_u_dt(:,:,:)
+     real, _ALLOCATABLE :: nudge_v_dt(:,:,:)
+
+  end type nudge_diag_type
+
+  type coarse_restart_type
+
+     real, _ALLOCATABLE :: u(:,:,:)
+     real, _ALLOCATABLE :: v(:,:,:)
+     real, _ALLOCATABLE :: w(:,:,:)
+     real, _ALLOCATABLE :: pt(:,:,:)
+     real, _ALLOCATABLE :: q(:,:,:,:)
+     real, _ALLOCATABLE :: qdiag(:,:,:,:)
+     real, _ALLOCATABLE :: delz(:,:,:)
+     real, _ALLOCATABLE :: phis(:,:)
+     real, _ALLOCATABLE :: delp(:,:,:)
+     real, _ALLOCATABLE :: ua(:,:,:)
+     real, _ALLOCATABLE :: va(:,:,:)
+     real, _ALLOCATABLE :: u_srf(:,:)
+     real, _ALLOCATABLE :: v_srf(:,:)
+     real, _ALLOCATABLE :: sgh(:,:)
+     real, _ALLOCATABLE :: oro(:,:)
+     real, _ALLOCATABLE :: ze0(:,:,:)
+     
+     logical :: allocated = .false.
+     
+     type(restart_file_type) :: fv_restart_coarse
+     type(restart_file_type) :: sst_restart_coarse
+     type(restart_file_type) :: fv_tile_restart_coarse
+     type(restart_file_type) :: rsf_restart_coarse
+     type(restart_file_type) :: mg_restart_coarse
+     type(restart_file_type) :: lnd_restart_coarse
+     type(restart_file_type) :: tra_restart_coarse
+     
+  end type coarse_restart_type
+  
   interface allocate_fv_nest_BC_type
      module procedure allocate_fv_nest_BC_type_3D
      module procedure allocate_fv_nest_BC_type_3D_Atm
@@ -831,7 +886,6 @@ module fv_arrays_mod
 !!!!!!!!!!!!!!
      type(restart_file_type) :: Fv_restart, SST_restart, Fv_tile_restart, &
           Rsf_restart, Mg_restart, Lnd_restart, Tra_restart
-
      type(fv_nest_type) :: neststruct
 
      !Hold on to coarse-grid global grid, so we don't have to waste processor time getting it again when starting to do grid nesting
@@ -841,12 +895,11 @@ module fv_arrays_mod
 
      type(inline_mp_type) :: inline_mp
      type(phys_diag_type) :: phys_diag
-
-
-  end type fv_atmos_type
-
+     type(nudge_diag_type) :: nudge_diag
+     type(coarse_restart_type) :: coarse_restart
+     
+  end type fv_atmos_type  
 contains
-
   subroutine allocate_fv_atmos_type(Atm, isd_in, ied_in, jsd_in, jed_in, is_in, ie_in, js_in, je_in, &
        npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, dummy, alloc_2d, ngrids_in)
 
@@ -865,8 +918,7 @@ contains
 
     !For 2D utility arrays
     integer:: isd_2d, ied_2d, jsd_2d, jed_2d, is_2d, ie_2d, js_2d, je_2d
-    integer:: npx_2d, npy_2d, npz_2d, ndims_2d, ncnst_2d, nq_2d, ng_2d
-
+    integer:: npx_2d, npy_2d, npz_2d, ndims_2d, ncnst_2d, nq_2d, ng_2d    
     integer :: i,j,k, ns, n
 
     if (Atm%allocated) return
@@ -1303,7 +1355,7 @@ contains
 
     Atm%allocated = .true.
     if (dummy) Atm%dummy = .true.
-    
+
   end subroutine allocate_fv_atmos_type
 
   subroutine deallocate_fv_atmos_type(Atm)
@@ -1314,7 +1366,6 @@ contains
     integer :: n
 
     if (.not.Atm%allocated) return
-
     deallocate (    Atm%u )
     deallocate (    Atm%v )
     deallocate (   Atm%pt )
@@ -1516,12 +1567,37 @@ contains
     if (Atm%flagstruct%grid_type < 4) then
        if(allocated(Atm%grid_global)) deallocate(Atm%grid_global)
     end if
+
+    call deallocate_coarse_restart_type(Atm)
     
     Atm%allocated = .false.
 
   end subroutine deallocate_fv_atmos_type
 
+  subroutine deallocate_coarse_restart_type(Atm)
+    type(fv_atmos_type), intent(INOUT) :: Atm
 
+    if (Atm%coarse_restart%allocated) then
+       deallocate(Atm%coarse_restart%u)
+       deallocate(Atm%coarse_restart%v)
+       deallocate(Atm%coarse_restart%ua)
+       deallocate(Atm%coarse_restart%va)
+       deallocate(Atm%coarse_restart%u_srf)
+       deallocate(Atm%coarse_restart%v_srf)
+       deallocate(Atm%coarse_restart%w)
+       deallocate(Atm%coarse_restart%delp)
+       deallocate(Atm%coarse_restart%delz)
+       deallocate(Atm%coarse_restart%pt)
+       deallocate(Atm%coarse_restart%q)
+       deallocate(Atm%coarse_restart%qdiag)
+       deallocate(Atm%coarse_restart%sgh)
+       deallocate(Atm%coarse_restart%oro)
+       deallocate(Atm%coarse_restart%phis)
+       deallocate(Atm%coarse_restart%ze0)
+    endif
+    
+  end subroutine deallocate_coarse_restart_type
+  
 subroutine allocate_fv_nest_BC_type_3D_Atm(BC,Atm,ns,istag,jstag,dummy)
 
   type(fv_nest_BC_type_3D), intent(INOUT) :: BC

@@ -249,13 +249,14 @@ contains
     tile_id = mpp_get_tile_id( fv_domain )
 
     call get_tile_string(fname, 'INPUT/fv_core.res'//trim(gn)//'.tile', tile_id(n), '.nc' )
-    if (mpp_pe() == mpp_root_pe()) print*, 'external_ic: looking for ', fname
+    call mpp_error(NOTE, 'external_ic: looking for '//fname)
     
        
     if( file_exist(fname) ) then
        call read_data(fname, 'phis', Atm%phis(is:ie,js:je),      &
             domain=fv_domain, tile_count=n)
     else
+       call mpp_error(NOTE, fname//' not found; generating terrain from USGS data')
        call surfdrv(  Atm%npx, Atm%npy, Atm%gridstruct%grid_64, Atm%gridstruct%agrid_64,   &
                          Atm%gridstruct%area_64, Atm%gridstruct%dx, Atm%gridstruct%dy, &
                          Atm%gridstruct%dxa, Atm%gridstruct%dya, &
@@ -264,7 +265,6 @@ contains
                          Atm%neststruct%nested, Atm%gridstruct%bounded_domain, &
                          Atm%neststruct%npx_global, Atm%domain, &
                          Atm%flagstruct%grid_number, Atm%bd )
-       call mpp_error(NOTE,'terrain datasets generated using USGS data')
     endif
 
 
