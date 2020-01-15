@@ -160,7 +160,7 @@ contains
       integer :: rainwat = -999, snowwat = -999, graupel = -999, cld_amt = -999
       integer :: theta_d = -999
       logical used, last_step, do_omega
-      integer, parameter :: max_packs=12
+      integer, parameter :: max_packs=13
       type(group_halo_update_type), save :: i_pack(max_packs)
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
@@ -331,7 +331,7 @@ contains
 !---------------------
 ! Compute Total Energy
 !---------------------
-      if ( consv_te > 0.  .and. (.not.do_adiabatic_init) ) then
+      if ( (consv_te > 0. .or. idiag%id_te>0)  .and. (.not.do_adiabatic_init) ) then
            call compute_total_energy(is, ie, js, je, isd, ied, jsd, jed, npz,        &
                                      u, v, w, delz, pt, delp, q, dp1, pe, peln, phis, &
                                      gridstruct%rsin2, gridstruct%cosa_s, &
@@ -345,7 +345,7 @@ contains
            endif
       endif
 
-      if( (flagstruct%consv_am.or.idiag%id_amdt>0) .and. (.not.do_adiabatic_init) ) then
+      if( (flagstruct%consv_am .or. idiag%id_amdt>0) .and. (.not.do_adiabatic_init) ) then
           call compute_aam(npz, is, ie, js, je, isd, ied, jsd, jed, gridstruct, bd,   &
                            ptop, ua, va, u, v, delp, teq, ps2, m_fac)
       endif
@@ -452,6 +452,9 @@ contains
             enddo
          enddo
       enddo
+      if ( flagstruct%trdm2 > 1.e-4 ) then
+         call start_group_halo_update(i_pack(13), dp1, domain)
+      endif
 
       if ( n_map==k_split ) last_step = .true.
 
@@ -489,18 +492,18 @@ contains
        !!! CLEANUP: merge these two calls?
        if (gridstruct%bounded_domain) then
          call tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
-                        flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), &
+                        flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), i_pack(13), &
                         flagstruct%nord_tr, flagstruct%trdm2, &
                         k_split, neststruct, parent_grid, n_map, flagstruct%lim_fac)
        else
          if ( flagstruct%z_tracer ) then
-         call tracer_2d_1L(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
-                        flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), &
-                        flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac)
+            call tracer_2d_1L(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
+                 flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), i_pack(13), &
+                 flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac)
          else
-         call tracer_2d(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
-                        flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), &
-                        flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac)
+            call tracer_2d(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
+                 flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), i_pack(13), &
+                 flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac)
          endif
        endif
                                              call timing_off('tracer_2d')
@@ -547,6 +550,17 @@ contains
                                                   call avec_timer_start(6)
 #endif
 
+     if ( flagstruct%fv_debug ) then
+        if (is_master()) write(*,'(A, I3, A1, I3)') 'before remap k_split ', n_map, '/', k_split
+       call prt_mxm('T_ldyn',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
+       call prt_mxm('SPHUM_ldyn',   q(isd,jsd,1,sphum  ), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       call prt_mxm('liq_wat_ldyn', q(isd,jsd,1,liq_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       call prt_mxm('rainwat_ldyn', q(isd,jsd,1,rainwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       call prt_mxm('ice_wat_ldyn', q(isd,jsd,1,ice_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       call prt_mxm('snowwat_ldyn', q(isd,jsd,1,snowwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       call prt_mxm('graupel_ldyn', q(isd,jsd,1,graupel), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+     endif
+
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
                      pkz, pk, mdt, bdt, npx, npy, npz, is,ie,js,je, isd,ied,jsd,jed,       &
                      nr, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
@@ -562,7 +576,7 @@ contains
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split
-       call prt_mxm('T_dyn_a3',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
+       call prt_mxm('T_dyn_a4',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
        call prt_mxm('SPHUM_dyn',   q(isd,jsd,1,sphum  ), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
        call prt_mxm('liq_wat_dyn', q(isd,jsd,1,liq_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
        call prt_mxm('rainwat_dyn', q(isd,jsd,1,rainwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
@@ -665,11 +679,13 @@ contains
                        ptop, ua, va, u, v, delp, te_2d, ps, m_fac)
       if( idiag%id_aam>0 ) then
           used = send_data(idiag%id_aam, te_2d, fv_time)
+       endif
+       if ( idiag%id_aam>0 .or. flagstruct%consv_am ) then
           if ( prt_minmax ) then
              gam = g_sum( domain, te_2d, is, ie, js, je, ng, gridstruct%area_64, 0) 
              if( is_master() ) write(6,*) 'Total AAM =', gam
           endif
-      endif
+       endif
   endif
 
   if( (flagstruct%consv_am.or.idiag%id_amdt>0) .and. (.not.do_adiabatic_init)  ) then
