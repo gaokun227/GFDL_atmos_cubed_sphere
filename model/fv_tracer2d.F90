@@ -105,10 +105,10 @@ subroutine tracer_2d_1L(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, n
       rarea => gridstruct%rarea
 
       sin_sg => gridstruct%sin_sg
-      dxa    => gridstruct%dxa 
-      dya    => gridstruct%dya 
-      dx     => gridstruct%dx  
-      dy     => gridstruct%dy  
+      dxa    => gridstruct%dxa
+      dya    => gridstruct%dya
+      dx     => gridstruct%dx
+      dy     => gridstruct%dy
 
 !$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,cx,xfx,dxa,dy, &
 !$OMP                                  sin_sg,cy,yfx,dya,dx,cmax)
@@ -330,12 +330,12 @@ subroutine tracer_2d(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy,
       rarea => gridstruct%rarea
 
       sin_sg => gridstruct%sin_sg
-      dxa    => gridstruct%dxa 
-      dya    => gridstruct%dya 
-      dx     => gridstruct%dx  
-      dy     => gridstruct%dy  
+      dxa    => gridstruct%dxa
+      dya    => gridstruct%dya
+      dx     => gridstruct%dx
+      dy     => gridstruct%dy
 
-!$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,cx,xfx,dxa,dy, &  
+!$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,cx,xfx,dxa,dy, &
 !$OMP                                  sin_sg,cy,yfx,dya,dx,cmax,q_split,ksplt)
     do k=1,npz
        do j=jsd,jed
@@ -574,10 +574,10 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
       rarea => gridstruct%rarea
 
       sin_sg => gridstruct%sin_sg
-      dxa    => gridstruct%dxa 
-      dya    => gridstruct%dya 
-      dx     => gridstruct%dx  
-      dy     => gridstruct%dy  
+      dxa    => gridstruct%dxa
+      dya    => gridstruct%dya
+      dx     => gridstruct%dx
+      dy     => gridstruct%dy
 
 !$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,cx,xfx,dxa,dy, &
 !$OMP                                  sin_sg,cy,yfx,dya,dx)
@@ -687,7 +687,7 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
       call complete_group_halo_update(q_pack, domain)
                            call timing_off('COMM_TRACER')
                        call timing_off('COMM_TOTAL')
-	    
+
       if (gridstruct%nested) then
             do iq=1,nq
                  call nested_grid_BC_apply_intT(q(isd:ied,jsd:jed,:,iq), &

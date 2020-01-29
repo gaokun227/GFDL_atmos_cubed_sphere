@@ -38,7 +38,7 @@ public :: compute_ocean_roughness, fixed_ocean_roughness
   real    :: roughness_init = 0.00044   ! not used in this version
   real    :: roughness_min  = 1.e-6
   real    :: charnock       = 0.032
-  
+
   real    :: roughness_mom   = 5.8e-5
   real    :: roughness_heat  = 5.8e-5   ! was 4.00e-4
   real    :: roughness_moist = 5.8e-5
@@ -133,7 +133,7 @@ contains
    else if (trim(rough_scheme) == 'beljaars' .or. &
             trim(rough_scheme) == 'charnock') then
 
-          ustar2(:,:) = max(gnu*gnu, u_star(:,:)*u_star(:,:))          
+          ustar2(:,:) = max(gnu*gnu, u_star(:,:)*u_star(:,:))
           xx1(:,:) = gnu / sqrt(ustar2(:,:))
           xx2(:,:) = ustar2(:,:) / grav
 
@@ -153,7 +153,7 @@ contains
 ! SJL mods: cap the growth of z0 with w10 up to 40 m/s
 ! z0 (w10=40) = 2.82E-3
                            if(do_cap40) rough_mom(i,j) = min( rough_mom(i,j), 2.82E-3)
-                      else    
+                      else
                            rough_mom(i,j) = 0.0185/grav*u_star(i,j)**2  ! (8a) Moon et al.
                       endif
 ! Ramp up the coefficient:

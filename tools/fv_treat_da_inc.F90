@@ -29,7 +29,7 @@
 !-------------------------------------------------------------------------------
 
 #ifdef OVERLOAD_R4
-#define _GET_VAR1 get_var1_real 
+#define _GET_VAR1 get_var1_real
 #else
 #define _GET_VAR1 get_var1_double
 #endif
@@ -93,7 +93,7 @@ contains
     real, intent(inout), dimension(is_in:ie_in+1,js_in:je_in  ,npz_in):: v  ! D grid meridional wind (m/s)
     real, intent(inout) :: delp(is_in:ie_in  ,js_in:je_in  ,npz_in)  ! pressure thickness (pascal)
     real, intent(inout) :: pt(  is_in:ie_in  ,js_in:je_in  ,npz_in)  ! temperature (K)
-    real, intent(inout) :: q(   is_in:ie_in  ,js_in:je_in  ,npz_in, nq)  ! 
+    real, intent(inout) :: q(   is_in:ie_in  ,js_in:je_in  ,npz_in, nq)  !
 
     ! local
     real :: deg2rad
@@ -184,7 +184,7 @@ contains
     do j=js,je
       do i=is,ie
           j1 = jdc(i,j)
-        jbeg = min(jbeg, j1) 
+        jbeg = min(jbeg, j1)
         jend = max(jend, j1+1)
       enddo
     enddo
@@ -228,7 +228,7 @@ contains
     do j=js,je
       do i=is,ie+1
           j1 = jdc_c(i,j)
-        jbeg = min(jbeg, j1) 
+        jbeg = min(jbeg, j1)
         jend = max(jend, j1+1)
       enddo
     enddo
@@ -281,7 +281,7 @@ contains
     do j=js,je+1
       do i=is,ie
           j1 = jdc_d(i,j)
-        jbeg = min(jbeg, j1) 
+        jbeg = min(jbeg, j1)
         jend = max(jend, j1+1)
       enddo
     enddo

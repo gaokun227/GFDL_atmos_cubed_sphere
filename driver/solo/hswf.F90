@@ -83,7 +83,7 @@ contains
       real, dimension(is:ie):: u1, v1
       integer  i,j,k
       integer  seconds, days
-      real  ty, tz, akap 
+      real  ty, tz, akap
       real  p0, t0, sday, rkv, rka, rks, rkt, sigb, rsgb
       real  tmp, solar_ang, solar_rate
       real  ap0k, algpk
@@ -141,7 +141,7 @@ contains
         do k=npz,1,-1
            do i=is,ie
               tey = ap0k*( 315.0 - ty*SIN(agrid(i,j,2))*SIN(agrid(i,j,2)) )
-              tez =  tz*( ap0k/akap )*COS(agrid(i,j,2))*COS(agrid(i,j,2)) 
+              tez =  tz*( ap0k/akap )*COS(agrid(i,j,2))*COS(agrid(i,j,2))
               if (strat .and. pl(i,k) <= 1.E2)  then
 ! Mesosphere: defined as the region above 1 mb
                   dz = h0 * log(pl(i,k+1)/pl(i,k))

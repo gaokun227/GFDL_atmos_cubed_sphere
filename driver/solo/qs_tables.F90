@@ -56,7 +56,7 @@ contains
   integer it
 
 ! if (.not. qs_table_is_initialized) call qs_wat_init
-       ap1 = 10.*dim(ta, tmin) + 1.    ! lower bound enforced 
+       ap1 = 10.*dim(ta, tmin) + 1.    ! lower bound enforced
        ap1 = min(2621., ap1)           ! upper bound enforced
         it = ap1
         es = table_w(it) + (ap1-it)*des_w(it)
@@ -81,7 +81,7 @@ contains
   integer it
 
 ! if (.not. qs_table_is_initialized) call qs_wat_init
-       ap1 = 10.*dim(ta, tmin) + 1.    ! lower bound enforced 
+       ap1 = 10.*dim(ta, tmin) + 1.    ! lower bound enforced
        ap1 = min(2621., ap1)           ! upper bound enforced
         it = ap1
         es = table_w(it) + (ap1-it)*des_w(it)

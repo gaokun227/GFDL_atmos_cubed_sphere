@@ -84,14 +84,14 @@ real :: realnumber
 real, public, parameter :: RADIUS = 6.3712e+6_r8_kind
 real(kind=r8_kind), public, parameter :: PI_8   = 3.1415926535897931_r8_kind
 real, public, parameter ::         PI     = 3.1415926535897931_r8_kind
-real, public, parameter :: OMEGA  = 7.2921e-5 
+real, public, parameter :: OMEGA  = 7.2921e-5
 real, public, parameter :: GRAV   = 9.80665_r8_kind
 real(kind=r8_kind), public, parameter :: GRAV_8  = 9.80665_r8_kind
 real, public, parameter :: RDGAS  = 287.05_r8_kind
 real, public, parameter :: RVGAS  = 461.50_r8_kind
 ! Extra:
-real, public, parameter :: HLV = 2.5e6_r8_kind   
-real, public, parameter :: HLF = 3.3358e5_r8_kind   
+real, public, parameter :: HLV = 2.5e6_r8_kind
+real, public, parameter :: HLF = 3.3358e5_r8_kind
 real, public, parameter :: con_cliq   =4.1855e+3_r8_kind      ! spec heat H2O liq   (J/kg/K)
 real, public, parameter :: con_csol   =2.1060e+3_r8_kind      ! spec heat H2O ice   (J/kg/K)
 #else
@@ -119,17 +119,17 @@ real(kind=8), public, parameter :: PI_8 = 3.141592653589793_r8_kind
 real, public, parameter ::         PI   = 3.141592653589793_r8_kind
 real, public, parameter :: OMEGA = 7.292e-5_r8_kind / small_fac
 real, public, parameter :: GRAV  = 9.8060226_r8_kind
-real, public, parameter :: RDGAS = 287.04_r8_kind 
-real, public, parameter :: RVGAS = 461.60_r8_kind 
+real, public, parameter :: RDGAS = 287.04_r8_kind
+real, public, parameter :: RVGAS = 461.60_r8_kind
 ! Extra:
-real, public, parameter :: HLV = 2.501e6_r8_kind   
-real, public, parameter :: HLF = 3.50e5_r8_kind   
+real, public, parameter :: HLV = 2.501e6_r8_kind
+real, public, parameter :: HLF = 3.50e5_r8_kind
 #endif
 real, public, parameter :: CP_AIR = 1004.6_r8_kind
 real, public, parameter :: CP_VAPOR = 4.0_r8_kind*RVGAS
 real, public, parameter :: KAPPA  = RDGAS/CP_AIR
 !!! real, public, parameter :: STEFAN  = 5.670400e-8_r8_kind
-real, public, parameter :: STEFAN  = 5.67051e-8_r8_kind 
+real, public, parameter :: STEFAN  = 5.67051e-8_r8_kind
 
 real, public, parameter :: CP_OCEAN = 3989.24495292815_r8_kind
 real, public, parameter :: RHO0    = 1.035e3_r8_kind
@@ -137,12 +137,12 @@ real, public, parameter :: RHO0R   = 1.0_r8_kind/RHO0
 real, public, parameter :: RHO_CP  = RHO0*CP_OCEAN
 
 !rabreal, public, parameter :: KAPPA  = 2._r8_kind/7._r8_kind
-!rabreal, public, parameter :: GRAV   = 9.80_r8_kind    
-!rabreal, public, parameter :: CP_AIR = RDGAS/KAPPA 
+!rabreal, public, parameter :: GRAV   = 9.80_r8_kind
+!rabreal, public, parameter :: CP_AIR = RDGAS/KAPPA
 
 !------------ water vapor constants ---------------
 ! <DATA NAME="ES0" TYPE="real" DEFAULT="1.0">
-!   Humidity factor. Controls the humidity content of the atmosphere through 
+!   Humidity factor. Controls the humidity content of the atmosphere through
 !   the Saturation Vapour Pressure expression when using DO_SIMPLE.
 ! </DATA>
 ! <DATA NAME="RVGAS" UNITS="J/kg/deg" TYPE="real" DEFAULT="461.50">
@@ -167,21 +167,21 @@ real, public, parameter :: RHO_CP  = RHO0*CP_OCEAN
 !   temp where fresh water freezes
 ! </DATA>
 
-real, public, parameter :: ES0 = 1.0_r8_kind 
-real, public, parameter :: DENS_H2O = 1000._r8_kind 
+real, public, parameter :: ES0 = 1.0_r8_kind
+real, public, parameter :: DENS_H2O = 1000._r8_kind
 real, public, parameter :: HLS = HLV + HLF
-real, public, parameter :: TFREEZE = 273.15_r8_kind    
+real, public, parameter :: TFREEZE = 273.15_r8_kind
 
-!rabreal, public, parameter :: RVGAS = 461.50_r8_kind 
-!rabreal, public, parameter :: HLV = 2.500e6_r8_kind   
-!rabreal, public, parameter :: HLF = 3.34e5_r8_kind   
+!rabreal, public, parameter :: RVGAS = 461.50_r8_kind
+!rabreal, public, parameter :: HLV = 2.500e6_r8_kind
+!rabreal, public, parameter :: HLF = 3.34e5_r8_kind
 !rabreal, public, parameter :: HLS = HLV + HLF
-!rabreal, public, parameter :: TFREEZE = 273.16_r8_kind    
+!rabreal, public, parameter :: TFREEZE = 273.16_r8_kind
 
 !-------------- radiation constants -----------------
 
 ! <DATA NAME="WTMAIR" UNITS="AMU" TYPE="real" DEFAULT="2.896440E+01">
-!  molecular weight of air 
+!  molecular weight of air
 ! </DATA>
 ! <DATA NAME="WTMH2O" UNITS="AMU" TYPE="real" DEFAULT="1.801534E+01">
 !  molecular weight of water
@@ -190,7 +190,7 @@ real, public, parameter :: TFREEZE = 273.15_r8_kind
 !   molecular weight of ozone
 ! </DATA>
 ! <DATA NAME="WTMC" UNITS="AMU" TYPE="real" DEFAULT="1.200000+01">
-!   molecular weight of carbon 
+!   molecular weight of carbon
 ! <DATA NAME="WTMCO2" UNITS="AMU" TYPE="real" DEFAULT="4.400995+01">
 !   molecular weight of carbon dioxide
 ! <DATA NAME="WTMO2" UNITS="AMU" TYPE="real" DEFAULT="3.19988+01">
@@ -207,7 +207,7 @@ real, public, parameter :: TFREEZE = 273.15_r8_kind
 ! seconds in a day
 ! </DATA>
 ! <DATA NAME="AVOGNO" UNITS="atoms/mole" TYPE="real" DEFAULT="6.023000E+23">
-!  Avogadro's number 
+!  Avogadro's number
 ! </DATA>
 ! <DATA NAME="PSTD" UNITS="dynes/cm^2" TYPE="real" DEFAULT="1.013250E+06">
 !  mean sea level pressure
@@ -282,7 +282,7 @@ real, public, parameter :: ALOGMIN     = -50.0_r8_kind
 !   a small number to prevent divide by zero exceptions
 ! </DATA>
 
-real, public, parameter :: VONKARM = 0.40_r8_kind     
+real, public, parameter :: VONKARM = 0.40_r8_kind
 real, public, parameter :: RAD_TO_DEG=180._r8_kind/PI
 real, public, parameter :: DEG_TO_RAD=PI/180._r8_kind
 real, public, parameter :: RADIAN  = RAD_TO_DEG
@@ -290,7 +290,7 @@ real, public, parameter :: C2DBARS = 1.e-4_r8_kind
 real, public, parameter :: KELVIN  = 273.15_r8_kind
 real, public, parameter :: EPSLN   = 1.0e-15_r8_kind
 
-!rabreal, public, parameter :: STEFAN  = 5.6734e-8_r8_kind 
+!rabreal, public, parameter :: STEFAN  = 5.6734e-8_r8_kind
 !rabreal, public, parameter :: EPSLN   = 1.0e-40_r8_kind
 !rabreal, public, parameter :: PI      = 3.14159265358979323846_r8_kind
 
@@ -309,10 +309,10 @@ end module constants_mod
 
 ! <INFO>
 
-!   <FUTURE>               
+!   <FUTURE>
 !   1.  Renaming of constants.
-!   </FUTURE>               
-!   <FUTURE>               
+!   </FUTURE>
+!   <FUTURE>
 !   2.  Additional constants.
 !   </FUTURE>
 !   <NOTE>
@@ -325,7 +325,7 @@ end module constants_mod
 !    The name given to a particular constant may be changed.<br><br>
 !
 !    Constants can be used on the right side on an assignment statement
-!    (their value can not be reassigned). 
+!    (their value can not be reassigned).
 !
 !
 !<TESTPROGRAM NAME="EXAMPLE">
