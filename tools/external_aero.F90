@@ -38,16 +38,18 @@ contains
 ! =======================================================================
 ! load aerosol 12 months climatological dataset
 
-subroutine load_aero(Atm)
+subroutine load_aero(Atm, fv_domain)
 
 	use fms_io_mod, only: restart_file_type, register_restart_field
 	use fms_io_mod, only: restore_state
 	use fv_arrays_mod, only: fv_atmos_type
   use fms_mod, only: file_exist, mpp_error, FATAL
+	use mpp_domains_mod, only: domain2d
 
 	implicit none
 
-	type(fv_atmos_type), intent(in), target :: Atm(:)
+	type(fv_atmos_type), intent(in), target :: Atm
+	type(domain2d), intent(in) :: fv_domain
 	type(restart_file_type) :: aero_restart
 
 	integer :: is, ie, js, je, n
@@ -56,10 +58,10 @@ subroutine load_aero(Atm)
 
 	character(len=64) :: file_name = "MERRA2_400.inst3_3d_aer_Nv.climatology.nc"
 
-	is = Atm(1)%bd%is
-	ie = Atm(1)%bd%ie
-	js = Atm(1)%bd%js
-	je = Atm(1)%bd%je
+	is = Atm%bd%is
+	ie = Atm%bd%ie
+	js = Atm%bd%js
+	je = Atm%bd%je
 
 	if (mpp_pe() .eq. mpp_root_pe()) then
 		write(*,*) "aerosol 12 months climatological dataset is used for forecast."
@@ -67,10 +69,8 @@ subroutine load_aero(Atm)
 
 	if (file_exist(file_name)) then
 		if (.not. allocated(aerosol)) allocate(aerosol(is:ie,js:je,nlev,nmon))
-		do n = 1, size(Atm(:))
-			id_res = register_restart_field(aero_restart,file_name,"SO4",aerosol,domain=Atm(n)%domain)
-			call restore_state(aero_restart)
-		enddo
+		id_res = register_restart_field(aero_restart,file_name,"SO4",aerosol,domain=fv_domain)
+		call restore_state(aero_restart)
 	else
 		call mpp_error("external_aero_mod","file: "//trim(file_name)//" does not exist.",FATAL)
 	endif

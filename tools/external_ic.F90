@@ -149,7 +149,7 @@ contains
 
 ! Read in aerosol
 			if ( Atm%flagstruct%do_aerosol ) then
-				call load_aero(Atm)
+				call load_aero(Atm, fv_domain)
 			endif
 
 ! Read in the specified external dataset and do all the needed transformation
