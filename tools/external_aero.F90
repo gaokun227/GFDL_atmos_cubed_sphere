@@ -27,7 +27,6 @@
 
 module external_aero_mod
 
-	use fv_arrays_mod, only: fv_atmos_type
 	use mpp_mod, only: mpp_pe, mpp_root_pe
 
 	public :: load_aero, read_aero, clean_aero
@@ -49,6 +48,7 @@ subroutine load_aero(Atm, fv_domain)
 	use fms_io_mod, only: restart_file_type, register_restart_field
 	use fms_io_mod, only: restore_state
 	use fms_mod, only: file_exist, mpp_error, FATAL
+	use fv_arrays_mod, only: fv_atmos_type
 	use mpp_domains_mod, only: domain2d
 	use diag_manager_mod, only: register_static_field
 
@@ -91,7 +91,7 @@ end subroutine load_aero
 ! =======================================================================
 ! read aerosol climatological dataset
 
-subroutine read_aero(Atm, Time)
+subroutine read_aero(is, ie, js, je, Time)
 
 	use constants_mod, only: grav
 	use diag_manager_mod, only: send_data
@@ -99,20 +99,14 @@ subroutine read_aero(Atm, Time)
 
 	implicit none
 
-	type(fv_atmos_type), intent(in), target :: Atm
 	type(time_type), intent(in) :: Time
 
 	integer :: k, n
-	integer :: is, ie, js, je
+	integer, intent(in) :: is, ie, js, je
 
 	real, allocatable, dimension(:,:) :: vi_aero
 
 	logical :: used
-
-	is = Atm%bd%is
-	ie = Atm%bd%ie
-	js = Atm%bd%js
-	je = Atm%bd%je
 
 	if (.not. allocated(vi_aero)) allocate(vi_aero(is:ie,js:je))
 

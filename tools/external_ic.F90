@@ -148,7 +148,7 @@ contains
       endif
 
 ! Read in aerosol
-			if ( Atm%flagstruct%do_aerosol ) then
+			if (Atm%flagstruct%do_aerosol) then
 				call load_aero(Atm, fv_domain)
 			endif
 

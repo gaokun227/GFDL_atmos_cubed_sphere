@@ -60,6 +60,7 @@ module fv_io_mod
   use fv_mp_mod,               only: mp_gather, is_master
   use fms_io_mod,              only: set_domain
   use fv_treat_da_inc_mod,     only: read_da_inc
+  use external_aero_mod,       only: load_aero
 
   implicit none
   private
@@ -134,6 +135,10 @@ contains
        call mpp_error(NOTE, 'READING FROM SST_RESTART DISABLED')
        !call restore_state(Atm(1)%SST_restart)
     endif
+
+		if (Atm(1)%flagstruct%do_aerosol) then
+			call load_aero(Atm, fv_domain)
+		endif
 
 ! fix for single tile runs where you need fv_core.res.nc and fv_core.res.tile1.nc
     ntiles = mpp_get_ntile_count(fv_domain)

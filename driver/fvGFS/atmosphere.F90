@@ -304,6 +304,9 @@ contains
    endif
    call fv_io_register_nudge_restart ( Atm )
 
+   if (Atm(mygrid)%flagstruct%do_aerosol) then
+     call read_aero(isc, iec, jsc, jec, Time)
+   endif
 
    if ( Atm(mygrid)%flagstruct%na_init>0 ) then
       call nullify_domain ( )
@@ -408,6 +411,11 @@ contains
      call read_new_bc_data(Atm(n), Time, Time_step_atmos, p_split, &
                            isd, ied, jsd, jed )
    endif
+
+   if (Atm(mygrid)%flagstruct%do_aerosol) then
+     call read_aero(isc, iec, jsc, jec, Time)
+   endif
+
    do psc=1,abs(p_split)
       p_step = psc
                     call timing_on('fv_dynamics')
