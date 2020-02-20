@@ -137,7 +137,7 @@ contains
     endif
 
 		if (Atm(1)%flagstruct%do_aerosol) then
-			call load_aero(Atm, fv_domain)
+			call load_aero(Atm(1), fv_domain)
 		endif
 
 ! fix for single tile runs where you need fv_core.res.nc and fv_core.res.tile1.nc
