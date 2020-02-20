@@ -62,6 +62,7 @@ module external_ic_mod
                                 get_var3_r4, get_var2_r4, get_var1_real, get_var_att_double
    use fv_nwp_nudge_mod,  only: T_is_Tv
    use test_cases_mod,    only: checker_tracers
+   use external_aero_mod, only: load_aero
 
 ! The "T" field in NCEP analysis is actually virtual temperature (Larry H. post processing)
 ! BEFORE 20051201
@@ -145,6 +146,11 @@ contains
       else
          if (.not. Atm%neststruct%nested) Atm%phis = 0. !TODO: Not sure about this line --- lmh 30 may 18
       endif
+
+! Read in aerosol
+			if ( Atm%flagstruct%do_aerosol ) then
+				call load_aero(Atm)
+			endif
 
 ! Read in the specified external dataset and do all the needed transformation
       if ( Atm%flagstruct%ncep_ic ) then
