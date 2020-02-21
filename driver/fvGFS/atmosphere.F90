@@ -274,7 +274,6 @@ contains
        !I've had trouble getting this to work with multiple grids at a time; worth revisiting?
    call fv_diag_init(Atm(mygrid:mygrid), Atm(mygrid)%atmos_axes, Time, npx, npy, npz, Atm(mygrid)%flagstruct%p_ref)
 
-!--- read in aerosol ---
    if (Atm(mygrid)%flagstruct%do_aerosol) then
      call load_aero(Atm(mygrid))
      call read_aero(isc, iec, jsc, jec, npz, nq, Time, Atm(mygrid)%pe(isc:iec,:,jsc:jec), &

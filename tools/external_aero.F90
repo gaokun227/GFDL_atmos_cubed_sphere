@@ -302,12 +302,12 @@ subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 	do j = js, je
 		do i = is, ie
 			if (pm(i,j,1) .lt. aero_now_p(i,j,1)) then
-				qa(i,j,1,areo_id) = aero_now_a(i,j,1) + &
+				qa(i,j,1,aero_id) = aero_now_a(i,j,1) + &
 					(log(pm(i,j,1)) - log(aero_now_p(i,j,1))) / &
 					(log(aero_now_p(i,j,2)) - log(aero_now_p(i,j,1))) * &
 					(aero_now_a(i,j,2) - aero_now_a(i,j,1))
 			else if (pm(i,j,npz) .ge. aero_now_p(i,j,nlev)) then
-				qa(i,j,npz,areo_id) = aero_now_a(i,j,npz-1) + &
+				qa(i,j,npz,aero_id) = aero_now_a(i,j,npz-1) + &
 					(log(pm(i,j,npz)) - log(aero_now_p(i,j,npz-1))) / &
 					(log(aero_now_p(i,j,npz)) - log(aero_now_p(i,j,npz-1))) * &
 					(aero_now_a(i,j,npz) - aero_now_a(i,j,npz-1))
@@ -316,7 +316,7 @@ subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 					do n = 1, nlev-1
 						if (pm(i,j,k) .ge. aero_now_p(i,j,n) .and. &
 							pm(i,j,k) .lt. aero_now_p(i,j,n+1)) then
-							qa(i,j,k,areo_id) = aero_now_a(i,j,n) + &
+							qa(i,j,k,aero_id) = aero_now_a(i,j,n) + &
 								(log(pm(i,j,k)) - log(aero_now_p(i,j,n))) / &
 								(log(aero_now_p(i,j,n+1)) - log(aero_now_p(i,j,n))) * &
 								(aero_now_a(i,j,n+1) - aero_now_a(i,j,n))
