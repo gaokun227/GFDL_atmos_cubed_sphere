@@ -27,6 +27,7 @@
 
 module external_aero_mod
 
+	use fms_mod, only: file_exist, mpp_error, FATAL
 	use mpp_mod, only: mpp_pe, mpp_root_pe
 
 	public :: load_aero, read_aero, clean_aero
@@ -50,7 +51,6 @@ subroutine load_aero(Atm)
 
 	use fms_io_mod, only: restart_file_type, register_restart_field
 	use fms_io_mod, only: restore_state
-	use fms_mod, only: file_exist, mpp_error, FATAL
 	use fv_arrays_mod, only: fv_atmos_type
 	use diag_manager_mod, only: register_static_field
 
@@ -89,15 +89,19 @@ subroutine load_aero(Atm)
 		if (.not. allocated(aerosol)) allocate(aerosol(is:ie,js:je,nlev,nmon))
 
 		! read in restart files
-		id_res = register_restart_field(aero_restart,trim(file_name),"PS",aero_ps,domain=Atm%domain)
-		id_res = register_restart_field(aero_restart,trim(file_name),"DELP",aero_dp,domain=Atm%domain)
-		id_res = register_restart_field(aero_restart,trim(file_name),"SO4",aerosol,domain=Atm%domain)
+		id_res = register_restart_field(aero_restart,trim(file_name),"PS",&
+			aero_ps,domain=Atm%domain)
+		id_res = register_restart_field(aero_restart,trim(file_name),"DELP",&
+			aero_dp,domain=Atm%domain)
+		id_res = register_restart_field(aero_restart,trim(file_name),"SO4",&
+			aerosol,domain=Atm%domain)
 		call restore_state(aero_restart)
 
 	else
 
 		! stop when aerosol does not exist
-		call mpp_error("external_aero_mod","file: "//trim(file_name)//" does not exist.",FATAL)
+		call mpp_error("external_aero_mod",&
+			"file: "//trim(file_name)//" does not exist.",FATAL)
 
 	endif
 
@@ -128,7 +132,7 @@ subroutine load_aero(Atm)
 
 	! stop when minimum value is less and equal to zero
 	if (minval(aero_p) .le. 0.0) then
-		call mpp_error("external_aero_mod","aero_p has value < 0.",FATAL)
+		call mpp_error("external_aero_mod","aero_p has value <= 0.",FATAL)
 	endif
 
 	! deallocate local array
@@ -138,15 +142,17 @@ subroutine load_aero(Atm)
 	! -----------------------------------------------------------------------
 	! register for diagnostic output
 
-	id_aero = register_static_field('dynamics','aerosol',Atm%atmos_axes(1:2),'none','none')
-	id_aero_now= register_static_field('dynamics','aero_now',Atm%atmos_axes(1:2),'none','none')
+	id_aero = register_static_field('dynamics','aerosol',&
+		Atm%atmos_axes(1:2),'none','none')
+	id_aero_now= register_static_field('dynamics','aero_now',&
+		Atm%atmos_axes(1:2),'none','none')
 
 end subroutine load_aero
 
 ! =======================================================================
 ! read aerosol climatological dataset
 
-subroutine read_aero(is, ie, js, je, Time)
+subroutine read_aero(is, ie, js, je, npz, Time, pe, peln, qa)
 
 	use constants_mod, only: grav
 	use diag_manager_mod, only: send_data
@@ -159,16 +165,20 @@ subroutine read_aero(is, ie, js, je, Time)
 	type(time_type) :: Time_before
 	type(time_type) :: Time_after
 
-	integer :: k, n
-	integer, intent(in) :: is, ie, js, je
+	integer :: i, j, k, n
+	integer, intent(in) :: is, ie, js, je, npz
 	integer :: year, month, day, hour, minute, second
 	integer :: seconds, days01, days21, month1, month2
+
+	real, dimension(is:ie,js:je,npz), intent(inout) :: qa
+	real, dimension(is:ie,npz+1,js:je), intent(in) :: pe, peln
 
 	real, allocatable, dimension(:,:) :: vi_aero
 	real, allocatable, dimension(:,:) :: vi_aero_now
 	real, allocatable, dimension(:,:,:) :: aero_now_a
 	real, allocatable, dimension(:,:,:) :: aero_now_p
 	real, allocatable, dimension(:,:,:) :: aero_now_dp
+	real, allocatable, dimension(:,:,:) :: pm
 
 	logical :: used
 
@@ -265,6 +275,54 @@ subroutine read_aero(is, ie, js, je, Time)
 		if (allocated(aero_now_dp)) deallocate(aero_now_dp)
 
 	endif
+
+	! -----------------------------------------------------------------------
+	! vertically interpolate aeorosol
+
+	! allocate local array
+	if (.not. allocated(pm)) allocate(pm(is:ie,js:je,npz))
+
+	! calculate layer mean pressure
+	do k = 1, npz
+		pm(:,:,k) = (pe(:,k+1,:) - pe(:,k,:)) / (peln(:,k+1,:) - peln(:,k,:))
+	enddo
+
+	! stop when minimum value is less and equal to zero
+	if (minval(pm) .le. 0.0) then
+		call mpp_error("external_aero_mod","pm has value <= 0.",FATAL)
+	endif
+
+	! vertically interpolation
+	do j = js, je
+		do i = is, ie
+			if (pm(i,j,1) .lt. aero_now_p(i,j,1)) then
+				qa(i,j,1) = aero_now_a(i,j,1) + &
+					(log(pm(i,j,1)) - log(aero_now_p(i,j,1))) / &
+					(log(aero_now_p(i,j,2)) - log(aero_now_p(i,j,1))) * &
+					(aero_now_a(i,j,2) - aero_now_a(i,j,1))
+			else if (pm(i,j,npz) .ge. aero_now_p(i,j,nlev)) then
+				qa(i,j,npz) = aero_now_a(i,j,npz-1) + &
+					(log(pm(i,j,npz)) - log(aero_now_p(i,j,npz-1))) / &
+					(log(aero_now_p(i,j,npz)) - log(aero_now_p(i,j,npz-1))) * &
+					(aero_now_a(i,j,npz) - aero_now_a(i,j,npz-1))
+			else
+				do k = 1, npz
+					do n = 1, nlev-1
+						if (pm(i,j,k) .ge. aero_now_p(i,j,n) .and. &
+							pm(i,j,k) .lt. aero_now_p(i,j,n+1)) then
+							qa(i,j,k) = aero_now_a(i,j,n) + &
+								(log(pm(i,j,k)) - log(aero_now_p(i,j,n))) / &
+								(log(aero_now_p(i,j,n+1)) - log(aero_now_p(i,j,n))) * &
+								(aero_now_a(i,j,n+1) - aero_now_a(i,j,n))
+						endif
+					end do
+				end do
+			endif
+		enddo
+	enddo
+
+	! deallocate local array
+	if (allocated(pm)) deallocate(pm)
 
 	! -----------------------------------------------------------------------
 	! deallocate local array

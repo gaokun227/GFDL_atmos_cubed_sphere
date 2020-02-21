@@ -128,6 +128,7 @@ character(len=20)   :: mod_name = 'fvGFS/atmosphere_mod'
 
   integer, dimension(:), allocatable :: id_tracerdt_dyn
   integer :: sphum, liq_wat, rainwat, ice_wat, snowwat, graupel  !condensate species
+  integer :: aerosol
 
   integer :: mygrid = 1
   integer :: p_split = 1
@@ -216,6 +217,7 @@ contains
    rainwat = get_tracer_index (MODEL_ATMOS, 'rainwat' )
    snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat' )
    graupel = get_tracer_index (MODEL_ATMOS, 'graupel' )
+   aerosol = get_tracer_index (MODEL_ATMOS, 'aerosol' )
 
    if (max(sphum,liq_wat,ice_wat,rainwat,snowwat,graupel) > Atm(mygrid)%flagstruct%nwat) then
       call mpp_error (FATAL,' atmosphere_init: condensate species are not first in the list of &
@@ -277,7 +279,8 @@ contains
 !--- read in aerosol ---
 		if (Atm(mygrid)%flagstruct%do_aerosol) then
 			call load_aero(Atm(mygrid))
-			call read_aero(isc, iec, jsc, jec, Time)
+      call read_aero(isc, iec, jsc, jec, npz, Time, Atm(mygrid)%pe(isc:iec,:,jsc:jec), &
+	      Atm(mygrid)%peln(isc:iec,:,jsc:jec), Atm(mygrid)%q(isc:iec,jsc:jec,:,aerosol))
 		endif
 
 !---------- reference profile -----------
@@ -416,7 +419,8 @@ contains
    endif
 
    if (Atm(mygrid)%flagstruct%do_aerosol) then
-     call read_aero(isc, iec, jsc, jec, Time)
+     call read_aero(isc, iec, jsc, jec, npz, Time, Atm(mygrid)%pe(isc:iec,:,jsc:jec), &
+	     Atm(mygrid)%peln(isc:iec,:,jsc:jec), Atm(mygrid)%q(isc:iec,jsc:jec,:,aerosol))
    endif
 
    do psc=1,abs(p_split)
