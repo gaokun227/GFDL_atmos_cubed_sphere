@@ -29,6 +29,7 @@ module external_aero_mod
 
 	use fms_mod, only: file_exist, mpp_error, FATAL
 	use mpp_mod, only: mpp_pe, mpp_root_pe
+	use time_manager_mod, only: time_type
 
 	public :: load_aero, read_aero, clean_aero
 
@@ -47,15 +48,16 @@ contains
 ! =======================================================================
 ! load aerosol 12 months climatological dataset
 
-subroutine load_aero(Atm)
+subroutine load_aero(Atm, Time)
 
 	use fms_io_mod, only: restart_file_type, register_restart_field
 	use fms_io_mod, only: restore_state
 	use fv_arrays_mod, only: fv_atmos_type
-	use diag_manager_mod, only: register_static_field
+	use diag_manager_mod, only: register_static_field, register_diag_field
 
 	implicit none
 
+	type(time_type), intent(in) :: Time
 	type(fv_atmos_type), intent(in), target :: Atm
 	type(restart_file_type) :: aero_restart
 
@@ -144,8 +146,8 @@ subroutine load_aero(Atm)
 
 	id_aero = register_static_field('dynamics','aero_ann',&
 		Atm%atmos_axes(1:2),'none','none')
-	id_aero_now= register_static_field('dynamics','aero_now',&
-		Atm%atmos_axes(1:2),'none','none')
+	id_aero_now= register_diag_field('dynamics','aero_now',&
+		Atm%atmos_axes(1:2),Time,'none','none')
 
 end subroutine load_aero
 
@@ -156,8 +158,7 @@ subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 
 	use constants_mod, only: grav
 	use diag_manager_mod, only: send_data
-	use time_manager_mod, only: time_type, get_date, set_date, get_time, &
-		operator(-)
+	use time_manager_mod, only: get_date, set_date, get_time, operator(-)
 	use tracer_manager_mod, only: get_tracer_index
 	use field_manager_mod, only: MODEL_ATMOS
 

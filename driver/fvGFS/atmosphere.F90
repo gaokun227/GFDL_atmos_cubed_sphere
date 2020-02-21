@@ -275,7 +275,7 @@ contains
    call fv_diag_init(Atm(mygrid:mygrid), Atm(mygrid)%atmos_axes, Time, npx, npy, npz, Atm(mygrid)%flagstruct%p_ref)
 
    if (Atm(mygrid)%flagstruct%do_aerosol) then
-     call load_aero(Atm(mygrid))
+     call load_aero(Atm(mygrid), Time)
      call read_aero(isc, iec, jsc, jec, npz, nq, Time, Atm(mygrid)%pe(isc:iec,:,jsc:jec), &
        Atm(mygrid)%peln(isc:iec,:,jsc:jec), Atm(mygrid)%q(isc:iec,jsc:jec,:,:))
    endif
