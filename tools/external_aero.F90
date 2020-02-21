@@ -307,10 +307,10 @@ subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 					(log(aero_now_p(i,j,2)) - log(aero_now_p(i,j,1))) * &
 					(aero_now_a(i,j,2) - aero_now_a(i,j,1))
 			else if (pm(i,j,npz) .ge. aero_now_p(i,j,nlev)) then
-				qa(i,j,npz,aero_id) = aero_now_a(i,j,npz-1) + &
-					(log(pm(i,j,npz)) - log(aero_now_p(i,j,npz-1))) / &
-					(log(aero_now_p(i,j,npz)) - log(aero_now_p(i,j,npz-1))) * &
-					(aero_now_a(i,j,npz) - aero_now_a(i,j,npz-1))
+				qa(i,j,npz,aero_id) = aero_now_a(i,j,nlev-1) + &
+					(log(pm(i,j,npz)) - log(aero_now_p(i,j,nlev-1))) / &
+					(log(aero_now_p(i,j,nlev)) - log(aero_now_p(i,j,nlev-1))) * &
+					(aero_now_a(i,j,nlev) - aero_now_a(i,j,nlev-1))
 			else
 				do k = 1, npz
 					do n = 1, nlev-1
