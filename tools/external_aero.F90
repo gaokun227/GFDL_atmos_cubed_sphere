@@ -142,7 +142,7 @@ subroutine load_aero(Atm)
 	! -----------------------------------------------------------------------
 	! register for diagnostic output
 
-	id_aero = register_static_field('dynamics','aerosol',&
+	id_aero = register_static_field('dynamics','aero_ann',&
 		Atm%atmos_axes(1:2),'none','none')
 	id_aero_now= register_static_field('dynamics','aero_now',&
 		Atm%atmos_axes(1:2),'none','none')
