@@ -81,7 +81,7 @@ use fv_regional_mod,    only: current_time_in_seconds
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
 use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
 use cld_eff_rad_mod,    only: cld_eff_rad_init
-use external_aero_mod,  only: load_aero, read_aero
+use external_aero_mod,  only: load_aero, read_aero, clean_aero
 
 implicit none
 private
@@ -504,6 +504,9 @@ contains
 
    if ( Atm(mygrid)%flagstruct%nudge ) call fv_nwp_nudge_end
 
+   if (Atm(mygrid)%flagstruct%do_aerosol) then
+     call clean_aero()
+   endif
 
    if (Atm(mygrid)%flagstruct%do_inline_mp) then
      call gfdl_mp_end ( )
