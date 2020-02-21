@@ -266,7 +266,9 @@ subroutine read_aero(is, ie, js, je, Time)
 
 	endif
 
+	! -----------------------------------------------------------------------
 	! deallocate local array
+
 	if (allocated(aero_now_a)) deallocate(aero_now_a)
 	if (allocated(aero_now_p)) deallocate(aero_now_p)
 
