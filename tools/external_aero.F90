@@ -152,12 +152,14 @@ end subroutine load_aero
 ! =======================================================================
 ! read aerosol climatological dataset
 
-subroutine read_aero(is, ie, js, je, npz, Time, pe, peln, qa)
+subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 
 	use constants_mod, only: grav
 	use diag_manager_mod, only: send_data
 	use time_manager_mod, only: time_type, get_date, set_date, get_time, &
 		operator(-)
+	use tracer_manager_mod, only: get_tracer_index
+	use field_manager_mod, only: MODEL_ATMOS
 
 	implicit none
 
@@ -166,11 +168,12 @@ subroutine read_aero(is, ie, js, je, npz, Time, pe, peln, qa)
 	type(time_type) :: Time_after
 
 	integer :: i, j, k, n
-	integer, intent(in) :: is, ie, js, je, npz
+	integer, intent(in) :: is, ie, js, je, npz, nq
 	integer :: year, month, day, hour, minute, second
 	integer :: seconds, days01, days21, month1, month2
+	integer :: aero_id
 
-	real, dimension(is:ie,js:je,npz), intent(inout) :: qa
+	real, dimension(is:ie,js:je,npz,nq), intent(inout) :: qa
 	real, dimension(is:ie,npz+1,js:je), intent(in) :: pe, peln
 
 	real, allocatable, dimension(:,:) :: vi_aero
@@ -292,16 +295,19 @@ subroutine read_aero(is, ie, js, je, npz, Time, pe, peln, qa)
 		call mpp_error("external_aero_mod","pm has value <= 0.",FATAL)
 	endif
 
+	! get aerosol tracer id
+	aero_id = get_tracer_index(MODEL_ATMOS, 'aerosol')
+
 	! vertically interpolation
 	do j = js, je
 		do i = is, ie
 			if (pm(i,j,1) .lt. aero_now_p(i,j,1)) then
-				qa(i,j,1) = aero_now_a(i,j,1) + &
+				qa(i,j,1,areo_id) = aero_now_a(i,j,1) + &
 					(log(pm(i,j,1)) - log(aero_now_p(i,j,1))) / &
 					(log(aero_now_p(i,j,2)) - log(aero_now_p(i,j,1))) * &
 					(aero_now_a(i,j,2) - aero_now_a(i,j,1))
 			else if (pm(i,j,npz) .ge. aero_now_p(i,j,nlev)) then
-				qa(i,j,npz) = aero_now_a(i,j,npz-1) + &
+				qa(i,j,npz,areo_id) = aero_now_a(i,j,npz-1) + &
 					(log(pm(i,j,npz)) - log(aero_now_p(i,j,npz-1))) / &
 					(log(aero_now_p(i,j,npz)) - log(aero_now_p(i,j,npz-1))) * &
 					(aero_now_a(i,j,npz) - aero_now_a(i,j,npz-1))
@@ -310,7 +316,7 @@ subroutine read_aero(is, ie, js, je, npz, Time, pe, peln, qa)
 					do n = 1, nlev-1
 						if (pm(i,j,k) .ge. aero_now_p(i,j,n) .and. &
 							pm(i,j,k) .lt. aero_now_p(i,j,n+1)) then
-							qa(i,j,k) = aero_now_a(i,j,n) + &
+							qa(i,j,k,areo_id) = aero_now_a(i,j,n) + &
 								(log(pm(i,j,k)) - log(aero_now_p(i,j,n))) / &
 								(log(aero_now_p(i,j,n+1)) - log(aero_now_p(i,j,n))) * &
 								(aero_now_a(i,j,n+1) - aero_now_a(i,j,n))
