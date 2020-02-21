@@ -149,16 +149,22 @@ subroutine read_aero(is, ie, js, je, Time)
 
 	use constants_mod, only: grav
 	use diag_manager_mod, only: send_data
-	use time_manager_mod, only: time_type
+	use time_manager_mod, only: time_type, get_date, set_date, get_time, &
+		operator(-)
 
 	implicit none
 
 	type(time_type), intent(in) :: Time
+	type(time_type) :: Time_before
+	type(time_type) :: Time_after
 
 	integer :: k, n
 	integer, intent(in) :: is, ie, js, je
+	integer :: year, month, day, hour, minute, second
+	integer :: seconds, days01, days21, month1, month2
 
 	real, allocatable, dimension(:,:) :: vi_aero
+	real, allocatable, dimension(:,:,:) :: aero_now
 
 	logical :: used
 
@@ -182,6 +188,46 @@ subroutine read_aero(is, ie, js, je, Time)
 
 	! deallocate local array
 	if (allocated(vi_aero)) deallocate(vi_aero)
+
+	! -----------------------------------------------------------------------
+	! linearly interpolate monthly aerosol to today
+
+	! allocate local array
+	if (.not. allocated(aero_now)) allocate(aero_now(is:ie,js:je,nlev))
+
+	! get current date information
+	call get_date(Time, year, month, day, hour, minute, second)
+
+	! get previous day 15 and next day 15 time
+	if (day .ge. 15) then
+		Time_before = set_date(year, month, 15, 0, 0, 0)
+		if (month .eq. 12) then
+			Time_after = set_date(year+1, 1, 15, 0, 0, 0)
+		else
+			Time_after = set_date(year, month+1, 15, 0, 0, 0)
+		endif
+	else
+		if (month .eq. 1) then
+			Time_before = set_date(year-1, 12, 15, 0, 0, 0)
+		else
+			Time_before = set_date(year, month-1, 15, 0, 0, 0)
+		endif
+		Time_after = set_date(year, month, 15, 0, 0, 0)
+	endif
+
+	! get day difference between current day and previous day 15,
+	! and between next day 15 and previous day 15
+	call get_time(Time - Time_before, seconds, days01)
+	call get_time(Time_after - Time_before, seconds, days21)
+	call get_date(Time_before, year, month1, day, hour, minute, second)
+	call get_date(Time_after, year, month2, day, hour, minute, second)
+
+	! get aerosol for current date
+	aero_now = aerosol(:,:,:,month2) - aerosol(:,:,:,month1)
+	aero_now = 1.0 * days01 / days21 * aero_now + aerosol(:,:,:,month1)
+
+	! deallocate local array
+	if (.not. allocated(aero_now)) deallocate(aero_now)
 
 end subroutine read_aero
 
