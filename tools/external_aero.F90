@@ -166,7 +166,8 @@ subroutine read_aero(is, ie, js, je, Time)
 
 	real, allocatable, dimension(:,:) :: vi_aero
 	real, allocatable, dimension(:,:) :: vi_aero_now
-	real, allocatable, dimension(:,:,:) :: aero_now_al
+	real, allocatable, dimension(:,:,:) :: aero_now_a
+	real, allocatable, dimension(:,:,:) :: aero_now_p
 	real, allocatable, dimension(:,:,:) :: aero_now_dp
 
 	logical :: used
@@ -200,8 +201,8 @@ subroutine read_aero(is, ie, js, je, Time)
 	! linearly interpolate monthly aerosol to today
 
 	! allocate local array
-	if (.not. allocated(aero_now_al)) allocate(aero_now_al(is:ie,js:je,nlev))
-	if (.not. allocated(aero_now_dp)) allocate(aero_now_dp(is:ie,js:je,nlev))
+	if (.not. allocated(aero_now_a)) allocate(aero_now_a(is:ie,js:je,nlev))
+	if (.not. allocated(aero_now_p)) allocate(aero_now_p(is:ie,js:je,nlev))
 
 	! get current date information
 	call get_date(Time, year, month, day, hour, minute, second)
@@ -231,10 +232,10 @@ subroutine read_aero(is, ie, js, je, Time)
 	call get_date(Time_after, year, month2, day, hour, minute, second)
 
 	! get aerosol for current date
-	aero_now_al = aerosol(:,:,:,month2) - aerosol(:,:,:,month1)
-	aero_now_al = 1.0 * days01 / days21 * aero_now_al + aerosol(:,:,:,month1)
-	aero_now_dp = aero_dp(:,:,:,month2) - aero_dp(:,:,:,month1)
-	aero_now_dp = 1.0 * days01 / days21 * aero_now_dp + aero_dp(:,:,:,month1)
+	aero_now_a = aerosol(:,:,:,month2) - aerosol(:,:,:,month1)
+	aero_now_a = 1.0 * days01 / days21 * aero_now_a + aerosol(:,:,:,month1)
+	aero_now_p = aero_p(:,:,:,month2) - aero_p(:,:,:,month1)
+	aero_now_p = 1.0 * days01 / days21 * aero_now_p + aero_p(:,:,:,month1)
 
 	! -----------------------------------------------------------------------
 	! diagnostic output of current vertical integral aerosol
@@ -243,11 +244,16 @@ subroutine read_aero(is, ie, js, je, Time)
 
 		! allocate local array
 		if (.not. allocated(vi_aero_now)) allocate(vi_aero_now(is:ie,js:je))
+		if (.not. allocated(aero_now_dp)) allocate(aero_now_dp(is:ie,js:je,nlev))
   
+		! get pressure thickness for current date
+		aero_now_dp = aero_dp(:,:,:,month2) - aero_dp(:,:,:,month1)
+		aero_now_dp = 1.0 * days01 / days21 * aero_now_dp + aero_dp(:,:,:,month1)
+
 		! calcualte annual mean vertical intergral aerosol
 		vi_aero_now = 0.0
 		do k = 1, nlev
-			vi_aero_now = vi_aero_now + aero_now_al(:,:,k) * aero_now_dp(:,:,k)
+			vi_aero_now = vi_aero_now + aero_now_a(:,:,k) * aero_now_dp(:,:,k)
 		enddo
 		vi_aero_now = vi_aero_now / grav * 1.e6
   
@@ -256,12 +262,13 @@ subroutine read_aero(is, ie, js, je, Time)
   
 		! deallocate local array
 		if (allocated(vi_aero_now)) deallocate(vi_aero_now)
+		if (allocated(aero_now_dp)) deallocate(aero_now_dp)
 
 	endif
 
 	! deallocate local array
-	if (.not. allocated(aero_now_al)) deallocate(aero_now_al)
-	if (.not. allocated(aero_now_dp)) deallocate(aero_now_dp)
+	if (allocated(aero_now_a)) deallocate(aero_now_a)
+	if (allocated(aero_now_p)) deallocate(aero_now_p)
 
 end subroutine read_aero
 
