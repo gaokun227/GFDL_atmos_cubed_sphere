@@ -31,10 +31,13 @@ module external_aero_mod
 
 	public :: load_aero, read_aero, clean_aero
 
+	! MERRA2 aerosol: # month = 12, # vertical layer = 72
 	integer :: nmon = 12, nlev = 72
 	integer :: id_aero
 
+	! share arrays for time and level interpolation
 	real, allocatable, dimension(:,:,:) :: aero_ps
+	real, allocatable, dimension(:,:,:,:) :: aero_p
 	real, allocatable, dimension(:,:,:,:) :: aero_dp
 	real, allocatable, dimension(:,:,:,:) :: aerosol
 
@@ -56,8 +59,12 @@ subroutine load_aero(Atm)
 	type(fv_atmos_type), intent(in), target :: Atm
 	type(restart_file_type) :: aero_restart
 
+	integer :: k
 	integer :: is, ie, js, je
 	integer :: id_res
+
+	real, allocatable, dimension(:,:,:,:) :: aero_pe
+	real, allocatable, dimension(:,:,:,:) :: aero_lndp
 
 	character(len=64) :: file_name = "MERRA2_400.inst3_3d_aer_Nv.climatology.nc"
 
@@ -70,17 +77,66 @@ subroutine load_aero(Atm)
 		write(*,*) "aerosol 12 months climatological dataset is used for forecast."
 	endif
 
+	! -----------------------------------------------------------------------
+	! load aerosol data
+
 	if (file_exist('INPUT/'//trim(file_name),domain=Atm%domain)) then
+
+		! allocate share arrays
 		if (.not. allocated(aero_ps)) allocate(aero_ps(is:ie,js:je,nmon))
+		if (.not. allocated(aero_p)) allocate(aero_p(is:ie,js:je,nlev,nmon))
 		if (.not. allocated(aero_dp)) allocate(aero_dp(is:ie,js:je,nlev,nmon))
 		if (.not. allocated(aerosol)) allocate(aerosol(is:ie,js:je,nlev,nmon))
+
+		! read in restart files
 		id_res = register_restart_field(aero_restart,trim(file_name),"PS",aero_ps,domain=Atm%domain)
 		id_res = register_restart_field(aero_restart,trim(file_name),"DELP",aero_dp,domain=Atm%domain)
 		id_res = register_restart_field(aero_restart,trim(file_name),"SO4",aerosol,domain=Atm%domain)
 		call restore_state(aero_restart)
+
 	else
+
+		! stop when aerosol does not exist
 		call mpp_error("external_aero_mod","file: "//trim(file_name)//" does not exist.",FATAL)
+
 	endif
+
+	! -----------------------------------------------------------------------
+	! calculate layer mean pressure
+
+	! allocate local array
+	if (.not. allocated(aero_pe)) allocate(aero_pe(is:ie,js:je,nlev+1,nmon))
+	if (.not. allocated(aero_lndp)) allocate(aero_lndp(is:ie,js:je,nlev,nmon))
+
+	! calcuate edge pressure
+	aero_p = -999.9
+	aero_pe(:,:,nlev+1,:) = aero_ps
+	do k = nlev, 1, -1
+		aero_pe(:,:,k,:) = aero_pe(:,:,k+1,:) - aero_dp(:,:,k,:)
+	enddo
+
+	! stop when minimum value is less and equal to zero
+	if (minval(aero_pe) .le. 0.0) then
+		call mpp_error("external_aero_mod","aero_pe has value <= 0.",FATAL)
+	endif
+
+	! calcuate layer mean pressure
+	do k = 1, nlev
+		aero_lndp(:,:,k,:) = log(aero_pe(:,:,k+1,:)) - log(aero_pe(:,:,k,:))
+	enddo
+	aero_p = aero_dp / aero_lndp
+
+	! stop when minimum value is less and equal to zero
+	if (minval(aero_p) .le. 0.0) then
+		call mpp_error("external_aero_mod","aero_p has value < 0.",FATAL)
+	endif
+
+	! deallocate local array
+	if (allocated(aero_pe)) deallocate(aero_pe)
+	if (allocated(aero_lndp)) deallocate(aero_lndp)
+
+	! -----------------------------------------------------------------------
+	! register for diagnostic output
 
 	id_aero = register_static_field('dynamics','aerosol',Atm%atmos_axes(1:2),'none','none')
 
@@ -106,8 +162,13 @@ subroutine read_aero(is, ie, js, je, Time)
 
 	logical :: used
 
+	! -----------------------------------------------------------------------
+	! diagnostic output of annual mean vertical integral aerosol
+
+	! allocate local array
 	if (.not. allocated(vi_aero)) allocate(vi_aero(is:ie,js:je))
 
+	! calcualte annual mean vertical intergral aerosol
 	vi_aero = 0.0
 	do n = 1, nmon
 		do k = 1, nlev
@@ -116,8 +177,10 @@ subroutine read_aero(is, ie, js, je, Time)
 	enddo
 	vi_aero = vi_aero / nmon / grav * 1.e6
 
+	! diagnostic output
 	if (id_aero > 0) used = send_data(id_aero,vi_aero,Time)
 
+	! deallocate local array
 	if (allocated(vi_aero)) deallocate(vi_aero)
 
 end subroutine read_aero
@@ -130,6 +193,7 @@ subroutine clean_aero()
 	implicit none
 
 	if (allocated(aero_ps)) deallocate(aero_ps)
+	if (allocated(aero_p)) deallocate(aero_p)
 	if (allocated(aero_dp)) deallocate(aero_dp)
 	if (allocated(aerosol)) deallocate(aerosol)
 
