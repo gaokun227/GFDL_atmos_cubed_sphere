@@ -43,19 +43,17 @@ contains
 ! =======================================================================
 ! load aerosol 12 months climatological dataset
 
-subroutine load_aero(Atm, fv_domain)
+subroutine load_aero(Atm)
 
 	use fms_io_mod, only: restart_file_type, register_restart_field
 	use fms_io_mod, only: restore_state
 	use fms_mod, only: file_exist, mpp_error, FATAL
 	use fv_arrays_mod, only: fv_atmos_type
-	use mpp_domains_mod, only: domain2d
 	use diag_manager_mod, only: register_static_field
 
 	implicit none
 
 	type(fv_atmos_type), intent(in), target :: Atm
-	type(domain2d), intent(in) :: fv_domain
 	type(restart_file_type) :: aero_restart
 
 	integer :: is, ie, js, je
@@ -72,13 +70,13 @@ subroutine load_aero(Atm, fv_domain)
 		write(*,*) "aerosol 12 months climatological dataset is used for forecast."
 	endif
 
-	if (file_exist(file_name)) then
+	if (file_exist('INPUT/'//trim(file_name),domain=Atm%domain)) then
 		if (.not. allocated(aero_ps)) allocate(aero_ps(is:ie,js:je,nmon))
 		if (.not. allocated(aero_dp)) allocate(aero_dp(is:ie,js:je,nlev,nmon))
 		if (.not. allocated(aerosol)) allocate(aerosol(is:ie,js:je,nlev,nmon))
-		id_res = register_restart_field(aero_restart,file_name,"PS",aero_ps,domain=fv_domain)
-		id_res = register_restart_field(aero_restart,file_name,"DELP",aero_dp,domain=fv_domain)
-		id_res = register_restart_field(aero_restart,file_name,"SO4",aerosol,domain=fv_domain)
+		id_res = register_restart_field(aero_restart,trim(file_name),"PS",aero_ps,domain=Atm%domain)
+		id_res = register_restart_field(aero_restart,trim(file_name),"DELP",aero_dp,domain=Atm%domain)
+		id_res = register_restart_field(aero_restart,trim(file_name),"SO4",aerosol,domain=Atm%domain)
 		call restore_state(aero_restart)
 	else
 		call mpp_error("external_aero_mod","file: "//trim(file_name)//" does not exist.",FATAL)
@@ -113,10 +111,10 @@ subroutine read_aero(is, ie, js, je, Time)
 	vi_aero = 0.0
 	do n = 1, nmon
 		do k = 1, nlev
-			vi_aero = vi_aero+aerosol(:,:,k,n)*aero_dp(:,:,k,n)/grav*1.e6
+			vi_aero = vi_aero + aerosol(:,:,k,n) * aero_dp(:,:,k,n)
 		enddo
 	enddo
-	vi_aero = vi_aero/nmon
+	vi_aero = vi_aero / nmon / grav * 1.e6
 
 	if (id_aero > 0) used = send_data(id_aero,vi_aero,Time)
 
