@@ -80,10 +80,18 @@ real :: realnumber
 #ifdef GFS_PHYS
 ! real(kind=r8_kind), public, parameter :: RADIUS = 6376000.0_r8_kind
 ! SJL: the following are from fv3_gfsphysics/gfs_physics/physics/physcons.f90
-real, public, parameter :: RADIUS = 6.3712e+6_r8_kind
+
+#ifdef SMALL_EARTH
+ real, public, parameter :: small_fac = 1._r8_kind / 10._r8_kind
+#else
+ real, public, parameter :: small_fac = 1._r8_kind 
+#endif
+
+
+real, public, parameter :: RADIUS = 6.3712e+6_r8_kind * small_fac
 real(kind=r8_kind), public, parameter :: PI_8   = 3.1415926535897931_r8_kind
 real, public, parameter ::         PI     = 3.1415926535897931_r8_kind
-real, public, parameter :: OMEGA  = 7.2921e-5 
+real, public, parameter :: OMEGA  = 7.2921e-5 / small_fac
 real, public, parameter :: GRAV   = 9.80665_r8_kind
 real(kind=r8_kind), public, parameter :: GRAV_8  = 9.80665_r8_kind
 real, public, parameter :: RDGAS  = 287.05_r8_kind
@@ -97,18 +105,18 @@ real, public, parameter :: con_csol   =2.1060e+3_r8_kind      ! spec heat H2O ic
 
 #ifdef SMALL_EARTH
 #ifdef DCMIP
-       real, private, paramter :: small_fac =  1._r8_kind / 120._r8_kind #only needed for supercell test
+       real, private, paramter :: small_fac =  1._r8_kind / 120._r8_kind !only needed for supercell test
 #else
 #ifdef HIWPP
 #ifdef SUPER_K
        real, private, parameter :: small_fac = 1._r8_kind / 120._r8_kind
-#else
+#else 
  real, private, parameter :: small_fac = 1._r8_kind / 166.7_r8_kind
-#endif
+#endif SUPER_K
 #else
  real, private, parameter :: small_fac = 1._r8_kind / 10._r8_kind
-#endif
-#endif
+#endif HIWPP
+#endif DCMIP
 #else
  real, private, parameter :: small_fac = 1._r8_kind
 #endif
