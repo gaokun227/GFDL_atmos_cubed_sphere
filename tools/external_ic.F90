@@ -661,18 +661,18 @@ contains
     do k=1,npz
       do j=js,je
         do i=is,ie
-          wt = Atm%delp(i,j,k)
-          if ( Atm%flagstruct%nwat == 6 ) then
-             qt = wt*(1. + Atm%q(i,j,k,liq_wat) + &
-                           Atm%q(i,j,k,ice_wat) + &
-                           Atm%q(i,j,k,rainwat) + &
-                           Atm%q(i,j,k,snowwat) + &
-                           Atm%q(i,j,k,graupel))
-          else   ! all other values of nwat
-             qt = wt*(1. + sum(Atm%q(i,j,k,2:Atm%flagstruct%nwat)))
-          endif
-          Atm%delp(i,j,k) = qt
-          if (ntclamt > 0) Atm%q(i,j,k,ntclamt) = 0.0    ! Moorthi
+					wt = Atm%delp(i,j,k)
+					if ( Atm%flagstruct%nwat == 6 ) then
+						 qt = wt/(1. - (Atm%q(i,j,k,liq_wat) + &
+														Atm%q(i,j,k,ice_wat) + &
+														Atm%q(i,j,k,rainwat) + &
+														Atm%q(i,j,k,snowwat) + &
+														Atm%q(i,j,k,graupel)))
+					else   ! all other values of nwat
+						 qt = wt/(1. - sum(Atm%q(i,j,k,2:Atm%flagstruct%nwat)))
+					endif
+					Atm%delp(i,j,k) = qt
+					if (ntclamt > 0) Atm%q(i,j,k,ntclamt) = 0.0    ! Moorthi
         enddo
       enddo
     enddo
