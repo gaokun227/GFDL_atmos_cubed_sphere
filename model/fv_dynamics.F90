@@ -52,6 +52,9 @@ implicit none
    integer :: kmax=1
    integer :: k_rf = 0
 
+   real, parameter    ::     rad2deg = 180./pi
+
+
    real :: agrav
 #ifdef HIWPP
    real, allocatable:: u00(:,:,:), v00(:,:,:)
@@ -559,6 +562,22 @@ contains
        call prt_mxm('ice_wat_ldyn', q(isd,jsd,1,ice_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
        call prt_mxm('snowwat_ldyn', q(isd,jsd,1,snowwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
        call prt_mxm('graupel_ldyn', q(isd,jsd,1,graupel), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+
+#ifdef TEST_LMH
+       !NaN search
+       do k=1,npz
+       do j=js,je
+       do i=is,ie
+          if (.not. pt(i,j,k) == pt(i,j,k)) then
+             print*, ' pt NAN_Warn: ', i,j,k,mpp_pe(),pt(i,j,k), gridstruct%agrid(i,j,1)*rad2deg, gridstruct%agrid(i,j,2)*rad2deg
+             if ( k/=1  ) print*, '   ', k-1, pt(i,j,k-1)    
+             if ( k/=npz ) print*, '   ', k+1, pt(i,j,k+1)    
+          endif
+       enddo
+       enddo
+       enddo
+#endif
+
      endif
 
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
@@ -940,7 +959,7 @@ contains
              enddo
           enddo
 #endif
-#ifdef SMALL_EARTH
+#ifdef SMALL_EARTH_TEST ! changed!!!
           tau0 = tau
 #else
           tau0 = tau * sday

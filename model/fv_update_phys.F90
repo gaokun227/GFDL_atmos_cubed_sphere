@@ -402,9 +402,11 @@ module fv_update_phys_mod
                      delz(i,j,k) = delz(i,j,k) - delp(i,j,k)*dim(tbad, tmax)*cvm(i) / (grav*(pe(i,k+1,j)-ptop))
                      pt(i,j,k) = min(tmax, tbad)
                      !!! DEBUG CODE
+#ifdef TEST_LMH
                      if (tbad > tmax) then
                         print*, ' fv_update_phys: Limited temp', i, j, k, mpp_pe(), gridstruct%agrid(i,j,:)*180./pi, tbad, pt(i,j,k), delz(i,j,k)
                      endif
+#endif
                      !!! END DEBUG CODE
 !-- Limiter (sjl): ---------------------------------------------------------------------------------------------------
                   enddo

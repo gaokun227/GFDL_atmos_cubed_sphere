@@ -96,6 +96,7 @@ module fv_diagnostics_mod
  public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, range_check!, id_divg, id_te
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field
+ public :: do_diag_debug_dyn, debug_column_dyn
 
  integer, parameter :: MAX_PLEVS = 31
 #ifdef FEWER_PLEVS
@@ -112,14 +113,17 @@ module fv_diagnostics_mod
  real, allocatable, dimension(:) :: diag_debug_lon, diag_debug_lat
  character(16), dimension(MAX_DIAG_COLUMN) :: diag_debug_names
  real, dimension(MAX_DIAG_COLUMN) :: diag_debug_lon_in, diag_debug_lat_in
+ integer, dimension(MAX_DIAG_COLUMN) :: diag_debug_kbottom, diag_debug_nlevels
 
  logical, allocatable, dimension(:,:) :: do_sonde_diag_column
  integer, allocatable, dimension(:) :: diag_sonde_units, diag_sonde_i, diag_sonde_j
  real, allocatable, dimension(:) :: diag_sonde_lon, diag_sonde_lat
  character(16), dimension(MAX_DIAG_COLUMN) :: diag_sonde_names
  real, dimension(MAX_DIAG_COLUMN) :: diag_sonde_lon_in, diag_sonde_lat_in
+ integer, dimension(MAX_DIAG_COLUMN) :: diag_debug_i_in, diag_debug_j_in, diag_debug_tile_in
 
  logical :: do_diag_debug = .false.
+ logical :: do_diag_debug_dyn = .false.
  logical :: do_diag_sonde = .false.
  logical :: prt_sounding = .false.
  integer :: sound_freq = 3
@@ -134,8 +138,9 @@ module fv_diagnostics_mod
  ! integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
  ! integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
  
- namelist /fv_diag_column_nml/ do_diag_debug, do_diag_sonde, sound_freq, &
-      diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, &
+ namelist /fv_diag_column_nml/ do_diag_debug, do_diag_debug_dyn, do_diag_sonde, sound_freq, &
+      diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, diag_debug_kbottom, diag_debug_nlevels,&
+      diag_debug_i_in, diag_debug_j_in, diag_debug_tile_in, &
       diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname
 
  namelist /fv_diag_plevs_nml/ nplev, levs, k100, k200, k500
@@ -639,6 +644,8 @@ contains
           idiag%id_v_dt_phys = register_diag_field ( trim(field), 'v_dt_phys', axes(1:3), Time,           &
                'meridional wind tendency from physics', 'm/s/s', missing_value=missing_value )
           if (idiag%id_v_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_v_dt(isc:iec,jsc:jec,npz))
+
+
 
           idiag%id_qv_dt_phys = register_diag_field ( trim(field), 'qv_dt_phys', axes(1:3), Time,           &
                'water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
@@ -1163,6 +1170,11 @@ contains
     diag_debug_names(:) = ''
     diag_debug_lon_in(:) = -999.
     diag_debug_lat_in(:) = -999.
+    diag_debug_i_in(:) = -999
+    diag_debug_j_in(:) = -999
+    diag_debug_tile_in(:) = -999
+    diag_debug_kbottom(:) = npz
+    diag_debug_nlevels(:) = npz/3
 
     !diag_debug_names(1:2) = (/'ORD','Princeton'/)
     !diag_debug_lon_in(1:2) = (/272.,285.33/)
@@ -1199,7 +1211,9 @@ contains
        !Determine number of debug columns
        do m=1,MAX_DIAG_COLUMN
           !if (is_master()) print*, i, diag_debug_names(m), len(trim(diag_debug_names(m))), diag_debug_lon_in(m), diag_debug_lat_in(m)
-          if (len(trim(diag_debug_names(m))) == 0 .or. diag_debug_lon_in(m) < -180. .or. diag_debug_lat_in(m) < -90.) exit
+          if (len(trim(diag_debug_names(m))) == 0) exit
+          if ( ( diag_debug_lon_in(m) < -180. .or. diag_debug_lat_in(m) < -90. ) .and. &
+               ( diag_debug_i_in(m) < -10 .or. diag_debug_j_in(m) < -10 .or. diag_debug_tile_in(m) < 0 )) exit
           num_diag_debug = num_diag_debug + 1
           if (diag_debug_lon_in(m) < 0.)  diag_debug_lon_in(m) = diag_debug_lon_in(m) + 360.
        enddo
@@ -1226,8 +1240,33 @@ contains
             diag_lon=diag_debug_lon, diag_lat=diag_debug_lat, diag_i=diag_debug_i, diag_j=diag_debug_j, diag_units=diag_debug_units)
 
        do m=1,num_diag_debug
-          diag_debug_i(m) = diag_debug_i(m) + isc - 1
-          diag_debug_j(m) = diag_debug_j(m) + jsc - 1
+
+          if (diag_debug_i_in(m) > 0 ) then
+
+             if ( diag_debug_i_in(m) >= isc .and. diag_debug_i_in(m) <= iec .and. &
+                  diag_debug_j_in(m) >= jsc .and. diag_debug_j_in(m) <= jec .and. &
+                  diag_debug_tile_in(m) == Atm(n)%tile_of_mosaic ) then
+
+                diag_debug_i(m) = diag_debug_i_in(m)
+                diag_debug_j(m) = diag_debug_j_in(m)
+
+                diag_debug_lon(m) = Atm(n)%gridstruct%agrid(diag_debug_i(m),diag_debug_j(m),1)
+                diag_debug_lat(m) = Atm(n)%gridstruct%agrid(diag_debug_i(m),diag_debug_j(m),2)
+
+             else
+
+                diag_debug_i(m) = -999
+                diag_debug_j(m) = -999
+
+             endif
+                  
+
+          else
+
+             diag_debug_i(m) = diag_debug_i(m) + isc - 1
+             diag_debug_j(m) = diag_debug_j(m) + jsc - 1
+
+          endif
 
           if (diag_debug_i(m) >= isc .and. diag_debug_i(m) <= iec .and. &
               diag_debug_j(m) >= jsc .and. diag_debug_j(m) <= jec ) then
@@ -1670,6 +1709,8 @@ contains
        if (idiag%id_t_dt_phys > 0)  used=send_data(idiag%id_t_dt_phys,  Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_u_dt_phys > 0)  used=send_data(idiag%id_u_dt_phys,  Atm(n)%phys_diag%phys_u_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_v_dt_phys > 0)  used=send_data(idiag%id_v_dt_phys,  Atm(n)%phys_diag%phys_v_dt(isc:iec,jsc:jec,1:npz), Time)
+
+
 
        if(idiag%id_c15>0 .or. idiag%id_c25>0 .or. idiag%id_c35>0 .or. idiag%id_c45>0) then
           call wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, Atm(n)%ua(isc:iec,jsc:jec,npz),   &
@@ -3554,7 +3595,7 @@ contains
 
       if (do_diag_debug) then
          call debug_column(Atm(n)%pt, Atm(n)%delp, Atm(n)%delz, Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%q, &
-              Atm(n)%npz, Atm(n)%ncnst, sphum, Atm(n)%flagstruct%nwat, Atm(n)%flagstruct%hydrostatic, Atm(n)%bd, Time)
+              Atm(n)%npz, Atm(n)%ncnst, sphum, Atm(n)%flagstruct%nwat, zvir, Atm(n)%flagstruct%hydrostatic, Atm(n)%bd, Time)
       endif
 
       if (prt_sounding) then
@@ -5973,10 +6014,11 @@ end subroutine eqv_pot
 
 !-----------------------------------------------------------------------
 
-  subroutine debug_column(pt, delp, delz, u, v, w, q, npz, ncnst, sphum, nwat, hydrostatic, bd, Time)
+  subroutine debug_column(pt, delp, delz, u, v, w, q, npz, ncnst, sphum, nwat, zvir, hydrostatic, bd, Time)
 
     type(fv_grid_bounds_type), intent(IN) :: bd
     integer, intent(IN) :: npz, ncnst, sphum, nwat
+    real, intent(IN) :: zvir
     logical, intent(IN) :: hydrostatic
     real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w
     real, dimension(bd%is:, bd%js:,1:), intent(IN) :: delz
@@ -5987,7 +6029,9 @@ end subroutine eqv_pot
 
     type(time_type), intent(IN) :: Time
     integer :: i,j,k,n,l
-    real cond
+    real cond, pres, rdg
+
+    rdg = -rdgas/grav
 
     do n=1,size(diag_debug_i)
 
@@ -6001,19 +6045,21 @@ end subroutine eqv_pot
           call column_diagnostics_header(diag_debug_names(n), diag_debug_units(n), Time, n, &
                diag_debug_lon, diag_debug_lat, diag_debug_i, diag_debug_j)
 
-          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9)') 'k', 'T', 'delp', 'delz', 'u', 'v', 'w', 'sphum', 'cond'
-          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9)') '', 'K', 'mb', 'm', 'm/s', 'm/s', 'm/s', 'g/kg', 'g/kg'
+          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9, A8)') 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres'
+          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9, A8)')  '', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb'
           if (hydrostatic) then
              call mpp_error(NOTE, 'Hydrostatic debug sounding not yet supported')
           else
-             do k=2*npz/3,npz
+             !do k=2*npz/3,npz
+             do k=max(diag_debug_kbottom(n)-diag_debug_nlevels(n),1),min(diag_debug_kbottom(n),npz)
                 cond = 0.
                 do l=2,nwat
                    cond = cond + q(i,j,k,l)
                 enddo
-                write(diag_debug_units(n),'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5 )') &
+                pres = rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))
+                write(diag_debug_units(n),'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F8.3 )') &
                      k, pt(i,j,k), delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
-                     q(i,j,k,sphum)*1000., cond*1000.
+                     q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2
              enddo
           endif
 
@@ -6024,6 +6070,85 @@ end subroutine eqv_pot
     enddo
 
   end subroutine debug_column
+
+  subroutine debug_column_dyn(pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
+       use_heat_source, npz, ncnst, sphum, nwat, zvir, hydrostatic, bd, Time, k_step, n_step)
+
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: npz, ncnst, sphum, nwat, k_step, n_step
+    real, intent(IN) :: akap, zvir
+    logical, intent(IN) :: hydrostatic, use_heat_source
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w, heat_source
+    real, dimension(bd%is:, bd%js:,1:), intent(IN) :: delz
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz), intent(IN) :: u
+    real, dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz), intent(IN) :: v
+    real, dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst), intent(IN) :: q
+    real, dimension(bd%isd:,bd%jsd:,1:), intent(IN) :: cappa
+   
+    !Will need to convert variables from internal dyn_core values into logical external values
+    ! esp. pt from theta_v to T
+
+    type(time_type), intent(IN) :: Time
+    integer :: i,j,k,n,l
+    real cond, pres, rdg, Tv, temp, heats, virt, pk, cv_air
+
+    rdg = -rdgas/grav
+    cv_air = cp_air - rdgas
+
+    do n=1,size(diag_debug_i)
+
+       i=diag_debug_i(n)
+       j=diag_debug_j(n)
+
+       if (i < bd%is .or. i > bd%ie) cycle
+       if (j < bd%js .or. j > bd%je) cycle
+
+       if (do_debug_diag_column(i,j)) then
+          call column_diagnostics_header(diag_debug_names(n), diag_debug_units(n), Time, n, &
+               diag_debug_lon, diag_debug_lat, diag_debug_i, diag_debug_j)
+
+          write(diag_debug_units(n),*) 'k_split = ', k_step, ', n_split = ', n_step
+          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A8)') 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres', 'heat'
+          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A8)')  '', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb', 'K'
+          if (hydrostatic) then
+             call mpp_error(NOTE, 'Hydrostatic debug sounding not yet supported')
+          else
+             !do k=2*npz/3,npz
+             do k=max(diag_debug_kbottom(n)-diag_debug_nlevels(n),1),min(diag_debug_kbottom(n),npz)
+                cond = 0.
+                do l=2,nwat
+                   cond = cond + q(i,j,k,l)
+                enddo
+                virt = (1.+zvir*q(i,j,k,sphum))
+!!$#ifdef MOIST_CAPPA
+!!$                    pkz(i,j,k) = exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+!!$#else
+!!$                    pkz(i,j,k) = exp( k1k*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+!!$#endif
+#ifdef MOIST_CAPPA
+                pres = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+                pk = exp(cappa(i,j,k)*log(pres))
+#else
+                pres = exp(1./(1.-akap)*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+                pk = exp(akap*log(pres))
+#endif
+                temp = pt(i,j,k)*pk/virt
+                if (use_heat_source) then
+                   heats = heat_source(i,j,k) / (cv_air*delp(i,j,k))
+                else
+                   heats = 0.0
+                endif
+                write(diag_debug_units(n),'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, G )') &
+                     k, temp, delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
+                     q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, heats
+             enddo
+          endif
+
+       endif
+
+    enddo
+
+  end subroutine debug_column_dyn
 
   subroutine sounding_column( pt, delp, delz, u, v, q, peln, pkz, phis, &
        npz, ncnst, sphum, nwat, hydrostatic, moist_phys, zvir, ng, bd, Time )
