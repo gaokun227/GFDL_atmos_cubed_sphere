@@ -1012,7 +1012,7 @@ contains
    integer :: i, j, ix, k, k1, n, w_diff, nt_dyn, iq
    integer :: nb, blen, nwat, dnats, nq_adv
    real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
-   real :: tracer_clock
+   real :: tracer_clock, lat_thresh
    character(len=32) :: tracer_name
 
    Time_prev = Time
@@ -1160,6 +1160,7 @@ contains
        call timing_off('FV_UPDATE_PHYS')
    call mpp_clock_end (id_dynam)
 
+
 !LMH 7jan2020: Update PBL and other clock tracers, if present
    tracer_clock = time_type_to_real(Time_next - Atm(n)%Time_init)*1.e-6
    do iq = 1, nq
@@ -1183,8 +1184,20 @@ contains
             Atm(n)%q(i,j,npz,iq) = tracer_clock
          enddo
          enddo
+      else if (trim(tracer_name) == 'itcz_clock' ) then
+         lat_thresh = 15.*pi/180.
+         do k=1,npz
+         do j=jsc,jec
+         do i=isc,iec
+            if (abs(Atm(n)%gridstruct%agrid(i,j,2)) < lat_thresh .and. Atm(n)%w(i,j,k) > 1.5) then
+               Atm(n)%q(i,j,npz,iq) = tracer_clock
+            endif
+         enddo
+         enddo
+         enddo
       endif
   enddo
+
 !--- nesting update after updating atmospheric variables with
 !--- physics tendencies
     if (ngrids > 1 .and. p_split > 0) then
