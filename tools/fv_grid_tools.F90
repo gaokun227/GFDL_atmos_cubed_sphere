@@ -1092,6 +1092,7 @@ contains
              call mpp_send(grid_global(:,:,:,1),size(grid_global),grids_master_procs(n))
           endif
           call mpp_sync_self()
+
        endif
     enddo
 
@@ -1404,19 +1405,6 @@ contains
                     pa_grid(i,j,1:2) )
             end do
          end do
-
-!!$      !TODO: can we just send around ONE grid and re-calculate
-!!$      ! staggered grids from that??
-!!$      call mpp_broadcast(grid_global(1-ng:npx+ng,  1-ng:npy+ng  ,:,1), &
-!!$           ((npx+ng)-(1-ng)+1)*((npy+ng)-(1-ng)+1)*ndims, mpp_root_pe() )
-!!$      call mpp_broadcast(      p_ind(1-ng:npx+ng,  1-ng:npy+ng  ,1:4),   &
-!!$           ((npx+ng)-(1-ng)+1)*((npy+ng)-(1-ng)+1)*4, mpp_root_pe() )
-!!$      call mpp_broadcast(    pa_grid( isg:ieg  , jsg:jeg  , :), &
-!!$           ((ieg-isg+1))*(jeg-jsg+1)*ndims, mpp_root_pe())
-!!$      call mpp_broadcast(  p_grid_u( isg:ieg  , jsg:jeg+1, :), &
-!!$           (ieg-isg+1)*(jeg-jsg+2)*ndims, mpp_root_pe())
-!!$      call mpp_broadcast(  p_grid_v( isg:ieg+1, jsg:jeg  , :), &
-!!$           (ieg-isg+2)*(jeg-jsg+1)*ndims, mpp_root_pe())
 
          if (Atm%flagstruct%grid_type >= 0) then
             do n=1,ndims
