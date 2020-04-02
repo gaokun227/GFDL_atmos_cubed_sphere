@@ -584,8 +584,8 @@ module fv_arrays_mod
      logical :: nested = .false.
      integer :: nestbctype = 1
      integer :: nsponge = 0
-     integer :: nestupdate = 0       
-     logical :: twowaynest = .false. 
+     integer :: nestupdate = 7 ! most commonly-used value
+     logical :: twowaynest = .true.  ! most commonly-used
      integer :: ioffset, joffset !Position of nest within parent grid
      integer :: nlevel = 0 ! levels down from top-most domain
 
