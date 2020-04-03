@@ -59,7 +59,8 @@ module fv_restart_mod
   use mpp_domains_mod,     only: mpp_global_field
   use fms_mod,             only: file_exist
   use fv_treat_da_inc_mod, only: read_da_inc
-
+  use fv_coarse_graining_mod, only: fv_io_write_restart_coarse
+  
   implicit none
   private
 
@@ -79,8 +80,10 @@ contains
   ! </DESCRIPTION>
   !
   subroutine fv_restart_init()
+    
     call fv_io_init()
     module_is_initialized = .TRUE.
+    
   end subroutine fv_restart_init
   ! </SUBROUTINE> NAME="fv_restart_init"
 
@@ -178,6 +181,7 @@ contains
        !2. Register restarts
        !--- call fv_io_register_restart to register restart field to be written out in fv_io_write_restart
        if ( n==this_grid ) call fv_io_register_restart(Atm(n)%domain,Atm(n:n))
+
        !if (Atm(n)%neststruct%nested) call fv_io_register_restart_BCs(Atm(n)) !TODO put into fv_io_register_restart
 
 
@@ -1218,7 +1222,15 @@ contains
     type(fv_atmos_type), intent(inout) :: Atm
     character(len=*),    intent(in)    :: timestamp
 
-    call fv_io_write_restart(Atm, timestamp)
+    if (Atm%flagstruct%restart_resolution .eq. 'both') then
+       call fv_io_write_restart(Atm, timestamp)
+       call fv_io_write_restart_coarse(Atm, timestamp)
+    else if (Atm%flagstruct%restart_resolution .eq. 'only_coarse') then
+       call fv_io_write_restart_coarse(Atm, timestamp)
+    else
+       call fv_io_write_restart(Atm, timestamp)
+    endif
+    
     if (Atm%neststruct%nested) then
        call fv_io_write_BCs(Atm)
     endif
@@ -1306,7 +1318,15 @@ contains
     ! Write4 energy correction term
 #endif
 
- call fv_io_write_restart(Atm)
+!    if (Atm%flagstruct%restart_resolution .eq. 'both') then
+       call fv_io_write_restart(Atm)
+       call fv_io_write_restart_coarse(Atm)
+!    else if (Atm%flagstruct%restart_resolution .eq. 'only_coarse') then
+!       call fv_io_write_restart_coarse(Atm)
+!    else
+!       call fv_io_write_restart(Atm)
+!    endif
+    
  if (Atm%neststruct%nested) call fv_io_write_BCs(Atm)
 
  module_is_initialized = .FALSE.

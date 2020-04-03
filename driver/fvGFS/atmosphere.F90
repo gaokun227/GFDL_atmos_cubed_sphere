@@ -30,7 +30,7 @@ module atmosphere_mod
 ! FMS modules:
 !-----------------
 use block_control_mod,      only: block_control_type
-use constants_mod,          only: cp_air, rdgas, grav, rvgas, kappa, pstd_mks
+use constants_mod,          only: cp_air, rdgas, grav, rvgas, kappa, pstd_mks, pi
 use time_manager_mod,       only: time_type, get_time, set_time, operator(+), &
                                   operator(-), operator(/), time_type_to_real
 use fms_mod,                only: file_exist, open_namelist_file,    &
@@ -41,7 +41,7 @@ use fms_mod,                only: file_exist, open_namelist_file,    &
                                   mpp_clock_id, mpp_clock_begin,     &
                                   mpp_clock_end, CLOCK_SUBCOMPONENT, &
                                   clock_flag_default, nullify_domain
-use mpp_mod,                only: mpp_error, stdout, FATAL, NOTE, &
+use mpp_mod,                only: mpp_error, stdout, FATAL, WARNING, NOTE, &
                                   input_nml_file, mpp_root_pe,    &
                                   mpp_npes, mpp_pe, mpp_chksum,   &
                                   mpp_get_current_pelist,         &
@@ -57,7 +57,7 @@ use IPD_typedefs,           only: IPD_data_type, kind_phys
 !-----------------
 ! FV core modules:
 !-----------------
-use fv_arrays_mod,      only: fv_atmos_type, R_GRID
+use fv_arrays_mod,      only: fv_atmos_type, R_GRID, fv_grid_bounds_type, phys_diag_type
 use fv_control_mod,     only: fv_control_init, fv_end, ngrids
 use fv_eta_mod,         only: get_eta_level
 use fv_fill_mod,        only: fill_gfs
@@ -70,6 +70,7 @@ use fv_timing_mod,      only: timing_on, timing_off
 use fv_mp_mod,          only: is_master
 use fv_sg_mod,          only: fv_subgrid_z
 use fv_update_phys_mod, only: fv_update_phys
+use fv_io_mod,          only: fv_io_register_nudge_restart
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
 use fv_regional_mod,    only: start_regional_restart, read_new_bc_data
 use fv_regional_mod,    only: a_step, p_step
@@ -292,6 +293,16 @@ contains
                                  isc, iec, jsc, jec, &
                                  isd, ied, jsd, jed )
    endif
+
+
+   if ( Atm(mygrid)%flagstruct%nudge ) then
+      call fv_nwp_nudge_init( Time, Atm(mygrid)%atmos_axes, npz, zvir, Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%ts, &
+           Atm(mygrid)%phis, Atm(mygrid)%gridstruct, Atm(mygrid)%ks, Atm(mygrid)%npx, Atm(mygrid)%neststruct, Atm(mygrid)%bd)
+      call mpp_error(NOTE, 'NWP nudging is active')
+   endif
+   call fv_io_register_nudge_restart ( Atm )
+
+
    if ( Atm(mygrid)%flagstruct%na_init>0 ) then
       call nullify_domain ( )
       if ( .not. Atm(mygrid)%flagstruct%hydrostatic ) then
@@ -477,6 +488,9 @@ contains
 
   ! initialize domains for writing global physics data
    call set_domain ( Atm(mygrid)%domain )
+
+   if ( Atm(mygrid)%flagstruct%nudge ) call fv_nwp_nudge_end
+
 
    if (Atm(mygrid)%flagstruct%do_inline_mp) then
      call gfdl_mp_end ( )
@@ -998,6 +1012,7 @@ contains
    integer :: i, j, ix, k, k1, n, w_diff, nt_dyn, iq
    integer :: nb, blen, nwat, dnats, nq_adv
    real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
+   real :: tracer_clock, lat_thresh
    character(len=32) :: tracer_name
 
    Time_prev = Time
@@ -1008,12 +1023,16 @@ contains
    nwat = Atm(n)%flagstruct%nwat
    dnats = Atm(mygrid)%flagstruct%dnats
    nq_adv = nq - dnats
+   nt_dyn = ncnst-pnats   !nothing more than nq
 
    if( nq<3 ) call mpp_error(FATAL, 'GFS phys must have 3 interactive tracers')
 
    call set_domain ( Atm(mygrid)%domain )
 
    call timing_on('GFS_TENDENCIES')
+
+   call atmos_phys_qdt_diag(Atm(n)%q, Atm(n)%phys_diag, nt_dyn, dt_atmos, .true.)
+
 !--- put u/v tendencies into haloed arrays u_dt and v_dt
 !$OMP parallel do default (none) & 
 !$OMP              shared (rdt, n, nq, dnats, npz, ncnst, nwat, mygrid, u_dt, v_dt, t_dt,&
@@ -1035,7 +1054,6 @@ contains
            IPD_Data(nb)%Stateout%gq0(:,:,iq) = IPD_Data(nb)%Statein%qgrs(:,:,iq)
         endif
      enddo
-
 
      do k = 1, npz
        k1 = npz+1-k !reverse the k direction 
@@ -1096,10 +1114,10 @@ contains
 
    enddo  ! nb-loop
 
+   call atmos_phys_qdt_diag(Atm(n)%q, Atm(n)%phys_diag, nt_dyn, dt_atmos, .false.)
    call timing_off('GFS_TENDENCIES')
 
    w_diff = get_tracer_index (MODEL_ATMOS, 'w_diff' )
-   nt_dyn = ncnst-pnats   !nothing more than nq
    if ( w_diff /= NO_TRACER ) then
       nt_dyn = nt_dyn - 1
    endif
@@ -1137,9 +1155,48 @@ contains
                          .true., Time_next, Atm(n)%flagstruct%nudge, Atm(n)%gridstruct,    &
                          Atm(n)%gridstruct%agrid(:,:,1), Atm(n)%gridstruct%agrid(:,:,2),   &
                          Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%flagstruct,            &
-                         Atm(n)%neststruct, Atm(n)%bd, Atm(n)%domain, Atm(n)%ptop)
+                         Atm(n)%neststruct, Atm(n)%bd, Atm(n)%domain, &
+                         Atm(n)%ptop, Atm(n)%phys_diag, Atm(n)%nudge_diag)
        call timing_off('FV_UPDATE_PHYS')
    call mpp_clock_end (id_dynam)
+
+
+!LMH 7jan2020: Update PBL and other clock tracers, if present
+   tracer_clock = time_type_to_real(Time_next - Atm(n)%Time_init)*1.e-6
+   do iq = 1, nq
+      call get_tracer_names (MODEL_ATMOS, iq, tracer_name)
+      if (trim(tracer_name) == 'pbl_clock') then
+         do nb = 1,Atm_block%nblks
+            blen = Atm_block%blksz(nb)
+            do ix = 1, blen
+               i = Atm_block%index(nb)%ii(ix)
+               j = Atm_block%index(nb)%jj(ix)
+               do k=1,npz
+                  k1 = npz+1-k !reverse the k direction 
+                  Atm(n)%q(i,j,k1,iq) = tracer_clock
+                  if (IPD_Data(nb)%Statein%phii(ix,k) > IPD_Data(nb)%intdiag%hpbl(ix)*grav) exit
+               enddo
+            enddo
+         enddo
+      else if (trim(tracer_name) == 'sfc_clock') then
+         do j=jsc,jec
+         do i=isc,iec
+            Atm(n)%q(i,j,npz,iq) = tracer_clock
+         enddo
+         enddo
+      else if (trim(tracer_name) == 'itcz_clock' ) then
+         lat_thresh = 15.*pi/180.
+         do k=1,npz
+         do j=jsc,jec
+         do i=isc,iec
+            if (abs(Atm(n)%gridstruct%agrid(i,j,2)) < lat_thresh .and. Atm(n)%w(i,j,k) > 1.5) then
+               Atm(n)%q(i,j,npz,iq) = tracer_clock
+            endif
+         enddo
+         enddo
+         enddo
+      endif
+  enddo
 
 !--- nesting update after updating atmospheric variables with
 !--- physics tendencies
@@ -1479,6 +1536,12 @@ contains
          enddo
      endif
 
+     do ix = 1, blen
+       i = Atm_block%index(nb)%ii(ix)
+       j = Atm_block%index(nb)%jj(ix)
+       IPD_Data(nb)%Statein%sst(ix) = _DBL_(_RL_(Atm(mygrid)%ts(i,j)))
+     enddo
+
      do k = 1, npz
        do ix = 1, blen
          i = Atm_block%index(nb)%ii(ix)
@@ -1592,5 +1655,102 @@ contains
   enddo
 
  end subroutine atmos_phys_driver_statein
+
+ subroutine atmos_phys_qdt_diag(q, phys_diag, nq, dt, begin)
+
+   integer, intent(IN) :: nq
+   real, intent(IN) :: dt
+   logical, intent(IN) :: begin
+   real, intent(IN) :: q(isd:ied,jsd:jed,npz,nq)
+   type(phys_diag_type), intent(INOUT) :: phys_diag
+
+   integer  sphum, liq_wat, ice_wat        ! GFDL AM physics
+   integer  rainwat, snowwat, graupel      ! GFDL Cloud Microphysics
+
+   sphum   = get_tracer_index (MODEL_ATMOS, 'sphum')
+   liq_wat = get_tracer_index (MODEL_ATMOS, 'liq_wat')
+   ice_wat = get_tracer_index (MODEL_ATMOS, 'ice_wat')
+   rainwat = get_tracer_index (MODEL_ATMOS, 'rainwat')
+   snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat')
+   graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
+
+   if (begin) then
+      if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = q(isc:iec,jsc:jec,:,sphum)
+      if (allocated(phys_diag%phys_ql_dt)) then
+         if (liq_wat < 0) call mpp_error(FATAL, " phys_ql_dt needs at least one liquid water tracer defined")
+         phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,liq_wat) 
+      endif
+      if (allocated(phys_diag%phys_qi_dt)) then
+         if (ice_wat < 0) then
+            call mpp_error(WARNING, " phys_qi_dt needs at least one ice water tracer defined")
+            phys_diag%phys_qi_dt = 0.
+         endif
+         phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,ice_wat)
+      endif
+            
+      if (liq_wat > 0) then
+         if (allocated(phys_diag%phys_liq_wat_dt)) phys_diag%phys_liq_wat_dt = q(isc:iec,jsc:jec,:,liq_wat)
+      endif
+      
+      if (rainwat > 0) then
+         if (allocated(phys_diag%phys_qr_dt)) phys_diag%phys_qr_dt = q(isc:iec,jsc:jec,:,rainwat)
+      endif
+
+      if (ice_wat > 0) then
+         if (allocated(phys_diag%phys_ice_wat_dt)) phys_diag%phys_ice_wat_dt = q(isc:iec,jsc:jec,:,ice_wat)
+      endif
+       
+      if (graupel > 0) then
+         if (allocated(phys_diag%phys_qg_dt)) phys_diag%phys_qg_dt = q(isc:iec,jsc:jec,:,graupel)
+      endif
+
+      if (snowwat > 0) then
+         if (allocated(phys_diag%phys_qs_dt)) phys_diag%phys_qs_dt = q(isc:iec,jsc:jec,:,snowwat)
+      endif
+   else
+      if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = q(isc:iec,jsc:jec,:,sphum) - phys_diag%phys_qv_dt
+      if (allocated(phys_diag%phys_ql_dt)) then
+         phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,liq_wat) - phys_diag%phys_ql_dt
+      endif
+      if (allocated(phys_diag%phys_qi_dt)) then
+         phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,ice_wat) - phys_diag%phys_qi_dt
+      endif
+   endif
+	
+   if (allocated(phys_diag%phys_ql_dt)) then
+      if (rainwat > 0) phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,rainwat) + phys_diag%phys_ql_dt
+   endif
+   if (allocated(phys_diag%phys_qi_dt)) then
+      if (snowwat > 0) phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,snowwat) + phys_diag%phys_qi_dt
+      if (graupel > 0) phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,graupel) + phys_diag%phys_qi_dt
+   endif
+      
+   if (.not. begin) then
+      if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = phys_diag%phys_qv_dt / dt
+      if (allocated(phys_diag%phys_ql_dt)) phys_diag%phys_ql_dt = phys_diag%phys_ql_dt / dt
+      if (allocated(phys_diag%phys_qi_dt)) phys_diag%phys_qi_dt = phys_diag%phys_qi_dt / dt
+   
+      if (liq_wat > 0) then
+         if (allocated(phys_diag%phys_liq_wat_dt)) phys_diag%phys_liq_wat_dt = (q(isc:iec,jsc:jec,:,liq_wat) - phys_diag%phys_liq_wat_dt) / dt
+      endif
+       
+      if (rainwat > 0) then
+         if (allocated(phys_diag%phys_qr_dt)) phys_diag%phys_qr_dt = (q(isc:iec,jsc:jec,:,rainwat) - phys_diag%phys_qr_dt) / dt
+      endif
+
+      if (ice_wat > 0) then
+         if (allocated(phys_diag%phys_ice_wat_dt)) phys_diag%phys_ice_wat_dt = (q(isc:iec,jsc:jec,:,ice_wat) - phys_diag%phys_ice_wat_dt) / dt
+      endif
+      
+      if (graupel > 0) then
+         if (allocated(phys_diag%phys_qg_dt)) phys_diag%phys_qg_dt = (q(isc:iec,jsc:jec,:,graupel) - phys_diag%phys_qg_dt) / dt
+      endif
+
+      if (snowwat > 0) then
+         if (allocated(phys_diag%phys_qs_dt)) phys_diag%phys_qs_dt = (q(isc:iec,jsc:jec,:,snowwat) - phys_diag%phys_qs_dt) / dt
+      endif
+   endif
+
+ end subroutine atmos_phys_qdt_diag
 
 end module atmosphere_mod

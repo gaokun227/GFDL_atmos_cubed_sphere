@@ -27,6 +27,7 @@ module fv_sg_mod
   use field_manager_mod,  only: MODEL_ATMOS
   use gfdl_cloud_microphys_mod, only: wqs1, wqs2, wqsat2_moist
   use fv_mp_mod,          only: mp_reduce_min, is_master
+  use mpp_mod,            only: mpp_pe
 
 implicit none
 private
@@ -1466,6 +1467,18 @@ real, dimension(is:ie,js:je):: pt2, qv2, ql2, qi2, qs2, qr2, qg2, dp2, p2, icpk,
 
  endif
 
+  if ( present(check_negative) ) then
+  if ( check_negative ) then
+     call prt_negative('Temperature', pt, is, ie, js, je, ng, kbot, 165.)
+     call prt_negative('sphum',   qv, is, ie, js, je, ng, kbot, -1.e-8)
+     call prt_negative('liq_wat', ql, is, ie, js, je, ng, kbot, -1.e-7)
+     call prt_negative('rainwat', qr, is, ie, js, je, ng, kbot, -1.e-7)
+     call prt_negative('ice_wat', qi, is, ie, js, je, ng, kbot, -1.e-7)
+     call prt_negative('snowwat', qs, is, ie, js, je, ng, kbot, -1.e-7)
+     call prt_negative('graupel', qg, is, ie, js, je, ng, kbot, -1.e-7)
+  endif
+  endif
+
  end subroutine neg_adj3
 
  subroutine fillq(im, km, q, dp)
@@ -1517,6 +1530,9 @@ real, dimension(is:ie,js:je):: pt2, qv2, ql2, qi2, qs2, qr2, qg2, dp2, p2, icpk,
       do j=js,je
          do i=is,ie
             qmin = min(qmin, q(i,j,k))
+!!$            if (q(i,j,k) < threshold) then
+!!$               print*, mpp_pe(), " Negative found in ", trim(qname), i, j, k, q(i,j,k)
+!!$            endif
          enddo
       enddo
       enddo

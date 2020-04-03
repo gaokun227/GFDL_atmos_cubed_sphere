@@ -19,7 +19,7 @@
 !***********************************************************************
 module fv_grid_tools_mod
 
-  use constants_mod, only: grav, omega, pi=>pi_8, cnst_radius=>radius
+  use constants_mod, only: grav, omega, pi=>pi_8, cnst_radius=>radius, small_fac
   use fv_arrays_mod, only: fv_atmos_type, fv_grid_type, fv_grid_bounds_type, R_GRID
   use fv_grid_utils_mod, only: gnomonic_grids, great_circle_dist,  &
                            mid_pt_sphere, spherical_angle,     &
@@ -77,6 +77,8 @@ contains
 
   subroutine read_grid(Atm, grid_file, ndims, nregions, ng)
     !     read_grid :: read grid from mosaic grid file.
+    !                  only reads in the grid CORNERS; other metrics (agrid, dx, dy, etc.) 
+    !                  still need to be computed
     type(fv_atmos_type), intent(inout), target :: Atm
     character(len=*),    intent(IN)    :: grid_file
     integer,             intent(IN)    :: ndims
@@ -133,7 +135,6 @@ contains
     if(grid_form .NE. "gnomonic_ed") call mpp_error(FATAL, &
          "fv_grid_tools(read_grid): the grid should be 'gnomonic_ed' when reading from grid file, contact developer")
 
-    !FIXME: Doesn't work for a nested grid
     ntiles = get_mosaic_ntiles(atm_mosaic)
     if( .not. Atm%gridstruct%bounded_domain) then  !<-- The regional setup has only 1 tile so do not shutdown in that case.
     if(ntiles .NE. 6) call mpp_error(FATAL, &
@@ -586,10 +587,18 @@ contains
           
           if (Atm%neststruct%nested) then
              !Read grid if it exists
-             ! still need to set up 
+
+             if (Atm%flagstruct%grid_type < 0) then
+                !Note that read_grid only reads in grid corners. Will still need to compute all other grid metrics.
+                !NOTE: cannot currently read in mosaic for both coarse and nested grids simultaneously
+                call read_grid(Atm, grid_file, ndims, 1, ng)
+             endif
+             ! still need to set up weights
              call setup_aligned_nest(Atm)
+             
           else
-             if(trim(grid_file) == 'INPUT/grid_spec.nc') then  
+             !if(trim(grid_file) == 'INPUT/grid_spec.nc') then  
+             if(Atm%flagstruct%grid_type < 0 ) then  
                 call read_grid(Atm, grid_file, ndims, nregions, ng)
              else
 
@@ -1060,9 +1069,7 @@ contains
           dxAV  = dxAV  / ( (ceiling(npy/2.0))*(ceiling(npx/2.0)) )
           aspAV = aspAV / ( (ceiling(npy/2.0))*(ceiling(npx/2.0)) )
           write(*,*  ) ''
-#ifdef SMALL_EARTH
-          write(*,*) ' REDUCED EARTH: Radius is ', radius, ', omega is ', omega
-#endif
+          write(*,*) ' Radius is ', radius, ', omega is ', omega, ' small_fac = ', small_fac
           write(*,*  ) ' Cubed-Sphere Grid Stats : ', npx,'x',npy,'x',nregions
           print*, dxN, dxM, dxAV, dxN, dxM
           write(*,201) '      Grid Length               : min: ', dxN,' max: ', dxM,' avg: ', dxAV, ' min/max: ',dxN/dxM
@@ -1087,6 +1094,7 @@ contains
              call mpp_send(grid_global(:,:,:,1),size(grid_global),grids_master_procs(n))
           endif
           call mpp_sync_self()
+
        endif
     enddo
 
@@ -1637,6 +1645,11 @@ contains
 !!$            call mpp_error(FATAL, 'nested grid lies outside its parent')
 !!$         end if
 
+      ! Generate grid global and parent_grid indices
+      ! Grid global only needed in case we create a new child nest on-the-fly?
+      !TODO If reading in grid from disk then simply mpp_GATHER grid global from local grid arrays
+      !     in fact for nest we should ONLY gather it WHEN NECESSARY.
+
          do j=1-ng,npy+ng
             jc = joffset + (j-1)/refinement !int( real(j-1) / real(refinement) )
             jmod = mod(j-1,refinement)
@@ -1710,29 +1723,18 @@ contains
             end do
          end do
 
-!!$      !TODO: can we just send around ONE grid and re-calculate
-!!$      ! staggered grids from that??
-!!$      call mpp_broadcast(grid_global(1-ng:npx+ng,  1-ng:npy+ng  ,:,1), &
-!!$           ((npx+ng)-(1-ng)+1)*((npy+ng)-(1-ng)+1)*ndims, mpp_root_pe() )
-!!$      call mpp_broadcast(      p_ind(1-ng:npx+ng,  1-ng:npy+ng  ,1:4),   &
-!!$           ((npx+ng)-(1-ng)+1)*((npy+ng)-(1-ng)+1)*4, mpp_root_pe() )
-!!$      call mpp_broadcast(    pa_grid( isg:ieg  , jsg:jeg  , :), &
-!!$           ((ieg-isg+1))*(jeg-jsg+1)*ndims, mpp_root_pe())
-!!$      call mpp_broadcast(  p_grid_u( isg:ieg  , jsg:jeg+1, :), &
-!!$           (ieg-isg+1)*(jeg-jsg+2)*ndims, mpp_root_pe())
-!!$      call mpp_broadcast(  p_grid_v( isg:ieg+1, jsg:jeg  , :), &
-!!$           (ieg-isg+2)*(jeg-jsg+1)*ndims, mpp_root_pe())
-
-      do n=1,ndims
-         do j=jsd,jed+1
+         if (Atm%flagstruct%grid_type >= 0) then
+            do n=1,ndims
+            do j=jsd,jed+1
             do i=isd,ied+1
                grid(i,j,n) = grid_global(i,j,n,1)
             enddo
-         enddo
-      enddo
+            enddo
+            enddo
+         endif
 
-      ind_h = -999999999
-      do j=jsd,jed
+         ind_h = -999999999
+         do j=jsd,jed
          do i=isd,ied
             ic = p_ind(i,j,1)
             jc = p_ind(i,j,2)
@@ -1759,31 +1761,31 @@ contains
             ind_h(i,j,4) = jmod
 
          end do
-      end do
+         end do
 
-      ind_b = -999999999
-      do j=jsd,jed+1
-      do i=isd,ied+1
-         ic = p_ind(i,j,1)
-         jc = p_ind(i,j,2)
-         imod = p_ind(i,j,3)
-         jmod = p_ind(i,j,4)
+         ind_b = -999999999
+         do j=jsd,jed+1
+         do i=isd,ied+1
+            ic = p_ind(i,j,1)
+            jc = p_ind(i,j,2)
+            imod = p_ind(i,j,3)
+            jmod = p_ind(i,j,4)
+            
+            ind_b(i,j,1) = ic
+            ind_b(i,j,2) = jc
+            
+            ind_b(i,j,3) = imod
+            ind_b(i,j,4) = jmod
+         enddo
+         enddo
 
-         ind_b(i,j,1) = ic
-         ind_b(i,j,2) = jc
-         
-         ind_b(i,j,3) = imod
-         ind_b(i,j,4) = jmod
-      enddo
-      enddo
+         ind_u = -99999999
+         !New BCs for wind components:
+         ! For aligned grid segments (mod(j-1,R) == 0) set 
+         !     identically equal to the coarse-grid value
+         ! Do linear interpolation in the y-dir elsewhere
 
-      ind_u = -99999999
-      !New BCs for wind components:
-      ! For aligned grid segments (mod(j-1,R) == 0) set 
-      !     identically equal to the coarse-grid value
-      ! Do linear interpolation in the y-dir elsewhere
-
-      do j=jsd,jed+1
+         do j=jsd,jed+1
          do i=isd,ied
             ic = p_ind(i,j,1)
             jc = p_ind(i,j,2)
@@ -1807,11 +1809,11 @@ contains
             ind_u(i,j,4) = p_ind(i,j,4)
 
          end do
-      end do
+         end do
 
-      ind_v = -999999999
+         ind_v = -999999999
 
-      do j=jsd,jed
+         do j=jsd,jed
          do i=isd,ied+1
             ic = p_ind(i,j,1)
             jc = p_ind(i,j,2)
@@ -1832,21 +1834,21 @@ contains
             ind_v(i,j,4) = jmod
             ind_v(i,j,3) = p_ind(i,j,3)
          end do
-      end do
+         end do
 
 
 
-      agrid(:,:,:) = -1.e25
+         agrid(:,:,:) = -1.e25
 
-      do j=jsd,jed
+         do j=jsd,jed
          do i=isd,ied
             call cell_center2(grid(i,j,  1:2), grid(i+1,j,  1:2),   &
                  grid(i,j+1,1:2), grid(i+1,j+1,1:2),   &
                  agrid(i,j,1:2) )
          enddo
-      enddo
+         enddo
 
-      call mpp_update_domains( agrid, Atm%domain, position=CENTER, complete=.true. )
+         call mpp_update_domains( agrid, Atm%domain, position=CENTER, complete=.true. )
 
       ! Compute dx
       do j=jsd,jed+1

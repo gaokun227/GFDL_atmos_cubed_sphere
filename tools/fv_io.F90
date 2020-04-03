@@ -438,11 +438,12 @@ contains
 
 ! use_ncep_sst may not be initialized at this point?
     call mpp_error(NOTE, 'READING FROM SST_restart DISABLED')
-!!$    if ( use_ncep_sst .or. Atm(1)%nudge .or. Atm(1)%ncep_ic ) then
-!!$       fname = 'sst_ncep.res.nc'
-!!$       id_restart = register_restart_field(Atm(1)%SST_restart, fname, 'sst_ncep', sst_ncep)
-!!$       id_restart = register_restart_field(Atm(1)%SST_restart, fname, 'sst_anom', sst_anom)
-!!$    endif
+    if ( use_ncep_sst .or. Atm(1)%flagstruct%nudge .or. Atm(1)%flagstruct%ncep_ic ) then
+!    if ( Atm(1)%nudge .or. Atm(1)%ncep_ic ) then
+       fname = 'sst_ncep.res.nc'
+       id_restart = register_restart_field(Atm(1)%SST_restart, fname, 'sst_ncep', sst_ncep)
+       id_restart = register_restart_field(Atm(1)%SST_restart, fname, 'sst_anom', sst_anom)
+    endif
 
   end subroutine  fv_io_register_nudge_restart
   ! </SUBROUTINE> NAME="fv_io_register_nudge_restart"
@@ -486,7 +487,7 @@ contains
 
 ! use_ncep_sst may not be initialized at this point?
 #ifndef DYCORE_SOLO
-    call mpp_error(NOTE, 'READING FROM SST_RESTART DISABLED')
+!    call mpp_error(NOTE, 'READING FROM SST_RESTART DISABLED')
 !!$   if ( use_ncep_sst .or. Atm(1)%flagstruct%nudge .or. Atm(1)%flagstruct%ncep_ic ) then
 !!$       fname = 'sst_ncep'//trim(gn)//'.res.nc'
 !!$       id_restart = register_restart_field(Atm(1)%SST_restart, fname, 'sst_ncep', sst_ncep)
@@ -589,10 +590,10 @@ contains
     type(fv_atmos_type),        intent(inout) :: Atm
     character(len=*), optional, intent(in) :: timestamp
 
-    if ( use_ncep_sst .or. Atm%flagstruct%nudge .or. Atm%flagstruct%ncep_ic ) then
-       call mpp_error(NOTE, 'READING FROM SST_RESTART DISABLED')
-       !call save_restart(Atm%SST_restart, timestamp)
-    endif
+!!$    if ( use_ncep_sst .or. Atm%flagstruct%nudge .or. Atm%flagstruct%ncep_ic ) then
+!!$       call mpp_error(NOTE, 'READING FROM SST_RESTART DISABLED')
+!!$       !call save_restart(Atm%SST_restart, timestamp)
+!!$    endif
  
     if ( (use_ncep_sst .or. Atm%flagstruct%nudge) .and. .not. Atm%gridstruct%nested ) then
        call save_restart(Atm%SST_restart, timestamp)

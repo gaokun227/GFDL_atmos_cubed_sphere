@@ -253,13 +253,14 @@ contains
     tile_id = mpp_get_tile_id( fv_domain )
 
        call get_tile_string(fname, 'INPUT/fv_core.res'//trim(gn)//'.tile', tile_id(n), '.nc' )
-       if (mpp_pe() == mpp_root_pe()) print*, 'external_ic: looking for ', fname
+    call mpp_error(NOTE, 'external_ic: looking for '//fname)
 
 
        if( file_exist(fname) ) then
        call read_data(fname, 'phis', Atm%phis(is:ie,js:je),      &
                          domain=fv_domain, tile_count=n)
        else
+       call mpp_error(NOTE, fname//' not found; generating terrain from USGS data')
        call surfdrv(  Atm%npx, Atm%npy, Atm%gridstruct%grid_64, Atm%gridstruct%agrid_64,   &
                          Atm%gridstruct%area_64, Atm%gridstruct%dx, Atm%gridstruct%dy, &
                          Atm%gridstruct%dxa, Atm%gridstruct%dya, &
@@ -268,7 +269,6 @@ contains
                          Atm%neststruct%nested, Atm%gridstruct%bounded_domain, &
                          Atm%neststruct%npx_global, Atm%domain, &
                          Atm%flagstruct%grid_number, Atm%bd )
-          call mpp_error(NOTE,'terrain datasets generated using USGS data')
        endif
 
 
@@ -787,12 +787,13 @@ contains
 
         ! real temperature (K)
         if (trim(source) == source_fv3gfs) id_res = register_restart_field (GFS_restart, fn_gfs_ics, 't', temp, mandatory=.false., &
-          domain=Atm%domain)
+                                                                            domain=Atm%domain)
         ! prognostic tracers
         do nt = 1, ntracers
+           q(:,:,:,nt) = -999.99
           call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
           id_res = register_restart_field (GFS_restart, fn_gfs_ics, trim(tracer_name), q(:,:,:,nt), &
-            mandatory=.false.,domain=Atm%domain)
+                                           mandatory=.false.,domain=Atm%domain)
         enddo
 
         ! read in the gfs_data and free the restart type to be re-used by the nest
@@ -3200,6 +3201,7 @@ contains
 
 ! map tracers
       do iq=1,ncnst
+         if (floor(qa(is,j,1,iq)) > -999) then !skip missing scalars
          do k=1,km
             do i=is,ie
                qp(i,k) = qa(i,j,k,iq)
@@ -3217,6 +3219,7 @@ contains
                Atm%q(i,j,k,iq) = qn1(i,k)
             enddo
          enddo
+         endif
       enddo
 
 !---------------------------------------------------

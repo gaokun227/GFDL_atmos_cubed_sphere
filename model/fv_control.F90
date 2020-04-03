@@ -53,7 +53,7 @@ module fv_control_mod
    use fv_mp_mod,           only: mp_start, domain_decomp, mp_assign_gid, global_nest_domain
    use fv_mp_mod,           only: broadcast_domains, mp_barrier, is_master, setup_master, grids_master_procs, tile_fine
    use fv_mp_mod,           only: MAX_NNEST, MAX_NTILE
-   !use test_cases_mod,      only: test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size
+   use test_cases_mod,      only: read_namelist_test_case_nml
    use fv_timing_mod,       only: timing_on, timing_off, timing_init, timing_prt
    use mpp_domains_mod,     only: domain2D
    use mpp_domains_mod,     only: mpp_define_nest_domains, nest_domain_type, mpp_get_global_domain
@@ -63,7 +63,8 @@ module fv_control_mod
                                   mpp_declare_pelist, mpp_root_pe, mpp_recv, mpp_sync_self, read_input_nml, &
                                   mpp_max
    use fv_diagnostics_mod,  only: fv_diag_init_gn
-
+   use fv_coarse_graining_mod, only: fv_coarse_graining_init
+   
    implicit none
    private
 
@@ -108,6 +109,7 @@ module fv_control_mod
      integer, dimension(MAX_NNEST) :: all_npy = 0
      integer, dimension(MAX_NNEST) :: all_npz = 0
      integer, dimension(MAX_NNEST) :: all_ntiles = 0
+     integer, dimension(MAX_NNEST) :: all_twowaynest = 0 ! > 0 implies two-way
      !integer, dimension(MAX_NNEST) :: tile_fine = 0
      integer, dimension(MAX_NNEST) :: icount_coarse = 1
      integer, dimension(MAX_NNEST) :: jcount_coarse = 1
@@ -290,8 +292,8 @@ module fv_control_mod
      integer, pointer :: parent_tile, refinement, nestbctype, nestupdate, nsponge, ioffset, joffset
      real, pointer :: s_weight, update_blend
 
+     character(len=16), pointer :: restart_resolution
      integer, pointer :: layout(:), io_layout(:)
-
      !!!!!!!!!! END POINTERS !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
      this_grid = -1 ! default
@@ -435,6 +437,7 @@ module fv_control_mod
 #endif
      call read_namelist_fv_grid_nml
      call read_namelist_fv_core_nml(Atm(this_grid)) ! do options processing here too?
+     call read_namelist_test_case_nml(Atm(this_grid)%nml_filename)
      !TODO test_case_nml moved to test_cases
      call mpp_get_current_pelist(Atm(this_grid)%pelist, commID=commID) ! for commID
      call mp_start(commID,halo_update_type)
@@ -472,6 +475,9 @@ module fv_control_mod
      all_npz(this_grid) = npz
      call mpp_max(all_npz, ngrids, global_pelist)
 
+     if (Atm(this_grid)%neststruct%twowaynest) all_twowaynest(this_grid) = 1
+     call mpp_max(all_twowaynest, ngrids, global_pelist)
+
      ntiles_nest_all = 0
      do n=1,ngrids
         if (n/=this_grid) then
@@ -479,6 +485,7 @@ module fv_control_mod
            Atm(n)%flagstruct%npy = all_npy(n)
            Atm(n)%flagstruct%npz = all_npz(n)
            Atm(n)%flagstruct%ntiles = all_ntiles(n)
+           Atm(n)%neststruct%twowaynest = (all_twowaynest(n) > 0) ! disabled
         endif
         npes_nest_tile(ntiles_nest_all+1:ntiles_nest_all+all_ntiles(n)) = &
              Atm(n)%npes_this_grid / all_ntiles(n)
@@ -498,7 +505,7 @@ module fv_control_mod
         endif
      enddo
 
-     if (mpp_pe() == 0) then
+     if (mpp_pe() == 0 .and. ngrids > 1) then
         print*, ' NESTING TREE'
         do n=1,ngrids
            write(*,'(12i4)') n, nest_level(n), nest_ioffsets(n), nest_joffsets(n), icount_coarse(n), jcount_coarse(n), tile_fine(n), tile_coarse(n), nest_refine(n), all_ntiles(n), all_npx(n), all_npy(n)
@@ -531,7 +538,7 @@ module fv_control_mod
         print*, ''
      endif
      if (dnrts < 0) dnrts = dnats
-
+     
      do n=1,ngrids
         !FIXME still setting up dummy structures for other grids for convenience reasons
         !isc, etc. set in domain_decomp
@@ -543,6 +550,10 @@ module fv_control_mod
              Atm(n)%flagstruct%npx,    Atm(n)%flagstruct%npy,   Atm(n)%flagstruct%npz, &
              Atm(n)%flagstruct%ndims,  Atm(n)%flagstruct%ncnst, Atm(n)%flagstruct%ncnst-Atm(n)%flagstruct%pnats, &
              n/=this_grid, n==this_grid, ngrids) !TODO don't need both of the last arguments
+
+        ! Initialize coarse graining module if toggled in
+        ! fv_coarse_graining_nml namelist
+        call fv_coarse_graining_init(Atm(n), n)
      enddo
      if ( (Atm(this_grid)%bd%iec-Atm(this_grid)%bd%isc+1).lt.4 .or. (Atm(this_grid)%bd%jec-Atm(this_grid)%bd%jsc+1).lt.4 ) then
         if (is_master()) write(*,'(6I6)') Atm(this_grid)%bd%isc, Atm(this_grid)%bd%iec, Atm(this_grid)%bd%jsc, Atm(this_grid)%bd%jec, this_grid
@@ -568,24 +579,20 @@ module fv_control_mod
 
      endif
 
-     allocate(Atm(this_grid)%neststruct%child_grids(ngrids)) !only temporary?
+     allocate(Atm(this_grid)%neststruct%child_grids(ngrids)) 
      do n=1,ngrids
         Atm(this_grid)%neststruct%child_grids(n) = (grid_coarse(n) == this_grid)
         allocate(Atm(n)%neststruct%do_remap_bc(ngrids))
         Atm(n)%neststruct%do_remap_bc(:) = .false.
      enddo
-     Atm(this_grid)%neststruct%parent_proc = ANY(tile_coarse == Atm(this_grid)%global_tile)
-      !Atm(this_grid)%neststruct%child_proc = ANY(Atm(this_grid)%pelist == gid) !this means a nested grid
-!!$         if (Atm(this_grid)%neststruct%nestbctype > 1) then
-!!$            call mpp_error(FATAL, 'nestbctype > 1 not yet implemented')
-!!$            Atm(this_grid)%neststruct%upoff = 0
-!!$         endif
-!!$      end if
-!!$
-!!$      do nn=1,size(Atm)
-!!$         if (n == 1) allocate(Atm(nn)%neststruct%nest_domain_all(size(Atm)))
-!!$         Atm(nn)%neststruct%nest_domain_all(n) = Atm(this_grid)%neststruct%nest_domain
-!!$      enddo
+     Atm(this_grid)%neststruct%parent_proc = ANY(Atm(this_grid)%neststruct%child_grids) !ANY(tile_coarse == Atm(this_grid)%global_tile)
+     Atm(this_grid)%neststruct%child_proc = ASSOCIATED(Atm(this_grid)%parent_grid) !this means a nested grid
+
+     if (ngrids > 1) call setup_update_regions
+     if (Atm(this_grid)%neststruct%nestbctype > 1) then
+        call mpp_error(FATAL, 'nestbctype > 1 not yet implemented')
+        Atm(this_grid)%neststruct%upoff = 0
+     endif
 
      if (Atm(this_grid)%gridstruct%bounded_domain .and. is_master()) print*, &
           ' Bounded domain: nested = ', Atm(this_grid)%neststruct%nested, ', regional = ', Atm(this_grid)%flagstruct%regional
@@ -824,6 +831,8 @@ module fv_control_mod
 
        layout                        => Atm%layout
        io_layout                     => Atm%io_layout
+
+       restart_resolution            => Atm%flagstruct%restart_resolution
      end subroutine set_namelist_pointers
 
 
@@ -935,7 +944,8 @@ module fv_control_mod
             nested, twowaynest, nudge_qv, &
             nestbctype, nestupdate, nsponge, s_weight, &
             check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
-            do_uni_zfull, adj_mass_vmr, update_blend, regional, bc_update_interval
+            do_uni_zfull, adj_mass_vmr, update_blend, regional,&
+            & bc_update_interval, restart_resolution
 
 #ifdef INTERNAL_FILE_NML
        ! Read FVCORE namelist 
@@ -1058,6 +1068,61 @@ module fv_control_mod
 
      end subroutine read_namelist_fv_core_nml
 
+     subroutine setup_update_regions
+
+       integer :: isu, ieu, jsu, jeu ! update regions
+       integer :: isc, jsc, iec, jec
+       integer :: upoff
+
+       isc = Atm(this_grid)%bd%isc
+       jsc = Atm(this_grid)%bd%jsc
+       iec = Atm(this_grid)%bd%iec
+       jec = Atm(this_grid)%bd%jec
+
+       upoff = Atm(this_grid)%neststruct%upoff
+
+       do n=2,ngrids
+          write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS 0: ', mpp_pe(), tile_coarse(n), Atm(this_grid)%global_tile
+          if (tile_coarse(n) == Atm(this_grid)%global_tile) then
+
+             isu = nest_ioffsets(n)
+             ieu = isu + icount_coarse(n) - 1
+             jsu = nest_joffsets(n)
+             jeu = jsu + jcount_coarse(n) - 1
+
+             !update offset adjustment
+             isu = isu + upoff
+             ieu = ieu - upoff
+             jsu = jsu + upoff
+             jeu = jeu - upoff
+
+             !restriction to current domain
+             !!! DEBUG CODE
+             if (Atm(this_grid)%flagstruct%fv_debug) then
+                write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS  : ', isu, jsu, ieu, jeu
+                write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS 2: ', isc, jsc, iec, jsc
+             endif
+             !!! END DEBUG CODE
+             if (isu > iec .or. ieu < isc .or. &
+                 jsu > jec .or. jeu < jsc ) then
+                isu = -999 ; jsu = -999 ; ieu = -1000 ; jeu = -1000
+             else
+                isu = max(isu,isc) ; jsu = max(jsu,jsc)
+                ieu = min(ieu,iec) ; jeu = min(jeu,jec)
+             endif
+             !!! DEBUG CODE
+             if (Atm(this_grid)%flagstruct%fv_debug) &
+                  write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS 3: ', isu, jsu, ieu, jeu
+             !!! END DEBUG CODE
+
+             Atm(n)%neststruct%isu = isu
+             Atm(n)%neststruct%ieu = ieu
+             Atm(n)%neststruct%jsu = jsu
+             Atm(n)%neststruct%jeu = jeu
+          endif
+       enddo
+
+     end subroutine setup_update_regions
 
    end subroutine fv_control_init
 
