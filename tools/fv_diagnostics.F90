@@ -855,6 +855,8 @@ contains
                'vertical ice water flux', 'kg/m**2/s', missing_value=missing_value )
           idiag%id_o3w = register_diag_field ( trim(field), 'o3w', axes(1:3), Time, &
                'vertical ozone flux', 'kg/m**2/s', missing_value=missing_value )
+          idiag%id_mw = register_diag_field ( trim(field), 'mw', axes(1:3), Time, &
+               'vertical mass flux', 'kg/m**2/s', missing_value=missing_value )
 
        endif
 
@@ -2868,7 +2870,7 @@ contains
        if(idiag%id_va > 0) used=send_data(idiag%id_va, Atm(n)%va(isc:iec,jsc:jec,:), Time)
 
        if(idiag%id_uw > 0 .or. idiag%id_vw > 0 .or. idiag%id_hw > 0 .or. idiag%id_qvw > 0 .or. &
-            idiag%id_qlw > 0 .or. idiag%id_qiw > 0 .or. idiag%id_o3w > 0 ) then
+            idiag%id_qlw > 0 .or. idiag%id_qiw > 0 .or. idiag%id_o3w > 0 .or. idiag%id_mw > 0 ) then
           allocate( a3(isc:iec,jsc:jec,npz) )
 
           do k=1,npz
@@ -2878,6 +2880,10 @@ contains
           enddo
           enddo
           enddo
+
+          if (idiag%id_mw > 0) then
+             used = send_data(idiag%id_mw, wk, Time)
+          endif
 
           if (idiag%id_uw > 0) then
              do k=1,npz
