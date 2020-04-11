@@ -995,9 +995,9 @@ contains
                            '1-km AGL w-wind', 'm/s', missing_value=missing_value )
 
           idiag%id_wmaxup = register_diag_field ( trim(field), 'wmaxup', axes(1:2), Time,       &
-                           'column-maximum updraft', 'm/s', missing_value=missing_value )
+                           'column-maximum updraft (below 100 mb)', 'm/s', missing_value=missing_value )
           idiag%id_wmaxdn = register_diag_field ( trim(field), 'wmaxdn', axes(1:2), Time,       &
-                           'column-maximum downdraft', 'm/s', missing_value=missing_value )
+                           'column-maximum downdraft (below 100 mb)', 'm/s', missing_value=missing_value )
 
        endif
 
@@ -3442,7 +3442,7 @@ contains
              a2(i,j) = 0.
              var2(i,j) = 0.
              do k=3,npz
-                if (Atm(n)%pe(i,k,j) <= 400.e2) continue
+                if (Atm(n)%pe(i,k,j) <= 100.e2) continue ! lmh 10apr2020: changed to current SPC standard
                 a2(i,j) = max(a2(i,j),Atm(n)%w(i,j,k))
                 var2(i,j) = min(var2(i,j),Atm(n)%w(i,j,k))
              enddo
