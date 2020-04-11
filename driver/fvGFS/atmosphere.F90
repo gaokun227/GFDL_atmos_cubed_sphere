@@ -79,6 +79,7 @@ use fv_regional_mod,    only: current_time_in_seconds
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
 use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
 use cloud_diagnosis_mod,only: cloud_diagnosis_init
+use diag_manager_mod,   only: send_data
 
 implicit none
 private
@@ -137,7 +138,7 @@ character(len=20)   :: mod_name = 'fvGFS/atmosphere_mod'
   real, parameter:: w0_big = 60.  ! to prevent negative w-tracer diffusion
 
 !---dynamics tendencies for use in fv_subgrid_z and during fv_update_phys
-  real, allocatable, dimension(:,:,:)   :: u_dt, v_dt, t_dt
+  real, allocatable, dimension(:,:,:)   :: u_dt, v_dt, t_dt, qv_dt
   real, allocatable :: pref(:,:), dum1d(:)
 
   logical :: first_diag = .true.
@@ -254,7 +255,8 @@ contains
 !----- allocate and zero out the dynamics (and accumulated) tendencies
    allocate( u_dt(isd:ied,jsd:jed,npz), &
              v_dt(isd:ied,jsd:jed,npz), &
-             t_dt(isc:iec,jsc:jec,npz) )
+             t_dt(isc:iec,jsc:jec,npz), &
+             qv_dt(isc:iec,jsc:jec,npz) )
 !--- allocate pref
    allocate(pref(npz+1,2), dum1d(npz+1))
 
@@ -389,9 +391,11 @@ contains
    type(time_type),intent(in) :: Time
    integer :: itrac, n, psc
    integer :: k, w_diff, nt_dyn
+   logical :: used
 
    type(time_type) :: atmos_time
    integer :: atmos_time_step
+   real :: rdt
 !---- Call FV dynamics -----
 
    call mpp_clock_begin (id_dynam)
@@ -445,10 +449,13 @@ contains
 !-----------------------------------------------------
 !--- zero out tendencies
     call mpp_clock_begin (id_subgridz)
-    u_dt(:,:,:)   = 0.
+    u_dt(:,:,:)   = 0. ! These are updated by fv_subgrid_z
     v_dt(:,:,:)   = 0.
-    t_dt(:,:,:)   = 0.
+    t_dt(:,:,:)   = Atm(n)%pt(isc:iec,jsc:jec,:)
+    qv_dt(:,:,:)  = Atm(n)%q (isc:iec,jsc:jec,:,sphum)
 
+    rdt = 1./dt_atmos
+    
     w_diff = get_tracer_index (MODEL_ATMOS, 'w_diff' )
     if ( Atm(n)%flagstruct%fv_sg_adj > 0 ) then
       nt_dyn = nq
@@ -474,6 +481,21 @@ contains
         enddo
     endif
 #endif
+
+    if (Atm(1)%idiag%id_u_dt_sg > 0) then
+       used = send_data(Atm(1)%idiag%id_u_dt_sg, u_dt(isc:iec,jsc:jec,:), fv_time)
+    end if
+    if (Atm(1)%idiag%id_v_dt_sg > 0) then
+       used = send_data(Atm(1)%idiag%id_v_dt_sg, v_dt(isc:iec,jsc:jec,:), fv_time)
+    end if
+    t_dt(:,:,:) = rdt*(Atm(1)%pt(isc:iec,jsc:jec,:) - t_dt(:,:,:))
+    if (Atm(1)%idiag%id_t_dt_sg > 0) then
+       used = send_data(Atm(1)%idiag%id_t_dt_sg, t_dt, fv_time)
+    end if
+    qv_dt(:,:,:) = rdt*(Atm(1)%q(isc:iec,jsc:jec,:,sphum) - qv_dt(:,:,:))
+    if (Atm(1)%idiag%id_qv_dt_sg > 0) then
+       used = send_data(Atm(1)%idiag%id_qv_dt_sg, qv_dt, fv_time)
+    end if
 
    call mpp_clock_end (id_subgridz)
 
@@ -508,7 +530,7 @@ contains
    call fv_end(Atm, mygrid)
    deallocate (Atm)
 
-   deallocate( u_dt, v_dt, t_dt, pref, dum1d )
+   deallocate( u_dt, v_dt, t_dt, qv_dt, pref, dum1d )
 
  end subroutine atmosphere_end
 

@@ -674,6 +674,16 @@ contains
                'snow water tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qs_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qs_dt(isc:iec,jsc:jec,npz))
           
+          idiag%id_T_dt_sg = register_diag_field ( trim(field), 'T_dt_sg', axes(1:3), Time,           &
+               'temperature tendency from 2dz subgrid mixing', 'K/s', missing_value=missing_value )
+          idiag%id_u_dt_sg = register_diag_field ( trim(field), 'u_dt_sg', axes(1:3), Time,           &
+               'zonal wind tendency from 2dz subgrid mixing', 'm/s/s', missing_value=missing_value )
+          idiag%id_v_dt_sg = register_diag_field ( trim(field), 'v_dt_sg', axes(1:3), Time,           &
+               'meridional wind tendency from 2dz subgrid mixing', 'm/s/s', missing_value=missing_value )
+          idiag%id_qv_dt_sg = register_diag_field ( trim(field), 'qv_dt_sg', axes(1:3), Time,           &
+               'water vapor tendency from 2dz subgrid mixing', 'kg/kg/s', missing_value=missing_value )
+
+
        endif
 
 !
