@@ -1095,12 +1095,12 @@ module fv_control_mod
              jeu = jeu - upoff
 
              !restriction to current domain
-             !!! DEBUG CODE
-             if (Atm(this_grid)%flagstruct%fv_debug) then
-                write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS  : ', isu, jsu, ieu, jeu
-                write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS 2: ', isc, jsc, iec, jsc
-             endif
-             !!! END DEBUG CODE
+!!$             !!! DEBUG CODE
+!!$             if (Atm(this_grid)%flagstruct%fv_debug) then
+!!$                write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS  : ', isu, jsu, ieu, jeu
+!!$                write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS 2: ', isc, jsc, iec, jsc
+!!$             endif
+!!$             !!! END DEBUG CODE
              if (isu > iec .or. ieu < isc .or. &
                  jsu > jec .or. jeu < jsc ) then
                 isu = -999 ; jsu = -999 ; ieu = -1000 ; jeu = -1000
@@ -1108,10 +1108,10 @@ module fv_control_mod
                 isu = max(isu,isc) ; jsu = max(jsu,jsc)
                 ieu = min(ieu,iec) ; jeu = min(jeu,jec)
              endif
-             !!! DEBUG CODE
-             if (Atm(this_grid)%flagstruct%fv_debug) &
-                  write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS 3: ', isu, jsu, ieu, jeu
-             !!! END DEBUG CODE
+!!$             !!! DEBUG CODE
+!!$             if (Atm(this_grid)%flagstruct%fv_debug) &
+!!$                  write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS 3: ', isu, jsu, ieu, jeu
+!!$             !!! END DEBUG CODE
 
              Atm(n)%neststruct%isu = isu
              Atm(n)%neststruct%ieu = ieu
