@@ -488,12 +488,12 @@ contains
     if (Atm(1)%idiag%id_v_dt_sg > 0) then
        used = send_data(Atm(1)%idiag%id_v_dt_sg, v_dt(isc:iec,jsc:jec,:), fv_time)
     end if
-    t_dt(:,:,:) = rdt*(Atm(1)%pt(isc:iec,jsc:jec,:) - t_dt(:,:,:))
     if (Atm(1)%idiag%id_t_dt_sg > 0) then
+       t_dt(:,:,:) = rdt*(Atm(1)%pt(isc:iec,jsc:jec,:) - t_dt(:,:,:))
        used = send_data(Atm(1)%idiag%id_t_dt_sg, t_dt, fv_time)
     end if
-    qv_dt(:,:,:) = rdt*(Atm(1)%q(isc:iec,jsc:jec,:,sphum) - qv_dt(:,:,:))
     if (Atm(1)%idiag%id_qv_dt_sg > 0) then
+       qv_dt(:,:,:) = rdt*(Atm(1)%q(isc:iec,jsc:jec,:,sphum) - qv_dt(:,:,:))
        used = send_data(Atm(1)%idiag%id_qv_dt_sg, qv_dt, fv_time)
     end if
 
