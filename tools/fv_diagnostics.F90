@@ -100,7 +100,7 @@ module fv_diagnostics_mod
 
  integer, parameter :: MAX_PLEVS = 31
 #ifdef FEWER_PLEVS
- integer :: nplev = 10 ! 31 ! lmh
+ integer :: nplev = 11 ! 31 ! lmh
 #else
  integer :: nplev = 31
 #endif
@@ -342,7 +342,7 @@ contains
 ! SJL note: 31 is enough here; if you need more levels you should do it OFF line
 ! do not add more to prevent the model from slowing down too much.
 #ifdef FEWER_PLEVS
-    levs(1:nplev) = (/50,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
+    levs(1:nplev) = (/50,70,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
     k100 = 2
     k200 = 3
     k300 = 5
@@ -2151,7 +2151,7 @@ contains
 
 
 
-       if( idiag%id_slp>0 .or. idiag%id_tm>0 .or. idiag%id_any_hght>0 .or. idiag%id_hght3d .or. idiag%id_c15>0 .or. idiag%id_ctz ) then
+       if( idiag%id_slp>0 .or. idiag%id_tm>0 .or. idiag%id_any_hght>0 .or. idiag%id_hght3d>0 .or. idiag%id_c15>0 .or. idiag%id_ctz>0 ) then
 
           allocate ( wz(isc:iec,jsc:jec,npz+1) )
           call get_height_field(isc, iec, jsc, jec, ngc, npz, Atm(n)%flagstruct%hydrostatic, Atm(n)%delz,  &
