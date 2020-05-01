@@ -1,21 +1,22 @@
 !***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of fvGFS.                                       *
-!*                                                                     *
-!* fvGFS is free software; you can redistribute it and/or modify it    *
-!* and are expected to follow the terms of the GNU General Public      *
-!* License as published by the Free Software Foundation; either        *
-!* version 2 of the License, or (at your option) any later version.    *
-!*                                                                     *
-!* fvGFS is distributed in the hope that it will be useful, but        *
-!* WITHOUT ANY WARRANTY; without even the implied warranty of          *
-!* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU   *
-!* General Public License for more details.                            *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
+!*                   GNU Lesser General Public License
+!*
+!* This file is part of the FV3 dynamical core.
+!*
+!* The FV3 dynamical core is free software: you can redistribute it
+!* and/or modify it under the terms of the
+!* GNU Lesser General Public License as published by the
+!* Free Software Foundation, either version 3 of the License, or
+!* (at your option) any later version.
+!*
+!* The FV3 dynamical core is distributed in the hope that it will be
+!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+!* See the GNU General Public License for more details.
+!*
+!* You should have received a copy of the GNU Lesser General Public
+!* License along with the FV3 dynamical core.
+!* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
 
 module fv_regional_mod
@@ -108,7 +109,7 @@ module fv_regional_mod
 !     integer, parameter :: jend_nest = 1290
 
       real :: current_time_in_seconds
-	  integer :: bc_time_interval
+      integer :: bc_time_interval
       integer,save :: ncid,next_time_to_read_bcs,npz,ntracers
 
       !Locations of tracer vbls in the tracers array
@@ -1967,7 +1968,7 @@ endif
                                              ,BC_t1%east )                   !<-- North BC vbls on final integration levels
           else
 
-           call remap_scalar_nggps_regional_bc(Atm                         &
+            call remap_scalar_nggps_regional_bc(Atm                        &
                                              ,'east '                      &
 
                                              ,isd,ied,jsd,jed              &  !<-- Atm array indices w/halo
@@ -1992,18 +1993,18 @@ endif
 
                                              ,BC_t1%east )                   !<-- North BC vbls on final integration levels
 
-		  endif
+          endif
 !
-        if (js == 1) then
-           jstart = 1
-        else
-           jstart = jsd
-        endif
-        if (je == npy-1) then
-           jend = je
-        else
-           jend = jed
-        endif
+          if (js == 1) then
+             jstart = 1
+          else
+             jstart = jsd
+          endif
+          if (je == npy-1) then
+             jend = je
+          else
+             jend = jed
+          endif
 
 
           do k=1,npz
@@ -2051,7 +2052,7 @@ endif
                                              ,BC_t1%west )                   !<-- North BC vbls on final integration levels
           else
 
-           call remap_scalar_nggps_regional_bc(Atm                          &
+            call remap_scalar_nggps_regional_bc(Atm                        &
                                              ,'west '                      &
 
                                              ,isd,ied,jsd,jed              &  !<-- Atm array indices w/halo
@@ -2076,18 +2077,18 @@ endif
 
                                              ,BC_t1%west )                   !<-- North BC vbls on final integration levels
 
-		  endif
+          endif
 !
-        if (js == 1) then
-           jstart = 1
-        else
-           jstart = jsd
-        endif
-        if (je == npy-1) then
-           jend = je
-        else
-           jend = jed
-        endif
+          if (js == 1) then
+             jstart = 1
+          else
+             jstart = jsd
+          endif
+          if (je == npy-1) then
+             jend = je
+          else
+             jend = jed
+          endif
 
           do k=1,npz
           do j=jstart,jend

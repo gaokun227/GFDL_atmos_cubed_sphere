@@ -1,21 +1,22 @@
 !***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of fvGFS.                                       *
-!*                                                                     *
-!* fvGFS is free software; you can redistribute it and/or modify it    *
-!* and are expected to follow the terms of the GNU General Public      *
-!* License as published by the Free Software Foundation; either        *
-!* version 2 of the License, or (at your option) any later version.    *
-!*                                                                     *
-!* fvGFS is distributed in the hope that it will be useful, but        *
-!* WITHOUT ANY WARRANTY; without even the implied warranty of          *
-!* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU   *
-!* General Public License for more details.                            *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
+!*                   GNU Lesser General Public License
+!*
+!* This file is part of the FV3 dynamical core.
+!*
+!* The FV3 dynamical core is free software: you can redistribute it
+!* and/or modify it under the terms of the
+!* GNU Lesser General Public License as published by the
+!* Free Software Foundation, either version 3 of the License, or
+!* (at your option) any later version.
+!*
+!* The FV3 dynamical core is distributed in the hope that it will be
+!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+!* See the GNU General Public License for more details.
+!*
+!* You should have received a copy of the GNU Lesser General Public
+!* License along with the FV3 dynamical core.
+!* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
 module fv_arrays_mod
 #include <fms_platform.h>
@@ -239,7 +240,7 @@ module fv_arrays_mod
      integer, pointer :: grid_type !< Which type of grid to use. If 0, the equidistant gnomonic
                                    !< cubed-sphere will be used. If 4, a doubly-periodic
                                    !< f-plane cartesian grid will be used. If 5, a user-defined
-								   !< orthogonal grid will be used. If -1, the grid is read
+                                   !< orthogonal grid will be used. If -1, the grid is read
                                    !< from INPUT/grid_spec.nc. Values 2, 3, 5, 6, and 7 are not
                                    !< supported and will likely not run. The default value is 0.
 
@@ -568,7 +569,7 @@ module fv_arrays_mod
 
   end type fv_nest_BC_type_4D
 
-  type nest_level_type 
+  type nest_level_type
      !Interpolation arrays for grid nesting
      logical                                :: on_level ! indicate if current processor on this level.
      logical                                :: do_remap_BC
@@ -675,7 +676,7 @@ module fv_arrays_mod
      real, _ALLOCATABLE :: phys_qs_dt(:,:,:)
      real, _ALLOCATABLE :: phys_u_dt(:,:,:)
      real, _ALLOCATABLE :: phys_v_dt(:,:,:)
-     
+
   end type phys_diag_type
 
   type nudge_diag_type
@@ -706,9 +707,9 @@ module fv_arrays_mod
      real, _ALLOCATABLE :: sgh(:,:)
      real, _ALLOCATABLE :: oro(:,:)
      real, _ALLOCATABLE :: ze0(:,:,:)
-     
+
      logical :: allocated = .false.
-     
+
      type(restart_file_type) :: fv_restart_coarse
      type(restart_file_type) :: sst_restart_coarse
      type(restart_file_type) :: fv_tile_restart_coarse
@@ -716,9 +717,9 @@ module fv_arrays_mod
      type(restart_file_type) :: mg_restart_coarse
      type(restart_file_type) :: lnd_restart_coarse
      type(restart_file_type) :: tra_restart_coarse
-     
+
   end type coarse_restart_type
-  
+
   interface allocate_fv_nest_BC_type
      module procedure allocate_fv_nest_BC_type_3D
      module procedure allocate_fv_nest_BC_type_3D_Atm
@@ -1571,7 +1572,7 @@ contains
     end if
 
     call deallocate_coarse_restart_type(Atm)
-    
+
     Atm%allocated = .false.
 
   end subroutine deallocate_fv_atmos_type
@@ -1597,9 +1598,9 @@ contains
        deallocate(Atm%coarse_restart%phis)
        deallocate(Atm%coarse_restart%ze0)
     endif
-    
+
   end subroutine deallocate_coarse_restart_type
-  
+
 subroutine allocate_fv_nest_BC_type_3D_Atm(BC,Atm,ns,istag,jstag,dummy)
 
   type(fv_nest_BC_type_3D), intent(INOUT) :: BC

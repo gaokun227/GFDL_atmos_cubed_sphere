@@ -1,21 +1,22 @@
 !***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of fvGFS.                                       *
-!*                                                                     *
-!* fvGFS is free software; you can redistribute it and/or modify it    *
-!* and are expected to follow the terms of the GNU General Public      *
-!* License as published by the Free Software Foundation; either        *
-!* version 2 of the License, or (at your option) any later version.    *
-!*                                                                     *
-!* fvGFS is distributed in the hope that it will be useful, but        *
-!* WITHOUT ANY WARRANTY; without even the implied warranty of          *
-!* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU   *
-!* General Public License for more details.                            *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
+!*                   GNU Lesser General Public License
+!*
+!* This file is part of the FV3 dynamical core.
+!*
+!* The FV3 dynamical core is free software: you can redistribute it
+!* and/or modify it under the terms of the
+!* GNU Lesser General Public License as published by the
+!* Free Software Foundation, either version 3 of the License, or
+!* (at your option) any later version.
+!*
+!* The FV3 dynamical core is distributed in the hope that it will be
+!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+!* See the GNU General Public License for more details.
+!*
+!* You should have received a copy of the GNU Lesser General Public
+!* License along with the FV3 dynamical core.
+!* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
 #ifdef OVERLOAD_R4
 #define _GET_VAR1 get_var1_real
@@ -272,7 +273,7 @@ contains
        endif
 
 
-	!Needed for reproducibility. DON'T REMOVE THIS!!
+    !Needed for reproducibility. DON'T REMOVE THIS!!
     call mpp_update_domains( Atm%phis, Atm%domain )
     ftop = g_sum(Atm%domain, Atm%phis(is:ie,js:je), is, ie, js, je, ng, Atm%gridstruct%area_64, 1)
 
@@ -661,18 +662,18 @@ contains
     do k=1,npz
       do j=js,je
         do i=is,ie
-					wt = Atm%delp(i,j,k)
-					if ( Atm%flagstruct%nwat == 6 ) then
-						 qt = wt/(1. - (Atm%q(i,j,k,liq_wat) + &
-														Atm%q(i,j,k,ice_wat) + &
-														Atm%q(i,j,k,rainwat) + &
-														Atm%q(i,j,k,snowwat) + &
-														Atm%q(i,j,k,graupel)))
-					else   ! all other values of nwat
-						 qt = wt/(1. - sum(Atm%q(i,j,k,2:Atm%flagstruct%nwat)))
-					endif
-					Atm%delp(i,j,k) = qt
-					if (ntclamt > 0) Atm%q(i,j,k,ntclamt) = 0.0    ! Moorthi
+          wt = Atm%delp(i,j,k)
+          if ( Atm%flagstruct%nwat == 6 ) then
+            qt = wt/(1. - (Atm%q(i,j,k,liq_wat) + &
+            Atm%q(i,j,k,ice_wat) + &
+            Atm%q(i,j,k,rainwat) + &
+            Atm%q(i,j,k,snowwat) + &
+            Atm%q(i,j,k,graupel)))
+          else   ! all other values of nwat
+            qt = wt/(1. - sum(Atm%q(i,j,k,2:Atm%flagstruct%nwat)))
+          endif
+          Atm%delp(i,j,k) = qt
+          if (ntclamt > 0) Atm%q(i,j,k,ntclamt) = 0.0    ! Moorthi
         enddo
       enddo
     enddo
@@ -1050,8 +1051,8 @@ contains
 
       allocate (zh(is:ie,js:je,levp+1))
       allocate (ps(is:ie,js:je))
-	  allocate (w(is:ie,js:je,levp))
-	  allocate (t(is:ie,js:je,levp))
+      allocate (w(is:ie,js:je,levp))
+      allocate (t(is:ie,js:je,levp))
       allocate (q (is:ie,js:je,levp,ntracers))
       allocate ( u_w(is:ie+1, js:je, 1:levp) )
       allocate ( v_w(is:ie+1, js:je, 1:levp) )
@@ -1237,7 +1238,7 @@ contains
                    Atm%gridstruct%dxc, Atm%gridstruct%dyc, Atm%gridstruct%sin_sg, &
                    Atm%flagstruct%n_zs_filter, cnst_0p20*Atm%gridstruct%da_min, &
                    .false., oro_g, Atm%gridstruct%bounded_domain, &
-	           Atm%domain, Atm%bd)
+                   Atm%domain, Atm%bd)
             if ( is_master() ) write(*,*) 'Warning !!! del-2 terrain filter has been applied ', &
                    Atm%flagstruct%n_zs_filter, ' times'
           else if( Atm%flagstruct%nord_zs_filter == 4 ) then
@@ -1245,7 +1246,7 @@ contains
                    Atm%gridstruct%dx, Atm%gridstruct%dy,   &
                    Atm%gridstruct%dxc, Atm%gridstruct%dyc, Atm%gridstruct%sin_sg, &
                    Atm%flagstruct%n_zs_filter, .false., oro_g, &
-	           Atm%gridstruct%bounded_domain, &
+                   Atm%gridstruct%bounded_domain, &
                    Atm%domain, Atm%bd)
             if ( is_master() ) write(*,*) 'Warning !!! del-4 terrain filter has been applied ', &
                    Atm%flagstruct%n_zs_filter, ' times'
@@ -1302,10 +1303,10 @@ contains
 
       deallocate (ak)
       deallocate (bk)
-	  deallocate (ps)
+      deallocate (ps)
       deallocate (q )
-	  deallocate (t )
-	  deallocate (zh)
+      deallocate (t )
+      deallocate (zh)
 
 
 
