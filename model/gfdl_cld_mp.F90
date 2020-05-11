@@ -359,7 +359,7 @@ contains
 subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
         graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
-        te, condensation, deposition, last_step, do_inline_mp)
+        te, condensation, deposition, evaporation, sublimation, last_step, do_inline_mp)
     
     implicit none
     
@@ -384,6 +384,7 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
     real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     real, intent (inout), dimension (is:ie) :: condensation, deposition
+    real, intent (inout), dimension (is:ie) :: evaporation, sublimation
     
     real, intent (inout), dimension (is:ie, ks:ke) :: te
     ! logical :: used
@@ -444,7 +445,7 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         qa, qnl, qni, dz, is, ie, ks, ke, dts, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
-        condensation, deposition, last_step, do_inline_mp)
+        condensation, deposition, evaporation, sublimation, last_step, do_inline_mp)
     
 end subroutine gfdl_cld_mp_driver
 
@@ -467,7 +468,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qnl, qni, dz, is, ie, ks, ke, dt_in, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
-        condensation, deposition, last_step, do_inline_mp)
+        condensation, deposition, evaporation, sublimation, last_step, do_inline_mp)
     
     implicit none
     
@@ -488,6 +489,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, intent (inout), dimension (is:ie, ks:ke) :: q_con, cappa
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     real, intent (inout), dimension (is:ie) :: condensation, deposition
+    real, intent (inout), dimension (is:ie) :: evaporation, sublimation
     
     real, intent (out), dimension (is:ie) :: w_var
     real, intent (out), dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i
@@ -516,7 +518,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real (kind = r_grid) :: con_r8, c8
     real :: convt
     real :: dts
-    real :: cond, dep
+    real :: cond, dep, reevap, sub
     
     integer :: i, k, n
     
@@ -705,8 +707,10 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         if (fix_negative) &
-            call neg_adj (ks, ke, tz, dp1, qvz, qlz, qrz, qiz, qsz, qgz)
+            call neg_adj (ks, ke, tz, dp1, qvz, qlz, qrz, qiz, qsz, qgz, cond)
         
+        condensation (i) = condensation (i) + cond * convt * ntimes
+            
         m2_rain (i, :) = 0.
         m2_sol (i, :) = 0.
         
@@ -717,8 +721,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, dte (i))
+                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, reevap, dte (i))
             
+            evaporation (i) = evaporation (i) + reevap * convt
             rain (i) = rain (i) + r1 * convt
             
             do k = ks, ke
@@ -777,8 +782,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, dte (i))
+                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, reevap, dte (i))
             
+            evaporation (i) = evaporation (i) + reevap * convt
             rain (i) = rain (i) + r1 * convt
             
             do k = ks, ke
@@ -793,10 +799,12 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             
             call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, ccn, &
                 cin, denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, gsize (i), &
-                cond, dep, last_step)
+                cond, dep, reevap, sub, last_step)
 
             condensation (i) = condensation (i) + cond * convt
             deposition (i) = deposition (i) + dep * convt
+            evaporation (i) = evaporation (i) + reevap * convt
+            sublimation (i) = sublimation (i) + sub * convt
             
         enddo
         
@@ -1015,7 +1023,7 @@ end subroutine sedi_heat
 ! -----------------------------------------------------------------------
 
 subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
-        den, denfac, ccn, c_praut, rh_rain, vtr, r1, m1_rain, w1, h_var, dte)
+        den, denfac, ccn, c_praut, rh_rain, vtr, r1, m1_rain, w1, h_var, reevap, dte)
     
     implicit none
     
@@ -1029,6 +1037,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     real, intent (inout), dimension (ks:ke) :: vtr, qv, ql, qr, qi, qs, qg, m1_rain, w1
     real (kind = r_grid), intent (inout) :: dte
     real, intent (out) :: r1
+    real, intent (out) :: reevap
     real, parameter :: so3 = 7. / 3.
     ! fall velocity constants:
     real, parameter :: vconr = 2503.23638966667
@@ -1055,6 +1064,8 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     m1_rain (:) = 0.
     
     call check_column (ks, ke, qr, no_fall)
+
+    reevap = 0
     
     if (no_fall) then
         vtr (:) = vf_min
@@ -1089,7 +1100,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         ! evaporation and accretion of rain for the first 1 / 2 time step
         ! -----------------------------------------------------------------------
         
-        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var)
+        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
         
         if (do_sedi_w) then
             do k = ks, ke
@@ -1188,7 +1199,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         ! evaporation and accretion of rain for the remaing 1 / 2 time step
         ! -----------------------------------------------------------------------
         
-        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var)
+        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
         
     endif
     
@@ -1254,16 +1265,17 @@ end subroutine warm_rain
 ! evaporation of rain
 ! -----------------------------------------------------------------------
 
-subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var)
+subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
     
     implicit none
     
     integer, intent (in) :: ks, ke
     real, intent (in) :: dt ! time step (s)
     real, intent (in) :: rh_rain, h_var
-    real, intent (in), dimension (ks:ke) :: den, denfac
+    real, intent (in), dimension (ks:ke) :: den, denfac, dp
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
     real, intent (inout), dimension (ks:ke) :: qv, qr, ql, qi, qs, qg
+    real, intent (out) :: reevap
     ! local:
     real (kind = r_grid), dimension (ks:ke) :: cvm
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk
@@ -1337,6 +1349,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
                         exp (0.725 * log (qden))) / (crevp (4) * t2 + crevp (5) * qsat * den (k))
                     evap = min (qr (k), dt * fac_revp * evap, dqv / (1. + lcpk (k) * dqsdt))
                 endif
+                reevap = reevap + evap * dp (k)
                 
                 ! -----------------------------------------------------------------------
                 ! alternative minimum evap in dry environmental air
@@ -1431,7 +1444,7 @@ end subroutine linear_prof
 
 subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
         ccn, cin, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, &
-        gsize, cond, dep, last_step)
+        gsize, cond, dep, reevap, sub, last_step)
     
     implicit none
     
@@ -1442,7 +1455,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     real, intent (inout), dimension (ks:ke) :: qvk, qlk, qrk, qik, qsk, qgk, qak
     real, intent (inout), dimension (ks:ke) :: cin
     real, intent (in) :: rh_adj, rh_rain, dts, h_var, gsize
-    real, intent (out) :: cond, dep
+    real, intent (out) :: cond, dep, reevap, sub
     ! local:
     real, dimension (ks:ke) :: icpk, di, qim
     real, dimension (ks:ke) :: q_liq, q_sol
@@ -1882,7 +1895,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     
     call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tzk, qvk, qlk, &
         qrk, qik, qsk, qgk, qak, dp1, h_var, rh_rain, te8, ccn, cin, gsize, &
-        cond, dep, last_step)
+        cond, dep, reevap, sub, last_step)
     
 end subroutine icloud
 
@@ -1891,7 +1904,7 @@ end subroutine icloud
 ! =======================================================================
 
 subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
-        qi, qs, qg, qa, dp1, h_var, rh_rain, te8, ccn, cin, gsize, cond, dep, last_step)
+        qi, qs, qg, qa, dp1, h_var, rh_rain, te8, ccn, cin, gsize, cond, dep, reevap, sub, last_step)
     
     implicit none
     
@@ -1903,7 +1916,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (ks:ke) :: cin
     logical, intent (in) :: last_step
-    real, intent (out) :: cond, dep
+    real, intent (out) :: cond, dep, reevap, sub
     ! local:
     real, dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
     real, dimension (ks:ke) :: q_liq, q_sol, q_cond
@@ -1952,6 +1965,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
 
     cond = 0
     dep = 0
+    reevap = 0
+    sub = 0
     
     do k = ks, ke
         
@@ -1985,6 +2000,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             if (tin > t_sub + 6.) then
                 rh = qpz / iqs1 (tin, den (k))
                 if (rh < rh_adj) then ! qpz / rh_adj < qs
+                    reevap = reevap + ql (k) * dp1 (k)
+                    sub = sub + qi (k) * dp1 (k)
                     tz (k) = tin
                     qv (k) = qpz
                     ql (k) = 0.
@@ -2009,6 +2026,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                 if (dq0 > 0.) then ! evaporation
                     factor = min (1., fac_l2v * (10. * dq0 / qsw)) ! the rh dependent factor = 1 at 90%
                     evap = min (ql (k), factor * dq0 / (1. + tcp3 (k) * dwsdt))
+                    reevap = reevap + evap * dp1 (k)
                 elseif (do_cond_timescale) then
                     factor = min (1., fac_v2l * (10. * (- dq0) / qsw))
                     evap = - min (qv (k), factor * (- dq0) / (1. + tcp3 (k) * dwsdt))
@@ -2022,6 +2040,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             if (dq0 > 0.) then ! evaporation
                 factor = min (1., fac_l2v * (10. * dq0 / qsw)) ! the rh dependent factor = 1 at 90%
                 evap = min (ql (k), factor * dq0 / (1. + tcp3 (k) * dwsdt))
+                reevap = reevap + evap * dp1 (k)
             elseif (do_cond_timescale) then
                 factor = min (1., fac_v2l * (10. * (- dq0) / qsw))
                 evap = - min (qv (k), factor * (- dq0) / (1. + tcp3 (k) * dwsdt))
@@ -2131,6 +2150,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                 else ! ice -- > vapor
                     pidep = pidep * min (1., dim (tz (k), t_sub) * 0.2)
                     sink = max (pidep, sink, - qi (k))
+                    sub = sub - sink * dp1 (k)
                 endif
                 qv (k) = qv (k) - sink
                 qi (k) = qi (k) + sink
@@ -2161,6 +2181,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                 pssub = (qsi - qv (k)) * dts * pssub
                 if (pssub > 0.) then ! qs -- > qv, sublimation
                     pssub = min (pssub * min (1., dim (tz (k), t_sub) * 0.2), qs (k))
+                    sub = sub + pssub * dp1 (k)
                 else
                     if (tz (k) > tice) then
                         pssub = 0. ! no deposition
@@ -2193,6 +2214,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                 pgsub = (qsi - qv (k)) * dts * pgsub
                 if (pgsub > 0.) then ! qs -- > qv, sublimation
                     pgsub = min (pgsub * min (1., dim (tz (k), t_sub) * 0.2), qg (k))
+                    sub = sub + pgsub * dp1 (k)
                 else
                     if (tz (k) > tice) then
                         pgsub = 0. ! no deposition
@@ -4445,7 +4467,7 @@ end subroutine qsmith
 ! this is designed for 6 - class micro - physics schemes
 ! =======================================================================
 
-subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg)
+subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
     
     implicit none
     
@@ -4453,6 +4475,7 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg)
     real, intent (in), dimension (ks:ke) :: dp
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: pt
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (out) :: cond
     
     real, dimension (ks:ke) :: lcpk, icpk
     
@@ -4469,6 +4492,8 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg)
         lcpk (k) = (lv00 + d1_vap * pt (k)) / cvm
         icpk (k) = (li00 + d1_ice * pt (k)) / cvm
     enddo
+
+    cond = 0
     
     do k = ks, ke
         
@@ -4504,6 +4529,7 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg)
         endif
         ! if cloud water < 0, borrow from water vapor
         if (ql (k) < 0.) then
+            cond = cond - ql (k) * dp (k)
             qv (k) = qv (k) + ql (k)
             pt (k) = pt (k) - ql (k) * lcpk (k) ! heating
             ql (k) = 0.
