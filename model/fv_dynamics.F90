@@ -632,8 +632,8 @@ contains
       inline_mp%prei = inline_mp%prei / k_split
       inline_mp%pres = inline_mp%pres / k_split
       inline_mp%preg = inline_mp%preg / k_split
-      inline_mp%cond = inline_mp%pres / k_split
-      inline_mp%dep = inline_mp%preg / k_split
+      inline_mp%cond = inline_mp%cond / k_split
+      inline_mp%dep = inline_mp%dep / k_split
       if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt = inline_mp%qv_dt / bdt
       if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt = inline_mp%ql_dt / bdt
       if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt = inline_mp%qi_dt / bdt
