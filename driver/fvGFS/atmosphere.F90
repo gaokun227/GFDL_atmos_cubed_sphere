@@ -32,7 +32,7 @@ module atmosphere_mod
 ! FMS modules:
 !-----------------
 use block_control_mod,      only: block_control_type
-use constants_mod,          only: cp_air, rdgas, grav, rvgas, kappa, pstd_mks
+use constants_mod,          only: cp_air, rdgas, grav, rvgas, kappa, pstd_mks, pi
 use time_manager_mod,       only: time_type, get_time, set_time, operator(+), &
                                   operator(-), operator(/), time_type_to_real
 use fms_mod,                only: file_exist, open_namelist_file,    &
@@ -1029,6 +1029,7 @@ contains
    integer :: i, j, ix, k, k1, n, w_diff, nt_dyn, iq
    integer :: nb, blen, nwat, dnats, nq_adv
    real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
+   real :: tracer_clock, lat_thresh
    character(len=32) :: tracer_name
 
    Time_prev = Time
@@ -1070,7 +1071,6 @@ contains
            IPD_Data(nb)%Stateout%gq0(:,:,iq) = IPD_Data(nb)%Statein%qgrs(:,:,iq)
         endif
      enddo
-
 
      do k = 1, npz
        k1 = npz+1-k !reverse the k direction
@@ -1176,6 +1176,44 @@ contains
                          Atm(n)%ptop, Atm(n)%phys_diag, Atm(n)%nudge_diag)
        call timing_off('FV_UPDATE_PHYS')
    call mpp_clock_end (id_dynam)
+
+
+!LMH 7jan2020: Update PBL and other clock tracers, if present
+   tracer_clock = time_type_to_real(Time_next - Atm(n)%Time_init)*1.e-6
+   do iq = 1, nq
+      call get_tracer_names (MODEL_ATMOS, iq, tracer_name)
+      if (trim(tracer_name) == 'pbl_clock') then
+         do nb = 1,Atm_block%nblks
+            blen = Atm_block%blksz(nb)
+            do ix = 1, blen
+               i = Atm_block%index(nb)%ii(ix)
+               j = Atm_block%index(nb)%jj(ix)
+               do k=1,npz
+                  k1 = npz+1-k !reverse the k direction
+                  Atm(n)%q(i,j,k1,iq) = tracer_clock
+                  if (IPD_Data(nb)%Statein%phii(ix,k) > IPD_Data(nb)%intdiag%hpbl(ix)*grav) exit
+               enddo
+            enddo
+         enddo
+      else if (trim(tracer_name) == 'sfc_clock') then
+         do j=jsc,jec
+         do i=isc,iec
+            Atm(n)%q(i,j,npz,iq) = tracer_clock
+         enddo
+         enddo
+      else if (trim(tracer_name) == 'itcz_clock' ) then
+         lat_thresh = 15.*pi/180.
+         do k=1,npz
+         do j=jsc,jec
+         do i=isc,iec
+            if (abs(Atm(n)%gridstruct%agrid(i,j,2)) < lat_thresh .and. Atm(n)%w(i,j,k) > 1.5) then
+               Atm(n)%q(i,j,npz,iq) = tracer_clock
+            endif
+         enddo
+         enddo
+         enddo
+      endif
+  enddo
 
 !--- nesting update after updating atmospheric variables with
 !--- physics tendencies
@@ -1666,11 +1704,11 @@ contains
          endif
          phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,ice_wat)
       endif
-            
+
       if (liq_wat > 0) then
          if (allocated(phys_diag%phys_liq_wat_dt)) phys_diag%phys_liq_wat_dt = q(isc:iec,jsc:jec,:,liq_wat)
       endif
-      
+
       if (rainwat > 0) then
          if (allocated(phys_diag%phys_qr_dt)) phys_diag%phys_qr_dt = q(isc:iec,jsc:jec,:,rainwat)
       endif
@@ -1678,7 +1716,7 @@ contains
       if (ice_wat > 0) then
          if (allocated(phys_diag%phys_ice_wat_dt)) phys_diag%phys_ice_wat_dt = q(isc:iec,jsc:jec,:,ice_wat)
       endif
-       
+
       if (graupel > 0) then
          if (allocated(phys_diag%phys_qg_dt)) phys_diag%phys_qg_dt = q(isc:iec,jsc:jec,:,graupel)
       endif
@@ -1695,7 +1733,7 @@ contains
          phys_diag%phys_qi_dt = q(isc:iec,jsc:jec,:,ice_wat) - phys_diag%phys_qi_dt
       endif
    endif
-	
+
    if (allocated(phys_diag%phys_ql_dt)) then
       if (rainwat > 0) phys_diag%phys_ql_dt = q(isc:iec,jsc:jec,:,rainwat) + phys_diag%phys_ql_dt
    endif
@@ -1708,11 +1746,11 @@ contains
       if (allocated(phys_diag%phys_qv_dt)) phys_diag%phys_qv_dt = phys_diag%phys_qv_dt / dt
       if (allocated(phys_diag%phys_ql_dt)) phys_diag%phys_ql_dt = phys_diag%phys_ql_dt / dt
       if (allocated(phys_diag%phys_qi_dt)) phys_diag%phys_qi_dt = phys_diag%phys_qi_dt / dt
-   
+
       if (liq_wat > 0) then
          if (allocated(phys_diag%phys_liq_wat_dt)) phys_diag%phys_liq_wat_dt = (q(isc:iec,jsc:jec,:,liq_wat) - phys_diag%phys_liq_wat_dt) / dt
       endif
-       
+
       if (rainwat > 0) then
          if (allocated(phys_diag%phys_qr_dt)) phys_diag%phys_qr_dt = (q(isc:iec,jsc:jec,:,rainwat) - phys_diag%phys_qr_dt) / dt
       endif
@@ -1720,7 +1758,7 @@ contains
       if (ice_wat > 0) then
          if (allocated(phys_diag%phys_ice_wat_dt)) phys_diag%phys_ice_wat_dt = (q(isc:iec,jsc:jec,:,ice_wat) - phys_diag%phys_ice_wat_dt) / dt
       endif
-      
+
       if (graupel > 0) then
          if (allocated(phys_diag%phys_qg_dt)) phys_diag%phys_qg_dt = (q(isc:iec,jsc:jec,:,graupel) - phys_diag%phys_qg_dt) / dt
       endif
