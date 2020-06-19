@@ -443,7 +443,7 @@ contains
 
 
     do n = ntileMe,1,-1
-       if (new_nest_topo(n)) then
+       if (new_nest_topo(n) > 0) then
           call twoway_topo_update(Atm(n), n==this_grid)
        endif
     end do
@@ -468,7 +468,7 @@ contains
        ntdiag = size(Atm(n)%qdiag,4)
 
 
-       if (.not. ideal_test_case(n)) then
+       if (ideal_test_case(n) == 0) then
 #ifdef SW_DYNAMICS
           Atm(n)%pt(:,:,:)=1.
 #else
