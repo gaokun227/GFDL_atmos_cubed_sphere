@@ -599,7 +599,7 @@ contains
 
           else
              !if(trim(grid_file) == 'INPUT/grid_spec.nc') then
-             if(Atm%flagstruct%grid_type < 0 ) then
+             if(trim(grid_file) == 'INPUT/grid_spec.nc' .or. Atm%flagstruct%grid_type < 0 ) then
                 call read_grid(Atm, grid_file, ndims, nregions, ng)
              else
 
