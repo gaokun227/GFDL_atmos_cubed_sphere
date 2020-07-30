@@ -18,7 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
-!-*- F90 -*-
+
 module sorted_index_mod
   !---------------------------------------------------------------------
   !<OVERVIEW>

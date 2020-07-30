@@ -18,6 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 module fv_arrays_mod
 #include <fms_platform.h>
   use mpp_domains_mod,       only: domain2d
@@ -96,7 +97,7 @@ module fv_arrays_mod
      real, allocatable :: zxg(:,:)
      real, allocatable :: pt1(:)
 
-     integer :: id_prer, id_prei, id_pres, id_preg
+     integer :: id_prer, id_prei, id_pres, id_preg, id_cond, id_dep, id_reevap, id_sub
      integer :: id_qv_dt_gfdlmp, id_T_dt_gfdlmp, id_ql_dt_gfdlmp, id_qi_dt_gfdlmp
      integer :: id_qr_dt_gfdlmp, id_qg_dt_gfdlmp, id_qs_dt_gfdlmp
      integer :: id_liq_wat_dt_gfdlmp, id_ice_wat_dt_gfdlmp
@@ -105,6 +106,12 @@ module fv_arrays_mod
      integer :: id_qr_dt_phys, id_qg_dt_phys, id_qs_dt_phys
      integer :: id_liq_wat_dt_phys, id_ice_wat_dt_phys
      integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
+
+! ESM/CM 3-D diagostics
+     integer :: id_uq, id_vq, id_wq, id_iuq, id_ivq, id_iwq,   & ! moisture flux & vertical integral
+                id_ut, id_vt, id_wt, id_iut, id_ivt, id_iwt,   & ! heat flux
+                id_uu, id_uv, id_vv, id_ww,                    & ! momentum flux
+                id_iuu, id_iuv, id_iuw, id_ivv, id_ivw, id_iww   ! vertically integral of momentum flux
 
      integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w
 
@@ -241,7 +248,7 @@ module fv_arrays_mod
                                    !< cubed-sphere will be used. If 4, a doubly-periodic
                                    !< f-plane cartesian grid will be used. If 5, a user-defined
                                    !< orthogonal grid will be used. If -1, the grid is read
-                                   !< from INPUT/grid_spec.nc. Values 2, 3, 5, 6, and 7 are not
+                                   !< from INPUT/grid_spec.nc. Values 2, 3, 6, and 7 are not
                                    !< supported and will likely not run. The default value is 0.
 
      logical, pointer :: nested   !< Whether this is a nested grid. .false. by default.
@@ -649,6 +656,10 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: prei(:,:)     _NULL
     real, _ALLOCATABLE :: pres(:,:)     _NULL
     real, _ALLOCATABLE :: preg(:,:)     _NULL
+    real, _ALLOCATABLE :: cond(:,:)     _NULL
+    real, _ALLOCATABLE :: dep(:,:)     _NULL
+    real, _ALLOCATABLE :: reevap(:,:)     _NULL
+    real, _ALLOCATABLE :: sub(:,:)     _NULL
 
     real, _ALLOCATABLE :: qv_dt(:,:,:)
     real, _ALLOCATABLE :: ql_dt(:,:,:)
@@ -1065,6 +1076,10 @@ contains
     allocate ( Atm%inline_mp%prei(is:ie,js:je) )
     allocate ( Atm%inline_mp%pres(is:ie,js:je) )
     allocate ( Atm%inline_mp%preg(is:ie,js:je) )
+    allocate ( Atm%inline_mp%cond(is:ie,js:je) )
+    allocate ( Atm%inline_mp%dep(is:ie,js:je) )
+    allocate ( Atm%inline_mp%reevap(is:ie,js:je) )
+    allocate ( Atm%inline_mp%sub(is:ie,js:je) )
 
     !--------------------------
     ! Non-hydrostatic dynamics:
@@ -1149,6 +1164,10 @@ contains
            Atm%inline_mp%prei(i,j) = real_big
            Atm%inline_mp%pres(i,j) = real_big
            Atm%inline_mp%preg(i,j) = real_big
+           Atm%inline_mp%cond(i,j) = real_big
+           Atm%inline_mp%dep(i,j) = real_big
+           Atm%inline_mp%reevap(i,j) = real_big
+           Atm%inline_mp%sub(i,j) = real_big
 
            Atm%ts(i,j) = 300.
            Atm%phis(i,j) = real_big
@@ -1397,6 +1416,10 @@ contains
     deallocate ( Atm%inline_mp%prei )
     deallocate ( Atm%inline_mp%pres )
     deallocate ( Atm%inline_mp%preg )
+    deallocate ( Atm%inline_mp%cond )
+    deallocate ( Atm%inline_mp%dep )
+    deallocate ( Atm%inline_mp%reevap )
+    deallocate ( Atm%inline_mp%sub )
 
     deallocate ( Atm%u_srf )
     deallocate ( Atm%v_srf )

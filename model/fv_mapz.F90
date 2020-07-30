@@ -18,9 +18,12 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 ! SJL: Apr 12, 2012
 ! This revision may actually produce rounding level differences due to the elimination of KS to compute
 ! pressure level for remapping.
+! Linjiong Zhou: Nov 19, 2019
+! Revise the OpenMP code to avoid crash
 module fv_mapz_mod
 
   use constants_mod,     only: radius, pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
@@ -33,9 +36,9 @@ module fv_mapz_mod
   use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID, inline_mp_type
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
-  use fv_cmp_mod,        only: qs_init, fv_sat_adj
+  use fast_sat_adj_mod,  only: fast_sat_adj, qsmith_init
 #ifndef DYCORE_SOLO
-  use gfdl_mp_mod,       only: gfdl_mp_driver
+  use gfdl_mp_mod,       only: gfdl_mp_driver, c_liq, c_ice
 #endif
 
   implicit none
@@ -44,16 +47,12 @@ module fv_mapz_mod
   real, parameter:: r3 = 1./3., r23 = 2./3., r12 = 1./12.
   real, parameter:: cv_vap = 3.*rvgas  ! 1384.5
   real, parameter:: cv_air =  cp_air - rdgas ! = rdgas * (7/2-1) = 2.5*rdgas=717.68
-  real, parameter:: c_ice = 2106.           ! heat capacity of ice at 0.C
-! real, parameter:: c_ice = 1972.           ! heat capacity of ice at -15.C
-! real, parameter:: c_liq = 4.1855e+3    ! GFS: heat capacity of water at 0C
-  real, parameter:: c_liq = 4218.        ! ECMWF-IFS
   real, parameter:: cp_vap = cp_vapor   ! 1846.
   real, parameter:: tice = 273.16
 
   real, parameter :: w_max = 90.
   real, parameter :: w_min = -60.
-  logical, parameter :: w_limiter = .False.
+  logical, parameter :: w_limiter = .True.
 
   real(kind=4) :: E_Flux = 0.
   private
@@ -69,7 +68,7 @@ contains
                       akap, cappa, kord_mt, kord_wz, kord_tr, kord_tm,  peln, te0_2d,        &
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
-                      hydrostatic, phys_hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
+                      hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
                       do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
                       moist_phys)
   logical, intent(in):: last_step
@@ -126,7 +125,7 @@ contains
                                                      ! as input; output: temperature
   real, intent(inout), dimension(isd:,jsd:,1:)::q_con, cappa
   real, intent(inout), dimension(is:,js:,1:)::delz
-  logical, intent(in):: hydrostatic, phys_hydrostatic
+  logical, intent(in):: hydrostatic
   logical, intent(in):: hybrid_z
   logical, intent(in):: out_dt
   logical, intent(in):: moist_phys
@@ -147,20 +146,22 @@ contains
 ! SJL 03.11.04: Initial version for partial remapping
 !
 !-----------------------------------------------------------------------
+  real, allocatable, dimension(:,:) :: dz, wa
   real, allocatable, dimension(:,:,:) :: dp0, u0, v0
   real, allocatable, dimension(:,:,:) :: u_dt, v_dt
   real, dimension(is:ie,js:je):: te_2d, zsum0, zsum1, dpln
-  real, dimension(is:ie,km)  :: q2, dp2, t0, w2
+  real, dimension(is:ie,km)  :: q2, dp2, t0, w2, q3
   real, dimension(is:ie,km+1):: pe1, pe2, pk1, pk2, pn2, phis
   real, dimension(isd:ied,jsd:jed,km):: pe4
   real, dimension(is:ie+1,km+1):: pe0, pe3
-  real, dimension(is:ie):: gsize, gz, cvm, qv
+  real, dimension(is:ie):: gsize, gz, cvm
+  real, dimension(isd:ied,jsd:jed,km):: qnl, qni
 
   real rcp, rg, rrg, bkh, dtmp, k1k
   logical:: fast_mp_consv
   integer:: i,j,k
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
-  integer:: ccn_cm3
+  integer:: ccn_cm3, cin_cm3
 
        k1k = rdgas/cv_air   ! akap / (1.-akap) = rg/Cv=0.4
         rg = rdgas
@@ -174,6 +175,7 @@ contains
        graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
        cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
        ccn_cm3 = get_tracer_index (MODEL_ATMOS, 'ccn_cm3')
+       cin_cm3 = get_tracer_index (MODEL_ATMOS, 'cin_cm3')
 
        if ( do_adiabatic_init .or. do_sat_adj ) then
             fast_mp_consv = (.not.do_adiabatic_init) .and. consv>consv_min
@@ -181,7 +183,7 @@ contains
                kmp = k
                if ( pfull(k) > 10.E2 ) exit
             enddo
-            call qs_init(kmp)
+            call qsmith_init
        endif
 
 !$OMP parallel do default(none) shared(is,ie,js,je,km,pe,ptop,kord_tm,hydrostatic, &
@@ -190,7 +192,7 @@ contains
 !$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
 !$OMP                                  hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,pe4)    &
-!$OMP                          private(qv,gz,cvm,kp,k_next,bkh,dp2,   &
+!$OMP                          private(gz,cvm,kp,k_next,bkh,dp2,   &
 !$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2,w2)
   do 1000 j=js,je+1
 
@@ -600,19 +602,7 @@ contains
 
   endif
 
-!$OMP parallel default(none) shared(is,ie,js,je,km,kmp,ptop,u,v,pe,ua,va,isd,ied,jsd,jed,kord_mt, &
-!$OMP                               te_2d,te,delp,hydrostatic,phys_hydrostatic,hs,rg,pt,peln,adiabatic, &
-!$OMP                               cp,delz,nwat,rainwat,liq_wat,ice_wat,snowwat,       &
-!$OMP                               graupel,q_con,r_vir,sphum,w,pk,pkz,last_step,consv, &
-!$OMP                               do_adiabatic_init,zsum1,zsum0,te0_2d,domain,        &
-!$OMP                               ng,gridstruct,E_Flux,pdt,dtmp,reproduce_sum,q,      &
-!$OMP                               mdt,cld_amt,cappa,dtdt,out_dt,rrg,akap,do_sat_adj,  &
-!$OMP                               fast_mp_consv,kord_tm,pe4, &
-!$OMP                               npx,npy,ccn_cm3,inline_mp,u_dt,v_dt,   &
-!$OMP                               do_inline_mp,c2l_ord,bd,dp0,ps) &
-!$OMP                       private(q2,pe0,pe1,pe2,pe3,qv,cvm,gz,gsize,phis,dpln,dp2,t0)
-
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,pe4,pe)
   do k=2,km
      do j=js,je
         do i=is,ie
@@ -626,7 +616,11 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 
   if ( consv > consv_min ) then
 
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,ptop,u,v,pe,isd,ied,jsd,jed,te_2d,delp, &
+!$OMP                                  hydrostatic,hs,rg,pt,peln,cp,delz,nwat,rainwat,liq_wat, &
+!$OMP                                  ice_wat,snowwat,graupel,q_con,r_vir,sphum,w,pk,pkz,zsum1, &
+!$OMP                                  zsum0,te0_2d,gridstruct,q) &
+!$OMP                          private(cvm,gz,phis)
     do j=js,je
        if ( hydrostatic ) then
             do i=is,ie
@@ -659,7 +653,7 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
            enddo
 
            do k=1,km
-#ifdef MOIST_CAPPA
+#ifdef USE_COND
               call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
                             ice_wat, snowwat, graupel, q, gz, cvm)
               do i=is,ie
@@ -698,20 +692,18 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 
     enddo   ! j-loop
 
-!$OMP single
          dtmp = consv*g_sum(domain, te_2d, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       E_Flux = dtmp / (grav*pdt*4.*pi*radius**2)    ! unit: W/m**2
                                                    ! Note pdt is "phys" time step
       if ( hydrostatic ) then
-           dtmp = dtmp / (cp*    g_sum(domain, zsum0, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+           dtmp = dtmp / g_sum(domain, zsum0, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       else
-           dtmp = dtmp / (cv_air*g_sum(domain, zsum1, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+           dtmp = dtmp / g_sum(domain, zsum1, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       endif
-!$OMP end single
 
   elseif ( consv < -consv_min ) then
 
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,pkz,delp,zsum1,zsum0,ptop,pk,hydrostatic)
       do j=js,je
          do i=is,ie
             zsum1(i,j) = pkz(i,j,1)*delp(i,j,1)
@@ -729,15 +721,13 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
       enddo
 
       E_Flux = consv
-!$OMP single
       if ( hydrostatic ) then
            dtmp = E_flux*(grav*pdt*4.*pi*radius**2) /    &
-                 (cp*g_sum(domain, zsum0,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+                 g_sum(domain, zsum0,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       else
            dtmp = E_flux*(grav*pdt*4.*pi*radius**2) /    &
-                 (cv_air*g_sum(domain, zsum1,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.))
+                 g_sum(domain, zsum1,  is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
       endif
-!$OMP end single
   endif        ! end consv check
 endif        ! end last_step check
 
@@ -746,19 +736,42 @@ endif        ! end last_step check
   if (do_adiabatic_init .or. do_sat_adj) then
                                            call timing_on('sat_adj2')
 
-!$OMP do
+           allocate(dz(is:ie,js:je))
+
+!$OMP parallel do default(none) shared(is,ie,js,je,km,kmp,isd,jsd,te,delp,hydrostatic,hs,pt,peln, &
+!$OMP                                  delz,rainwat,liq_wat,ice_wat,snowwat,graupel,q_con,r_vir, &
+!$OMP                                  sphum,pkz,last_step,ng,gridstruct,q,mdt,cld_amt,cappa,dtdt, &
+!$OMP                                  out_dt,rrg,akap,fast_mp_consv) &
+!$OMP                          private(qnl,qni,dpln,dz)
            do k=kmp,km
               do j=js,je
                  do i=is,ie
                     dpln(i,j) = peln(i,k+1,j) - peln(i,k,j)
+                    qnl(i,j,k) = 0.0
+                    qni(i,j,k) = 0.0
+                    if (.not. hydrostatic) then
+                       dz(i,j) = delz(i,j,k)
+                    endif
                  enddo
               enddo
-              call fv_sat_adj(abs(mdt), r_vir, is, ie, js, je, ng, hydrostatic, fast_mp_consv, &
+              call fast_sat_adj(abs(mdt), is, ie, js, je, ng, hydrostatic, fast_mp_consv, &
                              te(isd,jsd,k), q(isd,jsd,k,sphum), q(isd,jsd,k,liq_wat),   &
                              q(isd,jsd,k,ice_wat), q(isd,jsd,k,rainwat),    &
-                             q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel),    &
-                             hs ,dpln, delz(is:ie,js:je,k), pt(isd,jsd,k), delp(isd,jsd,k), q_con(isd:,jsd:,k), & ! TEMPORARY
-              cappa(isd:,jsd:,k), gridstruct%area_64, dtdt(is,js,k), out_dt, last_step, cld_amt>0, q(isd,jsd,k,cld_amt))
+                             q(isd,jsd,k,snowwat), q(isd,jsd,k,graupel), q(isd,jsd,k,cld_amt), &
+                             qnl(isd,jsd,k), qni(isd,jsd,k), hs ,dpln, dz(is:ie,js:je), &
+                             pt(isd,jsd,k), delp(isd,jsd,k), &
+#ifdef USE_COND
+                             q_con(isd:,jsd:,k), &
+#else
+                             q_con(isd:,jsd:,1), &
+#endif
+#ifdef MOIST_CAPPA
+                             cappa(isd:,jsd:,k), &
+#else
+                             cappa(isd:,jsd:,1), &
+#endif
+                             sqrt(gridstruct%area_64(is:ie,js:je)), &
+                             dtdt(is,js,k), out_dt, last_step)
               if ( .not. hydrostatic  ) then
                  do j=js,je
                     do i=is,ie
@@ -772,8 +785,10 @@ endif        ! end last_step check
               endif
            enddo    ! OpenMP k-loop
 
+           deallocate(dz)
+
            if ( fast_mp_consv ) then
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,kmp,te,te0_2d)
                 do j=js,je
                    do i=is,ie
                       do k=kmp,km
@@ -792,7 +807,19 @@ endif        ! end last_step check
 
   if ((.not. do_adiabatic_init) .and. do_inline_mp) then
 
-!$OMP do
+    allocate(dz(is:ie,km))
+    allocate(wa(is:ie,km))
+
+!$OMP parallel do default(none) shared(is,ie,js,je,isd,jsd,km,pe,ua,va, &
+!$OMP                                  te,delp,hydrostatic,hs,pt,peln, &
+!$OMP                                  delz,rainwat,liq_wat,ice_wat,snowwat, &
+!$OMP                                  graupel,q_con,sphum,w,pk,pkz,last_step,consv, &
+!$OMP                                  do_adiabatic_init,te0_2d, &
+!$OMP                                  gridstruct,q, &
+!$OMP                                  mdt,cld_amt,cappa,rrg,akap, &
+!$OMP                                  ccn_cm3,cin_cm3,inline_mp, &
+!$OMP                                  do_inline_mp,ps) &
+!$OMP                          private(u_dt,v_dt,q2,q3,gsize,dp2,t0,dz,wa)
     do j = js, je
 
         gsize(is:ie) = sqrt(gridstruct%area_64(is:ie,j))
@@ -802,15 +829,21 @@ endif        ! end last_step check
         else
           q2(is:ie,:) = 0.0
         endif
-
+        if (cin_cm3 .gt. 0) then
+          q3(is:ie,:) = q(is:ie,j,:,cin_cm3)
+        else
+          q3(is:ie,:) = 0.0
+        endif
+ 
         ! note: ua and va are A-grid variables
         ! note: pt is virtual temperature at this point
         ! note: w is vertical velocity (m/s)
         ! note: delz is negative, delp is positive, delz doesn't change in constant volume situation
         ! note: hs is geopotential height (m^2/s^2)
-        ! note: the unit of q2 is #/cc
+        ! note: the unit of q2 or q3 is #/cm^3
         ! note: the unit of area is m^2
         ! note: the unit of prer, prei, pres, preg is mm/day
+        ! note: the unit of cond, dep, reevap, sub is mm/day
 
         ! save ua, va for wind tendency calculation
         u_dt(is:ie,j,:) = ua(is:ie,j,:)
@@ -820,50 +853,68 @@ endif        ! end last_step check
         dp2(is:ie,:) = q(is:ie,j,:,sphum)
         t0(is:ie,:) = pt(is:ie,j,:)
 
+        if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt(is:ie,j,:) = inline_mp%liq_wat_dt(is:ie,j,:) - q(is:ie,j,:,liq_wat)
+        if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt(is:ie,j,:) = inline_mp%ice_wat_dt(is:ie,j,:) - q(is:ie,j,:,ice_wat)
+        if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt(is:ie,j,:) = inline_mp%qv_dt(is:ie,j,:) - q(is:ie,j,:,sphum)
+        if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,:) = inline_mp%ql_dt(is:ie,j,:) - (q(is:ie,j,:,liq_wat) + q(is:ie,j,:,rainwat))
+        if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,:) = inline_mp%qi_dt(is:ie,j,:) - (q(is:ie,j,:,ice_wat) + q(is:ie,j,:,snowwat) + q(is:ie,j,:,graupel))
+        if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt(is:ie,j,:) = inline_mp%qr_dt(is:ie,j,:) - q(is:ie,j,:,rainwat)
+        if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt(is:ie,j,:) = inline_mp%qs_dt(is:ie,j,:) - q(is:ie,j,:,snowwat)
+        if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt(is:ie,j,:) = inline_mp%qg_dt(is:ie,j,:) - q(is:ie,j,:,graupel)
+        if (allocated(inline_mp%t_dt)) inline_mp%t_dt(is:ie,j,:) = inline_mp%t_dt(is:ie,j,:) - pt(is:ie,j,:)
+        if (allocated(inline_mp%u_dt)) inline_mp%u_dt(is:ie,j,:) = inline_mp%u_dt(is:ie,j,:) - ua(is:ie,j,:)
+        if (allocated(inline_mp%v_dt)) inline_mp%v_dt(is:ie,j,:) = inline_mp%v_dt(is:ie,j,:) - va(is:ie,j,:)
 
-        if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,:) = q(is:ie,j,:,liq_wat) + q(is:ie,j,:,rainwat)
-        if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,:) = &
-             q(is:ie,j,:,ice_wat) + q(is:ie,j,:,snowwat) + q(is:ie,j,:,graupel)
-
-        if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt(is:ie,j,:) = q(is:ie,j,:,liq_wat)
-        if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt(is:ie,j,:) = q(is:ie,j,:,rainwat)
-        if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt(is:ie,j,:) = q(is:ie,j,:,ice_wat)
-        if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt(is:ie,j,:) = q(is:ie,j,:,graupel)
-        if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt(is:ie,j,:) = q(is:ie,j,:,snowwat)
+        if (.not. hydrostatic) then
+            wa(is:ie,:) = w(is:ie,j,:)
+            dz(is:ie,:) = delz(is:ie,j,:)
+        else
+            dz(is:ie,:) = (peln(is:je,1:km,j) - peln(is:ie,2:km+1,j)) * rdgas * pt(is:ie,j,:) / grav
+        endif
 
 #ifndef DYCORE_SOLO
         call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
-                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), &
-                       pt(is:ie,j,:), w(is:ie,j,:), ua(is:ie,j,:), va(is:ie,j,:), &
-                       delz(is:ie,j,:), delp(is:ie,j,:), gsize, abs(mdt), &
+                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), q3(is:ie,:),  &
+                       pt(is:ie,j,:), wa(is:ie,:), ua(is:ie,j,:), va(is:ie,j,:), &
+                       dz(is:ie,:), delp(is:ie,j,:), gsize, abs(mdt), &
                        hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
-                       inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), &
-                       hydrostatic, phys_hydrostatic, &
-                       is, ie, 1, km, q_con(is:ie,j,:), cappa(is:ie,j,:), consv>consv_min, &
-                       te(is:ie,j,:), last_step)
+                       inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), hydrostatic, &
+                       is, ie, 1, km, &
+#ifdef USE_COND
+                       q_con(is:ie,j,:), &
+#else
+                       q_con(isd:,jsd,1:), &
 #endif
+#ifdef MOIST_CAPPA
+                       cappa(is:ie,j,:), &
+#else
+                       cappa(isd:,jsd,1:), &
+#endif
+                       consv>consv_min, &
+                       te(is:ie,j,:), inline_mp%cond(is:ie,j), inline_mp%dep(is:ie,j), &
+                       inline_mp%reevap(is:ie,j), inline_mp%sub(is:ie,j), last_step, do_inline_mp)
+#endif
+
+        if (.not. hydrostatic) then
+            w(is:ie,j,:) = wa(is:ie,:)
+        endif
 
         ! compute wind tendency at A grid fori D grid wind update
         u_dt(is:ie,j,:) = (ua(is:ie,j,:) - u_dt(is:ie,j,:)) / abs(mdt)
         v_dt(is:ie,j,:) = (va(is:ie,j,:) - v_dt(is:ie,j,:)) / abs(mdt)
 
-        if (.not. do_adiabatic_init) then
-           if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt(is:ie,j,:) = (q(is:ie,j,:,sphum) - dp2(is:ie,:)) / abs(mdt)
-           if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,:) = &
-                (q(is:ie,j,:,liq_wat) + q(is:ie,j,:,rainwat) - inline_mp%ql_dt(is:ie,j,:)) / abs(mdt)
-           if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,:) = &
-                (q(is:ie,j,:,ice_wat) + q(is:ie,j,:,snowwat) + q(is:ie,j,:,graupel) - inline_mp%qi_dt(is:ie,j,:)) / abs(mdt)
-
-           if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt(is:ie,j,:) = (q(is:ie,j,:,liq_wat) - inline_mp%liq_wat_dt(is:ie,j,:)) / abs(mdt)
-           if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt(is:ie,j,:) = (q(is:ie,j,:,rainwat) - inline_mp%qr_dt(is:ie,j,:)) / abs(mdt)
-           if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt(is:ie,j,:) = (q(is:ie,j,:,ice_wat) - inline_mp%ice_wat_dt(is:ie,j,:)) / abs(mdt)
-           if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt(is:ie,j,:) = (q(is:ie,j,:,graupel) - inline_mp%qg_dt(is:ie,j,:)) / abs(mdt)
-           if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt(is:ie,j,:) = (q(is:ie,j,:,snowwat) - inline_mp%qs_dt(is:ie,j,:)) / abs(mdt)
-           if (allocated(inline_mp%t_dt))  inline_mp%t_dt(is:ie,j,:)  = (pt(is:ie,j,:)      -  t0(is:ie,:)) / abs(mdt)
-           if (allocated(inline_mp%u_dt)) inline_mp%u_dt(is:ie,j,:) = u_dt(is:ie,j,:)
-           if (allocated(inline_mp%v_dt)) inline_mp%v_dt(is:ie,j,:) = v_dt(is:ie,j,:)
-        endif
+        if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt(is:ie,j,:) = inline_mp%liq_wat_dt(is:ie,j,:) + q(is:ie,j,:,liq_wat)
+        if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt(is:ie,j,:) = inline_mp%ice_wat_dt(is:ie,j,:) + q(is:ie,j,:,ice_wat)
+        if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt(is:ie,j,:) = inline_mp%qv_dt(is:ie,j,:) + q(is:ie,j,:,sphum)
+        if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,:) = inline_mp%ql_dt(is:ie,j,:) + (q(is:ie,j,:,liq_wat) + q(is:ie,j,:,rainwat))
+        if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,:) = inline_mp%qi_dt(is:ie,j,:) + (q(is:ie,j,:,ice_wat) + q(is:ie,j,:,snowwat) + q(is:ie,j,:,graupel))
+        if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt(is:ie,j,:) = inline_mp%qr_dt(is:ie,j,:) + q(is:ie,j,:,rainwat)
+        if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt(is:ie,j,:) = inline_mp%qs_dt(is:ie,j,:) + q(is:ie,j,:,snowwat)
+        if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt(is:ie,j,:) = inline_mp%qg_dt(is:ie,j,:) + q(is:ie,j,:,graupel)
+        if (allocated(inline_mp%t_dt)) inline_mp%t_dt(is:ie,j,:) = inline_mp%t_dt(is:ie,j,:) + pt(is:ie,j,:)
+        if (allocated(inline_mp%u_dt)) inline_mp%u_dt(is:ie,j,:) = inline_mp%u_dt(is:ie,j,:) + ua(is:ie,j,:)
+        if (allocated(inline_mp%v_dt)) inline_mp%v_dt(is:ie,j,:) = inline_mp%v_dt(is:ie,j,:) + va(is:ie,j,:)
 
         ! update pe, peln, pk, ps
         do k=2,km+1
@@ -882,8 +933,19 @@ endif        ! end last_step check
             pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
 #endif
         endif
+ 
+        if (consv .gt. consv_min) then
+            do i = is, ie
+                do k = 1, km
+                    te0_2d(i, j) = te0_2d(i, j) + te(i, j, k)
+                enddo
+            enddo
+        endif
 
     enddo
+
+    deallocate(dz)
+    deallocate(wa)
 
   endif
 
@@ -891,40 +953,36 @@ endif        ! end last_step check
   if ( last_step ) then
        ! Output temperature if last_step
 !!!  if ( is_master() ) write(*,*) 'dtmp=', dtmp, nwat
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,isd,ied,jsd,jed,hydrostatic,pt,adiabatic,cp, &
+!$OMP                                  nwat,rainwat,liq_wat,ice_wat,snowwat,graupel,r_vir,&
+!$OMP                                  sphum,pkz,dtmp,q) &
+!$OMP                          private(cvm,gz)
         do k=1,km
            do j=js,je
-#ifdef USE_COND
-              if ( nwat==2 ) then
+              if (hydrostatic) then
                  do i=is,ie
-                    gz(i) = max(0., q(i,j,k,liq_wat))
-                    qv(i) = max(0., q(i,j,k,sphum))
-                    pt(i,j,k) = (pt(i,j,k)+dtmp*pkz(i,j,k)) / ((1.+r_vir*qv(i))*(1.-gz(i)))
-                 enddo
-              elseif ( nwat==6 ) then
-                 do i=is,ie
-                    gz(i) = q(i,j,k,liq_wat)+q(i,j,k,rainwat)+q(i,j,k,ice_wat)+q(i,j,k,snowwat)+q(i,j,k,graupel)
-                    pt(i,j,k) = (pt(i,j,k)+dtmp*pkz(i,j,k))/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i)))
+                    pt(i,j,k) = (pt(i,j,k)+dtmp/cp*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum))
                  enddo
               else
+#ifdef USE_COND
                  call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
                                ice_wat, snowwat, graupel, q, gz, cvm)
                  do i=is,ie
-                    pt(i,j,k) = (pt(i,j,k)+dtmp*pkz(i,j,k)) / ((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i)))
+                    pt(i,j,k) = (pt(i,j,k)+dtmp/cvm(i)*pkz(i,j,k))/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i)))
                  enddo
-              endif
 #else
-              if ( .not. adiabatic ) then
-                 do i=is,ie
-                    pt(i,j,k) = (pt(i,j,k)+dtmp*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum))
-                 enddo
-              endif
+                 if ( .not. adiabatic ) then
+                    do i=is,ie
+                       pt(i,j,k) = (pt(i,j,k)+dtmp/cv_air*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum))
+                    enddo
+                 endif
 #endif
+              endif
            enddo   ! j-loop
         enddo  ! k-loop
   else  ! not last_step
     if ( kord_tm < 0 ) then
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,km,pkz,pt)
        do k=1,km
           do j=js,je
              do i=is,ie
@@ -934,7 +992,6 @@ endif        ! end last_step check
        enddo
     endif
   endif
-!$OMP end parallel
 
 !-----------------------------------------------------------------------
 ! Inline GFDL MP
@@ -959,11 +1016,13 @@ endif        ! end last_step check
 
     ! update dry total energy
     if (consv .gt. consv_min) then
+!$OMP parallel do default(none) shared(is,ie,js,je,km,te0_2d,hydrostatic,delp,gridstruct,u,v,dp0,u0,v0,hs,delz,w) &
+!$OMP                          private(phis)
       do j=js,je
         if (hydrostatic) then
           do k = 1, km
             do i=is,ie
-              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + delp(i,j,k) * &
+              te0_2d(i,j) = te0_2d(i,j) + delp(i,j,k) * &
                            (0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
                                                         v(i,j,k)**2+v(i+1,j,k)**2 -  &
                            (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))) &
@@ -984,7 +1043,7 @@ endif        ! end last_step check
           enddo
           do k = 1, km
             do i=is,ie
-              te0_2d(i,j) = te0_2d(i,j) + te(i,j,k) + delp(i,j,k) * &
+              te0_2d(i,j) = te0_2d(i,j) + delp(i,j,k) * &
                              (0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
                               u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
                              (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)))) &

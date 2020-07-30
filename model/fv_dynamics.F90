@@ -18,6 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 module fv_dynamics_mod
    use constants_mod,       only: grav, pi=>pi_8, radius, hlv, rdgas, omega, rvgas, cp_vapor
    use dyn_core_mod,        only: dyn_core, del2_cubed, init_ijk_mem
@@ -430,6 +431,21 @@ contains
       inline_mp%prei = 0.0
       inline_mp%pres = 0.0
       inline_mp%preg = 0.0
+      inline_mp%cond = 0.0
+      inline_mp%dep = 0.0
+      inline_mp%reevap = 0.0
+      inline_mp%sub = 0.0
+      if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt = 0.0
+      if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt = 0.0
+      if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt = 0.0
+      if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt = 0.0
+      if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt = 0.0
+      if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt = 0.0
+      if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt = 0.0
+      if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt = 0.0
+      if (allocated(inline_mp%t_dt))  inline_mp%t_dt = 0.0
+      if (allocated(inline_mp%u_dt)) inline_mp%u_dt = 0.0
+      if (allocated(inline_mp%v_dt)) inline_mp%v_dt = 0.0
   endif
 
                                                   call timing_on('FV_DYN_LOOP')
@@ -588,7 +604,7 @@ contains
                      kord_tracer, flagstruct%kord_tm, peln, te_2d,               &
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
                      idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
-                     flagstruct%do_sat_adj, hydrostatic, flagstruct%phys_hydrostatic, &
+                     flagstruct%do_sat_adj, hydrostatic, &
                      hybrid_z, do_omega,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      inline_mp, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
@@ -651,6 +667,21 @@ contains
       inline_mp%prei = inline_mp%prei / k_split
       inline_mp%pres = inline_mp%pres / k_split
       inline_mp%preg = inline_mp%preg / k_split
+      inline_mp%cond = inline_mp%cond / k_split
+      inline_mp%dep = inline_mp%dep / k_split
+      inline_mp%reevap = inline_mp%reevap / k_split
+      inline_mp%sub = inline_mp%sub / k_split
+      if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt = inline_mp%qv_dt / bdt
+      if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt = inline_mp%ql_dt / bdt
+      if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt = inline_mp%qi_dt / bdt
+      if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt = inline_mp%liq_wat_dt / bdt
+      if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt = inline_mp%qr_dt / bdt
+      if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt = inline_mp%ice_wat_dt / bdt
+      if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt = inline_mp%qg_dt / bdt
+      if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt = inline_mp%qs_dt / bdt
+      if (allocated(inline_mp%t_dt))  inline_mp%t_dt = inline_mp%t_dt / bdt
+      if (allocated(inline_mp%u_dt)) inline_mp%u_dt = inline_mp%u_dt / bdt
+      if (allocated(inline_mp%v_dt)) inline_mp%v_dt = inline_mp%v_dt / bdt
   endif
 
                                                   call timing_off('FV_DYN_LOOP')

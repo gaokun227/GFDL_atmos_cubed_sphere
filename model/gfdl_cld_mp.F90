@@ -27,15 +27,15 @@
 ! developer: shian - jiann lin, linjiong zhou
 ! =======================================================================
 
-module gfdl_mp_mod
+module gfdl_cld_mp_mod
     
-    use fv_arrays_mod, only: r_grid
+    use machine, only: r_grid => kind_phys
     
     implicit none
     
     private
     
-    public gfdl_mp_driver, gfdl_mp_init, gfdl_mp_end
+    public gfdl_cld_mp_driver, gfdl_cld_mp_init, gfdl_cld_mp_end
     public wqs1, wqs2, iqs1, iqs2, mpdrv, sedi_heat, warm_rain, revap_racc, &
         linear_prof, icloud, subgrid_z_proc, terminal_fall, check_column, implicit_fall, &
         lagrangian_fall_ppm, cs_profile, cs_limiters, fall_speed, setupm, setup_con, &
@@ -361,7 +361,7 @@ contains
 ! the driver of the gfdl cloud microphysics
 ! -----------------------------------------------------------------------
 
-subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
+subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
         graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
         te, condensation, deposition, evaporation, sublimation, last_step, do_inline_mp)
@@ -452,7 +452,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
         condensation, deposition, evaporation, sublimation, last_step, do_inline_mp)
     
-end subroutine gfdl_mp_driver
+end subroutine gfdl_cld_mp_driver
 
 ! -----------------------------------------------------------------------
 ! gfdl cloud microphysics, major program
@@ -991,16 +991,16 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
     if (consv_checker) then
         if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg)) .gt. te_err) then
-            print *, "gfdl_mp te: ", sum (te_beg) / sum (gsize ** 2) + sum (te_b_beg) / sum (gsize ** 2), &
+            print *, "gfdl_cld_mp te: ", sum (te_beg) / sum (gsize ** 2) + sum (te_b_beg) / sum (gsize ** 2), &
                 sum (te_end) / sum (gsize ** 2) + sum (te_b_end) / sum (gsize ** 2), &
                  (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg))
         endif
         if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg)) .gt. te_err) then
-            print *, "gfdl_mp tw: ", sum (tw_beg) / sum (gsize ** 2) + sum (tw_b_beg) / sum (gsize ** 2), &
+            print *, "gfdl_cld_mp tw: ", sum (tw_beg) / sum (gsize ** 2) + sum (tw_b_beg) / sum (gsize ** 2), &
                 sum (tw_end) / sum (gsize ** 2) + sum (tw_b_end) / sum (gsize ** 2), &
                  (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg))
         endif
-        ! print *, "gfdl_mp te loss (%) : ", sum (te_loss) / (sum (te_beg) + sum (te_b_beg)) * 100.0
+        ! print *, "gfdl_cld_mp te loss (%) : ", sum (te_loss) / (sum (te_beg) + sum (te_b_beg)) * 100.0
     endif
     
 end subroutine mpdrv
@@ -3592,7 +3592,7 @@ end subroutine setupm
 ! initialization of gfdl cloud microphysics
 ! =======================================================================
 
-subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
+subroutine gfdl_cld_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
     
     implicit none
     
@@ -3646,13 +3646,13 @@ subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
     
     module_is_initialized = .true.
     
-end subroutine gfdl_mp_init
+end subroutine gfdl_cld_mp_init
 
 ! =======================================================================
 ! end of gfdl cloud microphysics
 ! =======================================================================
 
-subroutine gfdl_mp_end
+subroutine gfdl_cld_mp_end
     
     implicit none
     
@@ -3667,7 +3667,7 @@ subroutine gfdl_mp_end
     
     tables_are_initialized = .false.
     
-end subroutine gfdl_mp_end
+end subroutine gfdl_cld_mp_end
 
 ! =======================================================================
 ! qsmith table initialization
@@ -4608,4 +4608,4 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
     
 end subroutine neg_adj
 
-end module gfdl_mp_mod
+end module gfdl_cld_mp_mod

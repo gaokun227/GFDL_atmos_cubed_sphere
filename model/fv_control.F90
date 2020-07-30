@@ -18,7 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
-! $Id$
+
 !
 !----------------
 ! FV contro panel
@@ -54,6 +54,7 @@ module fv_control_mod
    use fv_mp_mod,           only: mp_start, domain_decomp, mp_assign_gid, global_nest_domain
    use fv_mp_mod,           only: broadcast_domains, mp_barrier, is_master, setup_master, grids_master_procs, tile_fine
    use fv_mp_mod,           only: MAX_NNEST, MAX_NTILE
+   !use test_cases_mod,      only: test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size
    use test_cases_mod,      only: read_namelist_test_case_nml
    use fv_timing_mod,       only: timing_on, timing_off, timing_init, timing_prt
    use mpp_domains_mod,     only: domain2D
@@ -255,7 +256,7 @@ module fv_control_mod
      logical , pointer :: nudge_ic
      logical , pointer :: ncep_ic
      logical , pointer :: nggps_ic
-   logical , pointer :: hrrrv3_ic
+     logical , pointer :: hrrrv3_ic
      logical , pointer :: ecmwf_ic
      logical , pointer :: gfs_phil
      logical , pointer :: agrid_vel_rst
@@ -440,6 +441,7 @@ module fv_control_mod
      call read_namelist_fv_core_nml(Atm(this_grid)) ! do options processing here too?
      call read_namelist_test_case_nml(Atm(this_grid)%nml_filename)
      !TODO test_case_nml moved to test_cases
+     call read_namelist_test_case_nml(Atm(this_grid)%nml_filename)
      call mpp_get_current_pelist(Atm(this_grid)%pelist, commID=commID) ! for commID
      call mp_start(commID,halo_update_type)
 
@@ -645,6 +647,10 @@ module fv_control_mod
 !!$     Atm(this_grid)%inline_mp%prei = too_big
 !!$     Atm(this_grid)%inline_mp%pres = too_big
 !!$     Atm(this_grid)%inline_mp%preg = too_big
+!!$     Atm(this_grid)%inline_mp%cond = too_big
+!!$     Atm(this_grid)%inline_mp%dep = too_big
+!!$     Atm(this_grid)%inline_mp%reevap = too_big
+!!$     Atm(this_grid)%inline_mp%sub = too_big
 
      !Initialize restart
      call fv_restart_init()

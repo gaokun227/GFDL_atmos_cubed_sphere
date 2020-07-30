@@ -18,6 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 module fv_eta_mod
  use constants_mod,  only: kappa, grav, cp_air, rdgas
  use fv_mp_mod,      only: is_master
