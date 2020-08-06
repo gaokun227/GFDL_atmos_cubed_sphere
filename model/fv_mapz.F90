@@ -343,10 +343,16 @@ contains
       endif
 
    if ( .not. hydrostatic ) then
-! Remap vertical wind:
+      ! Remap vertical wind:
+      if (kord_wz < 0) then
         call map1_ppm (km,   pe1,  w,  ws(is,j),   &
                        km,   pe2,  w,              &
-                       is, ie, j, isd, ied, jsd, jed, -2, kord_wz)
+                       is, ie, j, isd, ied, jsd, jed, -3, abs(kord_wz))
+      else
+        call map1_ppm (km,   pe1,  w,  ws(is,j),   &
+                       km,   pe2,  w,              &
+                       is, ie, j, isd, ied, jsd, jed, -2, abs(kord_wz))
+      endif
 ! Remap delz for hybrid sigma-p coordinate
         call map1_ppm (km,   pe1, delz,  gz,   & ! works
                        km,   pe2, delz,              &
@@ -1390,12 +1396,13 @@ endif        ! end last_step check
  integer, intent(in) :: i2                ! Finishing longitude
  integer, intent(in) :: iv                ! Mode: 0 == constituents  1 == ???
                                           !       2 == remap temp with cs scheme
+                                          !      -1 == vertical velocity, with bottom BC
  integer, intent(in) :: kord              ! Method order
  integer, intent(in) :: j                 ! Current latitude
  integer, intent(in) :: ibeg, iend, jbeg, jend
  integer, intent(in) :: km                ! Original vertical dimension
  integer, intent(in) :: kn                ! Target vertical dimension
- real, intent(in) ::   qs(i1:i2)       ! bottom BC (only used if iv == -2 ?? )
+ real, intent(in) ::   qs(i1:i2)       ! bottom BC (only used if iv == -2 )
  real, intent(in) ::  pe1(i1:i2,km+1)  ! pressure at layer edges
                                        ! (from model top to bottom surface)
                                        ! in the original vertical coordinate
@@ -2196,7 +2203,8 @@ endif        ! end last_step check
 ! Latest: Apr 2008 S.-J. Lin, NOAA/GFDL
  integer, intent(in):: i1, i2
  integer, intent(in):: km      ! vertical dimension
- integer, intent(in):: iv      ! iv =-1: winds
+ integer, intent(in):: iv      ! iv =-2: vertical velocity
+                               ! iv =-1: winds
                                ! iv = 0: positive definite scalars
                                ! iv = 1: others
  integer, intent(in):: kord
@@ -2206,7 +2214,7 @@ endif        ! end last_step check
 !-----------------------------------------------------------------------
  logical, dimension(i1:i2,km):: extm, ext5, ext6
  real  gam(i1:i2,km)
- real    q(i1:i2,km+1)
+ real    q(i1:i2,km+1) ! interface values
  real   d4(i1:i2)
  real   bet, a_bot, grat
  real   pmp_1, lac_1, pmp_2, lac_2, x0, x1
@@ -2236,28 +2244,52 @@ endif        ! end last_step check
            q(i,k) = q(i,k) - gam(i,k+1)*q(i,k+1)
         enddo
       enddo
- else
+
+else ! all others
   do i=i1,i2
          grat = delp(i,2) / delp(i,1)   ! grid ratio
           bet = grat*(grat+0.5)
        q(i,1) = ( (grat+grat)*(grat+1.)*a4(1,i,1) + a4(1,i,2) ) / bet
-     gam(i,1) = ( 1. + grat*(grat+1.5) ) / bet
+     gam(i,1) = ( 1. + grat*(grat+1.5) ) / bet                        
   enddo
 
-  do k=2,km
-     do i=i1,i2
-           d4(i) = delp(i,k-1) / delp(i,k)
-             bet =  2. + d4(i) + d4(i) - gam(i,k-1)
-          q(i,k) = ( 3.*(a4(1,i,k-1)+d4(i)*a4(1,i,k)) - q(i,k-1) )/bet
-        gam(i,k) = d4(i) / bet
-     enddo
-  enddo
+  if (iv.eq.-3) then !LBC for vertical velocities
+    do k=2,km-1
+       do i=i1,i2
+             d4(i) = delp(i,k-1) / delp(i,k)
+               bet =  2. + d4(i) + d4(i) - gam(i,k-1)
+            q(i,k) = ( 3.*(a4(1,i,k-1)+d4(i)*a4(1,i,k)) - q(i,k-1) )/bet
+          gam(i,k) = d4(i) / bet
+       enddo
+    enddo
+    
+    do i=i1,i2
+       !    a_bot = 1. + d4(i)*(d4(i)+1.5)
+       !q(i,km+1) = (2.*d4(i)*(d4(i)+1.)*a4(1,i,km)+a4(1,i,km-1)-a_bot*q(i,km))  &
+       !          / ( d4(i)*(d4(i)+0.5) - a_bot*gam(i,km) )
+       d4(i) = delp(i,km-1) / delp(i,km)
+       bet =  2. + d4(i) + d4(i) - gam(i,km-1)
+       grat = delp(i,km-1) / delp(i,km)
+       q(i,km) = ( 3.*(a4(1,i,k-1)+d4(i)*a4(1,i,k)) - grat*qs(i) - q(i,k-1) )/bet
+       q(i,km+1) = qs(i)
+    enddo
 
-  do i=i1,i2
-         a_bot = 1. + d4(i)*(d4(i)+1.5)
-     q(i,km+1) = (2.*d4(i)*(d4(i)+1.)*a4(1,i,km)+a4(1,i,km-1)-a_bot*q(i,km))  &
-               / ( d4(i)*(d4(i)+0.5) - a_bot*gam(i,km) )
-  enddo
+  else ! all others
+    do k=2,km
+       do i=i1,i2
+             d4(i) = delp(i,k-1) / delp(i,k)
+               bet =  2. + d4(i) + d4(i) - gam(i,k-1)
+            q(i,k) = ( 3.*(a4(1,i,k-1)+d4(i)*a4(1,i,k)) - q(i,k-1) )/bet
+          gam(i,k) = d4(i) / bet
+       enddo
+    enddo
+    
+    do i=i1,i2
+           a_bot = 1. + d4(i)*(d4(i)+1.5)
+       q(i,km+1) = (2.*d4(i)*(d4(i)+1.)*a4(1,i,km)+a4(1,i,km-1)-a_bot*q(i,km))  &
+                 / ( d4(i)*(d4(i)+0.5) - a_bot*gam(i,km) )
+    enddo
+  endif
 
   do k=km,1,-1
      do i=i1,i2
@@ -2291,7 +2323,7 @@ endif        ! end last_step check
 
   do k=2,km
      do i=i1,i2
-        gam(i,k) = a4(1,i,k) - a4(1,i,k-1)
+        gam(i,k) = a4(1,i,k) - a4(1,i,k-1) ! now dq 
      enddo
   enddo
 
@@ -2309,7 +2341,7 @@ endif        ! end last_step check
           else
 ! There exists a local min
                  q(i,k) = min(q(i,k), max(a4(1,i,k-1),a4(1,i,k)))
-               if ( iv==0 ) q(i,k) = max(0., q(i,k))
+               if ( iv==0 ) q(i,k) = max(0., q(i,k)) ! positive-definite
           endif
         endif
      enddo
