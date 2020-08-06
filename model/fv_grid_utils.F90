@@ -215,17 +215,19 @@
       cos_sg(:,:,:) =  big_number
       sin_sg(:,:,:) = tiny_number
 
-      sw_corner = .false.
-      se_corner = .false.
-      ne_corner = .false.
-      nw_corner = .false.
-
-      if (grid_type < 3 .and. .not. Atm%gridstruct%bounded_domain) then
-         if (       is==1 .and.  js==1 )      sw_corner = .true.
-         if ( (ie+1)==npx .and.  js==1 )      se_corner = .true.
-         if ( (ie+1)==npx .and. (je+1)==npy ) ne_corner = .true.
-         if (       is==1 .and. (je+1)==npy ) nw_corner = .true.
-      endif
+!!$      !!!Temporarily Restored
+!!$      sw_corner = .false.
+!!$      se_corner = .false.
+!!$      ne_corner = .false.
+!!$      nw_corner = .false.
+!!$
+!!$      if (grid_type < 3 .and. .not. Atm%gridstruct%bounded_domain) then
+!!$         if (       is==1 .and.  js==1 )      sw_corner = .true.
+!!$         if ( (ie+1)==npx .and.  js==1 )      se_corner = .true.
+!!$         if ( (ie+1)==npx .and. (je+1)==npy ) ne_corner = .true.
+!!$         if (       is==1 .and. (je+1)==npy ) nw_corner = .true.
+!!$      endif
+!!$      !!!END Temporarily restored
 
   if ( sw_corner ) then
        tmp1 = great_circle_dist(grid(1,1,1:2), agrid(1,1,1:2))
@@ -740,8 +742,12 @@
      if( is_master() ) write(*,*) 'da_max/da_min=', Atm%gridstruct%da_max/Atm%gridstruct%da_min
 
      call global_mx_c(area_c(is:ie,js:je), is, ie, js, je, Atm%gridstruct%da_min_c, Atm%gridstruct%da_max_c)
+!!! DEBUG CODE
+     if (Atm%flagstruct%grid_type < 3 .and. .not. Atm%gridstruct%bounded_domain) Atm%gridstruct%da_min_c = Atm%gridstruct%da_min_c*4./3.
+!     Atm%gridstruct%da_min_c = Atm%gridstruct%da_min_c*3./2.
+!!! END DEBUG CODE
 
-     if( is_master() ) write(*,*) 'da_max_c/da_min_c=', Atm%gridstruct%da_max_c/Atm%gridstruct%da_min_c
+     if( is_master() ) write(*,*) 'da_max_c, da_min_c, da_max_c/da_min_c=', Atm%gridstruct%da_max_c, Atm%gridstruct%da_min_c, Atm%gridstruct%da_max_c/Atm%gridstruct%da_min_c
 
 !------------------------------------------------
 ! Initialization for interpolation at face edges
