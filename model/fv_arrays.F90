@@ -53,7 +53,7 @@ module fv_arrays_mod
                          id_f15, id_f25, id_f35, id_f45, id_ctp,  &
            id_ppt, id_ts, id_tb, id_ctt, id_pmask, id_pmaskv2,    &
            id_delp, id_delz, id_ws, id_iw, id_lw,                 &
-           id_pfhy, id_pfnh,                                      &
+           id_pfhy, id_pfnh, id_ppnh,                             &
            id_qn, id_qn200, id_qn500, id_qn850, id_qp, id_mdt,    &
            id_qdt, id_aam, id_amdt,                               &
            id_acly, id_acl, id_acl2,                              &
