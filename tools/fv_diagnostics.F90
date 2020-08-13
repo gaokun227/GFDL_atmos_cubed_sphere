@@ -2512,7 +2512,7 @@ contains
                 endif
              endif
           endif
-          if ( idiag%id_t(k200) .and. prt_minmax ) then
+          if ( idiag%id_t(k200) > 0 .and. prt_minmax ) then
              call prt_mxm('T200:', a3(isc:iec,jsc:jec,k200), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
              if (.not. Atm(n)%gridstruct%bounded_domain) then
