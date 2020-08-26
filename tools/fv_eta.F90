@@ -18,6 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 module fv_eta_mod
  use constants_mod,  only: kappa, grav, cp_air, rdgas
  use fv_mp_mod,      only: is_master
@@ -39,7 +40,7 @@ module fv_eta_mod
       integer,  intent(in)::  km           ! vertical dimension
       integer,  intent(out):: ks           ! number of pure p layers
       real:: a60(61),b60(61)
-! Thfollowing L63 setting is the same as NCEP GFS's L64 except the top
+! The following L63 setting is the same as NCEP GFS's L64 except the top
 ! 3 layers
       data a60/300.0000,     430.00000,     558.00000,    &
               700.00000,     863.05803,    1051.07995,    &

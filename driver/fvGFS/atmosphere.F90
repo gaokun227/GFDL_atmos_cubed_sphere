@@ -18,6 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 module atmosphere_mod
 #include <fms_platform.h>
 
@@ -79,7 +80,7 @@ use fv_regional_mod,    only: current_time_in_seconds
 
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
 use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
-use cloud_diagnosis_mod,only: cloud_diagnosis_init
+use cld_eff_rad_mod,    only: cld_eff_rad_init
 use diag_manager_mod,   only: send_data
 
 implicit none
@@ -263,8 +264,8 @@ contains
 
    if (Atm(mygrid)%flagstruct%do_inline_mp) then
      call gfdl_mp_init(mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
-     call cloud_diagnosis_init(nlunit, input_nml_file, stdlog(), fn_nml)
    endif
+   call cld_eff_rad_init(nlunit, input_nml_file, stdlog(), fn_nml)
 
    call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mygrid)%gridstruct%grid_type, mygrid)
 

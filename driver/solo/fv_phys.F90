@@ -23,7 +23,7 @@ module fv_phys_mod
 
 use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, radius, kappa, OMEGA
 use time_manager_mod,      only: time_type, get_time
-use gfdl_cloud_microphys_mod, only: gfdl_cloud_microphys_driver, qsmith, wet_bulb
+use gfdl_cld_mp_mod,       only: gfdl_cld_mp_driver, qsmith, wet_bulb
 use hswf_mod,              only: Held_Suarez_Tend
 use fv_sg_mod,             only: fv_subgrid_z
 use fv_update_phys_mod,    only: fv_update_phys
@@ -97,7 +97,7 @@ public :: fv_phys, fv_nudge
   logical:: strat_rad        = .false.
   logical:: do_abl = .false.
   logical:: do_mon_obkv = .true.
-  logical:: do_gfdl_cloud_microphys = .false.
+  logical:: do_gfdl_cld_mp = .false.
   logical:: do_K_warm_rain = .false.
   logical:: do_strat_forcing = .true.
   logical:: prog_cloud       = .true.
@@ -144,7 +144,7 @@ public :: fv_phys, fv_nudge
   real, allocatable:: prec_total(:,:)
   real    :: missing_value = -1.e10
 
-namelist /sim_phys_nml/mixed_layer, gray_rad, strat_rad, do_gfdl_cloud_microphys,   &
+namelist /sim_phys_nml/mixed_layer, gray_rad, strat_rad, do_gfdl_cld_mp,   &
                        heating_rate, cooling_rate, uniform_sst, sst0, c0,    &
                        sw_abs, prog_cloud, low_c, diurnal_cycle, &
                        do_mon_obkv, do_t_strat, p_strat, t_strat, tau_strat, &
@@ -967,7 +967,7 @@ endif
  endif
 
 
-  if ( do_gfdl_cloud_microphys ) then
+  if ( do_gfdl_cld_mp ) then
       land(:,:) = 0.
       k_mp = 1
       do k=2, km
@@ -983,7 +983,7 @@ endif
 !!NOTE: You can do threaded GFDL MP in solo core, but it **WILL** mess up your GFDL MP diagnostics!!!
                                                                                           call timing_on('gfdl_mp')
 !!$#ifndef GFDL_MP_THREAD
-!!$      call gfdl_cloud_microphys_driver(q3(is:ie,js:je,1:km,sphum),   q3(is:ie,js:je,1:km,liq_wat), q3(is:ie,js:je,1:km,rainwat),  &
+!!$      call gfdl_cld_mp_driver(q3(is:ie,js:je,1:km,sphum),   q3(is:ie,js:je,1:km,liq_wat), q3(is:ie,js:je,1:km,rainwat),  &
 !!$                                    q3(is:ie,js:je,1:km,ice_wat), q3(is:ie,js:je,1:km,snowwat), q3(is:ie,js:je,1:km,graupel),  &
 !!$                                    q3(is:ie,js:je,1:km,cld_amt), q3(is:ie,js:je,1:km,cld_amt),   &
 !!$                                  q_dt(is:ie,js:je,1:km,sphum), q_dt(is:ie,js:je,1:km,liq_wat), q_dt(is:ie,js:je,1:km,rainwat), &
@@ -996,7 +996,7 @@ endif
 !!$#else
 !$omp parallel do default(shared)
    do j=js,je
-      call gfdl_cloud_microphys_driver(q3(is:ie,j,1:km,sphum),     q3(is:ie,j,1:km,liq_wat), q3(is:ie,j,1:km,rainwat),  &
+      call gfdl_cld_mp_driver(q3(is:ie,j,1:km,sphum),     q3(is:ie,j,1:km,liq_wat), q3(is:ie,j,1:km,rainwat),  &
                                     q3(is:ie,j,1:km,ice_wat),   q3(is:ie,j,1:km,snowwat), q3(is:ie,j,1:km,graupel),  &
                                     q3(is:ie,j,1:km,cld_amt),   q3(is:ie,j,1:km,cld_amt),   &
                                   q_dt(is:ie,j,1:km,sphum),   q_dt(is:ie,j,1:km,liq_wat), q_dt(is:ie,j,1:km,rainwat), &
@@ -1603,7 +1603,7 @@ endif
  10     call close_file (unit)
     endif
 
-    if (nwat /= 6 .and. do_gfdl_cloud_microphys) then
+    if (nwat /= 6 .and. do_gfdl_cld_mp) then
        call mpp_error(FATAL, "Need nwat == 6 to run GFDL Cloud Microphysics.")
     endif
 

@@ -18,6 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 #ifndef _FV_ETA_
 #define _FV_ETA__
 
@@ -503,7 +504,7 @@
                 1.0000000000e+00 /
 
 ! This is activated by USE_GFSL63
-! Thfollowing L63 setting is the same as NCEP GFS's L64 except the top
+! The following L63 setting is the same as NCEP GFS's L64 except the top
 ! 3 layers
       data a63/64.247,       137.790,       221.958,      &
               318.266,       428.434,       554.424,      &

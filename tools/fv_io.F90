@@ -18,6 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 !!!NOTE: Merging in the seasonal forecast initialization code
 !!!!     has proven problematic in the past, since many conflicts
 !!!!     occur. Leaving this for now --- lmh 10aug15

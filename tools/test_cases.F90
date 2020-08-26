@@ -22,7 +22,7 @@
  module test_cases_mod
 
       use constants_mod,     only: cnst_radius=>radius, pi=>pi_8, omega, grav, kappa, rdgas, cp_air, rvgas
-      use init_hydro_mod,    only: p_var, hydro_eq
+      use init_hydro_mod,    only: p_var, hydro_eq, hydro_eq_ext
       use fv_mp_mod,         only: is_master,        &
                                    domain_decomp, fill_corners, XDir, YDir, &
                                    mp_stop, mp_reduce_sum, mp_reduce_max, mp_gather, mp_bcst
@@ -103,6 +103,10 @@
       real(kind=R_GRID), parameter :: one = 1.d0
       integer :: test_case = 11
       logical :: bubble_do = .false.
+      logical :: no_wind = .false.
+      logical :: gaussian_dt = .false.
+      logical :: do_marine_sounding = .false.
+      real    :: dt_amp = 2.1
       real    :: alpha = 0.0
       integer :: Nsolitons = 1
       real    :: soliton_size = 750.e3, soliton_Umax = 50.
@@ -6138,11 +6142,13 @@ end subroutine terminator_tracers
         real, dimension(1:npz):: pk1, ts1, qs1
         real :: us0 = 30.
         real :: dist, r0, f0_const, prf, rgrav
-        real :: ptmp, ze, zc, zm, utmp, vtmp
+        real :: ptmp, ze, zc, zm, utmp, vtmp, xr, yr
         real :: t00, p00, xmax, xc, xx, yy, pk0, pturb, ztop
         real :: ze1(npz+1)
          real:: dz1(npz)
         real:: zvir
+        real :: sigma, mu, amp, zint, zmid, qsum, pint, pmid
+        integer :: o3mr
         integer :: i, j, k, m, icenter, jcenter
 
         real, pointer, dimension(:,:,:)   :: agrid, grid
@@ -6320,6 +6326,35 @@ end subroutine terminator_tracers
                enddo
             enddo
          enddo
+
+#ifdef O3_IC
+         !--------------------------------------------------------------
+         ! *** Add o3 distribution *** Linjiong Zhou
+         ! normal distribution based on pressure
+         o3mr = get_tracer_index (MODEL_ATMOS, 'o3mr')
+         if (o3mr > 0) then
+            sigma = 19.0
+            mu = 1.e3
+            amp = 0.00023
+            do j=js,je
+               do i=is,ie
+                  pint = ptop
+                  qsum = 0.0
+                  do k=1,npz
+                     pmid = pint + 0.5 * delp(i,j,k)
+                     pint = pint + delp(i,j,k)
+                     q(i,j,k,o3mr) = 1.0 / (sigma * sqrt(2.0 * pi)) * &
+                        exp(- (pmid ** 0.5 - mu ** 0.5) ** 2.0 / (2.0 * sigma ** 2.0))
+                     qsum = qsum + q(i,j,k,o3mr)
+                  enddo
+                  do k=npz,1,-1
+                     q(i,j,k,o3mr) = amp * q(i,j,k,o3mr) / qsum
+                  enddo
+               enddo
+            enddo
+         endif
+         !--------------------------------------------------------------
+#endif
 
         case ( 15 )
 !---------------------------
@@ -6670,6 +6705,137 @@ end subroutine terminator_tracers
             enddo
          endif
 
+      case ( 19 )
+!---------------------------
+! Revised Doubly periodic SuperCell, straight wind (v==0)
+! Linjiong Zhou
+!--------------------------
+        zvir = rvgas/rdgas - 1.
+        p00 = 1000.E2
+          ps(:,:) = p00
+        phis(:,:) = 0.
+        do j=js,je
+           do i=is,ie
+                pk(i,j,1) = ptop**kappa
+                pe(i,1,j) = ptop
+              peln(i,1,j) = log(ptop)
+           enddo
+        enddo
+
+        do k=1,npz
+           do j=js,je
+              do i=is,ie
+                 delp(i,j,k) = ak(k+1)-ak(k) + ps(i,j)*(bk(k+1)-bk(k))
+                 pe(i,k+1,j) = ak(k+1) + ps(i,j)*bk(k+1)
+                 peln(i,k+1,j) = log(pe(i,k+1,j))
+                   pk(i,j,k+1) = exp( kappa*peln(i,k+1,j) )
+              enddo
+           enddo
+        enddo
+
+        i = is
+        j = js
+        do k=1,npz
+           pk1(k) = (pk(i,j,k+1)-pk(i,j,k))/(kappa*(peln(i,k+1,j)-peln(i,k,j)))
+        enddo
+
+        if (do_marine_sounding) then
+        call Marine_Sounding(npz, p00, pk1, ts1, qs1)
+        else
+        call SuperCell_Sounding_Marine(npz, p00, pk1, ts1, qs1)
+        endif
+
+        v(:,:,:) = 0.
+        w(:,:,:) = 0.
+        q(:,:,:,:) = 0.
+
+        do k=1,npz
+           do j=js,je
+              do i=is,ie
+                 pt(i,j,k)   = ts1(k)
+                  q(i,j,k,1) = qs1(k)
+                 delz(i,j,k) = rdgas/grav*ts1(k)*(1.+zvir*qs1(k))*(peln(i,k,j)-peln(i,k+1,j))
+                enddo
+             enddo
+          enddo
+
+        ze1(npz+1) = 0.
+        do k=npz,1,-1
+           ze1(k) = ze1(k+1) - delz(is,js,k)
+        enddo
+
+        do k=1,npz
+             zm = 0.5*(ze1(k)+ze1(k+1))
+           if (no_wind) then
+              us0 = 0.0
+           else
+              us0 = 14.
+           endif
+           utmp = us0*tanh(zm/1.2E4)
+           do j=js,je+1
+              do i=is,ie
+                 u(i,j,k) = utmp
+              enddo
+           enddo
+        enddo
+
+        call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                   pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                   .true., hydrostatic, nwat, domain, flagstruct%adiabatic)
+
+        if (gaussian_dt) then
+
+! *** Add Initial perturbation (Gaussian) ***
+        pturb = dt_amp
+        r0 = 10.e3
+        zc = 1.4e3         ! center of bubble  from surface
+        icenter = (npx-1)/2 + 1
+        jcenter = (npy-1)/2 + 1
+        do k=1, npz
+           zm = 0.5*(ze1(k)+ze1(k+1))
+           ptmp = (zm-zc)/zc
+           if ( abs(ptmp) < 1. ) then
+              do j=js,je
+                 do i=is,ie
+                   xr = (i-icenter)*dx_const/r0
+                   yr = (j-jcenter)*dy_const/r0
+                   dist = 1
+                   if ( abs(xr) < 1. .and. abs(yr) < 1. ) then
+                        dist = cos(pi/2*ptmp)**2*cos(pi/2*xr)**2*cos(pi/2*yr)**2
+                   endif
+                   if ( dist < 1. ) then
+                        pt(i,j,k) = pt(i,j,k) + pturb*dist
+                   endif
+                 enddo
+              enddo
+           endif
+        enddo
+
+        else
+
+! *** Add Initial perturbation (Ellipse) ***
+        pturb = dt_amp
+        r0 = 10.e3
+        zc = 1.4e3         ! center of bubble  from surface
+        icenter = (npx-1)/2 + 1
+        jcenter = (npy-1)/2 + 1
+        do k=1, npz
+           zm = 0.5*(ze1(k)+ze1(k+1))
+           ptmp = ( (zm-zc)/zc ) **2
+           if ( ptmp < 1. ) then
+              do j=js,je
+                 do i=is,ie
+                   dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                   if ( dist < 1. ) then
+                        pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
+                   endif
+                 enddo
+              enddo
+           endif
+        enddo
+
+        endif
+
         case ( 101 )
 
 ! IC for LES
@@ -6821,7 +6987,8 @@ end subroutine terminator_tracers
         alpha = 0.
         bubble_do = .false.
         test_case = 11   ! (USGS terrain)
-        namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size
+        namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
+								no_wind, gaussian_dt, dt_amp, do_marine_sounding
 
 #ifdef INTERNAL_FILE_NML
         ! Read Test_Case namelist
@@ -7165,7 +7332,7 @@ end subroutine terminator_tracers
 
 
  subroutine SuperCell_Sounding(km, ps, pk1, tp, qp)
-! use gfdl_cloud_microphys_mod, only: wqsat_moist, qsmith_init, qs_blend
+ use gfdl_mp_mod, only: wqsat_moist, qsmith_init, qs_blend
 ! Morris Weisman & J. Klemp 2002 sounding
 ! Output sounding on pressure levels:
  integer, intent(in):: km
@@ -7183,6 +7350,138 @@ end subroutine terminator_tracers
  real, parameter:: ztr = 12.E3
  real, parameter:: ttr = 213.
  real, parameter:: ptr = 343.    ! Tropopause potential temp.
+ real, parameter:: pt0 = 300.    ! surface potential temperature
+ real:: dz0, zvir, fac_z, pk0, temp1, p2
+ integer:: k, n, kk
+
+!#ifdef GFS_PHYS
+!
+! call mpp_error(FATAL, 'SuperCell sounding cannot perform with GFS Physics.')
+!
+!#else
+
+ zvir = rvgas/rdgas - 1.
+ pk0 = p00**kappa
+ pp(ns) = ps
+ pk(ns) = ps**kappa
+ if ( (is_master()) ) then
+     write(*,*) 'Computing sounding for super-cell test'
+ endif
+
+ call qsmith_init
+
+ dz0 = 50.
+ zs(ns) = 0.
+ qs(:) = qst
+ rh(:) = 0.25
+
+ do k=ns-1, 1, -1
+    zs(k) = zs(k+1) + dz0
+ enddo
+
+ do k=1,ns
+! Potential temperature
+    if ( zs(k) .gt. ztr ) then
+! Stratosphere:
+         pt(k) = ptr*exp(grav*(zs(k)-ztr)/(cp_air*ttr))
+    else
+! Troposphere:
+         fac_z = (zs(k)/ztr)**1.25
+         pt(k) = pt0 + (ptr-pt0)* fac_z
+         rh(k) =  1. -     0.75 * fac_z
+! First guess on q:
+         qs(k) = qv0 - (qv0-qst)*fac_z
+    endif
+    pt(k) = pt(k) / pk0
+ enddo
+
+!--------------------------------------
+! Iterate nx times with virtual effect:
+!--------------------------------------
+ do n=1, nx
+    do k=1,ns-1
+        temp1 = 0.5*(pt(k)*(1.+zvir*qs(k)) + pt(k+1)*(1.+zvir*qs(k+1)))
+       dpk(k) = grav*(zs(k)-zs(k+1))/(cp_air*temp1)   ! DPK > 0
+    enddo
+
+    do k=ns-1,1,-1
+       pk(k) = pk(k+1) - dpk(k)
+    enddo
+
+    do k=1, ns
+       temp1 = pt(k)*pk(k)
+!      if ( (is_master()) ) write(*,*) k, temp1, rh(k)
+       if ( pk(k) > 0. ) then
+            pp(k) = exp(log(pk(k))/kappa)
+#ifdef SUPER_K
+            qs(k) = 380./pp(k)*exp(17.27*(temp1-273.)/(temp1-36.))
+            qs(k) = min( qv0, rh(k)*qs(k) )
+            if ( (is_master()) ) write(*,*) 0.01*pp(k), qs(k)
+#else
+
+#ifdef USE_MIXED_TABLE
+            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+#else
+            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
+#endif
+
+#endif
+       else
+            if ( (is_master()) ) write(*,*) n, k, pk(k)
+            call mpp_error(FATAL, 'Super-Cell case: pk < 0')
+       endif
+    enddo
+ enddo
+
+! Interpolate to p levels using pk1: p**kappa
+ do 555 k=1, km
+    if ( pk1(k) .le. pk(1) ) then
+         tp(k) = pt(1)*pk(1)/pk1(k)   ! isothermal above
+         qp(k) = qst                  ! set to stratosphere value
+    elseif ( pk1(k) .ge. pk(ns) ) then
+         tp(k) = pt(ns)
+         qp(k) = qs(ns)
+    else
+      do kk=1,ns-1
+         if( (pk1(k).le.pk(kk+1)) .and. (pk1(k).ge.pk(kk)) ) then
+             fac_z = (pk1(k)-pk(kk))/(pk(kk+1)-pk(kk))
+             tp(k) = pt(kk) + (pt(kk+1)-pt(kk))*fac_z
+             qp(k) = qs(kk) + (qs(kk+1)-qs(kk))*fac_z
+             goto 555
+         endif
+      enddo
+    endif
+555  continue
+
+ do k=1,km
+    tp(k) = tp(k)*pk1(k)    ! temperature
+    tp(k) = max(Tmin, tp(k))
+ enddo
+
+!#endif
+
+ end subroutine SuperCell_Sounding
+
+! added by Linjiong Zhou
+ subroutine SuperCell_Sounding_Marine(km, ps, pk1, tp, qp)
+ use gfdl_mp_mod, only: wqsat_moist, qsmith_init, qs_blend
+! Morris Weisman & J. Klemp 2002 sounding
+! Output sounding on pressure levels:
+ integer, intent(in):: km
+ real, intent(in):: ps     ! surface pressure (Pa)
+ real, intent(in), dimension(km):: pk1
+ real, intent(out), dimension(km):: tp, qp
+! Local:
+ integer, parameter:: ns = 401
+ integer, parameter:: nx = 3
+ real, dimension(ns):: zs, pt, qs, us, rh, pp, pk, dpk, dqdt
+ real, parameter:: Tmin = 175.
+ real, parameter:: p00 = 1.0e5
+ real, parameter:: qst = 3.0e-6
+ real, parameter:: qv0 = 1.7e-2  ! higher surface specific humidity
+ real, parameter:: ztr = 12.E3
+ real, parameter:: ttr = 213.
+ real, parameter:: ptr = 353.    ! higher Tropopause potential temp.
  real, parameter:: pt0 = 300.    ! surface potential temperature
  real:: dz0, zvir, fac_z, pk0, temp1, p2
  integer:: k, n, kk
@@ -7293,7 +7592,141 @@ end subroutine terminator_tracers
 
 !#endif
 
- end subroutine SuperCell_Sounding
+ end subroutine SuperCell_Sounding_Marine
+
+ ! added by Linjiong Zhou
+ subroutine Marine_Sounding(km, ps, pk1, tp, qp)
+ use gfdl_mp_mod, only: wqsat_moist, qsmith_init, qs_blend
+! JASMINE CETRONE AND ROBERT A. HOUZE JR. MWR 225
+! Output sounding on pressure levels:
+ integer, intent(in):: km
+ real, intent(in):: ps     ! surface pressure (Pa)
+ real, intent(in), dimension(km):: pk1
+ real, intent(out), dimension(km):: tp, qp
+! Local:
+ integer, parameter:: ns = 401
+ integer, parameter:: nx = 3
+ real, dimension(ns):: zs, pt, qs, us, rh, pp, pk, dpk, dqdt
+ real, parameter:: Tmin = 175.
+ real, parameter:: p00 = 1.0e5
+ real, parameter:: qst = 3.0e-6
+ real, parameter:: qv0 = 2.0e-2
+ real, parameter:: ztr = 12.E3
+ real, parameter:: ttr = 213.
+ real, parameter:: ptr = 346.    ! Tropopause potential temp.
+ real, parameter:: pt0 = 300.    ! surface potential temperature
+ real:: dz0, zvir, fac_z, pk0, temp1, p2
+ integer:: k, n, kk
+
+!#ifdef GFS_PHYS
+!
+! call mpp_error(FATAL, 'SuperCell sounding cannot perform with GFS Physics.')
+!
+!#else
+
+ zvir = rvgas/rdgas - 1.
+ pk0 = p00**kappa
+ pp(ns) = ps
+ pk(ns) = ps**kappa
+ if ( (is_master()) ) then
+     write(*,*) 'Computing sounding for super-cell test'
+ endif
+
+ call qsmith_init
+
+ dz0 = 50.
+ zs(ns) = 0.
+ qs(:) = qst
+ rh(:) = 0.25
+
+ do k=ns-1, 1, -1
+    zs(k) = zs(k+1) + dz0
+ enddo
+
+ do k=1,ns
+! Potential temperature
+    if ( zs(k) .gt. ztr ) then
+! Stratosphere:
+         pt(k) = ptr*exp(grav*(zs(k)-ztr)/(cp_air*ttr))
+    else
+! Troposphere:
+         fac_z = (zs(k)/ztr)**1.25
+         pt(k) = (pt0 + (ptr-pt0)* fac_z**1.25)*(ztr-zs(k))/ztr+&
+                 (pt0 + (ptr-pt0)* fac_z**0.15)*zs(k)/ztr
+         rh(k) =  1. -     0.75 * fac_z
+! First guess on q:
+         qs(k) = (qv0 - (qv0-qst)* fac_z**0.50)*(ztr-zs(k))/ztr+&
+                 (qv0 - (qv0-qst)* fac_z**0.01)*zs(k)/ztr
+    endif
+    pt(k) = pt(k) / pk0
+ enddo
+
+!--------------------------------------
+! Iterate nx times with virtual effect:
+!--------------------------------------
+ do n=1, nx
+    do k=1,ns-1
+        temp1 = 0.5*(pt(k)*(1.+zvir*qs(k)) + pt(k+1)*(1.+zvir*qs(k+1)))
+       dpk(k) = grav*(zs(k)-zs(k+1))/(cp_air*temp1)   ! DPK > 0
+    enddo
+
+    do k=ns-1,1,-1
+       pk(k) = pk(k+1) - dpk(k)
+    enddo
+
+    do k=1, ns
+       temp1 = pt(k)*pk(k)
+!      if ( (is_master()) ) write(*,*) k, temp1, rh(k)
+       if ( pk(k) > 0. ) then
+            pp(k) = exp(log(pk(k))/kappa)
+#ifdef SUPER_K
+            qs(k) = 380./pp(k)*exp(17.27*(temp1-273.)/(temp1-36.))
+            qs(k) = min( qv0, rh(k)*qs(k) )
+            if ( (is_master()) ) write(*,*) 0.01*pp(k), qs(k)
+#else
+
+#ifdef USE_MIXED_TABLE
+            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+#else
+            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
+#endif
+
+#endif
+       else
+            if ( (is_master()) ) write(*,*) n, k, pk(k)
+            call mpp_error(FATAL, 'Super-Cell case: pk < 0')
+       endif
+    enddo
+ enddo
+
+! Interpolate to p levels using pk1: p**kappa
+ do 555 k=1, km
+    if ( pk1(k) .le. pk(1) ) then
+         tp(k) = pt(1)*pk(1)/pk1(k)   ! isothermal above
+         qp(k) = qst                  ! set to stratosphere value
+    elseif ( pk1(k) .ge. pk(ns) ) then
+         tp(k) = pt(ns)
+         qp(k) = qs(ns)
+    else
+      do kk=1,ns-1
+         if( (pk1(k).le.pk(kk+1)) .and. (pk1(k).ge.pk(kk)) ) then
+             fac_z = (pk1(k)-pk(kk))/(pk(kk+1)-pk(kk))
+             tp(k) = pt(kk) + (pt(kk+1)-pt(kk))*fac_z
+             qp(k) = qs(kk) + (qs(kk+1)-qs(kk))*fac_z
+             goto 555
+         endif
+      enddo
+    endif
+555  continue
+
+ do k=1,km
+    tp(k) = tp(k)*pk1(k)    ! temperature
+    tp(k) = max(Tmin, tp(k))
+ enddo
+
+!#endif
+
+ end subroutine Marine_Sounding
 
  subroutine DCMIP16_BC(delp,pt,u,v,q,w,delz,&
       is,ie,js,je,isd,ied,jsd,jed,npz,nq,ak,bk,ptop, &

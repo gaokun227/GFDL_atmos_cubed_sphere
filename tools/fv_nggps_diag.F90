@@ -18,6 +18,7 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 module fv_nggps_diags_mod
 
  use mpp_mod,            only: mpp_pe, mpp_root_pe
