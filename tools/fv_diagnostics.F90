@@ -108,7 +108,7 @@ module fv_diagnostics_mod
  integer, allocatable, dimension(:) :: diag_debug_units
  character(diag_name_len), dimension(MAX_DIAG_COLUMN) :: diag_debug_names
  real, dimension(MAX_DIAG_COLUMN) :: diag_debug_lon, diag_debug_lat
- integer, dimension(MAX_DIAG_COLUMN) :: diag_debug_kbottom, diag_debug_nlevels
+ integer :: diag_debug_kbottom, diag_debug_nlevels
 
  integer, allocatable, dimension(:) :: diag_sonde_units
  character(diag_name_len), dimension(MAX_DIAG_COLUMN) :: diag_sonde_names
@@ -132,8 +132,9 @@ module fv_diagnostics_mod
  ! integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
  ! integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
 
- namelist /fv_diag_column_nml/ do_diag_debug, do_diag_debug_dyn, do_diag_sonde, sound_freq, runname
-      !diag_debug_lon, diag_debug_lat, diag_debug_names, diag_debug_kbottom, diag_debug_nlevels,&
+ namelist /fv_diag_column_nml/ do_diag_debug, do_diag_debug_dyn, do_diag_sonde, &
+      sound_freq, runname, diag_debug_kbottom, diag_debug_nlevels
+      !diag_debug_lon, diag_debug_lat, diag_debug_names, 
       !diag_debug_i, diag_debug_j, diag_debug_tile, &
       !diag_sonde_lon, diag_sonde_lat, diag_sonde_names
 
@@ -1179,8 +1180,8 @@ contains
     diag_debug_i(:) = -999
     diag_debug_j(:) = -999
     diag_debug_tile(:) = -999
-    diag_debug_kbottom(:) = npz
-    diag_debug_nlevels(:) = npz/3
+    diag_debug_kbottom = npz
+    diag_debug_nlevels = npz/3
 
     !diag_debug_names(1:2) = (/'ORD','Princeton'/)
     !diag_debug_lon(1:2) = (/272.,285.33/)
@@ -6180,7 +6181,7 @@ end subroutine eqv_pot
 
     type(time_type), intent(IN) :: Time
     integer :: i,j,k,n,l, unit
-    real cond, pres, rdg
+    real cond, pres, rdg, preshyd(npz), pehyd(npz+1), presdry, preshyddry(npz), pehyddry(npz+1)
     integer :: yr, mon, dd, hr, mn, days, seconds
 
     rdg = -rdgas/grav
@@ -6213,22 +6214,32 @@ end subroutine eqv_pot
        write(unit, '(A, I8, A, I6, A, I6, A, I3)') ' on processor # ', mpp_pe(), ' :  local i = ', i, ',   local j = ', j, ' tile = ', diag_debug_tile(n)
        write(unit, *)
        
-       write(unit,500) 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres'
-       write(unit,500) ' ', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb'
-500    format(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9)
+       write(unit,500) 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres', 'NHprime'!, 'pdry', 'NHpdry'
+       write(unit,500) ' ', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb',   'mb'!,    !  'mb',   'mb'
+500    format(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A9)
        if (hydrostatic) then
           call mpp_error(NOTE, 'Hydrostatic debug sounding not yet supported')
        else
+          pehyd = ptop
+          pehyddry = ptop
+          do k=1,npz
+             pehyd(k+1) = pehyd(k) + delp(i,j,k)
+             preshyd(k) = (pehyd(k+1) - pehyd(k))/log(pehyd(k+1)/pehyd(k))
+             !pehyddry(k+1) = pehyddry(k) + delp(i,j,k)*(1.-sum(q(i,j,k,1:nwat)))
+             !preshyddry(k) = (pehyddry(k+1) - pehyddry(k))/log(pehyddry(k+1)/pehyddry(k))
+          enddo
+          
           !do k=2*npz/3,npz
-          do k=max(diag_debug_kbottom(n)-diag_debug_nlevels(n),1),min(diag_debug_kbottom(n),npz)
+          do k=max(diag_debug_kbottom-diag_debug_nlevels,1),min(diag_debug_kbottom,npz)
              cond = 0.
              do l=2,nwat
                 cond = cond + q(i,j,k,l)
              enddo
-             pres = rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))
-             write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3 )') &
+             pres = rdg*delp(i,j,k)*(1.-cond)/delz(i,j,k)*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))
+             !presdry = rdg*delp(i,j,k)*(1.-cond-q(i,j,k,sphum))/delz(i,j,k)*pt(i,j,k)
+             write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, F9.3)') &
                   k, pt(i,j,k), delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
-                  q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2
+                  q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, (pres-preshyd(k))*1.e-2!, presdry*1.e-2, (presdry-preshyddry(k))*1.e-2
           enddo
        endif
        
@@ -6262,6 +6273,7 @@ end subroutine eqv_pot
     type(time_type), intent(IN) :: Time
     integer :: i,j,k,n,l, unit
     real cond, pres, rdg, Tv, temp, heats, virt, pk, cv_air
+    real preshyd(npz), pehyd(npz+1)
     integer yr, mon, dd, hr, mn, seconds
 
     rdg = -rdgas/grav
@@ -6286,24 +6298,29 @@ end subroutine eqv_pot
        write(unit, '(A, I8, A, I6, A, I6)') ' on processor # ', mpp_pe(), ' :  local i = ', i, ',   local j = ', j
        write(unit, *)
        
-       write(unit,500) 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres', 'heat'
-       write(unit,500)  ' ', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb', 'K'
-500    format(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A8)
+       write(unit,500) 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres', 'NHprime', 'heat'
+       write(unit,500)  ' ', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb', 'mb', 'K'
+500    format(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A9, A8)
           if (hydrostatic) then
              call mpp_error(NOTE, 'Hydrostatic debug sounding not yet supported')
           else
+             pehyd = ptop
+             do k=1,npz
+                pehyd(k+1) = pehyd(k) + delp(i,j,k)
+                preshyd(k) = (pehyd(k+1) - pehyd(k))/log(pehyd(k+1)/pehyd(k))
+             enddo
              !do k=2*npz/3,npz
-             do k=max(diag_debug_kbottom(n)-diag_debug_nlevels(n),1),min(diag_debug_kbottom(n),npz)
+             do k=max(diag_debug_kbottom-diag_debug_nlevels,1),min(diag_debug_kbottom,npz)
                 cond = 0.
                 do l=2,nwat
                    cond = cond + q(i,j,k,l)
                 enddo
                 virt = (1.+zvir*q(i,j,k,sphum))
 #ifdef MOIST_CAPPA
-                pres = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+                pres = exp(1./(1.-cappa(i,j,k))*log(rdg*(delp(i,j,k)-cond)/delz(i,j,k)*pt(i,j,k)) )
                 pk = exp(cappa(i,j,k)*log(pres))
 #else
-                pres = exp(1./(1.-akap)*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+                pres = exp(1./(1.-akap)*log(rdg*(delp(i,j,k))/delz(i,j,k)*pt(i,j,k)) )
                 pk = exp(akap*log(pres))
 #endif
                 temp = pt(i,j,k)*pk/virt
@@ -6312,9 +6329,9 @@ end subroutine eqv_pot
                 else
                    heats = 0.0
                 endif
-                write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, G )') &
+                write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, F9.3, G )') &
                      k, temp, delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
-                     q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, heats
+                     q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, (pres-preshyd(k))*1.e-2, heats
              enddo
           endif
 
