@@ -583,6 +583,15 @@ module fv_eta_mod
             enddo
 
          endif
+
+         ! xi chen's l65
+      case (65)
+         ks = 29
+         do k=1,km+1
+            ak(k) = a65(k)
+            bk(k) = b65(k)
+         enddo
+
          !-->cjg
       case (68)
          ks = 27
@@ -637,6 +646,14 @@ module fv_eta_mod
             bk(k) = b96(k)
          enddo
          !<--cjg
+
+      ! kgao   
+      case (88)
+         ks = 19 
+         do k=1,km+1
+            ak(k) = a88(k)
+            bk(k) = b88(k)
+         enddo
 
       case (100)
          ks = 38
