@@ -113,7 +113,7 @@ module fv_arrays_mod
                 id_uu, id_uv, id_vv, id_ww,                    & ! momentum flux
                 id_iuu, id_iuv, id_iuw, id_ivv, id_ivw, id_iww   ! vertically integral of momentum flux
 
-     integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w
+     integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w, id_mw
      integer :: id_u_dt_sg, id_v_dt_sg, id_t_dt_sg, id_qv_dt_sg
 
      logical :: initialized = .false.
