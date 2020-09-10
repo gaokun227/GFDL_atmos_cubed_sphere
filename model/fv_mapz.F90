@@ -161,7 +161,7 @@ contains
   logical:: fast_mp_consv
   integer:: i,j,k
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
-  integer:: ccn_cm3, cin_cm3
+  integer:: ccn_cm3, cin_cm3, aerosol
 
        k1k = rdgas/cv_air   ! akap / (1.-akap) = rg/Cv=0.4
         rg = rdgas
@@ -176,6 +176,7 @@ contains
        cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
        ccn_cm3 = get_tracer_index (MODEL_ATMOS, 'ccn_cm3')
        cin_cm3 = get_tracer_index (MODEL_ATMOS, 'cin_cm3')
+       aerosol = get_tracer_index (MODEL_ATMOS, 'aerosol')
 
        if ( do_adiabatic_init .or. do_sat_adj ) then
             fast_mp_consv = (.not.do_adiabatic_init) .and. consv>consv_min
@@ -747,13 +748,17 @@ endif        ! end last_step check
 !$OMP parallel do default(none) shared(is,ie,js,je,km,kmp,isd,jsd,te,delp,hydrostatic,hs,pt,peln, &
 !$OMP                                  delz,rainwat,liq_wat,ice_wat,snowwat,graupel,q_con,r_vir, &
 !$OMP                                  sphum,pkz,last_step,ng,gridstruct,q,mdt,cld_amt,cappa,dtdt, &
-!$OMP                                  out_dt,rrg,akap,fast_mp_consv) &
+!$OMP                                  out_dt,rrg,akap,fast_mp_consv,aerosol) &
 !$OMP                          private(qnl,qni,dpln,dz)
            do k=kmp,km
               do j=js,je
                  do i=is,ie
                     dpln(i,j) = peln(i,k+1,j) - peln(i,k,j)
-                    qnl(i,j,k) = 0.0
+                    if (aerosol .gt. 0) then
+                       qnl(i,j,k) = q(isd,jsd,k,aerosol)
+                    else
+                       qnl(i,j,k) = 0.0
+                    endif
                     qni(i,j,k) = 0.0
                     if (.not. hydrostatic) then
                        dz(i,j) = delz(i,j,k)
@@ -821,7 +826,7 @@ endif        ! end last_step check
 !$OMP                                  delz,rainwat,liq_wat,ice_wat,snowwat, &
 !$OMP                                  graupel,q_con,sphum,w,pk,pkz,last_step,consv, &
 !$OMP                                  do_adiabatic_init,te0_2d, &
-!$OMP                                  gridstruct,q, &
+!$OMP                                  gridstruct,q,aerosol, &
 !$OMP                                  mdt,cld_amt,cappa,rrg,akap, &
 !$OMP                                  ccn_cm3,cin_cm3,inline_mp, &
 !$OMP                                  do_inline_mp,ps) &
@@ -830,8 +835,8 @@ endif        ! end last_step check
 
         gsize(is:ie) = sqrt(gridstruct%area_64(is:ie,j))
 
-        if (ccn_cm3 .gt. 0) then
-          q2(is:ie,:) = q(is:ie,j,:,ccn_cm3)
+        if (aerosol .gt. 0) then
+          q2(is:ie,:) = q(is:ie,j,:,aerosol)
         else
           q2(is:ie,:) = 0.0
         endif

@@ -120,7 +120,7 @@ contains
     character(len=120):: fname_ne, fname_sw
     character(len=3) :: gn
 
-    integer :: npts, sphum
+    integer :: npts, sphum, aero_id
     integer, allocatable :: pelist(:), smoothed_topo(:)
     real    :: sumpertn
     real    :: zvir
@@ -542,6 +542,13 @@ contains
 !      call make_eta_level(npz, Atm(n)%pe, area, Atm(n)%ks, Atm(n)%ak, Atm(n)%bk, Atm(n)%ptop)
      endif
 !---------------------------------------------------------------------------------------------
+
+     if (Atm(n)%flagstruct%do_aerosol) then
+       aero_id = get_tracer_index(MODEL_ATMOS, 'aerosol')
+       if (aero_id .gt. 0) then
+         Atm(n)%q(isc:iec,jsc:jec,:,aero_id) = 0.0
+       endif
+     endif
 
      if (Atm(n)%flagstruct%add_noise > 0.) then
         write(errstring,'(A, E16.9)') "Adding thermal noise of amplitude ", Atm(n)%flagstruct%add_noise
