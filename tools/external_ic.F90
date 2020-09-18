@@ -428,7 +428,7 @@ contains
 
 
 ! read in gfs_data. If levp = 66, read only the lowest 65 level
-    if (levsp .eq. 66) then
+    if (levsp .eq. levp+2) then
       call mpp_error(NOTE,'==> External_ic::get_nggps_ic: Correcting BAD IC')
       call read_gfs_data_bad()
     else
@@ -898,7 +898,7 @@ contains
         v_w(is:ie+1, js:je, 1:levp)    =  v_w_tmp(is:ie+1, js:je, 2:levsp-1)
         u_s(is:ie, js:je+1, 1:levp)    =  u_s_tmp(is:ie, js:je+1, 2:levsp-1)
         v_s(is:ie, js:je+1, 1:levp)    =  v_s_tmp(is:ie, js:je+1, 2:levsp-1)
-        temp(is:ie,js:je,1:levp)        = temp_tmp(is:ie,js:je,1:levsp-1)
+        temp(is:ie,js:je,1:levp)        = temp_tmp(is:ie,js:je,2:levsp-1)
 
         deallocate(u_w_tmp, v_w_tmp, u_s_tmp, v_s_tmp, omga_tmp, zh_tmp, temp_tmp, q_tmp)
 
@@ -3330,15 +3330,6 @@ contains
                   Atm%q(i,j,k,ice_wat) = qn1(i,k)
                else                                     ! between -15~0C: linear interpolation
                   Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-258.16)/15.)
-
-
-
-
-
-
-
-
-
                   Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
                endif
 #else
