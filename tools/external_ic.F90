@@ -76,7 +76,8 @@ module external_ic_mod
    real(kind=R_GRID), parameter :: cnst_0p20=0.20d0
    real :: deg2rad
    character (len = 80) :: source
-   character(len=27), parameter :: source_fv3gfs = 'FV3GFS GAUSSIAN NEMSIO FILE'
+   character(len=27), parameter :: source_fv3gfs_nemsio = 'FV3GFS GAUSSIAN NEMSIO FILE'
+   character(len=27), parameter :: source_fv3gfs_netcdf = 'FV3GFS GAUSSIAN NETCDF FILE'
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -659,7 +660,7 @@ contains
     snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
     graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
     ntclamt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
-    if (trim(source) == source_fv3gfs) then
+    if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) then
     do k=1,npz
       do j=js,je
         do i=is,ie
@@ -734,7 +735,7 @@ contains
     deallocate (bk)
     deallocate (ps)
     deallocate (q )
-    if (trim(source) == source_fv3gfs) deallocate (temp)
+    if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) deallocate (temp)
     deallocate (omga)
 
 
@@ -767,7 +768,7 @@ contains
         allocate ( v_w(is:ie+1, js:je, 1:levp) )
         allocate ( u_s(is:ie, js:je+1, 1:levp) )
         allocate ( v_s(is:ie, js:je+1, 1:levp) )
-        if (trim(source) == source_fv3gfs) allocate (temp(is:ie,js:je,1:levp))
+        if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) allocate (temp(is:ie,js:je,1:levp))
 
 
         ! surface pressure (Pa)
@@ -788,7 +789,7 @@ contains
         id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'ZH', zh, domain=Atm%domain)
 
         ! real temperature (K)
-        if (trim(source) == source_fv3gfs) id_res = register_restart_field (GFS_restart, fn_gfs_ics, 't', temp, mandatory=.false., &
+        if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) id_res = register_restart_field (GFS_restart, fn_gfs_ics, 't', temp, mandatory=.false., &
                                                                             domain=Atm%domain)
         ! prognostic tracers
         do nt = 1, ntracers
@@ -3280,7 +3281,7 @@ contains
 !----------------------------------------------------
 ! Compute true temperature using hydrostatic balance
 !----------------------------------------------------
-      if (trim(source) /= source_fv3gfs .or. .not. present(t_in)) then
+      if ((trim(source) /= source_fv3gfs_nemsio .and. trim(source) /= source_fv3gfs_netcdf) .or. .not. present(t_in)) then
          do k=1,npz
 !        qc = 1.-(Atm%q(i,j,k,liq_wat)+Atm%q(i,j,k,rainwat)+Atm%q(i,j,k,ice_wat)+Atm%q(i,j,k,snowwat))
 !        Atm%pt(i,j,k) = (gz_fv(k)-gz_fv(k+1))*qc/( rdgas*(pn1(i,k+1)-pn1(i,k))*(1.+zvir*Atm%q(i,j,k,sphum)) )
@@ -3312,7 +3313,7 @@ contains
 ! seperate cloud water and cloud ice from Jan-Huey Chen's HiRAM code
 ! only use for NCEP IC and GFDL microphy
 !-----------------------------------------------------------------------
-   if (trim(source) /= source_fv3gfs) then
+   if (trim(source) /= source_fv3gfs_nemsio .and. trim(source) /= source_fv3gfs_netcdf) then
       if ((Atm%flagstruct%nwat .eq. 3 .or. Atm%flagstruct%nwat .eq. 6) .and. &
            (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%nggps_ic)) then
          do k=1,npz
@@ -3375,7 +3376,7 @@ contains
          enddo
       enddo
       call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, -1, 4, Atm%ptop)
-    if (trim(source) == source_fv3gfs) then
+    if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) then
       do k=1,npz
          do i=is,ie
             atm%w(i,j,k) = qn1(i,k)
