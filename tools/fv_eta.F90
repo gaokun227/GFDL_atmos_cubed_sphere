@@ -685,6 +685,14 @@ module fv_eta_mod
             ptop = 1.
             stretch_fac = 1.03
             auto_routine = 2
+         elseif (trim(npz_type) == 'gfs') then
+            ks = 39
+            ptop = a127(1)
+            pint = a127(ks+1)
+            do k=1,km+1
+               ak(k) = a127(k)
+               bk(k) = b127(k)
+            enddo
          else
             ptop = 1.
             pint = 75.E2
