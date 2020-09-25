@@ -1387,7 +1387,7 @@ contains
       allocate (bk_in(levp+1))                                             !    remapping BC updates during the forecast.
       call read_data('INPUT/gfs_ctrl.nc','vcoord',wk2, no_domain=.TRUE.)
       ak_in(1:levp+1) = wk2(1:levp+1,1)
-      ak_in(1) = 1.e-9
+      ak_in(1) = max(1.e-9, ak_in(1))
       bk_in(1:levp+1) = wk2(1:levp+1,2)
       deallocate(wk2)
       bc_hour=nint(current_time_in_seconds/3600.)
@@ -1411,6 +1411,7 @@ contains
       if(Atm%flagstruct%regional_bcs_from_gsi)then
         Atm%flagstruct%regional_bcs_from_gsi=.false.
       endif
+
 !
 !-----------------------------------------------------------------------
 !***  If the GSI will need restart files that include the
