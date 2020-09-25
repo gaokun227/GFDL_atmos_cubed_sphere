@@ -1246,7 +1246,11 @@ contains
 !***  Get the source of the input data
 !-----------------------------------------------------------------------
 !
-      call get_data_source(data_source,Atm%flagstruct%regional)
+      if (Atm%flagstruct%hrrrv3_ic) then
+        data_source = 'FV3GFS GAUSSIAN NEMSIO FILE'
+      else
+        call get_data_source(data_source,Atm%flagstruct%regional)
+      endif
 !
       call setup_regional_BC(Atm                                        &
                             ,isd, ied, jsd, jed                         &
@@ -1372,7 +1376,11 @@ contains
 !***  Get the source of the input data.
 !-----------------------------------------------------------------------
 !
-      call get_data_source(data_source,Atm%flagstruct%regional)
+      if (Atm%flagstruct%hrrrv3_ic) then
+        data_source = 'FV3GFS GAUSSIAN NEMSIO FILE'
+      else
+        call get_data_source(data_source,Atm%flagstruct%regional)
+      endif
 !
 !-----------------------------------------------------------------------
 !***  Preliminary setup for the forecast.
@@ -1385,7 +1393,11 @@ contains
       allocate (wk2(levp+1,2))
       allocate (ak_in(levp+1))                                             !<-- Save the input vertical structure for
       allocate (bk_in(levp+1))                                             !    remapping BC updates during the forecast.
-      call read_data('INPUT/gfs_ctrl.nc','vcoord',wk2, no_domain=.TRUE.)
+      if (Atm%flagstruct%hrrrv3_ic) then
+        call read_data('INPUT/hrrr_ctrl.nc','vcoord',wk2, no_domain=.TRUE.)
+      else
+        call read_data('INPUT/gfs_ctrl.nc','vcoord',wk2, no_domain=.TRUE.)
+      end if
       ak_in(1:levp+1) = wk2(1:levp+1,1)
       ak_in(1) = max(1.e-9, ak_in(1))
       bk_in(1:levp+1) = wk2(1:levp+1,2)
@@ -1396,9 +1408,9 @@ contains
 !***  Fill time level t1 from the BC file at the restart time.
 !-----------------------------------------------------------------------
 !
-      call regional_bc_data(Atm, bc_hour                                & 
-                           ,isc, iec, jsc, jec                          & 
-                           ,isd, ied, jsd, jed                          & 
+      call regional_bc_data(Atm, bc_hour                                &
+                           ,isc, iec, jsc, jec                          &
+                           ,isd, ied, jsd, jed                          &
                            ,ak_in, bk_in )
 !
 !-----------------------------------------------------------------------
@@ -1488,8 +1500,8 @@ contains
 !***  Transfer the time level t1 data to t0.
 !-----------------------------------------------------------------------
 !
-        call regional_bc_t1_to_t0(BC_t1, BC_t0                          &  
-                                 ,Atm%npz                               & 
+        call regional_bc_t1_to_t0(BC_t1, BC_t0                          &
+                                 ,Atm%npz                               &
                                  ,ntracers                              &
                                  ,Atm%regional_bc_bounds )
 !
@@ -1498,9 +1510,9 @@ contains
 !***  the next time level.
 !-----------------------------------------------------------------------
 !
-        call regional_bc_data(Atm, bc_hour                              & 
+        call regional_bc_data(Atm, bc_hour                              &
                              ,Atm%bd%is, Atm%bd%ie                      &
-                             ,Atm%bd%js, Atm%bd%je                      & 
+                             ,Atm%bd%js, Atm%bd%je                      &
                              ,isd, ied, jsd, jed                        &
                              ,ak_in, bk_in )
       endif
@@ -1729,15 +1741,29 @@ contains
 !***  Sensible temperature
 !--------------------------
 !
-      if (data_source == 'FV3GFS GAUSSIAN NEMSIO FILE') then
+      if (Atm%flagstruct%hrrrv3_ic) then
+
         nlev=klev_in
-        var_name_root='t'
+        var_name_root='pt     '
         call read_regional_bc_file(is_input,ie_input,js_input,je_input  &
                                   ,nlev                                 &
                                   ,ntracers                             &
 !                                 ,Atm%regional_bc_bounds               &
                                   ,var_name_root                        &
                                   ,array_3d=t_input)
+
+
+      else
+        if (data_source == 'FV3GFS GAUSSIAN NEMSIO FILE') then
+          nlev=klev_in
+          var_name_root='t'
+          call read_regional_bc_file(is_input,ie_input,js_input,je_input  &
+                                    ,nlev                                 &
+                                    ,ntracers                             &
+!                                   ,Atm%regional_bc_bounds               &
+                                    ,var_name_root                        &
+                                    ,array_3d=t_input)
+        endif
       endif
 !
 !-----------------------------
@@ -1822,11 +1848,11 @@ contains
 !-----------------------------------------------------------------------
 !***  Read the tracers specified in the field_table.  If they are not
 !***  in the input data then print a warning and set them to 0 in the
-!***  boundary. Some tracers are mandatory to have, because they are 
+!***  boundary. Some tracers are mandatory to have, because they are
 !***  used later for calculating virtual potential temperature etc.
 !-----------------------------------------------------------------------
 !
-      do nt = 1, ntracers 
+      do nt = 1, ntracers
         call get_tracer_names(MODEL_ATMOS, nt, var_name_root)
         index= get_tracer_index(MODEL_ATMOS,trim(var_name_root))
         if (index==liq_water_index .or. index==sphum_index) then
@@ -1844,7 +1870,7 @@ contains
       enddo
 !
 !-----------------------------------------------------------------------
-!***  For a DA-updated BC file we can simply transfer the data 
+!***  For a DA-updated BC file we can simply transfer the data
 !***  from the *_input arrays into the model's boundary arrays
 !***  since they came out of restart files.  Otherwise proceed
 !***  with vertical remapping from input layers to model forecast
@@ -1857,7 +1883,7 @@ contains
 !-----------------------------------------------------------------------
 !
         call fill_BC_for_DA
-!      
+!
 !-----------------------------------------------------------------------
 !
       else                                                                 !<-- Rotate winds and vertically remap BC file data
@@ -1874,7 +1900,7 @@ contains
 !
 !-----------------------------------------------------------------------
 !***  We have the boundary variables from the BC file on the levels
-!***  of the input data.  Remap the scalars (tracers, vertical 
+!***  of the input data.  Remap the scalars (tracers, vertical
 !***  velocity, ozone) to the FV3 domain levels.  Scalar remapping
 !***  must be done on all four sides before remapping of the winds
 !***  since pressures are needed on each side of wind points and so
@@ -1883,7 +1909,7 @@ contains
 !-----------------------------------------------------------------------
 !
 ! Definitions in this module greatly differ from those in existing nesting
-!  code or elsewhere in FMS. North <--> South, East <--> West, and 
+!  code or elsewhere in FMS. North <--> South, East <--> West, and
 !  North and South always span  [isd-1 , ied+1] while East and West do not
 !  go into the outermost corners (so the they span [1, je], always.)
 !-----------------------------------------------------------------------
@@ -1918,7 +1944,7 @@ contains
               call_remap=.true.
               side='east '
               bc_side_t1=>BC_t1%east
-              bc_side_t0=>BC_t0%east  
+              bc_side_t0=>BC_t0%east
             endif
           endif
 !
@@ -1975,7 +2001,7 @@ contains
 
                 do k=1,npz
                 do j=jsd,0
-                do i=istart,iend 
+                do i=istart,iend
                       delz_regBC%south_t1(i,j,k) = bc_side_t1%delz_BC(i,j,k)
                       delz_regBC%south_t0(i,j,k) = bc_side_t0%delz_BC(i,j,k)
                 enddo
@@ -2004,7 +2030,7 @@ contains
                   enddo
                   enddo
                 endif
-              endif 
+              endif
            endif
 
            if(nside==2)then
@@ -2022,7 +2048,7 @@ contains
 
                 do k=1,npz
                 do j=npy,jed
-                do i=istart,iend 
+                do i=istart,iend
                       delz_regBC%north_t1(i,j,k) = bc_side_t1%delz_BC(i,j,k)
                       delz_regBC%north_t0(i,j,k) = bc_side_t0%delz_BC(i,j,k)
                 enddo
@@ -2041,7 +2067,7 @@ contains
           	  enddo
                 endif
 
- 
+
                 if (ie == npx-1) then
                   do k=1,npz
                   do j=npy,jed
@@ -2052,11 +2078,11 @@ contains
                   enddo
                   enddo
                 endif
-              endif 
+              endif
            endif
-      
-!          
-            
+
+!
+
            if(nside==3)then
               if(east_bc)then
                 if (js == 1) then
@@ -2387,7 +2413,7 @@ contains
 #endif
 !
 !-----------------------------------------------------------------------
-!***  Convert the boundary region sensible temperature array to 
+!***  Convert the boundary region sensible temperature array to
 !***  FV3's modified virtual potential temperature.
 !-----------------------------------------------------------------------
 !
@@ -2428,7 +2454,7 @@ contains
 !-----------------------------------------------------------------------
 !
 !-----------------------------------------------------------------------
-!***  Since corner tasks are on more than one side we cannot 
+!***  Since corner tasks are on more than one side we cannot
 !***  generalize the transfer of data into a given side's
 !***  arrays.  Do each side separately.
 !
@@ -2442,7 +2468,7 @@ contains
 !
       if(north_bc)then
 !
-        is_input=lbound(BC_t1%north%delp_BC,1)                             !<-- 
+        is_input=lbound(BC_t1%north%delp_BC,1)                             !<--
         ie_input=ubound(BC_t1%north%delp_BC,1)                             !  Index limits for
         js_input=lbound(BC_t1%north%delp_BC,2)                             !  mass variables.
         je_input=ubound(BC_t1%north%delp_BC,2)                             !<--
@@ -2468,7 +2494,7 @@ contains
         enddo
         enddo
 !
-        is_input=lbound(BC_t1%north%u_BC,1)                                !<-- 
+        is_input=lbound(BC_t1%north%u_BC,1)                                !<--
         ie_input=ubound(BC_t1%north%u_BC,1)                                !  Index limits for
         js_input=lbound(BC_t1%north%u_BC,2)                                !  D-grid u and C-grid v.
         je_input=ubound(BC_t1%north%u_BC,2)                                !<--
@@ -2482,7 +2508,7 @@ contains
         enddo
         enddo
 !
-        is_input=lbound(BC_t1%north%v_BC,1)                                !<-- 
+        is_input=lbound(BC_t1%north%v_BC,1)                                !<--
         ie_input=ubound(BC_t1%north%v_BC,1)                                !  Index limits for
         js_input=lbound(BC_t1%north%v_BC,2)                                !  D-grid v and C-grid u.
         je_input=ubound(BC_t1%north%v_BC,2)                                !<--
@@ -2529,7 +2555,7 @@ contains
         enddo
         enddo
 !
-        is_input=lbound(BC_t1%south%u_BC,1)                                !<-- 
+        is_input=lbound(BC_t1%south%u_BC,1)                                !<--
         ie_input=ubound(BC_t1%south%u_BC,1)                                !  Index limits for
         js_input=lbound(BC_t1%south%u_BC,2)                                !  D-grid u and C-grid v.
         je_input=ubound(BC_t1%south%u_BC,2)                                !<--
@@ -2543,7 +2569,7 @@ contains
         enddo
         enddo
 !
-        is_input=lbound(BC_t1%south%v_BC,1)                                !<-- 
+        is_input=lbound(BC_t1%south%v_BC,1)                                !<--
         ie_input=ubound(BC_t1%south%v_BC,1)                                !  Index limits for
         js_input=lbound(BC_t1%south%v_BC,2)                                !  D-grid v and C-grid u.
         je_input=ubound(BC_t1%south%v_BC,2)                                !<--
@@ -2590,7 +2616,7 @@ contains
         enddo
         enddo
 !
-        is_input=lbound(BC_t1%east%u_BC,1)                                 !<-- 
+        is_input=lbound(BC_t1%east%u_BC,1)                                 !<--
         ie_input=ubound(BC_t1%east%u_BC,1)                                 !  Index limits for
         js_input=lbound(BC_t1%east%u_BC,2)                                 !  D-grid u and C-grid v.
         je_input=ubound(BC_t1%east%u_BC,2)                                 !<--
@@ -2604,7 +2630,7 @@ contains
         enddo
         enddo
 !
-        is_input=lbound(BC_t1%east%v_BC,1)                                 !<-- 
+        is_input=lbound(BC_t1%east%v_BC,1)                                 !<--
         ie_input=ubound(BC_t1%east%v_BC,1)                                 !  Index limits for
         js_input=lbound(BC_t1%east%v_BC,2)                                 !  D-grid v and C-grid u.
         je_input=ubound(BC_t1%east%v_BC,2)                                 !<--
@@ -2651,7 +2677,7 @@ contains
         enddo
         enddo
 !
-        is_input=lbound(BC_t1%west%u_BC,1)                                 !<-- 
+        is_input=lbound(BC_t1%west%u_BC,1)                                 !<--
         ie_input=ubound(BC_t1%west%u_BC,1)                                 !  Index limits for
         js_input=lbound(BC_t1%west%u_BC,2)                                 !  D-grid u and C-grid v.
         je_input=ubound(BC_t1%west%u_BC,2)                                 !<--
@@ -2665,7 +2691,7 @@ contains
         enddo
         enddo
 !
-        is_input=lbound(BC_t1%west%v_BC,1)                                 !<-- 
+        is_input=lbound(BC_t1%west%v_BC,1)                                 !<--
         ie_input=ubound(BC_t1%west%v_BC,1)                                 !  Index limits for
         js_input=lbound(BC_t1%west%v_BC,2)                                 !  D-grid v and C-grid u.
         je_input=ubound(BC_t1%west%v_BC,2)                                 !<--
@@ -3723,7 +3749,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 ! and will be read in.
 ! If the source is from old GFS or operational GSM then the tracers will be fixed in the boundaries
 ! and may not provide a very good result
-! 
+!
 !  if (cld_amt .gt. 0) BC_side%q_BC(:,:,:,cld_amt) = 0.
   if (trim(data_source) /= 'FV3GFS GAUSSIAN NEMSIO FILE') then
    if ( Atm%flagstruct%nwat .eq. 6 ) then
@@ -3980,9 +4006,9 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
 !---------------------------------------------------------------------
 !***  Select the boundary variables' boundary data at the two
-!***  bracketing time levels and apply them to the updating 
+!***  bracketing time levels and apply them to the updating
 !***  of the variables' boundary regions at the appropriate
-!***  forecast time.  This is done at the beginning of every 
+!***  forecast time.  This is done at the beginning of every
 !***  large timestep in fv_dynamics.
 !---------------------------------------------------------------------
       implicit none
@@ -4004,8 +4030,8 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
       real,dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz),intent(out) ::  &
                                                                 delp  &
-                                                               ,pt 
-! 
+                                                               ,pt
+!
       real,dimension(bd%isd:,bd%jsd:,1:),intent(out) :: w
       real,dimension(bd%is:,bd%js:,1:),intent(out) :: delz
 #ifdef USE_COND
@@ -4059,7 +4085,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                   ,bd%isd                             &
                                   ,bd%ied+1                           &
                                   ,bd%jsd                             &
-                                  ,bd%js-1)                       
+                                  ,bd%js-1)
       endif
 !
       if(south_bc)then
@@ -4076,7 +4102,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                   ,bd%isd                             &
                                   ,bd%ied+1                           &
                                   ,bd%je+1                            &
-                                  ,bd%jed )                       
+                                  ,bd%jed )
       endif
 !
       if(east_bc)then
@@ -4093,7 +4119,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                   ,bd%isd                             &
                                   ,bd%is-1                            &
                                   ,bd%js                              &
-                                  ,bd%je  )                       
+                                  ,bd%je  )
       endif
 !
       if(west_bc)then
@@ -4110,7 +4136,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                   ,bd%ie+2                            &
                                   ,bd%ied+1                           &
                                   ,bd%js                              &
-                                  ,bd%je  )                       
+                                  ,bd%je  )
       endif
 !
 !---------------------------------------------------------------------
@@ -4126,7 +4152,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                       ,i1_uvw,i2_uvw,j1_uvw,j2_uvw )
 !
 !---------------------------------------------------------------------
-!***  Apply boundary values to the prognostic arrays at the 
+!***  Apply boundary values to the prognostic arrays at the
 !***  desired time.
 !---------------------------------------------------------------------
       implicit none
@@ -4180,9 +4206,9 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           delz_ptr=>delz_auxiliary%north
         case ('south')
           delz_ptr=>delz_auxiliary%south
-        case ('east') 
+        case ('east')
           delz_ptr=>delz_auxiliary%east
-        case ('west') 
+        case ('west')
           delz_ptr=>delz_auxiliary%west
       end select
 !
@@ -4507,7 +4533,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
               endif
             endif
 !
-            i1_blend=i1-nrows_blend_user     
+            i1_blend=i1-nrows_blend_user
             i2_blend=i1-1
             j1_blend=js
             j2_blend=je
@@ -4569,7 +4595,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                           ,bc_t0,bc_t1                &
                                           ,lbnd1,ubnd1,lbnd2,ubnd2    &
                                           ,iq )
-                                      
+
 !---------------------------------------------------------------------
 !***  Select the boundary variable associated with the prognostic
 !***  array that needs its boundary region to be updated.
@@ -4779,7 +4805,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           do j=j1_blend,j2_blend
             factor_dist=exp(-(blend_exp1+blend_exp2*(j-j_bc-1)*rdenom)) !<-- Exponential falloff of blending weights.
             do i=i1_blend,i2_blend
-              blend_value=bc_t0(i,j,k)                                &  !<-- Blend data interpolated 
+              blend_value=bc_t0(i,j,k)                                &  !<-- Blend data interpolated
                          +(bc_t1(i,j,k)-bc_t0(i,j,k))*fraction_interval  !    between t0 and t1.
 !
               array(i,j,k)=(1.-factor_dist)*array(i,j,k)+factor_dist*blend_value
@@ -4798,7 +4824,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           do j=j1_blend,j2_blend
             factor_dist=exp(-(blend_exp1+blend_exp2*(j_bc-j-1)*rdenom)) !<-- Exponential falloff of blending weights.
             do i=i1_blend,i2_blend
-              blend_value=bc_t0(i,j,k)                                &  !<-- Blend data interpolated 
+              blend_value=bc_t0(i,j,k)                                &  !<-- Blend data interpolated
                          +(bc_t1(i,j,k)-bc_t0(i,j,k))*fraction_interval  !    between t0 and t1.
               array(i,j,k)=(1.-factor_dist)*array(i,j,k)+factor_dist*blend_value
             enddo
@@ -4816,7 +4842,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           do j=j1_blend,j2_blend
             do i=i1_blend,i2_blend
 !
-              blend_value=bc_t0(i,j,k)                                  &  !<-- Blend data interpolated 
+              blend_value=bc_t0(i,j,k)                                  &  !<-- Blend data interpolated
                          +(bc_t1(i,j,k)-bc_t0(i,j,k))*fraction_interval    !    between t0 and t1.
 !
               factor_dist=exp(-(blend_exp1+blend_exp2*(i-i_bc-1)*rdenom))  !<-- Exponential falloff of blending weights.
@@ -4837,7 +4863,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
           do j=j1_blend,j2_blend
             do i=i1_blend,i2_blend
 !
-              blend_value=bc_t0(i,j,k)                                  &  !<-- Blend data interpolated 
+              blend_value=bc_t0(i,j,k)                                  &  !<-- Blend data interpolated
                          +(bc_t1(i,j,k)-bc_t0(i,j,k))*fraction_interval    !    between t0 and t1.
 !
               factor_dist=exp(-(blend_exp1+blend_exp2*(i_bc-i-1)*rdenom))  !<-- Exponential falloff of blending weights.
@@ -5223,7 +5249,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 #else
           pkz=exp(kappa*log(rdg*delp(i,j,k)*pt(i,j,k)                   &
               *(1.+dp1)/delz(i,j,k)))
-          pt(i,j,k)=pt(i,j,k)*(1.+dp1)/pkz          
+          pt(i,j,k)=pt(i,j,k)*(1.+dp1)/pkz
 #endif
         enddo
         enddo
@@ -5426,7 +5452,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
         p00=Atm%ptop                                                     !<-- Use layer interface pressures.
 !
         n_loopk: do k=1,npz
-          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb. 
+          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb.
             call get_q00
             do j=js,je
             do i=is,ie
@@ -5456,8 +5482,8 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
         p00=Atm%ptop                                                     !<-- Use layer interface pressures.
 !
-        s_loopk: do k=1,npz      
-          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb. 
+        s_loopk: do k=1,npz
+          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb.
             call get_q00
             do j=js,je
             do i=is,ie
@@ -5487,8 +5513,8 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
         p00=Atm%ptop                                                     !<-- Use layer interface pressures.
 !
-        e_loopk: do k=1,npz      
-          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb. 
+        e_loopk: do k=1,npz
+          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb.
             call get_q00
             do j=js,je
             do i=is,ie
@@ -5518,8 +5544,8 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
         p00=Atm%ptop                                                     !<-- Use layer interface pressures.
 !
-        w_loopk: do k=1,npz      
-          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb. 
+        w_loopk: do k=1,npz
+          if(p00<3000.)then                                              !<-- Apply nudging only if pressure < 30 mb.
             call get_q00
             do j=js,je
             do i=is,ie
@@ -5580,11 +5606,11 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
   subroutine dump_field_3d (domain, name, field, isd, ied, jsd, jed, nlev, stag)
 
 !-----------------------------------------------------------------------
-!***  Subroutines dump_field_2d and dump_field_3d are module 
+!***  Subroutines dump_field_2d and dump_field_3d are module
 !***  procedures with the generic interface 'dump_field'.
-!***  Use these routines to write out NetCDF files containing 
+!***  Use these routines to write out NetCDF files containing
 !***  FULL fields that include the variables' boundary region.
-!***  See the following four examples for guidance on how to 
+!***  See the following four examples for guidance on how to
 !***  call the routines.
 !-----------------------------------------------------------------------
 !   call dump_field(Atm(1)%domain,"atm_pt",   Atm(1)%pt,   isd, ied,   jsd, jed,   Atm(1)%npz, stag=H_STAGGER)
@@ -6009,7 +6035,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
         endif
 !
 !-----------------------------------------------------------------------
-!***  What is the full domain extent of this variable including 
+!***  What is the full domain extent of this variable including
 !***  boundary rows?
 !-----------------------------------------------------------------------
 !
@@ -6036,36 +6062,36 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
         allocate( global_field(istart_g:iend_g, jstart_g:jend_g, 1:nz) )
 !
 !-----------------------------------------------------------------------
-!***  What is the local extent of the variable on the task subdomain? 
+!***  What is the local extent of the variable on the task subdomain?
 !***  We must exclude inner halo data since the data is not updated
-!***  there in some of the variables.  Of course the outer halo data 
+!***  there in some of the variables.  Of course the outer halo data
 !***  around the domain boundary is included.
 !-----------------------------------------------------------------------
 !
-        istart=lbound(fields_core(nv)%ptr,1)   
+        istart=lbound(fields_core(nv)%ptr,1)
         if(istart>1)then
           istart=istart+halo
         endif
 !
-        iend  =ubound(fields_core(nv)%ptr,1)  
+        iend  =ubound(fields_core(nv)%ptr,1)
         if(iend<ieg-halo)then
           iend=iend-halo
         endif
 !
-        jstart=lbound(fields_core(nv)%ptr,2)   
+        jstart=lbound(fields_core(nv)%ptr,2)
         if(jstart>1)then
           jstart=jstart+halo
         endif
 !
-        jend  =ubound(fields_core(nv)%ptr,2)  
+        jend  =ubound(fields_core(nv)%ptr,2)
         if(jend<jeg-halo)then
           jend=jend-halo
         endif
 !
 !-----------------------------------------------------------------------
 !***  The interior values of the pt array are the sensible
-!***  temperature.  The halo points though remain as the 
-!***  special potential temperature used inside the dynamics 
+!***  temperature.  The halo points though remain as the
+!***  special potential temperature used inside the dynamics
 !***  since those halo values never needed to be converted
 !***  back to sensible.  We are now writing out the full
 !***  field including boundary rows for the GSI so the domain
@@ -6102,7 +6128,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                    ,global_field(:,:,k)                          &
                                    ,start=(/1,1,k/)                              &
                                    ,count=(/count_i,count_j,1/)))
-          endif 
+          endif
         enddo
 !
         deallocate(global_field)
@@ -6123,7 +6149,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
       endif
 !
 !-----------------------------------------------------------------------
-!***  What is the full domain extent of this variable including 
+!***  What is the full domain extent of this variable including
 !***  boundary rows?
 !-----------------------------------------------------------------------
 !
@@ -6140,9 +6166,9 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
       allocate( global_field(istart_g:iend_g, jstart_g:jend_g, 1:nz) )
 !
 !-----------------------------------------------------------------------
-!***  What is the local extent of the variable on the task subdomain? 
+!***  What is the local extent of the variable on the task subdomain?
 !***  We must exclude inner halo data since the data is not updated
-!***  there in some of the variables.  Of course the outer halo data 
+!***  there in some of the variables.  Of course the outer halo data
 !***  around the domain boundary is included.  These values are the
 !***  same for all the tracers.
 !-----------------------------------------------------------------------
@@ -6228,7 +6254,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                    ,global_field(:,:,k)                 &
                                    ,start=(/1,1,k/)                     &
                                    ,count=(/count_i,count_j,1/)))
-          endif 
+          endif
         enddo
 !
       enddo vbls_tracers
