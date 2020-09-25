@@ -894,11 +894,11 @@ contains
         zh  (is:ie,js:je,1:levp+1)      =   zh_tmp(is:ie,js:je,2:levsp)
         omga(is:ie,js:je,1:levp)        = omga_tmp(is:ie,js:je,2:levsp-1)
 
-        u_w(is:ie+1, js:je, 1:levp)    =  u_w_tmp(is:ie+1, js:je, 2:levsp-1)
-        v_w(is:ie+1, js:je, 1:levp)    =  v_w_tmp(is:ie+1, js:je, 2:levsp-1)
-        u_s(is:ie, js:je+1, 1:levp)    =  u_s_tmp(is:ie, js:je+1, 2:levsp-1)
-        v_s(is:ie, js:je+1, 1:levp)    =  v_s_tmp(is:ie, js:je+1, 2:levsp-1)
-        temp(is:ie,js:je,1:levp)        = temp_tmp(is:ie,js:je,1:levsp-1)
+        u_w(is:ie+1, js:je, 1:levp)    =  u_w_tmp(is:ie+1, js:je  , 2:levsp-1)
+        v_w(is:ie+1, js:je, 1:levp)    =  v_w_tmp(is:ie+1, js:je  , 2:levsp-1)
+        u_s(is:ie, js:je+1, 1:levp)    =  u_s_tmp(is:ie  , js:je+1, 2:levsp-1)
+        v_s(is:ie, js:je+1, 1:levp)    =  v_s_tmp(is:ie  , js:je+1, 2:levsp-1)
+        temp(is:ie,js:je,1:levp)        = temp_tmp(is:ie ,js:je   , 2:levsp-1)
 
         deallocate(u_w_tmp, v_w_tmp, u_s_tmp, v_s_tmp, omga_tmp, zh_tmp, temp_tmp, q_tmp)
 
