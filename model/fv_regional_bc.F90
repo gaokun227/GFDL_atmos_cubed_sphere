@@ -3357,7 +3357,7 @@ contains
       endif
 !
       allocate(BC_side%delp_BC (is_0:ie_0,js_0:je_0,klev)) ; BC_side%delp_BC=real_snan
-      allocate(BC_side%divgd_BC(is_0:ie_0,js_0:je_0,klev)) ; BC_side%divgd_BC=real_snan
+      allocate(BC_side%divgd_BC(is_we:ie_we,js_sn:je_sn,klev)) ; BC_side%divgd_BC=real_snan
 !
       allocate(BC_side%q_BC    (is_0:ie_0,js_0:je_0,1:klev,1:ntracers)) ; BC_side%q_BC=real_snan
 !
@@ -4360,7 +4360,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
             i1=isd
             i2=ied
-            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v')then
+            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v'.or.trim(bc_vbl_name)=='divgd')then
               i2=ied+1
             endif
 !
@@ -4369,7 +4369,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
             i1_blend=is
             i2_blend=ie
-            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v')then
+            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v'.or.trim(bc_vbl_name)=='divgd')then
               i2_blend=ie+1
             endif
             j1_blend=js
@@ -4392,24 +4392,24 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
             i1=isd
             i2=ied
-            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v')then
+            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v'.or.trim(bc_vbl_name)=='divgd')then
               i2=ied+1
             endif
 !
             j1=je+1
             j2=jed
-            if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc')then
+            if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc'.or.trim(bc_vbl_name)=='divgd')then
               j1=je+2
               j2=jed+1
             endif
 !
             i1_blend=is
             i2_blend=ie
-            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v')then
+            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v'.or.trim(bc_vbl_name)=='divgd')then
               i2_blend=ie+1
             endif
             j2_blend=je
-            if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc')then
+            if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc'.or.trim(bc_vbl_name)=='divgd')then
               j2_blend=je+1
             endif
             j1_blend=j2_blend-nrows_blend_user+1
@@ -4440,7 +4440,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
             endif
             if(south_bc)then
               j2=je
-              if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc')then
+              if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc'.or.trim(bc_vbl_name)=='divgd')then
                 j2=je+1
               endif
             endif
@@ -4455,7 +4455,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
             if(south_bc)then
               j2_blend=je-nrows_blend_user     !<-- South BC already handles nrows_blend_user blending rows
             endif
-            if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc')then
+            if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc'.or.trim(bc_vbl_name)=='divgd')then
               j2_blend=j2_blend+1
             endif
             i_bc=i2
@@ -4479,7 +4479,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !
             i1=ie+1
             i2=ied
-            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v')then
+            if(trim(bc_vbl_name)=='uc'.or.trim(bc_vbl_name)=='v'.or.trim(bc_vbl_name)=='divgd')then
               i1=ie+2
               i2=ied+1
             endif
@@ -4489,7 +4489,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
             endif
             if(south_bc)then
               j2=je
-              if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc')then
+              if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc'.or.trim(bc_vbl_name)=='divgd')then
                 j2=je+1
               endif
             endif
@@ -4504,7 +4504,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
             if(south_bc)then
               j2_blend=je-nrows_blend_user   !<-- South BC already handled nrows_blend_user blending rows.
             endif
-            if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc')then
+            if(trim(bc_vbl_name)=='u'.or.trim(bc_vbl_name)=='vc'.or.trim(bc_vbl_name)=='divgd')then
               j2_blend=j2_blend+1
             endif
             i_bc=i1
@@ -4986,7 +4986,6 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
             do j=js_c,je_c
             do i=is_c,ie_c
               bc_side_t0%delp_BC(i,j,k) =bc_side_t1%delp_BC(i,j,k)
-              bc_side_t0%divgd_BC(i,j,k)=bc_side_t1%divgd_BC(i,j,k)
             enddo
             enddo
           enddo
@@ -5026,9 +5025,13 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
               bc_side_t0%vc_BC(i,j,k)=bc_side_t1%vc_BC(i,j,k)
             enddo
             enddo
+
+            do j=js_s,je_s
+            do i=is_w,ie_w
+              bc_side_t0%divgd_BC(i,j,k)=bc_side_t1%divgd_BC(i,j,k)
+            enddo
             enddo
 !
-          do k=1,nlev
             do j=js_w,je_w
             do i=is_w,ie_w
               bc_side_t0%v_BC(i,j,k) =bc_side_t1%v_BC(i,j,k)
