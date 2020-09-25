@@ -26,9 +26,9 @@ module fv_diagnostics_mod
 
  use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, radius, kappa, WTMAIR, WTMCO2, &
                                omega, hlv, cp_air, cp_vapor, TFREEZE
- use fms_mod,            only: write_version_number
+ use fms_mod,            only: write_version_number, lowercase
  use fms_io_mod,         only: set_domain, nullify_domain, write_version_number
- use time_manager_mod,   only: time_type, get_date, get_time
+ use time_manager_mod,   only: time_type, get_date, get_time, month_name
  use mpp_domains_mod,    only: domain2d, mpp_update_domains, DGRID_NE, NORTH, EAST
  use diag_manager_mod,   only: diag_axis_init, register_diag_field, &
                                register_static_field, send_data, diag_grid_init
@@ -37,14 +37,14 @@ module fv_diagnostics_mod
  use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp
  use fv_mp_mod,          only: mp_reduce_sum, mp_reduce_min, mp_reduce_max, is_master
  use fv_eta_mod,         only: get_eta_level, gw_1d
- use fv_grid_utils_mod,  only: g_sum
+ use fv_grid_utils_mod,  only: g_sum, v_prod, latlon2xyz, great_circle_dist, vect_cross
  use a2b_edge_mod,       only: a2b_ord2, a2b_ord4
  use fv_surf_map_mod,    only: zs_g
  use fv_sg_mod,          only: qsmith
 
  use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
  use field_manager_mod,  only: MODEL_ATMOS
- use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, mpp_max, NOTE, input_nml_file
+ use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, mpp_max, NOTE, input_nml_file, get_unit
  use mpp_io_mod,         only: mpp_flush
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
@@ -102,7 +102,7 @@ module fv_diagnostics_mod
 
  integer, parameter :: MAX_PLEVS = 31
 #ifdef FEWER_PLEVS
- integer :: nplev = 10 ! 31 ! lmh
+ integer :: nplev = 11 ! 31 ! lmh
 #else
  integer :: nplev = 31
 #endif
@@ -110,19 +110,17 @@ module fv_diagnostics_mod
  integer :: k100, k200, k300, k500
 
  integer, parameter :: MAX_DIAG_COLUMN = 100
- logical, allocatable, dimension(:,:) :: do_debug_diag_column
- integer, allocatable, dimension(:) :: diag_debug_units, diag_debug_i, diag_debug_j
- real, allocatable, dimension(:) :: diag_debug_lon, diag_debug_lat
- character(16), dimension(MAX_DIAG_COLUMN) :: diag_debug_names
- real, dimension(MAX_DIAG_COLUMN) :: diag_debug_lon_in, diag_debug_lat_in
- integer, dimension(MAX_DIAG_COLUMN) :: diag_debug_kbottom, diag_debug_nlevels
+ integer, parameter :: diag_name_len = 16
+ integer, allocatable, dimension(:) :: diag_debug_units
+ character(diag_name_len), dimension(MAX_DIAG_COLUMN) :: diag_debug_names
+ real, dimension(MAX_DIAG_COLUMN) :: diag_debug_lon, diag_debug_lat
+ integer :: diag_debug_kbottom, diag_debug_nlevels
 
- logical, allocatable, dimension(:,:) :: do_sonde_diag_column
- integer, allocatable, dimension(:) :: diag_sonde_units, diag_sonde_i, diag_sonde_j
- real, allocatable, dimension(:) :: diag_sonde_lon, diag_sonde_lat
- character(16), dimension(MAX_DIAG_COLUMN) :: diag_sonde_names
- real, dimension(MAX_DIAG_COLUMN) :: diag_sonde_lon_in, diag_sonde_lat_in
- integer, dimension(MAX_DIAG_COLUMN) :: diag_debug_i_in, diag_debug_j_in, diag_debug_tile_in
+ integer, allocatable, dimension(:) :: diag_sonde_units
+ character(diag_name_len), dimension(MAX_DIAG_COLUMN) :: diag_sonde_names
+ real, dimension(MAX_DIAG_COLUMN) :: diag_sonde_lon, diag_sonde_lat
+ integer, dimension(MAX_DIAG_COLUMN) :: diag_debug_i, diag_debug_j, diag_debug_tile
+ integer, dimension(MAX_DIAG_COLUMN) :: diag_sonde_i, diag_sonde_j, diag_sonde_tile
 
  logical :: do_diag_debug = .false.
  logical :: do_diag_debug_dyn = .false.
@@ -140,10 +138,11 @@ module fv_diagnostics_mod
  ! integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
  ! integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
 
- namelist /fv_diag_column_nml/ do_diag_debug, do_diag_debug_dyn, do_diag_sonde, sound_freq, &
-      diag_debug_lon_in, diag_debug_lat_in, diag_debug_names, diag_debug_kbottom, diag_debug_nlevels,&
-      diag_debug_i_in, diag_debug_j_in, diag_debug_tile_in, &
-      diag_sonde_lon_in, diag_sonde_lat_in, diag_sonde_names, runname
+ namelist /fv_diag_column_nml/ do_diag_debug, do_diag_debug_dyn, do_diag_sonde, &
+      sound_freq, runname, diag_debug_kbottom, diag_debug_nlevels
+      !diag_debug_lon, diag_debug_lat, diag_debug_names, 
+      !diag_debug_i, diag_debug_j, diag_debug_tile, &
+      !diag_sonde_lon, diag_sonde_lat, diag_sonde_names
 
  namelist /fv_diag_plevs_nml/ nplev, levs, k100, k200, k500
 
@@ -345,7 +344,7 @@ contains
 ! SJL note: 31 is enough here; if you need more levels you should do it OFF line
 ! do not add more to prevent the model from slowing down too much.
 #ifdef FEWER_PLEVS
-    levs(1:nplev) = (/50,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
+    levs(1:nplev) = (/50,70,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
     k100 = 2
     k200 = 3
     k300 = 5
@@ -684,6 +683,16 @@ contains
           idiag%id_qs_dt_phys = register_diag_field ( trim(field), 'qs_dt_phys', axes(1:3), Time,           &
                'snow water tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (idiag%id_qs_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qs_dt(isc:iec,jsc:jec,npz))
+          
+          idiag%id_T_dt_sg = register_diag_field ( trim(field), 'T_dt_sg', axes(1:3), Time,           &
+               'temperature tendency from 2dz subgrid mixing', 'K/s', missing_value=missing_value )
+          idiag%id_u_dt_sg = register_diag_field ( trim(field), 'u_dt_sg', axes(1:3), Time,           &
+               'zonal wind tendency from 2dz subgrid mixing', 'm/s/s', missing_value=missing_value )
+          idiag%id_v_dt_sg = register_diag_field ( trim(field), 'v_dt_sg', axes(1:3), Time,           &
+               'meridional wind tendency from 2dz subgrid mixing', 'm/s/s', missing_value=missing_value )
+          idiag%id_qv_dt_sg = register_diag_field ( trim(field), 'qv_dt_sg', axes(1:3), Time,           &
+               'water vapor tendency from 2dz subgrid mixing', 'kg/kg/s', missing_value=missing_value )
+
 
        endif
 
@@ -822,6 +831,8 @@ contains
           else
              idiag%id_pfnh = register_diag_field ( trim(field), 'pfnh', axes(1:3), Time,        &
                   'non-hydrostatic pressure', 'pa', missing_value=missing_value )
+             idiag%id_ppnh = register_diag_field ( trim(field), 'ppnh', axes(1:3), Time,        &
+                  'non-hydrostatic pressure perturbation', 'pa', missing_value=missing_value )
           endif
           !--------------------
           ! 3D Condensate
@@ -866,6 +877,8 @@ contains
                'vertical ice water flux', 'kg/m**2/s', missing_value=missing_value )
           idiag%id_o3w = register_diag_field ( trim(field), 'o3w', axes(1:3), Time, &
                'vertical ozone flux', 'kg/m**2/s', missing_value=missing_value )
+          idiag%id_mw = register_diag_field ( trim(field), 'mw', axes(1:3), Time, &
+               'vertical mass flux', 'kg/m**2/s', missing_value=missing_value )
 
 !--------------------
 ! 3D flux terms
@@ -996,14 +1009,12 @@ contains
        idiag%id_intqg = register_diag_field ( trim(field), 'intqg', axes(1:2), Time,        &
             'Vertically Integrated Graupel', 'kg/m**2', missing_value=missing_value )
 
-#ifdef HIWPP
        idiag%id_acl = register_diag_field ( trim(field), 'acl', axes(1:2), Time,        &
             'Column-averaged Cl mixing ratio', 'kg/kg', missing_value=missing_value )
        idiag%id_acl2 = register_diag_field ( trim(field), 'acl2', axes(1:2), Time,        &
             'Column-averaged Cl2 mixing ratio', 'kg/kg', missing_value=missing_value )
        idiag%id_acly = register_diag_field ( trim(field), 'acly', axes(1:2), Time,        &
             'Column-averaged total chlorine mixing ratio', 'kg/kg', missing_value=missing_value )
-#endif
 
 !--------------------------
 ! 850-mb vorticity
@@ -1056,9 +1067,9 @@ contains
                            '1-km AGL w-wind', 'm/s', missing_value=missing_value )
 
           idiag%id_wmaxup = register_diag_field ( trim(field), 'wmaxup', axes(1:2), Time,       &
-                           'column-maximum updraft', 'm/s', missing_value=missing_value )
+                           'column-maximum updraft (below 100 mb)', 'm/s', missing_value=missing_value )
           idiag%id_wmaxdn = register_diag_field ( trim(field), 'wmaxdn', axes(1:2), Time,       &
-                           'column-maximum downdraft', 'm/s', missing_value=missing_value )
+                           'column-maximum downdraft (below 100 mb)', 'm/s', missing_value=missing_value )
 
        endif
 
@@ -1241,25 +1252,28 @@ contains
     !Start by hard-coding one diagnostic column then add options for more later
 
     diag_debug_names(:) = ''
-    diag_debug_lon_in(:) = -999.
-    diag_debug_lat_in(:) = -999.
-    diag_debug_i_in(:) = -999
-    diag_debug_j_in(:) = -999
-    diag_debug_tile_in(:) = -999
-    diag_debug_kbottom(:) = npz
-    diag_debug_nlevels(:) = npz/3
+    diag_debug_lon(:) = -999.
+    diag_debug_lat(:) = -999.
+    diag_debug_i(:) = -999
+    diag_debug_j(:) = -999
+    diag_debug_tile(:) = -999
+    diag_debug_kbottom = npz
+    diag_debug_nlevels = npz/3
 
     !diag_debug_names(1:2) = (/'ORD','Princeton'/)
-    !diag_debug_lon_in(1:2) = (/272.,285.33/)
-    !diag_debug_lat_in(1:2) = (/42.,40.36/)
+    !diag_debug_lon(1:2) = (/272.,285.33/)
+    !diag_debug_lat(1:2) = (/42.,40.36/)
 
     diag_sonde_names(:) = ''
-    diag_sonde_lon_in(:) = -999.
-    diag_sonde_lat_in(:) = -999.
+    diag_sonde_lon(:) = -999.
+    diag_sonde_lat(:) = -999.
+    diag_sonde_i(:) = -999
+    diag_sonde_j(:) = -999
+    diag_sonde_tile(:) = -99
 
     !diag_sonde_names(1:4) = (/'OUN','MYNN','PIT', 'ORD'/)
-    !diag_sonde_lon_in(1:4) = (/285.33,282.54,279.78,272./)
-    !diag_sonde_lat_in(1:4) = (/35.18,25.05,40.53,42./)
+    !diag_sonde_lon(1:4) = (/285.33,282.54,279.78,272./)
+    !diag_sonde_lat(1:4) = (/35.18,25.05,40.53,42./)
 
 
 #ifdef INTERNAL_FILE_NML
@@ -1277,124 +1291,17 @@ contains
     close (nlunit)
 #endif
 
-    call column_diagnostics_init
-
-    if (do_diag_debug) then
-
-       !Determine number of debug columns
-       do m=1,MAX_DIAG_COLUMN
-          !if (is_master()) print*, i, diag_debug_names(m), len(trim(diag_debug_names(m))), diag_debug_lon_in(m), diag_debug_lat_in(m)
-          if (len(trim(diag_debug_names(m))) == 0) exit
-          if ( ( diag_debug_lon_in(m) < -180. .or. diag_debug_lat_in(m) < -90. ) .and. &
-               ( diag_debug_i_in(m) < -10 .or. diag_debug_j_in(m) < -10 .or. diag_debug_tile_in(m) < 0 )) exit
-          num_diag_debug = num_diag_debug + 1
-          if (diag_debug_lon_in(m) < 0.)  diag_debug_lon_in(m) = diag_debug_lon_in(m) + 360.
-       enddo
-
-       if (num_diag_debug == 0) do_diag_debug = .FALSE.
-
+    if (do_diag_debug .or. do_diag_sonde) then
+       call read_column_table
     endif
 
     if (do_diag_debug) then
-
-       allocate(do_debug_diag_column(isc:iec,jsc:jec))
-       allocate(diag_debug_lon(num_diag_debug))
-       allocate(diag_debug_lat(num_diag_debug))
-       allocate(diag_debug_i(num_diag_debug))
-       allocate(diag_debug_j(num_diag_debug))
-       allocate(diag_debug_units(num_diag_debug))
-
-
-       call initialize_diagnostic_columns("DEBUG", num_diag_pts_latlon=num_diag_debug, num_diag_pts_ij=0,  &
-            global_i=(/1/), global_j=(/1/), &
-            global_lat_latlon=diag_debug_lat_in, global_lon_latlon=diag_debug_lon_in, &
-            lonb_in=Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,1), latb_in=Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2), &
-            do_column_diagnostics=do_debug_diag_column, &
-            diag_lon=diag_debug_lon, diag_lat=diag_debug_lat, diag_i=diag_debug_i, diag_j=diag_debug_j, diag_units=diag_debug_units)
-
-       do m=1,num_diag_debug
-
-          if (diag_debug_i_in(m) > 0 ) then
-
-             if ( diag_debug_i_in(m) >= isc .and. diag_debug_i_in(m) <= iec .and. &
-                  diag_debug_j_in(m) >= jsc .and. diag_debug_j_in(m) <= jec .and. &
-                  diag_debug_tile_in(m) == Atm(n)%tile_of_mosaic ) then
-
-                diag_debug_i(m) = diag_debug_i_in(m)
-                diag_debug_j(m) = diag_debug_j_in(m)
-
-                diag_debug_lon(m) = Atm(n)%gridstruct%agrid(diag_debug_i(m),diag_debug_j(m),1)
-                diag_debug_lat(m) = Atm(n)%gridstruct%agrid(diag_debug_i(m),diag_debug_j(m),2)
-
-             else
-
-                diag_debug_i(m) = -999
-                diag_debug_j(m) = -999
-
-             endif
-
-
-          else
-
-             diag_debug_i(m) = diag_debug_i(m) + isc - 1
-             diag_debug_j(m) = diag_debug_j(m) + jsc - 1
-
-          endif
-
-          if (diag_debug_i(m) >= isc .and. diag_debug_i(m) <= iec .and. &
-              diag_debug_j(m) >= jsc .and. diag_debug_j(m) <= jec ) then
-             write(*,'(A, 1x, I04, 1x, A, 4F7.2, 2I5)') 'DEBUG POINT: ', mpp_pe(), diag_debug_names(m), diag_debug_lon_in(m), diag_debug_lat_in(m), &
-                  Atm(n)%gridstruct%agrid(diag_debug_i(m), diag_debug_j(m),1)*rad2deg, Atm(n)%gridstruct%agrid(diag_debug_i(m), diag_debug_j(m),2)*rad2deg, &
-                  diag_debug_i(m), diag_debug_j(m)
-          endif
-       enddo
-
+       allocate(diag_debug_units(num_diag_debug))       
+       call find_diagnostic_column("DEBUG", diag_debug_names, diag_debug_i, diag_debug_j, diag_debug_tile, diag_debug_lat, diag_debug_lon, diag_debug_units, Atm(n)%gridstruct%grid_64, Atm(n)%gridstruct%agrid_64, num_diag_debug, Atm(n)%gridstruct%ntiles_g, Atm(n)%bd, Atm(n)%global_tile, npx, npy)
     endif
-
-
-    !Radiosondes
     if (do_diag_sonde) then
-
-       !Determine number of sonde columns
-       do m=1,MAX_DIAG_COLUMN
-          if (len(trim(diag_sonde_names(m))) == 0 .or. diag_sonde_lon_in(m) < -180. .or. diag_sonde_lat_in(m) < -90.) exit
-          !if (is_master()) print*, i, diag_sonde_names(m), len(trim(diag_sonde_names(m))), diag_sonde_lon_in(m), diag_sonde_lat_in(m)
-          num_diag_sonde = num_diag_sonde + 1
-          if (diag_sonde_lon_in(m) < 0.)  diag_sonde_lon_in(m) = diag_sonde_lon_in(m) + 360.
-       enddo
-
-       if (num_diag_sonde == 0) do_diag_sonde = .FALSE.
-
-    endif
-
-    if (do_diag_sonde) then
-
-       allocate(do_sonde_diag_column(isc:iec,jsc:jec))
-       allocate(diag_sonde_lon(num_diag_sonde))
-       allocate(diag_sonde_lat(num_diag_sonde))
-       allocate(diag_sonde_i(num_diag_sonde))
-       allocate(diag_sonde_j(num_diag_sonde))
        allocate(diag_sonde_units(num_diag_sonde))
-
-       call initialize_diagnostic_columns("Sounding", num_diag_pts_latlon=num_diag_sonde, num_diag_pts_ij=0,  &
-            global_i=(/1/), global_j=(/1/), &
-            global_lat_latlon=diag_sonde_lat_in, global_lon_latlon=diag_sonde_lon_in, &
-            lonb_in=Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,1), latb_in=Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2), &
-            do_column_diagnostics=do_sonde_diag_column, &
-            diag_lon=diag_sonde_lon, diag_lat=diag_sonde_lat, diag_i=diag_sonde_i, diag_j=diag_sonde_j, diag_units=diag_sonde_units)
-
-       do m=1,num_diag_sonde
-          diag_sonde_i(m) = diag_sonde_i(m) + isc - 1
-          diag_sonde_j(m) = diag_sonde_j(m) + jsc - 1
-
-          if (diag_sonde_i(m) >= isc .and. diag_sonde_i(m) <= iec .and. &
-              diag_sonde_j(m) >= jsc .and. diag_sonde_j(m) <= jec ) then
-             write(*,'(A, 1x, I04, 1x, A, 4F7.2, 2I5)') 'SONDE POINT: ', mpp_pe(), diag_sonde_names(m), diag_sonde_lon_in(m), diag_sonde_lat_in(m), &
-                  Atm(n)%gridstruct%agrid(diag_sonde_i(m), diag_sonde_j(m),1)*rad2deg, Atm(n)%gridstruct%agrid(diag_sonde_i(m), diag_sonde_j(m),2)*rad2deg, &
-                  diag_sonde_i(m), diag_sonde_j(m)
-          endif
-       enddo
-
+       call find_diagnostic_column("Sonde ", diag_sonde_names, diag_sonde_i, diag_sonde_j, diag_sonde_tile, diag_sonde_lat, diag_sonde_lon, diag_sonde_units, Atm(n)%gridstruct%grid_64, Atm(n)%gridstruct%agrid_64, num_diag_sonde, Atm(n)%gridstruct%ntiles_g, Atm(n)%bd, Atm(n)%global_tile, npx, npy)
     endif
 
     !Model initialization time (not necessarily the time this simulation is started,
@@ -2233,7 +2140,7 @@ contains
 
 
 
-       if( idiag%id_slp>0 .or. idiag%id_tm>0 .or. idiag%id_any_hght>0 .or. idiag%id_hght3d .or. idiag%id_c15>0 .or. idiag%id_ctz ) then
+       if( idiag%id_slp>0 .or. idiag%id_tm>0 .or. idiag%id_any_hght>0 .or. idiag%id_hght3d>0 .or. idiag%id_c15>0 .or. idiag%id_ctz>0 ) then
 
           allocate ( wz(isc:iec,jsc:jec,npz+1) )
           call get_height_field(isc, iec, jsc, jec, ngc, npz, Atm(n)%flagstruct%hydrostatic, Atm(n)%delz,  &
@@ -2578,7 +2485,7 @@ contains
           enddo
           used = send_data(idiag%id_tq, a2*ginv, Time)
        endif
-#ifdef HIWPP
+
        Cl  = get_tracer_index (MODEL_ATMOS, 'Cl')
        Cl2 = get_tracer_index (MODEL_ATMOS, 'Cl2')
        if (Cl > 0 .and. Cl2 > 0) then
@@ -2673,7 +2580,7 @@ contains
           deallocate(var2)
 
        endif
-#endif
+
        if ( idiag%id_iw>0 ) then
           a2 = 0.
           if (ice_wat > 0) then
@@ -2965,7 +2872,7 @@ contains
        if(idiag%id_va > 0) used=send_data(idiag%id_va, Atm(n)%va(isc:iec,jsc:jec,:), Time)
 
        if(idiag%id_uw > 0 .or. idiag%id_vw > 0 .or. idiag%id_hw > 0 .or. idiag%id_qvw > 0 .or. &
-            idiag%id_qlw > 0 .or. idiag%id_qiw > 0 .or. idiag%id_o3w > 0 ) then
+            idiag%id_qlw > 0 .or. idiag%id_qiw > 0 .or. idiag%id_o3w > 0 .or. idiag%id_mw > 0 ) then
           allocate( a3(isc:iec,jsc:jec,npz) )
 
           do k=1,npz
@@ -2975,6 +2882,10 @@ contains
           enddo
           enddo
           enddo
+
+          if (idiag%id_mw > 0) then
+             used = send_data(idiag%id_mw, wk, Time)
+          endif
 
           if (idiag%id_uw > 0) then
              do k=1,npz
@@ -3094,7 +3005,7 @@ contains
 
 
 #ifdef GFS_PHYS
-       if(idiag%id_delp > 0 .or. idiag%id_cape > 0 .or. idiag%id_cin > 0 .or. ((.not. Atm(n)%flagstruct%hydrostatic) .and. idiag%id_pfnh > 0)) then
+       if(idiag%id_delp > 0 .or. idiag%id_cape > 0 .or. idiag%id_cin > 0 .or. ((.not. Atm(n)%flagstruct%hydrostatic) .and. (idiag%id_pfnh > 0 .or. idiag%id_ppnh > 0))) then
           do k=1,npz
             do j=jsc,jec
             do i=isc,iec
@@ -3103,10 +3014,44 @@ contains
             enddo
           enddo
           if (idiag%id_delp > 0) used=send_data(idiag%id_delp, wk, Time)
+
        endif
 
-       if( ( (.not. Atm(n)%flagstruct%hydrostatic) .and. idiag%id_pfnh > 0) .or. idiag%id_cape > 0 .or. idiag%id_cin > 0) then
-           do k=1,npz
+       if( ( (.not. Atm(n)%flagstruct%hydrostatic) .and. (idiag%id_pfnh > 0 .or. idiag%id_ppnh > 0)) .or. idiag%id_cape > 0 .or. idiag%id_cin > 0) then
+
+!!$          if (idiag%id_ppnh > 0) then
+!!$             if (allocated(a3)) deallocate(a3)
+!!$             allocate(a3(isc:iec,jsc:jec,1:npz+1))
+!!$                do j=jsc,jec
+!!$                do i=isc,iec
+!!$                    a3(i,j,1) = ptop
+!!$                enddo
+!!$                enddo
+!!$              do k=2,npz+1
+!!$                do j=jsc,jec
+!!$                do i=isc,iec
+!!$                   a3(i,j,k) = a3(i,j,k-1) + wk(i,j,k) !interface pressure
+!!$                enddo
+!!$                enddo
+!!$              enddo
+!!$              do k=1,npz+1
+!!$                do j=jsc,jec
+!!$                do i=isc,iec
+!!$                   a3(i,j,k) = log(a3(i,j,k)) !log pressure
+!!$                enddo
+!!$                enddo
+!!$             enddo
+!!$             do k=1,npz
+!!$                do j=jsc,jec
+!!$                do i=isc,iec
+!!$                   a3(i,j,k) = wk(i,j,k)/(a3(i,j,k+1)-a3(i,j,k)) !hydro layer-mean pressure
+!!$                enddo
+!!$                enddo
+!!$             enddo
+!!$             
+!!$          endif
+
+          do k=1,npz
              do j=jsc,jec
              do i=isc,iec
                  wk(i,j,k) = -wk(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
@@ -3118,7 +3063,21 @@ contains
 !              call prt_maxmin(' PFNH (mb)', wk(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0, npz, 1.E-2)
 !           endif
            used=send_data(idiag%id_pfnh, wk, Time)
-       endif
+           if (idiag%id_ppnh > 0) then
+             do k=1,npz
+               do j=jsc,jec
+               do i=isc,iec
+                  !wk(i,j,k) = wk(i,j,k) - a3(i,j,k)
+                  wk(i,j,k) = wk(i,j,k) - 0.5 *(Atm(n)%pe(i,k,j)+Atm(n)%pe(i,k+1,j)) !STUPID: testing only!!
+               enddo
+               enddo
+             enddo
+             if (idiag%id_ppnh > 0) used=send_data(idiag%id_ppnh, wk, Time)
+           endif
+
+!           if (allocated(a3)) deallocate(a3)
+
+        endif
 #else
        if(idiag%id_delp > 0) used=send_data(idiag%id_delp, Atm(n)%delp(isc:iec,jsc:jec,:), Time)
 
@@ -3526,7 +3485,7 @@ contains
              a2(i,j) = 0.
              var2(i,j) = 0.
              do k=3,npz
-                if (Atm(n)%pe(i,k,j) <= 400.e2) continue
+                if (Atm(n)%pe(i,k,j) <= 100.e2) continue ! lmh 10apr2020: changed to current SPC standard
                 a2(i,j) = max(a2(i,j),Atm(n)%w(i,j,k))
                 var2(i,j) = min(var2(i,j),Atm(n)%w(i,j,k))
              enddo
@@ -6135,6 +6094,201 @@ end subroutine eqv_pot
   end function getqvi
 
 !-----------------------------------------------------------------------
+!use diag_debug_[ij] for everything
+
+  subroutine read_column_table
+!EXAMPLE COLUMN_TABLE file:
+!#Use space-delineated fields (no commas)
+!DEBUG index  ORD  2 30 5
+!DEBUG index  Princeton 2 37 5
+!DEBUG latlon ORD2 272. 42.
+!DEBUG index  Princeton 285.33 40.36
+!DEBUG latlon NP 0. 90.
+!DEBUG latlon SP 0. -90.
+!sonde latlon OUN          -97.47 35.22
+!sonde latlon Amarillo    -101.70 35.22
+!sonde latlon DelRio      -100.92 29.37
+!sonde latlon Jackson      -90.08 32.32
+!sonde latlon ILX          -89.34 40.15
+!sonde latlon AtlanticCity -74.56 39.45
+!sonde latlon DodgeCity    -99.97 37.77
+
+    integer :: iunit, io, nline
+    character(len=256)    :: record
+    character(len=10)     :: dum1, dum2
+
+    iunit = get_unit()    
+    open(iunit, file='column_table', action='READ', iostat=io)
+    if(io/=0) call mpp_error(FATAL, ' find_diagnostic_column: Error in opening column_table')
+
+    num_diag_debug=0
+    num_diag_sonde=0
+    nline=0
+    do while (num_diag_debug < MAX_DIAG_COLUMN .and. num_diag_sonde < MAX_DIAG_COLUMN .and. nline < MAX_DIAG_COLUMN*4)
+       nline = nline + 1
+       read(iunit,'(a)',end=100) record
+       if (record(1:1) == '#') cycle
+       if (record(1:10) == '          ') cycle
+       
+       !Debug record with index point (index point not supported for sonde output)
+       !if (is_master()) print*, index(lowercase(record), "debug"), index(lowercase(record), "index"), trim(record)
+       if (index(lowercase(record), "debug") .ne. 0 .and. index(lowercase(record), "index") .ne. 0) then
+          if (num_diag_debug >= MAX_DIAG_COLUMN) continue
+          num_diag_debug = num_diag_debug + 1
+          read(record,*,iostat=io) dum1, dum2, diag_debug_names(num_diag_debug), diag_debug_i(num_diag_debug), diag_debug_j(num_diag_debug), diag_debug_tile(num_diag_debug)
+          if (io/=0) then
+             print*, ' read_column_table: error on line ', nline
+             call mpp_error(FATAL,'error in column_table format')
+          endif
+       else !debug or sonde record with specified lat-lon
+          if (index(lowercase(record), "debug") .ne. 0 ) then
+          if (num_diag_debug >= MAX_DIAG_COLUMN) continue
+             num_diag_debug = num_diag_debug + 1
+             read(record,*,iostat=io) dum1, dum2, diag_debug_names(num_diag_debug), diag_debug_lon(num_diag_debug), diag_debug_lat(num_diag_debug)
+             if (io/=0) then
+                print*, ' read_column_table: error on line ', nline
+                call mpp_error(FATAL,'error in column_table format')
+             endif
+          else
+          if (num_diag_sonde >= MAX_DIAG_COLUMN) continue
+             num_diag_sonde = num_diag_sonde + 1
+             read(record,*,iostat=io) dum1, dum2, diag_sonde_names(num_diag_sonde), diag_sonde_lon(num_diag_sonde), diag_sonde_lat(num_diag_sonde)
+             if (io/=0) then
+                print*, ' read_column_table: error on line ', nline
+                call mpp_error(FATAL,'error in column_table format')
+             endif
+          endif
+          
+       endif
+       
+    enddo
+100 continue
+    
+  end subroutine read_column_table
+  
+ !Note that output lat-lon are in degrees but input is in radians
+  subroutine find_diagnostic_column(diag_class, diag_names, diag_i, diag_j, diag_tile, diag_lat, diag_lon, diag_units, grid, agrid, num_diag, ntiles, bd, tile, npx, npy)
+
+    implicit none
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: num_diag, tile, ntiles, npx, npy
+    character(*), intent(IN) :: diag_class
+    character(diag_name_len), intent(IN) :: diag_names(MAX_DIAG_COLUMN)
+    integer, dimension(MAX_DIAG_COLUMN), intent(INOUT) :: diag_i, diag_j, diag_tile
+    real, dimension(MAX_DIAG_COLUMN), intent(INOUT) :: diag_lat, diag_lon
+    integer, dimension(num_diag), intent(OUT) :: diag_units
+    real(kind=R_GRID), intent(IN) :: grid(bd%isd+1:bd%ied+1,bd%jsd+1:bd%jed+1,2)
+    real(kind=R_GRID), intent(IN) :: agrid(bd%isd:bd%ied,bd%jsd:bd%jed,2)
+    
+    integer :: i,j,m,io
+    character(80) :: filename
+    real(kind=R_GRID), dimension(2):: pp
+    real(kind=R_GRID), dimension(3):: vp_12, vp_23, vp_34, vp_14
+    real :: dmin, dist
+    integer :: isc, iec, jsc, jec
+    integer :: isd, ied, jsd, jed
+    logical :: point_found
+    
+    isd = bd%isd
+    ied = bd%ied
+    jsd = bd%jsd
+    jed = bd%jed
+    isc = bd%isc
+    iec = bd%iec
+    jsc = bd%jsc
+    jec = bd%jec
+
+    
+    do m=1,num_diag
+
+       point_found = .false.
+       
+       !Index specified
+       if (diag_i(m) >= -10 .and. diag_j(m) >= -10) then
+
+          if ((diag_tile(m) < 0 .or. diag_tile(m) > ntiles)) then
+             if (ntiles > 1) then
+                call mpp_error(FATAL, ' find_diagnostic_column: diag_tile must be specified for '//trim(diag_class)//' point '//trim(diag_names(m))//' since ntiles > 1')
+             else
+                diag_tile(m) = 1
+             endif
+          endif
+
+          i=diag_i(m)
+          j=diag_j(m)
+          
+          if (diag_tile(m) == tile .and. i >= isc .and. i <= iec .and. &
+               j >= jsc .and. j <= jec) then
+             diag_lon(m) = agrid(i,j,1)*rad2deg
+             diag_lat(m) = agrid(i,j,2)*rad2deg
+             point_found = .true.
+          else
+             diag_i(m) = -999
+             diag_j(m) = -999
+             diag_lon(m) = -999.
+             diag_lat(m) = -999.
+             diag_tile(m) = -1
+             point_found = .false.
+          endif
+
+       else ! lat-lon specified: find nearest grid cell center
+
+          !diag_lon and diag_lat are in degrees
+          ! great_circle_dist wants radians
+          pp = (/ diag_lon(m)/rad2deg, diag_lat(m)/rad2deg /)
+          !find nearest grid cell: if it is in the halo skip
+          dmin = 9.e20
+          diag_i(m) = -999
+          diag_j(m) = -999
+          do j=jsd,jed
+             do i=isd,ied
+                !no corners
+                if ( i < 1    .and. j < 1 ) cycle
+                if ( i >= npx .and. j < 1 ) cycle
+                if ( i < 1    .and. j >= npy ) cycle
+                if ( i >= npx .and. j >= npy ) cycle
+                dist =  great_circle_dist(pp, agrid(i,j,:))
+                if (dmin >= dist) then
+                   diag_i(m) = i
+                   diag_j(m) = j
+                   dmin = dist
+                endif
+             enddo
+          enddo
+          !print*, 'lat-lon point:', mpp_pe(), dmin, diag_i(m), diag_j(m), isc, iec, jsc, jec
+          
+          if ( diag_i(m) < isc .or. diag_i(m) > iec .or. diag_j(m) < jsc .or. diag_j(m) > jec ) then
+             diag_i(m) = -999
+             diag_j(m) = -999
+             diag_lon(m) = -999.
+             diag_lat(m) = -999.
+             diag_tile(m) = -1
+             point_found = .false.
+          else
+             diag_lon(m) = agrid(diag_i(m), diag_j(m), 1)*rad2deg
+             diag_lat(m) = agrid(diag_i(m), diag_j(m), 2)*rad2deg
+             diag_tile(m) = tile
+             point_found = .true.
+          endif
+          
+       endif
+
+       if (point_found) then
+          
+          !Initialize output file
+          diag_units(m) = get_unit()
+          write(filename, 202) trim(diag_names(m)), trim(diag_class)
+202       format(A, '.', A, '.out')
+          open(diag_units(m), file=trim(filename), action='WRITE', position='rewind', iostat=io)
+          if(io/=0) call mpp_error(FATAL, ' find_diagnostic_column: Error in opening file '//trim(filename))
+          !Print debug message
+          write(*,'(A, 1x, A, 1x, 1x, A, 2F8.3, 2I5, I3, I04)') trim(diag_class), 'point: ', diag_names(m), diag_lon(m), diag_lat(m), diag_i(m), diag_j(m), diag_tile(m), mpp_pe()
+
+       endif
+
+    enddo
+    
+  end subroutine find_diagnostic_column
 
   subroutine debug_column(pt, delp, delz, u, v, w, q, npz, ncnst, sphum, nwat, zvir, hydrostatic, bd, Time)
 
@@ -6150,8 +6304,9 @@ end subroutine eqv_pot
 
 
     type(time_type), intent(IN) :: Time
-    integer :: i,j,k,n,l
-    real cond, pres, rdg
+    integer :: i,j,k,n,l, unit
+    real cond, pres, rdg, preshyd(npz), pehyd(npz+1), presdry, preshyddry(npz), pehyddry(npz+1)
+    integer :: yr, mon, dd, hr, mn, days, seconds
 
     rdg = -rdgas/grav
 
@@ -6159,35 +6314,64 @@ end subroutine eqv_pot
 
        i=diag_debug_i(n)
        j=diag_debug_j(n)
+       unit=diag_debug_units(n)
 
+       !Sanity check
        if (i < bd%is .or. i > bd%ie) cycle
        if (j < bd%js .or. j > bd%je) cycle
 
-       if (do_debug_diag_column(i,j)) then
-          call column_diagnostics_header(diag_debug_names(n), diag_debug_units(n), Time, n, &
-               diag_debug_lon, diag_debug_lat, diag_debug_i, diag_debug_j)
-
-          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9, A8)') 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres'
-          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9, A8)')  '', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb'
-          if (hydrostatic) then
-             call mpp_error(NOTE, 'Hydrostatic debug sounding not yet supported')
-          else
-             !do k=2*npz/3,npz
-             do k=max(diag_debug_kbottom(n)-diag_debug_nlevels(n),1),min(diag_debug_kbottom(n),npz)
-                cond = 0.
-                do l=2,nwat
-                   cond = cond + q(i,j,k,l)
-                enddo
-                pres = rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))
-                write(diag_debug_units(n),'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F8.3 )') &
-                     k, pt(i,j,k), delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
-                     q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2
+!!$ EXAMPLE FORMAT
+!!$               PRINTING ORD               DIAGNOSTICS
+!!$
+!!$ time stamp:  2016  August   6   0   7  30
+!!$ DIAGNOSTIC POINT COORDINATES, point #   1
+!!$
+!!$ longitude =  271.354 latitude  =   42.063
+!!$ on processor #    162 :   processor i =     2 ,   processor j =    30
+       
+       write(unit, *) "DEBUG POINT ",  diag_debug_names(n)
+       write(unit, *)
+       call get_date(Time, yr, mon, dd, hr, mn, seconds)
+       write(unit, '(A, I6, A12, 4I4)') " Time: ", yr, month_name(mon), dd, hr, mn, seconds
+       write(unit, *)
+       write(unit, '(A, F8.3, A, F8.3)') ' longitude = ', diag_debug_lon(n), ' latitude = ', diag_debug_lat(n)
+       write(unit, '(A, I8, A, I6, A, I6, A, I3)') ' on processor # ', mpp_pe(), ' :  local i = ', i, ',   local j = ', j, ' tile = ', diag_debug_tile(n)
+       write(unit, *)
+       
+       write(unit,500) 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres', 'NHprime'!, 'pdry', 'NHpdry'
+       write(unit,500) ' ', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb',   'mb'!,    !  'mb',   'mb'
+500    format(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A9)
+       if (hydrostatic) then
+          call mpp_error(NOTE, 'Hydrostatic debug sounding not yet supported')
+       else
+          pehyd = ptop
+          pehyddry = ptop
+          do k=1,npz
+             pehyd(k+1) = pehyd(k) + delp(i,j,k)
+             preshyd(k) = (pehyd(k+1) - pehyd(k))/log(pehyd(k+1)/pehyd(k))
+             !pehyddry(k+1) = pehyddry(k) + delp(i,j,k)*(1.-sum(q(i,j,k,1:nwat)))
+             !preshyddry(k) = (pehyddry(k+1) - pehyddry(k))/log(pehyddry(k+1)/pehyddry(k))
+          enddo
+          
+          !do k=2*npz/3,npz
+          do k=max(diag_debug_kbottom-diag_debug_nlevels,1),min(diag_debug_kbottom,npz)
+             cond = 0.
+             do l=2,nwat
+                cond = cond + q(i,j,k,l)
              enddo
-          endif
-
-          !call mpp_flush(diag_units(n))
-
+             pres = rdg*delp(i,j,k)*(1.-cond)/delz(i,j,k)*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))
+             !presdry = rdg*delp(i,j,k)*(1.-cond-q(i,j,k,sphum))/delz(i,j,k)*pt(i,j,k)
+             write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, F9.3)') &
+                  k, pt(i,j,k), delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
+                  q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, (pres-preshyd(k))*1.e-2!, presdry*1.e-2, (presdry-preshyddry(k))*1.e-2
+          enddo
        endif
+       
+       write(unit, *) '==================================================================='
+       write(unit, *)
+       
+       call mpp_flush(unit)
+
 
     enddo
 
@@ -6211,8 +6395,10 @@ end subroutine eqv_pot
     ! esp. pt from theta_v to T
 
     type(time_type), intent(IN) :: Time
-    integer :: i,j,k,n,l
+    integer :: i,j,k,n,l, unit
     real cond, pres, rdg, Tv, temp, heats, virt, pk, cv_air
+    real preshyd(npz), pehyd(npz+1)
+    integer yr, mon, dd, hr, mn, seconds
 
     rdg = -rdgas/grav
     cv_air = cp_air - rdgas
@@ -6221,37 +6407,44 @@ end subroutine eqv_pot
 
        i=diag_debug_i(n)
        j=diag_debug_j(n)
-
+       unit=diag_debug_units(n)
+       
        if (i < bd%is .or. i > bd%ie) cycle
        if (j < bd%js .or. j > bd%je) cycle
 
-       if (do_debug_diag_column(i,j)) then
-          call column_diagnostics_header(diag_debug_names(n), diag_debug_units(n), Time, n, &
-               diag_debug_lon, diag_debug_lat, diag_debug_i, diag_debug_j)
-
-          write(diag_debug_units(n),*) 'k_split = ', k_step, ', n_split = ', n_step
-          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A8)') 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres', 'heat'
-          write(diag_debug_units(n),'(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A8)')  '', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb', 'K'
+       write(unit, *) "DEBUG POINT ",  diag_debug_names(n)
+       write(unit, *)
+       call get_date(Time, yr, mon, dd, hr, mn, seconds)
+       write(unit, '(A, I6, A12, 4I4)') " Time: ", yr, month_name(mon), dd, hr, mn, seconds
+       write(unit,*) 'k_split = ', k_step, ', n_split = ', n_step
+       write(unit, *)
+       write(unit, '(A, F8.3, A, F8.3)') ' longitude = ', diag_debug_lon(n), ' latitude = ', diag_debug_lat(n)
+       write(unit, '(A, I8, A, I6, A, I6)') ' on processor # ', mpp_pe(), ' :  local i = ', i, ',   local j = ', j
+       write(unit, *)
+       
+       write(unit,500) 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres', 'NHprime', 'heat'
+       write(unit,500)  ' ', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb', 'mb', 'K'
+500    format(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A9, A8)
           if (hydrostatic) then
              call mpp_error(NOTE, 'Hydrostatic debug sounding not yet supported')
           else
+             pehyd = ptop
+             do k=1,npz
+                pehyd(k+1) = pehyd(k) + delp(i,j,k)
+                preshyd(k) = (pehyd(k+1) - pehyd(k))/log(pehyd(k+1)/pehyd(k))
+             enddo
              !do k=2*npz/3,npz
-             do k=max(diag_debug_kbottom(n)-diag_debug_nlevels(n),1),min(diag_debug_kbottom(n),npz)
+             do k=max(diag_debug_kbottom-diag_debug_nlevels,1),min(diag_debug_kbottom,npz)
                 cond = 0.
                 do l=2,nwat
                    cond = cond + q(i,j,k,l)
                 enddo
                 virt = (1.+zvir*q(i,j,k,sphum))
-!!$#ifdef MOIST_CAPPA
-!!$                    pkz(i,j,k) = exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
-!!$#else
-!!$                    pkz(i,j,k) = exp( k1k*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
-!!$#endif
 #ifdef MOIST_CAPPA
-                pres = exp(1./(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+                pres = exp(1./(1.-cappa(i,j,k))*log(rdg*(delp(i,j,k)-cond)/delz(i,j,k)*pt(i,j,k)) )
                 pk = exp(cappa(i,j,k)*log(pres))
 #else
-                pres = exp(1./(1.-akap)*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+                pres = exp(1./(1.-akap)*log(rdg*(delp(i,j,k))/delz(i,j,k)*pt(i,j,k)) )
                 pk = exp(akap*log(pres))
 #endif
                 temp = pt(i,j,k)*pk/virt
@@ -6260,13 +6453,16 @@ end subroutine eqv_pot
                 else
                    heats = 0.0
                 endif
-                write(diag_debug_units(n),'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, G )') &
+                write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, F9.3, G )') &
                      k, temp, delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
-                     q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, heats
+                     q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, (pres-preshyd(k))*1.e-2, heats
              enddo
           endif
 
-       endif
+       write(unit, *) '==================================================================='
+       write(unit, *)
+       
+       call mpp_flush(unit)
 
     enddo
 
@@ -6298,10 +6494,9 @@ end subroutine eqv_pot
     real, PARAMETER :: ms_to_knot = 1.9438445
     real, PARAMETER :: p0 = 1000.e2
 
-    integer :: i, j, k, n
+    integer :: i, j, k, n, unit
     integer :: yr_v, mo_v, dy_v, hr_v, mn_v, sec_v ! need to get numbers for these
 
-    if (.not. any(do_sonde_diag_column)) return
     call get_date(Time, yr_v, mo_v, dy_v, hr_v, mn_v, sec_v)
     call eqv_pot(thetae, pt, delp, delz, peln, pkz, q(bd%isd,bd%jsd,1,sphum), &
          bd%is, bd%ie, bd%js, bd%je, ng, npz, hydrostatic, moist_phys)
@@ -6310,25 +6505,23 @@ end subroutine eqv_pot
 
        i=diag_sonde_i(n)
        j=diag_sonde_j(n)
+       unit=diag_sonde_units(n)
 
        if (i < bd%is .or. i > bd%ie) cycle
        if (j < bd%js .or. j > bd%je) cycle
 
-       if (do_sonde_diag_column(i,j)) then
-          !call column_diagnostics_header(diag_sonde_names(n), diag_sonde_units(n), Time, n, &
-          !     diag_sonde_lon, diag_sonde_lat, diag_sonde_i, diag_sonde_j)
 
-          write(diag_sonde_units(n),600)        &
+          write(unit,600)        &
                trim(diag_sonde_names(n)), yr_v, mo_v, dy_v, hr_v, yr_init, mo_init, dy_init, hr_init, trim(runname)
 600       format(A,'.v', I4, I2.2, I2.2, I2.2, '.i', I4, I2.2, I2.2, I2.2, '.', A, '.dat########################################################')
-          write(diag_sonde_units(n),601) trim(diag_sonde_names(n)), yr_v, mo_v, dy_v, hr_v, yr_init, mo_init, dy_init, hr_init, &
-               trim(runname), diag_sonde_lon(n), diag_sonde_lat(n)
-601       format(3x, A16, ' Valid ', I4, I2.2, I2.2, '.', I2.2, 'Z  Init ', I4, I2.2, I2.2, '.', I2.2, 'Z \n', A, 2F8.3)
-          write(diag_sonde_units(n),*)
-          write(diag_sonde_units(n),*)        '-------------------------------------------------------------------------------'
-          write(diag_sonde_units(n),'(11A7)') 'PRES', 'HGHT', "TEMP", "DWPT", "RELH", "MIXR", "DRCT", "SKNT", "THTA", "THTE", "THTV"
-          write(diag_sonde_units(n),'(11A7)') 'hPa', 'm', 'C', 'C', '%', 'g/kg', 'deg', 'knot', 'K', 'K', 'K'
-          write(diag_sonde_units(n),*)        '-------------------------------------------------------------------------------'
+          write(unit,601) trim(diag_sonde_names(n)), yr_v, mo_v, dy_v, hr_v, yr_init, mo_init, dy_init, hr_init
+601       format(3x, A16, ' Valid ', I4, I2.2, I2.2, '.', I2.2, 'Z  Init ', I4, I2.2, I2.2, '.', I2.2, 'Z')
+          write(unit,'(5x, A, 2F8.3)') trim(runname), diag_sonde_lon(n), diag_sonde_lat(n)
+          write(unit,*)
+          write(unit,*)        '-------------------------------------------------------------------------------'
+          write(unit,'(11A7)') 'PRES', 'HGHT', "TEMP", "DWPT", "RELH", "MIXR", "DRCT", "SKNT", "THTA", "THTE", "THTV"
+          write(unit,'(11A7)') 'hPa', 'm', 'C', 'C', '%', 'g/kg', 'deg', 'knot', 'K', 'K', 'K'
+          write(unit,*)        '-------------------------------------------------------------------------------'
 
           if (hydrostatic) then
              call mpp_error(NOTE, 'Hydrostatic diagnostic sounding not yet supported')
@@ -6362,19 +6555,16 @@ end subroutine eqv_pot
                 theta = pt(i,j,k)*rpk
                 thetav = Tv*rpk
 
-                write(diag_sonde_units(n),'(F7.1, I7, F7.1, F7.1, I7, F7.2, I7, F7.2, F7.1, F7.1, F7.1)') &
+                write(unit,'(F7.1, I7, F7.1, F7.1, I7, F7.2, I7, F7.2, F7.1, F7.1, F7.1)') &
                      pres*1.e-2, int(hght(k)), pt(i,j,k)-TFREEZE, dewpt, int(rh*100.), mixr*1.e3, int(wdir), wspd, theta, thetae(i,j,k), thetav
              enddo
           endif
 
-          !call mpp_flush(diag_units(n))
-
-       endif
+          call mpp_flush(unit)
 
     enddo
 
 
   end subroutine sounding_column
-
-
+  
 end module fv_diagnostics_mod

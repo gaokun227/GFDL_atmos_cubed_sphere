@@ -1640,8 +1640,6 @@
 
          q(:,:,:,:) = 0.
 
-#ifdef HIWPP
-
    cl = get_tracer_index(MODEL_ATMOS, 'cl')
    cl2 = get_tracer_index(MODEL_ATMOS, 'cl2')
    if (cl > 0 .and. cl2 > 0) then
@@ -1650,7 +1648,6 @@
       call mpp_update_domains(q,domain)
    endif
 
-#endif
 #endif
     ! Initialize surface Pressure
          ps(:,:) = 1.e5
@@ -6299,7 +6296,8 @@ end subroutine terminator_tracers
                      do k=1,npz
                         prf = ak(k) + ps(i,j)*bk(k)
                         if ( prf > 100.E2 ) then
-                             pt(i,j,k) = pt(i,j,k) + 0.01*(1. - (dist/r0)) * prf/ps(i,j)
+                             pt(i,j,k) = pt(i,j,k) + 2.0*(1. - (dist/r0)) * prf/ps(i,j)
+!                             pt(i,j,k) = pt(i,j,k) + 0.01*(1. - (dist/r0)) * prf/ps(i,j)
                         endif
                      enddo
                   enddo
@@ -6387,18 +6385,18 @@ end subroutine terminator_tracers
            enddo
 
 
-           do k=1,npz
-              do j=jsd,jed
-                 do i=isd,ied
-                         ptmp = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
-!                   pt(i,j,k) = t00
-                 enddo
-              enddo
-           enddo
+!!$           do k=1,npz
+!!$              do j=jsd,jed
+!!$                 do i=isd,ied
+!!$                         ptmp = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
+!!$!                   pt(i,j,k) = t00
+!!$                 enddo
+!!$              enddo
+!!$           enddo
 
           call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
-                     moist_phys, .false., nwat, domain, flagstruct%adiabatic)
+                     moist_phys, .false., nwat, domain, flagstruct%adiabatic, .true.)
 
 ! *** Add Initial perturbation ***
            r0 = 5.*max(dx_const, dy_const)
@@ -6416,7 +6414,7 @@ end subroutine terminator_tracers
                            (zm-zc)**2
                     dist = sqrt(dist)
                     if ( dist <= r0 ) then
-                         pt(i,j,k) = pt(i,j,k) + 5.*(1.-dist/r0)
+                       pt(i,j,k) = pt(i,j,k) + 5.*(1.-dist/r0)
                     endif
                  enddo
               enddo
@@ -6467,7 +6465,7 @@ end subroutine terminator_tracers
              do j=js,je
                 do i=is,ie
                    peln(i,k,j) = log(pe(i,k,j))
-                    ze0(i,j,k) = ze1(k)
+                    !ze0(i,j,k) = ze1(k) !not used?
                 enddo
              enddo
           enddo
@@ -6547,11 +6545,17 @@ end subroutine terminator_tracers
               do i=is,ie
                  pt(i,j,k)   = ts1(k)
                   q(i,j,k,1) = qs1(k)
-                 delz(i,j,k) = rdgas/grav*ts1(k)*(1.+zvir*qs1(k))*(peln(i,k,j)-peln(i,k+1,j))
+!                 delz(i,j,k) = rdgas/grav*ts1(k)*(1.+zvir*qs1(k))*(peln(i,k,j)-peln(i,k+1,j))
                 enddo
              enddo
           enddo
 
+          call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                     pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                     moist_phys, .false., nwat, domain, flagstruct%adiabatic, .true.)
+
+        
+          
         ze1(npz+1) = 0.
         do k=npz,1,-1
            ze1(k) = ze1(k+1) - delz(is,js,k)
@@ -7496,7 +7500,7 @@ end subroutine terminator_tracers
      write(*,*) 'Computing sounding for super-cell test'
  endif
 
- call qsmith_init
+ !call qsmith_init
 
  dz0 = 50.
  zs(ns) = 0.
@@ -7541,19 +7545,19 @@ end subroutine terminator_tracers
 !      if ( (is_master()) ) write(*,*) k, temp1, rh(k)
        if ( pk(k) > 0. ) then
             pp(k) = exp(log(pk(k))/kappa)
-#ifdef SUPER_K
+!#ifdef SUPER_K
             qs(k) = 380./pp(k)*exp(17.27*(temp1-273.)/(temp1-36.))
             qs(k) = min( qv0, rh(k)*qs(k) )
             if ( (is_master()) ) write(*,*) 0.01*pp(k), qs(k)
-#else
-
-#ifdef USE_MIXED_TABLE
-            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
-#else
-            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
-#endif
-
-#endif
+!#else
+!
+!#ifdef USE_MIXED_TABLE
+!            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+!#else
+!            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
+!#endif
+!
+!#endif
        else
             if ( (is_master()) ) write(*,*) n, k, pk(k)
             call mpp_error(FATAL, 'Super-Cell case: pk < 0')

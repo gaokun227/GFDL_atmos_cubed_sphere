@@ -54,7 +54,7 @@ module fv_arrays_mod
                          id_f15, id_f25, id_f35, id_f45, id_ctp,  &
            id_ppt, id_ts, id_tb, id_ctt, id_pmask, id_pmaskv2,    &
            id_delp, id_delz, id_ws, id_iw, id_lw,                 &
-           id_pfhy, id_pfnh,                                      &
+           id_pfhy, id_pfnh, id_ppnh,                             &
            id_qn, id_qn200, id_qn500, id_qn850, id_qp, id_mdt,    &
            id_qdt, id_aam, id_amdt,                               &
            id_acly, id_acl, id_acl2,                              &
@@ -113,7 +113,8 @@ module fv_arrays_mod
                 id_uu, id_uv, id_vv, id_ww,                    & ! momentum flux
                 id_iuu, id_iuv, id_iuw, id_ivv, id_ivw, id_iww   ! vertically integral of momentum flux
 
-     integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w
+     integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w, id_mw
+     integer :: id_u_dt_sg, id_v_dt_sg, id_t_dt_sg, id_qv_dt_sg
 
      logical :: initialized = .false.
      real  sphum, liq_wat, ice_wat       ! GFDL physics
