@@ -3264,7 +3264,7 @@ contains
               call check(status)
             endif
             if (status /= nf90_noerr) then
-              if (east_bc.and.is_master()) write(0,*)' WARNING: Tracer ',trim(var_name),' not in input file'
+              if (is_master()) write(0,*)' WARNING: Tracer ',trim(var_name),' not in input file'
               array_4d(:,:,:,tlev)=0.                                        !<-- Tracer not in input so set to zero in boundary.
 !
               blend_this_tracer(tlev)=.false.                                !<-- Tracer not in input so do not apply blending.
@@ -3627,6 +3627,13 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
              BC_side%q_BC(i,j,k,iq) = qn1(i,k)
            enddo
          enddo
+       else
+       ! Initialize cld_amt
+         do k=1,npz
+           do i=is,ie
+             BC_side%q_BC(i,j,k,iq) = 0.
+           enddo
+         enddo
        endif
       enddo
 
@@ -3725,6 +3732,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
             BC_side%q_BC(i,j,k,rainwat) = 0.
             BC_side%q_BC(i,j,k,snowwat) = 0.
             BC_side%q_BC(i,j,k,graupel) = 0.
+            BC_side%q_BC(i,j,k,cld_amt) = 0.
             if ( BC_side%pt_BC(i,j,k) > 273.16 ) then       ! > 0C all liq_wat
                BC_side%q_BC(i,j,k,liq_wat) = qn1(i,k)
                BC_side%q_BC(i,j,k,ice_wat) = 0.
@@ -5018,7 +5026,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
               bc_side_t0%vc_BC(i,j,k)=bc_side_t1%vc_BC(i,j,k)
             enddo
             enddo
-          enddo
+            enddo
 !
           do k=1,nlev
             do j=js_w,je_w
