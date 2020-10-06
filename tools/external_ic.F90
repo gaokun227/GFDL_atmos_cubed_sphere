@@ -1149,7 +1149,7 @@ contains
 
 
         ! this is necessary to remap temperature and w correctly
-        source = source_fv3gfs
+        source = source_fv3gfs_nemsio
 
 !***  For regional runs read in each of the BC variables from the NetCDF boundary file
 !***  and remap in the vertical from the input levels to the model integration levels.
