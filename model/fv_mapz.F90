@@ -52,7 +52,6 @@ module fv_mapz_mod
 
   real, parameter :: w_max = 90.
   real, parameter :: w_min = -60.
-  logical, parameter :: w_limiter = .True.
 
   real(kind=4) :: E_Flux = 0.
   private
@@ -70,9 +69,10 @@ contains
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
                       do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
-                      moist_phys)
+                      moist_phys, w_limiter)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
+  logical, intent(in):: w_limiter
   real,    intent(in):: mdt                   ! remap time step
   real,    intent(in):: pdt                   ! phys time step
   integer, intent(in):: npx, npy
