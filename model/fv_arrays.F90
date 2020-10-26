@@ -537,10 +537,6 @@ module fv_arrays_mod
   real(kind=R_GRID) :: deglon_start = -30., deglon_stop = 30., &  ! boundaries of latlon patch
                        deglat_start = -30., deglat_stop = 30.
 
-   logical :: regional = .false.       !< Default setting for the regional domain.
-
-   integer :: bc_update_interval = 3   !< Default setting for interval (hours) between external regional BC data files.
-
    !Convenience pointers
   integer, pointer :: grid_number
 
@@ -551,6 +547,13 @@ module fv_arrays_mod
   !real,    pointer :: alpha
 
   logical :: w_limiter = .true. ! Fix excessive w - momentum conserving --- sjl
+
+  ! options related to regional mode
+  logical :: regional = .false.       !< Default setting for the regional domain.
+  integer :: bc_update_interval = 3   !< Default setting for interval (hours) between external regional BC data files.
+  integer :: nrows_blend = 0          !< # of blending rows in the outer integration domain.
+  logical :: write_restart_with_bcs = .false.   !< Default setting for using DA-updated BC files
+  logical :: regional_bcs_from_gsi = .false.    !< Default setting for writing restart files with boundary rows.
 
   end type fv_flags_type
 
@@ -1763,3 +1766,4 @@ end subroutine deallocate_fv_nest_BC_type_3d
 
 
 end module fv_arrays_mod
+

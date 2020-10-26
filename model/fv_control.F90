@@ -291,8 +291,8 @@ module fv_control_mod
      real(kind=R_GRID), pointer :: deglat
 
      logical, pointer :: nested, twowaynest
-     logical, pointer :: regional
-     integer, pointer :: bc_update_interval
+     logical, pointer :: regional, write_restart_with_bcs, regional_bcs_from_gsi
+     integer, pointer :: bc_update_interval, nrows_blend
      integer, pointer :: parent_tile, refinement, nestbctype, nestupdate, nsponge, ioffset, joffset
      real, pointer :: s_weight, update_blend
 
@@ -462,6 +462,13 @@ module fv_control_mod
         endif
 
      endif
+
+
+      if (Atm(this_grid)%flagstruct%regional) then
+         if ( consv_te > 0.) then
+            call mpp_error(FATAL, 'The global energy fixer cannot be used on a regional grid. consv_te must be set to 0.')
+         end if
+      end if
 
      !Now only one call to mpp_define_nest_domains for ALL nests
      ! set up nest_level, tile_fine, tile_coarse
@@ -729,6 +736,9 @@ module fv_control_mod
        target_lon                    => Atm%flagstruct%target_lon
        regional                      => Atm%flagstruct%regional
        bc_update_interval            => Atm%flagstruct%bc_update_interval
+       nrows_blend                   => Atm%flagstruct%nrows_blend
+       write_restart_with_bcs        => Atm%flagstruct%write_restart_with_bcs
+       regional_bcs_from_gsi         => Atm%flagstruct%regional_bcs_from_gsi
        reset_eta                     => Atm%flagstruct%reset_eta
        p_fac                         => Atm%flagstruct%p_fac
        a_imp                         => Atm%flagstruct%a_imp
@@ -956,7 +966,7 @@ module fv_control_mod
             nestbctype, nestupdate, nsponge, s_weight, &
             check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
             do_uni_zfull, adj_mass_vmr, update_blend, regional,&
-            & bc_update_interval, restart_resolution, w_limiter
+            bc_update_interval, nrows_blend, write_restart_with_bcs, regional_bcs_from_gsi, restart_resolution, w_limiter
 
 #ifdef INTERNAL_FILE_NML
        ! Read FVCORE namelist
