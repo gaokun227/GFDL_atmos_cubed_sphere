@@ -62,6 +62,7 @@ module fv_restart_mod
   use fms_mod,             only: file_exist
   use fv_treat_da_inc_mod, only: read_da_inc
   use fv_coarse_graining_mod, only: fv_io_write_restart_coarse
+  use fv_regional_mod,     only: write_full_fields
 
   implicit none
   private
@@ -445,7 +446,7 @@ contains
 
 
     do n = ntileMe,1,-1
-       if (new_nest_topo(n)) then
+       if (new_nest_topo(n) > 0) then
           call twoway_topo_update(Atm(n), n==this_grid)
        endif
     end do
@@ -470,7 +471,7 @@ contains
        ntdiag = size(Atm(n)%qdiag,4)
 
 
-       if (.not. ideal_test_case(n)) then
+       if (ideal_test_case(n) == 0) then
 #ifdef SW_DYNAMICS
           Atm(n)%pt(:,:,:)=1.
 #else
@@ -1330,6 +1331,8 @@ contains
 !    endif
 
  if (Atm%neststruct%nested) call fv_io_write_BCs(Atm)
+
+ if (Atm%flagstruct%write_restart_with_bcs) call write_full_fields(Atm)
 
  module_is_initialized = .FALSE.
 
