@@ -549,6 +549,8 @@ module fv_arrays_mod
   !integer, pointer :: test_case
   !real,    pointer :: alpha
 
+  logical :: w_limiter = .true. ! Fix excessive w - momentum conserving --- sjl
+
   end type fv_flags_type
 
   type fv_nest_BC_type_3D
