@@ -101,7 +101,7 @@ contains
 
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed, ng
-      integer :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, o3mr
+      integer :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, o3mr, sgs_tke, cld_amt
 
       is  = Atm%bd%is
       ie  = Atm%bd%ie
@@ -194,6 +194,8 @@ contains
         snowwat   = get_tracer_index(MODEL_ATMOS, 'snowwat')
         graupel   = get_tracer_index(MODEL_ATMOS, 'graupel')
         o3mr      = get_tracer_index(MODEL_ATMOS, 'o3mr')
+        sgs_tke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+        cld_amt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
         if ( liq_wat > 0 ) &
         call prt_maxmin('liq_wat', Atm%q(:,:,:,liq_wat), is, ie, js, je, ng, Atm%npz, 1.)
         if ( ice_wat > 0 ) &
@@ -206,6 +208,10 @@ contains
         call prt_maxmin('graupel', Atm%q(:,:,:,graupel), is, ie, js, je, ng, Atm%npz, 1.)
         if ( o3mr > 0    ) &
         call prt_maxmin('O3MR',    Atm%q(:,:,:,o3mr),    is, ie, js, je, ng, Atm%npz, 1.)
+        if ( sgs_tke > 0    ) &
+        call prt_maxmin('sgs_tke', Atm%q(:,:,:,sgs_tke), is, ie, js, je, ng, Atm%npz, 1.)
+        if ( cld_amt > 0    ) &
+        call prt_maxmin('cld_amt', Atm%q(:,:,:,cld_amt), is, ie, js, je, ng, Atm%npz, 1.)
       endif
 
 !Now in fv_restart
@@ -1871,7 +1877,7 @@ contains
       logical:: found
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
-      integer :: sphum, o3mr, liq_wat, ice_wat, rainwat, snowwat, graupel
+      integer :: sphum, o3mr, liq_wat, ice_wat, rainwat, snowwat, graupel, sgs_tke, cld_amt
       real:: wt, qt, m_fac
       real(kind=8) :: scale_value, offset, ptmp
       real(kind=R_GRID), dimension(2):: p1, p2, p3
@@ -1910,19 +1916,22 @@ contains
       snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
       graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
       o3mr    = get_tracer_index(MODEL_ATMOS, 'o3mr')
+      sgs_tke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+      cld_amt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
 
-      if (is_master()) then
-         print *, 'sphum = ', sphum
-         print *, 'liq_wat = ', liq_wat
-         if ( Atm%flagstruct%nwat .eq. 6 ) then
-            print *, 'rainwat = ', rainwat
-            print *, 'iec_wat = ', ice_wat
-            print *, 'snowwat = ', snowwat
-            print *, 'graupel = ', graupel
-         endif
-         print *, ' o3mr = ', o3mr
-      endif
-
+      !if (is_master()) then
+      !   print *, 'sphum = ', sphum
+      !   print *, 'liq_wat = ', liq_wat
+      !   if ( Atm%flagstruct%nwat .eq. 6 ) then
+      !      print *, 'rainwat = ', rainwat
+      !      print *, 'iec_wat = ', ice_wat
+      !      print *, 'snowwat = ', snowwat
+      !      print *, 'graupel = ', graupel
+      !   endif
+      !   print *, ' o3mr = ', o3mr
+      !   print *, ' sgs_tke = ', sgs_tke
+      !   print *, ' cld_amt = ', cld_amt
+      !endif
 
 ! Set up model's ak and bk
       if (Atm%flagstruct%external_eta) then
@@ -2413,6 +2422,27 @@ contains
       enddo
 #endif
 
+      if (cld_amt > 0) then
+        do k=1,npz
+          do j=js,je
+          do i=is,ie
+             Atm%q(i,j,k,cld_amt) = 0.0    ! Moorthi
+          enddo
+          enddo
+        enddo
+      endif
+
+      if (sgs_tke > 0) then
+         do k=1,npz
+           do j=js,je
+           do i=is,ie
+              !pe1 = Atm%ak(k+1) + Atm%bk(k+1)*Atm%ps(i,j)
+              Atm%q(i,j,k,sgs_tke) = 0.02 ! 1.*exp(-(Atm%ps(i,j) - pe1)**2)
+           enddo
+           enddo
+         enddo
+      endif
+
       deallocate ( ak0, bk0 )
 !     deallocate ( psc )
       deallocate ( psc_r8 )
@@ -2739,7 +2769,6 @@ contains
 
  end subroutine remap_coef
 
-
  subroutine remap_scalar(Atm, km, npz, ncnst, ak0, bk0, psc, qa, zh, omga, t_in)
   type(fv_atmos_type), intent(inout) :: Atm
   integer, intent(in):: km, npz, ncnst
@@ -2763,7 +2792,7 @@ contains
   real(kind=R_GRID):: pst
 !!! High-precision
   integer i,j,k,l,m, k2,iq
-  integer  sphum, o3mr, liq_wat, ice_wat, rainwat, snowwat, graupel, cld_amt
+  integer  sphum, o3mr, liq_wat, ice_wat, rainwat, snowwat, graupel, cld_amt, sgs_tke
   integer :: is,  ie,  js,  je
 
   is  = Atm%bd%is
@@ -2779,6 +2808,7 @@ contains
   graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
   cld_amt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
   o3mr    = get_tracer_index(MODEL_ATMOS, 'o3mr')
+  sgs_tke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
 
   if (mpp_pe()==1) then
     print *, 'In remap_scalar:'
@@ -2792,6 +2822,9 @@ contains
       print *, 'snowwat = ', snowwat
       print *, 'graupel = ', graupel
     endif
+    print *, 'o3mr = ', o3mr
+    print *, 'sgs_tke = ', sgs_tke
+    print *, 'cld_amt = ', cld_amt
   endif
 
   if ( sphum/=1 ) then
@@ -2803,10 +2836,6 @@ contains
 #ifdef USE_GFS_ZS
    Atm%phis(is:ie,js:je) = zh(is:ie,js:je,km+1)*grav
 #endif
-
-  if (Atm%flagstruct%ecmwf_ic) then
-      if (cld_amt .gt. 0) Atm%q(i,j,k,cld_amt) = 0.
-  endif
 
 !$OMP parallel do default(none) &
 !$OMP             shared(sphum,liq_wat,rainwat,ice_wat,snowwat,graupel,source,&
