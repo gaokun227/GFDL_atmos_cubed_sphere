@@ -567,6 +567,20 @@ contains
     latlon = .false.
     cubed_sphere = .false.
 
+      sw_corner = .false.
+      se_corner = .false.
+      ne_corner = .false.
+      nw_corner = .false.
+
+      if (Atm%flagstruct%grid_type < 3 .and. .not. Atm%gridstruct%bounded_domain) then
+         if (       is==1 .and.  js==1 )      sw_corner = .true.
+         if ( (ie+1)==npx .and.  js==1 )      se_corner = .true.
+         if ( (ie+1)==npx .and. (je+1)==npy ) ne_corner = .true.
+         if (       is==1 .and. (je+1)==npy ) nw_corner = .true.
+      endif
+
+
+    
     if ( (Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) .and. abs(atm%flagstruct%stretch_fac-1.) > 1.E-5 ) then
        stretched_grid = .true.
        if (Atm%flagstruct%do_schmidt .and. Atm%flagstruct%do_cube_transform) then
@@ -599,8 +613,7 @@ contains
              call setup_aligned_nest(Atm)
 
           else
-             !if(trim(grid_file) == 'INPUT/grid_spec.nc') then
-             if(Atm%flagstruct%grid_type < 0 ) then
+             if( trim(grid_file) == 'INPUT/grid_spec.nc' .or. Atm%flagstruct%grid_type < 0 ) then
                 call read_grid(Atm, grid_file, ndims, nregions, ng)
              else
 
@@ -2450,8 +2463,13 @@ contains
          minarea = mpp_global_min(domain, area)
 
         if (is_master()) write(*,209) 'MAX    AREA (m*m):', maxarea,            '          MIN AREA (m*m):', minarea
-        if (is_master()) write(*,209) 'GLOBAL AREA (m*m):', globalarea, ' IDEAL GLOBAL AREA (m*m):', 4.0*pi*radius**2
+        if (bounded_domain) then
+           if (is_master()) write(*,210) 'REGIONAL AREA (m*m):', globalarea
+        else
+           if (is_master()) write(*,209) 'GLOBAL AREA (m*m):', globalarea, ' IDEAL GLOBAL AREA (m*m):', 4.0*pi*radius**2
+        endif
  209  format(A,e21.14,A,e21.14)
+ 210  format(A,e21.14)
 
         if (bounded_domain) then
            nh = ng-1 !cannot get rarea_c on boundary directly

@@ -244,7 +244,7 @@ module gfdl_mp_mod
     ! cloud condensate upper bounds: "safety valves" for ql & qi
     
     real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain)
-    real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources)
+    real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources) (not used)
     
     real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold (was 1.e-4)
     ! qi0_crt if negative, its magnitude is used as the mixing ration threshold; otherwise, used as density
@@ -2990,7 +2990,7 @@ subroutine implicit_fall (dt, ks, ke, ze, vt, dp, q, precip, m1)
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        q (k) = qm (k) / dp (k)
+        q (k) = qm (k) / dp (k) !dry dp used inside MP
     enddo
     
 end subroutine implicit_fall

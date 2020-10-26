@@ -48,7 +48,7 @@ module external_ic_mod
    use fv_grid_utils_mod, only: ptop_min, g_sum,mid_pt_sphere,get_unit_vect2,get_latlon_vector,inner_prod
    use fv_io_mod,         only: fv_io_read_tracers
    use fv_mapz_mod,       only: mappm
-   use fv_regional_mod,   only: dump_field, H_STAGGER, U_STAGGER, V_STAGGER
+   use fv_regional_mod,   only: dump_field, H_STAGGER, U_STAGGER, V_STAGGER, get_data_source
    use fv_mp_mod,         only: is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
    use fv_regional_mod,   only: start_regional_cold_start
    use fv_surf_map_mod,   only: surfdrv, FV3_zs_filter
@@ -76,7 +76,8 @@ module external_ic_mod
    real(kind=R_GRID), parameter :: cnst_0p20=0.20d0
    real :: deg2rad
    character (len = 80) :: source
-   character(len=27), parameter :: source_fv3gfs = 'FV3GFS GAUSSIAN NEMSIO FILE'
+   character(len=27), parameter :: source_fv3gfs_nemsio = 'FV3GFS GAUSSIAN NEMSIO FILE'
+   character(len=27), parameter :: source_fv3gfs_netcdf = 'FV3GFS GAUSSIAN NETCDF FILE'
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -434,7 +435,7 @@ contains
 
 
 ! read in gfs_data. If levp = 66, read only the lowest 65 level
-    if (levsp .eq. 66) then
+    if (levsp .eq. levp+2) then
       call mpp_error(NOTE,'==> External_ic::get_nggps_ic: Correcting BAD IC')
       call read_gfs_data_bad()
     else
@@ -665,7 +666,7 @@ contains
     snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
     graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
     ntclamt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
-    if (trim(source) == source_fv3gfs) then
+    if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) then
     do k=1,npz
       do j=js,je
         do i=is,ie
@@ -740,7 +741,7 @@ contains
     deallocate (bk)
     deallocate (ps)
     deallocate (q )
-    if (trim(source) == source_fv3gfs) deallocate (temp)
+    if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) deallocate (temp)
     deallocate (omga)
 
 
@@ -773,7 +774,7 @@ contains
         allocate ( v_w(is:ie+1, js:je, 1:levp) )
         allocate ( u_s(is:ie, js:je+1, 1:levp) )
         allocate ( v_s(is:ie, js:je+1, 1:levp) )
-        if (trim(source) == source_fv3gfs) allocate (temp(is:ie,js:je,1:levp))
+        if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) allocate (temp(is:ie,js:je,1:levp))
 
 
         ! surface pressure (Pa)
@@ -794,7 +795,7 @@ contains
         id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'ZH', zh, domain=Atm%domain)
 
         ! real temperature (K)
-        if (trim(source) == source_fv3gfs) id_res = register_restart_field (GFS_restart, fn_gfs_ics, 't', temp, mandatory=.false., &
+        if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) id_res = register_restart_field (GFS_restart, fn_gfs_ics, 't', temp, mandatory=.false., &
                                                                             domain=Atm%domain)
         ! prognostic tracers
         do nt = 1, ntracers
@@ -900,11 +901,11 @@ contains
         zh  (is:ie,js:je,1:levp+1)      =   zh_tmp(is:ie,js:je,2:levsp)
         omga(is:ie,js:je,1:levp)        = omga_tmp(is:ie,js:je,2:levsp-1)
 
-        u_w(is:ie+1, js:je, 1:levp)    =  u_w_tmp(is:ie+1, js:je, 2:levsp-1)
-        v_w(is:ie+1, js:je, 1:levp)    =  v_w_tmp(is:ie+1, js:je, 2:levsp-1)
-        u_s(is:ie, js:je+1, 1:levp)    =  u_s_tmp(is:ie, js:je+1, 2:levsp-1)
-        v_s(is:ie, js:je+1, 1:levp)    =  v_s_tmp(is:ie, js:je+1, 2:levsp-1)
-        temp(is:ie,js:je,1:levp)        = temp_tmp(is:ie,js:je,1:levsp-1)
+        u_w(is:ie+1, js:je, 1:levp)    =  u_w_tmp(is:ie+1, js:je  , 2:levsp-1)
+        v_w(is:ie+1, js:je, 1:levp)    =  v_w_tmp(is:ie+1, js:je  , 2:levsp-1)
+        u_s(is:ie, js:je+1, 1:levp)    =  u_s_tmp(is:ie  , js:je+1, 2:levsp-1)
+        v_s(is:ie, js:je+1, 1:levp)    =  v_s_tmp(is:ie  , js:je+1, 2:levsp-1)
+        temp(is:ie,js:je,1:levp)        = temp_tmp(is:ie ,js:je   , 2:levsp-1)
 
         deallocate(u_w_tmp, v_w_tmp, u_s_tmp, v_s_tmp, omga_tmp, zh_tmp, temp_tmp, q_tmp)
 
@@ -1067,15 +1068,6 @@ contains
       allocate ( v_s(is:ie, js:je+1, 1:levp) )
 
 
-        !!! If a nested grid, save the filled coarse-grid topography for blending
-        if (Atm%neststruct%nested) then
-          allocate(phis_coarse(isd:ied,jsd:jed))
-          do j=jsd,jed
-            do i=isd,ied
-              phis_coarse(i,j) = Atm%phis(i,j)
-            enddo
-          enddo
-        endif
 
 !--- read in surface temperature (k) and land-frac
         ! surface skin temperature
@@ -1094,9 +1086,6 @@ contains
           ! land-frac
           id_res = register_restart_field (ORO_restart, fn_oro_ics, 'land_frac', oro_g, domain=Atm%domain)
           call mpp_update_domains(oro_g, Atm%domain)
-          if (Atm%neststruct%nested) then
-             call extrapolation_BC(oro_g, 0, 0, Atm%npx, Atm%npy, Atm%bd, .true.)
-          endif
         endif
 
         if ( Atm%flagstruct%fv_land ) then
@@ -1164,6 +1153,10 @@ contains
         if(is_master())  write(*,*) 'HRRR ak(1)=', ak(1), ' ak(2)=', ak(2)
         ak(1) = max(1.e-9, ak(1))
 
+
+        ! this is necessary to remap temperature and w correctly
+        source = source_fv3gfs_nemsio
+
 !***  For regional runs read in each of the BC variables from the NetCDF boundary file
 !***  and remap in the vertical from the input levels to the model integration levels.
 !***  Here in the initialization we begn by allocating the regional domain's boundary
@@ -1180,7 +1173,7 @@ contains
 !
 !***  Remap the variables in the compute domain.
 !
-        call remap_scalar_nh(Atm, levp, npz, ntracers, ak, bk, ps, q, zh, w, t)
+        call remap_scalar(Atm, levp, npz, ntracers, ak, bk, ps, q, zh, w, t)
 
         allocate ( ud(is:ie,  js:je+1, 1:levp) )
         allocate ( vd(is:ie+1,js:je,   1:levp) )
@@ -1208,18 +1201,6 @@ contains
 
         deallocate ( ud )
         deallocate ( vd )
-
-        if (Atm%neststruct%nested) then
-           if (is_master()) write(*,*) 'Blending nested and coarse grid topography'
-           npx = Atm%npx
-           npy = Atm%npy
-           do j=jsd,jed
-              do i=isd,ied
-                 wt = max(0.,min(1.,real(5 - min(i,j,npx-i,npy-j,5))/5. ))
-                 Atm%phis(i,j) = (1.-wt)*Atm%phis(i,j) + wt*phis_coarse(i,j)
-              enddo
-           enddo
-        endif
 
 
         !!! Perform terrain smoothing, if desired
@@ -1261,17 +1242,6 @@ contains
 
         endif
 
-        if ( Atm%neststruct%nested .and. ( Atm%flagstruct%n_zs_filter > 0 .or. Atm%flagstruct%full_zs_filter ) ) then
-          npx = Atm%npx
-          npy = Atm%npy
-          do j=jsd,jed
-            do i=isd,ied
-              wt = max(0.,min(1.,real(5 - min(i,j,npx-i,npy-j,5))/5. ))
-              Atm%phis(i,j) = (1.-wt)*Atm%phis(i,j) + wt*phis_coarse(i,j)
-            enddo
-          enddo
-          deallocate(phis_coarse)
-        endif
 
         call mpp_update_domains( Atm%phis, Atm%domain, complete=.true. )
 
@@ -3310,7 +3280,7 @@ contains
 !----------------------------------------------------
 ! Compute true temperature using hydrostatic balance
 !----------------------------------------------------
-      if (trim(source) /= source_fv3gfs .or. .not. present(t_in)) then
+      if ((trim(source) /= source_fv3gfs_nemsio .and. trim(source) /= source_fv3gfs_netcdf) .or. .not. present(t_in)) then
          do k=1,npz
 !        qc = 1.-(Atm%q(i,j,k,liq_wat)+Atm%q(i,j,k,rainwat)+Atm%q(i,j,k,ice_wat)+Atm%q(i,j,k,snowwat))
 !        Atm%pt(i,j,k) = (gz_fv(k)-gz_fv(k+1))*qc/( rdgas*(pn1(i,k+1)-pn1(i,k))*(1.+zvir*Atm%q(i,j,k,sphum)) )
@@ -3342,7 +3312,7 @@ contains
 ! seperate cloud water and cloud ice from Jan-Huey Chen's HiRAM code
 ! only use for NCEP IC and GFDL microphy
 !-----------------------------------------------------------------------
-   if (trim(source) /= source_fv3gfs) then
+   if (trim(source) /= source_fv3gfs_nemsio .and. trim(source) /= source_fv3gfs_netcdf) then
       if ((Atm%flagstruct%nwat .eq. 3 .or. Atm%flagstruct%nwat .eq. 6) .and. &
            (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%nggps_ic)) then
          do k=1,npz
@@ -3360,15 +3330,6 @@ contains
                   Atm%q(i,j,k,ice_wat) = qn1(i,k)
                else                                     ! between -15~0C: linear interpolation
                   Atm%q(i,j,k,liq_wat) = qn1(i,k)*((Atm%pt(i,j,k)-258.16)/15.)
-
-
-
-
-
-
-
-
-
                   Atm%q(i,j,k,ice_wat) = qn1(i,k) - Atm%q(i,j,k,liq_wat)
                endif
 #else
@@ -3414,7 +3375,7 @@ contains
          enddo
       enddo
       call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, -1, 4, Atm%ptop)
-    if (trim(source) == source_fv3gfs) then
+    if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) then
       do k=1,npz
          do i=is,ie
             atm%w(i,j,k) = qn1(i,k)
@@ -4495,27 +4456,6 @@ subroutine pmaxmn(qname, q, is, ie, js, je, km, fac, area, domain)
     enddo
 
   end subroutine get_staggered_grid
-
-  subroutine get_data_source(source,regional)
-!
-! This routine extracts the data source information if it is present in the datafile.
-!
-      character (len = 80) :: source
-      integer              :: ncids,sourceLength
-      logical :: lstatus,regional
-!
-! Use the fms call here so we can actually get the return code value.
-!
-      if (regional) then
-       lstatus = get_global_att_value('INPUT/gfs_data.nc',"source", source)
-      else
-       lstatus = get_global_att_value('INPUT/gfs_data.tile1.nc',"source", source)
-      endif
-      if (.not. lstatus) then
-         if (mpp_pe() == 0) write(0,*) 'INPUT source not found ',lstatus,' set source=No Source Attribute'
-         source='No Source Attribute'
-      endif
-  end subroutine get_data_source
 
 
  end module external_ic_mod
