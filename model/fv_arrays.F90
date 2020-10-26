@@ -545,6 +545,7 @@ module fv_arrays_mod
   !integer, pointer :: test_case
   !real,    pointer :: alpha
 
+  logical :: w_limiter = .true. ! Fix excessive w - momentum conserving --- sjl
   ! options related to regional mode
   logical :: regional = .false.       !< Default setting for the regional domain.
   integer :: bc_update_interval = 3   !< Default setting for interval (hours) between external regional BC data files.
