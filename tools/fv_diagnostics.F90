@@ -34,7 +34,7 @@ module fv_diagnostics_mod
                                register_static_field, send_data, diag_grid_init
  use fv_arrays_mod,      only: fv_atmos_type, fv_grid_type, fv_diag_type, fv_grid_bounds_type, &
                                R_GRID
- use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp
+ use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp, mappm
  use fv_mp_mod,          only: mp_reduce_sum, mp_reduce_min, mp_reduce_max, is_master
  use fv_eta_mod,         only: get_eta_level, gw_1d
  use fv_grid_utils_mod,  only: g_sum, v_prod, latlon2xyz, great_circle_dist, vect_cross
@@ -106,8 +106,10 @@ module fv_diagnostics_mod
 #else
  integer :: nplev = 31
 #endif
- integer :: levs(MAX_PLEVS)
+ integer :: levs(MAX_PLEVS) 
  integer :: k100, k200, k300, k500
+ integer :: nplev_ave
+ integer :: levs_ave(MAX_PLEVS) !for layer averages
 
  integer, parameter :: MAX_DIAG_COLUMN = 100
  integer, parameter :: diag_name_len = 16
@@ -144,7 +146,7 @@ module fv_diagnostics_mod
       !diag_debug_i, diag_debug_j, diag_debug_tile, &
       !diag_sonde_lon, diag_sonde_lat, diag_sonde_names
 
- namelist /fv_diag_plevs_nml/ nplev, levs, k100, k200, k500
+ namelist /fv_diag_plevs_nml/ nplev, levs, levs_ave, k100, k200, k500
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -171,19 +173,20 @@ contains
     !These id_* are not needed later since they are for static data which is not used elsewhere
     integer :: id_bk, id_pk, id_area, id_lon, id_lat, id_lont, id_latt, id_phalf, id_pfull
     integer :: id_hyam, id_hybm
-    integer :: id_plev
+    integer :: id_plev, id_plev_ave_edges, id_plev_ave
     integer :: i, j, k, m, n, ntileMe, id_xt, id_yt, id_x, id_y, id_xe, id_ye, id_xn, id_yn
     integer :: isc, iec, jsc, jec
 
     logical :: used
 
-    character(len=64) :: plev
+    character(len=64) :: plev, plev2, plevf
     character(len=64) :: field
     integer              :: ntprog
     integer              :: unit
 
     integer :: ncnst
     integer :: axe2(3)
+    integer :: axe_ave(3)
 
     character(len=64) :: errmsg
     logical :: exists
@@ -345,7 +348,8 @@ contains
 
 ! Selected pressure levels
 ! SJL note: 31 is enough here; if you need more levels you should do it OFF line
-! do not add more to prevent the model from slowing down too much.
+    ! do not add more to prevent the model from slowing down too much.
+    levs = 0
 #ifdef FEWER_PLEVS
     levs(1:nplev) = (/50,70,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
     k100 = 2
@@ -359,6 +363,8 @@ contains
     k300 = 15
     k500 = 19
 #endif
+    levs_ave = 0
+    levs_ave(1:4) = (/50,400,850,1000/)
 #ifdef INTERNAL_FILE_NML
     read(input_nml_file, nml=fv_diag_plevs_nml,iostat=ios)
 #else
@@ -398,14 +404,35 @@ contains
        call mpp_error(NOTE, "fv_diag_plevs_nml: k500 set incorrectly, finding closest entry in plevs")
        k500 = minloc(abs(levs(1:nplev)-500),1)
     endif
-    !
-
+    
+    nplev_ave = 0
+    if (levs_ave(1) > 0 ) then
+       do i=1,MAX_PLEVS-1
+          if (levs_ave(i+1) <= 0) then
+             exit
+          endif
+          if (levs_ave(i) >= levs_ave(i+1)) then
+             call mpp_error(FATAL, "fv_diag_plevs_nml: levs_ave is not monotonically increasing.")
+          end if
+          nplev_ave = nplev_ave + 1
+       enddo
+    end if
+       
     id_plev = diag_axis_init('plev', levs(1:nplev)*1.0, 'mb', 'z', &
             'actual pressure level', direction=-1, set_name="dynamics")
 
     axe2(1) = id_xt
     axe2(2) = id_yt
     axe2(3) = id_plev
+
+    id_plev_ave_edges = diag_axis_init('plev_ave_edges', levs_ave(1:nplev_ave+1)*1.0, 'mb', 'z', &
+            'averaging layer pressure interface', direction=-1, set_name="dynamics")
+    id_plev_ave = diag_axis_init('plev_ave', (levs_ave(1:nplev_ave)+levs_ave(2:nplev_ave+1))*0.5, 'mb', 'z', &
+            'averaging layer pressure level', direction=-1, set_name="dynamics", edges=id_plev_ave_edges)
+
+    axe_ave(1) = id_xt
+    axe_ave(2) = id_yt
+    axe_ave(3) = id_plev_ave
 
 !---- register time independent fields -------
 
@@ -561,6 +588,19 @@ contains
     id_q(:)   = 0
     id_omg(:) = 0
 
+    allocate(id_t_ave(nplev_ave))
+    allocate(id_q_ave(nplev_ave))
+    allocate(id_qv_dt_gfdlmp_ave(nplev_ave))
+    allocate(id_t_dt_gfdlmp_ave(nplev_ave))
+    allocate(id_qv_dt_phys_ave(nplev_ave))
+    allocate(id_t_dt_phys_ave(nplev_ave))
+    id_t_ave = 0
+    id_q_ave = 0
+    id_qv_dt_gfdlmp_ave = 0
+    id_t_dt_gfdlmp_ave = 0
+    id_qv_dt_phys_ave = 0
+    id_t_dt_phys_ave = 0
+    
 !    do n = 1, ntileMe
     n = 1
        field= 'dynamics'
@@ -722,22 +762,53 @@ contains
                                     trim(adjustl(plev))//'-mb omega', 'Pa/s', missing_value=missing_value)
       enddo
 
-       if (Atm(n)%flagstruct%write_3d_diags) then
-          id_u_plev = register_diag_field ( trim(field), 'u_plev', axe2(1:3), Time,        &
-               'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
-          id_v_plev = register_diag_field ( trim(field), 'v_plev', axe2(1:3), Time,        &
-               'meridional wind', 'm/sec', missing_value=missing_value, range=vrange )
-          id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
-               'temperature', 'K', missing_value=missing_value, range=trange )
-          id_h_plev = register_diag_field ( trim(field), 'h_plev', axe2(1:3), Time,        &
-               'height', 'm', missing_value=missing_value )
-          id_q_plev = register_diag_field ( trim(field), 'q_plev', axe2(1:3), Time,        &
-               'specific humidity', 'kg/kg', missing_value=missing_value )
-          id_omg_plev = register_diag_field ( trim(field), 'omg_plev', axe2(1:3), Time,        &
-               'omega', 'Pa/s', missing_value=missing_value )
-       endif
+      id_u_plev = register_diag_field ( trim(field), 'u_plev', axe2(1:3), Time,        &
+           'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
+      id_v_plev = register_diag_field ( trim(field), 'v_plev', axe2(1:3), Time,        &
+           'meridional wind', 'm/sec', missing_value=missing_value, range=vrange )
+      id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
+           'temperature', 'K', missing_value=missing_value, range=trange )
+      id_h_plev = register_diag_field ( trim(field), 'h_plev', axe2(1:3), Time,        &
+           'height', 'm', missing_value=missing_value )
+      id_q_plev = register_diag_field ( trim(field), 'q_plev', axe2(1:3), Time,        &
+           'specific humidity', 'kg/kg', missing_value=missing_value )
+      id_omg_plev = register_diag_field ( trim(field), 'omg_plev', axe2(1:3), Time,        &
+           'omega', 'Pa/s', missing_value=missing_value )
 
+      
+      !Layer averages for temperature, moisture, etc.
+      do i=1,nplev_ave
+         write(plev, '(I5)') levs_ave(i)
+         write(plev2,'(I5)') levs_ave(i+1)
+         plevf=trim(adjustl(plev))//'-'//trim(adjustl(plev2))
+        id_t_ave(i)   = register_diag_field(trim(field), 't'//trim(plevf), axes(1:2), Time, &
+                                    trim(adjustl(plevf))//'-mb averaged temperature', 'K', missing_value=missing_value)
+        id_q_ave(i)   = register_diag_field(trim(field), 'q'//trim(plevf), axes(1:2), Time, &
+                                    trim(adjustl(plevf))//'-mb averaged specific humidity', 'kg/kg', missing_value=missing_value)
+        id_qv_dt_gfdlmp_ave(i) = register_diag_field ( trim(field), 'qv_dt_gfdlmp'//trim(plevf), axes(1:2), Time,           &
+               trim(adjustl(plevf))//'-mb averaged water vapor specific humidity tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+        id_t_dt_gfdlmp_ave(i) = register_diag_field ( trim(field), 't_dt_gfdlmp'//trim(plevf), axes(1:2), Time,           &
+               trim(adjustl(plevf))//'-mb averaged temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
+        id_qv_dt_phys_ave(i) = register_diag_field ( trim(field), 'qv_dt_phys'//trim(plevf), axes(1:2), Time,           &
+               trim(adjustl(plevf))//'-mb averaged water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
+        id_t_dt_phys_ave(i) = register_diag_field ( trim(field), 't_dt_phys'//trim(plevf), axes(1:2), Time,           &
+               trim(adjustl(plevf))//'-mb averaged temperature tendency from physics', 'K/s', missing_value=missing_value )
+      enddo
+        id_t_plev_ave   = register_diag_field(trim(field), 't_plev_ave', axe_ave(1:3), Time, &
+                                    'layer-averaged temperature', 'K', missing_value=missing_value)
+        id_q_plev_ave   = register_diag_field(trim(field), 'q_plev_ave', axe_ave(1:3), Time, &
+                                    'layer-averaged specific humidity', 'kg/kg', missing_value=missing_value)
+        id_qv_dt_gfdlmp_plev_ave = register_diag_field ( trim(field), 'qv_dt_gfdlmp_plev_ave', axe_ave(1:3), Time,           &
+               'layer-averaged water vapor specific humidity tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+        id_t_dt_gfdlmp_plev_ave = register_diag_field ( trim(field), 't_dt_gfdlmp_plev_ave', axe_ave(1:3), Time,           &
+               'layer-averaged temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
+        id_qv_dt_phys_plev_ave = register_diag_field ( trim(field), 'qv_dt_phys_plev_ave', axe_ave(1:3), Time,           &
+               'layer-averaged water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
+        id_t_dt_phys_plev_ave = register_diag_field ( trim(field), 't_dt_phys_plev_ave', axe_ave(1:3), Time,           &
+               'layer-averaged temperature tendency from physics', 'K/s', missing_value=missing_value )
 
+      
+      
       ! flag for calculation of geopotential
 !!$      if ( all(id_h(minloc(abs(levs-10)))>0)  .or. all(id_h(minloc(abs(levs-50)))>0)  .or. &
 !!$           all(id_h(minloc(abs(levs-100)))>0) .or. all(id_h(minloc(abs(levs-200)))>0) .or. &
@@ -3432,6 +3503,25 @@ contains
        if( allocated(a3) ) deallocate (a3)
 ! *** End cs_intp
 
+       if ( id_t_plev_ave > 0  ) then
+          !Need a 2D array of full pressure interfaces
+          allocate(a3(isc:iec,jsc:jec,nplev_ave))
+          if (allocated(a2)) deallocate(a2)
+          allocate(a2(isc:iec,nplev_ave+1))
+          do k=1,nplev_ave+1
+             a2(:,k) = log(real(levs_ave(k))*100.)
+          enddo
+          do j=jsc,jec
+             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%pt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
+          enddo
+          used=send_data(id_t_plev_ave, a3, Time)
+          deallocate(a2)
+          deallocate(a3)
+       endif
+       
+       
+       if (allocated(a2)) deallocate(a2)
+       allocate ( a2(isc:iec,jsc:jec) )
        if ( id_sl12>0 ) then   ! 13th level wind speed (~ 222 mb for the 32L setup)
             do j=jsc,jec
                do i=isc,iec
@@ -6568,7 +6658,5 @@ end subroutine eqv_pot
 
 
   end subroutine sounding_column
-
-
   
 end module fv_diagnostics_mod
