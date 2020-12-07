@@ -777,35 +777,22 @@ contains
 
       
       !Layer averages for temperature, moisture, etc.
-      do i=1,nplev_ave
-         write(plev, '(I5)') levs_ave(i)
-         write(plev2,'(I5)') levs_ave(i+1)
-         plevf=trim(adjustl(plev))//'-'//trim(adjustl(plev2))
-        id_t_ave(i)   = register_diag_field(trim(field), 't'//trim(plevf), axes(1:2), Time, &
-                                    trim(adjustl(plevf))//'-mb averaged temperature', 'K', missing_value=missing_value)
-        id_q_ave(i)   = register_diag_field(trim(field), 'q'//trim(plevf), axes(1:2), Time, &
-                                    trim(adjustl(plevf))//'-mb averaged specific humidity', 'kg/kg', missing_value=missing_value)
-        id_qv_dt_gfdlmp_ave(i) = register_diag_field ( trim(field), 'qv_dt_gfdlmp'//trim(plevf), axes(1:2), Time,           &
-               trim(adjustl(plevf))//'-mb averaged water vapor specific humidity tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
-        id_t_dt_gfdlmp_ave(i) = register_diag_field ( trim(field), 't_dt_gfdlmp'//trim(plevf), axes(1:2), Time,           &
-               trim(adjustl(plevf))//'-mb averaged temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
-        id_qv_dt_phys_ave(i) = register_diag_field ( trim(field), 'qv_dt_phys'//trim(plevf), axes(1:2), Time,           &
-               trim(adjustl(plevf))//'-mb averaged water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
-        id_t_dt_phys_ave(i) = register_diag_field ( trim(field), 't_dt_phys'//trim(plevf), axes(1:2), Time,           &
-               trim(adjustl(plevf))//'-mb averaged temperature tendency from physics', 'K/s', missing_value=missing_value )
-      enddo
         id_t_plev_ave   = register_diag_field(trim(field), 't_plev_ave', axe_ave(1:3), Time, &
                                     'layer-averaged temperature', 'K', missing_value=missing_value)
         id_q_plev_ave   = register_diag_field(trim(field), 'q_plev_ave', axe_ave(1:3), Time, &
                                     'layer-averaged specific humidity', 'kg/kg', missing_value=missing_value)
         id_qv_dt_gfdlmp_plev_ave = register_diag_field ( trim(field), 'qv_dt_gfdlmp_plev_ave', axe_ave(1:3), Time,           &
                'layer-averaged water vapor specific humidity tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
+        if (id_qv_dt_gfdlmp_plev_ave > 0 .and. .not. allocated(Atm(n)%inline_mp%qv_dt) ) allocate(Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,npz))
         id_t_dt_gfdlmp_plev_ave = register_diag_field ( trim(field), 't_dt_gfdlmp_plev_ave', axe_ave(1:3), Time,           &
                'layer-averaged temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
+        if (id_t_dt_gfdlmp_plev_ave > 0 .and. .not. allocated(Atm(n)%inline_mp%t_dt) ) allocate(Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,npz))
         id_qv_dt_phys_plev_ave = register_diag_field ( trim(field), 'qv_dt_phys_plev_ave', axe_ave(1:3), Time,           &
                'layer-averaged water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
+        if (id_qv_dt_phys_plev_ave > 0 .and. .not. allocated(Atm(n)%phys_diag%phys_qv_dt) ) allocate(Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,npz))
         id_t_dt_phys_plev_ave = register_diag_field ( trim(field), 't_dt_phys_plev_ave', axe_ave(1:3), Time,           &
                'layer-averaged temperature tendency from physics', 'K/s', missing_value=missing_value )
+        if (id_t_dt_phys_plev_ave > 0 .and. .not. allocated(Atm(n)%phys_diag%phys_t_dt) ) allocate(Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,npz))
 
       
       
@@ -3503,22 +3490,62 @@ contains
        if( allocated(a3) ) deallocate (a3)
 ! *** End cs_intp
 
-       if ( id_t_plev_ave > 0  ) then
-          !Need a 2D array of full pressure interfaces
-          allocate(a3(isc:iec,jsc:jec,nplev_ave))
-          if (allocated(a2)) deallocate(a2)
-          allocate(a2(isc:iec,nplev_ave+1))
-          do k=1,nplev_ave+1
-             a2(:,k) = log(real(levs_ave(k))*100.)
-          enddo
+
+       !!! BEGIN LAYER-AVERAGED DIAGNOSTICS
+       allocate(a3(isc:iec,jsc:jec,nplev_ave))
+       if (allocated(a2)) deallocate(a2)
+       allocate(a2(isc:iec,nplev_ave+1))
+       
+       !Use logp to interpolate temperature
+       do k=1,nplev_ave+1
+          a2(:,k) = log(real(levs_ave(k))*100.)
+       enddo
+       if ( id_t_plev_ave > 0) then
           do j=jsc,jec
              call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%pt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
           enddo
-          used=send_data(id_t_plev_ave, a3, Time)
-          deallocate(a2)
-          deallocate(a3)
+          if (id_t_plev_ave > 0) used=send_data(id_t_plev_ave, a3, Time)
        endif
-       
+       if ( id_t_dt_gfdlmp_plev_ave > 0 ) then
+          do j=jsc,jec
+             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%inline_mp%t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
+          enddo
+          if (id_t_dt_gfdlmp_plev_ave > 0) used=send_data(id_t_dt_gfdlmp_plev_ave, a3, Time)
+       endif
+       if ( id_t_dt_phys_plev_ave > 0 ) then
+          do j=jsc,jec
+             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
+          enddo
+          if (id_t_dt_phys_plev_ave > 0) used=send_data(id_t_dt_phys_plev_ave, a3, Time)
+       endif
+
+       !Using full pressure to interpolate other scalars
+       do k=1,nplev_ave+1
+          a2(:,k) = real(levs_ave(k))*100.
+       enddo
+       if ( id_q_plev_ave > 0 ) then
+          do j=jsc,jec
+             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%q(isc:iec,j,:,sphum), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8, ptop)
+          enddo
+          if (id_q_plev_ave > 0) used=send_data(id_q_plev_ave, a3, Time)
+       endif
+       if ( id_qv_dt_gfdlmp_plev_ave > 0 ) then
+          do j=jsc,jec
+             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%inline_mp%qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8, ptop)
+          enddo
+          if (id_qv_dt_gfdlmp_plev_ave > 0) used=send_data(id_qv_dt_gfdlmp_plev_ave, a3, Time)
+       endif
+       if ( id_qv_dt_phys_plev_ave > 0 ) then
+          do j=jsc,jec
+             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8, ptop)
+          enddo
+          if (id_qv_dt_phys_plev_ave > 0) used=send_data(id_qv_dt_phys_plev_ave, a3, Time)
+       endif
+
+
+       deallocate(a2)
+       deallocate(a3)
+       !!! END LAYER AVERAGED DIAGNOSTICS
        
        if (allocated(a2)) deallocate(a2)
        allocate ( a2(isc:iec,jsc:jec) )
@@ -6658,5 +6685,5 @@ end subroutine eqv_pot
 
 
   end subroutine sounding_column
-  
+
 end module fv_diagnostics_mod
