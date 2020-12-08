@@ -34,7 +34,7 @@ module fv_diagnostics_mod
                                register_static_field, send_data, diag_grid_init
  use fv_arrays_mod,      only: fv_atmos_type, fv_grid_type, fv_diag_type, fv_grid_bounds_type, &
                                R_GRID
- use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp, mappm
+ use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp
  use fv_mp_mod,          only: mp_reduce_sum, mp_reduce_min, mp_reduce_max, is_master
  use fv_eta_mod,         only: get_eta_level, gw_1d
  use fv_grid_utils_mod,  only: g_sum, v_prod, latlon2xyz, great_circle_dist, vect_cross
@@ -106,10 +106,8 @@ module fv_diagnostics_mod
 #else
  integer :: nplev = 31
 #endif
- integer :: levs(MAX_PLEVS) 
+ integer :: levs(MAX_PLEVS)
  integer :: k100, k200, k300, k500
- integer :: nplev_ave
- integer :: levs_ave(MAX_PLEVS) !for layer averages
 
  integer, parameter :: MAX_DIAG_COLUMN = 100
  integer, parameter :: diag_name_len = 16
@@ -146,7 +144,7 @@ module fv_diagnostics_mod
       !diag_debug_i, diag_debug_j, diag_debug_tile, &
       !diag_sonde_lon, diag_sonde_lat, diag_sonde_names
 
- namelist /fv_diag_plevs_nml/ nplev, levs, levs_ave, k100, k200, k500
+ namelist /fv_diag_plevs_nml/ nplev, levs, k100, k200, k500
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -173,20 +171,19 @@ contains
     !These id_* are not needed later since they are for static data which is not used elsewhere
     integer :: id_bk, id_pk, id_area, id_lon, id_lat, id_lont, id_latt, id_phalf, id_pfull
     integer :: id_hyam, id_hybm
-    integer :: id_plev, id_plev_ave_edges, id_plev_ave
+    integer :: id_plev
     integer :: i, j, k, m, n, ntileMe, id_xt, id_yt, id_x, id_y, id_xe, id_ye, id_xn, id_yn
     integer :: isc, iec, jsc, jec
 
     logical :: used
 
-    character(len=64) :: plev, plev2, plevf
+    character(len=64) :: plev
     character(len=64) :: field
     integer              :: ntprog
     integer              :: unit
 
     integer :: ncnst
     integer :: axe2(3)
-    integer :: axe_ave(3)
 
     character(len=64) :: errmsg
     logical :: exists
@@ -348,8 +345,7 @@ contains
 
 ! Selected pressure levels
 ! SJL note: 31 is enough here; if you need more levels you should do it OFF line
-    ! do not add more to prevent the model from slowing down too much.
-    levs = 0
+! do not add more to prevent the model from slowing down too much.
 #ifdef FEWER_PLEVS
     levs(1:nplev) = (/50,70,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
     k100 = 2
@@ -363,8 +359,6 @@ contains
     k300 = 15
     k500 = 19
 #endif
-    levs_ave = 0
-    levs_ave(1:4) = (/50,400,850,1000/)
 #ifdef INTERNAL_FILE_NML
     read(input_nml_file, nml=fv_diag_plevs_nml,iostat=ios)
 #else
@@ -404,35 +398,14 @@ contains
        call mpp_error(NOTE, "fv_diag_plevs_nml: k500 set incorrectly, finding closest entry in plevs")
        k500 = minloc(abs(levs(1:nplev)-500),1)
     endif
-    
-    nplev_ave = 0
-    if (levs_ave(1) > 0 ) then
-       do i=1,MAX_PLEVS-1
-          if (levs_ave(i+1) <= 0) then
-             exit
-          endif
-          if (levs_ave(i) >= levs_ave(i+1)) then
-             call mpp_error(FATAL, "fv_diag_plevs_nml: levs_ave is not monotonically increasing.")
-          end if
-          nplev_ave = nplev_ave + 1
-       enddo
-    end if
-       
+    !
+
     id_plev = diag_axis_init('plev', levs(1:nplev)*1.0, 'mb', 'z', &
             'actual pressure level', direction=-1, set_name="dynamics")
 
     axe2(1) = id_xt
     axe2(2) = id_yt
     axe2(3) = id_plev
-
-    id_plev_ave_edges = diag_axis_init('plev_ave_edges', levs_ave(1:nplev_ave+1)*1.0, 'mb', 'z', &
-            'averaging layer pressure interface', direction=-1, set_name="dynamics")
-    id_plev_ave = diag_axis_init('plev_ave', (levs_ave(1:nplev_ave)+levs_ave(2:nplev_ave+1))*0.5, 'mb', 'z', &
-            'averaging layer pressure level', direction=-1, set_name="dynamics", edges=id_plev_ave_edges)
-
-    axe_ave(1) = id_xt
-    axe_ave(2) = id_yt
-    axe_ave(3) = id_plev_ave
 
 !---- register time independent fields -------
 
@@ -749,39 +722,22 @@ contains
                                     trim(adjustl(plev))//'-mb omega', 'Pa/s', missing_value=missing_value)
       enddo
 
-      id_u_plev = register_diag_field ( trim(field), 'u_plev', axe2(1:3), Time,        &
-           'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
-      id_v_plev = register_diag_field ( trim(field), 'v_plev', axe2(1:3), Time,        &
-           'meridional wind', 'm/sec', missing_value=missing_value, range=vrange )
-      id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
-           'temperature', 'K', missing_value=missing_value, range=trange )
-      id_h_plev = register_diag_field ( trim(field), 'h_plev', axe2(1:3), Time,        &
-           'height', 'm', missing_value=missing_value )
-      id_q_plev = register_diag_field ( trim(field), 'q_plev', axe2(1:3), Time,        &
-           'specific humidity', 'kg/kg', missing_value=missing_value )
-      id_omg_plev = register_diag_field ( trim(field), 'omg_plev', axe2(1:3), Time,        &
-           'omega', 'Pa/s', missing_value=missing_value )
+       if (Atm(n)%flagstruct%write_3d_diags) then
+          id_u_plev = register_diag_field ( trim(field), 'u_plev', axe2(1:3), Time,        &
+               'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
+          id_v_plev = register_diag_field ( trim(field), 'v_plev', axe2(1:3), Time,        &
+               'meridional wind', 'm/sec', missing_value=missing_value, range=vrange )
+          id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
+               'temperature', 'K', missing_value=missing_value, range=trange )
+          id_h_plev = register_diag_field ( trim(field), 'h_plev', axe2(1:3), Time,        &
+               'height', 'm', missing_value=missing_value )
+          id_q_plev = register_diag_field ( trim(field), 'q_plev', axe2(1:3), Time,        &
+               'specific humidity', 'kg/kg', missing_value=missing_value )
+          id_omg_plev = register_diag_field ( trim(field), 'omg_plev', axe2(1:3), Time,        &
+               'omega', 'Pa/s', missing_value=missing_value )
+       endif
 
-      
-      !Layer averages for temperature, moisture, etc.
-        id_t_plev_ave   = register_diag_field(trim(field), 't_plev_ave', axe_ave(1:3), Time, &
-                                    'layer-averaged temperature', 'K', missing_value=missing_value)
-        id_q_plev_ave   = register_diag_field(trim(field), 'q_plev_ave', axe_ave(1:3), Time, &
-                                    'layer-averaged specific humidity', 'kg/kg', missing_value=missing_value)
-        id_qv_dt_gfdlmp_plev_ave = register_diag_field ( trim(field), 'qv_dt_gfdlmp_plev_ave', axe_ave(1:3), Time,           &
-               'layer-averaged water vapor specific humidity tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
-        if (id_qv_dt_gfdlmp_plev_ave > 0 .and. .not. allocated(Atm(n)%inline_mp%qv_dt) ) allocate(Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,npz))
-        id_t_dt_gfdlmp_plev_ave = register_diag_field ( trim(field), 't_dt_gfdlmp_plev_ave', axe_ave(1:3), Time,           &
-               'layer-averaged temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
-        if (id_t_dt_gfdlmp_plev_ave > 0 .and. .not. allocated(Atm(n)%inline_mp%t_dt) ) allocate(Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,npz))
-        id_qv_dt_phys_plev_ave = register_diag_field ( trim(field), 'qv_dt_phys_plev_ave', axe_ave(1:3), Time,           &
-               'layer-averaged water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
-        if (id_qv_dt_phys_plev_ave > 0 .and. .not. allocated(Atm(n)%phys_diag%phys_qv_dt) ) allocate(Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,npz))
-        id_t_dt_phys_plev_ave = register_diag_field ( trim(field), 't_dt_phys_plev_ave', axe_ave(1:3), Time,           &
-               'layer-averaged temperature tendency from physics', 'K/s', missing_value=missing_value )
-        if (id_t_dt_phys_plev_ave > 0 .and. .not. allocated(Atm(n)%phys_diag%phys_t_dt) ) allocate(Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,npz))
 
-      
       ! flag for calculation of geopotential
 !!$      if ( all(id_h(minloc(abs(levs-10)))>0)  .or. all(id_h(minloc(abs(levs-50)))>0)  .or. &
 !!$           all(id_h(minloc(abs(levs-100)))>0) .or. all(id_h(minloc(abs(levs-200)))>0) .or. &
@@ -906,6 +862,8 @@ contains
           !--------------------
           id_pv = register_diag_field ( trim(field), 'pv', axes(1:3), Time,       &
                'potential vorticity', '1/s', missing_value=missing_value )
+          id_epv = register_diag_field ( trim(field), 'epv', axes(1:3), Time,       &
+               'Ertel''s potential vorticity', 'PVU', missing_value=missing_value )
 
           ! -------------------
           ! Vertical flux correlation terms (good for averages)
@@ -3476,65 +3434,6 @@ contains
        if( allocated(a3) ) deallocate (a3)
 ! *** End cs_intp
 
-       !!! BEGIN LAYER-AVERAGED DIAGNOSTICS
-       allocate(a3(isc:iec,jsc:jec,nplev_ave))
-       if (allocated(a2)) deallocate(a2)
-       allocate(a2(isc:iec,nplev_ave+1))
-       
-       !Use logp to interpolate temperature
-       do k=1,nplev_ave+1
-          a2(:,k) = log(real(levs_ave(k))*100.)
-       enddo
-       if ( id_t_plev_ave > 0) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%pt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
-          enddo
-          if (id_t_plev_ave > 0) used=send_data(id_t_plev_ave, a3, Time)
-       endif
-       if ( id_t_dt_gfdlmp_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%inline_mp%t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
-          enddo
-          if (id_t_dt_gfdlmp_plev_ave > 0) used=send_data(id_t_dt_gfdlmp_plev_ave, a3, Time)
-       endif
-       if ( id_t_dt_phys_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
-          enddo
-          if (id_t_dt_phys_plev_ave > 0) used=send_data(id_t_dt_phys_plev_ave, a3, Time)
-       endif
-
-       !Using full pressure to interpolate other scalars
-       do k=1,nplev_ave+1
-          a2(:,k) = real(levs_ave(k))*100.
-       enddo
-       if ( id_q_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%q(isc:iec,j,:,sphum), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8, ptop)
-          enddo
-          if (id_q_plev_ave > 0) used=send_data(id_q_plev_ave, a3, Time)
-       endif
-       if ( id_qv_dt_gfdlmp_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%inline_mp%qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8, ptop)
-          enddo
-          if (id_qv_dt_gfdlmp_plev_ave > 0) used=send_data(id_qv_dt_gfdlmp_plev_ave, a3, Time)
-       endif
-       if ( id_qv_dt_phys_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8, ptop)
-          enddo
-          if (id_qv_dt_phys_plev_ave > 0) used=send_data(id_qv_dt_phys_plev_ave, a3, Time)
-       endif
-
-
-       deallocate(a2)
-       deallocate(a3)
-       !!! END LAYER AVERAGED DIAGNOSTICS
-       
-       if (allocated(a2)) deallocate(a2)
-       allocate ( a2(isc:iec,jsc:jec) )
-
        if ( id_sl12>0 ) then   ! 13th level wind speed (~ 222 mb for the 32L setup)
             do j=jsc,jec
                do i=isc,iec
@@ -3696,6 +3595,18 @@ contains
           if( allocated(a3) ) deallocate ( a3 )
           deallocate ( pt1 )
        endif
+
+       if (id_epv > 0 .and. .not. Atm(n)%flagstruct%hydrostatic) then
+          if (allocated(a3)) deallocate(a3)
+          allocate(a3(isc:iec,jsc:jec,npz))
+          do k=1,npz
+             a1d(k) = Atm(n)%ak(k+1)-Atm(n)%ak(k) + (Atm(n)%bk(k+1)-Atm(n)%bk(k))*1.E5
+          enddo
+          call ertel_pv(Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%pt, Atm(n)%delp, Atm(n)%delz, Atm(n)%pkz, a3, a1d ,Atm(n)%gridstruct, Atm(n)%domain, Atm(n)%bd, Atm(n)%npx, Atm(n)%npy, npz)
+          used = send_data (id_epv, a3, Time)
+          deallocate(a3)
+       endif
+
        
 #ifndef SW_DYNAMICS
         do itrac=1, Atm(n)%ncnst
@@ -6672,4 +6583,282 @@ end subroutine eqv_pot
 
   end subroutine sounding_column
 
+  !Still needs some bugs sorted out
+  subroutine ertel_pv(u, v, w, pt, delp, delz, pkz, epv, dp0, gridstruct, domain, bd, npx, npy, npz)
+
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: npx, npy, npz
+    real, intent(IN)  :: u(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz)
+    real, intent(IN)  :: v(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz)
+    real, intent(INOUT)  :: w(bd%isd:bd%ied,bd%jsd:bd%jed,npz) !a2b demands an inout directive
+    real, intent(IN)  :: pt(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real, intent(IN)  :: delp(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real, intent(IN)  :: delz(bd%is:bd%ie,bd%js:bd%je,npz)
+    real, intent(IN)  :: pkz(bd%is:bd%ie,bd%js:bd%je,npz)
+    real, intent(IN)  :: dp0(npz)
+    real, intent(OUT)  ::  epv(bd%is:bd%ie,bd%js:bd%je,npz)
+    type(fv_grid_type), intent(IN) :: gridstruct
+    type(domain2d), intent(INOUT) :: domain
+    
+
+    real :: ue(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz+1), ve(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz+1), wb(bd%isd:bd%ied,bd%jsd:bd%jed,npz), delz_h(bd%isd:bd%ied,bd%jsd:bd%jed,npz), dzb(bd%isd:bd%ied,bd%jsd:bd%jed,npz), xi(bd%is:bd%ie,bd%js:bd%je+1,npz), eta(bd%is:bd%ie+1,bd%js:bd%je,npz), vortz(bd%is:bd%ie,bd%js:bd%je,npz+1), theta(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+
+    integer :: i, j, k
+    real :: th1, th2, rrho, rvol
+    real, PARAMETER :: p0 = 1000.e2
+    real, PARAMETER :: rpk = exp(kappa*log(p0))
+    integer :: is,  ie,  js,  je
+    integer :: isd, ied, jsd, jed
+    integer :: ng
+    
+    is  = bd%is
+    ie  = bd%ie
+    js  = bd%js
+    je  = bd%je
+    isd = bd%isd
+    ied = bd%ied
+    jsd = bd%jsd
+    jed = bd%jed
+
+    ng = bd%ng
+    
+    !1. Compute top/bottom edge horizontal velocities (need to update routines for non-uniform grid)
+    !   Use dp0 (reference height) to compute edge values
+    !   Use ppme to compute this?? requires full delp and thus a halo update
+    !    Want to multiply in dx and dy as appropriate
+    !do j=js,je+1
+    !   call edge_scalar(u(is,j,1), ue(is,j,1), bd%is, bd%ie, npz, 1)
+    !enddo
+    k=1
+       do j=js,je+1
+          do i=is,ie
+             ue(i,j,k) = u(i,j,k) !* gridstruct%dy(i,j)
+          enddo
+       enddo
+    do k=2,npz
+       do j=js,je+1
+          do i=is,ie
+             ue(i,j,k) = 0.5*(u(i,j,k-1)+u(i,j,k)) !* gridstruct%dy(i,j)
+          enddo
+       enddo
+    enddo
+    k=npz+1
+       do j=js,je+1
+          do i=is,ie
+             ue(i,j,k) = u(i,j,npz) !* gridstruct%dy(i,j)
+          enddo
+       enddo
+    !do j=js,je
+    !   call edge_scalar(v(is,j,1), ve(is,j,1), bd%is, bd%ie+1, npz, 1)
+    !enddo
+    k=1
+       do j=js,je
+          do i=is,ie+1
+             ve(i,j,k) = v(i,j,k) !* gridstruct%dx(i,j)
+          enddo
+       enddo
+    do k=2,npz
+       do j=js,je
+          do i=is,ie+1
+             ve(i,j,k) = 0.5*(v(i,j,k-1)+v(i,j,k)) !* gridstruct%dx(i,j)
+          enddo
+       enddo
+    enddo
+    k=npz+1
+       do j=js,je
+          do i=is,ie+1
+             ve(i,j,k) = v(i,j,npz) !* gridstruct%dx(i,j)
+          enddo
+       enddo
+    
+
+    !2. Compute corner vertical velocities and edge distances
+    do k=1,npz
+       call a2b_ord4(w(isd,ied,k), wb(isd,ied,k), gridstruct, npx, npy, is, ie, js, je, ng)
+    enddo
+    do k=1,npz
+       do j=js,je
+          do i=is,ie
+             delz_h(i,j,k) = delz(i,j,k)
+          enddo
+       enddo
+    enddo
+    call mpp_update_domains(delz_h, domain)
+    do k=1,npz
+       call a2b_ord4(delz_h(isd,ied,k), dzb(isd,ied,k), gridstruct, npx, npy, is, ie, js, je, ng)
+       do j=js,je+1
+          do i=is,ie+1
+             wb(i,j,k) = wb(i,j,k)!*dzb(i,j,k)
+          enddo
+       enddo
+    enddo
+    
+    !3. Compute face-mean normal vorticity components using Stokes's theorem
+    do k=1,npz
+       do j=js,je
+          do i=is,ie+1
+             !rarea_side = 1./( 0.5*gridstruct%dy(i,j)*(dzb(i,j,k)+dzb(i,j+1,k)) ) ! unnecessary because we multiply by the area again later anyway??
+             xi(i,j,k) = ( ue(i,j,k) + wb(i,j+1,k) - ue(i,j,k+1) - wb(i,j,k))
+          enddo
+       enddo
+       do j=js,je+1
+          do i=is,ie
+             !rarea_side = 1./( 0.5*gridstruct%dx(i,j)*(dzb(i,j,k)+dzb(i+1,j,k)) )
+             eta(i,j,k) = ( ve(i,j,k) + wb(i+1,j,k) - ve(i,j,k+1) - wb(i,j,k))
+          enddo
+       enddo
+    enddo
+    do k=1,npz+1
+       do j=js,je
+          do i=is,ie
+             vortz(i,j,k) = (ue(i,j,k) + ve(i+1,j,k) - ue(i,j+1,k) - ve(i,j,k))
+             vortz(i,j,k) = vortz(i,j,k) + gridstruct%area(i,j)*gridstruct%f0(i,j) ! absolute vertical vorticity; assuming shallow atmosphere
+          enddo
+       enddo
+    enddo
+    
+    
+    !4. Compute theta on all faces ( requires a more accurate calculation for top and bottom edges)
+    ! Compute using dry kappa (for now) since this is what is usually expected?
+    do k=1,npz
+       do j=js,je
+          do i=is,ie
+             theta(i,j,k) = pt(i,j,k)/pkz(i,j,k)*rpk
+          enddo
+       enddo
+    enddo
+    call mpp_update_domains(theta, domain, whalo=1, ehalo=1, shalo=1, nhalo=1)
+    
+    !5. Sum 
+    k=1
+        do j=js,je
+          do i=is,ie
+!!$             th1 = 0.5*(theta(i-1,j,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i+1,j,k))
+!!$             epv(i,j,k) = xi(i+1,j,k)*th2 - xi(i,j,k)*th1
+!!$
+!!$             th1 = 0.5*(theta(i,j-1,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i,j-1,k))
+!!$             epv(i,j,k) = epv(i,j,k) + eta(i,j+1,k)*th2 - eta(i,j,k)*th1
+
+             th1 = theta(i,j,k)
+             th2 = 0.5*(theta(i,j,k) + theta(i,j,k+1))
+             epv(i,j,k) = vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+!             epv(i,j,k) = epv(i,j,k) + vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+          enddo
+       enddo
+    do k=2,npz-1
+       do j=js,je
+          do i=is,ie
+!!$             th1 = 0.5*(theta(i-1,j,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i+1,j,k))
+!!$             epv(i,j,k) = xi(i+1,j,k)*th2 - xi(i,j,k)*th1
+!!$
+!!$             th1 = 0.5*(theta(i,j-1,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i,j-1,k))
+!!$             epv(i,j,k) = epv(i,j,k) + eta(i,j+1,k)*th2 - eta(i,j,k)*th1
+
+             th1 = 0.5*(theta(i,j,k-1) + theta(i,j,k))
+             th2 = 0.5*(theta(i,j,k) + theta(i,j,k+1))
+             epv(i,j,k) = vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+!             epv(i,j,k) = epv(i,j,k) + vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+          enddo
+       enddo
+    enddo
+    k=npz
+       do j=js,je
+          do i=is,ie
+!!$             th1 = 0.5*(theta(i-1,j,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i+1,j,k))
+!!$             epv(i,j,k) = xi(i+1,j,k)*th2 - xi(i,j,k)*th1
+!!$
+!!$             th1 = 0.5*(theta(i,j-1,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i,j-1,k))
+!!$             epv(i,j,k) = epv(i,j,k) + eta(i,j+1,k)*th2 - eta(i,j,k)*th1
+
+             th1 = 0.5*(theta(i,j,k-1) + theta(i,j,k))
+             th2 = theta(i,j,k) 
+             epv(i,j,k) = vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+!             epv(i,j,k) = epv(i,j,k) + vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+          enddo
+       enddo
+
+   do k=1,npz
+      do j=js,je
+         do i=is,ie
+            rrho = grav/delp(i,j,k)
+            rvol = gridstruct%rarea(i,j) !delz drops out
+            epv(i,j,k) = epv(i,j,k) * rrho * rvol * 1.e6 ! PVU
+         enddo
+      enddo
+   enddo
+
+!!!DEBUG CODE!!!
+   if (is_master()) then
+      i = 1; j = 1 ; k = npz/2
+      print*, 'u: ', ue(i,j,k), u(i,j,k), ue(i,j,k+1)
+      print*, 'v: ', ve(i,j,k), v(i,j,k), ve(i,j,k+1)
+      print*, 'delz: ', dzb(i,j,k), delz(i,j,k), dzb(i+1,j+1,k)
+      print*, 'wb: ', wb(i,j,k), w(i,j,k), wb(i+1,j+1,k)
+      print*, 'xi: ', xi(i,j,k), xi(i+1,j,k)
+      print*, 'eta: ', eta(i,j,k), eta(i,j+1,k)
+      print*, 'vortz: ', vortz(i,j,k), vortz(i,j,k+1)
+      print*, 'theta: ', theta(i-1:i+1,j,k)
+      print*, 'EPV: ', epv(i:i+1,j,k)
+   endif
+   
+!!!END DEBUG CODE!!!
+   
+  end subroutine ertel_pv
+
+ subroutine edge_scalar(q1, qe, i1, i2, km, id)
+! Optimized for wind profile reconstruction:
+ integer, intent(in):: i1, i2, km
+ integer, intent(in):: id                       ! 0: pp 1: wind
+ real, intent(in ), dimension(i1:i2,km):: q1
+ real, intent(out), dimension(i1:i2,km+1):: qe
+!-----------------------------------------------------------------------
+ real, parameter:: r2o3 = 2./3.
+ real, parameter:: r4o3 = 4./3.
+ real  gak(km)
+ real  bet
+ integer i, k
+
+!------------------------------------------------
+! Optimized coding for uniform grid: SJL Apr 2007
+!------------------------------------------------
+
+   if ( id==1 ) then
+      do i=i1,i2
+         qe(i,1) = r4o3*q1(i,1) + r2o3*q1(i,2)
+      enddo
+   else
+      do i=i1,i2
+         qe(i,1) = 1.E30
+      enddo
+   endif
+
+   gak(1) = 7./3.
+   do k=2,km
+      gak(k) =  1. / (4. - gak(k-1))
+      do i=i1,i2
+         qe(i,k) = (3.*(q1(i,k-1) + q1(i,k)) - qe(i,k-1)) * gak(k)
+      enddo
+   enddo
+
+   bet = 1. / (1.5 - 3.5*gak(km))
+   do i=i1,i2
+      qe(i,km+1) = (4.*q1(i,km) + q1(i,km-1) - 3.5*qe(i,km)) * bet
+   enddo
+
+   do k=km,1,-1
+      do i=i1,i2
+         qe(i,k) = qe(i,k) - gak(k)*qe(i,k+1)
+      enddo
+   enddo
+
+ end subroutine edge_scalar
+
+
+  
 end module fv_diagnostics_mod
