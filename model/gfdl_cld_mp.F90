@@ -2990,7 +2990,7 @@ subroutine implicit_fall (dt, ks, ke, ze, vt, dp, q, precip, m1)
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        q (k) = qm (k) / dp (k)
+        q (k) = qm (k) / dp (k) !dry dp used inside MP
     enddo
     
 end subroutine implicit_fall
