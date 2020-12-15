@@ -45,7 +45,9 @@
  integer, allocatable :: id_u(:), id_v(:), id_t(:), id_h(:), id_q(:), id_omg(:)
 
  integer:: id_u_plev, id_v_plev, id_t_plev, id_h_plev, id_q_plev, id_omg_plev
-! IPCC diag
+ integer:: id_t_plev_ave, id_q_plev_ave, id_qv_dt_gfdlmp_plev_ave, id_t_dt_gfdlmp_plev_ave, id_qv_dt_phys_plev_ave, id_t_dt_phys_plev_ave
+
+ ! IPCC diag
  integer :: id_rh10,  id_rh50,  id_rh100, id_rh200,  id_rh250, id_rh300, &
             id_rh500, id_rh700, id_rh850, id_rh925,  id_rh1000
  integer :: id_dp10,  id_dp50,  id_dp100, id_dp200,  id_dp250, id_dp300, &
@@ -86,6 +88,6 @@
                 id_uu, id_uv, id_vv, id_ww,                    & ! momentum flux
                 id_iuu, id_iuv, id_iuw, id_ivv, id_ivw, id_iww   ! vertically integral of momentum flux
 
-     integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w, id_mw
+     integer :: id_uw, id_vw
      
 #endif _FV_DIAG__
