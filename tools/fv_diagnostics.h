@@ -88,6 +88,6 @@
                 id_uu, id_uv, id_vv, id_ww,                    & ! momentum flux
                 id_iuu, id_iuv, id_iuw, id_ivv, id_ivw, id_iww   ! vertically integral of momentum flux
 
-     integer :: id_uw, id_vw, id_hw, id_qvw, id_qlw, id_qiw, id_o3w, id_mw
+     integer :: id_uw, id_vw
      
 #endif _FV_DIAG__
