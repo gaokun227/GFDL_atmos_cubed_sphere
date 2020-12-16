@@ -35,9 +35,13 @@ module nh_utils_mod
    public update_dz_c, update_dz_d, nh_bc
    public sim_solver, sim1_solver, sim3_solver
    public sim3p0_solver, rim_2d
-   public Riem_Solver_c
+   public Riem_Solver_c, edge_scalar
 
+#ifdef DZ_MIN_6
+   real, parameter:: dz_min = 6.
+#else
    real, parameter:: dz_min = 2.
+#endif
    real, parameter:: r3 = 1./3.
 
 CONTAINS
@@ -174,6 +178,11 @@ CONTAINS
      enddo
      do k=km, 1, -1
         do i=is1, ie1
+#ifdef DZ_MIN_6
+           if (gz(i,j,k) < gz(i,j,k+1) + dz_min) then
+              write(*,'(A, 3I4, 2F)') 'UPDATE_DZ_C: dz limiter applied', i, j, k, gz(i,j,k), gz(i,j,k+1)
+           endif
+#endif
            gz(i,j,k) = max( gz(i,j,k), gz(i,j,k+1) + dz_min )
         enddo
      enddo
@@ -289,6 +298,11 @@ CONTAINS
      do k=km, 1, -1
         do i=is, ie
 ! Enforce monotonicity of height to prevent blowup
+#ifdef DZ_MIN_6
+           if (zh(i,j,k) < zh(i,j,k+1) + dz_min) then
+              write(*,'(A, 3I4, 2F)') 'UPDATE_DZ_D: dz limiter applied', i, j, k, zh(i,j,k), zh(i,j,k+1)
+           endif
+#endif
            zh(i,j,k) = max( zh(i,j,k), zh(i,j,k+1) + dz_min )
         enddo
      enddo
@@ -1626,7 +1640,6 @@ CONTAINS
 
  end subroutine edge_profile
 
-!TODO LMH 25may18: do not need delz defined on full compute domain; pass appropriate BCs instead
  subroutine nh_bc(ptop, grav, kappa, cp, delp, delzBC, pt, phis, &
 #ifdef USE_COND
       q_con, &
