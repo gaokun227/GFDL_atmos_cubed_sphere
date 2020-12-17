@@ -308,8 +308,8 @@ module gfdl_cld_mp_mod
     real :: rhc_cevap = 0.85 ! cloud water
     real :: rhc_revap = 0.85 ! cloud water
 
-	real :: f_dq_p = 1.0
-	real :: f_dq_m = 1.0
+    real :: f_dq_p = 1.0
+    real :: f_dq_m = 1.0
     logical :: do_cld_adj = .false.
     
     integer :: inflag = 1 ! ice nucleation scheme
@@ -3867,7 +3867,8 @@ subroutine wqs2_vect (is, ie, ta, den, wqsat, dqdt)
     
     integer, intent (in) :: is, ie
     
-    real, intent (in), dimension (is:ie) :: ta, den
+    real (kind = r_grid), intent (in), dimension (is:ie) :: ta
+    real, intent (in), dimension (is:ie) :: den
     
     real, intent (out), dimension (is:ie) :: wqsat, dqdt
     
