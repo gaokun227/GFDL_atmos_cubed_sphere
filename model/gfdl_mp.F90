@@ -3705,7 +3705,8 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     
     real (kind = r_grid), dimension (is:ie, js:je) :: te_beg, te_end, tw_beg, tw_end
     
-    real, dimension (is:ie) :: wqsat, dq2dt, qpz, cvm, t0, pt1, qstar
+    real (kind = r_grid), dimension (is:ie) :: pt1
+    real, dimension (is:ie) :: wqsat, dq2dt, qpz, cvm, t0, qstar
     real, dimension (is:ie) :: icp2, lcp2, tcp2, tcp3
     real, dimension (is:ie) :: den, q_liq, q_sol, q_cond, src, sink, hvar
     real, dimension (is:ie) :: mc_air, lhl, lhi, ccn, cin
@@ -4650,7 +4651,8 @@ subroutine wqs2_vect (is, ie, ta, den, wqsat, dqdt)
     
     integer, intent (in) :: is, ie
     
-    real, intent (in), dimension (is:ie) :: ta, den
+    real (kind = r_grid), intent (in), dimension (is:ie) :: ta
+    real, intent (in), dimension (is:ie) :: den
     
     real, intent (out), dimension (is:ie) :: wqsat, dqdt
     

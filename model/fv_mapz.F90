@@ -36,9 +36,8 @@ module fv_mapz_mod
   use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID, inline_mp_type
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
-  use fast_sat_adj_mod,  only: fast_sat_adj, qsmith_init
 #ifndef DYCORE_SOLO
-  use gfdl_mp_mod,       only: gfdl_mp_driver, c_liq, c_ice
+  use gfdl_mp_mod,       only: gfdl_mp_driver, c_liq, c_ice, fast_sat_adj, qsmith_init
 #endif
 
   implicit none
