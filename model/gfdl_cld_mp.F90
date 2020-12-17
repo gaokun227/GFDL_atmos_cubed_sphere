@@ -35,7 +35,9 @@ module gfdl_cld_mp_mod
     
     private
     
-    public gfdl_cld_mp_driver, gfdl_cld_mp_init, gfdl_cld_mp_end
+    public gfdl_cld_mp_init
+    public gfdl_cld_mp_driver
+    public gfdl_cld_mp_end
     public wqs1, wqs2, iqs1, iqs2, mpdrv, sedi_heat, warm_rain, revap_racc, &
         linear_prof, icloud, subgrid_z_proc, terminal_fall, check_column, implicit_fall, &
         lagrangian_fall_ppm, cs_profile, cs_limiters, fall_speed, setupm, setup_con, &

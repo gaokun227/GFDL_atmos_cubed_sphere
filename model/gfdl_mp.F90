@@ -29,13 +29,15 @@
 
 module gfdl_mp_mod
     
-    use fv_arrays_mod, only: r_grid
+    use machine, only: r_grid => kind_phys
     
     implicit none
     
     private
     
-    public gfdl_mp_driver, gfdl_mp_init, gfdl_mp_end
+    public gfdl_mp_init
+    public gfdl_mp_driver
+    public gfdl_mp_end
     public wqs1, wqs2, iqs1, iqs2, mpdrv, sedi_heat, warm_rain, revap_racc, &
         linear_prof, icloud, subgrid_z_proc, terminal_fall, check_column, implicit_fall, &
         lagrangian_fall_ppm, cs_profile, cs_limiters, fall_speed, setupm, setup_con, &
