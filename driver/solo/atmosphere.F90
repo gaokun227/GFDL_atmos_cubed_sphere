@@ -52,7 +52,6 @@ use fv_restart_mod,     only: fv_restart
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
 use gfdl_cld_mp_mod,    only: gfdl_cld_mp_init, gfdl_cld_mp_end
-use cld_eff_rad_mod,    only: cld_eff_rad_init
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
 use fv_mp_mod,          only: switch_current_Atm
 use field_manager_mod,  only: MODEL_ATMOS
@@ -167,7 +166,6 @@ contains
                              Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
                 if ( Atm(n)%flagstruct%nwat==6) call gfdl_cld_mp_init(mpp_pe(),  &
                                                 mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml) 
-                if ( Atm(n)%flagstruct%nwat==6) call cld_eff_rad_init(nlunit, input_nml_file, stdlog(), fn_nml)
            endif
         endif
 
