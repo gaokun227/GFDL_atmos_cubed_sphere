@@ -49,9 +49,8 @@ module fv_diagnostics_mod
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
  use fv_arrays_mod, only: max_step 
- use gfdl_mp_mod, only: wqs1, qsmith_init, c_liq
+ use gfdl_mp_mod, only: wqs1, qsmith_init, c_liq, rad_ref
 
- use rad_ref_mod, only: rad_ref
  use fv_coarse_graining_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
  use fv_diag_column_mod, only: fv_diag_column_init, sounding_column, debug_column
  
@@ -3095,8 +3094,10 @@ contains
           if (.not. allocated(a3)) allocate(a3(isc:iec,jsc:jec,npz))
 
 !          call dbzcalc_smithxue(Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
-          call rad_ref(Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
-               a3, a2, allmax, Atm(n)%bd, npz, Atm(n)%ncnst, Atm(n)%flagstruct%hydrostatic, &
+          call rad_ref(Atm(n)%bd%is, Atm(n)%bd%ie, Atm(n)%bd%js, Atm(n)%bd%je, &
+               Atm(n)%bd%isd, Atm(n)%bd%ied, Atm(n)%bd%jsd, Atm(n)%bd%jed, &
+               Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
+               a3, a2, allmax, npz, Atm(n)%ncnst, Atm(n)%flagstruct%hydrostatic, &
                zvir, .false., .false., .false., .true., Atm(n)%flagstruct%do_inline_mp, &
                sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, mp_top) ! GFDL MP has constant N_0 intercept
 
