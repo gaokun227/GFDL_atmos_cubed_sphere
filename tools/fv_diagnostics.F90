@@ -52,7 +52,6 @@ module fv_diagnostics_mod
  use gfdl_mp_mod, only: wqs1, qsmith_init, c_liq
 
  use rad_ref_mod, only: rad_ref
- use fv_coarse_graining_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
  use fv_diag_column_mod, only: fv_diag_column_init, sounding_column, debug_column
  
  implicit none
@@ -97,7 +96,8 @@ module fv_diagnostics_mod
  public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, range_check!, id_divg, id_te
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field, get_height_given_pressure
-
+ public :: cs3_interpolator
+ 
  integer, parameter :: MAX_PLEVS = 31
 #ifdef FEWER_PLEVS
  integer :: nplev = 11 !< # of levels in plev interpolated standard level output, with levels given by levs. 11 by default
@@ -420,9 +420,9 @@ contains
                                          'latitude', 'degrees_N' )
        id_area = register_static_field ( trim(field), 'area', axes(1:2),  &
                                          'cell area', 'm**2' )
-       id_dx = register_static_field( trim(field), 'dx', (/id_x,id_y/), &
+       id_dx = register_static_field( trim(field), 'dx', (/id_xt,id_y/), &
             'dx', 'm')
-       id_dy = register_static_field( trim(field), 'dy', (/id_x,id_y/), &
+       id_dy = register_static_field( trim(field), 'dy', (/id_x,id_yt/), &
             'dy', 'm')
 #ifndef DYNAMICS_ZS
        id_zsurf = register_static_field ( trim(field), 'zsurf', axes(1:2),  &
@@ -694,7 +694,48 @@ contains
           idiag%id_qv_dt_sg = register_diag_field ( trim(field), 'qv_dt_sg', axes(1:3), Time,           &
                'water vapor tendency from 2dz subgrid mixing', 'kg/kg/s', missing_value=missing_value )
 
-
+          ! Nudging tendencies
+          id_t_dt_nudge = register_diag_field('dynamics', &
+               't_dt_nudge', axes(1:3), Time, &
+               'temperature tendency from nudging', &
+               'K/s', missing_value=missing_value)
+          if ((id_t_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_t_dt))) then
+             allocate (Atm(n)%nudge_diag%nudge_t_dt(isc:iec,jsc:jec,npz))
+             Atm(n)%nudge_diag%nudge_t_dt(isc:iec,jsc:jec,1:npz) = 0.0
+          endif
+          id_ps_dt_nudge = register_diag_field('dynamics', &
+               'ps_dt_nudge', axes(1:2), Time, &
+               'surface pressure tendency from nudging', &
+               'Pa/s', missing_value=missing_value)
+          if ((id_ps_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_ps_dt))) then
+             allocate (Atm(n)%nudge_diag%nudge_ps_dt(isc:iec,jsc:jec))
+             Atm(n)%nudge_diag%nudge_ps_dt(isc:iec,jsc:jec) = 0.0
+          endif
+          id_delp_dt_nudge = register_diag_field('dynamics', &
+               'delp_dt_nudge', axes(1:3), Time, &
+               'pressure thickness tendency from nudging', &
+               'Pa/s', missing_value=missing_value)
+          if ((id_delp_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_delp_dt))) then
+             allocate (Atm(n)%nudge_diag%nudge_delp_dt(isc:iec,jsc:jec,npz))
+             Atm(n)%nudge_diag%nudge_delp_dt(isc:iec,jsc:jec,1:npz) = 0.0
+          endif
+          id_u_dt_nudge = register_diag_field('dynamics', &
+               'u_dt_nudge', axes(1:3), Time, &
+               'zonal wind tendency from nudging', &
+               'm/s/s', missing_value=missing_value)
+          if ((id_u_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_u_dt))) then
+             allocate (Atm(n)%nudge_diag%nudge_u_dt(isc:iec,jsc:jec,npz))
+             Atm(n)%nudge_diag%nudge_u_dt(isc:iec,jsc:jec,1:npz) = 0.0
+          endif
+          id_v_dt_nudge = register_diag_field('dynamics', &
+               'v_dt_nudge', axes(1:3), Time, &
+               'meridional wind tendency from nudging', &
+               'm/s/s', missing_value=missing_value)
+          if ((id_v_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_v_dt))) then
+             allocate (Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,npz))
+             Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,1:npz) = 0.0
+          endif         
+          
        endif
 
 !
@@ -1274,29 +1315,6 @@ contains
 
     call fv_diag_column_init(Atm(n), yr_init, mo_init, dy_init, hr_init, do_diag_debug, do_diag_sonde, sound_freq)
 
-    
-    ! These diagnostics do not work, because of an FMS issue.  Maybe we could
-    ! implement them by outputting them on the grid corners (and filling the
-    ! empty rows or columns with missing value flags)?
-    ! ---------------
-    ! id_d_grid_ucomp = register_diag_field('dynamics', &
-    !      'd_grid_ucomp', (/ id_xt, id_y, id_pfull /), &
-    !      Time, 'D grid zonal velocity', 'm/s', missing_value=missing_value)
-
-    ! id_d_grid_vcomp = register_diag_field('dynamics', &
-    !      'd_grid_vcomp', (/ id_x, id_yt, id_pfull /), &
-    !      Time, 'D grid meridional velocity', 'm/s', missing_value=missing_value)
-
-    ! id_c_grid_ucomp = register_diag_field('dynamics', &
-    !      'c_grid_ucomp', (/ id_x, id_yt, id_pfull /), &
-    !      Time, 'C grid zonal velocity', 'm/s', missing_value=missing_value)
-
-    ! id_c_grid_vcomp = register_diag_field('dynamics', &
-    !      'c_grid_vcomp', (/ id_xt, id_y, id_pfull /), &
-    !      Time, 'C grid meridional velocity', 'm/s', missing_value=missing_value)
-
-    call fv_coarse_grained_diagnostics_init(Atm, Time, id_pfull)
-
  end subroutine fv_diag_init
 
 
@@ -1644,11 +1662,18 @@ contains
        if (id_qi_dt_phys > 0) used=send_data(id_qi_dt_phys, Atm(n)%phys_diag%phys_qi_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_liq_wat_dt_phys > 0) used=send_data(id_liq_wat_dt_phys, Atm(n)%phys_diag%phys_liq_wat_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_ice_wat_dt_phys > 0) used=send_data(id_ice_wat_dt_phys, Atm(n)%phys_diag%phys_ice_wat_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (id_qr_dt_phys > 0) used=send_data(id_qr_dt_phys, Atm(n)%phys_diag%phys_qr_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (id_qs_dt_phys > 0) used=send_data(id_qs_dt_phys, Atm(n)%phys_diag%phys_qs_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (id_qg_dt_phys > 0) used=send_data(id_qg_dt_phys, Atm(n)%phys_diag%phys_qg_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_t_dt_phys > 0)  used=send_data(id_t_dt_phys,  Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_u_dt_phys > 0)  used=send_data(id_u_dt_phys,  Atm(n)%phys_diag%phys_u_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_v_dt_phys > 0)  used=send_data(id_v_dt_phys,  Atm(n)%phys_diag%phys_v_dt(isc:iec,jsc:jec,1:npz), Time)
 
-
+       if (id_t_dt_nudge > 0) used=send_data(id_t_dt_nudge,  Atm(n)%nudge_diag%nudge_t_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (id_ps_dt_nudge > 0) used=send_data(id_ps_dt_nudge,  Atm(n)%nudge_diag%nudge_ps_dt(isc:iec,jsc:jec), Time)
+       if (id_delp_dt_nudge > 0) used=send_data(id_delp_dt_nudge,  Atm(n)%nudge_diag%nudge_delp_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (id_u_dt_nudge > 0) used=send_data(id_u_dt_nudge,  Atm(n)%nudge_diag%nudge_u_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (id_v_dt_nudge > 0) used=send_data(id_v_dt_nudge,  Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,1:npz), Time)
 
        if(id_c15>0 .or. id_c25>0 .or. id_c35>0 .or. id_c45>0) then
           call wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, Atm(n)%ua(isc:iec,jsc:jec,npz),   &
@@ -3801,8 +3826,6 @@ contains
     if (allocated(dvmr)) deallocate(dvmr)
 
     call nullify_domain()
-
-    call fv_coarse_grained_diagnostics(Atm, Time, zvir)
 
  end subroutine fv_diag
 
