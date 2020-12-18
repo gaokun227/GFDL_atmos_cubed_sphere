@@ -61,7 +61,7 @@ module fv_restart_mod
   use mpp_domains_mod,     only: mpp_global_field
   use fms_mod,             only: file_exist
   use fv_treat_da_inc_mod, only: read_da_inc
-  use fv_coarse_graining_mod, only: fv_io_write_restart_coarse
+  use coarse_grained_restart_files_mod, only: fv_io_write_restart_coarse
   use fv_regional_mod,     only: write_full_fields
 
   implicit none
@@ -1225,11 +1225,11 @@ contains
     type(fv_atmos_type), intent(inout) :: Atm
     character(len=*),    intent(in)    :: timestamp
 
-    if (Atm%flagstruct%restart_resolution .eq. 'both') then
+    if (Atm%coarse_graining%write_coarse_restart_files) then
        call fv_io_write_restart(Atm, timestamp)
-       call fv_io_write_restart_coarse(Atm, timestamp)
-    else if (Atm%flagstruct%restart_resolution .eq. 'only_coarse') then
-       call fv_io_write_restart_coarse(Atm, timestamp)
+       if (.not. Atm%coarse_graining%write_only_coarse_intermediate_restarts) then
+          call fv_io_write_restart(Atm, timestamp)
+       endif
     else
        call fv_io_write_restart(Atm, timestamp)
     endif
@@ -1321,14 +1321,10 @@ contains
     ! Write4 energy correction term
 #endif
 
-!    if (Atm%flagstruct%restart_resolution .eq. 'both') then
-       call fv_io_write_restart(Atm)
-       call fv_io_write_restart_coarse(Atm)
-!    else if (Atm%flagstruct%restart_resolution .eq. 'only_coarse') then
-!       call fv_io_write_restart_coarse(Atm)
-!    else
-!       call fv_io_write_restart(Atm)
-!    endif
+       call fv_io_write_restart(Atm)    	
+       if (Atm%coarse_graining%write_coarse_restart_files) then
+          call fv_io_write_restart_coarse(Atm)
+       endif
 
  if (Atm%neststruct%nested) call fv_io_write_BCs(Atm)
 
