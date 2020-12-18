@@ -658,18 +658,35 @@ module fv_arrays_mod
      real, _ALLOCATABLE :: oro(:,:)
      real, _ALLOCATABLE :: ze0(:,:,:)
 
-     logical :: allocated = .false.
-
-     type(restart_file_type) :: fv_restart_coarse
-     type(restart_file_type) :: sst_restart_coarse
-     type(restart_file_type) :: fv_tile_restart_coarse
-     type(restart_file_type) :: rsf_restart_coarse
-     type(restart_file_type) :: mg_restart_coarse
-     type(restart_file_type) :: lnd_restart_coarse
-     type(restart_file_type) :: tra_restart_coarse
-
+     type(restart_file_type) :: fv_core_coarse
+     type(restart_file_type) :: fv_tracer_coarse
+     type(restart_file_type) :: fv_srf_wnd_coarse
+     type(restart_file_type) :: mg_drag_coarse
+     type(restart_file_type) :: fv_land_coarse
+     
   end type coarse_restart_type
+	
+  type fv_coarse_graining_type
 
+     type(domain2d) :: domain  !< domain2d for the coarse cubed-sphere grid
+     integer :: factor  !< factor the coarse grid is downsampled by (e.g. 8 if coarsening from C384 to C48 resolution)
+     integer :: nx_coarse  !< number of cells along the edge of a coarse cubed-sphere tile
+     integer :: id_x_coarse  !< diagnostic x-axis id for data on x-edges
+     integer :: id_y_coarse  !< diagnostic y-axis id for data on y-edges
+     integer :: id_xt_coarse  !< diagnostic x-axis id for data on x-centers
+     integer :: id_yt_coarse  !< diagnostic y-axis id for data on y-centers
+     integer :: id_pfull  !< diagnostic vertical axis id for data on z-centers
+     integer :: id_phalf  !< diagnostic vertical axis id for data on z-edges
+     character(len=64) :: strategy  !< Current valid values are: 'model_level' and 'pressure_level'
+     logical :: write_coarse_restart_files = .false.  !< Whether to write coarse restart files
+     logical :: write_coarse_diagnostics = .false.  !< Whether to enable writing coarse diagnostics
+     logical :: write_only_coarse_intermediate_restarts = .false.  !< Whether to write only coarse intermediate restart files (if write_coarse_restart_files is .true.)
+     type(coarse_restart_type) :: restart  !< container for coarse restart data
+     logical :: write_coarse_dgrid_vel_rst = .true.  !< Whether to write D-grid winds to coarse restart files
+     logical :: write_coarse_agrid_vel_rst = .false.  !< Whether to write A-grid winds to coarse restart files
+
+  end type fv_coarse_graining_type
+  
   interface allocate_fv_nest_BC_type
      module procedure allocate_fv_nest_BC_type_3D
      module procedure allocate_fv_nest_BC_type_3D_Atm
@@ -850,7 +867,8 @@ module fv_arrays_mod
      type(phys_diag_type) :: phys_diag
      type(nudge_diag_type) :: nudge_diag
      type(coarse_restart_type) :: coarse_restart
-
+     type(fv_coarse_graining_type) :: coarse_graining
+     
   end type fv_atmos_type
 contains
   subroutine allocate_fv_atmos_type(Atm, isd_in, ied_in, jsd_in, jed_in, is_in, ie_in, js_in, je_in, &
@@ -1533,35 +1551,9 @@ contains
        if(allocated(Atm%grid_global)) deallocate(Atm%grid_global)
     end if
 
-    call deallocate_coarse_restart_type(Atm)
-
     Atm%allocated = .false.
 
   end subroutine deallocate_fv_atmos_type
-
-  subroutine deallocate_coarse_restart_type(Atm)
-    type(fv_atmos_type), intent(INOUT) :: Atm
-
-    if (Atm%coarse_restart%allocated) then
-       deallocate(Atm%coarse_restart%u)
-       deallocate(Atm%coarse_restart%v)
-       deallocate(Atm%coarse_restart%ua)
-       deallocate(Atm%coarse_restart%va)
-       deallocate(Atm%coarse_restart%u_srf)
-       deallocate(Atm%coarse_restart%v_srf)
-       deallocate(Atm%coarse_restart%w)
-       deallocate(Atm%coarse_restart%delp)
-       deallocate(Atm%coarse_restart%delz)
-       deallocate(Atm%coarse_restart%pt)
-       deallocate(Atm%coarse_restart%q)
-       deallocate(Atm%coarse_restart%qdiag)
-       deallocate(Atm%coarse_restart%sgh)
-       deallocate(Atm%coarse_restart%oro)
-       deallocate(Atm%coarse_restart%phis)
-       deallocate(Atm%coarse_restart%ze0)
-    endif
-
-  end subroutine deallocate_coarse_restart_type
 
 subroutine allocate_fv_nest_BC_type_3D_Atm(BC,Atm,ns,istag,jstag,dummy)
 
