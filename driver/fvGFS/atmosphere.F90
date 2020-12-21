@@ -261,9 +261,7 @@ contains
 !--- allocate pref
    allocate(pref(npz+1,2), dum1d(npz+1))
 
-   if (Atm(mygrid)%flagstruct%do_inline_mp) then
-     call gfdl_mp_init(mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
-   endif
+   call gfdl_mp_init(mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
 
    call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mygrid)%gridstruct%grid_type, mygrid)
 
@@ -513,10 +511,7 @@ contains
 
    if ( Atm(mygrid)%flagstruct%nudge ) call fv_nwp_nudge_end
 
-
-   if (Atm(mygrid)%flagstruct%do_inline_mp) then
-     call gfdl_mp_end ( )
-   endif
+   call gfdl_mp_end ( )
 
    call nullify_domain ( )
    if (first_diag) then
