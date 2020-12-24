@@ -4546,6 +4546,9 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     real :: lambdar, lambdas, lambdag
     real :: rei_fac
     
+    real :: ccno = 90. ! ccn over ocean (cm^ - 3)
+    real :: ccnl = 270. ! ccn over land (cm^ - 3)
+    
     real, parameter :: n0r = 8.0e6, n0s = 3.0e6, n0g = 4.0e6 ! intercept parameters (m^ - 4) in lin et al. (1983)
     real, parameter :: alphar = 0.8, alphas = 0.25, alphag = 0.5 ! parameters in terminal equation in lin et al., (1983)
     real, parameter :: gammar = 17.837789, gammas = 8.2850630, gammag = 11.631769 ! gamma values as a result of different alpha
@@ -4698,10 +4701,10 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! -----------------------------------------------------------------------
                 
 #ifndef MARTIN_CCN
-                ccnw = ccn_o * abs (mask - 1.0) + ccn_l * (1.0 - abs (mask - 1.0))
+                ccnw = ccno * abs (mask - 1.0) + ccnl * (1.0 - abs (mask - 1.0))
 #else
-                ccnw = 0.80 * (- 1.15e-3 * (ccn_o ** 2) + 0.963 * ccn_o + 5.30) * abs (mask - 1.0) + &
-                    0.67 * (- 2.10e-4 * (ccn_l ** 2) + 0.568 * ccn_l - 27.9) * (1.0 - abs (mask - 1.0))
+                ccnw = 0.80 * (- 1.15e-3 * (ccno ** 2) + 0.963 * ccno + 5.30) * abs (mask - 1.0) + &
+                    0.67 * (- 2.10e-4 * (ccnl ** 2) + 0.568 * ccnl - 27.9) * (1.0 - abs (mask - 1.0))
 #endif
                 
                 if (qmw (i, k) .gt. qmin) then
@@ -4721,7 +4724,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! cloud water (martin et al., 1994, gfdl revision)
                 ! -----------------------------------------------------------------------
                 
-                ccnw = 1.077 * ccn_o * abs (mask - 1.0) + 1.143 * ccn_l * (1.0 - abs (mask - 1.0))
+                ccnw = 1.077 * ccno * abs (mask - 1.0) + 1.143 * ccnl * (1.0 - abs (mask - 1.0))
                 
                 if (qmw (i, k) .gt. qmin) then
                     qcw (i, k) = betaw * dpg * qmw (i, k) * 1.0e3
