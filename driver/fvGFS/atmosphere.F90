@@ -591,7 +591,13 @@ contains
 
    if (present(p_hydro)) p_hydro = Atm(mygrid)%flagstruct%phys_hydrostatic
    if (present(  hydro))   hydro = Atm(mygrid)%flagstruct%hydrostatic
-   if (present(tile_num)) tile_num = Atm(mygrid)%tile_of_mosaic
+   if (present(tile_num)) then
+     if (Atm(mygrid)%gridstruct%nested) then
+       tile_num = Atm(mygrid)%tile_of_mosaic + 6
+     else
+       tile_num = Atm(mygrid)%tile_of_mosaic
+     endif
+   endif
  end subroutine atmosphere_control_data
 
 
