@@ -35,61 +35,29 @@ module gfdl_mp_mod
     
     private
     
-    public gfdl_mp_init
-    public gfdl_mp_driver
-    public gfdl_mp_end
-    public wqs1, wqs2, iqs1, iqs2, mpdrv, sedi_heat, warm_rain, revap_racc, &
-        linear_prof, icloud, subgrid_z_proc, terminal_fall, check_column, implicit_fall, &
-        lagrangian_fall_ppm, cs_profile, cs_limiters, fall_speed, setupm, setup_con, &
-        qsmith_init, qs_tablew, qs_table2, qs_table3, qs_table, neg_adj, acr3d, smlt, gmlt, &
-        wet_bulb, qsmith, qs_blend, es3_table1d, es2_table1d, esw_table1d, es2_table, &
-        esw_table, d_sat, qs1d_m, wqsat_moist, wqsat2_moist, qs1d_moist, revap_rac1, &
-        wqs2_vect, rhow, rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh, rvgas, rdgas, &
-        grav, hlv, hlf, cp_air, cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, &
-        t_ice, t_wfr, e00, pi, zvir, rgrav
+    public :: gfdl_mp_init
+    public :: gfdl_mp_driver
+    public :: gfdl_mp_end
+    public :: qsmith, qsmith_init, qs_blend, c_liq, c_ice, wqs1, wqs2, wqsat_moist, wqsat2_moist, wet_bulb, rhow
     public :: fast_sat_adj, cld_eff_rad, rad_ref
     
     logical :: module_is_initialized = .false.
     logical :: qsmith_tables_initialized = .false.
     
-    real, parameter :: grav = 9.80665 ! gfs: acceleration due to gravity
-    real, parameter :: rdgas = 287.05 ! gfs: gas constant for dry air
-    real, parameter :: rvgas = 461.50 ! gfs: gas constant for water vapor
-    real, parameter :: cp_air = 1.0046e3 ! gfs: heat capacity of dry air at constant pressure
-    real, parameter :: hlv = 2.5e6 ! gfs: latent heat of evaporation
-    real, parameter :: hlf = 3.3358e5 ! gfs: latent heat of fusion
-    real, parameter :: pi = 3.1415926535897931 ! gfs: ratio of circle circumference to diameter
+    real, parameter :: grav = 9.80665 ! acceleration due to gravity
+    real, parameter :: rdgas = 287.05 ! gas constant for dry air
+    real, parameter :: rvgas = 461.50 ! gas constant for water vapor
+    real, parameter :: cp_air = 1.0046e3 ! heat capacity of dry air at constant pressure
+    real, parameter :: hlv = 2.5e6 ! latent heat of evaporation
+    real, parameter :: hlf = 3.3358e5 ! latent heat of fusion
+    real, parameter :: pi = 3.1415926535897931 ! ratio of circle circumference to diameter
     
-    ! real, parameter :: cp_air = rdgas * 7. / 2. ! 1004.675, heat capacity of dry air at constant pressure
     real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0, heat capacity of water vapore at constnat pressure
-    ! real, parameter :: cv_air = 717.56 ! satoh value, heat capacity of dry air at constant volume
     real, parameter :: cv_air = cp_air - rdgas ! 717.55, heat capacity of dry air at constant volume
-    ! real, parameter :: cv_vap = 1410.0 ! emanuel value, heat capacity of water vapor at constant volume
     real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume
     
-    ! http: // www.engineeringtoolbox.com / ice - thermal - properties - d_576.html
-    ! c_ice = 2050.0 at 0 deg c
-    ! c_ice = 2000.0 at - 10 deg c
-    ! c_ice = 1943.0 at - 20 deg c
-    ! c_ice = 1882.0 at - 30 deg c
-    ! c_ice = 1818.0 at - 40 deg c
-    
-    ! https: // www.engineeringtoolbox.com / specific - heat - capacity - water - d_660.html
-    ! c_liq = 4219.9 at 0.01 deg c
-    ! c_liq = 4195.5 at 10 deg c
-    ! c_liq = 4184.4 at 20 deg c
-    ! c_liq = 4180.1 at 30 deg c
-    ! c_liq = 4179.6 at 40 deg c
-    
-    ! the following two are from emanuel's book "atmospheric convection"
-    ! real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg c: c = c_ice + 7.3 * (t - tice)
-    ! real, parameter :: c_liq = 4.190e3 ! heat capacity of water at 0 deg c
-    ! real, parameter :: c_ice = 1.972e3 ! gfdl: heat capacity of ice at - 15 deg c
-    ! real, parameter :: c_liq = 4.1855e3 ! gfdl: heat capacity of water at 15 deg c
-    ! real, parameter :: c_ice = 2.106e3 ! gfs: heat capacity of ice at 0 deg c
-    ! real, parameter :: c_liq = 4.1855e3 ! gfs: heat capacity of liquid at 15 deg c
-    real, parameter :: c_ice = 2.106e3 ! ifs: heat capacity of ice at 0 deg c
-    real, parameter :: c_liq = 4.218e3 ! ifs: heat capacity of water at 0 deg c
+    real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg c
+    real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg c
     
     real, parameter :: eps = rdgas / rvgas ! 0.6219934995
     real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077338443
@@ -99,15 +67,11 @@ module gfdl_mp_mod
     
     real, parameter :: t_ice = 273.16 ! freezing temperature
     real, parameter :: table_ice = 273.16 ! freezing point for qs table
-    real :: t_wfr ! complete freezing temperature
     
-    real (kind = r_grid), parameter :: e00 = 611.21 ! ifs: saturation vapor pressure at 0 deg c
-    ! real (kind = r_grid), parameter :: e00 = 610.71 ! gfdl: saturation vapor pressure at 0 deg c
+    real (kind = r_grid), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg c
     
-    real, parameter :: hlv0 = hlv ! gfs: evaporation latent heat coefficient at 0 deg c
-    ! real, parameter :: hlv0 = 2.501e6 ! emanuel value
-    real, parameter :: hlf0 = hlf ! gfs: fussion latent heat coefficient at 0 deg c
-    ! real, parameter :: hlf0 = 3.337e5 ! emanuel value
+    real, parameter :: hlv0 = hlv ! evaporation latent heat coefficient at 0 deg c
+    real, parameter :: hlf0 = hlf ! fussion latent heat coefficient at 0 deg c
     
     real, parameter :: lv0 = hlv0 - dc_vap * t_ice ! 3.14893552e6, evaporation latent heat coefficient at 0 deg k
     real, parameter :: li0 = hlf0 - dc_ice * t_ice ! - 2.2691392e5, fussion latend heat coefficient at 0 deg k
@@ -129,18 +93,17 @@ module gfdl_mp_mod
     real, parameter :: rnzr = 8.0e6 ! lin et al. 1983
     real, parameter :: rnzs = 3.0e6 ! lin et al. 1983
     real, parameter :: rnzg = 4.0e6 ! rutledge and hobbs 1984
-    ! lmh, 20170929
     real, parameter :: rnzh = 4.0e4 ! lin et al. 1983
     
     real, parameter :: rhow = 1.0e3 ! density of cloud water
     real, parameter :: rhor = 1.0e3 ! lin et al. 1983
     real, parameter :: rhos = 0.1e3 ! lin et al. 1983
     real, parameter :: rhog = 0.4e3 ! rutledge and hobbs 1984
-    ! lmh, 20170929
     real, parameter :: rhoh = 0.917e3 ! lin et al. 1983
     
     real, parameter :: rgrav = 1. / grav
     
+    real :: t_wfr ! complete freezing temperature
     real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw ! constants for accretions
     real :: acco (3, 4) ! constants for accretions
     ! constants for sublimation / deposition, freezing / melting, condensation / evaporation
@@ -367,25 +330,6 @@ module gfdl_mp_mod
     ! -----------------------------------------------------------------------
     
     namelist / gfdl_mp_nml / &
-        t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
-        vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
-        vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
-        qi0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
-        const_vs, const_vg, const_vr, use_ccn, rthresh, ccn_l, ccn_o, qc_crt, &
-        tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
-        tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
-        z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
-        rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
-        do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, &
-        ntimes, disp_heat, do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
-        do_cond_timescale, mp_time, consv_checker, te_err, use_park_cloud, &
-        use_gi_cloud, use_rhc_cevap, use_rhc_revap, inflag, do_warm_rain_mp, &
-        rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
-        qi0_rei, qmin, beta, liq_ice_combine, rewflag, reiflag, rewmin, rewmax, reimin, &
-        reimax, rermin, rermax, resmin, resmax, regmin, regmax, betaw, betai, betar, betas, &
-        betag
-    
-    public &
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
         vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
@@ -5142,8 +5086,6 @@ end subroutine rad_ref
 subroutine setup_con
     
     implicit none
-    
-    ! master = (mpp_pe () .eq.mpp_root_pe ())
     
     if (.not. qsmith_tables_initialized) call qsmith_init
     
