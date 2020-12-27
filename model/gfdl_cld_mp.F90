@@ -53,6 +53,7 @@ module gfdl_cld_mp_mod
     logical :: module_is_initialized = .false.
     logical :: qsmith_tables_initialized = .false.
     logical :: tables_are_initialized = .false.
+    logical :: do_setup = .true. ! setup constants and parameters
     
     ! -----------------------------------------------------------------------
     ! physics constants
@@ -140,6 +141,7 @@ module gfdl_cld_mp_mod
     real :: es0, ces0
     real :: pie, fac_rc
     real :: c_air, c_vap
+    real :: g2, log_10
     
     real :: lat2, lcp, icp, tcp ! used in bigg mechanism and wet bulk
     
@@ -169,7 +171,6 @@ module gfdl_cld_mp_mod
     logical :: rad_graupel = .true. ! consider graupel in cloud fraction calculation
     logical :: rad_rain = .true. ! consider rain in cloud fraction calculation
     logical :: fix_negative = .false. ! fix negative water species
-    logical :: do_setup = .true. ! setup constants and parameters
     logical :: disp_heat = .false. ! dissipative heating due to sedimentation
     logical :: do_cond_timescale = .false. ! whether to apply a timescale to condensation
     
@@ -287,8 +288,6 @@ module gfdl_cld_mp_mod
     logical :: do_warm_rain_mp = .false. ! do warm rain cloud microphysics only
     ! turn off to save time, turn on only in c48 64bit
     
-    real :: g2, log_10
-    
     real :: rh_thres = 0.75
     real :: rhc_cevap = 0.85 ! cloud water
     real :: rhc_revap = 0.85 ! cloud water
@@ -352,17 +351,17 @@ module gfdl_cld_mp_mod
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
         vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
-        qi0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
+        qi0_crt, qr0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
         const_vs, const_vg, const_vr, use_ccn, rthresh, ccn_l, ccn_o, qc_crt, &
         tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
-        tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_pgacs, &
+        tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_piacr, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
         rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, &
         ntimes, disp_heat, do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_park_cloud, &
         use_gi_cloud, use_rhc_cevap, use_rhc_revap, inflag, do_warm_rain_mp, &
-        rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
+        rh_thres, f_dq_p, f_dq_m, do_cld_adj, rhc_cevap, rhc_revap, &
         qi0_rei, qmin, beta, liq_ice_combine, rewflag, reiflag, rewmin, rewmax, reimin, &
         reimax, rermin, rermax, resmin, resmax, regmin, regmax, betaw, betai, betar, betas, &
         betag
