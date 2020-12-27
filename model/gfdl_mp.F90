@@ -18,13 +18,14 @@
 !* License along with the FV3 dynamical core.
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
+
 ! =======================================================================
-! cloud micro - physics package for gfdl global cloud resolving model
-! the algorithms are originally derived from lin et al 1983. most of the
-! key elements have been simplified / improved. this code at this stage
-! bears little to no similarity to the original lin mp in zetac.
-! therefore, it is best to be called gfdl micro - physics (gfdl mp) .
-! developer: shian - jiann lin, linjiong zhou
+! GFDL Cloud Microphysics Package (GFDL MP)
+! The algorithms are originally derived from Lin et al. (1983).
+! Most of the key elements have been simplified / improved.
+! This code at this stage bears little to no similarity to the original Lin MP in ZETAC.
+! Developers: Shian-Jiann Lin, Linjiong Zhou, and the GFDL FV3 Team
+! References: Chen and Lin (2011, 2013), Zhou et al. (2019), Harris et al. (2020)
 ! =======================================================================
 
 module gfdl_mp_mod
@@ -35,14 +36,27 @@ module gfdl_mp_mod
     
     private
     
+    ! -----------------------------------------------------------------------
+    ! public subroutines, functions, and variables
+    ! -----------------------------------------------------------------------
+    
     public :: gfdl_mp_init
     public :: gfdl_mp_driver
     public :: gfdl_mp_end
-    public :: qsmith, qsmith_init, qs_blend, c_liq, c_ice, wqs1, wqs2, wqsat_moist, wqsat2_moist, wet_bulb, rhow
     public :: fast_sat_adj, cld_eff_rad, rad_ref
+    public :: qsmith, qsmith_init, qs_blend, c_liq, c_ice, wqs1, wqs2, wqsat_moist, wqsat2_moist, wet_bulb, rhow
+    
+    ! -----------------------------------------------------------------------
+    ! initialization conditions
+    ! -----------------------------------------------------------------------
     
     logical :: module_is_initialized = .false.
     logical :: qsmith_tables_initialized = .false.
+    logical :: tables_are_initialized = .false.
+    
+    ! -----------------------------------------------------------------------
+    ! physics constants
+    ! -----------------------------------------------------------------------
     
     real, parameter :: grav = 9.80665 ! acceleration due to gravity
     real, parameter :: rdgas = 287.05 ! gas constant for dry air
@@ -51,24 +65,23 @@ module gfdl_mp_mod
     real, parameter :: hlv = 2.5e6 ! latent heat of evaporation
     real, parameter :: hlf = 3.3358e5 ! latent heat of fusion
     real, parameter :: pi = 3.1415926535897931 ! ratio of circle circumference to diameter
+
+    real, parameter :: rgrav = 1. / grav ! inversion of gravity acceleration
+    
+    real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg c
+    real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg c
+
+    real, parameter :: t_ice = 273.16 ! freezing temperature
     
     real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0, heat capacity of water vapore at constnat pressure
     real, parameter :: cv_air = cp_air - rdgas ! 717.55, heat capacity of dry air at constant volume
     real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume
-    
-    real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg c
-    real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg c
     
     real, parameter :: eps = rdgas / rvgas ! 0.6219934995
     real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077338443
     
     real, parameter :: dc_vap = cp_vap - c_liq ! - 2.372e3, isobaric heating / cooling
     real, parameter :: dc_ice = c_liq - c_ice ! 2.112e3, isobaric heating / colling
-    
-    real, parameter :: t_ice = 273.16 ! freezing temperature
-    real, parameter :: table_ice = 273.16 ! freezing point for qs table
-    
-    real (kind = r_grid), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg c
     
     real, parameter :: hlv0 = hlv ! evaporation latent heat coefficient at 0 deg c
     real, parameter :: hlf0 = hlf ! fussion latent heat coefficient at 0 deg c
@@ -78,6 +91,12 @@ module gfdl_mp_mod
     
     real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling
     real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coefficient at 0 deg k
+    
+    real (kind = r_grid), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg c
+    
+    ! -----------------------------------------------------------------------
+    ! unchangeable parameters
+    ! -----------------------------------------------------------------------
     
     real, parameter :: qrmin = 1.e-8 ! min value for cloud condensates
     real, parameter :: qvmin = 1.e-20 ! min value for water vapor (treated as zero)
@@ -90,25 +109,34 @@ module gfdl_mp_mod
     
     real, parameter :: sfcrho = 1.2 ! surface air density
     
-    real, parameter :: rnzr = 8.0e6 ! lin et al. 1983
-    real, parameter :: rnzs = 3.0e6 ! lin et al. 1983
-    real, parameter :: rnzg = 4.0e6 ! rutledge and hobbs 1984
-    real, parameter :: rnzh = 4.0e4 ! lin et al. 1983
+    real, parameter :: rnzr = 8.0e6 ! intercept parameter of rain (Lin et al. 1983)
+    real, parameter :: rnzs = 3.0e6 ! intercept parameter of snow (Lin et al. 1983)
+    real, parameter :: rnzg = 4.0e6 ! intercept parameter of graupel (Rutledge and Hobbs 1984)
+    real, parameter :: rnzh = 4.0e4 ! intercept parameter of hail (Lin et al. 1983)
     
     real, parameter :: rhow = 1.0e3 ! density of cloud water
-    real, parameter :: rhor = 1.0e3 ! lin et al. 1983
-    real, parameter :: rhos = 0.1e3 ! lin et al. 1983
-    real, parameter :: rhog = 0.4e3 ! rutledge and hobbs 1984
-    real, parameter :: rhoh = 0.917e3 ! lin et al. 1983
+    real, parameter :: rhor = 1.0e3 ! density of rain (Lin et al. 1983)
+    real, parameter :: rhos = 0.1e3 ! density of snow (Lin et al. 1983)
+    real, parameter :: rhog = 0.4e3 ! density of graupel (Rutledge and Hobbs 1984)
+    real, parameter :: rhoh = 9.17e2 ! density of hail (Lin et al. 1983)
     
-    real, parameter :: rgrav = 1. / grav
+    real, parameter :: dt_fr = 8. ! homogeneous freezing of all cloud water at t_wfr - dt_fr
+    ! minimum temperature water can exist (Moore and Molinero 2011)
+    ! dt_fr can be considered as the error bar
     
-    real :: t_wfr ! complete freezing temperature
-    real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw ! constants for accretions
+    real, parameter :: p0_min = 100. ! minimum pressure (pascal) for mp to operate
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+    
     real :: acco (3, 4) ! constants for accretions
+    real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw ! constants for accretions
     ! constants for sublimation / deposition, freezing / melting, condensation / evaporation
     real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5)
     
+    real :: t_wfr ! complete freezing temperature
+    real :: p_min
     real :: es0, ces0
     real :: pie, fac_rc
     real :: c_air, c_vap
@@ -123,17 +151,8 @@ module gfdl_mp_mod
     real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
     real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
     
-    logical :: tables_are_initialized = .false.
-    
-    real, parameter :: dt_fr = 8. ! homogeneous freezing of all cloud water at t_wfr - dt_fr
-    ! minimum temperature water can exist (moore & molinero nov. 2011, nature)
-    ! dt_fr can be considered as the error bar
-    
-    real, parameter :: p0_min = 100. ! minimum pressure (pascal) for mp to operate
-    real :: p_min
-    
     ! -----------------------------------------------------------------------
-    ! namelist parameters
+    ! namelist (changeable) parameters
     ! -----------------------------------------------------------------------
     
     integer :: ntimes = 1 ! cloud microphysics sub cycles
@@ -5221,7 +5240,7 @@ real function wqs1 (ta, den)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5246,7 +5265,7 @@ real function wqs2 (ta, den, dqdt)
     real :: es, ap1, tmin
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     
     if (.not. tables_are_initialized) call qsmith_init
     
@@ -5342,7 +5361,7 @@ real function iqs1 (ta, den)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5368,7 +5387,7 @@ real function iqs2 (ta, den, dqdt)
     real (kind = r_grid) :: tmin, es, ap1
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5395,7 +5414,7 @@ real function qs1d_moist (ta, qv, pa, dqdt)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     eps10 = 10. * eps
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
@@ -5423,7 +5442,7 @@ real function wqsat2_moist (ta, qv, pa, dqdt)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     eps10 = 10. * eps
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
@@ -5449,7 +5468,7 @@ real function wqsat_moist (ta, qv, pa)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5472,7 +5491,7 @@ real function qs1d_m (ta, qv, pa)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5495,7 +5514,7 @@ real function d_sat (ta, den)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5519,7 +5538,7 @@ real function esw_table (ta)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5541,7 +5560,7 @@ real function es2_table (ta)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5567,7 +5586,7 @@ subroutine esw_table1d (ta, es, n)
     
     integer :: i, it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     
     do i = 1, n
         ap1 = 10. * dim (ta (i), tmin) + 1.
@@ -5596,7 +5615,7 @@ subroutine es2_table1d (ta, es, n)
     
     integer :: i, it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     
     do i = 1, n
         ap1 = 10. * dim (ta (i), tmin) + 1.
@@ -5625,7 +5644,7 @@ subroutine es3_table1d (ta, es, n)
     
     integer :: i, it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     
     do i = 1, n
         ap1 = 10. * dim (ta (i), tmin) + 1.
@@ -5652,7 +5671,7 @@ subroutine qs_tablew (n)
     
     integer :: i
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     
     ! -----------------------------------------------------------------------
     ! compute es over water
@@ -5684,7 +5703,7 @@ subroutine qs_table2 (n)
     
     integer :: i, i0, i1
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     
     do i = 1, n
         tem0 = tmin + delt * real (i - 1)
@@ -5736,9 +5755,9 @@ subroutine qs_table3 (n)
     integer :: i, i0, i1
     
     esbasw = 1013246.0
-    tbasw = table_ice + 100.
+    tbasw = t_ice + 100.
     esbasi = 6107.1
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     
     do i = 1, n
         tem = tmin + delt * real (i - 1)
@@ -5748,9 +5767,9 @@ subroutine qs_table3 (n)
             ! compute es over ice between - 160 deg c and 0 deg c.
             ! see smithsonian meteorological tables page 350.
             ! -----------------------------------------------------------------------
-            aa = - 9.09718 * (table_ice / tem - 1.)
-            b = - 3.56654 * log10 (table_ice / tem)
-            c = 0.876793 * (1. - tem / table_ice)
+            aa = - 9.09718 * (t_ice / tem - 1.)
+            b = - 3.56654 * log10 (t_ice / tem)
+            c = 0.876793 * (1. - tem / t_ice)
             e = log10 (esbasi)
             table3 (i) = 0.1 * 10 ** (aa + b + c + e)
         else
@@ -5795,7 +5814,7 @@ real function qs_blend (t, p, q)
     
     integer :: it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     ap1 = 10. * dim (t, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5822,7 +5841,7 @@ subroutine qs_table (n)
     
     integer :: i
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     
     ! -----------------------------------------------------------------------
     ! compute es over ice between - 160 deg c and 0 deg c.
@@ -5859,7 +5878,7 @@ subroutine qs_table (n)
     
     do i = 1, 200
         tem = 253.16 + delt * real (i - 1)
-        wice = 0.05 * (table_ice - tem)
+        wice = 0.05 * (t_ice - tem)
         wh2o = 0.05 * (tem - 253.16)
         table (i + 1400) = wice * table (i + 1400) + wh2o * esupc (i)
     enddo
@@ -5889,7 +5908,7 @@ subroutine qsmith (im, km, ks, t, p, q, qs, dqdt)
     
     integer :: i, k, it
     
-    tmin = table_ice - 160.
+    tmin = t_ice - 160.
     eps10 = 10. * eps
     
     if (.not. tables_are_initialized) then
