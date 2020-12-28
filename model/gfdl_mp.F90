@@ -44,15 +44,14 @@ module gfdl_mp_mod
     public :: gfdl_mp_driver
     public :: gfdl_mp_end
     public :: fast_sat_adj, cld_eff_rad, rad_ref
-    public :: qsmith, qsmith_init, qs_blend, c_liq, c_ice, wqs1, wqs2, wqsat_moist, wqsat2_moist, wet_bulb, rhow
+    public :: qsmith, qsmith_init, qs_blend, wqs1, wqs2, wqsat_moist, wqsat2_moist
+    public :: c_liq, c_ice, rhow, wet_bulb
     
     ! -----------------------------------------------------------------------
     ! initialization conditions
     ! -----------------------------------------------------------------------
     
-    logical :: module_is_initialized = .false.
-    logical :: qsmith_tables_initialized = .false.
-    logical :: tables_are_initialized = .false.
+    logical :: tables_are_initialized = .false. ! initialize satuation tables
     logical :: do_setup = .true. ! setup constants and parameters
     
     ! -----------------------------------------------------------------------
@@ -3655,8 +3654,6 @@ subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
         t_wfr = t_ice - 40.0
     endif
     
-    module_is_initialized = .true.
-    
 end subroutine gfdl_mp_init
 
 ! =======================================================================
@@ -4511,7 +4508,6 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     real :: ccno = 90. ! ccn over ocean (cm^ - 3)
     real :: ccnl = 270. ! ccn over land (cm^ - 3)
     
-    real, parameter :: n0r = 8.0e6, n0s = 3.0e6, n0g = 4.0e6 ! intercept parameters (m^ - 4) in lin et al. (1983)
     real, parameter :: alphar = 0.8, alphas = 0.25, alphag = 0.5 ! parameters in terminal equation in lin et al., (1983)
     real, parameter :: gammar = 17.837789, gammas = 8.2850630, gammag = 11.631769 ! gamma values as a result of different alpha
     real, parameter :: rho_0 = 50.e-3
@@ -4853,7 +4849,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             
             if (qmr (i, k) .gt. qmin) then
                 qcr (i, k) = betar * dpg * qmr (i, k) * 1.0e3
-                lambdar = exp (0.25 * log (pi * rhor * n0r / qmr (i, k) / rho))
+                lambdar = exp (0.25 * log (pi * rhor * rnzr / qmr (i, k) / rho))
                 rer (i, k) = 0.5 * exp (log (gammar / 6) / alphar) / lambdar * 1.0e6
                 rer (i, k) = max (rermin, min (rermax, rer (i, k)))
             else
@@ -4867,7 +4863,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             
             if (qms (i, k) .gt. qmin) then
                 qcs (i, k) = betas * dpg * qms (i, k) * 1.0e3
-                lambdas = exp (0.25 * log (pi * rhos * n0s / qms (i, k) / rho))
+                lambdas = exp (0.25 * log (pi * rhos * rnzs / qms (i, k) / rho))
                 res (i, k) = 0.5 * exp (log (gammas / 6) / alphas) / lambdas * 1.0e6
                 res (i, k) = max (resmin, min (resmax, res (i, k)))
             else
@@ -4881,7 +4877,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             
             if (qmg (i, k) .gt. qmin) then
                 qcg (i, k) = betag * dpg * qmg (i, k) * 1.0e3
-                lambdag = exp (0.25 * log (pi * rhog * n0g / qmg (i, k) / rho))
+                lambdag = exp (0.25 * log (pi * rhog * rnzg / qmg (i, k) / rho))
                 reg (i, k) = 0.5 * exp (log (gammag / 6) / alphag) / lambdag * 1.0e6
                 reg (i, k) = max (regmin, min (regmax, reg (i, k)))
             else
@@ -5105,9 +5101,9 @@ subroutine setup_con
     
     implicit none
     
-    if (.not. qsmith_tables_initialized) call qsmith_init
+    if (.not. tables_are_initialized) call qsmith_init
     
-    qsmith_tables_initialized = .true.
+    tables_are_initialized = .true.
     
 end subroutine setup_con
 
@@ -5910,9 +5906,7 @@ subroutine qsmith (im, km, ks, t, p, q, qs, dqdt)
     tmin = t_ice - 160.
     eps10 = 10. * eps
     
-    if (.not. tables_are_initialized) then
-        call qsmith_init
-    endif
+    if (.not. tables_are_initialized) call qsmith_init
     
     do k = ks, km
         do i = 1, im
