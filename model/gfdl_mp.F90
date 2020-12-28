@@ -58,73 +58,77 @@ module gfdl_mp_mod
     ! physics constants
     ! -----------------------------------------------------------------------
     
-    real, parameter :: grav = 9.80665 ! acceleration due to gravity
-    real, parameter :: rdgas = 287.05 ! gas constant for dry air
-    real, parameter :: rvgas = 461.50 ! gas constant for water vapor
-    real, parameter :: cp_air = 1.0046e3 ! heat capacity of dry air at constant pressure
-    real, parameter :: hlv = 2.5e6 ! latent heat of evaporation
-    real, parameter :: hlf = 3.3358e5 ! latent heat of fusion
+    real, parameter :: grav = 9.80665 ! acceleration due to gravity (m/s^2)
+
+    real, parameter :: rgrav = 1.0 / grav ! inversion of gravity acceleration (s^2/m)
+
     real, parameter :: pi = 3.1415926535897931 ! ratio of circle circumference to diameter
 
-    real, parameter :: rgrav = 1. / grav ! inversion of gravity acceleration
-    
-    real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg c
-    real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg c
+    real, parameter :: rdgas = 287.05 ! gas constant for dry air (J/kg/K)
+    real, parameter :: rvgas = 461.50 ! gas constant for water vapor (J/kg/K)
 
-    real, parameter :: t_ice = 273.16 ! freezing temperature
-    
-    real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0, heat capacity of water vapore at constnat pressure
-    real, parameter :: cv_air = cp_air - rdgas ! 717.55, heat capacity of dry air at constant volume
-    real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume
-    
     real, parameter :: eps = rdgas / rvgas ! 0.6219934995
     real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077338443
     
-    real, parameter :: dc_vap = cp_vap - c_liq ! - 2.372e3, isobaric heating / cooling
-    real, parameter :: dc_ice = c_liq - c_ice ! 2.112e3, isobaric heating / colling
+    real, parameter :: t_ice = 273.16 ! freezing temperature (K)
     
-    real, parameter :: hlv0 = hlv ! evaporation latent heat coefficient at 0 deg c
-    real, parameter :: hlf0 = hlf ! fussion latent heat coefficient at 0 deg c
+    real, parameter :: cp_air = 1.0046e3 ! heat capacity of dry air at constant pressure (J/kg/K)
+    real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0, heat capacity of water vapore at constnat pressure (J/kg/K)
+    real, parameter :: cv_air = cp_air - rdgas ! 717.55, heat capacity of dry air at constant volume (J/kg/K)
+    real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume (J/kg/K)
     
-    real, parameter :: lv0 = hlv0 - dc_vap * t_ice ! 3.14893552e6, evaporation latent heat coefficient at 0 deg k
-    real, parameter :: li0 = hlf0 - dc_ice * t_ice ! - 2.2691392e5, fussion latend heat coefficient at 0 deg k
+    real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg C (J/kg/K)
+    real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg C (J/kg/K)
+
+    real, parameter :: dc_vap = cp_vap - c_liq ! - 2.372e3, isobaric heating / cooling (J/kg/K)
+    real, parameter :: dc_ice = c_liq - c_ice ! 2.112e3, isobaric heating / colling (J/kg/K)
     
-    real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling
-    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coefficient at 0 deg k
+    real, parameter :: hlv = 2.5e6 ! latent heat of evaporation (J/kg)
+    real, parameter :: hlf = 3.3358e5 ! latent heat of fusion (J/kg)
+
+    real, parameter :: hlv0 = hlv ! evaporation latent heat coefficient at 0 deg C (J/kg)
+    real, parameter :: hlf0 = hlf ! fussion latent heat coefficient at 0 deg C (J/kg)
     
-    real (kind = r_grid), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg c
+    real, parameter :: lv0 = hlv0 - dc_vap * t_ice ! 3.14893552e6, evaporation latent heat coefficient at 0 deg K (J/kg)
+    real, parameter :: li0 = hlf0 - dc_ice * t_ice ! - 2.2691392e5, fussion latend heat coefficient at 0 deg K (J/kg)
+    
+    real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling (J/kg/K)
+
+    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coefficient at 0 deg K (J/kg)
+    
+    real (kind = r_grid), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg C (Pa)
     
     ! -----------------------------------------------------------------------
     ! unchangeable parameters
     ! -----------------------------------------------------------------------
     
-    real, parameter :: qrmin = 1.e-8 ! min value for cloud condensates
-    real, parameter :: qvmin = 1.e-20 ! min value for water vapor (treated as zero)
-    real, parameter :: qcmin = 1.e-12 ! min value for cloud condensates
+    real, parameter :: qvmin = 1.0e-20 ! min value for water vapor (treated as zero) (kg/kg)
+    real, parameter :: qcmin = 1.0e-12 ! min value for cloud condensates (kg/kg)
+    real, parameter :: qrmin = 1.0e-8 ! min value for cloud condensates (kg/kg)
     
-    real, parameter :: vr_min = 1.e-3 ! min fall speed for rain
-    real, parameter :: vf_min = 1.e-5 ! min fall speed for cloud ice, snow, graupel
+    real, parameter :: vr_min = 1.0e-3 ! min fall speed for rain (m/s)
+    real, parameter :: vf_min = 1.0e-5 ! min fall speed for cloud ice, snow, graupel (m/s)
     
-    real, parameter :: dz_min = 1.e-2 ! used for correcting flipped height
+    real, parameter :: dz_min = 1.0e-2 ! used for correcting flipped height (m)
     
-    real, parameter :: sfcrho = 1.2 ! surface air density
+    real, parameter :: sfcrho = 1.2 ! surface air density (kg/m^3)
     
-    real, parameter :: rnzr = 8.0e6 ! intercept parameter of rain (Lin et al. 1983)
-    real, parameter :: rnzs = 3.0e6 ! intercept parameter of snow (Lin et al. 1983)
-    real, parameter :: rnzg = 4.0e6 ! intercept parameter of graupel (Rutledge and Hobbs 1984)
-    real, parameter :: rnzh = 4.0e4 ! intercept parameter of hail (Lin et al. 1983)
+    real, parameter :: rnzr = 8.0e6 ! intercept parameter of rain (Lin et al. 1983) (1/m^4)
+    real, parameter :: rnzs = 3.0e6 ! intercept parameter of snow (Lin et al. 1983) (1/m^4)
+    real, parameter :: rnzg = 4.0e6 ! intercept parameter of graupel (Rutledge and Hobbs 1984) (1/m^4)
+    real, parameter :: rnzh = 4.0e4 ! intercept parameter of hail (Lin et al. 1983) (1/m^4)
     
-    real, parameter :: rhow = 1.0e3 ! density of cloud water
-    real, parameter :: rhor = 1.0e3 ! density of rain (Lin et al. 1983)
-    real, parameter :: rhos = 0.1e3 ! density of snow (Lin et al. 1983)
-    real, parameter :: rhog = 0.4e3 ! density of graupel (Rutledge and Hobbs 1984)
-    real, parameter :: rhoh = 9.17e2 ! density of hail (Lin et al. 1983)
+    real, parameter :: rhow = 1.0e3 ! density of cloud water (kg/m^3)
+    real, parameter :: rhor = 1.0e3 ! density of rain (Lin et al. 1983) (kg/m^3)
+    real, parameter :: rhos = 0.1e3 ! density of snow (Lin et al. 1983) (kg/m^3)
+    real, parameter :: rhog = 0.4e3 ! density of graupel (Rutledge and Hobbs 1984) (kg/m^3)
+    real, parameter :: rhoh = 9.17e2 ! density of hail (Lin et al. 1983) (kg/m^3)
     
-    real, parameter :: dt_fr = 8. ! homogeneous freezing of all cloud water at t_wfr - dt_fr
+    real, parameter :: dt_fr = 8.0 ! homogeneous freezing of all cloud water at t_wfr - dt_fr
     ! minimum temperature water can exist (Moore and Molinero 2011)
-    ! dt_fr can be considered as the error bar
+    ! dt_fr can be considered as the error bar (K)
     
-    real, parameter :: p0_min = 100. ! minimum pressure (pascal) for mp to operate
+    real, parameter :: p0_min = 100.0 ! minimum pressure for mp to operate (Pa)
     
     ! -----------------------------------------------------------------------
     ! local variables
