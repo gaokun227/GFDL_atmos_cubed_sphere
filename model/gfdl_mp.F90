@@ -62,7 +62,7 @@ module gfdl_mp_mod
 
     real, parameter :: rgrav = 1.0 / grav ! inversion of gravity acceleration (s^2/m)
 
-    real, parameter :: pi = 3.1415926535897931 ! ratio of circle circumference to diameter
+    real, parameter :: pi = 4.0 * atan (1.0) ! ratio of circle circumference to diameter
 
     real, parameter :: rdgas = 287.05 ! gas constant for dry air (J/kg/K)
     real, parameter :: rvgas = 461.50 ! gas constant for water vapor (J/kg/K)
@@ -99,7 +99,7 @@ module gfdl_mp_mod
     real (kind = r_grid), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg C (Pa)
     
     ! -----------------------------------------------------------------------
-    ! unchangeable parameters
+    ! predefined parameters
     ! -----------------------------------------------------------------------
     
     real, parameter :: qvmin = 1.0e-20 ! min value for water vapor (treated as zero) (kg/kg)
@@ -130,34 +130,30 @@ module gfdl_mp_mod
     
     real, parameter :: p0_min = 100.0 ! minimum pressure for mp to operate (Pa)
     
+    real (kind = r_grid), parameter :: one_r8 = 1. ! constant 1
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
     
-    real :: acco (3, 4) ! constants for accretions
-    real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw ! constants for accretions
-    ! constants for sublimation / deposition, freezing / melting, condensation / evaporation
+    real :: acco (3, 4)
+    real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw
     real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5)
     
     real :: t_wfr ! complete freezing temperature
-    real :: p_min
-    real :: es0, ces0
-    real :: pie, fac_rc
+    real :: p_min, fac_rc
     real :: c_air, c_vap
-    real :: g2, log_10
-    
-    real :: lat2, lcp, icp, tcp ! used in bigg mechanism and wet bulk
-    
-    real :: d0_vap ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
+    real :: lat2, lcp
+    real :: d0_vap
+
     real (kind = r_grid) :: lv00, li00, li20
     real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
-    real (kind = r_grid), parameter :: one_r8 = 1.
     
     real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
     real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
     
     ! -----------------------------------------------------------------------
-    ! namelist (changeable) parameters
+    ! namelist parameters
     ! -----------------------------------------------------------------------
     
     integer :: ntimes = 1 ! cloud microphysics sub cycles
@@ -451,8 +447,6 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
     lat2 = (hlv + hlf) ** 2
     
     lcp = hlv / cp_air
-    icp = hlf / cp_air
-    tcp = (hlv + hlf) / cp_air
     
     ! tendency zero out for am moist processes should be done outside the driver
     
@@ -1037,7 +1031,7 @@ subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
     
     ! this is the vectorized loop
     do k = ks + 1, ke
-        dgz (k) = - g2 * (dz (k - 1) + dz (k))
+        dgz (k) = - 0.5 * grav * (dz (k - 1) + dz (k))
         cv0 (k) = dm (k) * (cv_air + qv (k) * cv_vap + (qr (k) + ql (k)) * c_liq + &
              (qi (k) + qs (k) + qg (k)) * c_ice) + cw * (m1 (k) - m1 (k - 1))
         ! cvm_new + cw * m1 (k) = cvm_old + cw * m1 (k - 1)
@@ -1627,7 +1621,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
                 ! melting of snow
                 ! -----------------------------------------------------------------------
                 
-                dqs0 = ces0 / p1 (k) - qv ! not sure if this is correct; check again
+                dqs0 = e00 * eps / p1 (k) - qv ! not sure if this is correct; check again
                 
                 if (qs > qcmin) then
                     
@@ -3388,7 +3382,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
                 else
                     ! deng and mace, 2008, grl
                     vti (k) = (3. + log10 (qi (k) * den (k))) * (tc (k) * (aa * tc (k) + bb) + cc) + dd * tc (k) + ee
-                    vti (k) = vi0 * exp (log_10 * vti (k))
+                    vti (k) = vi0 * exp (log (10.) * vti (k))
                 endif
                 vti (k) = min (vi_max, max (vf_min, vti (k)))
             endif
@@ -3467,11 +3461,9 @@ subroutine setupm
     
     integer :: i, k
     
-    pie = 4. * atan (1.0)
-    
     ! s. klein's formular (eq 16) from am2
     
-    fac_rc = (4. / 3.) * pie * rhor * rthresh ** 3
+    fac_rc = (4. / 3.) * pi * rhor * rthresh ** 3
     
     if (prog_ccn) then
         ! if (master) write (*, *) 'prog_ccn option is .t.'
@@ -3493,7 +3485,7 @@ subroutine setupm
     ch2o = c_liq
     ri50 = 1.e-4
     
-    pisq = pie * pie
+    pisq = pi * pi
     scm3 = (visk / vdifu) ** (1. / 3.)
     
     cracs = pisq * rnzr * rnzs * rhos
@@ -3510,12 +3502,12 @@ subroutine setupm
     ! act: 1 - 2:racs (s - r) ; 3 - 4:sacr (r - s) ;
     ! 5 - 6:gacr (r - g) ; 7 - 8:gacs (s - g)
     
-    act (1) = pie * rnzs * rhos
-    act (2) = pie * rnzr * rhor
+    act (1) = pi * rnzs * rhos
+    act (2) = pi * rnzr * rhor
     if (do_hail) then
-        act (6) = pie * rnzh * rhoh
+        act (6) = pi * rnzh * rhoh
     else
-        act (6) = pie * rnzg * rhog
+        act (6) = pi * rnzg * rhog
     endif
     act (3) = act (2)
     act (4) = act (1)
@@ -3531,16 +3523,16 @@ subroutine setupm
     
     gcon = 40.74 * sqrt (sfcrho) ! 44.628
     
-    csacw = pie * rnzs * clin * gam325 / (4. * act (1) ** 0.8125)
+    csacw = pi * rnzs * clin * gam325 / (4. * act (1) ** 0.8125)
     ! decreasing csacw to reduce cloud water --- > snow
     
-    craci = pie * rnzr * alin * gam380 / (4. * act (2) ** 0.95)
+    craci = pi * rnzr * alin * gam380 / (4. * act (2) ** 0.95)
     csaci = csacw * c_psaci
     
     if (do_hail) then
-        cgacw = pie * rnzh * gam350 * gcon / (4. * act (6) ** 0.875)
+        cgacw = pi * rnzh * gam350 * gcon / (4. * act (6) ** 0.875)
     else
-        cgacw = pie * rnzg * gam350 * gcon / (4. * act (6) ** 0.875)
+        cgacw = pi * rnzg * gam350 * gcon / (4. * act (6) ** 0.875)
     endif
     ! cgaci = cgacw * 0.1
     
@@ -3553,13 +3545,13 @@ subroutine setupm
     
     ! subl and revp: five constants for three separate processes
     
-    cssub (1) = 2. * pie * vdifu * tcond * rvgas * rnzs
+    cssub (1) = 2. * pi * vdifu * tcond * rvgas * rnzs
     if (do_hail) then
-        cgsub (1) = 2. * pie * vdifu * tcond * rvgas * rnzh
+        cgsub (1) = 2. * pi * vdifu * tcond * rvgas * rnzh
     else
-        cgsub (1) = 2. * pie * vdifu * tcond * rvgas * rnzg
+        cgsub (1) = 2. * pi * vdifu * tcond * rvgas * rnzg
     endif
-    crevp (1) = 2. * pie * vdifu * tcond * rvgas * rnzr
+    crevp (1) = 2. * pi * vdifu * tcond * rvgas * rnzr
     cssub (2) = 0.78 / sqrt (act (1))
     cgsub (2) = 0.78 / sqrt (act (6))
     crevp (2) = 0.78 / sqrt (act (2))
@@ -3578,8 +3570,8 @@ subroutine setupm
     
     ! smlt: five constants (lin et al. 1983)
     
-    csmlt (1) = 2. * pie * tcond * rnzs / hltf
-    csmlt (2) = 2. * pie * vdifu * rnzs * hltc / hltf
+    csmlt (1) = 2. * pi * tcond * rnzs / hltf
+    csmlt (2) = 2. * pi * vdifu * rnzs * hltc / hltf
     csmlt (3) = cssub (2)
     csmlt (4) = cssub (3)
     csmlt (5) = ch2o / hltf
@@ -3587,18 +3579,15 @@ subroutine setupm
     ! gmlt: five constants
     
     if (do_hail) then
-        cgmlt (1) = 2. * pie * tcond * rnzh / hltf
-        cgmlt (2) = 2. * pie * vdifu * rnzh * hltc / hltf
+        cgmlt (1) = 2. * pi * tcond * rnzh / hltf
+        cgmlt (2) = 2. * pi * vdifu * rnzh * hltc / hltf
     else
-        cgmlt (1) = 2. * pie * tcond * rnzg / hltf
-        cgmlt (2) = 2. * pie * vdifu * rnzg * hltc / hltf
+        cgmlt (1) = 2. * pi * tcond * rnzg / hltf
+        cgmlt (2) = 2. * pi * vdifu * rnzg * hltc / hltf
     endif
     cgmlt (3) = cgsub (2)
     cgmlt (4) = cgsub (3)
     cgmlt (5) = ch2o / hltf
-    
-    es0 = e00
-    ces0 = eps * es0
     
 end subroutine setupm
 
@@ -3649,9 +3638,6 @@ subroutine gfdl_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
         do_setup = .false.
     endif
     
-    g2 = 0.5 * grav
-    log_10 = log (10.)
-
     if (do_warm_rain_mp) then
         t_wfr = t_min
     else
