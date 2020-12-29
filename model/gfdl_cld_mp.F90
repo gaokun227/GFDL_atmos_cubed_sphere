@@ -190,12 +190,12 @@ module gfdl_cld_mp_mod
     ! 1: Deng and Mace (2008)
     ! 2: Heymsfield and Donner (1990)
 
-    integer :: rewflag = 1
+    integer :: rewflag = 1 ! cloud water effective radius scheme
     ! 1: Martin et al. (1994)
     ! 2: Martin et al. (1994), GFDL revision
     ! 3: Kiehl et al. (1994)
 
-    integer :: reiflag = 1
+    integer :: reiflag = 1 ! cloud ice effective radius scheme
     ! 1: Heymsfield and Mcfarquhar (1996)
     ! 2: Donner et al. (1997)
     ! 3: Fu (2007)
@@ -244,116 +244,102 @@ module gfdl_cld_mp_mod
 
     logical :: do_warm_rain_mp = .false. ! do warm rain cloud microphysics only
 
-    real :: mp_time = 150.0 ! maximum micro - physics time step (s)
+    real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
-    real :: tice_mlt = 273.16 ! set ice melting temperature to 268.0 based on observation (Kay et al. 2016) (K)
+    real :: tice_mlt = 273.16 ! can set ice melting temperature to 268.0 based on observation (Kay et al. 2016) (K)
     
-    real :: t_min = 178.0 ! min temp to freeze - dry all water vapor (K)
-    real :: t_sub = 184.0 ! min temp for sublimation of cloud ice (K)
+    real :: t_min = 178.0 ! minimum temperature to freeze - dry all water vapor (K)
+    real :: t_sub = 184.0 ! minimum temperature for sublimation of cloud ice (K)
 
     real :: rh_inc = 0.25 ! rh increment for complete evaporation of cloud water and cloud ice
     real :: rh_inr = 0.25 ! rh increment for minimum evaporation of rain
     real :: rh_ins = 0.25 ! rh increment for sublimation of snow
     
-    real :: tau_r2g = 900.0 ! rain freezing to graupel (s)
-    real :: tau_g2r = 600.0 ! graupel melting to rain (s)
-    real :: tau_i2s = 1000.0 ! cloud ice to snow autoconversion (s)
-    real :: tau_l2r = 900.0 ! cloud water to rain autoconversion (s)
-    real :: tau_v2l = 150.0 ! water vapor to cloud water (condensation) (s)
-    real :: tau_l2v = 300.0 ! cloud water to water vapor (evaporation) (s)
-    real :: tau_revp = 0.0 ! rain evaporation (s)
-    real :: tau_imlt = 600.0 ! cloud ice melting (s)
-    real :: tau_smlt = 900.0 ! snow melting (s)
+    real :: tau_r2g = 900.0 ! rain freezing to graupel time scale (s)
+    real :: tau_g2r = 600.0 ! graupel melting to rain time scale (s)
+    real :: tau_i2s = 1000.0 ! cloud ice to snow autoconversion time scale (s)
+    real :: tau_l2r = 900.0 ! cloud water to rain autoconversion time scale (s)
+    real :: tau_v2l = 150.0 ! water vapor to cloud water condensation time scale (s)
+    real :: tau_l2v = 300.0 ! cloud water to water vapor evaporation time scale (s)
+    real :: tau_revp = 0.0 ! rain evaporation time scale (s)
+    real :: tau_imlt = 600.0 ! cloud ice melting time scale (s)
+    real :: tau_smlt = 900.0 ! snow melting time scale (s)
     
     real :: dw_land = 0.20 ! base value for subgrid deviation / variability over land
-    real :: dw_ocean = 0.10 ! base value for ocean
+    real :: dw_ocean = 0.10 ! base value for subgrid deviation / variability over ocean
     
     real :: ccn_o = 90.0 ! ccn over ocean (1/cm^3)
     real :: ccn_l = 270.0 ! ccn over land (1/cm^3)
     
-    real :: rthresh = 10.0e-6 ! critical cloud drop radius (micron)
+    real :: rthresh = 10.0e-6 ! critical cloud drop radius (micron) for autoconversion
     
     real :: cld_min = 0.05 ! minimum cloud fraction
 
     real :: sat_adj0 = 0.90 ! adjustment factor (0: no, 1: full) during fast_sat_adj
     
-    real :: qi_lim = 1. ! cloud ice limiter (0: no, 1: full, >1: extra) to prevent large ice build up
+    real :: qi_lim = 1.0 ! cloud ice limiter (0: no, 1: full, >1: extra) to prevent large ice build up
     
-    real :: ql_mlt = 2.0e-3 ! max value of cloud water allowed from melted cloud ice (kg/kg)
-    real :: qs_mlt = 1.0e-6 ! max cloud water due to snow melt (kg/kg)
+    real :: ql_mlt = 2.0e-3 ! maximum cloud water allowed from melted cloud ice (kg/kg)
+    real :: qs_mlt = 1.0e-6 ! maximum cloud water allowed from melted snow (kg/kg)
     
-    real :: ql_gen = 1.0e-3 ! max cloud water generation during remapping step if do_sat_adj = .true.
+    real :: ql_gen = 1.0e-3 ! maximum cloud water generation during remapping step if do_sat_adj = .true. (kg/kg)
     
-    real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain) (kg/kg)
-    real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources) (kg/m^3)
+    real :: ql0_max = 2.0e-3 ! maximum cloud water value (autoconverted to rain) (kg/kg)
+    real :: qi0_max = 1.0e-4 ! maximum cloud ice value (by other sources) (kg/m^3)
     
-    real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold
-    ! qi0_crt if negative, its magnitude is used as the mixing ration threshold; otherwise, used as density
-    real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold
-    ! lin et al. (1983) used * mixing ratio * = 1.e-4 (hail)
-    real :: qs0_crt = 1.0e-3 ! snow to graupel density threshold (0.6e-3 in purdue lin scheme)
+    real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold (kg/m^3)
+    real :: qs0_crt = 1.0e-3 ! snow to graupel autoconversion threshold (0.6e-3 in Purdue Lin scheme) (kg/m^3)
     
-    real :: c_paut = 0.55 ! autoconversion cloud water to rain (use 0.5 to reduce autoconversion)
-    real :: c_psaci = 0.02 ! accretion: cloud ice to snow (was 0.1 in zetac)
-    real :: c_piacr = 5.0 ! accretion: rain to ice: (not used)
-    real :: c_cracw = 0.9 ! rain accretion efficiency
-    real :: c_pgacs = 2.0e-3 ! snow to graupel "accretion" eff. (was 0.1 in zetac)
+    real :: c_paut = 0.55 ! cloud water to rain autoconversion efficiency
+    real :: c_psaci = 0.02 ! cloud ice to snow accretion efficiency (was 0.1 in ZETAC)
+    real :: c_cracw = 0.9 ! cloud water to rain accretion efficiency
+    real :: c_pgacs = 2.0e-3 ! snow to graupel accretion efficiency (was 0.1 in ZETAC)
     
-    ! decreasing clin to reduce csacw (so as to reduce cloud water --- > snow)
+    real :: alin = 842.0 ! "a" in Lin et al. (1983)
+    real :: clin = 4.8 ! "c" in Lin et al. (1983), 4.8 -- > 6. (to ehance ql -- > qs)
     
-    real :: alin = 842.0 ! "a" in lin et al. (1983)
-    real :: clin = 4.8 ! "c" in lin et al. (1983), 4.8 -- > 6. (to ehance ql -- > qs)
+    real :: vi_fac = 1.0 ! IFS: if const_vi: 1 / 3
+    real :: vs_fac = 1.0 ! IFS: if const_vs: 1.
+    real :: vg_fac = 1.0 ! IFS: if const_vg: 2.
+    real :: vr_fac = 1.0 ! IFS: if const_vr: 4.
     
-    real :: vi_fac = 1. ! ifs: if const_vi: 1 / 3
-    real :: vs_fac = 1. ! ifs: if const_vs: 1.
-    real :: vg_fac = 1. ! ifs: if const_vg: 2.
-    real :: vr_fac = 1. ! ifs: if const_vr: 4.
+    real :: vi_max = 0.5 ! maximum fall speed for cloud ice (m/s)
+    real :: vs_max = 5.0 ! maximum fall speed for snow (m/s)
+    real :: vg_max = 8.0 ! maximum fall speed for graupel (m/s)
+    real :: vr_max = 12.0 ! maximum fall speed for rain (m/s)
     
-    real :: vi_max = 0.5 ! max fall speed for ice
-    real :: vs_max = 5.0 ! max fall speed for snow
-    real :: vg_max = 8.0 ! max fall speed for graupel
-    real :: vr_max = 12. ! max fall speed for rain
+    real :: xr_a = 0.25 ! p value in Xu and Randall (1996)
+    real :: xr_b = 100.0 ! alpha_0 value in Xu and Randall (1996)
+    real :: xr_c = 0.49 ! gamma value in Xu and Randall (1996)
     
-    real :: xr_a = 0.25 ! p value in xu and randall, 1996
-    real :: xr_b = 100. ! alpha_0 value in xu and randall, 1996
-    real :: xr_c = 0.49 ! gamma value in xu and randall, 1996
+    real :: te_err = 1.e-14 ! 64bit: 1.e-14, 32bit: 1.e-7; turn off to save computer time
     
-    real :: te_err = 1.e-14 ! 64bit: 1.e-14, 32bit: 1.e-7
-    
-    ! turn off to save time, turn on only in c48 64bit
-    
-    real :: rh_thres = 0.75
-    real :: rhc_cevap = 0.85 ! cloud water
-    real :: rhc_revap = 0.85 ! cloud water
+    real :: rh_thres = 0.75 ! minimum relative humidity for cloud fraction
+    real :: rhc_cevap = 0.85 ! maximum relative humidity for cloud water evaporation
+    real :: rhc_revap = 0.85 ! maximum relative humidity for rain evaporation
 
-    real :: f_dq_p = 1.0
-    real :: f_dq_m = 1.0
+    real :: f_dq_p = 1.0 ! cloud fraction adjustment for supersaturation
+    real :: f_dq_m = 1.0 ! cloud fraction adjustment for undersaturation
     
-    real :: qi0_rei = 0.8e-4 ! max cloud ice value (by other sources)
+    real :: qi0_rei = 0.8e-4 ! maximum cloud ice value (by other sources) (kg/kg)
     
-    real :: qmin = 1.0e-12 ! minimum mass mixing ratio (kg / kg)
-    real :: beta = 1.22 ! defined in heymsfield and mcfarquhar, 1996
+    real :: qmin = 1.0e-12 ! minimum mass mixing ratio (kg/kg)
+    real :: beta = 1.22 ! defined in Heymsfield and Mcfarquhar (1996)
     
 #ifdef SJ_CLD_TEST
-    real :: rewmin = 4.0, rewmax = 10.0
-    real :: reimin = 4.0, reimax = 250.0
-    real :: rermin = 5.0, rermax = 2000.0
-    real :: resmin = 5.0, resmax = 2000.0
-    real :: regmin = 5.0, regmax = 2000.0
+    real :: rewmin = 4.0, rewmax = 10.0 ! minimum and maximum effective radius for cloud water
+    real :: reimin = 4.0, reimax = 250.0 ! minimum and maximum effective radius for cloud ice
+    real :: rermin = 5.0, rermax = 2000.0 ! minimum and maximum effective radius for rain
+    real :: resmin = 5.0, resmax = 2000.0 ! minimum and maximum effective radius for snow
+    real :: regmin = 5.0, regmax = 2000.0 ! minimum and maximum effective radius for graupel
 #else
-    real :: rewmin = 5.0, rewmax = 10.0
-    real :: reimin = 10.0, reimax = 150.0
-    real :: rermin = 0.0, rermax = 10000.0
-    real :: resmin = 0.0, resmax = 10000.0
-    real :: regmin = 0.0, regmax = 10000.0
+    real :: rewmin = 5.0, rewmax = 10.0 ! minimum and maximum effective radius for cloud water
+    real :: reimin = 10.0, reimax = 150.0 ! minimum and maximum effective radius for cloud ice
+    real :: rermin = 0.0, rermax = 10000.0 ! minimum and maximum effective radius for rain
+    real :: resmin = 0.0, resmax = 10000.0 ! minimum and maximum effective radius for snow
+    real :: regmin = 0.0, regmax = 10000.0 ! minimum and maximum effective radius for graupel
 #endif
-    ! rewmax = 15.0, rermin = 15.0 ! Kokhanovsky 2004
-    
-    real :: betaw = 1.0
-    real :: betai = 1.0
-    real :: betar = 1.0
-    real :: betas = 1.0
-    real :: betag = 1.0
+    ! rewmax = 15.0, rermin = 15.0 ! Kokhanovsky (2004)
     
     ! -----------------------------------------------------------------------
     ! namelist
@@ -363,20 +349,18 @@ module gfdl_cld_mp_mod
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, vi_fac, &
         vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, vs_max, &
         vg_max, vr_max, qs_mlt, qs0_crt, ql0_max, qi0_max, qi0_crt, ifflag, &
-        qr0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, const_vs, &
-        const_vg, const_vr, rthresh, ccn_l, ccn_o, sat_adj0, igflag, &
-        tau_imlt, tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen, &
-        c_paut, c_psaci, c_piacr, c_pgacs, z_slope_liq, z_slope_ice, &
-        prog_ccn, c_cracw, alin, clin, rad_snow, rad_graupel, rad_rain, &
-        cld_min, use_ppm, mono_prof, do_sedi_heat, &
-        do_sedi_uv, do_sedi_w, icloud_f, irain_f, ntimes, do_disp_heat, &
-        do_hail, xr_a, xr_b, xr_c, tau_revp, tice_mlt, &
-        do_cond_timescale, mp_time, consv_checker, te_err, &
-        use_rhc_cevap, use_rhc_revap, inflag, &
+        do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, &
+        const_vr, rthresh, ccn_l, ccn_o, sat_adj0, igflag, c_paut, tau_imlt, &
+        tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen, do_hail, inflag, &
+        c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, &
+        clin, rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
+        do_sedi_heat, do_sedi_uv, do_sedi_w, icloud_f, irain_f, xr_a, xr_b, &
+        xr_c, ntimes, do_disp_heat, tau_revp, tice_mlt, do_cond_timescale, &
+        mp_time, consv_checker, te_err, use_rhc_cevap, use_rhc_revap, &
         do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, rhc_cevap, &
         rhc_revap, qi0_rei, qmin, beta, liq_ice_combine, rewflag, reiflag, &
         rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
-        regmin, regmax, betaw, betai, betar, betas, betag
+        regmin, regmax
     
 contains
 
@@ -4672,7 +4656,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
 #endif
                 
                 if (qmw (i, k) .gt. qmin) then
-                    qcw (i, k) = betaw * dpg * qmw (i, k) * 1.0e3
+                    qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / (4.0 * pi * rhow * ccnw))) * 1.0e4
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
@@ -4691,7 +4675,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ccnw = 1.077 * ccno * abs (mask - 1.0) + 1.143 * ccnl * (1.0 - abs (mask - 1.0))
                 
                 if (qmw (i, k) .gt. qmin) then
-                    qcw (i, k) = betaw * dpg * qmw (i, k) * 1.0e3
+                    qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / (4.0 * pi * rhow * ccnw))) * 1.0e4
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
@@ -4708,7 +4692,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! -----------------------------------------------------------------------
                 
                 if (qmw (i, k) .gt. qmin) then
-                    qcw (i, k) = betaw * dpg * qmw (i, k) * 1.0e3
+                    qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = 14.0 * abs (mask - 1.0) + &
                          (8.0 + (14.0 - 8.0) * min (1.0, max (0.0, - tc0 / 30.0))) * (1.0 - abs (mask - 1.0))
                     rew (i, k) = rew (i, k) + (14.0 - rew (i, k)) * min (1.0, max (0.0, snowd (i) / 1000.0))
@@ -4727,7 +4711,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qmin) then
-                    qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
+                    qci (i, k) = dpg * qmi (i, k) * 1.0e3
 #ifdef SJ_CLD_TEST
                     rei_fac = log (1.0e3 * min (qi0_rei, qmi (i, k)) * rho)
 #else
@@ -4757,7 +4741,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qmin) then
-                    qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
+                    qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     if (tc0 .le. - 55) then
                         rei (i, k) = 15.41627
                     elseif (tc0 .le. - 50) then
@@ -4790,7 +4774,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qmin) then
-                    qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
+                    qci (i, k) = dpg * qmi (i, k) * 1.0e3
 #ifdef SJ_CLD_TEST
                     ! use fu2007 form below - 10 c
                     if (tc0 > - 10) then
@@ -4819,7 +4803,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qmin) then
-                    qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
+                    qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     ind = min (max (int (t (i, k) - 136.0), 44), 138 - 1)
                     cor = t (i, k) - int (t (i, k))
                     rei (i, k) = retab (ind) * (1. - cor) + retab (ind + 1) * cor
@@ -4838,7 +4822,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qmin) then
-                    qci (i, k) = betai * dpg * qmi (i, k) * 1.0e3
+                    qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / rho_0) * max (0.0, - tc0) ** 1.5
                     rei (i, k) = 377.4 + bw * (203.3 + bw * (37.91 + 2.3696 * bw))
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
@@ -4854,7 +4838,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             ! -----------------------------------------------------------------------
             
             if (qmr (i, k) .gt. qmin) then
-                qcr (i, k) = betar * dpg * qmr (i, k) * 1.0e3
+                qcr (i, k) = dpg * qmr (i, k) * 1.0e3
                 lambdar = exp (0.25 * log (pi * rhor * rnzr / qmr (i, k) / rho))
                 rer (i, k) = 0.5 * exp (log (gammar / 6) / alphar) / lambdar * 1.0e6
                 rer (i, k) = max (rermin, min (rermax, rer (i, k)))
@@ -4868,7 +4852,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             ! -----------------------------------------------------------------------
             
             if (qms (i, k) .gt. qmin) then
-                qcs (i, k) = betas * dpg * qms (i, k) * 1.0e3
+                qcs (i, k) = dpg * qms (i, k) * 1.0e3
                 lambdas = exp (0.25 * log (pi * rhos * rnzs / qms (i, k) / rho))
                 res (i, k) = 0.5 * exp (log (gammas / 6) / alphas) / lambdas * 1.0e6
                 res (i, k) = max (resmin, min (resmax, res (i, k)))
@@ -4882,7 +4866,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             ! -----------------------------------------------------------------------
             
             if (qmg (i, k) .gt. qmin) then
-                qcg (i, k) = betag * dpg * qmg (i, k) * 1.0e3
+                qcg (i, k) = dpg * qmg (i, k) * 1.0e3
                 lambdag = exp (0.25 * log (pi * rhog * rnzg / qmg (i, k) / rho))
                 reg (i, k) = 0.5 * exp (log (gammag / 6) / alphag) / lambdag * 1.0e6
                 reg (i, k) = max (regmin, min (regmax, reg (i, k)))
