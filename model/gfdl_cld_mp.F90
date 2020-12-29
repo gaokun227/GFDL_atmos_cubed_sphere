@@ -140,10 +140,9 @@ module gfdl_cld_mp_mod
     real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw
     real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5)
     
-    real :: t_wfr ! complete freezing temperature
+    real :: t_wfr ! complete freezing temperature (K)
     real :: p_min, fac_rc
     real :: c_air, c_vap
-    real :: lat2, lcp
     real :: d0_vap
 
     real (kind = r_grid) :: lv00, li00, li20
@@ -159,20 +158,82 @@ module gfdl_cld_mp_mod
     integer :: ntimes = 1 ! cloud microphysics sub cycles
     
     integer :: icloud_f = 0 ! cloud scheme
+    ! 0: subgrid variability based scheme
+    ! 1: same as 0, but for old fvgfs implementation
+    ! 2: binary cloud scheme
+    ! 3: extension of  0
+
     integer :: irain_f = 0 ! cloud water to rain auto conversion scheme
+    ! 0: subgrid variability based scheme
+    ! 1: no subgrid varaibility
     
-    logical :: sedi_transport = .true. ! transport of momentum in sedimentation
-    logical :: do_sedi_w = .true. ! transport of vertical momentum during sedimentation
+    integer :: inflag = 1 ! ice nucleation scheme
+    ! 1: Hong et al. (2004)
+    ! 2: Meyers et al. (1992)
+    ! 3: Meyers et al. (1992)
+    ! 4: Cooper (1986)
+    ! 5: Flecther (1962)
+    
+    integer :: rewflag = 1
+    ! 1: Martin et al. (1994)
+    ! 2: Martin et al. (1994), GFDL revision
+    ! 3: Kiehl et al. (1994)
+
+    integer :: reiflag = 1
+    ! 1: Heymsfield and Mcfarquhar (1996)
+    ! 2: Donner et al. (1997)
+    ! 3: Fu (2007)
+    ! 4: Kristjansson et al. (2000)
+    ! 5: Wyser (1998)
+    
+    logical :: sedi_transport = .true. ! transport of horizontal momentum in sedimentation
+    logical :: do_sedi_w = .true. ! transport of vertical momentum in sedimentation
     logical :: do_sedi_heat = .true. ! transport of heat in sedimentation
-    logical :: prog_ccn = .false. ! do prognostic ccn (yi ming's method)
-    logical :: do_qa = .true. ! do inline cloud fraction
-    logical :: rad_snow = .true. ! consider snow in cloud fraciton calculation
-    logical :: rad_graupel = .true. ! consider graupel in cloud fraction calculation
-    logical :: rad_rain = .true. ! consider rain in cloud fraction calculation
-    logical :: fix_negative = .false. ! fix negative water species
     logical :: disp_heat = .false. ! dissipative heating due to sedimentation
-    logical :: do_cond_timescale = .false. ! whether to apply a timescale to condensation
+
+    logical :: do_qa = .true. ! do inline cloud fraction
+    logical :: rad_snow = .true. ! include snow in cloud fraciton calculation
+    logical :: rad_graupel = .true. ! include graupel in cloud fraction calculation
+    logical :: rad_rain = .true. ! include rain in cloud fraction calculation
+    logical :: use_xr_cloud = .false. ! use Xu and Randall (1996)'s cloud diagnosis
+    logical :: use_park_cloud = .false. ! use Park et al. (2016)'s cloud diagnosis
+    logical :: use_gi_cloud = .false. ! use Pultepe and Isaac (2007)'s cloud diagnosis
+    logical :: do_cld_adj = .false. ! do cloud fraction adjustment
+
+    logical :: use_ppm = .false. ! use ppm fall scheme
+    logical :: use_ppm_ice = .false. ! use ppm fall scheme for cloud ice
+    logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
+
+    logical :: z_slope_liq = .true. ! use linear mono slope for autocconversions
+    logical :: z_slope_ice = .false. ! use linear mono slope for autocconversions
+
+    logical :: use_rhc_cevap = .false. ! cap of rh for cloud water evaporation
+    logical :: use_rhc_revap = .false. ! cap of rh for rain evaporation
+
+    logical :: const_vi = .false. ! if .ture., the constants are specified by v * _fac
+    logical :: const_vs = .false. ! if .ture., the constants are specified by v * _fac
+    logical :: const_vg = .false. ! if .ture., the constants are specified by v * _fac
+    logical :: const_vr = .false. ! if .ture., the constants are specified by v * _fac
     
+    logical :: liq_ice_combine = .true. ! combine all liquid water, combine all solid water
+    logical :: snow_grauple_combine = .false. ! combine snow and graupel
+    
+    logical :: prog_ccn = .false. ! do prognostic ccn (Yi Ming's method)
+
+    logical :: fix_negative = .false. ! fix negative water species
+
+    logical :: do_cond_timescale = .false. ! whether to apply a timescale to condensation
+
+    logical :: do_sat_adj = .false. ! do fast saturation adjustments
+
+    logical :: do_hail = .false. ! use hail parameters instead of graupel
+
+    logical :: hd_icefall = .false. ! use Heymsfield and Donner (1990)'s fall speed of cloud ice
+
+    logical :: consv_checker = .false. ! turn on energy and water conservation checker
+
+    logical :: do_warm_rain_mp = .false. ! do warm rain cloud microphysics only
+
     real :: cld_fac = 1.0 ! multiplication factor for cloud fraction
     real :: cld_min = 0.05 ! minimum cloud fraction
     real :: tice = 273.16 ! set tice = 165. to trun off ice - phase phys (kessler emulator)
@@ -248,11 +309,6 @@ module gfdl_cld_mp_mod
     real :: alin = 842.0 ! "a" in lin et al. (1983)
     real :: clin = 4.8 ! "c" in lin et al. (1983), 4.8 -- > 6. (to ehance ql -- > qs)
     
-    logical :: const_vi = .false. ! if .t. the constants are specified by v * _fac
-    logical :: const_vs = .false. ! if .t. the constants are specified by v * _fac
-    logical :: const_vg = .false. ! if .t. the constants are specified by v * _fac
-    logical :: const_vr = .false. ! if .t. the constants are specified by v * _fac
-    
     real :: vi_fac = 1. ! ifs: if const_vi: 1 / 3
     real :: vs_fac = 1. ! ifs: if const_vs: 1.
     real :: vg_fac = 1. ! ifs: if const_vg: 2.
@@ -269,22 +325,6 @@ module gfdl_cld_mp_mod
     
     real :: te_err = 1.e-14 ! 64bit: 1.e-14, 32bit: 1.e-7
     
-    logical :: do_sat_adj = .false. ! has fast saturation adjustments
-    logical :: z_slope_liq = .true. ! use linear mono slope for autocconversions
-    logical :: z_slope_ice = .false. ! use linear mono slope for autocconversions
-    logical :: use_ccn = .false. ! must be true when prog_ccn is false
-    logical :: use_ppm = .false. ! use ppm fall scheme
-    logical :: use_ppm_ice = .false. ! use ppm fall scheme for cloud ice
-    logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
-    logical :: do_hail = .false. ! use hail parameters instead of graupel
-    logical :: hd_icefall = .false. ! use heymsfield and donner, 1990's fall speed of cloud ice
-    logical :: use_xr_cloud = .false. ! use xu and randall, 1996's cloud diagnosis
-    logical :: use_park_cloud = .false. ! park et al. 2016
-    logical :: use_gi_cloud = .false. ! gultepe and isaac (2007, grl)
-    logical :: use_rhc_cevap = .false. ! cap of rh for cloud water evaporation
-    logical :: use_rhc_revap = .false. ! cap of rh for rain evaporation
-    logical :: consv_checker = .false. ! turn on energy and water conservation checker
-    logical :: do_warm_rain_mp = .false. ! do warm rain cloud microphysics only
     ! turn off to save time, turn on only in c48 64bit
     
     real :: rh_thres = 0.75
@@ -293,14 +333,6 @@ module gfdl_cld_mp_mod
 
     real :: f_dq_p = 1.0
     real :: f_dq_m = 1.0
-    logical :: do_cld_adj = .false.
-    
-    integer :: inflag = 1 ! ice nucleation scheme
-    ! 1: hong et al., 2004
-    ! 2: meyers et al., 1992
-    ! 3: meyers et al., 1992
-    ! 4: cooper, 1986
-    ! 5: flecther, 1962
     
     real :: qi0_rei = 0.8e-4 ! max cloud ice value (by other sources)
     
@@ -328,20 +360,6 @@ module gfdl_cld_mp_mod
     real :: betas = 1.0
     real :: betag = 1.0
     
-    logical :: liq_ice_combine = .true.
-    logical :: snow_grauple_combine = .false.
-    
-    integer :: rewflag = 1
-    ! 1: martin et al., 1994
-    ! 2: martin et al., 1994, gfdl revision
-    ! 3: kiehl et al., 1994
-    integer :: reiflag = 1
-    ! 1: heymsfield and mcfarquhar, 1996
-    ! 2: donner et al., 1997
-    ! 3: fu, 2007
-    ! 4: kristjansson et al., 2000
-    ! 5: wyser, 1998
-    
     ! -----------------------------------------------------------------------
     ! namelist
     ! -----------------------------------------------------------------------
@@ -351,7 +369,7 @@ module gfdl_cld_mp_mod
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
         vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
         qi0_crt, qr0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
-        const_vs, const_vg, const_vr, use_ccn, rthresh, ccn_l, ccn_o, qc_crt, &
+        const_vs, const_vg, const_vr, rthresh, ccn_l, ccn_o, qc_crt, &
         tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_piacr, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
@@ -439,14 +457,6 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
     c1_vap = c_vap / c_air
     c1_liq = c_liq / c_air
     c1_ice = c_ice / c_air
-    
-    ! -----------------------------------------------------------------------
-    ! define latent heat coefficient used in wet bulb and bigg mechanism
-    ! -----------------------------------------------------------------------
-    
-    lat2 = (hlv + hlf) ** 2
-    
-    lcp = hlv / cp_air
     
     ! tendency zero out for am moist processes should be done outside the driver
     
@@ -2166,7 +2176,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                             cin (k) = 1.e-5 * exp (0.5 * (tice - tz (k))) * 1000.0 ! convert from L^-1 to m^-3
                     endif
                     pidep = dt_pisub * dq * 4.0 * 11.9 * exp (0.5 * log (qi (k) * den (k) * cin (k))) &
-                         / (qsi * den (k) * lat2 / (0.0243 * rvgas * tz (k) ** 2) + 4.42478e4)
+                         / (qsi * den (k) * (hlv + hlf) ** 2 / (0.0243 * rvgas * tz (k) ** 2) + 4.42478e4)
                 else
                     pidep = 0.
                 endif
@@ -2340,13 +2350,6 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
         
         qpz = cld_fac * qpz
         rh = qpz / qstar
-        
-        ! -----------------------------------------------------------------------
-        ! icloud_f = 0: bug - fixed
-        ! icloud_f = 1: old fvgfs gfdl) mp implementation
-        ! icloud_f = 2: binary cloud scheme (0 / 1)
-        ! icloud_f = 3: revision of icloud = 0
-        ! -----------------------------------------------------------------------
         
         if (use_xr_cloud) then ! xu and randall cloud scheme (1996)
             if (rh >= 1.0) then
@@ -3711,7 +3714,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     real :: d0_vap ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
     real :: lv00 ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
     real :: li00
-    real :: qsw, rh, lat2, ccn0
+    real :: qsw, rh, ccn0
     real :: tc, qsi, dqsdt, dq, dq0, pidep, qi_crt, tmp, dtmp
     real :: tin, rqi, q_plus, q_minus
     real :: sdt, dt_bigg, adj_fac
@@ -3752,8 +3755,6 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     d0_vap = c_vap - c_liq
     lv00 = hlv - d0_vap * t_ice
     li00 = hlf - dc_ice * t_ice
-    
-    lat2 = (hlv + hlf) ** 2
     
     do j = js, je
         
@@ -4190,7 +4191,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                             cin (i) = 1.e-5 * exp (0.5 * (t_ice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
                     endif
                     pidep = sdt * dq * 4.0 * 11.9 * exp (0.5 * log (qi (i, j) * den (i) * cin (i))) &
-                         / (qsi * den (i) * lat2 / (0.0243 * rvgas * pt1 (i) ** 2) + 4.42478e4)
+                         / (qsi * den (i) * (hlv + hlf) ** 2 / (0.0243 * rvgas * pt1 (i) ** 2) + 4.42478e4)
                 else
                     pidep = 0.
                 endif
@@ -4381,12 +4382,6 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 ! -----------------------------------------------------------------------
                 
                 rh = qpz (i) / qstar (i)
-                
-                ! -----------------------------------------------------------------------
-                ! icloud_f = 0: bug - fxied
-                ! icloud_f = 1: old fvgfs gfdl_mp implementation
-                ! icloud_f = 2: binary cloud scheme (0 / 1)
-                ! -----------------------------------------------------------------------
                 
                 if (rh > 0.75 .and. qpz (i) > 1.e-6) then
                     dq = hvar (i) * qpz (i)
@@ -5313,7 +5308,9 @@ real function wet_bulb (q, t, den)
     
     real, intent (in) :: t, q, den
     
-    real :: qs, tp, dqdt
+    real :: qs, tp, dqdt, lcp
+    
+    lcp = hlv / cp_air
     
     wet_bulb = t
     qs = wqs2 (wet_bulb, den, dqdt)
