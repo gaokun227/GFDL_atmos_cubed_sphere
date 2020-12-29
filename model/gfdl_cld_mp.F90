@@ -70,7 +70,7 @@ module gfdl_cld_mp_mod
     real, parameter :: eps = rdgas / rvgas ! 0.6219934995
     real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077338443
     
-    real, parameter :: t_ice = 273.16 ! freezing temperature (K)
+    real, parameter :: tice = 273.16 ! freezing temperature (K)
     
     real, parameter :: cp_air = 1.0046e3 ! heat capacity of dry air at constant pressure (J/kg/K)
     real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0, heat capacity of water vapore at constnat pressure (J/kg/K)
@@ -89,12 +89,12 @@ module gfdl_cld_mp_mod
     real, parameter :: hlv0 = hlv ! evaporation latent heat coefficient at 0 deg C (J/kg)
     real, parameter :: hlf0 = hlf ! fussion latent heat coefficient at 0 deg C (J/kg)
     
-    real, parameter :: lv0 = hlv0 - dc_vap * t_ice ! 3.14893552e6, evaporation latent heat coefficient at 0 deg K (J/kg)
-    real, parameter :: li0 = hlf0 - dc_ice * t_ice ! - 2.2691392e5, fussion latend heat coefficient at 0 deg K (J/kg)
+    real, parameter :: lv0 = hlv0 - dc_vap * tice ! 3.14893552e6, evaporation latent heat coeff. at 0 deg K (J/kg)
+    real, parameter :: li0 = hlf0 - dc_ice * tice ! - 2.2691392e5, fussion latent heat coeff. at 0 deg K (J/kg)
     
     real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling (J/kg/K)
 
-    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coefficient at 0 deg K (J/kg)
+    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coeff. at 0 deg K (J/kg)
     
     real (kind = r_grid), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg C (Pa)
     
@@ -130,7 +130,7 @@ module gfdl_cld_mp_mod
     
     real, parameter :: p0_min = 100.0 ! minimum pressure for mp to operate (Pa)
     
-    real (kind = r_grid), parameter :: one_r8 = 1. ! constant 1
+    real (kind = r_grid), parameter :: one_r8 = 1.0 ! constant 1
     
     ! -----------------------------------------------------------------------
     ! local variables
@@ -234,30 +234,28 @@ module gfdl_cld_mp_mod
 
     logical :: do_warm_rain_mp = .false. ! do warm rain cloud microphysics only
 
-    real :: cld_fac = 1.0 ! multiplication factor for cloud fraction
-    real :: cld_min = 0.05 ! minimum cloud fraction
-    real :: tice = 273.16 ! set tice = 165. to trun off ice - phase phys (kessler emulator)
-    real :: tice_mlt = 273.16 ! set ice melting temperature to 268.0 based on observation (kay et al., 2016, jc)
+    real :: mp_time = 150.0 ! maximum micro - physics time step (s)
     
-    real :: t_min = 178. ! min temp to freeze - dry all water vapor
-    real :: t_sub = 184. ! min temp for sublimation of cloud ice
-    real :: mp_time = 150. ! maximum micro - physics time step (sec)
+    real :: tice_mlt = 273.16 ! set ice melting temperature to 268.0 based on observation (Kay et al. 2016) (K)
     
+    real :: t_min = 178.0 ! min temp to freeze - dry all water vapor (K)
+    real :: t_sub = 184.0 ! min temp for sublimation of cloud ice (K)
+
     real :: rh_inc = 0.25 ! rh increment for complete evaporation of cloud water and cloud ice
     real :: rh_inr = 0.25 ! rh increment for minimum evaporation of rain
     real :: rh_ins = 0.25 ! rh increment for sublimation of snow
     
-    real :: tau_r2g = 900. ! rain freezing during fast_sat
-    real :: tau_smlt = 900. ! snow melting
-    real :: tau_g2r = 600. ! graupel melting to rain
-    real :: tau_imlt = 600. ! cloud ice melting
-    real :: tau_i2s = 1000. ! cloud ice to snow auto - conversion
-    real :: tau_l2r = 900. ! cloud water to rain auto - conversion
-    real :: tau_v2l = 150. ! water vapor to cloud water (condensation)
-    real :: tau_l2v = 300. ! cloud water to water vapor (evaporation)
-    real :: tau_g2v = 900. ! grapuel sublimation
-    real :: tau_v2g = 21600. ! grapuel deposition -- make it a slow process
-    real :: tau_revp = 0. ! rain evaporation
+    real :: tau_r2g = 900.0 ! rain freezing during fast_sat
+    real :: tau_smlt = 900.0 ! snow melting
+    real :: tau_g2r = 600.0 ! graupel melting to rain
+    real :: tau_imlt = 600.0 ! cloud ice melting
+    real :: tau_i2s = 1000.0 ! cloud ice to snow auto - conversion
+    real :: tau_l2r = 900.0 ! cloud water to rain auto - conversion
+    real :: tau_v2l = 150.0 ! water vapor to cloud water (condensation)
+    real :: tau_l2v = 300.0 ! cloud water to water vapor (evaporation)
+    real :: tau_g2v = 900.0 ! grapuel sublimation
+    real :: tau_v2g = 21600.0 ! grapuel deposition -- make it a slow process
+    real :: tau_revp = 0.0 ! rain evaporation
     
     real :: dw_land = 0.20 ! base value for subgrid deviation / variability over land
     real :: dw_ocean = 0.10 ! base value for ocean
@@ -267,6 +265,8 @@ module gfdl_cld_mp_mod
     
     real :: rthresh = 10.0e-6 ! critical cloud drop radius (micron)
     
+    real :: cld_min = 0.05 ! minimum cloud fraction
+
     ! -----------------------------------------------------------------------
     ! wrf / wsm6 scheme: qi_gen = 4.92e-11 * (1.e3 * exp (0.1 * tmp)) ** 1.33
     ! optimized: qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
@@ -372,8 +372,8 @@ module gfdl_cld_mp_mod
         const_vs, const_vg, const_vr, rthresh, ccn_l, ccn_o, qc_crt, &
         tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_piacr, c_pgacs, &
-        z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, tice, &
-        rad_snow, rad_graupel, rad_rain, cld_fac, cld_min, use_ppm, use_ppm_ice, mono_prof, &
+        z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, &
+        rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, use_ppm_ice, mono_prof, &
         do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, &
         ntimes, disp_heat, do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_park_cloud, &
@@ -449,9 +449,9 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
     d1_vap = d0_vap / c_air
     d1_ice = dc_ice / c_air
     
-    ! lv0 = hlv0 - (c_vap - c_liq) * t_ice! 3.13905782e6, evaporation latent heat coefficient at 0 deg k
-    lv00 = (hlv0 - d0_vap * t_ice) / c_air
-    li00 = (hlf0 - dc_ice * t_ice) / c_air
+    ! lv0 = hlv0 - (c_vap - c_liq) * tice! 3.13905782e6, evaporation latent heat coefficient at 0 deg k
+    lv00 = (hlv0 - d0_vap * tice) / c_air
+    li00 = (hlf0 - dc_ice * tice) / c_air
     li20 = lv00 + li00
     
     c1_vap = c_vap / c_air
@@ -1524,7 +1524,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     fac_imlt = 1. - exp (- dt5 / tau_imlt)
     
     ! -----------------------------------------------------------------------
-    ! define heat capacity and latend heat coefficient
+    ! define heat capacity and latent heat coefficient
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
@@ -1596,7 +1596,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
         call linear_prof (ke - ks + 1, qik (ks), di (ks), z_slope_ice, h_var)
         
         ! -----------------------------------------------------------------------
-        ! update capacity heat and latend heat coefficient
+        ! update capacity heat and latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do k = ks, ke
@@ -1991,7 +1991,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     fac_v2g = 1. - exp (- dts / tau_v2g)
     
     ! -----------------------------------------------------------------------
-    ! define heat capacity and latend heat coefficient
+    ! define heat capacity and latent heat coefficient
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
@@ -2099,7 +2099,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
         tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
         
         ! -----------------------------------------------------------------------
-        ! update heat capacity and latend heat coefficient
+        ! update heat capacity and latent heat coefficient
         ! -----------------------------------------------------------------------
         
         icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
@@ -2144,7 +2144,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             endif
             
             ! -----------------------------------------------------------------------
-            ! update capacity heat and latend heat coefficient
+            ! update capacity heat and latent heat coefficient
             ! -----------------------------------------------------------------------
             
             tcpk (k) = (li20 + (d1_vap + d1_ice) * tz (k)) / cvm (k)
@@ -2200,7 +2200,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             endif
             
             ! -----------------------------------------------------------------------
-            ! update capacity heat and latend heat coefficient
+            ! update capacity heat and latent heat coefficient
             ! -----------------------------------------------------------------------
             
             tcpk (k) = (li20 + (d1_vap + d1_ice) * tz (k)) / cvm (k)
@@ -2348,7 +2348,6 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
         ! binary cloud scheme; qa = 0.5 if qstar == qpz
         ! -----------------------------------------------------------------------
         
-        qpz = cld_fac * qpz
         rh = qpz / qstar
         
         if (use_xr_cloud) then ! xu and randall cloud scheme (1996)
@@ -2478,7 +2477,7 @@ subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den,
     integer :: i
     
     ! -----------------------------------------------------------------------
-    ! define latend heat coefficient
+    ! define latent heat coefficient
     ! -----------------------------------------------------------------------
     
     do i = is, ie
@@ -2580,7 +2579,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     fac_imlt = 1. - exp (- dt5 / tau_imlt)
     
     ! -----------------------------------------------------------------------
-    ! define heat capacity and latend heat coefficient
+    ! define heat capacity and latent heat coefficient
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
@@ -2642,7 +2641,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     zt (ks) = ze (ks)
     
     ! -----------------------------------------------------------------------
-    ! update capacity heat and latend heat coefficient
+    ! update capacity heat and latent heat coefficient
     ! -----------------------------------------------------------------------
     
     do k = k0, ke
@@ -3644,7 +3643,7 @@ subroutine gfdl_cld_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml
     if (do_warm_rain_mp) then
         t_wfr = t_min
     else
-        t_wfr = t_ice - 40.0
+        t_wfr = tice - 40.0
     endif
     
 end subroutine gfdl_cld_mp_init
@@ -3753,8 +3752,8 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         c_vap = cv_vap
     endif
     d0_vap = c_vap - c_liq
-    lv00 = hlv - d0_vap * t_ice
-    li00 = hlf - dc_ice * t_ice
+    lv00 = hlv - d0_vap * tice
+    li00 = hlf - dc_ice * tice
     
     do j = js, je
         
@@ -3809,7 +3808,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! moist heat capacity and latend heat coefficient
+        ! moist heat capacity and latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -3867,8 +3866,8 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! -----------------------------------------------------------------------
         
         do i = is, ie
-            if (qi (i, j) > 1.e-8 .and. pt1 (i) > t_ice) then
-                sink (i) = min (qi (i, j), fac_imlt * (pt1 (i) - t_ice) / icp2 (i))
+            if (qi (i, j) > 1.e-8 .and. pt1 (i) > tice) then
+                sink (i) = min (qi (i, j), fac_imlt * (pt1 (i) - tice) / icp2 (i))
                 qi (i, j) = qi (i, j) - sink (i)
                 tmp = min (sink (i), dim (ql_mlt, ql (i, j)))
                 ql (i, j) = ql (i, j) + tmp
@@ -3881,7 +3880,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! update latend heat coefficient
+        ! update latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -3926,7 +3925,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! -----------------------------------------------------------------------
         
         do i = is, ie
-            dtmp = t_ice - 48. - pt1 (i)
+            dtmp = tice - 48. - pt1 (i)
             if (ql (i, j) > 0. .and. dtmp > 0.) then
                 sink (i) = min (ql (i, j), dtmp / icp2 (i))
                 ql (i, j) = ql (i, j) - sink (i)
@@ -3939,7 +3938,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! update latend heat coefficient
+        ! update latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -3947,7 +3946,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
             lhi (i) = li00 + dc_ice * pt1 (i)
             lcp2 (i) = lhl (i) / cvm (i)
             icp2 (i) = lhi (i) / cvm (i)
-            tcp3 (i) = lcp2 (i) + icp2 (i) * min (1., dim (t_ice, pt1 (i)) / 48.)
+            tcp3 (i) = lcp2 (i) + icp2 (i) * min (1., dim (tice, pt1 (i)) / 48.)
         enddo
         
         ! -----------------------------------------------------------------------
@@ -3978,7 +3977,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! update latend heat coefficient
+        ! update latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -3986,7 +3985,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
             lhi (i) = li00 + dc_ice * pt1 (i)
             lcp2 (i) = lhl (i) / cvm (i)
             icp2 (i) = lhi (i) / cvm (i)
-            tcp3 (i) = lcp2 (i) + icp2 (i) * min (1., dim (t_ice, pt1 (i)) / 48.)
+            tcp3 (i) = lcp2 (i) + icp2 (i) * min (1., dim (tice, pt1 (i)) / 48.)
         enddo
         
         if (last_step) then
@@ -4021,7 +4020,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
             enddo
             
             ! -----------------------------------------------------------------------
-            ! update latend heat coefficient
+            ! update latent heat coefficient
             ! -----------------------------------------------------------------------
             
             do i = is, ie
@@ -4052,7 +4051,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! update latend heat coefficient
+        ! update latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -4065,7 +4064,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! -----------------------------------------------------------------------
         
         do i = is, ie
-            tc = t_ice - pt1 (i)
+            tc = tice - pt1 (i)
             if (ql (i, j) > 0.0 .and. tc > 0.) then
                 sink (i) = 100. / (rhow * ccn (i)) * dt_bigg * (exp (0.66 * tc) - 1.) * ql (i, j) ** 2
                 sink (i) = min (ql (i, j), tc / icp2 (i), sink (i))
@@ -4079,7 +4078,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! update latend heat coefficient
+        ! update latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -4092,7 +4091,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! -----------------------------------------------------------------------
         
         do i = is, ie
-            dtmp = (t_ice - 0.1) - pt1 (i)
+            dtmp = (tice - 0.1) - pt1 (i)
             if (qr (i, j) > 1.e-7 .and. dtmp > 0.) then
                 tmp = min (1., (dtmp * 0.025) ** 2) * qr (i, j)
                 sink (i) = min (tmp, fac_r2g * dtmp / icp2 (i))
@@ -4106,7 +4105,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! update latend heat coefficient
+        ! update latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -4119,7 +4118,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! -----------------------------------------------------------------------
         
         do i = is, ie
-            dtmp = pt1 (i) - (t_ice + 0.1)
+            dtmp = pt1 (i) - (tice + 0.1)
             if (qs (i, j) > 1.e-7 .and. dtmp > 0.) then
                 tmp = min (1., (dtmp * 0.1) ** 2) * qs (i, j)
                 sink (i) = min (tmp, fac_smlt * dtmp / icp2 (i))
@@ -4149,7 +4148,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         enddo
         
         ! -----------------------------------------------------------------------
-        ! update latend heat coefficient
+        ! update latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -4168,7 +4167,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
             src (i) = 0.
             if (pt1 (i) < t_sub) then
                 src (i) = dim (qv (i, j), 1.e-6)
-            elseif (pt1 (i) < t_ice) then
+            elseif (pt1 (i) < tice) then
                 qsi = iqs2 (pt1 (i), den (i), dqsdt)
                 dq = qv (i, j) - qsi
                 sink (i) = adj_fac * dq / (1. + tcp2 (i) * dqsdt)
@@ -4179,16 +4178,16 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                             cin (i) = 5.38e7 * exp (0.75 * log (qi (i, j) * den (i)))
                         if (inflag .eq. 2) &
                             ! meyers et al., 1992
-                            cin (i) = exp (-2.80 + 0.262 * (t_ice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
+                            cin (i) = exp (-2.80 + 0.262 * (tice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
                         if (inflag .eq. 3) &
                             ! meyers et al., 1992
                             cin (i) = exp (-0.639 + 12.96 * (qv (i, j) / qsi - 1.0)) * 1000.0 ! convert from L^-1 to m^-3
                         if (inflag .eq. 4) &
                             ! cooper, 1986
-                            cin (i) = 5.e-3 * exp (0.304 * (t_ice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
+                            cin (i) = 5.e-3 * exp (0.304 * (tice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
                         if (inflag .eq. 5) &
                             ! flecther, 1962
-                            cin (i) = 1.e-5 * exp (0.5 * (t_ice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
+                            cin (i) = 1.e-5 * exp (0.5 * (tice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
                     endif
                     pidep = sdt * dq * 4.0 * 11.9 * exp (0.5 * log (qi (i, j) * den (i) * cin (i))) &
                          / (qsi * den (i) * (hlv + hlf) ** 2 / (0.0243 * rvgas * pt1 (i) ** 2) + 4.42478e4)
@@ -4196,7 +4195,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                     pidep = 0.
                 endif
                 if (dq > 0.) then
-                    tmp = t_ice - pt1 (i)
+                    tmp = tice - pt1 (i)
                     ! qi_crt = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp))) / den (i)
                     qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den (i)
                     src (i) = min (sink (i), max (qi_crt - qi (i, j), pidep), tmp / tcp2 (i))
@@ -4290,7 +4289,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! update latend heat coefficient
+        ! update latent heat coefficient
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -4354,7 +4353,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 
                 if (tin <= t_wfr) then
                     qstar (i) = iqs1 (tin, den (i))
-                elseif (tin >= t_ice) then
+                elseif (tin >= tice) then
                     qstar (i) = wqs1 (tin, den (i))
                 else
                     qsi = iqs1 (tin, den (i))
@@ -4362,7 +4361,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                     if (q_cond (i) > 1.e-6) then
                         rqi = q_sol (i) / q_cond (i)
                     else
-                        rqi = ((t_ice - tin) / (t_ice - t_wfr))
+                        rqi = ((tice - tin) / (tice - t_wfr))
                     endif
                     qstar (i) = rqi * qsi + (1. - rqi) * qsw
                 endif
@@ -4545,7 +4544,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
 #ifdef SJ_CLD_TEST
                 ! frozen condensates:
                 ! cloud ice treated as snow above freezing and graupel exists
-                if (t (i, k) > t_ice) then
+                if (t (i, k) > tice) then
                     qms (i, k) = qmi (i, k) + qms (i, k)
                     qmi (i, k) = 0.
                 else
@@ -4635,7 +4634,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             rho = p (i, k) / (rdgas * t (i, k))
             ! use rho = dpg / delz ! needs delz
             
-            tc0 = t (i, k) - t_ice
+            tc0 = t (i, k) - tice
             
             if (rewflag .eq. 1) then
                 
@@ -5220,7 +5219,7 @@ real function wqs1 (ta, den)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5245,7 +5244,7 @@ real function wqs2 (ta, den, dqdt)
     real :: es, ap1, tmin
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     
     if (.not. tables_are_initialized) call qsmith_init
     
@@ -5283,7 +5282,7 @@ subroutine wqs2_vect (is, ie, ta, den, wqsat, dqdt)
     
     integer :: i, it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     
     do i = is, ie
         ap1 = 10. * dim (ta (i), tmin) + 1.
@@ -5343,7 +5342,7 @@ real function iqs1 (ta, den)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5369,7 +5368,7 @@ real function iqs2 (ta, den, dqdt)
     real (kind = r_grid) :: tmin, es, ap1
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5396,7 +5395,7 @@ real function qs1d_moist (ta, qv, pa, dqdt)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     eps10 = 10. * eps
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
@@ -5424,7 +5423,7 @@ real function wqsat2_moist (ta, qv, pa, dqdt)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     eps10 = 10. * eps
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
@@ -5450,7 +5449,7 @@ real function wqsat_moist (ta, qv, pa)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5473,7 +5472,7 @@ real function qs1d_m (ta, qv, pa)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5496,7 +5495,7 @@ real function d_sat (ta, den)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5520,7 +5519,7 @@ real function esw_table (ta)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5542,7 +5541,7 @@ real function es2_table (ta)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     ap1 = 10. * dim (ta, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5568,7 +5567,7 @@ subroutine esw_table1d (ta, es, n)
     
     integer :: i, it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     
     do i = 1, n
         ap1 = 10. * dim (ta (i), tmin) + 1.
@@ -5597,7 +5596,7 @@ subroutine es2_table1d (ta, es, n)
     
     integer :: i, it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     
     do i = 1, n
         ap1 = 10. * dim (ta (i), tmin) + 1.
@@ -5626,7 +5625,7 @@ subroutine es3_table1d (ta, es, n)
     
     integer :: i, it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     
     do i = 1, n
         ap1 = 10. * dim (ta (i), tmin) + 1.
@@ -5653,7 +5652,7 @@ subroutine qs_tablew (n)
     
     integer :: i
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     
     ! -----------------------------------------------------------------------
     ! compute es over water
@@ -5661,9 +5660,9 @@ subroutine qs_tablew (n)
     
     do i = 1, n
         tem = tmin + delt * real (i - 1)
-        fac0 = (tem - t_ice) / (tem * t_ice)
+        fac0 = (tem - tice) / (tem * tice)
         fac1 = fac0 * lv0
-        fac2 = (dc_vap * log (tem / t_ice) + fac1) / rvgas
+        fac2 = (dc_vap * log (tem / tice) + fac1) / rvgas
         tablew (i) = e00 * exp (fac2)
     enddo
     
@@ -5685,23 +5684,23 @@ subroutine qs_table2 (n)
     
     integer :: i, i0, i1
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     
     do i = 1, n
         tem0 = tmin + delt * real (i - 1)
-        fac0 = (tem0 - t_ice) / (tem0 * t_ice)
+        fac0 = (tem0 - tice) / (tem0 * tice)
         if (i <= 1600) then
             ! -----------------------------------------------------------------------
             ! compute es over ice between - 160 deg c and 0 deg c.
             ! -----------------------------------------------------------------------
             fac1 = fac0 * li2
-            fac2 = (d2ice * log (tem0 / t_ice) + fac1) / rvgas
+            fac2 = (d2ice * log (tem0 / tice) + fac1) / rvgas
         else
             ! -----------------------------------------------------------------------
             ! compute es over water between 0 deg c and 102 deg c.
             ! -----------------------------------------------------------------------
             fac1 = fac0 * lv0
-            fac2 = (dc_vap * log (tem0 / t_ice) + fac1) / rvgas
+            fac2 = (dc_vap * log (tem0 / tice) + fac1) / rvgas
         endif
         table2 (i) = e00 * exp (fac2)
     enddo
@@ -5737,9 +5736,9 @@ subroutine qs_table3 (n)
     integer :: i, i0, i1
     
     esbasw = 1013246.0
-    tbasw = t_ice + 100.
+    tbasw = tice + 100.
     esbasi = 6107.1
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     
     do i = 1, n
         tem = tmin + delt * real (i - 1)
@@ -5749,9 +5748,9 @@ subroutine qs_table3 (n)
             ! compute es over ice between - 160 deg c and 0 deg c.
             ! see smithsonian meteorological tables page 350.
             ! -----------------------------------------------------------------------
-            aa = - 9.09718 * (t_ice / tem - 1.)
-            b = - 3.56654 * log10 (t_ice / tem)
-            c = 0.876793 * (1. - tem / t_ice)
+            aa = - 9.09718 * (tice / tem - 1.)
+            b = - 3.56654 * log10 (tice / tem)
+            c = 0.876793 * (1. - tem / tice)
             e = log10 (esbasi)
             table3 (i) = 0.1 * 10 ** (aa + b + c + e)
         else
@@ -5796,7 +5795,7 @@ real function qs_blend (t, p, q)
     
     integer :: it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     ap1 = 10. * dim (t, tmin) + 1.
     ap1 = min (2621., ap1)
     it = ap1
@@ -5823,7 +5822,7 @@ subroutine qs_table (n)
     
     integer :: i
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     
     ! -----------------------------------------------------------------------
     ! compute es over ice between - 160 deg c and 0 deg c.
@@ -5831,9 +5830,9 @@ subroutine qs_table (n)
     
     do i = 1, 1600
         tem = tmin + delt * real (i - 1)
-        fac0 = (tem - t_ice) / (tem * t_ice)
+        fac0 = (tem - tice) / (tem * tice)
         fac1 = fac0 * li2
-        fac2 = (d2ice * log (tem / t_ice) + fac1) / rvgas
+        fac2 = (d2ice * log (tem / tice) + fac1) / rvgas
         table (i) = e00 * exp (fac2)
     enddo
     
@@ -5843,9 +5842,9 @@ subroutine qs_table (n)
     
     do i = 1, 1221
         tem = 253.16 + delt * real (i - 1)
-        fac0 = (tem - t_ice) / (tem * t_ice)
+        fac0 = (tem - tice) / (tem * tice)
         fac1 = fac0 * lv0
-        fac2 = (dc_vap * log (tem / t_ice) + fac1) / rvgas
+        fac2 = (dc_vap * log (tem / tice) + fac1) / rvgas
         esh20 = e00 * exp (fac2)
         if (i <= 200) then
             esupc (i) = esh20
@@ -5860,7 +5859,7 @@ subroutine qs_table (n)
     
     do i = 1, 200
         tem = 253.16 + delt * real (i - 1)
-        wice = 0.05 * (t_ice - tem)
+        wice = 0.05 * (tice - tem)
         wh2o = 0.05 * (tem - 253.16)
         table (i + 1400) = wice * table (i + 1400) + wh2o * esupc (i)
     enddo
@@ -5890,7 +5889,7 @@ subroutine qsmith (im, km, ks, t, p, q, qs, dqdt)
     
     integer :: i, k, it
     
-    tmin = t_ice - 160.
+    tmin = tice - 160.
     eps10 = 10. * eps
     
     if (.not. tables_are_initialized) call qsmith_init
