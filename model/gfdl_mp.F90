@@ -173,6 +173,12 @@ module gfdl_mp_mod
     ! 3: Meyers et al. (1992)
     ! 4: Cooper (1986)
     ! 5: Flecther (1962)
+
+    integer :: igflag = 3 ! ice generation scheme
+    ! 1: WSM6
+    ! 2: WSM6 with 0 at 0 C
+    ! 3: WSM6 with 0 at 0 C and fixed value at - 10 C
+    ! 4: combination of 1 and 3
     
     integer :: rewflag = 1
     ! 1: Martin et al. (1994)
@@ -265,14 +271,6 @@ module gfdl_mp_mod
     
     real :: cld_min = 0.05 ! minimum cloud fraction
 
-    ! -----------------------------------------------------------------------
-    ! wrf / wsm6 scheme: qi_gen = 4.92e-11 * (1.e3 * exp (0.1 * tmp)) ** 1.33
-    ! optimized: qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
-    ! qi_gen ~ 4.808e-7 at 0 c; 1.818e-6 at - 10 c, 9.82679e-5 at - 40c
-    ! the following value is constructed such that qc_crt = 0 at zero c and @ - 10c matches
-    ! wrf / wsm6 ice initiation scheme; qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den
-    ! -----------------------------------------------------------------------
-    
     real :: sat_adj0 = 0.90 ! adjustment factor (0: no, 1: full) during fast_sat_adj
     
     real :: qc_crt = 5.0e-8 ! mini condensate mixing ratio to allow partial cloudiness
@@ -283,7 +281,6 @@ module gfdl_mp_mod
     real :: qs_mlt = 1.0e-6 ! max cloud water due to snow melt
     
     real :: ql_gen = 1.0e-3 ! max cloud water generation during remapping step if do_sat_adj = .t.
-    real :: qi_gen = 1.82e-6 ! max cloud ice generation during remapping step
     
     ! cloud condensate upper bounds: "safety valves" for ql & qi
     
@@ -363,23 +360,23 @@ module gfdl_mp_mod
     ! -----------------------------------------------------------------------
     
     namelist / gfdl_mp_nml / &
-        t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
-        vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
-        vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
-        qi0_crt, qr0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
-        const_vs, const_vg, const_vr, rthresh, ccn_l, ccn_o, qc_crt, &
-        sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
-        tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_piacr, c_pgacs, &
-        z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, &
-        rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, use_ppm_ice, mono_prof, &
-        do_sedi_heat, sedi_transport, do_sedi_w, icloud_f, irain_f, &
-        ntimes, disp_heat, do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, hd_icefall, &
-        do_cond_timescale, mp_time, consv_checker, te_err, use_park_cloud, &
-        use_gi_cloud, use_rhc_cevap, use_rhc_revap, inflag, do_warm_rain_mp, &
-        rh_thres, f_dq_p, f_dq_m, do_cld_adj, rhc_cevap, rhc_revap, &
-        qi0_rei, qmin, beta, liq_ice_combine, rewflag, reiflag, rewmin, rewmax, reimin, &
-        reimax, rermin, rermax, resmin, resmax, regmin, regmax, betaw, betai, betar, betas, &
-        betag
+        t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, vi_fac, &
+        vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, vs_max, &
+        vg_max, vr_max, qs_mlt, qs0_crt, ql0_max, qi0_max, qi0_crt, &
+        qr0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, const_vs, &
+        const_vg, const_vr, rthresh, ccn_l, ccn_o, qc_crt, sat_adj0, igflag, &
+        tau_imlt, tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen, &
+        c_paut, c_psaci, c_piacr, c_pgacs, z_slope_liq, z_slope_ice, &
+        prog_ccn, c_cracw, alin, clin, rad_snow, rad_graupel, rad_rain, &
+        cld_min, use_ppm, use_ppm_ice, mono_prof, do_sedi_heat, &
+        sedi_transport, do_sedi_w, icloud_f, irain_f, ntimes, disp_heat, &
+        do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, &
+        hd_icefall, do_cond_timescale, mp_time, consv_checker, te_err, &
+        use_park_cloud, use_gi_cloud, use_rhc_cevap, use_rhc_revap, inflag, &
+        do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, rhc_cevap, &
+        rhc_revap, qi0_rei, qmin, beta, liq_ice_combine, rewflag, reiflag, &
+        rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
+        regmin, regmax, betaw, betai, betar, betas, betag
     
 contains
 
@@ -1504,7 +1501,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, praci, psaci
     real :: pgmlt, psmlt, pgfr, psaut
     real :: tc, dqs0, qden, qsm
-    real :: dt5, factor, sink, qi_crt
+    real :: dt5, factor, sink
     real :: tmp, qsw, qsi, dqsdt, dq
     real :: dtmp, qc, q_plus, q_minus
     integer :: k
@@ -1957,7 +1954,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     real, dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
     real, dimension (ks:ke) :: q_liq, q_sol, q_cond
     real (kind = r_grid), dimension (ks:ke) :: cvm
-    real :: pidep, qi_crt
+    real :: pidep, qi_gen, qi_crt
     real :: sigma, gam
     ! -----------------------------------------------------------------------
     ! qstar over water may be accurate only down to - 80 deg c with ~10% uncertainty
@@ -2176,9 +2173,22 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                 endif
                 if (dq > 0.) then ! vapor - > ice
                     tmp = tice - tz (k)
-                    ! 20160912: the following should produce more ice at higher altitude
-                    ! qi_crt = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp))) / den (k)
-                    qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den (k)
+                    ! -----------------------------------------------------------------------
+                    ! WRF / WSM6 scheme: qi_gen = 4.92e-11 * (1.e3 * exp (0.1 * tmp)) ** 1.33
+                    ! optimized: qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
+                    ! qi_gen ~ 4.808e-7 at 0 c; 1.818e-6 at - 10 c, 9.827e-5 at - 40 c
+                    ! the following value is constructed such that qc_crt = 0 at 0 c and at - 10 c matches
+                    ! WRF / WSM6 ice initiation scheme; qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den
+                    ! -----------------------------------------------------------------------
+                    qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
+                    if (igflag .eq. 1) &
+                        qi_crt = qi_gen / den (k)
+                    if (igflag .eq. 2) &
+                        qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den (k)
+                    if (igflag .eq. 3) &
+                        qi_crt = 1.82e-6 * min (qi_lim, 0.1 * tmp) / den (k)
+                    if (igflag .eq. 4) &
+                        qi_crt = max (qi_gen, 1.82e-6) * min (qi_lim, 0.1 * tmp) / den (k)
                     sink = min (sink, max (qi_crt - qi (k), pidep), tmp / tcpk (k))
                     dep = dep + sink * dp1 (k)
                 else ! ice -- > vapor
@@ -3708,7 +3718,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     real :: lv00 ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
     real :: li00
     real :: qsw, rh, ccn0
-    real :: tc, qsi, dqsdt, dq, dq0, pidep, qi_crt, tmp, dtmp
+    real :: tc, qsi, dqsdt, dq, dq0, pidep, qi_gen, qi_crt, tmp, dtmp
     real :: tin, rqi, q_plus, q_minus
     real :: sdt, dt_bigg, adj_fac
     real :: fac_smlt, fac_r2g, fac_i2s, fac_imlt, fac_l2r, fac_v2l, fac_l2v
@@ -4190,8 +4200,22 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 endif
                 if (dq > 0.) then
                     tmp = tice - pt1 (i)
-                    ! qi_crt = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp))) / den (i)
-                    qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den (i)
+                    ! -----------------------------------------------------------------------
+                    ! WRF / WSM6 scheme: qi_gen = 4.92e-11 * (1.e3 * exp (0.1 * tmp)) ** 1.33
+                    ! optimized: qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
+                    ! qi_gen ~ 4.808e-7 at 0 c; 1.818e-6 at - 10 c, 9.827e-5 at - 40 c
+                    ! the following value is constructed such that qc_crt = 0 at 0 c and at - 10 c matches
+                    ! WRF / WSM6 ice initiation scheme; qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den
+                    ! -----------------------------------------------------------------------
+                    qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
+                    if (igflag .eq. 1) &
+                        qi_crt = qi_gen / den (i)
+                    if (igflag .eq. 2) &
+                        qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den (i)
+                    if (igflag .eq. 3) &
+                        qi_crt = 1.82e-6 * min (qi_lim, 0.1 * tmp) / den (i)
+                    if (igflag .eq. 4) &
+                        qi_crt = max (qi_gen, 1.82e-6) * min (qi_lim, 0.1 * tmp) / den (i)
                     src (i) = min (sink (i), max (qi_crt - qi (i, j), pidep), tmp / tcp2 (i))
                 else
                     pidep = pidep * min (1., dim (pt1 (i), t_sub) * 0.2)
