@@ -245,23 +245,21 @@ module gfdl_cld_mp_mod
     real :: rh_inr = 0.25 ! rh increment for minimum evaporation of rain
     real :: rh_ins = 0.25 ! rh increment for sublimation of snow
     
-    real :: tau_r2g = 900.0 ! rain freezing during fast_sat
-    real :: tau_smlt = 900.0 ! snow melting
-    real :: tau_g2r = 600.0 ! graupel melting to rain
-    real :: tau_imlt = 600.0 ! cloud ice melting
-    real :: tau_i2s = 1000.0 ! cloud ice to snow auto - conversion
-    real :: tau_l2r = 900.0 ! cloud water to rain auto - conversion
-    real :: tau_v2l = 150.0 ! water vapor to cloud water (condensation)
-    real :: tau_l2v = 300.0 ! cloud water to water vapor (evaporation)
-    real :: tau_g2v = 900.0 ! grapuel sublimation
-    real :: tau_v2g = 21600.0 ! grapuel deposition -- make it a slow process
-    real :: tau_revp = 0.0 ! rain evaporation
+    real :: tau_r2g = 900.0 ! rain freezing to graupel (s)
+    real :: tau_g2r = 600.0 ! graupel melting to rain (s)
+    real :: tau_i2s = 1000.0 ! cloud ice to snow autoconversion (s)
+    real :: tau_l2r = 900.0 ! cloud water to rain autoconversion (s)
+    real :: tau_v2l = 150.0 ! water vapor to cloud water (condensation) (s)
+    real :: tau_l2v = 300.0 ! cloud water to water vapor (evaporation) (s)
+    real :: tau_revp = 0.0 ! rain evaporation (s)
+    real :: tau_imlt = 600.0 ! cloud ice melting (s)
+    real :: tau_smlt = 900.0 ! snow melting (s)
     
     real :: dw_land = 0.20 ! base value for subgrid deviation / variability over land
     real :: dw_ocean = 0.10 ! base value for ocean
     
-    real :: ccn_o = 90. ! ccn over ocean (cm^ - 3)
-    real :: ccn_l = 270. ! ccn over land (cm^ - 3)
+    real :: ccn_o = 90.0 ! ccn over ocean (1/cm^3)
+    real :: ccn_l = 270.0 ! ccn over land (1/cm^3)
     
     real :: rthresh = 10.0e-6 ! critical cloud drop radius (micron)
     
@@ -370,7 +368,7 @@ module gfdl_cld_mp_mod
         vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
         qi0_crt, qr0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
         const_vs, const_vg, const_vr, rthresh, ccn_l, ccn_o, qc_crt, &
-        tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
+        sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
         tau_i2s, tau_l2r, qi_lim, ql_gen, c_paut, c_psaci, c_piacr, c_pgacs, &
         z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, clin, &
         rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, use_ppm_ice, mono_prof, &
@@ -1501,7 +1499,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     real, dimension (ks:ke) :: q_liq, q_sol
     real (kind = r_grid), dimension (ks:ke) :: cvm, te8
     real (kind = r_grid) :: tz
-    real :: rdts, fac_g2v, fac_v2g, fac_i2s, fac_imlt
+    real :: rdts, fac_i2s, fac_imlt
     real :: qv, ql, qr, qi, qs, qg, melt
     real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, praci, psaci
     real :: pgmlt, psmlt, pgfr, psaut
@@ -1519,8 +1517,6 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     ! -----------------------------------------------------------------------
     
     fac_i2s = 1. - exp (- dts / tau_i2s)
-    fac_g2v = 1. - exp (- dts / tau_g2v)
-    fac_v2g = 1. - exp (- dts / tau_v2g)
     fac_imlt = 1. - exp (- dt5 / tau_imlt)
     
     ! -----------------------------------------------------------------------
@@ -1972,7 +1968,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     real :: q_plus, q_minus, dt_evap, dt_pisub
     real :: evap, sink, tc, dtmp, qa10, qa100
     real :: pssub, pgsub, tsq, qden
-    real :: fac_l2v, fac_v2l, fac_g2v, fac_v2g
+    real :: fac_l2v, fac_v2l
     integer :: k
     
     if (do_sat_adj) then
@@ -1987,8 +1983,6 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     
     fac_l2v = 1. - exp (- dt_evap / tau_l2v)
     fac_v2l = 1. - exp (- dt_evap / tau_v2l)
-    fac_g2v = 1. - exp (- dts / tau_g2v)
-    fac_v2g = 1. - exp (- dts / tau_v2g)
     
     ! -----------------------------------------------------------------------
     ! define heat capacity and latent heat coefficient
