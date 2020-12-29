@@ -157,7 +157,13 @@ module gfdl_cld_mp_mod
     
     integer :: ntimes = 1 ! cloud microphysics sub cycles
     
-    integer :: icloud_f = 0 ! cloud scheme
+    integer :: cfflag = 1 ! cloud fraction scheme
+    ! 1: GFDL cloud scheme
+    ! 2: Xu and Randall (1996)
+    ! 3: Park et al. (2016)
+    ! 4: Pultepe and Isaac (2007)
+    
+    integer :: icloud_f = 0 ! GFDL cloud scheme
     ! 0: subgrid variability based scheme
     ! 1: same as 0, but for old fvgfs implementation
     ! 2: binary cloud scheme
@@ -179,7 +185,11 @@ module gfdl_cld_mp_mod
     ! 2: WSM6 with 0 at 0 C
     ! 3: WSM6 with 0 at 0 C and fixed value at - 10 C
     ! 4: combination of 1 and 3
-    
+
+    integer :: ifflag = 1 ! ice fall scheme
+    ! 1: Deng and Mace (2008)
+    ! 2: Heymsfield and Donner (1990)
+
     integer :: rewflag = 1
     ! 1: Martin et al. (1994)
     ! 2: Martin et al. (1994), GFDL revision
@@ -192,26 +202,22 @@ module gfdl_cld_mp_mod
     ! 4: Kristjansson et al. (2000)
     ! 5: Wyser (1998)
     
-    logical :: sedi_transport = .true. ! transport of horizontal momentum in sedimentation
+    logical :: do_sedi_uv = .true. ! transport of horizontal momentum in sedimentation
     logical :: do_sedi_w = .true. ! transport of vertical momentum in sedimentation
     logical :: do_sedi_heat = .true. ! transport of heat in sedimentation
-    logical :: disp_heat = .false. ! dissipative heating due to sedimentation
+    logical :: do_disp_heat = .true. ! dissipative heating due to sedimentation
 
     logical :: do_qa = .true. ! do inline cloud fraction
     logical :: rad_snow = .true. ! include snow in cloud fraciton calculation
     logical :: rad_graupel = .true. ! include graupel in cloud fraction calculation
     logical :: rad_rain = .true. ! include rain in cloud fraction calculation
-    logical :: use_xr_cloud = .false. ! use Xu and Randall (1996)'s cloud diagnosis
-    logical :: use_park_cloud = .false. ! use Park et al. (2016)'s cloud diagnosis
-    logical :: use_gi_cloud = .false. ! use Pultepe and Isaac (2007)'s cloud diagnosis
     logical :: do_cld_adj = .false. ! do cloud fraction adjustment
 
     logical :: use_ppm = .false. ! use ppm fall scheme
-    logical :: use_ppm_ice = .false. ! use ppm fall scheme for cloud ice
     logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
 
     logical :: z_slope_liq = .true. ! use linear mono slope for autocconversions
-    logical :: z_slope_ice = .false. ! use linear mono slope for autocconversions
+    logical :: z_slope_ice = .true. ! use linear mono slope for autocconversions
 
     logical :: use_rhc_cevap = .false. ! cap of rh for cloud water evaporation
     logical :: use_rhc_revap = .false. ! cap of rh for rain evaporation
@@ -233,8 +239,6 @@ module gfdl_cld_mp_mod
     logical :: do_sat_adj = .false. ! do fast saturation adjustments
 
     logical :: do_hail = .false. ! use hail parameters instead of graupel
-
-    logical :: hd_icefall = .false. ! use Heymsfield and Donner (1990)'s fall speed of cloud ice
 
     logical :: consv_checker = .false. ! turn on energy and water conservation checker
 
@@ -273,21 +277,17 @@ module gfdl_cld_mp_mod
 
     real :: sat_adj0 = 0.90 ! adjustment factor (0: no, 1: full) during fast_sat_adj
     
-    real :: qc_crt = 5.0e-8 ! mini condensate mixing ratio to allow partial cloudiness
+    real :: qi_lim = 1. ! cloud ice limiter (0: no, 1: full, >1: extra) to prevent large ice build up
     
-    real :: qi_lim = 1. ! cloud ice limiter to prevent large ice build up
+    real :: ql_mlt = 2.0e-3 ! max value of cloud water allowed from melted cloud ice (kg/kg)
+    real :: qs_mlt = 1.0e-6 ! max cloud water due to snow melt (kg/kg)
     
-    real :: ql_mlt = 2.0e-3 ! max value of cloud water allowed from melted cloud ice
-    real :: qs_mlt = 1.0e-6 ! max cloud water due to snow melt
+    real :: ql_gen = 1.0e-3 ! max cloud water generation during remapping step if do_sat_adj = .true.
     
-    real :: ql_gen = 1.0e-3 ! max cloud water generation during remapping step if do_sat_adj = .t.
+    real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain) (kg/kg)
+    real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources) (kg/m^3)
     
-    ! cloud condensate upper bounds: "safety valves" for ql & qi
-    
-    real :: ql0_max = 2.0e-3 ! max cloud water value (auto converted to rain)
-    real :: qi0_max = 1.0e-4 ! max cloud ice value (by other sources)
-    
-    real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold (was 1.e-4)
+    real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold
     ! qi0_crt if negative, its magnitude is used as the mixing ration threshold; otherwise, used as density
     real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold
     ! lin et al. (1983) used * mixing ratio * = 1.e-4 (hail)
@@ -362,17 +362,17 @@ module gfdl_cld_mp_mod
     namelist / gfdl_mp_nml / &
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, vi_fac, &
         vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, vs_max, &
-        vg_max, vr_max, qs_mlt, qs0_crt, ql0_max, qi0_max, qi0_crt, &
+        vg_max, vr_max, qs_mlt, qs0_crt, ql0_max, qi0_max, qi0_crt, ifflag, &
         qr0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, const_vs, &
-        const_vg, const_vr, rthresh, ccn_l, ccn_o, qc_crt, sat_adj0, igflag, &
+        const_vg, const_vr, rthresh, ccn_l, ccn_o, sat_adj0, igflag, &
         tau_imlt, tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen, &
         c_paut, c_psaci, c_piacr, c_pgacs, z_slope_liq, z_slope_ice, &
         prog_ccn, c_cracw, alin, clin, rad_snow, rad_graupel, rad_rain, &
-        cld_min, use_ppm, use_ppm_ice, mono_prof, do_sedi_heat, &
-        sedi_transport, do_sedi_w, icloud_f, irain_f, ntimes, disp_heat, &
-        do_hail, use_xr_cloud, xr_a, xr_b, xr_c, tau_revp, tice_mlt, &
-        hd_icefall, do_cond_timescale, mp_time, consv_checker, te_err, &
-        use_park_cloud, use_gi_cloud, use_rhc_cevap, use_rhc_revap, inflag, &
+        cld_min, use_ppm, mono_prof, do_sedi_heat, &
+        do_sedi_uv, do_sedi_w, icloud_f, irain_f, ntimes, do_disp_heat, &
+        do_hail, xr_a, xr_b, xr_c, tau_revp, tice_mlt, &
+        do_cond_timescale, mp_time, consv_checker, te_err, &
+        use_rhc_cevap, use_rhc_revap, inflag, &
         do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, rhc_cevap, &
         rhc_revap, qi0_rei, qmin, beta, liq_ice_combine, rewflag, reiflag, &
         rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
@@ -841,7 +841,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! note: dp1 is dry mass; dp0 is the old moist (total) mass
         ! -----------------------------------------------------------------------
         
-        if (sedi_transport) then
+        if (do_sedi_uv) then
             do k = ks + 1, ke
                 u1 (k) = (dp0 (k) * u1 (k) + m1 (k - 1) * u1 (k - 1)) / (dp0 (k) + m1 (k - 1))
                 v1 (k) = (dp0 (k) * v1 (k) + m1 (k - 1) * v1 (k - 1)) / (dp0 (k) + m1 (k - 1))
@@ -850,7 +850,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             enddo
             ! sjl modify tz due to ke loss:
             ! seperate loop (vectorize better with no k - dependency)
-            if (disp_heat) then
+            if (do_disp_heat) then
                 do k = ks + 1, ke
 #ifdef MOIST_CAPPA
                     c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
@@ -865,7 +865,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         if (do_sedi_w) then
             ! conserve local te
             !#ifdef disp_w
-            if (disp_heat) then
+            if (do_disp_heat) then
                 do k = ks, ke
 #ifdef MOIST_CAPPA
                     c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
@@ -1501,7 +1501,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, praci, psaci
     real :: pgmlt, psmlt, pgfr, psaut
     real :: tc, dqs0, qden, qsm
-    real :: dt5, factor, sink, qi_crt
+    real :: dt5, factor, sink
     real :: tmp, qsw, qsi, dqsdt, dq
     real :: dtmp, qc, q_plus, q_minus
     integer :: k
@@ -2177,7 +2177,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                     ! WRF / WSM6 scheme: qi_gen = 4.92e-11 * (1.e3 * exp (0.1 * tmp)) ** 1.33
                     ! optimized: qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
                     ! qi_gen ~ 4.808e-7 at 0 c; 1.818e-6 at - 10 c, 9.827e-5 at - 40 c
-                    ! the following value is constructed such that qc_crt = 0 at 0 c and at - 10 c matches
+                    ! the following value is constructed such that qi_crt = 0 at 0 c and at - 10 c matches
                     ! WRF / WSM6 ice initiation scheme; qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den
                     ! -----------------------------------------------------------------------
                     qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
@@ -2354,47 +2354,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
         
         rh = qpz / qstar
         
-        if (use_xr_cloud) then ! xu and randall cloud scheme (1996)
-            if (rh >= 1.0) then
-                qa (k) = 1.0
-            elseif (rh > rh_thres .and. q_cond (k) > 1.e-6) then
-                qa (k) = rh ** xr_a * (1.0 - exp (- xr_b * max (0.0, q_cond (k)) / &
-                    max (1.e-5, (max (1.e-10, 1.0 - rh) * qstar) ** xr_c)))
-                qa (k) = max (0.0, min (1., qa (k)))
-            else
-                qa (k) = 0.0
-            endif
-        elseif (use_park_cloud) then ! park et al. 2016 (mon. wea. review)
-            if (q_cond (k) > 1.e-6) then
-                qa (k) = 1. / 50. * (5.77 * (100. - gsize / 1000.) * max (0.0, q_cond (k) * 1000.) ** 1.07 + &
-                    4.82 * (gsize / 1000. - 50.) * max (0.0, q_cond (k) * 1000.) ** 0.94)
-                qa (k) = qa (k) * (0.92 / 0.96 * q_liq (k) / q_cond (k) + 1.0 / 0.96 * q_sol (k) / q_cond (k))
-                qa (k) = max (0.0, min (1., qa (k)))
-            else
-                qa (k) = 0.0
-            endif
-        elseif (use_gi_cloud) then ! gultepe and isaac (2007)
-            sigma = 0.28 + max (0.0, q_cond (k) * 1000.) ** 0.49
-            gam = max (0.0, q_cond (k) * 1000.) / sigma
-            if (gam < 0.18) then
-                qa10 = 0.
-            elseif (gam > 2.0) then
-                qa10 = 1.0
-            else
-                qa10 = - 0.1754 + 0.9811 * gam - 0.2223 * gam ** 2 + 0.0104 * gam ** 3
-                qa10 = max (0.0, min (1., qa10))
-            endif
-            if (gam < 0.12) then
-                qa100 = 0.
-            elseif (gam > 1.85) then
-                qa100 = 1.0
-            else
-                qa100 = - 0.0913 + 0.7213 * gam + 0.1060 * gam ** 2 - 0.0946 * gam ** 3
-                qa100 = max (0.0, min (1., qa100))
-            endif
-            qa (k) = qa10 + (log10 (gsize / 1000.) - 1) * (qa100 - qa10)
-            qa (k) = max (0.0, min (1., qa (k)))
-        else
+        if (cfflag .eq. 1) then
             if (rh > rh_thres .and. qpz > 1.e-6) then
                 
                 dq = h_var * qpz
@@ -2451,6 +2411,52 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             endif
         endif
         
+        if (cfflag .eq. 2) then
+            if (rh >= 1.0) then
+                qa (k) = 1.0
+            elseif (rh > rh_thres .and. q_cond (k) > 1.e-6) then
+                qa (k) = rh ** xr_a * (1.0 - exp (- xr_b * max (0.0, q_cond (k)) / &
+                    max (1.e-5, (max (1.e-10, 1.0 - rh) * qstar) ** xr_c)))
+                qa (k) = max (0.0, min (1., qa (k)))
+            else
+                qa (k) = 0.0
+            endif
+        endif
+
+        if (cfflag .eq. 3) then
+            if (q_cond (k) > 1.e-6) then
+                qa (k) = 1. / 50. * (5.77 * (100. - gsize / 1000.) * max (0.0, q_cond (k) * 1000.) ** 1.07 + &
+                    4.82 * (gsize / 1000. - 50.) * max (0.0, q_cond (k) * 1000.) ** 0.94)
+                qa (k) = qa (k) * (0.92 / 0.96 * q_liq (k) / q_cond (k) + 1.0 / 0.96 * q_sol (k) / q_cond (k))
+                qa (k) = max (0.0, min (1., qa (k)))
+            else
+                qa (k) = 0.0
+            endif
+        endif
+
+        if (cfflag .eq. 4) then
+            sigma = 0.28 + max (0.0, q_cond (k) * 1000.) ** 0.49
+            gam = max (0.0, q_cond (k) * 1000.) / sigma
+            if (gam < 0.18) then
+                qa10 = 0.
+            elseif (gam > 2.0) then
+                qa10 = 1.0
+            else
+                qa10 = - 0.1754 + 0.9811 * gam - 0.2223 * gam ** 2 + 0.0104 * gam ** 3
+                qa10 = max (0.0, min (1., qa10))
+            endif
+            if (gam < 0.12) then
+                qa100 = 0.
+            elseif (gam > 1.85) then
+                qa100 = 1.0
+            else
+                qa100 = - 0.0913 + 0.7213 * gam + 0.1060 * gam ** 2 - 0.0946 * gam ** 3
+                qa100 = max (0.0, min (1., qa100))
+            endif
+            qa (k) = qa10 + (log10 (gsize / 1000.) - 1) * (qa100 - qa10)
+            qa (k) = max (0.0, min (1., qa (k)))
+        endif
+
     enddo
     
 end subroutine subgrid_z_proc
@@ -2708,7 +2714,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             enddo
         endif
         
-        if (use_ppm_ice) then
+        if (use_ppm) then
             call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qi, i1, m1_sol, mono_prof)
         else
             call implicit_fall (dtm, ks, ke, ze, vti, dp, qi, i1, m1_sol)
@@ -3382,14 +3388,12 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
                 vti (k) = vf_min
             else
                 tc (k) = tk (k) - tice
-                if (hd_icefall) then
-                    ! heymsfield and donner, 1990, jas
-                    vti (k) = vi_fac * 3.29 * (qi (k) * den (k)) ** 0.16
-                else
-                    ! deng and mace, 2008, grl
+                if (ifflag .eq. 1) then
                     vti (k) = (3. + log10 (qi (k) * den (k))) * (tc (k) * (aa * tc (k) + bb) + cc) + dd * tc (k) + ee
                     vti (k) = vi0 * exp (log (10.) * vti (k))
                 endif
+                if (ifflag .eq. 2) &
+                    vti (k) = vi_fac * 3.29 * (qi (k) * den (k)) ** 0.16
                 vti (k) = min (vi_max, max (vf_min, vti (k)))
             endif
         enddo
@@ -4204,7 +4208,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                     ! WRF / WSM6 scheme: qi_gen = 4.92e-11 * (1.e3 * exp (0.1 * tmp)) ** 1.33
                     ! optimized: qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
                     ! qi_gen ~ 4.808e-7 at 0 c; 1.818e-6 at - 10 c, 9.827e-5 at - 40 c
-                    ! the following value is constructed such that qc_crt = 0 at 0 c and at - 10 c matches
+                    ! the following value is constructed such that qi_crt = 0 at 0 c and at - 10 c matches
                     ! WRF / WSM6 ice initiation scheme; qi_crt = qi_gen * min (qi_lim, 0.1 * tmp) / den
                     ! -----------------------------------------------------------------------
                     qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tmp)))
