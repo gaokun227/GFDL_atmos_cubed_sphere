@@ -638,21 +638,29 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     dt_rain = dts * 0.5
     rdt = one_r8 / dts
     
+    ! -----------------------------------------------------------------------
+    ! initialization of total energy difference
+    ! -----------------------------------------------------------------------
+
     dte = 0.0
     
-    ! convert to mm / day
+    ! -----------------------------------------------------------------------
+    ! unit convert to mm/day
+    ! -----------------------------------------------------------------------
+
     convt = 86400. * rdt * rgrav
-    
-    ! -----------------------------------------------------------------------
-    ! use local variables
-    ! -----------------------------------------------------------------------
     
     do i = is, ie
         
+        ! -----------------------------------------------------------------------
+        ! conversion of temperature
+        ! -----------------------------------------------------------------------
+    
         do k = ks, ke
             if (do_inline_mp) then
 #ifdef MOIST_CAPPA
-                tz (k) = pt (i, k) / ((1. + zvir * qv (i, k)) * (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k))))
+                tz (k) = pt (i, k) / ((1. + zvir * qv (i, k)) * &
+                   (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k))))
 #else
                 tz (k) = pt (i, k) / (1. + zvir * qv (i, k))
 #endif
@@ -680,29 +688,38 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 te_beg_0 (i, k) = rgrav * te_beg_0 (i, k) * delp (i, k) * gsize (i) ** 2.0
                 tw_beg_0 (i, k) = rgrav * (qv (i, k) + q_liq (k) + q_sol (k)) * delp (i, k) * gsize (i) ** 2.0
             enddo
-            te_b_beg_0 (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
+            te_b_beg_0 (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * &
+                gsize (i) ** 2.0
             tw_b_beg_0 (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
         endif
         
         do k = ks, ke
+
+            ! -----------------------------------------------------------------------
+            ! initialization
+            ! -----------------------------------------------------------------------
+
+            m1 (k) = 0.
+            qaz (k) = 0.
             dp0 (k) = delp (i, k)
+            dz1 (k) = dz (i, k)
+
             ! -----------------------------------------------------------------------
             ! convert moist mixing ratios to dry mixing ratios
             ! -----------------------------------------------------------------------
+
             qvz (k) = qv (i, k)
             qlz (k) = ql (i, k)
             qrz (k) = qr (i, k)
             qiz (k) = qi (i, k)
             qsz (k) = qs (i, k)
             qgz (k) = qg (i, k)
-            ! save moist ratios for te:
+
             q_liq (k) = qlz (k) + qrz (k)
             q_sol (k) = qiz (k) + qsz (k) + qgz (k)
             q_cond = q_liq (k) + q_sol (k)
-            qaz (k) = 0.
-            dz1 (k) = dz (i, k)
             con_r8 = one_r8 - (qvz (k) + q_cond)
-            ! dp1 is dry mass (no change during mp)
+
             dp1 (k) = dp0 (k) * con_r8
             con_r8 = one_r8 / con_r8
             qvz (k) = qvz (k) * con_r8
@@ -712,14 +729,18 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qsz (k) = qsz (k) * con_r8
             qgz (k) = qgz (k) * con_r8
             
-            den (k) = - dp1 (k) / (grav * dz1 (k)) ! density of dry air
-            p1 (k) = den (k) * rdgas * tz (k) ! dry air pressure
-            
             ! -----------------------------------------------------------------------
-            ! for sedi_momentum transport:
+            ! dry air density and layer-mean pressure thickness
             ! -----------------------------------------------------------------------
             
-            m1 (k) = 0.
+            den (k) = - dp1 (k) / (grav * dz1 (k))
+            p1 (k) = den (k) * rdgas * tz (k)
+            denfac (k) = sqrt (sfcrho / den (k))
+            
+            ! -----------------------------------------------------------------------
+            ! for sedi_momentum transport
+            ! -----------------------------------------------------------------------
+            
             u0 (k) = ua (i, k)
             v0 (k) = va (i, k)
             if (.not. hydrostatic) then
@@ -727,11 +748,11 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             endif
             u1 (k) = u0 (k)
             v1 (k) = v0 (k)
-            denfac (k) = sqrt (sfcrho / den (k))
+
         enddo
         
         ! -----------------------------------------------------------------------
-        ! fix energy conservation
+        ! calculate total energy
         ! -----------------------------------------------------------------------
         
         if (consv_te) then
@@ -773,27 +794,27 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 te_beg (i, k) = rgrav * te_beg (i, k) * dp1 (k) * gsize (i) ** 2.0
                 tw_beg (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
             enddo
-            te_b_beg (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
+            te_b_beg (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * &
+                gsize (i) ** 2.0
             tw_b_beg (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
         endif
         
         ! -----------------------------------------------------------------------
-        ! calculate cloud condensation nuclei (ccn)
-        ! the following is based on klein eq. 15
+        ! calculate cloud droplet concentration based on cloud condensation nuclei (CCN)
+        ! it is used in cloud water to rain autoconversion
+        ! convert # / cm^3 to # / m^3 for CCN
         ! -----------------------------------------------------------------------
         
         cpaut = c_paut * 0.104 * grav / 1.717e-5
         
         if (prog_ccn) then
             do k = ks, ke
-                ! convert # / cm^3 to # / m^3
                 ccn (k) = max (10.0, qnl (i, k)) * 1.e6
                 cin (k) = max (10.0, qni (i, k)) * 1.e6
                 ccn (k) = ccn (k) / den (k)
                 c_praut (k) = cpaut * (ccn (k) * rhor) ** (- 1. / 3.)
             enddo
         else
-            ! convert # / cm^3 to # / m^3
             ccn0 = (ccn_l * min (1., abs (hs (i)) / (10. * grav)) + &
                 ccn_o * (1. - min (1., abs (hs (i)) / (10. * grav)))) * 1.e6
             do k = ks, ke
@@ -820,10 +841,10 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         rh_adj = 1. - h_var - rh_inc
-        rh_rain = max (0.35, rh_adj - rh_inr) ! rh_inr = 0.25
+        rh_rain = max (0.35, rh_adj - rh_inr)
         
         ! -----------------------------------------------------------------------
-        ! fix all negative water species
+        ! fix negative water species
         ! -----------------------------------------------------------------------
         
         if (fix_negative) &
@@ -831,13 +852,17 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         condensation (i) = condensation (i) + cond * convt * ntimes
             
+        ! -----------------------------------------------------------------------
+        ! initialization
+        ! -----------------------------------------------------------------------
+
         m2_rain (i, :) = 0.
         m2_sol (i, :) = 0.
         
         do n = 1, ntimes
             
             ! -----------------------------------------------------------------------
-            ! time - split warm rain processes: 1st pass
+            ! time-split warm rain processes: 1st pass
             ! -----------------------------------------------------------------------
             
             call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
@@ -860,7 +885,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
                 dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, dte (i))
             
-            rain (i) = rain (i) + r1 * convt ! from melted snow & ice that reached the ground
+            rain (i) = rain (i) + r1 * convt
             snow (i) = snow (i) + s1 * convt
             graupel (i) = graupel (i) + g1 * convt
             ice (i) = ice (i) + i1 * convt
@@ -871,7 +896,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             
             if (consv_checker) then
                 do k = ks, ke
-                    te1 (k) = one_r8 + qvz (k) * c1_vap + (qlz (k) + qrz (k)) * c1_liq + (qiz (k) + qsz (k) + qgz (k)) * c1_ice
+                    te1 (k) = one_r8 + qvz (k) * c1_vap + (qlz (k) + qrz (k)) * c1_liq + &
+                        (qiz (k) + qsz (k) + qgz (k)) * c1_ice
                     te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp1 (k)
                 enddo
             endif
@@ -891,14 +917,15 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             
             if (consv_checker) then
                 do k = ks, ke
-                    te2 (k) = one_r8 + qvz (k) * c1_vap + (qlz (k) + qrz (k)) * c1_liq + (qiz (k) + qsz (k) + qgz (k)) * c1_ice
+                    te2 (k) = one_r8 + qvz (k) * c1_vap + (qlz (k) + qrz (k)) * c1_liq + &
+                        (qiz (k) + qsz (k) + qgz (k)) * c1_ice
                     te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp1 (k)
                 enddo
                 dte (i) = dte (i) + sum (te1) - sum (te2)
             endif
             
             ! -----------------------------------------------------------------------
-            ! time - split warm rain processes: 2nd pass
+            ! time-split warm rain processes: 2nd pass
             ! -----------------------------------------------------------------------
             
             call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
@@ -914,7 +941,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             enddo
             
             ! -----------------------------------------------------------------------
-            ! ice - phase microphysics
+            ! ice-phase microphysics
             ! -----------------------------------------------------------------------
             
             call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, ccn, &
@@ -940,12 +967,11 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 ua (i, k) = u1 (k)
                 va (i, k) = v1 (k)
             enddo
-            ! sjl modify tz due to ke loss:
-            ! seperate loop (vectorize better with no k - dependency)
             if (do_disp_heat) then
                 do k = ks + 1, ke
 #ifdef MOIST_CAPPA
-                    c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
+                    c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + &
+                        (qiz (k) + qsz (k) + qgz (k)) * c_ice
                     tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / c8
 #else
                     tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / c_air
@@ -955,19 +981,17 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         endif
         
         if (do_sedi_w) then
-            ! conserve local te
-            !#ifdef disp_w
             if (do_disp_heat) then
                 do k = ks, ke
 #ifdef MOIST_CAPPA
-                    c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + (qiz (k) + qsz (k) + qgz (k)) * c_ice
+                    c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + &
+                        (qiz (k) + qsz (k) + qgz (k)) * c_ice
                     tz (k) = tz (k) + 0.5 * (w (i, k) ** 2 - w1 (k) ** 2) / c8
 #else
                     tz (k) = tz (k) + 0.5 * (w (i, k) ** 2 - w1 (k) ** 2) / c_air
 #endif
                 enddo
             endif
-            !#endif
             do k = ks, ke
                 w (i, k) = w1 (k)
             enddo
@@ -991,7 +1015,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 te_end (i, k) = rgrav * te_end (i, k) * dp1 (k) * gsize (i) ** 2.0
                 tw_end (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
             enddo
-            te_b_end (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
+            te_b_end (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * &
+                gsize (i) ** 2.0
             tw_b_end (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
             ! total energy loss due to sedimentation and its heating
             te_loss (i) = dte (i) * gsize (i) ** 2.0
@@ -1003,10 +1028,13 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         do k = ks, ke
-            ! total mass changed due to sedimentation !!!
+
+            ! -----------------------------------------------------------------------
+            ! convert dry mixing ratios back to moist mixing ratios
+            ! -----------------------------------------------------------------------
+
             con_r8 = one_r8 + qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
             delp (i, k) = dp1 (k) * con_r8
-            ! convert back to moist mixing ratios
             con_r8 = one_r8 / con_r8
             qvz (k) = qvz (k) * con_r8
             qlz (k) = qlz (k) * con_r8
@@ -1014,22 +1042,30 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qiz (k) = qiz (k) * con_r8
             qsz (k) = qsz (k) * con_r8
             qgz (k) = qgz (k) * con_r8
-            ! all are moist mixing ratios at this point on:
+
             qv (i, k) = qvz (k)
             ql (i, k) = qlz (k)
             qr (i, k) = qrz (k)
             qi (i, k) = qiz (k)
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
+
+            ! -----------------------------------------------------------------------
+            ! conversion of temperature
+            ! -----------------------------------------------------------------------
+    
             q_liq (k) = qlz (k) + qrz (k)
             q_sol (k) = qiz (k) + qsz (k) + qgz (k)
             q_cond = q_liq (k) + q_sol (k)
-            cvm (k) = (one_r8 - (qvz (k) + q_cond)) * c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
+            cvm (k) = (one_r8 - (qvz (k) + q_cond)) * c_air + qvz (k) * c_vap + q_liq (k) * c_liq + &
+                q_sol (k) * c_ice
+
 #ifdef MOIST_CAPPA
             q_con (i, k) = q_cond
             tmp = rdgas * (1. + zvir * qvz (k))
             cappa (i, k) = tmp / (tmp + cvm (k))
 #endif
+
             if (do_inline_mp) then
 #ifdef MOIST_CAPPA
                 pt (i, k) = tz (k) * (1. + zvir * qvz (k)) * (1. - q_cond)
@@ -1039,6 +1075,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             else
                 pt (i, k) = pt (i, k) + (tz (k) - pt (i, k)) * cvm (k) / cp_air
             endif
+
         enddo
         
         ! -----------------------------------------------------------------------
@@ -1056,12 +1093,13 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 te_end_0 (i, k) = rgrav * te_end_0 (i, k) * delp (i, k) * gsize (i) ** 2.0
                 tw_end_0 (i, k) = rgrav * (qv (i, k) + q_liq (k) + q_sol (k)) * delp (i, k) * gsize (i) ** 2.0
             enddo
-            te_b_end_0 (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * gsize (i) ** 2.0
+            te_b_end_0 (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * &
+                gsize (i) ** 2.0
             tw_b_end_0 (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
         endif
         
         ! -----------------------------------------------------------------------
-        ! fix energy conservation
+        ! calculate total energy loss or gain
         ! -----------------------------------------------------------------------
         
         if (consv_te) then
@@ -1095,12 +1133,14 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     ! -----------------------------------------------------------------------
     
     if (consv_checker) then
-        if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg)) .gt. te_err) then
+        if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / &
+            (sum (te_beg) + sum (te_b_beg)) .gt. te_err) then
             print *, "gfdl_mp te: ", sum (te_beg) / sum (gsize ** 2) + sum (te_b_beg) / sum (gsize ** 2), &
                 sum (te_end) / sum (gsize ** 2) + sum (te_b_end) / sum (gsize ** 2), &
                  (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / (sum (te_beg) + sum (te_b_beg))
         endif
-        if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg)) .gt. te_err) then
+        if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / &
+            (sum (tw_beg) + sum (tw_b_beg)) .gt. te_err) then
             print *, "gfdl_mp tw: ", sum (tw_beg) / sum (gsize ** 2) + sum (tw_b_beg) / sum (gsize ** 2), &
                 sum (tw_end) / sum (gsize ** 2) + sum (tw_b_end) / sum (gsize ** 2), &
                  (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / (sum (tw_beg) + sum (tw_b_beg))
