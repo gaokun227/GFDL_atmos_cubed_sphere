@@ -133,25 +133,6 @@ module gfdl_cld_mp_mod
     real (kind = r_grid), parameter :: one_r8 = 1.0 ! constant 1
     
     ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-    
-    real :: acco (3, 4)
-    real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw
-    real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5)
-    
-    real :: t_wfr ! complete freezing temperature (K)
-    real :: p_min, fac_rc
-    real :: c_air, c_vap
-    real :: d0_vap
-
-    real (kind = r_grid) :: lv00, li00, li20
-    real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
-    
-    real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
-    real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
-    
-    ! -----------------------------------------------------------------------
     ! namelist parameters
     ! -----------------------------------------------------------------------
     
@@ -246,7 +227,7 @@ module gfdl_cld_mp_mod
 
     real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
-    real :: tice_mlt = 273.16 ! can set ice melting temperature to 268.0 based on observation (Kay et al. 2016) (K)
+    real :: tice_mlt = 273.16 ! can set ice melting temperature to 268 based on observation (Kay et al. 2016) (K)
     
     real :: t_min = 178.0 ! minimum temperature to freeze - dry all water vapor (K)
     real :: t_sub = 184.0 ! minimum temperature for sublimation of cloud ice (K)
@@ -327,19 +308,38 @@ module gfdl_cld_mp_mod
     real :: beta = 1.22 ! defined in Heymsfield and Mcfarquhar (1996)
     
 #ifdef SJ_CLD_TEST
-    real :: rewmin = 4.0, rewmax = 10.0 ! minimum and maximum effective radius for cloud water
-    real :: reimin = 4.0, reimax = 250.0 ! minimum and maximum effective radius for cloud ice
-    real :: rermin = 5.0, rermax = 2000.0 ! minimum and maximum effective radius for rain
-    real :: resmin = 5.0, resmax = 2000.0 ! minimum and maximum effective radius for snow
-    real :: regmin = 5.0, regmax = 2000.0 ! minimum and maximum effective radius for graupel
+    real :: rewmin = 4.0, rewmax = 10.0 ! minimum and maximum effective radius for cloud water (micron)
+    real :: reimin = 4.0, reimax = 250.0 ! minimum and maximum effective radius for cloud ice (micron)
+    real :: rermin = 5.0, rermax = 2000.0 ! minimum and maximum effective radius for rain (micron)
+    real :: resmin = 5.0, resmax = 2000.0 ! minimum and maximum effective radius for snow (micron)
+    real :: regmin = 5.0, regmax = 2000.0 ! minimum and maximum effective radius for graupel (micron)
 #else
-    real :: rewmin = 5.0, rewmax = 10.0 ! minimum and maximum effective radius for cloud water
-    real :: reimin = 10.0, reimax = 150.0 ! minimum and maximum effective radius for cloud ice
-    real :: rermin = 0.0, rermax = 10000.0 ! minimum and maximum effective radius for rain
-    real :: resmin = 0.0, resmax = 10000.0 ! minimum and maximum effective radius for snow
+    real :: rewmin = 5.0, rewmax = 10.0 ! minimum and maximum effective radius for cloud water (micron)
+    real :: reimin = 10.0, reimax = 150.0 ! minimum and maximum effective radius for cloud ice (micron)
+    real :: rermin = 0.0, rermax = 10000.0 ! minimum and maximum effective radius for rain (micron)
+    real :: resmin = 0.0, resmax = 10000.0 ! minimum and maximum effective radius for snow (micron)
     real :: regmin = 0.0, regmax = 10000.0 ! minimum and maximum effective radius for graupel
 #endif
     ! rewmax = 15.0, rermin = 15.0 ! Kokhanovsky (2004)
+    
+    ! -----------------------------------------------------------------------
+    ! local shared variables
+    ! -----------------------------------------------------------------------
+    
+    real :: acco (3, 4)
+    real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw
+    real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5)
+    
+    real :: t_wfr ! complete freezing temperature (K)
+    real :: p_min, fac_rc
+    real :: c_air, c_vap
+    real :: d0_vap
+
+    real (kind = r_grid) :: lv00, li00, li20
+    real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
+    
+    real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
+    real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
     
     ! -----------------------------------------------------------------------
     ! namelist
@@ -364,54 +364,133 @@ module gfdl_cld_mp_mod
     
 contains
 
-! -----------------------------------------------------------------------
-! the driver of the gfdl cloud microphysics
-! -----------------------------------------------------------------------
+! =======================================================================
+! GFDL cloud microphysics initialization
+! =======================================================================
 
-subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
-        pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
-        graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
-        te, condensation, deposition, evaporation, sublimation, last_step, do_inline_mp)
+subroutine gfdl_cld_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
     
     implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: me
+    integer, intent (in) :: master
+    integer, intent (in) :: nlunit
+    integer, intent (in) :: logunit
+    
+    character (len = 64), intent (in) :: fn_nml
+
+    character (len = *), intent (in) :: input_nml_file (:)
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+    
+    logical :: exists
+    
+    ! -----------------------------------------------------------------------
+    ! read namelist
+    ! -----------------------------------------------------------------------
+    
+#ifdef INTERNAL_FILE_NML
+    read (input_nml_file, nml = gfdl_mp_nml)
+#else
+    inquire (file = trim (fn_nml), exist = exists)
+    if (.not. exists) then
+        write (6, *) 'gfdl - mp :: namelist file: ', trim (fn_nml), ' does not exist'
+        stop
+    else
+        open (unit = nlunit, file = fn_nml, readonly, status = 'old')
+    endif
+    rewind (nlunit)
+    read (nlunit, nml = gfdl_mp_nml)
+    close (nlunit)
+#endif
+    
+    ! -----------------------------------------------------------------------
+    ! write namelist to log file
+    ! -----------------------------------------------------------------------
+    
+    if (me .eq. master) then
+        write (logunit, *) " ================================================================== "
+        write (logunit, *) "gfdl_mp_mod"
+        write (logunit, nml = gfdl_mp_nml)
+    endif
+    
+    ! -----------------------------------------------------------------------
+    ! initialize microphysics variables
+    ! -----------------------------------------------------------------------
+    
+    if (do_setup) then
+        call setup_con
+        call setupm
+        do_setup = .false.
+    endif
+    
+    if (do_warm_rain_mp) then
+        t_wfr = t_min
+    else
+        t_wfr = tice - 40.0
+    endif
+    
+end subroutine gfdl_cld_mp_init
+
+! =======================================================================
+! GFDL cloud microphysics driver
+! =======================================================================
+
+subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, w, &
+        ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, graupel, &
+        hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, te, &
+        condensation, deposition, evaporation, sublimation, last_step, &
+        do_inline_mp)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: is, ie, ks, ke
     
     logical, intent (in) :: hydrostatic
     logical, intent (in) :: last_step
     logical, intent (in) :: consv_te
     logical, intent (in) :: do_inline_mp
     
-    integer, intent (in) :: is, ie ! physics window
-    integer, intent (in) :: ks, ke ! vertical dimension
-    
-    real, intent (in) :: dts ! physics time step
+    real, intent (in) :: dts
     
     real, intent (in), dimension (is:ie) :: hs, gsize
     
     real, intent (in), dimension (is:ie, ks:ke) :: dz
     real, intent (in), dimension (is:ie, ks:ke) :: qnl, qni
     
-    real, intent (inout), dimension (is:ie, ks:ke) :: delp
+    real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
-    real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
+    real, intent (inout), dimension (is:ie, ks:ke) :: ua, va, w
+    real, intent (inout), dimension (is:ie, ks:ke) :: te
+
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
+
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     real, intent (inout), dimension (is:ie) :: condensation, deposition
     real, intent (inout), dimension (is:ie) :: evaporation, sublimation
-    
-    real, intent (inout), dimension (is:ie, ks:ke) :: te
-    ! logical :: used
-    real, dimension (is:ie) :: w_var
-    real, dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i
-    real, dimension (is:ie, ks:ke) :: m2_rain, m2_sol
+
+    ! -----------------------------------------------------------------------
+    ! top level for microphysical processes
+    ! -----------------------------------------------------------------------
     
     if (last_step) then
-        p_min = p0_min ! final clean - up
+        p_min = p0_min ! final cleanup
     else
         p_min = 30.e2 ! time saving trick
     endif
     
     ! -----------------------------------------------------------------------
-    ! define heat capacity of dry air and water vapor based on hydrostatical property
+    ! define various heat capacities and latent heat coefficients at 0 deg K
     ! -----------------------------------------------------------------------
     
     if (hydrostatic) then
@@ -424,11 +503,11 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
     endif
     d0_vap = c_vap - c_liq
     
-    ! scaled constants (to reduce fp errors for 32 - bit) :
+    ! scaled constants (to reduce float point errors for 32-bit)
+
     d1_vap = d0_vap / c_air
     d1_ice = dc_ice / c_air
     
-    ! lv0 = hlv0 - (c_vap - c_liq) * tice! 3.13905782e6, evaporation latent heat coefficient at 0 deg k
     lv00 = (hlv0 - d0_vap * tice) / c_air
     li00 = (hlf0 - dc_ice * tice) / c_air
     li20 = lv00 + li00
@@ -437,93 +516,122 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
     c1_liq = c_liq / c_air
     c1_ice = c_ice / c_air
     
-    ! tendency zero out for am moist processes should be done outside the driver
-    
     ! -----------------------------------------------------------------------
-    ! major cloud microphysics
+    ! major cloud microphysics driver
     ! -----------------------------------------------------------------------
     
-    call mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, qg, &
-        qa, qnl, qni, dz, is, ie, ks, ke, dts, &
-        rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
-        condensation, deposition, evaporation, sublimation, last_step, do_inline_mp)
+    call mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, qg, qa, &
+        qnl, qni, dz, is, ie, ks, ke, dts, rain, snow, graupel, ice, gsize, &
+        hs, q_con, cappa, consv_te, te, condensation, deposition, evaporation, &
+        sublimation, last_step, do_inline_mp)
     
 end subroutine gfdl_cld_mp_driver
 
-! -----------------------------------------------------------------------
-! gfdl cloud microphysics, major program
-! lin et al., 1983, jam, 1065 - 1092, and
-! rutledge and hobbs, 1984, jas, 2949 - 2972
-! terminal fall is handled lagrangianly by conservative fv algorithm
-! pt: temperature (k)
-! 6 water species:
-! 1) qv: water vapor (kg / kg)
-! 2) ql: cloud water (kg / kg)
-! 3) qr: rain (kg / kg)
-! 4) qi: cloud ice (kg / kg)
-! 5) qs: snow (kg / kg)
-! 6) qg: graupel (kg / kg)
-! -----------------------------------------------------------------------
+! =======================================================================
+! GFDL cloud microphysics end
+! =======================================================================
 
-subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
-        qg, qa, qnl, qni, dz, is, ie, ks, ke, dt_in, &
-        rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
-        w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
-        condensation, deposition, evaporation, sublimation, last_step, do_inline_mp)
+subroutine gfdl_cld_mp_end
     
     implicit none
     
+    ! -----------------------------------------------------------------------
+    ! free up memory
+    ! -----------------------------------------------------------------------
+    
+    deallocate (table)
+    deallocate (table2)
+    deallocate (table3)
+    deallocate (tablew)
+    deallocate (des)
+    deallocate (des2)
+    deallocate (des3)
+    deallocate (desw)
+    
+    tables_are_initialized = .false.
+    
+end subroutine gfdl_cld_mp_end
+
+! =======================================================================
+! major cloud microphysics driver
+! =======================================================================
+
+subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
+        qg, qa, qnl, qni, dz, is, ie, ks, ke, dt_in, rain, snow, graupel, &
+        ice, gsize, hs, q_con, cappa, consv_te, te, condensation, &
+        deposition, evaporation, sublimation, last_step, do_inline_mp)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: is, ie, ks, ke
+
     logical, intent (in) :: hydrostatic
     logical, intent (in) :: last_step
     logical, intent (in) :: consv_te
     logical, intent (in) :: do_inline_mp
-    integer, intent (in) :: is, ie, ks, ke
+
     real, intent (in) :: dt_in
+
     real, intent (in), dimension (is:ie) :: gsize
     real, intent (in), dimension (is:ie) :: hs
+
     real, intent (in), dimension (is:ie, ks:ke) :: dz
     real, intent (in), dimension (is:ie, ks:ke) :: qnl, qni
     
-    real, intent (inout), dimension (is:ie, ks:ke) :: delp
+    real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
-    real, intent (inout), dimension (is:ie, ks:ke) :: pt, ua, va, w
+    real, intent (inout), dimension (is:ie, ks:ke) :: ua, va, w
+
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
+
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     real, intent (inout), dimension (is:ie) :: condensation, deposition
     real, intent (inout), dimension (is:ie) :: evaporation, sublimation
     
-    real, intent (out), dimension (is:ie) :: w_var
-    real, intent (out), dimension (is:ie, ks:ke) :: vt_r, vt_s, vt_g, vt_i
-    real, intent (out), dimension (is:ie, ks:ke) :: m2_rain, m2_sol
     real, intent (out), dimension (is:ie, ks:ke) :: te
-    ! local:
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: i, k, n
+    
+    real :: cpaut, rh_adj, rh_rain
+    real :: r1, s1, i1, g1, rdt, ccn0
+    real :: dt_rain, convt, dts, q_cond
+    real :: s_leng, t_land, t_ocean, h_var, tmp
+    real :: cond, dep, reevap, sub
+    
     real, dimension (ks:ke) :: q_liq, q_sol
     real, dimension (ks:ke) :: qvz, qlz, qrz, qiz, qsz, qgz, qaz
     real, dimension (ks:ke) :: vtiz, vtsz, vtgz, vtrz
     real, dimension (ks:ke) :: dp1, dz1
     real, dimension (ks:ke) :: den, p1, denfac
-    real, dimension (ks:ke) :: ccn, cin, c_praut, m1_rain, m1_sol, m1
+    real, dimension (ks:ke) :: ccn, cin, m1_rain, m1_sol
     real, dimension (ks:ke) :: u0, v0, u1, v1, w1
+    real, dimension (ks:ke) :: c_praut, m1
+
+    real, dimension (is:ie, ks:ke) :: m2_rain, m2_sol
     
+    real (kind = r_grid) :: con_r8, c8
+
     real (kind = r_grid), dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
     real (kind = r_grid), dimension (is:ie, ks:ke) :: te_beg_0, te_end_0, tw_beg_0, tw_end_0
+
     real (kind = r_grid), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
     real (kind = r_grid), dimension (is:ie) :: te_b_beg_0, te_b_end_0, tw_b_beg_0, tw_b_end_0
+
     real (kind = r_grid), dimension (ks:ke) :: te1, te2
-    
-    real :: cpaut, rh_adj, rh_rain
-    real :: r1, s1, i1, g1, rdt, ccn0
-    real :: dt_rain
-    real :: s_leng, t_land, t_ocean, h_var, tmp
     real (kind = r_grid), dimension (ks:ke) :: dp0, tz, cvm
-    real (kind = r_grid) :: con_r8, c8
-    real :: convt
-    real :: dts, q_cond
-    real :: cond, dep, reevap, sub
     
-    integer :: i, k, n
-    
+    ! -----------------------------------------------------------------------
+    ! time steps
+    ! -----------------------------------------------------------------------
+
     ntimes = max (ntimes, int (dt_in / min (dt_in, mp_time)))
     dts = dt_in / real (ntimes)
     
@@ -3584,82 +3692,6 @@ subroutine setupm
     cgmlt (5) = ch2o / hltf
     
 end subroutine setupm
-
-! =======================================================================
-! initialization of gfdl cloud microphysics
-! =======================================================================
-
-subroutine gfdl_cld_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
-    
-    implicit none
-    
-    integer, intent (in) :: me
-    integer, intent (in) :: master
-    integer, intent (in) :: nlunit
-    integer, intent (in) :: logunit
-    
-    character (len = 64), intent (in) :: fn_nml
-    character (len = *), intent (in) :: input_nml_file (:)
-    
-    logical :: exists
-    
-#ifdef INTERNAL_FILE_NML
-    read (input_nml_file, nml = gfdl_mp_nml)
-#else
-    inquire (file = trim (fn_nml), exist = exists)
-    if (.not. exists) then
-        write (6, *) 'gfdl - mp :: namelist file: ', trim (fn_nml), ' does not exist'
-        stop
-    else
-        open (unit = nlunit, file = fn_nml, readonly, status = 'old')
-    endif
-    rewind (nlunit)
-    read (nlunit, nml = gfdl_mp_nml)
-    close (nlunit)
-#endif
-    
-    ! write version number and namelist to log file
-    
-    if (me .eq. master) then
-        write (logunit, *) " ================================================================== "
-        write (logunit, *) "gfdl_mp_mod"
-        write (logunit, nml = gfdl_mp_nml)
-    endif
-    
-    if (do_setup) then
-        call setup_con
-        call setupm
-        do_setup = .false.
-    endif
-    
-    if (do_warm_rain_mp) then
-        t_wfr = t_min
-    else
-        t_wfr = tice - 40.0
-    endif
-    
-end subroutine gfdl_cld_mp_init
-
-! =======================================================================
-! end of gfdl cloud microphysics
-! =======================================================================
-
-subroutine gfdl_cld_mp_end
-    
-    implicit none
-    
-    deallocate (table)
-    deallocate (table2)
-    deallocate (table3)
-    deallocate (tablew)
-    deallocate (des)
-    deallocate (des2)
-    deallocate (des3)
-    deallocate (desw)
-    
-    tables_are_initialized = .false.
-    
-end subroutine gfdl_cld_mp_end
 
 ! =======================================================================
 ! fast saturation adjustments
