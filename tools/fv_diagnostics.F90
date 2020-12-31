@@ -49,7 +49,7 @@ module fv_diagnostics_mod
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
  use fv_arrays_mod, only: max_step 
- use gfdl_mp_mod, only: wqs1, qsmith_init, c_liq, rad_ref
+ use gfdl_mp_mod, only: wqs, qsmith_init, c_liq, rad_ref
 
  use fv_coarse_graining_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
  use fv_diag_column_mod, only: fv_diag_column_init, sounding_column, debug_column
@@ -5315,7 +5315,7 @@ subroutine eqv_pot(theta_e, pt, delp, delz, peln, pkz, q, is, ie, js, je, ng, np
         if ( moist ) then
             do i=is,ie
                rq(i) = max(0., q(i,j,k))
-!              rh(i) = max(1.e-12, rq(i)/wqs1(pt(i,j,k),den(i)))   ! relative humidity
+!              rh(i) = max(1.e-12, rq(i)/wqs(pt(i,j,k),den(i)))   ! relative humidity
 !              theta_e(i,j,k) = exp(rq(i)/cp_air*((hlv+dc_vap*(pt(i,j,k)-tice))/pt(i,j,k) -   &
 !                                   rvgas*log(rh(i))) + kappa*log(1.e5/pd(i))) * pt(i,j,k)
 ! Simplified form: (ignoring the RH term)

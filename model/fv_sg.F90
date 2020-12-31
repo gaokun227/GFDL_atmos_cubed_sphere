@@ -27,7 +27,7 @@ module fv_sg_mod
   use constants_mod,      only: rdgas, rvgas, cp_air, cp_vapor, hlv, hlf, kappa, grav
   use tracer_manager_mod, only: get_tracer_index
   use field_manager_mod,  only: MODEL_ATMOS
-  use gfdl_mp_mod,        only: wqs1, wqs2, wqsat2_moist, c_liq, c_ice
+  use gfdl_mp_mod,        only: wqs, wqs_moist, c_liq, c_ice
   use fv_mp_mod,          only: mp_reduce_min, is_master
   use mpp_mod,            only: mpp_pe
 
@@ -905,7 +905,7 @@ contains
 
 ! Prevent super saturation over water:
        do i=is, ie
-          qsw = wqs2(t0(i,k), den(i,k), dqsdt)
+          qsw = wqs(t0(i,k), den(i,k), dqsdt)
            dq = q0(i,k,sphum) - qsw
           if ( dq > 0. ) then   ! remove super-saturation
              tcp3 = lcp2(i) + icp2(i)*min(1., dim(tice,t0(i,k))/40.)
@@ -1312,7 +1312,7 @@ real, dimension(is:ie,js:je):: pt2, qv2, ql2, qi2, qs2, qr2, qg2, dp2, p2, icpk,
         endif
 
 ! vapor <---> liquid water --------------------------------
-        qsw = wqsat2_moist(pt2(i,j), qv2(i,j), p2(i,j), dwsdt)
+        qsw = wqs_moist(pt2(i,j), p2(i,j), qv2(i,j), dwsdt)
         sink = min( ql2(i,j), (qsw-qv2(i,j))/(1.+lcpk(i,j)*dwsdt) )
         qv2(i,j) = qv2(i,j) + sink
         ql2(i,j) = ql2(i,j) - sink

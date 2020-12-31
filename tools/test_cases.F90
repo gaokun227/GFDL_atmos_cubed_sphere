@@ -7332,7 +7332,7 @@ end subroutine terminator_tracers
 
 
  subroutine SuperCell_Sounding(km, ps, pk1, tp, qp)
- use gfdl_mp_mod, only: wqsat_moist, qsmith_init, qs_blend
+ use gfdl_mp_mod, only: wqs_moist, qsmith_init, qs_moist
 ! Morris Weisman & J. Klemp 2002 sounding
 ! Output sounding on pressure levels:
  integer, intent(in):: km
@@ -7420,9 +7420,9 @@ end subroutine terminator_tracers
 #else
 
 #ifdef USE_MIXED_TABLE
-            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+            qs(k) = min(qv0, rh(k)*qs_moist(temp1, pp(k), qs(k)))
 #else
-            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
+            qs(k) = min(qv0, rh(k)*wqs_moist(temp1, pp(k), qs(k)))
 #endif
 
 #endif
@@ -7464,7 +7464,7 @@ end subroutine terminator_tracers
 
 ! added by Linjiong Zhou
  subroutine SuperCell_Sounding_Marine(km, ps, pk1, tp, qp)
- use gfdl_mp_mod, only: wqsat_moist, qsmith_init, qs_blend
+ use gfdl_mp_mod, only: wqs_moist, qsmith_init, qs_moist
 ! Morris Weisman & J. Klemp 2002 sounding
 ! Output sounding on pressure levels:
  integer, intent(in):: km
@@ -7552,9 +7552,9 @@ end subroutine terminator_tracers
 !#else
 !
 !#ifdef USE_MIXED_TABLE
-!            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+!            qs(k) = min(qv0, rh(k)*qs_moist(temp1, pp(k), qs(k)))
 !#else
-!            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
+!            qs(k) = min(qv0, rh(k)*wqs_moist(temp1, pp(k), qs(k)))
 !#endif
 !
 !#endif
@@ -7596,7 +7596,7 @@ end subroutine terminator_tracers
 
  ! added by Linjiong Zhou
  subroutine Marine_Sounding(km, ps, pk1, tp, qp)
- use gfdl_mp_mod, only: wqsat_moist, qsmith_init, qs_blend
+ use gfdl_mp_mod, only: wqs_moist, qsmith_init, qs_moist
 ! JASMINE CETRONE AND ROBERT A. HOUZE JR. MWR 225
 ! Output sounding on pressure levels:
  integer, intent(in):: km
@@ -7686,9 +7686,9 @@ end subroutine terminator_tracers
 #else
 
 #ifdef USE_MIXED_TABLE
-            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+            qs(k) = min(qv0, rh(k)*qs_moist(temp1, pp(k), qs(k)))
 #else
-            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
+            qs(k) = min(qv0, rh(k)*wqs_moist(temp1, pp(k), qs(k)))
 #endif
 
 #endif

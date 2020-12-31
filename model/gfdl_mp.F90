@@ -44,7 +44,7 @@ module gfdl_mp_mod
     public :: gfdl_mp_driver
     public :: gfdl_mp_end
     public :: fast_sat_adj, cld_eff_rad, rad_ref
-    public :: qsmith, qsmith_init, qs_blend, wqs1, wqs2, wqsat_moist, wqsat2_moist
+    public :: qsmith_init, qs_moist, qsmith, wqs, wqs_moist
     public :: c_liq, c_ice, rhow, wet_bulb
     
     ! -----------------------------------------------------------------------
@@ -339,8 +339,8 @@ module gfdl_mp_mod
     real (kind = r_grid) :: lv00, li00, li20
     real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
     
-    real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
-    real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
+    real, allocatable :: table1 (:), table2 (:), table3 (:), table4 (:)
+    real, allocatable :: des1 (:), des2 (:), des3 (:), des4 (:)
     
     ! -----------------------------------------------------------------------
     ! namelist
@@ -540,14 +540,14 @@ subroutine gfdl_mp_end
     ! free up memory
     ! -----------------------------------------------------------------------
     
-    deallocate (table)
+    deallocate (table1)
     deallocate (table2)
     deallocate (table3)
-    deallocate (tablew)
-    deallocate (des)
+    deallocate (table4)
+    deallocate (des1)
     deallocate (des2)
     deallocate (des3)
-    deallocate (desw)
+    deallocate (des4)
     
     tables_are_initialized = .false.
     
@@ -1661,7 +1661,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             tin = (tz (k) * cvm (k) - lv00 * ql (k)) / (1. + (qv (k) + ql (k)) * c1_vap + qr (k) * c1_liq + q_sol (k) * c1_ice)
             
             qpz = qv (k) + ql (k)
-            qsat = wqs2 (tin, den (k), dqsdt)
+            qsat = wqs (tin, den (k), dqsdt)
             dqh = max (ql (k), h_var * max (qpz, qcmin))
             dqh = min (dqh, 0.2 * qpz) ! new limiter
             dqv = qsat - qv (k) ! use this to prevent super - sat the gird box
@@ -1677,7 +1677,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             ! rain evaporation
             ! -----------------------------------------------------------------------
             
-            rh_tem = qpz / iqs1 (tin, den (k))
+            rh_tem = qpz / iqs (tin, den (k))
             
             if (dqv > qvmin .and. qsat > q_minus) then
                 if (qsat > q_plus) then
@@ -2348,7 +2348,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             tin = (te8 (k) - lv00 * qpz + li00 * (qs (k) + qg (k))) / &
                  (one_r8 + qpz * c1_vap + qr (k) * c1_liq + (qs (k) + qg (k)) * c1_ice)
             if (tin > t_sub + 6.) then
-                rh = qpz / iqs1 (tin, den (k))
+                rh = qpz / iqs (tin, den (k))
                 if (rh < rh_adj) then ! qpz / rh_adj < qs
                     reevap = reevap + ql (k) * dp1 (k)
                     sub = sub + qi (k) * dp1 (k)
@@ -2367,8 +2367,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
         ! -----------------------------------------------------------------------
         
         tin = tz (k)
-        rh_tem = qpz / iqs1 (tin, den (k))
-        qsw = wqs2 (tin, den (k), dwsdt)
+        rh_tem = qpz / iqs (tin, den (k))
+        qsw = wqs (tin, den (k), dwsdt)
         dq0 = qsw - qv (k)
         if (use_rhc_cevap) then
             evap = 0.
@@ -2464,7 +2464,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             ! -----------------------------------------------------------------------
             
             if (tz (k) < tice) then
-                qsi = iqs2 (tz (k), den (k), dqsdt)
+                tin = tz (k)
+                qsi = iqs (tin, den (k), dqsdt)
                 dq = qv (k) - qsi
                 sink = dq / (1. + tcpk (k) * dqsdt)
                 if (qi (k) > qrmin) then
@@ -2534,7 +2535,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             ! -----------------------------------------------------------------------
             
             if (qs (k) > qrmin) then
-                qsi = iqs2 (tz (k), den (k), dqsdt)
+                tin = tz (k)
+                qsi = iqs (tin, den (k), dqsdt)
                 qden = qs (k) * den (k)
                 tmp = exp (0.65625 * log (qden))
                 tsq = tz (k) * tz (k)
@@ -2567,7 +2569,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             ! -----------------------------------------------------------------------
             
             if (qg (k) > qrmin) then
-                qsi = iqs2 (tz (k), den (k), dqsdt)
+                tin = tz (k)
+                qsi = iqs (tin, den (k), dqsdt)
                 qden = qg (k) * den (k)
                 tmp = exp (0.6875 * log (qden))
                 tsq = tz (k) * tz (k)
@@ -2641,14 +2644,14 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
         
         if (tin <= t_wfr) then
             ! ice phase:
-            qstar = iqs1 (tin, den (k))
+            qstar = iqs (tin, den (k))
         elseif (tin >= tice) then
             ! liquid phase:
-            qstar = wqs1 (tin, den (k))
+            qstar = wqs (tin, den (k))
         else
             ! mixed phase:
-            qsi = iqs1 (tin, den (k))
-            qsw = wqs1 (tin, den (k))
+            qsi = iqs (tin, den (k))
+            qsw = wqs (tin, den (k))
             if (q_cond (k) > 3.e-6) then
                 rqi = q_sol (k) / q_cond (k)
             else
@@ -2822,7 +2825,7 @@ subroutine revap_rac1 (hydrostatic, is, ie, dt, tz, qv, ql, qr, qi, qs, qg, den,
         if (qr (i) > qrmin .and. tz (i) > t_wfr) then
             qpz = qv (i) + ql (i)
             tin = tz (i) - lcp2 (i) * ql (i) ! presence of clouds suppresses the rain evap
-            qsat = wqs2 (tin, den (i), dqsdt)
+            qsat = wqs (tin, den (i), dqsdt)
             dqh = max (ql (i), hvar (i) * max (qpz, qcmin))
             dqv = qsat - qv (i)
             q_minus = qpz - dqh
@@ -3811,8 +3814,8 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     real :: li00
     real :: qsw, rh, ccn0
     real :: tc, qsi, dqsdt, dq, dq0, pidep, qi_gen, qi_crt, tmp, dtmp
-    real :: tin, rqi, q_plus, q_minus
-    real :: sdt, dt_bigg, adj_fac
+    real :: rqi, q_plus, q_minus
+    real :: tin, sdt, dt_bigg, adj_fac
     real :: fac_smlt, fac_r2g, fac_i2s, fac_imlt, fac_l2r, fac_v2l, fac_l2v
     real :: factor, qim, c_air, c_vap, dw
     
@@ -4049,10 +4052,10 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! condensation / evaporation between water vapor and cloud water
         ! -----------------------------------------------------------------------
         
-        call wqs2_vect (is, ie, pt1, den, wqsat, dq2dt)
-        
         adj_fac = sat_adj0
         do i = is, ie
+            tin = pt1 (i)
+            wqsat (i) = wqs (tin, den (i), dq2dt (i))
             dq0 = (qv (i, j) - wqsat (i)) / (1. + tcp3 (i) * dq2dt (i))
             if (dq0 > 0.) then
                 src (i) = min (adj_fac * dq0, max (ql_gen - ql (i, j), fac_v2l * dq0))
@@ -4092,9 +4095,9 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
             ! final iteration:
             ! -----------------------------------------------------------------------
             
-            call wqs2_vect (is, ie, pt1, den, wqsat, dq2dt)
-            
             do i = is, ie
+                tin = pt1 (i)
+                wqsat (i) = wqs (tin, den (i), dq2dt (i))
                 dq0 = (qv (i, j) - wqsat (i)) / (1. + tcp3 (i) * dq2dt (i))
                 if (dq0 > 0.) then
                     src (i) = dq0
@@ -4264,7 +4267,8 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
             if (pt1 (i) < t_sub) then
                 src (i) = dim (qv (i, j), 1.e-6)
             elseif (pt1 (i) < tice) then
-                qsi = iqs2 (pt1 (i), den (i), dqsdt)
+                tin = pt1 (i)
+                qsi = iqs (tin, den (i), dqsdt)
                 dq = qv (i, j) - qsi
                 sink (i) = adj_fac * dq / (1. + tcp2 (i) * dqsdt)
                 if (qi (i, j) > 1.e-8) then
@@ -4462,12 +4466,12 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 ! -----------------------------------------------------------------------
                 
                 if (tin <= t_wfr) then
-                    qstar (i) = iqs1 (tin, den (i))
+                    qstar (i) = iqs (tin, den (i))
                 elseif (tin >= tice) then
-                    qstar (i) = wqs1 (tin, den (i))
+                    qstar (i) = wqs (tin, den (i))
                 else
-                    qsi = iqs1 (tin, den (i))
-                    qsw = wqs1 (tin, den (i))
+                    qsi = iqs (tin, den (i))
+                    qsw = wqs (tin, den (i))
                     if (q_cond (i) > 1.e-6) then
                         rqi = q_sol (i) / q_cond (i)
                     else
@@ -5350,7 +5354,7 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
 end subroutine neg_adj
 
 ! =======================================================================
-! initialization
+! qsmith table initialization
 ! prepare saturation water vapor pressure tables
 ! =======================================================================
 
@@ -5364,30 +5368,31 @@ subroutine qsmith_init
     
     if (.not. tables_are_initialized) then
         
-        allocate (table (length))
+        allocate (table1 (length))
         allocate (table2 (length))
         allocate (table3 (length))
-        allocate (tablew (length))
-        allocate (des (length))
+        allocate (table4 (length))
+
+        allocate (des1 (length))
         allocate (des2 (length))
         allocate (des3 (length))
-        allocate (desw (length))
+        allocate (des4 (length))
         
-        call qs_table (length)
+        call qs_table1 (length)
         call qs_table2 (length)
         call qs_table3 (length)
-        call qs_tablew (length)
+        call qs_table4 (length)
         
         do i = 1, length - 1
-            des (i) = max (0., table (i + 1) - table (i))
+            des1 (i) = max (0., table1 (i + 1) - table1 (i))
             des2 (i) = max (0., table2 (i + 1) - table2 (i))
             des3 (i) = max (0., table3 (i + 1) - table3 (i))
-            desw (i) = max (0., tablew (i + 1) - tablew (i))
+            des4 (i) = max (0., table4 (i + 1) - table4 (i))
         enddo
-        des (length) = des (length - 1)
+        des1 (length) = des1 (length - 1)
         des2 (length) = des2 (length - 1)
         des3 (length) = des3 (length - 1)
-        desw (length) = desw (length - 1)
+        des4 (length) = des4 (length - 1)
         
         tables_are_initialized = .true.
         
@@ -5396,629 +5401,35 @@ subroutine qsmith_init
 end subroutine qsmith_init
 
 ! =======================================================================
-! compute the saturated specific humidity for table ii
+! saturation water vapor pressure table 1
+! 3 - phase table, blended between -20 deg C and 0 deg C
 ! =======================================================================
 
-real function wqs1 (ta, den)
+subroutine qs_table1 (n)
     
     implicit none
     
-    ! pure water phase; universal dry / moist formular using air density
-    ! input "den" can be either dry or moist air density
-    
-    real, intent (in) :: ta, den
-    
-    real :: es, ap1, tmin
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = tablew (it) + (ap1 - it) * desw (it)
-    wqs1 = es / (rvgas * ta * den)
-    
-end function wqs1
-
-! =======================================================================
-! compute the gradient of saturated specific humidity for table ii
-! =======================================================================
-
-real function wqs2 (ta, den, dqdt)
-    
-    implicit none
-    
-    ! pure water phase; universal dry / moist formular using air density
-    ! input "den" can be either dry or moist air density
-    
-    real, intent (in) :: ta, den
-    real, intent (out) :: dqdt
-    real :: es, ap1, tmin
-    integer :: it
-    
-    tmin = tice - 160.
-    
-    if (.not. tables_are_initialized) call qsmith_init
-    
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = tablew (it) + (ap1 - it) * desw (it)
-    wqs2 = es / (rvgas * ta * den)
-    it = ap1 - 0.5
-    ! finite diff, del_t = 0.1:
-    dqdt = 10. * (desw (it) + (ap1 - it) * (desw (it + 1) - desw (it))) / (rvgas * ta * den)
-    
-end function wqs2
-
-! =======================================================================
-! compute the gradient of saturated specific humidity for table ii
-! it is the same as "wqs2", but written as vector function
-! =======================================================================
-
-subroutine wqs2_vect (is, ie, ta, den, wqsat, dqdt)
-    
-    implicit none
-    
-    ! pure water phase; universal dry / moist formular using air density
-    ! input "den" can be either dry or moist air density
-    
-    integer, intent (in) :: is, ie
-    
-    real (kind = r_grid), intent (in), dimension (is:ie) :: ta
-    real, intent (in), dimension (is:ie) :: den
-    
-    real, intent (out), dimension (is:ie) :: wqsat, dqdt
-    
-    real :: es, ap1, tmin
-    
-    integer :: i, it
-    
-    tmin = tice - 160.
-    
-    do i = is, ie
-        ap1 = 10. * dim (ta (i), tmin) + 1.
-        ap1 = min (2621., ap1)
-        it = ap1
-        es = tablew (it) + (ap1 - it) * desw (it)
-        wqsat (i) = es / (rvgas * ta (i) * den (i))
-        it = ap1 - 0.5
-        ! finite diff, del_t = 0.1:
-        dqdt (i) = 10. * (desw (it) + (ap1 - it) * (desw (it + 1) - desw (it))) / (rvgas * ta (i) * den (i))
-    enddo
-    
-end subroutine wqs2_vect
-
-! =======================================================================
-! compute wet buld temperature
-! =======================================================================
-
-real function wet_bulb (q, t, den)
-    
-    implicit none
-    
-    real, intent (in) :: t, q, den
-    
-    real :: qs, tp, dqdt, lcp
-    
-    lcp = hlv / cp_air
-    
-    wet_bulb = t
-    qs = wqs2 (wet_bulb, den, dqdt)
-    tp = 0.5 * (qs - q) / (1. + lcp * dqdt) * lcp
-    wet_bulb = wet_bulb - tp
-    
-    ! tp is negative if super - saturated
-    if (tp > 0.01) then
-        qs = wqs2 (wet_bulb, den, dqdt)
-        tp = (qs - q) / (1. + lcp * dqdt) * lcp
-        wet_bulb = wet_bulb - tp
-    endif
-    
-end function wet_bulb
-
-! =======================================================================
-! compute the saturated specific humidity for table iii
-! =======================================================================
-
-real function iqs1 (ta, den)
-    
-    implicit none
-    
-    ! water - ice phase; universal dry / moist formular using air density
-    ! input "den" can be either dry or moist air density
-    
-    real, intent (in) :: ta, den
-    
-    real :: es, ap1, tmin
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table2 (it) + (ap1 - it) * des2 (it)
-    iqs1 = es / (rvgas * ta * den)
-    
-end function iqs1
-
-! =======================================================================
-! compute the gradient of saturated specific humidity for table iii
-! =======================================================================
-
-real function iqs2 (ta, den, dqdt)
-    
-    implicit none
-    
-    ! water - ice phase; universal dry / moist formular using air density
-    ! input "den" can be either dry or moist air density
-    
-    real (kind = r_grid), intent (in) :: ta
-    real, intent (in) :: den
-    real, intent (out) :: dqdt
-    real (kind = r_grid) :: tmin, es, ap1
-    integer :: it
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table2 (it) + (ap1 - it) * des2 (it)
-    iqs2 = es / (rvgas * ta * den)
-    it = ap1 - 0.5
-    dqdt = 10. * (des2 (it) + (ap1 - it) * (des2 (it + 1) - des2 (it))) / (rvgas * ta * den)
-    
-end function iqs2
-
-! =======================================================================
-! compute the gradient of saturated specific humidity for table iii
-! =======================================================================
-
-real function qs1d_moist (ta, qv, pa, dqdt)
-    
-    implicit none
-    
-    real, intent (in) :: ta, pa, qv
-    
-    real, intent (out) :: dqdt
-    
-    real :: es, ap1, tmin, eps10
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    eps10 = 10. * eps
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table2 (it) + (ap1 - it) * des2 (it)
-    qs1d_moist = eps * es * (1. + zvir * qv) / pa
-    it = ap1 - 0.5
-    dqdt = eps10 * (des2 (it) + (ap1 - it) * (des2 (it + 1) - des2 (it))) * (1. + zvir * qv) / pa
-    
-end function qs1d_moist
-
-! =======================================================================
-! compute the gradient of saturated specific humidity for table ii
-! =======================================================================
-
-real function wqsat2_moist (ta, qv, pa, dqdt)
-    
-    implicit none
-    
-    real, intent (in) :: ta, pa, qv
-    
-    real, intent (out) :: dqdt
-    
-    real :: es, ap1, tmin, eps10
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    eps10 = 10. * eps
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = tablew (it) + (ap1 - it) * desw (it)
-    wqsat2_moist = eps * es * (1. + zvir * qv) / pa
-    it = ap1 - 0.5
-    dqdt = eps10 * (desw (it) + (ap1 - it) * (desw (it + 1) - desw (it))) * (1. + zvir * qv) / pa
-    
-end function wqsat2_moist
-
-! =======================================================================
-! compute the saturated specific humidity for table ii
-! =======================================================================
-
-real function wqsat_moist (ta, qv, pa)
-    
-    implicit none
-    
-    real, intent (in) :: ta, pa, qv
-    
-    real :: es, ap1, tmin
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = tablew (it) + (ap1 - it) * desw (it)
-    wqsat_moist = eps * es * (1. + zvir * qv) / pa
-    
-end function wqsat_moist
-
-! =======================================================================
-! compute the saturated specific humidity for table iii
-! =======================================================================
-
-real function qs1d_m (ta, qv, pa)
-    
-    implicit none
-    
-    real, intent (in) :: ta, pa, qv
-    
-    real :: es, ap1, tmin
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table2 (it) + (ap1 - it) * des2 (it)
-    qs1d_m = eps * es * (1. + zvir * qv) / pa
-    
-end function qs1d_m
-
-! =======================================================================
-! computes the difference in saturation vapor * density * between water and ice
-! =======================================================================
-
-real function d_sat (ta, den)
-    
-    implicit none
-    
-    real, intent (in) :: ta, den
-    
-    real :: es_w, es_i, ap1, tmin
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es_w = tablew (it) + (ap1 - it) * desw (it)
-    es_i = table2 (it) + (ap1 - it) * des2 (it)
-    d_sat = dim (es_w, es_i) / (rvgas * ta * den) ! take positive difference
-    
-end function d_sat
-
-! =======================================================================
-! compute the saturated water vapor pressure for table ii
-! =======================================================================
-
-real function esw_table (ta)
-    
-    implicit none
-    
-    real, intent (in) :: ta
-    
-    real :: ap1, tmin
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    esw_table = tablew (it) + (ap1 - it) * desw (it)
-    
-end function esw_table
-
-! =======================================================================
-! compute the saturated water vapor pressure for table iii
-! =======================================================================
-
-real function es2_table (ta)
-    
-    implicit none
-    
-    real, intent (in) :: ta
-    
-    real :: ap1, tmin
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es2_table = table2 (it) + (ap1 - it) * des2 (it)
-    
-end function es2_table
-
-! =======================================================================
-! compute the saturated water vapor pressure for table ii
-! =======================================================================
-
-subroutine esw_table1d (ta, es, n)
-    
-    implicit none
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
     integer, intent (in) :: n
     
-    real, intent (in) :: ta (n)
-    
-    real, intent (out) :: es (n)
-    
-    real :: ap1, tmin
-    
-    integer :: i, it
-    
-    tmin = tice - 160.
-    
-    do i = 1, n
-        ap1 = 10. * dim (ta (i), tmin) + 1.
-        ap1 = min (2621., ap1)
-        it = ap1
-        es (i) = tablew (it) + (ap1 - it) * desw (it)
-    enddo
-    
-end subroutine esw_table1d
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
 
-! =======================================================================
-! compute the saturated water vapor pressure for table iii
-! =======================================================================
-
-subroutine es2_table1d (ta, es, n)
-    
-    implicit none
-    
-    integer, intent (in) :: n
-    
-    real, intent (in) :: ta (n)
-    
-    real, intent (out) :: es (n)
-    
-    real :: ap1, tmin
-    
-    integer :: i, it
-    
-    tmin = tice - 160.
-    
-    do i = 1, n
-        ap1 = 10. * dim (ta (i), tmin) + 1.
-        ap1 = min (2621., ap1)
-        it = ap1
-        es (i) = table2 (it) + (ap1 - it) * des2 (it)
-    enddo
-    
-end subroutine es2_table1d
-
-! =======================================================================
-! compute the saturated water vapor pressure for table iv
-! =======================================================================
-
-subroutine es3_table1d (ta, es, n)
-    
-    implicit none
-    
-    integer, intent (in) :: n
-    
-    real, intent (in) :: ta (n)
-    
-    real, intent (out) :: es (n)
-    
-    real :: ap1, tmin
-    
-    integer :: i, it
-    
-    tmin = tice - 160.
-    
-    do i = 1, n
-        ap1 = 10. * dim (ta (i), tmin) + 1.
-        ap1 = min (2621., ap1)
-        it = ap1
-        es (i) = table3 (it) + (ap1 - it) * des3 (it)
-    enddo
-    
-end subroutine es3_table1d
-
-! =======================================================================
-! saturation water vapor pressure table ii
-! 1 - phase table
-! =======================================================================
-
-subroutine qs_tablew (n)
-    
-    implicit none
-    
-    integer, intent (in) :: n
-    
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem, fac0, fac1, fac2
-    
     integer :: i
-    
-    tmin = tice - 160.
-    
-    ! -----------------------------------------------------------------------
-    ! compute es over water
-    ! -----------------------------------------------------------------------
-    
-    do i = 1, n
-        tem = tmin + delt * real (i - 1)
-        fac0 = (tem - tice) / (tem * tice)
-        fac1 = fac0 * lv0
-        fac2 = (dc_vap * log (tem / tice) + fac1) / rvgas
-        tablew (i) = e00 * exp (fac2)
-    enddo
-    
-end subroutine qs_tablew
-
-! =======================================================================
-! saturation water vapor pressure table iii
-! 2 - phase table
-! =======================================================================
-
-subroutine qs_table2 (n)
-    
-    implicit none
-    
-    integer, intent (in) :: n
-    
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem0, tem1, fac0, fac1, fac2
-    
-    integer :: i, i0, i1
-    
-    tmin = tice - 160.
-    
-    do i = 1, n
-        tem0 = tmin + delt * real (i - 1)
-        fac0 = (tem0 - tice) / (tem0 * tice)
-        if (i <= 1600) then
-            ! -----------------------------------------------------------------------
-            ! compute es over ice between - 160 deg c and 0 deg c.
-            ! -----------------------------------------------------------------------
-            fac1 = fac0 * li2
-            fac2 = (d2ice * log (tem0 / tice) + fac1) / rvgas
-        else
-            ! -----------------------------------------------------------------------
-            ! compute es over water between 0 deg c and 102 deg c.
-            ! -----------------------------------------------------------------------
-            fac1 = fac0 * lv0
-            fac2 = (dc_vap * log (tem0 / tice) + fac1) / rvgas
-        endif
-        table2 (i) = e00 * exp (fac2)
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! smoother around 0 deg c
-    ! -----------------------------------------------------------------------
-    
-    i0 = 1600
-    i1 = 1601
-    tem0 = 0.25 * (table2 (i0 - 1) + 2. * table (i0) + table2 (i0 + 1))
-    tem1 = 0.25 * (table2 (i1 - 1) + 2. * table (i1) + table2 (i1 + 1))
-    table2 (i0) = tem0
-    table2 (i1) = tem1
-    
-end subroutine qs_table2
-
-! =======================================================================
-! saturation water vapor pressure table iv
-! 2 - phase table with " - 2 c" as the transition point
-! =======================================================================
-
-subroutine qs_table3 (n)
-    
-    implicit none
-    
-    integer, intent (in) :: n
-    
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: esbasw, tbasw, esbasi, tmin, tem, aa, b, c, d, e
-    real (kind = r_grid) :: tem0, tem1
-    
-    integer :: i, i0, i1
-    
-    esbasw = 1013246.0
-    tbasw = tice + 100.
-    esbasi = 6107.1
-    tmin = tice - 160.
-    
-    do i = 1, n
-        tem = tmin + delt * real (i - 1)
-        ! if (i <= 1600) then
-        if (i <= 1580) then ! change to - 2 c
-            ! -----------------------------------------------------------------------
-            ! compute es over ice between - 160 deg c and 0 deg c.
-            ! see smithsonian meteorological tables page 350.
-            ! -----------------------------------------------------------------------
-            aa = - 9.09718 * (tice / tem - 1.)
-            b = - 3.56654 * log10 (tice / tem)
-            c = 0.876793 * (1. - tem / tice)
-            e = log10 (esbasi)
-            table3 (i) = 0.1 * 10 ** (aa + b + c + e)
-        else
-            ! -----------------------------------------------------------------------
-            ! compute es over water between - 2 deg c and 102 deg c.
-            ! see smithsonian meteorological tables page 350.
-            ! -----------------------------------------------------------------------
-            aa = - 7.90298 * (tbasw / tem - 1.)
-            b = 5.02808 * log10 (tbasw / tem)
-            c = - 1.3816e-7 * (10 ** ((1. - tem / tbasw) * 11.344) - 1.)
-            d = 8.1328e-3 * (10 ** ((tbasw / tem - 1.) * (- 3.49149)) - 1.)
-            e = log10 (esbasw)
-            table3 (i) = 0.1 * 10 ** (aa + b + c + d + e)
-        endif
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! smoother around - 2 deg c
-    ! -----------------------------------------------------------------------
-    
-    i0 = 1580
-    i1 = 1581
-    tem0 = 0.25 * (table3 (i0 - 1) + 2. * table (i0) + table3 (i0 + 1))
-    tem1 = 0.25 * (table3 (i1 - 1) + 2. * table (i1) + table3 (i1 + 1))
-    table3 (i0) = tem0
-    table3 (i1) = tem1
-    
-end subroutine qs_table3
-
-! =======================================================================
-! compute the saturated specific humidity for table
-! note: this routine is based on "moist" mixing ratio
-! =======================================================================
-
-real function qs_blend (t, p, q)
-    
-    implicit none
-    
-    real, intent (in) :: t, p, q
-    
-    real :: es, ap1, tmin
-    
-    integer :: it
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (t, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table (it) + (ap1 - it) * des (it)
-    qs_blend = eps * es * (1. + zvir * q) / p
-    
-end function qs_blend
-
-! =======================================================================
-! saturation water vapor pressure table i
-! 3 - phase table
-! =======================================================================
-
-subroutine qs_table (n)
-    
-    implicit none
-    
-    integer, intent (in) :: n
     
     real (kind = r_grid) :: delt = 0.1
     real (kind = r_grid) :: tmin, tem, esh20
     real (kind = r_grid) :: wice, wh2o, fac0, fac1, fac2
     real (kind = r_grid) :: esupc (200)
     
-    integer :: i
-    
     tmin = tice - 160.
     
     ! -----------------------------------------------------------------------
-    ! compute es over ice between - 160 deg c and 0 deg c.
+    ! compute es over ice between - 160 deg C and 0 deg C
     ! -----------------------------------------------------------------------
     
     do i = 1, 1600
@@ -6026,11 +5437,11 @@ subroutine qs_table (n)
         fac0 = (tem - tice) / (tem * tice)
         fac1 = fac0 * li2
         fac2 = (d2ice * log (tem / tice) + fac1) / rvgas
-        table (i) = e00 * exp (fac2)
+        table1 (i) = e00 * exp (fac2)
     enddo
     
     ! -----------------------------------------------------------------------
-    ! compute es over water between - 20 deg c and 102 deg c.
+    ! compute es over water between - 20 deg C and 102 deg C
     ! -----------------------------------------------------------------------
     
     do i = 1, 1221
@@ -6042,72 +5453,443 @@ subroutine qs_table (n)
         if (i <= 200) then
             esupc (i) = esh20
         else
-            table (i + 1400) = esh20
+            table1 (i + 1400) = esh20
         endif
     enddo
     
     ! -----------------------------------------------------------------------
-    ! derive blended es over ice and supercooled water between - 20 deg c and 0 deg c
+    ! derive blended es over ice and supercooled water between - 20 deg C and 0 deg C
     ! -----------------------------------------------------------------------
     
     do i = 1, 200
         tem = 253.16 + delt * real (i - 1)
         wice = 0.05 * (tice - tem)
         wh2o = 0.05 * (tem - 253.16)
-        table (i + 1400) = wice * table (i + 1400) + wh2o * esupc (i)
+        table1 (i + 1400) = wice * table1 (i + 1400) + wh2o * esupc (i)
     enddo
     
-end subroutine qs_table
+end subroutine qs_table1
 
 ! =======================================================================
-! compute the saturated specific humidity and the gradient of saturated specific humidity
-! input t in deg k, p in pa; p = rho rdry tv, moist pressure
+! saturation water vapor pressure table 2
+! 2 - phase table, smoothed around 0 deg C
 ! =======================================================================
 
-subroutine qsmith (im, km, ks, t, p, q, qs, dqdt)
+subroutine qs_table2 (n)
     
     implicit none
     
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: n
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: i, i0, i1
+    
+    real (kind = r_grid) :: delt = 0.1
+    real (kind = r_grid) :: tmin, tem0, tem1, fac0, fac1, fac2
+    
+    tmin = tice - 160.
+    
+    do i = 1, n
+        tem0 = tmin + delt * real (i - 1)
+        fac0 = (tem0 - tice) / (tem0 * tice)
+        if (i <= 1600) then
+            ! -----------------------------------------------------------------------
+            ! compute es over ice between - 160 deg C and 0 deg C
+            ! -----------------------------------------------------------------------
+            fac1 = fac0 * li2
+            fac2 = (d2ice * log (tem0 / tice) + fac1) / rvgas
+        else
+            ! -----------------------------------------------------------------------
+            ! compute es over water between 0 deg C and 102 deg C
+            ! -----------------------------------------------------------------------
+            fac1 = fac0 * lv0
+            fac2 = (dc_vap * log (tem0 / tice) + fac1) / rvgas
+        endif
+        table2 (i) = e00 * exp (fac2)
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! smoother around 0 deg C
+    ! -----------------------------------------------------------------------
+    
+    i0 = 1600
+    i1 = 1601
+    tem0 = 0.25 * (table2 (i0 - 1) + 2. * table1 (i0) + table2 (i0 + 1))
+    tem1 = 0.25 * (table2 (i1 - 1) + 2. * table1 (i1) + table2 (i1 + 1))
+    table2 (i0) = tem0
+    table2 (i1) = tem1
+    
+end subroutine qs_table2
+
+! =======================================================================
+! saturation water vapor pressure table 3
+! 2 - phase table, smoothed around - 2 deg C
+! see smithsonian meteorological tables page 350
+! =======================================================================
+
+subroutine qs_table3 (n)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: n
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: i, i0, i1
+    
+    real (kind = r_grid) :: delt = 0.1
+    real (kind = r_grid) :: esbasw, tbasw, esbasi, tmin, tem, a, b, c, d, e
+    real (kind = r_grid) :: tem0, tem1
+    
+    esbasw = 1013246.0
+    tbasw = tice + 100.
+    esbasi = 6107.1
+    tmin = tice - 160.
+    
+    do i = 1, n
+        tem = tmin + delt * real (i - 1)
+        if (i <= 1580) then ! change from 0 deg C to - 2 deg C
+            ! -----------------------------------------------------------------------
+            ! compute es over ice between - 160 deg C and - 2 deg C
+            ! -----------------------------------------------------------------------
+            a = - 9.09718 * (tice / tem - 1.)
+            b = - 3.56654 * log10 (tice / tem)
+            c = 0.876793 * (1. - tem / tice)
+            e = log10 (esbasi)
+            table3 (i) = 0.1 * 10 ** (a + b + c + e)
+        else
+            ! -----------------------------------------------------------------------
+            ! compute es over water between - 2 deg C and 102 deg C
+            ! -----------------------------------------------------------------------
+            a = - 7.90298 * (tbasw / tem - 1.)
+            b = 5.02808 * log10 (tbasw / tem)
+            c = - 1.3816e-7 * (10 ** ((1. - tem / tbasw) * 11.344) - 1.)
+            d = 8.1328e-3 * (10 ** ((tbasw / tem - 1.) * (- 3.49149)) - 1.)
+            e = log10 (esbasw)
+            table3 (i) = 0.1 * 10 ** (a + b + c + d + e)
+        endif
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! smoother around - 2 deg C
+    ! -----------------------------------------------------------------------
+    
+    i0 = 1580
+    i1 = 1581
+    tem0 = 0.25 * (table3 (i0 - 1) + 2. * table1 (i0) + table3 (i0 + 1))
+    tem1 = 0.25 * (table3 (i1 - 1) + 2. * table1 (i1) + table3 (i1 + 1))
+    table3 (i0) = tem0
+    table3 (i1) = tem1
+    
+end subroutine qs_table3
+
+! =======================================================================
+! saturation water vapor pressure table 4
+! 1 - phase table
+! =======================================================================
+
+subroutine qs_table4 (n)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: n
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: i
+    
+    real (kind = r_grid) :: delt = 0.1
+    real (kind = r_grid) :: tmin, tem, fac0, fac1, fac2
+    
+    tmin = tice - 160.
+    
+    ! -----------------------------------------------------------------------
+    ! compute es over water only
+    ! -----------------------------------------------------------------------
+    
+    do i = 1, n
+        tem = tmin + delt * real (i - 1)
+        fac0 = (tem - tice) / (tem * tice)
+        fac1 = fac0 * lv0
+        fac2 = (dc_vap * log (tem / tice) + fac1) / rvgas
+        table4 (i) = e00 * exp (fac2)
+    enddo
+    
+end subroutine qs_table4
+
+! =======================================================================
+! compute the saturated specific humidity and its gradient for table 4
+! =======================================================================
+
+real function wqs (ta, den, dqdt, es)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: ta, den
+
+    real, intent (out), optional :: dqdt, es
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: it
+    
+    real :: ap1, tmin
+    
+    if (.not. tables_are_initialized) call qsmith_init
+    
+    tmin = tice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = table4 (it) + (ap1 - it) * des4 (it)
+    wqs = es / (rvgas * ta * den)
+	if (present (dqdt)) then
+        it = ap1 - 0.5
+        ! finite diff, del_t = 0.1:
+        dqdt = 10. * (des4 (it) + (ap1 - it) * (des4 (it + 1) - des4 (it))) / (rvgas * ta * den)
+	endif
+    
+end function wqs
+
+! =======================================================================
+! compute the saturated specific humidity and its gradient for table 2
+! =======================================================================
+
+real function iqs (ta, den, dqdt, es)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: ta, den
+
+    real, intent (out), optional :: dqdt, es
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: it
+    
+    real :: ap1, tmin
+
+    if (.not. tables_are_initialized) call qsmith_init
+    
+    tmin = tice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = table2 (it) + (ap1 - it) * des2 (it)
+	if (present (dqdt)) then
+    iqs = es / (rvgas * ta * den)
+        it = ap1 - 0.5
+        dqdt = 10. * (des2 (it) + (ap1 - it) * (des2 (it + 1) - des2 (it))) / (rvgas * ta * den)
+    endif
+    
+end function iqs
+
+! =======================================================================
+! compute the saturated specific humidity and its gradient for table 4
+! it is the same as "wqs", but includes the moist effect
+! =======================================================================
+
+real function wqs_moist (ta, pa, qv, dqdt)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: ta, pa, qv
+    
+    real, intent (out), optional :: dqdt
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: it
+    
+    real :: es, ap1, tmin, eps10
+    
+    if (.not. tables_are_initialized) call qsmith_init
+    
+    tmin = tice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = table4 (it) + (ap1 - it) * des4 (it)
+    wqs_moist = eps * es * (1. + zvir * qv) / pa
+	if (present (dqdt)) then
+        eps10 = 10. * eps
+        it = ap1 - 0.5
+        dqdt = eps10 * (des4 (it) + (ap1 - it) * (des4 (it + 1) - des4 (it))) * (1. + zvir * qv) / pa
+    endif
+    
+end function wqs_moist
+
+! =======================================================================
+! compute the saturated specific humidity and its gradient for table 1
+! it is the same as "wqs_moist", but for table 1
+! =======================================================================
+
+real function qs_moist (ta, pa, qv, dqdt)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: ta, pa, qv
+    
+    real, intent (out), optional :: dqdt
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: it
+    
+    real :: es, ap1, tmin, eps10
+    
+    if (.not. tables_are_initialized) call qsmith_init
+    
+    tmin = tice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = table1 (it) + (ap1 - it) * des1 (it)
+    qs_moist = eps * es * (1. + zvir * qv) / pa
+	if (present (dqdt)) then
+        eps10 = 10. * eps
+        it = ap1 - 0.5
+        dqdt = eps10 * (des1 (it) + (ap1 - it) * (des1 (it + 1) - des1 (it))) * (1. + zvir * qv) / pa
+    endif
+    
+end function qs_moist
+
+! =======================================================================
+! compute the saturated specific humidity and its gradient for table 1
+! it is the same as "qs_moist", but written as vector function
+! =======================================================================
+
+subroutine qsmith (im, km, ks, ta, pa, qv, qs, dqdt)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
     integer, intent (in) :: im, km, ks
     
-    real, intent (in), dimension (im, km) :: t, p, q
+    real, intent (in), dimension (im, km) :: ta, pa, qv
     
     real, intent (out), dimension (im, km) :: qs
     
     real, intent (out), dimension (im, km), optional :: dqdt
     
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: i, k, it
+    
     real :: eps10, ap1, tmin
     
     real, dimension (im, km) :: es
     
-    integer :: i, k, it
-    
-    tmin = tice - 160.
-    eps10 = 10. * eps
-    
     if (.not. tables_are_initialized) call qsmith_init
     
+    tmin = tice - 160.
     do k = ks, km
         do i = 1, im
-            ap1 = 10. * dim (t (i, k), tmin) + 1.
+            ap1 = 10. * dim (ta (i, k), tmin) + 1.
             ap1 = min (2621., ap1)
             it = ap1
-            es (i, k) = table (it) + (ap1 - it) * des (it)
-            qs (i, k) = eps * es (i, k) * (1. + zvir * q (i, k)) / p (i, k)
+            es (i, k) = table1 (it) + (ap1 - it) * des1 (it)
+            qs (i, k) = eps * es (i, k) * (1. + zvir * qv (i, k)) / pa (i, k)
         enddo
     enddo
     
     if (present (dqdt)) then
+        eps10 = 10. * eps
         do k = ks, km
             do i = 1, im
-                ap1 = 10. * dim (t (i, k), tmin) + 1.
+                ap1 = 10. * dim (ta (i, k), tmin) + 1.
                 ap1 = min (2621., ap1) - 0.5
                 it = ap1
-                dqdt (i, k) = eps10 * (des (it) + (ap1 - it) * (des (it + 1) - des (it))) * (1. + zvir * q (i, k)) / p (i, k)
+                dqdt (i, k) = eps10 * (des1 (it) + (ap1 - it) * (des1 (it + 1) - des1 (it))) * &
+                    (1. + zvir * qv (i, k)) / pa (i, k)
             enddo
         enddo
     endif
     
 end subroutine qsmith
+
+! =======================================================================
+! compute wet buld temperature
+! =======================================================================
+
+real function wet_bulb (qv, ta, den)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: qv, ta, den
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    real :: qs, tp, dqdt, lcp
+    
+    lcp = hlv / cp_air
+    
+    wet_bulb = ta
+    qs = wqs (wet_bulb, den, dqdt)
+    tp = 0.5 * (qs - qv) / (1. + lcp * dqdt) * lcp
+    wet_bulb = wet_bulb - tp
+    
+    ! tp is negative if supersaturated
+    if (tp > 0.01) then
+        qs = wqs (wet_bulb, den, dqdt)
+        tp = (qs - qv) / (1. + lcp * dqdt) * lcp
+        wet_bulb = wet_bulb - tp
+    endif
+    
+end function wet_bulb
 
 end module gfdl_mp_mod
