@@ -5707,8 +5707,8 @@ real function iqs (ta, den, dqdt, es)
     ap1 = min (2621., ap1)
     it = ap1
     es = table2 (it) + (ap1 - it) * des2 (it)
-	if (present (dqdt)) then
     iqs = es / (rvgas * ta * den)
+	if (present (dqdt)) then
         it = ap1 - 0.5
         dqdt = 10. * (des2 (it) + (ap1 - it) * (des2 (it + 1) - des2 (it))) / (rvgas * ta * den)
     endif
