@@ -273,8 +273,9 @@ module gfdl_cld_mp_mod
     
     real :: c_paut = 0.55 ! cloud water to rain autoconversion efficiency
     real :: c_psaci = 0.02 ! cloud ice to snow accretion efficiency (was 0.1 in ZETAC)
-    real :: c_cracw = 0.9 ! cloud water to rain accretion efficiency
+    real :: c_pracw = 0.9 ! cloud water to rain accretion efficiency
     real :: c_pgacs = 2.0e-3 ! snow to graupel accretion efficiency (was 0.1 in ZETAC)
+    real :: c_pgaci = 0.05 ! cloud ice to graupel accretion efficiency (was 0.1 in ZETAC)
     
     real :: alin = 842.0 ! "a" in Lin et al. (1983)
     real :: clin = 4.8 ! "c" in Lin et al. (1983), 4.8 -- > 6. (to ehance ql -- > qs)
@@ -352,14 +353,14 @@ module gfdl_cld_mp_mod
         do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, &
         const_vr, rthresh, ccn_l, ccn_o, sat_adj0, igflag, c_paut, tau_imlt, &
         tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen, do_hail, inflag, &
-        c_psaci, c_pgacs, z_slope_liq, z_slope_ice, prog_ccn, c_cracw, alin, &
-        clin, rad_snow, rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, &
-        do_sedi_heat, do_sedi_uv, do_sedi_w, icloud_f, irain_f, xr_a, xr_b, &
-        xr_c, ntimes, do_disp_heat, tau_revp, tice_mlt, do_cond_timescale, &
-        mp_time, consv_checker, te_err, use_rhc_cevap, use_rhc_revap, &
-        do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, rhc_cevap, &
-        rhc_revap, qi0_rei, qmin, beta, liq_ice_combine, rewflag, reiflag, &
-        rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
+        c_psaci, c_pgacs, c_pgaci, z_slope_liq, z_slope_ice, prog_ccn, &
+        c_pracw, alin, clin, rad_snow, rad_graupel, rad_rain, cld_min, &
+        use_ppm, mono_prof, do_sedi_heat, do_sedi_uv, do_sedi_w, icloud_f, &
+        irain_f, xr_a, xr_b, xr_c, ntimes, do_disp_heat, tau_revp, tice_mlt, &
+        do_cond_timescale, mp_time, consv_checker, te_err, use_rhc_cevap, &
+        use_rhc_revap, do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
+        rhc_cevap, rhc_revap, qi0_rei, qmin, beta, liq_ice_combine, rewflag, &
+        reiflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
         regmin, regmax
     
 contains
@@ -551,6 +552,192 @@ subroutine gfdl_cld_mp_end
     tables_are_initialized = .false.
     
 end subroutine gfdl_cld_mp_end
+
+! =======================================================================
+! qsmith table initialization
+! =======================================================================
+
+subroutine setup_con
+    
+    implicit none
+    
+    if (.not. tables_are_initialized) call qsmith_init
+    
+    tables_are_initialized = .true.
+    
+end subroutine setup_con
+
+! =======================================================================
+! setup GFDL cloud microphysics parameters
+! =======================================================================
+
+subroutine setupm
+    
+    implicit none
+    
+    integer :: i, k
+    
+    real :: gcon, scm3, pisq, act (8)
+    real :: visk, vdifu, tcond
+    
+    ! -----------------------------------------------------------------------
+    ! Gamma function
+    ! -----------------------------------------------------------------------
+    
+    real, parameter :: &
+        gam263 = 1.456943, gam275 = 1.608355, gam290 = 1.827363, &
+        gam325 = 2.54925, gam350 = 3.323363, gam380 = 4.694155, &
+        gam425 = 8.285063, gam450 = 11.631769, gam480 = 17.837789, &
+        gam625 = 184.860962, gam680 = 496.604067
+    
+    real, parameter :: acc (3) = (/ 5.0, 2.0, 0.5 /)
+    
+    ! -----------------------------------------------------------------------
+    ! cloud water autoconversion threshold in mass
+    ! -----------------------------------------------------------------------
+    
+    fac_rc = (4. / 3.) * pi * rhor * rthresh ** 3
+    
+    ! -----------------------------------------------------------------------
+    ! physics constants
+    ! -----------------------------------------------------------------------
+    
+    visk = 1.259e-5 ! kinematic viscosity of air (cm^2/s)
+    vdifu = 2.11e-5 ! diffusivity of water vapor in air (cm^2/s)
+    tcond = 2.36e-2 ! thermal conductivity of air (J/m/s/K)
+    scm3 = (visk / vdifu) ** (1. / 3.)
+    
+    ! -----------------------------------------------------------------------
+    ! accretion between rain, snow, and graupel or hail
+    ! -----------------------------------------------------------------------
+    
+    pisq = pi * pi
+    
+    cracs = pisq * rnzr * rnzs * rhos
+    csacr = pisq * rnzr * rnzs * rhor
+    if (do_hail) then
+        cgacr = pisq * rnzr * rnzh * rhor
+        cgacs = pisq * rnzh * rnzs * rhos
+    else
+        cgacr = pisq * rnzr * rnzg * rhor
+        cgacs = pisq * rnzg * rnzs * rhos
+    endif
+    cgacs = cgacs * c_pgacs
+    
+    ! act:
+    ! 1-2: racs (s-r)
+    ! 3-4: sacr (r-s)
+    ! 5-6: gacr (r-g)
+    ! 7-8: gacs (s-g)
+    
+    act (1) = pi * rnzs * rhos
+    act (2) = pi * rnzr * rhor
+    if (do_hail) then
+        act (6) = pi * rnzh * rhoh
+    else
+        act (6) = pi * rnzg * rhog
+    endif
+    act (3) = act (2)
+    act (4) = act (1)
+    act (5) = act (2)
+    act (7) = act (1)
+    act (8) = act (6)
+    
+    do i = 1, 3
+        do k = 1, 4
+            acco (i, k) = acc (i) / (act (2 * k - 1) ** ((7 - i) * 0.25) * act (2 * k) ** (i * 0.25))
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! accretion between cloud water, cloud ice, rain, and snow
+    ! -----------------------------------------------------------------------
+    
+    csacw = pi * rnzs * clin * gam325 / (4. * act (1) ** 0.8125)
+    craci = pi * rnzr * alin * gam380 / (4. * act (2) ** 0.95)
+    csaci = csacw * c_psaci
+    cracw = craci * c_pracw
+    
+    ! -----------------------------------------------------------------------
+    ! accretion between cloud water, cloud ice, and graupel or hail
+    ! -----------------------------------------------------------------------
+    
+    gcon = 40.74 * sqrt (sfcrho)
+    
+    if (do_hail) then
+        cgacw = pi * rnzh * gam350 * gcon / (4. * act (6) ** 0.875)
+    else
+        cgacw = pi * rnzg * gam350 * gcon / (4. * act (6) ** 0.875)
+    endif
+    cgaci = cgacw * c_pgaci
+    
+    ! -----------------------------------------------------------------------
+    ! snow sublimation
+    ! -----------------------------------------------------------------------
+
+    cssub (1) = 2. * pi * vdifu * tcond * rvgas * rnzs
+    cssub (2) = 0.78 / sqrt (act (1))
+    cssub (3) = 0.31 * scm3 * gam263 * sqrt (clin / visk) / act (1) ** 0.65625
+    cssub (4) = tcond * rvgas
+    cssub (5) = (hlv + hlf) ** 2 * vdifu
+
+    ! -----------------------------------------------------------------------
+    ! graupel or hail sublimation
+    ! -----------------------------------------------------------------------
+    
+    if (do_hail) then
+        cgsub (1) = 2. * pi * vdifu * tcond * rvgas * rnzh
+    else
+        cgsub (1) = 2. * pi * vdifu * tcond * rvgas * rnzg
+    endif
+    cgsub (2) = 0.78 / sqrt (act (6))
+    cgsub (3) = 0.31 * scm3 * gam275 * sqrt (gcon / visk) / act (6) ** 0.6875
+    cgsub (4) = cssub (4)
+    cgsub (5) = cssub (5)
+
+    ! -----------------------------------------------------------------------
+    ! rain evaporation
+    ! -----------------------------------------------------------------------
+    
+    crevp (1) = 2. * pi * vdifu * tcond * rvgas * rnzr
+    crevp (2) = 0.78 / sqrt (act (2))
+    crevp (3) = 0.31 * scm3 * gam290 * sqrt (alin / visk) / act (2) ** 0.725
+    crevp (4) = cssub (4)
+    crevp (5) = hlv ** 2 * vdifu
+    
+    ! -----------------------------------------------------------------------
+    ! rain freezing
+    ! -----------------------------------------------------------------------
+    
+    cgfr (1) = 20.e2 * pisq * rnzr * rhor / act (2) ** 1.75
+    cgfr (2) = 0.66
+    
+    ! -----------------------------------------------------------------------
+    ! snow melting
+    ! -----------------------------------------------------------------------
+    
+    csmlt (1) = 2. * pi * tcond * rnzs / hlf
+    csmlt (2) = 2. * pi * vdifu * rnzs * hlv / hlf
+    csmlt (3) = cssub (2)
+    csmlt (4) = cssub (3)
+    csmlt (5) = c_liq / hlf
+    
+    ! -----------------------------------------------------------------------
+    ! graupel or hail melting
+    ! -----------------------------------------------------------------------
+    
+    if (do_hail) then
+        cgmlt (1) = 2. * pi * tcond * rnzh / hlf
+        cgmlt (2) = 2. * pi * vdifu * rnzh * hlv / hlf
+    else
+        cgmlt (1) = 2. * pi * tcond * rnzg / hlf
+        cgmlt (2) = 2. * pi * vdifu * rnzg * hlv / hlf
+    endif
+    cgmlt (3) = cgsub (2)
+    cgmlt (4) = cgsub (3)
+    cgmlt (5) = c_liq / hlf
+    
+end subroutine setupm
 
 ! =======================================================================
 ! major cloud microphysics driver
@@ -3579,161 +3766,6 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
 end subroutine fall_speed
 
 ! =======================================================================
-! setup gfdl cloud microphysics parameters
-! =======================================================================
-
-subroutine setupm
-    
-    implicit none
-    
-    real :: gcon, cd, scm3, pisq, act (8)
-    real :: vdifu, tcond
-    real :: visk
-    real :: ch2o, hltf
-    real :: hlts, hltc, ri50
-    
-    real, parameter :: gam263 = 1.456943, gam275 = 1.608355, gam290 = 1.827363, &
-        gam325 = 2.54925, gam350 = 3.323363, gam380 = 4.694155, &
-        gam425 = 8.285063, gam450 = 11.631769, gam480 = 17.837789, &
-        gam625 = 184.860962, gam680 = 496.604067
-    
-    real, parameter :: acc (3) = (/ 5.0, 2.0, 0.5 /)
-    
-    real den_rc
-    
-    integer :: i, k
-    
-    ! s. klein's formular (eq 16) from am2
-    
-    fac_rc = (4. / 3.) * pi * rhor * rthresh ** 3
-    
-    if (prog_ccn) then
-        ! if (master) write (*, *) 'prog_ccn option is .t.'
-    else
-        den_rc = fac_rc * ccn_o * 1.e6
-        ! if (master) write (*, *) 'mp: for ccn_o = ', ccn_o, 'ql_rc = ', den_rc
-        den_rc = fac_rc * ccn_l * 1.e6
-        ! if (master) write (*, *) 'mp: for ccn_l = ', ccn_l, 'ql_rc = ', den_rc
-    endif
-    
-    vdifu = 2.11e-5
-    tcond = 2.36e-2
-    
-    visk = 1.259e-5
-    hlts = hlv + hlf
-    hltc = hlv
-    hltf = hlf
-    
-    ch2o = c_liq
-    ri50 = 1.e-4
-    
-    pisq = pi * pi
-    scm3 = (visk / vdifu) ** (1. / 3.)
-    
-    cracs = pisq * rnzr * rnzs * rhos
-    csacr = pisq * rnzr * rnzs * rhor
-    if (do_hail) then
-        cgacr = pisq * rnzr * rnzh * rhor
-        cgacs = pisq * rnzh * rnzs * rhos
-    else
-        cgacr = pisq * rnzr * rnzg * rhor
-        cgacs = pisq * rnzg * rnzs * rhos
-    endif
-    cgacs = cgacs * c_pgacs
-    
-    ! act: 1 - 2:racs (s - r) ; 3 - 4:sacr (r - s) ;
-    ! 5 - 6:gacr (r - g) ; 7 - 8:gacs (s - g)
-    
-    act (1) = pi * rnzs * rhos
-    act (2) = pi * rnzr * rhor
-    if (do_hail) then
-        act (6) = pi * rnzh * rhoh
-    else
-        act (6) = pi * rnzg * rhog
-    endif
-    act (3) = act (2)
-    act (4) = act (1)
-    act (5) = act (2)
-    act (7) = act (1)
-    act (8) = act (6)
-    
-    do i = 1, 3
-        do k = 1, 4
-            acco (i, k) = acc (i) / (act (2 * k - 1) ** ((7 - i) * 0.25) * act (2 * k) ** (i * 0.25))
-        enddo
-    enddo
-    
-    gcon = 40.74 * sqrt (sfcrho) ! 44.628
-    
-    csacw = pi * rnzs * clin * gam325 / (4. * act (1) ** 0.8125)
-    ! decreasing csacw to reduce cloud water --- > snow
-    
-    craci = pi * rnzr * alin * gam380 / (4. * act (2) ** 0.95)
-    csaci = csacw * c_psaci
-    
-    if (do_hail) then
-        cgacw = pi * rnzh * gam350 * gcon / (4. * act (6) ** 0.875)
-    else
-        cgacw = pi * rnzg * gam350 * gcon / (4. * act (6) ** 0.875)
-    endif
-    ! cgaci = cgacw * 0.1
-    
-    ! sjl, may 28, 2012
-    cgaci = cgacw * 0.05
-    ! sjl, may 28, 2012
-    
-    cracw = craci ! cracw = 3.27206196043822
-    cracw = c_cracw * cracw
-    
-    ! subl and revp: five constants for three separate processes
-    
-    cssub (1) = 2. * pi * vdifu * tcond * rvgas * rnzs
-    if (do_hail) then
-        cgsub (1) = 2. * pi * vdifu * tcond * rvgas * rnzh
-    else
-        cgsub (1) = 2. * pi * vdifu * tcond * rvgas * rnzg
-    endif
-    crevp (1) = 2. * pi * vdifu * tcond * rvgas * rnzr
-    cssub (2) = 0.78 / sqrt (act (1))
-    cgsub (2) = 0.78 / sqrt (act (6))
-    crevp (2) = 0.78 / sqrt (act (2))
-    cssub (3) = 0.31 * scm3 * gam263 * sqrt (clin / visk) / act (1) ** 0.65625
-    cgsub (3) = 0.31 * scm3 * gam275 * sqrt (gcon / visk) / act (6) ** 0.6875
-    crevp (3) = 0.31 * scm3 * gam290 * sqrt (alin / visk) / act (2) ** 0.725
-    cssub (4) = tcond * rvgas
-    cssub (5) = hlts ** 2 * vdifu
-    cgsub (4) = cssub (4)
-    crevp (4) = cssub (4)
-    cgsub (5) = cssub (5)
-    crevp (5) = hltc ** 2 * vdifu
-    
-    cgfr (1) = 20.e2 * pisq * rnzr * rhor / act (2) ** 1.75
-    cgfr (2) = 0.66
-    
-    ! smlt: five constants (lin et al. 1983)
-    
-    csmlt (1) = 2. * pi * tcond * rnzs / hltf
-    csmlt (2) = 2. * pi * vdifu * rnzs * hltc / hltf
-    csmlt (3) = cssub (2)
-    csmlt (4) = cssub (3)
-    csmlt (5) = ch2o / hltf
-    
-    ! gmlt: five constants
-    
-    if (do_hail) then
-        cgmlt (1) = 2. * pi * tcond * rnzh / hltf
-        cgmlt (2) = 2. * pi * vdifu * rnzh * hltc / hltf
-    else
-        cgmlt (1) = 2. * pi * tcond * rnzg / hltf
-        cgmlt (2) = 2. * pi * vdifu * rnzg * hltc / hltf
-    endif
-    cgmlt (3) = cgsub (2)
-    cgmlt (4) = cgsub (3)
-    cgmlt (5) = ch2o / hltf
-    
-end subroutine setupm
-
-! =======================================================================
 ! fast saturation adjustments
 ! this is designed for single - moment 6 - class cloud microphysics schemes
 ! handles the heat release due to in situ phase changes.
@@ -5156,20 +5188,6 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
 end subroutine rad_ref
 
 ! =======================================================================
-! qsmith table initialization
-! =======================================================================
-
-subroutine setup_con
-    
-    implicit none
-    
-    if (.not. tables_are_initialized) call qsmith_init
-    
-    tables_are_initialized = .true.
-    
-end subroutine setup_con
-
-! =======================================================================
 ! accretion function (lin et al. 1983)
 ! =======================================================================
 
@@ -5233,6 +5251,103 @@ real function gmlt (tc, dqs, qgrho, pgacw, pgacr, c, rho)
         c (4) * qgrho ** 0.6875 / rho ** 0.25) + c (5) * tc * (pgacw + pgacr)
     
 end function gmlt
+
+! =======================================================================
+! fix negative water species
+! =======================================================================
+
+subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
+    
+    implicit none
+    
+    integer, intent (in) :: ks, ke
+    real, intent (in), dimension (ks:ke) :: dp
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: pt
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (out) :: cond
+    
+    real, dimension (ks:ke) :: lcpk, icpk
+    
+    real :: dq, cvm
+    
+    integer :: k
+    
+    ! -----------------------------------------------------------------------
+    ! define heat capacity and latent heat coefficient
+    ! -----------------------------------------------------------------------
+    
+    do k = ks, ke
+        cvm = 1. + qv (k) * c1_vap + (qr (k) + ql (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+        lcpk (k) = (lv00 + d1_vap * pt (k)) / cvm
+        icpk (k) = (li00 + d1_ice * pt (k)) / cvm
+    enddo
+
+    cond = 0
+    
+    do k = ks, ke
+        
+        ! -----------------------------------------------------------------------
+        ! ice phase:
+        ! -----------------------------------------------------------------------
+        
+        ! if cloud ice < 0, borrow from snow
+        if (qi (k) < 0.) then
+            qs (k) = qs (k) + qi (k)
+            qi (k) = 0.
+        endif
+        ! if snow < 0, borrow from graupel
+        if (qs (k) < 0.) then
+            qg (k) = qg (k) + qs (k)
+            qs (k) = 0.
+        endif
+        ! if graupel < 0, borrow from rain
+        if (qg (k) < 0.) then
+            qr (k) = qr (k) + qg (k)
+            pt (k) = pt (k) - qg (k) * icpk (k) ! heating
+            qg (k) = 0.
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! liquid phase:
+        ! -----------------------------------------------------------------------
+        
+        ! if rain < 0, borrow from cloud water
+        if (qr (k) < 0.) then
+            ql (k) = ql (k) + qr (k)
+            qr (k) = 0.
+        endif
+        ! if cloud water < 0, borrow from water vapor
+        if (ql (k) < 0.) then
+            cond = cond - ql (k) * dp (k)
+            qv (k) = qv (k) + ql (k)
+            pt (k) = pt (k) - ql (k) * lcpk (k) ! heating
+            ql (k) = 0.
+        endif
+        
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! fix water vapor; borrow from below
+    ! -----------------------------------------------------------------------
+    
+    do k = ks, ke - 1
+        if (qv (k) < 0.) then
+            qv (k + 1) = qv (k + 1) + qv (k) * dp (k) / dp (k + 1)
+            qv (k) = 0.
+        endif
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! bottom layer; borrow from above
+    ! -----------------------------------------------------------------------
+    
+    if (qv (ke) < 0. .and. qv (ke - 1) > 0.) then
+        dq = min (- qv (ke) * dp (ke), qv (ke - 1) * dp (ke - 1))
+        qv (ke - 1) = qv (ke - 1) - dq / dp (ke - 1)
+        qv (ke) = qv (ke) + dq / dp (ke)
+    endif
+    
+end subroutine neg_adj
 
 ! =======================================================================
 ! initialization
@@ -5994,103 +6109,5 @@ subroutine qsmith (im, km, ks, t, p, q, qs, dqdt)
     endif
     
 end subroutine qsmith
-
-! =======================================================================
-! fix negative water species
-! this is designed for 6 - class micro - physics schemes
-! =======================================================================
-
-subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
-    
-    implicit none
-    
-    integer, intent (in) :: ks, ke
-    real, intent (in), dimension (ks:ke) :: dp
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: pt
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-    real, intent (out) :: cond
-    
-    real, dimension (ks:ke) :: lcpk, icpk
-    
-    real :: dq, cvm
-    
-    integer :: k
-    
-    ! -----------------------------------------------------------------------
-    ! define heat capacity and latent heat coefficient
-    ! -----------------------------------------------------------------------
-    
-    do k = ks, ke
-        cvm = 1. + qv (k) * c1_vap + (qr (k) + ql (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-        lcpk (k) = (lv00 + d1_vap * pt (k)) / cvm
-        icpk (k) = (li00 + d1_ice * pt (k)) / cvm
-    enddo
-
-    cond = 0
-    
-    do k = ks, ke
-        
-        ! -----------------------------------------------------------------------
-        ! ice phase:
-        ! -----------------------------------------------------------------------
-        
-        ! if cloud ice < 0, borrow from snow
-        if (qi (k) < 0.) then
-            qs (k) = qs (k) + qi (k)
-            qi (k) = 0.
-        endif
-        ! if snow < 0, borrow from graupel
-        if (qs (k) < 0.) then
-            qg (k) = qg (k) + qs (k)
-            qs (k) = 0.
-        endif
-        ! if graupel < 0, borrow from rain
-        if (qg (k) < 0.) then
-            qr (k) = qr (k) + qg (k)
-            pt (k) = pt (k) - qg (k) * icpk (k) ! heating
-            qg (k) = 0.
-        endif
-        
-        ! -----------------------------------------------------------------------
-        ! liquid phase:
-        ! -----------------------------------------------------------------------
-        
-        ! if rain < 0, borrow from cloud water
-        if (qr (k) < 0.) then
-            ql (k) = ql (k) + qr (k)
-            qr (k) = 0.
-        endif
-        ! if cloud water < 0, borrow from water vapor
-        if (ql (k) < 0.) then
-            cond = cond - ql (k) * dp (k)
-            qv (k) = qv (k) + ql (k)
-            pt (k) = pt (k) - ql (k) * lcpk (k) ! heating
-            ql (k) = 0.
-        endif
-        
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! fix water vapor; borrow from below
-    ! -----------------------------------------------------------------------
-    
-    do k = ks, ke - 1
-        if (qv (k) < 0.) then
-            qv (k + 1) = qv (k + 1) + qv (k) * dp (k) / dp (k + 1)
-            qv (k) = 0.
-        endif
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! bottom layer; borrow from above
-    ! -----------------------------------------------------------------------
-    
-    if (qv (ke) < 0. .and. qv (ke - 1) > 0.) then
-        dq = min (- qv (ke) * dp (ke), qv (ke - 1) * dp (ke - 1))
-        qv (ke - 1) = qv (ke - 1) - dq / dp (ke - 1)
-        qv (ke) = qv (ke) + dq / dp (ke)
-    endif
-    
-end subroutine neg_adj
 
 end module gfdl_cld_mp_mod
