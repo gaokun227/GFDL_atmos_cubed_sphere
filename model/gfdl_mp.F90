@@ -5640,7 +5640,7 @@ end subroutine qs_table4
 ! compute the saturated specific humidity and its gradient for table 4
 ! =======================================================================
 
-real function wqs (ta, den, dqdt, es)
+real function wqs (ta, den, dqdt)
     
     implicit none
     
@@ -5650,7 +5650,7 @@ real function wqs (ta, den, dqdt, es)
     
     real, intent (in) :: ta, den
 
-    real, intent (out), optional :: dqdt, es
+    real, intent (out), optional :: dqdt
     
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5658,7 +5658,7 @@ real function wqs (ta, den, dqdt, es)
 
     integer :: it
     
-    real :: ap1, tmin
+    real :: es, ap1, tmin
     
     if (.not. tables_are_initialized) call qsmith_init
     
@@ -5680,7 +5680,7 @@ end function wqs
 ! compute the saturated specific humidity and its gradient for table 2
 ! =======================================================================
 
-real function iqs (ta, den, dqdt, es)
+real function iqs (ta, den, dqdt)
     
     implicit none
     
@@ -5690,7 +5690,7 @@ real function iqs (ta, den, dqdt, es)
     
     real, intent (in) :: ta, den
 
-    real, intent (out), optional :: dqdt, es
+    real, intent (out), optional :: dqdt
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5698,7 +5698,7 @@ real function iqs (ta, den, dqdt, es)
 
     integer :: it
     
-    real :: ap1, tmin
+    real :: es, ap1, tmin
 
     if (.not. tables_are_initialized) call qsmith_init
     
