@@ -5264,20 +5264,32 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
     
     implicit none
     
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
     integer, intent (in) :: ks, ke
+
     real, intent (in), dimension (ks:ke) :: dp
+
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: pt
+
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+
     real, intent (out) :: cond
     
-    real, dimension (ks:ke) :: lcpk, icpk
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
     
     real :: dq, cvm
     
-    integer :: k
+    real, dimension (ks:ke) :: lcpk, icpk
     
     ! -----------------------------------------------------------------------
-    ! define heat capacity and latent heat coefficient
+    ! calculate moist heat capacity and latent heat coefficients
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
@@ -5291,7 +5303,7 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
     do k = ks, ke
         
         ! -----------------------------------------------------------------------
-        ! ice phase:
+        ! fix negative solid-phase hydrometeors
         ! -----------------------------------------------------------------------
         
         ! if cloud ice < 0, borrow from snow
@@ -5299,20 +5311,22 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
             qs (k) = qs (k) + qi (k)
             qi (k) = 0.
         endif
+
         ! if snow < 0, borrow from graupel
         if (qs (k) < 0.) then
             qg (k) = qg (k) + qs (k)
             qs (k) = 0.
         endif
+
         ! if graupel < 0, borrow from rain
         if (qg (k) < 0.) then
             qr (k) = qr (k) + qg (k)
-            pt (k) = pt (k) - qg (k) * icpk (k) ! heating
+            pt (k) = pt (k) - qg (k) * icpk (k)
             qg (k) = 0.
         endif
         
         ! -----------------------------------------------------------------------
-        ! liquid phase:
+        ! fix negative liquid-phase hydrometeors
         ! -----------------------------------------------------------------------
         
         ! if rain < 0, borrow from cloud water
@@ -5320,20 +5334,22 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
             ql (k) = ql (k) + qr (k)
             qr (k) = 0.
         endif
+
         ! if cloud water < 0, borrow from water vapor
         if (ql (k) < 0.) then
             cond = cond - ql (k) * dp (k)
             qv (k) = qv (k) + ql (k)
-            pt (k) = pt (k) - ql (k) * lcpk (k) ! heating
+            pt (k) = pt (k) - ql (k) * lcpk (k)
             ql (k) = 0.
         endif
         
     enddo
     
     ! -----------------------------------------------------------------------
-    ! fix water vapor; borrow from below
+    ! fix water vapor
     ! -----------------------------------------------------------------------
     
+    ! borrow water vapor from below
     do k = ks, ke - 1
         if (qv (k) < 0.) then
             qv (k + 1) = qv (k + 1) + qv (k) * dp (k) / dp (k + 1)
@@ -5341,10 +5357,7 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
         endif
     enddo
     
-    ! -----------------------------------------------------------------------
-    ! bottom layer; borrow from above
-    ! -----------------------------------------------------------------------
-    
+    ! borrow water vapor from above
     if (qv (ke) < 0. .and. qv (ke - 1) > 0.) then
         dq = min (- qv (ke) * dp (ke), qv (ke - 1) * dp (ke - 1))
         qv (ke - 1) = qv (ke - 1) - dq / dp (ke - 1)
@@ -5668,11 +5681,11 @@ real function wqs (ta, den, dqdt)
     it = ap1
     es = table4 (it) + (ap1 - it) * des4 (it)
     wqs = es / (rvgas * ta * den)
-	if (present (dqdt)) then
+    if (present (dqdt)) then
         it = ap1 - 0.5
         ! finite diff, del_t = 0.1:
         dqdt = 10. * (des4 (it) + (ap1 - it) * (des4 (it + 1) - des4 (it))) / (rvgas * ta * den)
-	endif
+    endif
     
 end function wqs
 
@@ -5708,7 +5721,7 @@ real function iqs (ta, den, dqdt)
     it = ap1
     es = table2 (it) + (ap1 - it) * des2 (it)
     iqs = es / (rvgas * ta * den)
-	if (present (dqdt)) then
+    if (present (dqdt)) then
         it = ap1 - 0.5
         dqdt = 10. * (des2 (it) + (ap1 - it) * (des2 (it + 1) - des2 (it))) / (rvgas * ta * den)
     endif
@@ -5748,7 +5761,7 @@ real function wqs_moist (ta, pa, qv, dqdt)
     it = ap1
     es = table4 (it) + (ap1 - it) * des4 (it)
     wqs_moist = eps * es * (1. + zvir * qv) / pa
-	if (present (dqdt)) then
+    if (present (dqdt)) then
         eps10 = 10. * eps
         it = ap1 - 0.5
         dqdt = eps10 * (des4 (it) + (ap1 - it) * (des4 (it + 1) - des4 (it))) * (1. + zvir * qv) / pa
@@ -5789,7 +5802,7 @@ real function qs_moist (ta, pa, qv, dqdt)
     it = ap1
     es = table1 (it) + (ap1 - it) * des1 (it)
     qs_moist = eps * es * (1. + zvir * qv) / pa
-	if (present (dqdt)) then
+    if (present (dqdt)) then
         eps10 = 10. * eps
         it = ap1 - 0.5
         dqdt = eps10 * (des1 (it) + (ap1 - it) * (des1 (it + 1) - des1 (it))) * (1. + zvir * qv) / pa
