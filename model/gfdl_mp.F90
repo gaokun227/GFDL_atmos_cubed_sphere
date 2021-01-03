@@ -92,6 +92,11 @@ module gfdl_mp_mod
     real, parameter :: lv0 = hlv0 - dc_vap * tice ! 3.14893552e6, evaporation latent heat coeff. at 0 deg K (J/kg)
     real, parameter :: li0 = hlf0 - dc_ice * tice ! - 2.2691392e5, fussion latent heat coeff. at 0 deg K (J/kg)
     
+    real, parameter :: gam263 = 1.456943, gam275 = 1.608355, gam290 = 1.827363 ! Gamma function (2.63, 2.75, 2.9)
+    real, parameter :: gam325 = 2.54925, gam350 = 3.323363, gam380 = 4.694155 ! Gamma function (3.25, 3.5, 3.8)
+    real, parameter :: gam425 = 8.285063, gam450 = 11.631769, gam480 = 17.837789 ! Gamma function (4.25, 4.5, 4.8)
+    real, parameter :: gam625 = 184.860962, gam680 = 496.604067 ! Gamma functio (6.25, 6.8)
+    
     real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling (J/kg/K)
 
     real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coeff. at 0 deg K (J/kg)
@@ -129,6 +134,8 @@ module gfdl_mp_mod
     ! dt_fr can be considered as the error bar (K)
     
     real, parameter :: p0_min = 100.0 ! minimum pressure for mp to operate (Pa)
+    
+    real, parameter :: acc (3) = (/ 5.0, 2.0, 0.5 /) ! accretion coefficients
     
     real (kind = r_grid), parameter :: one_r8 = 1.0 ! constant 1
     
@@ -579,18 +586,6 @@ subroutine setupm
     
     real :: gcon, scm3, pisq, act (8)
     real :: visk, vdifu, tcond
-    
-    ! -----------------------------------------------------------------------
-    ! Gamma function
-    ! -----------------------------------------------------------------------
-    
-    real, parameter :: &
-        gam263 = 1.456943, gam275 = 1.608355, gam290 = 1.827363, &
-        gam325 = 2.54925, gam350 = 3.323363, gam380 = 4.694155, &
-        gam425 = 8.285063, gam450 = 11.631769, gam480 = 17.837789, &
-        gam625 = 184.860962, gam680 = 496.604067
-    
-    real, parameter :: acc (3) = (/ 5.0, 2.0, 0.5 /)
     
     ! -----------------------------------------------------------------------
     ! cloud water autoconversion threshold in mass
@@ -1337,44 +1332,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     
 end subroutine mpdrv
 
-! -----------------------------------------------------------------------
-! sedimentation of heat
-! -----------------------------------------------------------------------
-
-subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
-    ! revised with a precise energy conserving form: s. - j. lin, jan 22, 2018
-    ! input q fields are dry mixing ratios, and dm is dry air mass
-    implicit none
-    integer, intent (in) :: ks, ke
-    real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-    real, intent (in) :: cw ! heat capacity
-    ! local:
-    real, dimension (ks:ke) :: dgz, cv0
-    integer :: k
-    
-    ! this is the vectorized loop
-    do k = ks + 1, ke
-        dgz (k) = - 0.5 * grav * (dz (k - 1) + dz (k))
-        cv0 (k) = dm (k) * (cv_air + qv (k) * cv_vap + (qr (k) + ql (k)) * c_liq + &
-             (qi (k) + qs (k) + qg (k)) * c_ice) + cw * (m1 (k) - m1 (k - 1))
-        ! cvm_new + cw * m1 (k) = cvm_old + cw * m1 (k - 1)
-    enddo
-    ! -----------------------------------------------------------------------
-    ! implicit algorithm: can't be vectorized
-    ! needs an inner i - loop for vectorization
-    ! -----------------------------------------------------------------------
-    ! top layer: cv0 = cvn + cw * m1 (k)
-    ! tz (k) = cv0 (k) * tz (k) / (cvn (k) + cw * m1 (k)) = tz (k) -- > no change
-    do k = ks + 1, ke
-        tz (k) = (cv0 (k) * tz (k) + m1 (k - 1) * (cw * tz (k - 1) + dgz (k))) / (cv0 (k) + cw * m1 (k - 1))
-    enddo
-    
-end subroutine sedi_heat
-
-! -----------------------------------------------------------------------
+! =======================================================================
 ! warm rain cloud microphysics
-! -----------------------------------------------------------------------
+! =======================================================================
 
 subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         den, denfac, ccn, c_praut, rh_rain, vtr, r1, m1_rain, w1, h_var, reevap, dte)
@@ -1382,21 +1342,30 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     implicit none
     
     integer, intent (in) :: ks, ke
-    real, intent (in) :: dt ! time step (s)
+
+    real, intent (in) :: dt
     real, intent (in) :: rh_rain, h_var
+
     real, intent (in), dimension (ks:ke) :: dp, dz, den
     real, intent (in), dimension (ks:ke) :: denfac, ccn, c_praut
     
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
     real, intent (inout), dimension (ks:ke) :: vtr, qv, ql, qr, qi, qs, qg, m1_rain, w1
+
     real (kind = r_grid), intent (inout) :: dte
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
     real, intent (out) :: r1
     real, intent (out) :: reevap
+
     real, parameter :: so3 = 7. / 3.
-    ! fall velocity constants:
     real, parameter :: vconr = 2503.23638966667
     real, parameter :: normr = 25132741228.7183
     real, parameter :: thr = 1.e-8
+    
+    integer :: k
+    
+    logical :: no_fall
     
     real, dimension (ks:ke) :: dl, dm
     real (kind = r_grid), dimension (ks:ke) :: te1, te2
@@ -1405,10 +1374,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     real :: qden
     real :: zs = 0.
     real :: dt5
-    integer :: k
-    
-    logical :: no_fall
-    
+
     dt5 = 0.5 * dt
     
     ! -----------------------------------------------------------------------
@@ -1615,9 +1581,9 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     
 end subroutine warm_rain
 
-! -----------------------------------------------------------------------
+! =======================================================================
 ! evaporation of rain
-! -----------------------------------------------------------------------
+! =======================================================================
 
 subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
     
@@ -1733,12 +1699,12 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
     
 end subroutine revap_racc
 
-! -----------------------------------------------------------------------
+! =======================================================================
 ! definition of vertical subgrid variability
 ! used for cloud ice and cloud water autoconversion
 ! qi -- > ql & ql -- > qr
 ! edges: qe == qbar + / - dm
-! -----------------------------------------------------------------------
+! =======================================================================
 
 subroutine linear_prof (km, q, dm, z_var, h_var)
     
@@ -3432,6 +3398,9 @@ subroutine lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, precip, m1, mono)
     
 end subroutine lagrangian_fall_ppm
 
+! =======================================================================
+! =======================================================================
+
 subroutine cs_profile (a4, del, km, do_mono)
     
     implicit none
@@ -3603,6 +3572,9 @@ subroutine cs_profile (a4, del, km, do_mono)
     a4 (4, km) = 0.
     
 end subroutine cs_profile
+
+! =======================================================================
+! =======================================================================
 
 subroutine cs_limiters (km, a4)
     
@@ -4606,8 +4578,6 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     real :: ccno = 90. ! ccn over ocean (cm^ - 3)
     real :: ccnl = 270. ! ccn over land (cm^ - 3)
     
-    real, parameter :: alphar = 0.8, alphas = 0.25, alphag = 0.5 ! parameters in terminal equation in lin et al., (1983)
-    real, parameter :: gammar = 17.837789, gammas = 8.2850630, gammag = 11.631769 ! gamma values as a result of different alpha
     real, parameter :: rho_0 = 50.e-3
     
     real :: retab (138) = (/ &
@@ -4948,7 +4918,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (qmr (i, k) .gt. qmin) then
                 qcr (i, k) = dpg * qmr (i, k) * 1.0e3
                 lambdar = exp (0.25 * log (pi * rhor * rnzr / qmr (i, k) / rho))
-                rer (i, k) = 0.5 * exp (log (gammar / 6) / alphar) / lambdar * 1.0e6
+                rer (i, k) = 0.5 * exp (log (gam480 / 6) / 0.80) / lambdar * 1.0e6
                 rer (i, k) = max (rermin, min (rermax, rer (i, k)))
             else
                 qcr (i, k) = 0.0
@@ -4962,7 +4932,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (qms (i, k) .gt. qmin) then
                 qcs (i, k) = dpg * qms (i, k) * 1.0e3
                 lambdas = exp (0.25 * log (pi * rhos * rnzs / qms (i, k) / rho))
-                res (i, k) = 0.5 * exp (log (gammas / 6) / alphas) / lambdas * 1.0e6
+                res (i, k) = 0.5 * exp (log (gam425 / 6) / 0.25) / lambdas * 1.0e6
                 res (i, k) = max (resmin, min (resmax, res (i, k)))
             else
                 qcs (i, k) = 0.0
@@ -4976,7 +4946,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (qmg (i, k) .gt. qmin) then
                 qcg (i, k) = dpg * qmg (i, k) * 1.0e3
                 lambdag = exp (0.25 * log (pi * rhog * rnzg / qmg (i, k) / rho))
-                reg (i, k) = 0.5 * exp (log (gammag / 6) / alphag) / lambdag * 1.0e6
+                reg (i, k) = 0.5 * exp (log (gam450 / 6) / 0.50) / lambdag * 1.0e6
                 reg (i, k) = max (regmin, min (regmax, reg (i, k)))
             else
                 qcg (i, k) = 0.0
@@ -5255,6 +5225,41 @@ real function gmlt (tc, dqs, qgrho, pgacw, pgacr, c, rho)
         c (4) * qgrho ** 0.6875 / rho ** 0.25) + c (5) * tc * (pgacw + pgacr)
     
 end function gmlt
+
+! =======================================================================
+! sedimentation of heat
+! =======================================================================
+
+subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
+    ! revised with a precise energy conserving form: s. - j. lin, jan 22, 2018
+    ! input q fields are dry mixing ratios, and dm is dry air mass
+    implicit none
+    integer, intent (in) :: ks, ke
+    real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real, intent (in) :: cw ! heat capacity
+    ! local:
+    real, dimension (ks:ke) :: dgz, cv0
+    integer :: k
+    
+    ! this is the vectorized loop
+    do k = ks + 1, ke
+        dgz (k) = - 0.5 * grav * (dz (k - 1) + dz (k))
+        cv0 (k) = dm (k) * (cv_air + qv (k) * cv_vap + (qr (k) + ql (k)) * c_liq + &
+             (qi (k) + qs (k) + qg (k)) * c_ice) + cw * (m1 (k) - m1 (k - 1))
+        ! cvm_new + cw * m1 (k) = cvm_old + cw * m1 (k - 1)
+    enddo
+    ! -----------------------------------------------------------------------
+    ! implicit algorithm: can't be vectorized
+    ! needs an inner i - loop for vectorization
+    ! -----------------------------------------------------------------------
+    ! top layer: cv0 = cvn + cw * m1 (k)
+    ! tz (k) = cv0 (k) * tz (k) / (cvn (k) + cw * m1 (k)) = tz (k) -- > no change
+    do k = ks + 1, ke
+        tz (k) = (cv0 (k) * tz (k) + m1 (k - 1) * (cw * tz (k - 1) + dgz (k))) / (cv0 (k) + cw * m1 (k - 1))
+    enddo
+    
+end subroutine sedi_heat
 
 ! =======================================================================
 ! fix negative water species
