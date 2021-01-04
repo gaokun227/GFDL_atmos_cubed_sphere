@@ -345,6 +345,7 @@ module gfdl_mp_mod
 
     real (kind = r_grid) :: lv00, li00, li20
     real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
+    real (kind = r_grid) :: vconr, vcons, vcong, vconh, normr, norms, normg, normh
     
     real, allocatable :: table1 (:), table2 (:), table3 (:), table4 (:)
     real, allocatable :: des1 (:), des2 (:), des3 (:), des4 (:)
@@ -594,6 +595,22 @@ subroutine setupm
     fac_rc = (4. / 3.) * pi * rhor * rthresh ** 3
     
     ! -----------------------------------------------------------------------
+    ! terminal fall speed for rain, snow, and graupel or hail
+    ! -----------------------------------------------------------------------
+    
+    gcon = 40.74 * sqrt (sfcrho)
+    
+    vconr = alin * gam480 / 6.0
+    vcons = clin * gam425 / 6.0
+    vcong = gam450 / 6.0 * gcon
+    vconh = vcong * sqrt (rhoh / rhog)
+
+    normr = pi * rhor * rnzr
+    norms = pi * rhos * rnzs
+    normg = pi * rhog * rnzg
+    normh = pi * rhoh * rnzh
+
+    ! -----------------------------------------------------------------------
     ! physics constants
     ! -----------------------------------------------------------------------
     
@@ -625,12 +642,12 @@ subroutine setupm
     ! 5-6: gacr (r-g)
     ! 7-8: gacs (s-g)
     
-    act (1) = pi * rnzs * rhos
-    act (2) = pi * rnzr * rhor
+    act (1) = norms
+    act (2) = normr
     if (do_hail) then
-        act (6) = pi * rnzh * rhoh
+        act (6) = normh
     else
-        act (6) = pi * rnzg * rhog
+        act (6) = normg
     endif
     act (3) = act (2)
     act (4) = act (1)
@@ -656,8 +673,6 @@ subroutine setupm
     ! -----------------------------------------------------------------------
     ! accretion between cloud water, cloud ice, and graupel or hail
     ! -----------------------------------------------------------------------
-    
-    gcon = 40.74 * sqrt (sfcrho)
     
     if (do_hail) then
         cgacw = pi * rnzh * gam350 * gcon / (4. * act (6) ** 0.875)
@@ -1359,8 +1374,6 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     real, intent (out) :: reevap
 
     real, parameter :: so3 = 7. / 3.
-    real, parameter :: vconr = 2503.23638966667
-    real, parameter :: normr = 25132741228.7183
     real, parameter :: thr = 1.e-8
     
     integer :: k
@@ -3638,15 +3651,6 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     real, parameter :: dd = 0.00216078
     real, parameter :: ee = 1.9714
     
-    ! marshall - palmer constants
-    
-    real, parameter :: vcons = 6.6280504
-    real, parameter :: vcong = 87.2382675
-    real, parameter :: vconh = vcong * sqrt (rhoh / rhog) ! 132.087495104005
-    real, parameter :: norms = 942477796.076938
-    real, parameter :: normg = 5026548245.74367
-    real, parameter :: normh = pi * rhoh * rnzh ! 115233618.533674
-    
     real, dimension (ks:ke) :: qden, tc, rhof
     
     real :: vi0
@@ -3722,7 +3726,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
                 if (qg (k) < thg) then
                     vtg (k) = vf_min
                 else
-                    vtg (k) = vg_fac * vconh * rhof (k) * sqrt (sqrt (sqrt (qg (k) * den (k) / normh)))
+                    vtg (k) = vg_fac * vconh * rhof (k) * sqrt (sqrt (sqrt (qg (k) * den (k) / normh))) / sqrt (den (k))
                     vtg (k) = min (vg_max, max (vf_min, vtg (k)))
                 endif
             enddo
@@ -3731,7 +3735,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
                 if (qg (k) < thg) then
                     vtg (k) = vf_min
                 else
-                    vtg (k) = vg_fac * vcong * rhof (k) * sqrt (sqrt (sqrt (qg (k) * den (k) / normg)))
+                    vtg (k) = vg_fac * vcong * rhof (k) * sqrt (sqrt (sqrt (qg (k) * den (k) / normg))) / sqrt (den (k))
                     vtg (k) = min (vg_max, max (vf_min, vtg (k)))
                 endif
             enddo
@@ -4917,7 +4921,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             
             if (qmr (i, k) .gt. qmin) then
                 qcr (i, k) = dpg * qmr (i, k) * 1.0e3
-                lambdar = exp (0.25 * log (pi * rhor * rnzr / qmr (i, k) / rho))
+                lambdar = exp (0.25 * log (normr / qmr (i, k) / rho))
                 rer (i, k) = 0.5 * exp (log (gam480 / 6) / 0.80) / lambdar * 1.0e6
                 rer (i, k) = max (rermin, min (rermax, rer (i, k)))
             else
@@ -4931,7 +4935,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             
             if (qms (i, k) .gt. qmin) then
                 qcs (i, k) = dpg * qms (i, k) * 1.0e3
-                lambdas = exp (0.25 * log (pi * rhos * rnzs / qms (i, k) / rho))
+                lambdas = exp (0.25 * log (norms / qms (i, k) / rho))
                 res (i, k) = 0.5 * exp (log (gam425 / 6) / 0.25) / lambdas * 1.0e6
                 res (i, k) = max (resmin, min (resmax, res (i, k)))
             else
@@ -4945,7 +4949,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             
             if (qmg (i, k) .gt. qmin) then
                 qcg (i, k) = dpg * qmg (i, k) * 1.0e3
-                lambdag = exp (0.25 * log (pi * rhog * rnzg / qmg (i, k) / rho))
+                lambdag = exp (0.25 * log (normg / qmg (i, k) / rho))
                 reg (i, k) = 0.5 * exp (log (gam450 / 6) / 0.50) / lambdag * 1.0e6
                 reg (i, k) = max (regmin, min (regmax, reg (i, k)))
             else
@@ -5026,18 +5030,6 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
     
     real, intent (in) :: zvir
     real, intent (out) :: allmax
-    
-    ! parameters for constant intercepts (in0[rsg] = .false.)
-    ! using gfdl mp values
-    
-    real (kind = r_grid), parameter :: vconr = 2503.23638966667
-    real (kind = r_grid), parameter :: vcong = 87.2382675
-    real (kind = r_grid), parameter :: vcons = 6.6280504
-    real (kind = r_grid), parameter :: vconh = vcong
-    real (kind = r_grid), parameter :: normr = 25132741228.7183
-    real (kind = r_grid), parameter :: normg = 5026548245.74367
-    real (kind = r_grid), parameter :: normh = pi * rhoh * rnzh
-    real (kind = r_grid), parameter :: norms = 942477796.076938
     
     ! constants for variable intercepts
     ! will need to be changed based on mp scheme
@@ -5124,7 +5116,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
             if (graupel > 0) then
                 do i = is, ie
                     t3 = rhoair (i) * max (qmin, q (i, j, k, graupel))
-                    vtg = max (1.e-3, vcongh * denfac (i) * exp (0.125 * log (t3 / normgh)))
+                    vtg = max (1.e-3, vcongh * denfac (i) * exp (0.125 * log (t3 / normgh))) / sqrt (rhoair (i))
                     z_e (i) = z_e (i) + 200. * exp (1.6 * log (3.6e6 * t3 / rhogh * vtg))
                 enddo
             endif
