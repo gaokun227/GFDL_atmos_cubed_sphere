@@ -97,6 +97,10 @@ module gfdl_cld_mp_mod
     real, parameter :: gam425 = 8.285063, gam450 = 11.631769, gam480 = 17.837789 ! Gamma function (4.25, 4.5, 4.8)
     real, parameter :: gam625 = 184.860962, gam680 = 496.604067 ! Gamma functio (6.25, 6.8)
     
+    real, parameter :: visk = 1.259e-5 ! kinematic viscosity of air (cm^2/s)
+    real, parameter :: vdifu = 2.11e-5 ! diffusivity of water vapor in air (cm^2/s)
+    real, parameter :: tcond = 2.36e-2 ! thermal conductivity of air (J/m/s/K)
+
     real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling (J/kg/K)
 
     real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coeff. at 0 deg K (J/kg)
@@ -586,7 +590,6 @@ subroutine setupm
     integer :: i, k
     
     real :: gcon, scm3, pisq, act (8)
-    real :: visk, vdifu, tcond
     
     ! -----------------------------------------------------------------------
     ! cloud water autoconversion threshold in mass
@@ -614,9 +617,6 @@ subroutine setupm
     ! physics constants
     ! -----------------------------------------------------------------------
     
-    visk = 1.259e-5 ! kinematic viscosity of air (cm^2/s)
-    vdifu = 2.11e-5 ! diffusivity of water vapor in air (cm^2/s)
-    tcond = 2.36e-2 ! thermal conductivity of air (J/m/s/K)
     scm3 = (visk / vdifu) ** (1. / 3.)
     
     ! -----------------------------------------------------------------------
@@ -4582,8 +4582,6 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     real :: ccno = 90. ! ccn over ocean (cm^ - 3)
     real :: ccnl = 270. ! ccn over land (cm^ - 3)
     
-    real, parameter :: rho_0 = 50.e-3
-    
     real :: retab (138) = (/ &
         0.05000, 0.05000, 0.05000, 0.05000, 0.05000, 0.05000, &
         0.05500, 0.06000, 0.07000, 0.08000, 0.09000, 0.10000, &
@@ -4905,7 +4903,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 if (qmi (i, k) .gt. qmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
-                    bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / rho_0) * max (0.0, - tc0) ** 1.5
+                    bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / 50.e-3) * max (0.0, - tc0) ** 1.5
                     rei (i, k) = 377.4 + bw * (203.3 + bw * (37.91 + 2.3696 * bw))
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
@@ -5051,8 +5049,6 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
     real, parameter :: alpha = 0.224
     real (kind = r_grid), parameter :: factor_s = gamma_seven * 1.e18 * (1. / (pi * rhos)) ** 1.75 &
          * (rhos / rhor) ** 2 * alpha
-    real, parameter :: qmin = 1.e-12
-    real, parameter :: tice = 273.16
     
     ! double precision
     
