@@ -82,6 +82,14 @@ contains
     index = index + 1
     coarse_diagnostics(index)%axes = 3
     coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'lagrangian_tendency_of_hydrostatic_pressure_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained lagrangian tendency of hydrostatic pressure'
+    coarse_diagnostics(index)%units = 'Pa/s'
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+    
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
     coarse_diagnostics(index)%name = 'ucomp_coarse'
     coarse_diagnostics(index)%description = 'coarse-grained zonal wind'
     coarse_diagnostics(index)%units = 'm/s'
@@ -559,9 +567,13 @@ contains
     type(fv_atmos_type), target, intent(inout) :: Atm(:)
     type(coarse_diag_type), intent(inout) :: coarse_diagnostic
 
-    integer :: is, ie, js, je, npz
+    integer :: is, ie, js, je, npz, isd, ied, jsd, jed
 
     call get_fine_array_bounds(is, ie, js, je)
+    isd = Atm(tile_count)%bd%isd
+    ied = Atm(tile_count)%bd%ied
+    jsd = Atm(tile_count)%bd%jsd
+    jed = Atm(tile_count)%bd%jed
     npz = Atm(tile_count)%npz
 
     ! It would be really nice if there were a cleaner way to do this;
@@ -653,6 +665,12 @@ contains
              Atm(tile_count)%nudge_diag%nudge_v_dt(is:ie,js:je,1:npz) = 0.0
           endif
           coarse_diagnostic%data%var3 => Atm(tile_count)%nudge_diag%nudge_v_dt(is:ie,js:je,1:npz)
+       elseif (starts_with(coarse_diagnostic%name, 'lagrangian_tendency_of_hydrostatic_pressure')) then
+          if (.not. allocated(Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure)) then
+             allocate(Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure(isd:ied,jsd:jed,1:npz))
+             Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%lagranian_tendency_of_hydrostatic_pressure(is:ie,js:je,1:npz)
        endif
     endif
   end subroutine maybe_allocate_reference_array
