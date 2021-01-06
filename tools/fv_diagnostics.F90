@@ -146,7 +146,7 @@ contains
     integer :: id_hyam, id_hybm
     integer :: id_plev, id_plev_ave_edges, id_plev_ave
     integer :: i, j, k, m, n, ntileMe, id_xt, id_yt, id_x, id_y, id_xe, id_ye, id_xn, id_yn
-    integer :: isc, iec, jsc, jec
+    integer :: isd, ied, jsd, jed, isc, iec, jsc, jec
 
     logical :: used
 
@@ -237,6 +237,9 @@ contains
     isc = Atm(n)%bd%isc; iec = Atm(n)%bd%iec
     jsc = Atm(n)%bd%jsc; jec = Atm(n)%bd%jec
 
+    isd = Atm(n)%bd%isd; ied = Atm(n)%bd%ied
+    jsd = Atm(n)%bd%jsd; jed = Atm(n)%bd%jed
+    
     ! Send diag_manager the grid informtaion
     call diag_grid_init(DOMAIN=Atm(n)%domain, &
          &              GLO_LON=rad2deg*Atm(n)%gridstruct%grid(isc:iec+1,jsc:jec+1,1), &
@@ -829,6 +832,13 @@ contains
                'theta_e', 'K', missing_value=missing_value )
           id_omga = register_diag_field ( trim(field), 'omega', axes(1:3), Time,      &
                'omega', 'Pa/s', missing_value=missing_value )
+          id_lagrangian_tendency_of_hydrostatic_pressure = &
+               register_diag_field(trim(field), 'lagrangian_tendency_of_hydrostatic_pressure',&
+               axes(1:3), Time, 'lagrangian_tendency_of_hydrostatic_pressure',&
+               'Pa/s', missing_value=missing_value)
+          if (.not. allocated(Atm(n)%lagrangian_tendency_of_hydrostatic_pressure)) then
+             allocate(Atm(n)%lagrangian_tendency_of_hydrostatic_pressure(isd:ied,jsd:jed,1:npz))
+          endif
           idiag%id_divg  = register_diag_field ( trim(field), 'divg', axes(1:3), Time,      &
                'mean divergence', '1/s', missing_value=missing_value )
 
@@ -3400,7 +3410,8 @@ contains
 
        if(id_pt   > 0) used=send_data(id_pt  , Atm(n)%pt  (isc:iec,jsc:jec,:), Time)
        if(id_omga > 0) used=send_data(id_omga, Atm(n)%omga(isc:iec,jsc:jec,:), Time)
-
+       if(id_lagrangian_tendency_of_hydrostatic_pressure > 0) used=send_data(id_lagrangian_tendency_of_hydrostatic_pressure, Atm(n)%lagrangian_tendency_of_hydrostatic_pressure(isc:iec,jsc:jec,:), Time)
+       
        allocate( a3(isc:iec,jsc:jec,npz) )
        if(id_theta_e > 0 ) then
 

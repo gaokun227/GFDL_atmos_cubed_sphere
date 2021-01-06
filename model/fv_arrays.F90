@@ -777,6 +777,7 @@ module fv_arrays_mod
 !-----------------------------------------------------------------------
     real, _ALLOCATABLE :: phis(:,:)     _NULL  ! Surface geopotential (g*Z_surf)
     real, _ALLOCATABLE :: omga(:,:,:)   _NULL  ! Vertical pressure velocity (pa/s)
+    real, _ALLOCATABLE :: lagrangian_tendency_of_hydrostatic_pressure(:,:,:) _NULL !< More accurate calculation of vertical pressure velocity in non-hydrostatic model (pa/s)
     real, _ALLOCATABLE :: ua(:,:,:)     _NULL  ! (ua, va) are mostly used as the A grid winds
     real, _ALLOCATABLE :: va(:,:,:)     _NULL
     real, _ALLOCATABLE :: uc(:,:,:)     _NULL  ! (uc, vc) are mostly used as the C grid winds
@@ -1340,6 +1341,7 @@ contains
     deallocate (  Atm%pkz )
     deallocate ( Atm%phis )
     deallocate ( Atm%omga )
+    if (allocated(Atm%lagrangian_tendency_of_hydrostatic_pressure)) deallocate ( Atm%lagrangian_tendency_of_hydrostatic_pressure )
     deallocate (   Atm%ua )
     deallocate (   Atm%va )
     deallocate (   Atm%uc )
