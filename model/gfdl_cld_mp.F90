@@ -52,7 +52,6 @@ module gfdl_cld_mp_mod
     ! -----------------------------------------------------------------------
     
     logical :: tables_are_initialized = .false. ! initialize satuation tables
-    logical :: do_setup = .true. ! setup constants and parameters
     
     ! -----------------------------------------------------------------------
     ! physics constants
@@ -324,20 +323,12 @@ module gfdl_cld_mp_mod
     real :: qmin = 1.0e-12 ! minimum mass mixing ratio (kg/kg)
     real :: beta = 1.22 ! defined in Heymsfield and Mcfarquhar (1996)
     
-#ifdef SJ_CLD_TEST
-    real :: rewmin = 4.0, rewmax = 10.0 ! minimum and maximum effective radius for cloud water (micron)
-    real :: reimin = 4.0, reimax = 250.0 ! minimum and maximum effective radius for cloud ice (micron)
-    real :: rermin = 5.0, rermax = 2000.0 ! minimum and maximum effective radius for rain (micron)
-    real :: resmin = 5.0, resmax = 2000.0 ! minimum and maximum effective radius for snow (micron)
-    real :: regmin = 5.0, regmax = 2000.0 ! minimum and maximum effective radius for graupel (micron)
-#else
     real :: rewmin = 5.0, rewmax = 10.0 ! minimum and maximum effective radius for cloud water (micron)
     real :: reimin = 10.0, reimax = 150.0 ! minimum and maximum effective radius for cloud ice (micron)
     real :: rermin = 0.0, rermax = 10000.0 ! minimum and maximum effective radius for rain (micron)
     real :: resmin = 0.0, resmax = 10000.0 ! minimum and maximum effective radius for snow (micron)
     real :: regmin = 0.0, regmax = 10000.0 ! minimum and maximum effective radius for graupel
-#endif
-    ! rewmax = 15.0, rermin = 15.0 ! Kokhanovsky (2004)
+    !real :: rewmax = 15.0, rermin = 15.0 ! Kokhanovsky (2004)
     
     ! -----------------------------------------------------------------------
     ! local shared variables
@@ -347,8 +338,7 @@ module gfdl_cld_mp_mod
     real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw
     real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (5), cgmlt (5)
     
-    real :: t_wfr ! complete freezing temperature (K)
-    real :: p_min, fac_rc, c_air, c_vap, d0_vap
+    real :: t_wfr, p_min, fac_rc, c_air, c_vap, d0_vap
 
     real (kind = r_grid) :: lv00, li00, li20
     real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
@@ -437,17 +427,9 @@ subroutine gfdl_cld_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml
     ! initialize microphysics variables
     ! -----------------------------------------------------------------------
     
-    if (do_setup) then
-        call setup_con
-        call setupm
-        do_setup = .false.
-    endif
+    if (.not. tables_are_initialized) call qsmith_init
     
-    if (do_warm_rain_mp) then
-        t_wfr = t_min
-    else
-        t_wfr = tice - 40.0
-    endif
+    call setup_mp
     
 end subroutine gfdl_cld_mp_init
 
@@ -560,30 +542,26 @@ subroutine gfdl_cld_mp_end
 end subroutine gfdl_cld_mp_end
 
 ! =======================================================================
-! qsmith table initialization
-! =======================================================================
-
-subroutine setup_con
-    
-    implicit none
-    
-    if (.not. tables_are_initialized) call qsmith_init
-    
-    tables_are_initialized = .true.
-    
-end subroutine setup_con
-
-! =======================================================================
 ! setup GFDL cloud microphysics parameters
 ! =======================================================================
 
-subroutine setupm
+subroutine setup_mp
     
     implicit none
     
     integer :: i, k
     
     real :: gcon, scm3, pisq, act (8)
+    
+    ! -----------------------------------------------------------------------
+    ! complete freezing temperature
+    ! -----------------------------------------------------------------------
+    
+    if (do_warm_rain_mp) then
+        t_wfr = t_min
+    else
+        t_wfr = tice - 40.0
+    endif
     
     ! -----------------------------------------------------------------------
     ! cloud water autoconversion threshold in mass
@@ -741,7 +719,7 @@ subroutine setupm
     cgmlt (4) = cgsub (3)
     cgmlt (5) = c_liq / hlf
     
-end subroutine setupm
+end subroutine setup_mp
 
 ! =======================================================================
 ! major cloud microphysics driver
@@ -1575,22 +1553,39 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
     
     implicit none
     
-    integer, intent (in) :: ks, ke
-    real, intent (in) :: dt ! time step (s)
-    real, intent (in) :: rh_rain, h_var
-    real, intent (in), dimension (ks:ke) :: den, denfac, dp
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-    real, intent (inout), dimension (ks:ke) :: qv, qr, ql, qi, qs, qg
-    real, intent (out) :: reevap
-    ! local:
-    real (kind = r_grid), dimension (ks:ke) :: cvm
-    real, dimension (ks:ke) :: q_liq, q_sol, lcpk
-    real :: dqv, qsat, dqsdt, evap, t2, qden, q_plus, q_minus, sink
-    real :: qpz, dq, dqh, tin
-    real :: fac_revp, rh_tem
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dt, rh_rain, h_var
+
+    real, intent (in), dimension (ks:ke) :: den, denfac, dp
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (inout), dimension (ks:ke) :: qv, qr, ql, qi, qs, qg
+
+    real, intent (out) :: reevap
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
     integer :: k
     
+    real :: dqv, qsat, dqsdt, evap, t2, qden, q_plus, q_minus, sink
+    real :: qpz, dq, dqh, tin, fac_revp, rh_tem
+    
+    real, dimension (ks:ke) :: q_liq, q_sol, lcpk
+
+    real (kind = r_grid), dimension (ks:ke) :: cvm
+
+    ! -----------------------------------------------------------------------
+    ! time-scale factor
+    ! -----------------------------------------------------------------------
+            
     if (tau_revp .gt. 1.e-6) then
         fac_revp = 1. - exp (- dt / tau_revp)
     else
