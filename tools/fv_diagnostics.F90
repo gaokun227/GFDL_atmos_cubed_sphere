@@ -623,7 +623,7 @@ contains
           id_liq_wat_dt_gfdlmp = register_diag_field ( trim(field), 'liq_wat_dt_gfdlmp', axes(1:3), Time,           &
                'liquid water tracer tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
           if (id_liq_wat_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%liq_wat_dt(isc:iec,jsc:jec,npz))
-          id_ice_wat_dt_gfdlmp = register_diag_field ( trim(field), 'ice_dt_wat_gfdlmp', axes(1:3), Time,           &
+          id_ice_wat_dt_gfdlmp = register_diag_field ( trim(field), 'ice_wat_dt_gfdlmp', axes(1:3), Time,           &
                'ice water tracer tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
           if (id_ice_wat_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%ice_wat_dt(isc:iec,jsc:jec,npz))
 
