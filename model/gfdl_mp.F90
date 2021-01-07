@@ -3849,7 +3849,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         
         do i = is, ie
             dtmp = tice - 48. - pt1 (i)
-            if (ql (i, j) .gt. qcmin. .and. dtmp .gt. 0.) then
+            if (ql (i, j) .gt. qcmin .and. dtmp .gt. 0.) then
                 sink (i) = min (ql (i, j), dtmp / icp2 (i))
                 ql (i, j) = ql (i, j) - sink (i)
                 qi (i, j) = qi (i, j) + sink (i)
@@ -3962,7 +3962,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         
         do i = is, ie
             dtmp = t_wfr - pt1 (i)
-            if (ql (i, j) .gt. qcmin. .and. dtmp .gt. 0.) then
+            if (ql (i, j) .gt. qcmin .and. dtmp .gt. 0.) then
                 sink (i) = min (ql (i, j), ql (i, j) * dtmp * 0.125, dtmp / icp2 (i))
                 ql (i, j) = ql (i, j) - sink (i)
                 qi (i, j) = qi (i, j) + sink (i)
