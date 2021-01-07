@@ -445,7 +445,9 @@ contains
             pe3(i,k) = omga(i,j,k-1)
          enddo
       enddo
-      if (allocated(lagrangian_tendency_of_hydrostatic_pressure)) then
+   endif
+
+   if (last_step .and. allocated(lagrangian_tendency_of_hydrostatic_pressure)) then
        do i=is,ie
           vulcan_pe3(i,1) = 0.
        enddo
@@ -455,8 +457,6 @@ contains
           enddo
        enddo
     endif
-
-   endif
    
    do k=1,km+1
       do i=is,ie
@@ -531,7 +531,7 @@ contains
    enddo
    endif     ! end do_omega
 
-   if ( do_omega .and. allocated(lagrangian_tendency_of_hydrostatic_pressure)) then
+   if ( last_step .and. allocated(lagrangian_tendency_of_hydrostatic_pressure)) then
        do k=1,km
           do i=is,ie
              dp2(i,k) = 0.5*(peln(i,k,j) + peln(i,k+1,j))
@@ -551,7 +551,7 @@ contains
               enddo
            enddo      
        enddo
-    endif     ! end do_omega
+    endif     ! end last_step
    
   endif !(j < je+1)
 
