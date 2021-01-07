@@ -6310,7 +6310,7 @@ end subroutine eqv_pot
 
     rdg = -rdgas/grav
 
-    do n=1,size(diag_debug_i)
+    do n=1,size(diag_debug_units)
 
        i=diag_debug_i(n)
        j=diag_debug_j(n)
@@ -6403,7 +6403,7 @@ end subroutine eqv_pot
     rdg = -rdgas/grav
     cv_air = cp_air - rdgas
 
-    do n=1,size(diag_debug_i)
+    do n=1,size(diag_debug_units)
 
        i=diag_debug_i(n)
        j=diag_debug_j(n)
@@ -6501,7 +6501,7 @@ end subroutine eqv_pot
     call eqv_pot(thetae, pt, delp, delz, peln, pkz, q(bd%isd,bd%jsd,1,sphum), &
          bd%is, bd%ie, bd%js, bd%je, ng, npz, hydrostatic, moist_phys)
 
-    do n=1,size(diag_sonde_i)
+    do n=1,size(diag_sonde_units)
 
        i=diag_sonde_i(n)
        j=diag_sonde_j(n)
