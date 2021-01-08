@@ -4475,51 +4475,13 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     if (liq_ice_combine) then
         do k = ks, ke
             do i = is, ie
-#ifdef SJ_CLD_TEST
-                ! frozen condensates:
-                ! cloud ice treated as snow above freezing and graupel exists
-                if (t (i, k) .gt. tice) then
-                    qms (i, k) = qmi (i, k) + qms (i, k)
-                    qmi (i, k) = 0.
-                else
-                    qmi (i, k) = qmi (i, k) + qms (i, k)
-                    if (qmi (i, k) .gt. qi0_max) then
-                        qms (i, k) = qmi (i, k) - qi0_max + qmg (i, k)
-                        qmi (i, k) = qi0_max
-                    else
-                        qms (i, k) = qmg (i, k)
-                    endif
-                    qmg (i, k) = 0. ! treating all graupel as "snow"
-                endif
-#else
                 qmw (i, k) = qmw (i, k) + qmr (i, k)
                 qmr (i, k) = 0.0
                 qmi (i, k) = qmi (i, k) + qms (i, k) + qmg (i, k)
                 qms (i, k) = 0.0
                 qmg (i, k) = 0.0
-#endif
             enddo
         enddo
-#ifdef SJ_CLD_TEST
-    else
-        ! treating snow as ice, graupel as snow
-        ! qmi (:, :) = qmi (:, :) + qms (:, :)
-        ! qms (:, :) = qmg (:, :)
-        ! qmg (:, :) = 0. ! treating all graupel as "snow"
-        do k = ks, ke
-            do i = is, ie
-                ! step - 1: combine cloud ice & snow
-                qmi (i, k) = qmi (i, k) + qms (i, k)
-                ! step - 2: auto - convert cloud ice if > qi0_max
-                qms (i, k) = qmi (i, k) - qi0_max
-                if (qms (i, k) .gt. 0.) then
-                    qmi (i, k) = qi0_max
-                else
-                    qms (i, k) = 0.0
-                endif
-            enddo
-        enddo
-#endif
     endif
     
     if (snow_grauple_combine) then
@@ -4530,24 +4492,6 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             enddo
         enddo
     endif
-    
-    ! liquid condensates:
-    ! sjl: 20180825
-#ifdef COMBINE_QR
-    do k = ks, ke
-        do i = is, ie
-            ! step - 1: combine cloud water & rain
-            qmw (i, k) = qmw (i, k) + qmr (i, k)
-            ! step - 2: auto - convert cloud wat if > ql0_max
-            qmr (i, k) = qmw (i, k) - ql0_max
-            if (qmr (i, k) .gt. 0.) then
-                qmw (i, k) = ql0_max
-            else
-                qmr (i, k) = 0.0
-            endif
-        enddo
-    enddo
-#endif
     
     do k = ks, ke
         
@@ -4640,11 +4584,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 if (qmi (i, k) .gt. qmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
-#ifdef SJ_CLD_TEST
-                    rei_fac = log (1.0e3 * min (qi0_rei, qmi (i, k)) * rho)
-#else
                     rei_fac = log (1.0e3 * qmi (i, k) * rho)
-#endif
                     if (tc0 .lt. - 50) then
                         rei (i, k) = beta / 9.917 * exp (0.109 * rei_fac) * 1.0e3
                     elseif (tc0 .lt. - 40) then
@@ -4703,20 +4643,8 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 if (qmi (i, k) .gt. qmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
-#ifdef SJ_CLD_TEST
-                    ! use fu2007 form below - 10 c
-                    if (tc0 .gt. - 10) then
-                        ! tc = - 10, rei = 40.6
-                        rei (i, k) = 100.0 + tc0 * 5.94
-                    else
-                        rei (i, k) = 47.05 + tc0 * (0.6624 + 0.001741 * tc0)
-                    endif
-                    ! rei (i, k) = max (reimin, min (reimax, rei (i, k)))
-                    rei (i, k) = max (reimin, rei (i, k))
-#else
                     rei (i, k) = 47.05 + tc0 * (0.6624 + 0.001741 * tc0)
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
-#endif
                 else
                     qci (i, k) = 0.0
                     rei (i, k) = reimin
