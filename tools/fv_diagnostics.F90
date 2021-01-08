@@ -6377,12 +6377,12 @@ end subroutine eqv_pot
 
   end subroutine debug_column
 
-  subroutine debug_column_dyn(pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
+  subroutine debug_column_dyn(ptop, pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
        use_heat_source, npz, ncnst, sphum, nwat, zvir, hydrostatic, bd, Time, k_step, n_step)
 
     type(fv_grid_bounds_type), intent(IN) :: bd
     integer, intent(IN) :: npz, ncnst, sphum, nwat, k_step, n_step
-    real, intent(IN) :: akap, zvir
+    real, intent(IN) :: akap, zvir, ptop
     logical, intent(IN) :: hydrostatic, use_heat_source
     real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w, heat_source
     real, dimension(bd%is:, bd%js:,1:), intent(IN) :: delz
@@ -6440,6 +6440,12 @@ end subroutine eqv_pot
                    cond = cond + q(i,j,k,l)
                 enddo
                 virt = (1.+zvir*q(i,j,k,sphum))
+                
+                ! when n_step < 0, pt is presumed as virtual temperature.
+                if (n_step < 0) then
+                  pres = rdg*(delp(i,j,k)-cond)/delz(i,j,k)*pt(i,j,k) 
+                  temp = pt(i,j,k)/virt
+                else
 #ifdef MOIST_CAPPA
                 pres = exp(1./(1.-cappa(i,j,k))*log(rdg*(delp(i,j,k)-cond)/delz(i,j,k)*pt(i,j,k)) )
                 pk = exp(cappa(i,j,k)*log(pres))
@@ -6448,6 +6454,7 @@ end subroutine eqv_pot
                 pk = exp(akap*log(pres))
 #endif
                 temp = pt(i,j,k)*pk/virt
+                endif
                 if (use_heat_source) then
                    heats = heat_source(i,j,k) / (cv_air*delp(i,j,k))
                 else

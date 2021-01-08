@@ -1189,7 +1189,7 @@ contains
       end if
 
       if ( do_diag_debug_dyn ) then
-         call debug_column_dyn( pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
+         call debug_column_dyn(ak(1), pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
               allocated(heat_source), npz, nq, sphum, flagstruct%nwat, zvir, hydrostatic, bd, fv_time, n_map, it)
       endif
 
