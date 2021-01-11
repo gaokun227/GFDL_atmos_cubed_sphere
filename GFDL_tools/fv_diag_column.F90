@@ -335,7 +335,7 @@ contains
 
     rdg = -rdgas/grav
 
-    do n=1,size(diag_debug_i)
+    do n=1,size(diag_debug_units)
 
        i=diag_debug_i(n)
        j=diag_debug_j(n)
@@ -428,7 +428,7 @@ contains
     rdg = -rdgas/grav
     cv_air = cp_air - rdgas
 
-    do n=1,size(diag_debug_i)
+    do n=1,size(diag_debug_units)
 
        i=diag_debug_i(n)
        j=diag_debug_j(n)
@@ -523,7 +523,7 @@ contains
 
     call get_date(Time, yr_v, mo_v, dy_v, hr_v, mn_v, sec_v)
 
-    do n=1,size(diag_sonde_i)
+    do n=1,size(diag_sonde_units)
 
        i=diag_sonde_i(n)
        j=diag_sonde_j(n)
