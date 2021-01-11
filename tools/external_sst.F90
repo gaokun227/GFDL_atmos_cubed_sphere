@@ -82,8 +82,7 @@ subroutine load_ec_sst(Atm)
 
     if (file_exist(fn_ec_time)) then
 
-        !call field_size(fn_ec_time, "tnew", siz)
-        call field_size(fn_ec_time, "time", siz)
+        call field_size(fn_ec_time, "tnew", siz)
  
         time_len = siz(1)
  
@@ -94,10 +93,9 @@ subroutine load_ec_sst(Atm)
         allocate(time(time_len))
         allocate(sst_time(time_len))
  
-        call read_data(fn_ec_time, "time", time, no_domain=.true.)
-        !DEBUG ! call get_var_att_value(fn_ec_time, "time", "units", units)
-        units = "hours since 2020-1-10 12:00:00" !DEBUG having trouble reading time from file
-        
+        call read_data(fn_ec_time, "tnew", time, no_domain=.true.)
+        call get_var_att_value(fn_ec_time, "tnew", "units", units)
+ 
         do n = 1, time_len
             sst_time(n) = get_cal_time(time(n), units, "gregorian")
         enddo
