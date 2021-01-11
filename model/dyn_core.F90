@@ -34,7 +34,8 @@ module dyn_core_mod
   use nh_core_mod,        only: Riem_Solver3, Riem_Solver_C, update_dz_c, update_dz_d, nh_bc
   use tp_core_mod,        only: copy_corners
   use fv_timing_mod,      only: timing_on, timing_off
-  use fv_diagnostics_mod, only: prt_maxmin, fv_time, prt_mxm, do_diag_debug_dyn, debug_column_dyn
+  use fv_diagnostics_mod, only: prt_maxmin, fv_time, prt_mxm
+  use fv_diag_column_mod, only: do_diag_debug_dyn, debug_column_dyn
 #ifdef ROT3
   use fv_update_phys_mod, only: update_dwinds_phys
 #endif
@@ -1189,8 +1190,8 @@ contains
       end if
 
       if ( do_diag_debug_dyn ) then
-         call debug_column_dyn(ak(1), pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
-              allocated(heat_source), npz, nq, sphum, flagstruct%nwat, zvir, hydrostatic, bd, fv_time, n_map, it)
+         call debug_column_dyn( pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
+              allocated(heat_source), npz, nq, sphum, flagstruct%nwat, zvir, ptop, hydrostatic, bd, fv_time, n_map, it)
       endif
 
 
