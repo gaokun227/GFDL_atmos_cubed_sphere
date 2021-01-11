@@ -104,10 +104,13 @@ public :: atmosphere_resolution, atmosphere_grid_bdry, &
 ! atmosphere_diss_est, &
           atmosphere_nggps_diag, &
           get_bottom_mass, get_bottom_wind,   &
-          get_stock_pe, set_atmosphere_pelist
+          get_stock_pe, set_atmosphere_pelist, &
+          atmosphere_coarse_diag_axes
 
 !--- physics/radiation data exchange routines
 public :: atmos_phys_driver_statein
+public :: atmosphere_coarse_graining_parameters
+public :: atmosphere_coarsening_strategy
 
 !-----------------------------------------------------------------------
 ! version number of this module
@@ -117,7 +120,7 @@ character(len=20)   :: mod_name = 'fvGFS/atmosphere_mod'
 
 !---- private data ----
   type (time_type) :: Time_step_atmos
-  public Atm
+  public Atm, mygrid
 
   !These are convenience variables for local use only, and are set to values in Atm%
   real    :: dt_atmos
@@ -465,7 +468,8 @@ contains
                       Atm(n)%flagstruct%hybrid_z,                          &
                       Atm(n)%gridstruct, Atm(n)%flagstruct,                &
                       Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
-                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp)
+                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp, &
+                      Atm(n)%lagrangian_tendency_of_hydrostatic_pressure)
 
      call timing_off('fv_dynamics')
 
@@ -710,7 +714,18 @@ contains
 
  end subroutine atmosphere_diag_axes
 
+ !>@brief The subroutine 'atmosphere_coarse_diag_axes' is an API to return the axis indices
+ !! for the coarse atmospheric (mass) grid.
+  subroutine atmosphere_coarse_diag_axes(coarse_axes)
+    integer, intent(out) :: coarse_axes(4)
 
+    coarse_axes = (/ &
+         Atm(mygrid)%coarse_graining%id_xt_coarse, &
+         Atm(mygrid)%coarse_graining%id_yt_coarse, &
+         Atm(mygrid)%coarse_graining%id_pfull, &
+         Atm(mygrid)%coarse_graining%id_phalf /)
+  end subroutine atmosphere_coarse_diag_axes
+ 
  subroutine atmosphere_etalvls (ak, bk, flip)
    real(kind=kind_phys), pointer, dimension(:), intent(inout) :: ak, bk
    logical, intent(in) :: flip
@@ -1396,7 +1411,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Backward
     call fv_dynamics(Atm(mygrid)%npx, Atm(mygrid)%npy, npz,  nq, Atm(mygrid)%ng, -dt_atmos, 0.,      &
                      Atm(mygrid)%flagstruct%fill, Atm(mygrid)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1410,7 +1425,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mygrid, nudge_dz, dz0) &
@@ -1482,7 +1497,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Forward call
     call fv_dynamics(Atm(mygrid)%npx, Atm(mygrid)%npy, npz,  nq, Atm(mygrid)%ng, dt_atmos, 0.,      &
                      Atm(mygrid)%flagstruct%fill, Atm(mygrid)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1496,7 +1511,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mygrid) &
@@ -1720,7 +1735,9 @@ contains
               IPD_Data(nb)%Statein%prsik(i,k) = exp( kappa*IPD_Data(nb)%Statein%prsik(i,k) )*pk0inv
            enddo
         enddo
-    endif
+     endif
+    IPD_Data(nb)%Statein%dycore_hydrostatic = Atm(mygrid)%flagstruct%hydrostatic
+    IPD_Data(nb)%Statein%nwat = Atm(mygrid)%flagstruct%nwat
   enddo
 
  end subroutine atmos_phys_driver_statein
@@ -1821,5 +1838,20 @@ contains
    endif
 
  end subroutine atmos_phys_qdt_diag
+
+ subroutine atmosphere_coarse_graining_parameters(coarse_domain, write_coarse_restart_files, write_only_coarse_intermediate_restarts)
+   type(domain2d), intent(out) :: coarse_domain
+   logical, intent(out) :: write_coarse_restart_files, write_only_coarse_intermediate_restarts
+
+   coarse_domain = Atm(mygrid)%coarse_graining%domain
+   write_coarse_restart_files = Atm(mygrid)%coarse_graining%write_coarse_restart_files
+   write_only_coarse_intermediate_restarts = Atm(mygrid)%coarse_graining%write_only_coarse_intermediate_restarts
+ end subroutine atmosphere_coarse_graining_parameters
+
+ subroutine atmosphere_coarsening_strategy(coarsening_strategy)
+   character(len=64), intent(out) :: coarsening_strategy
+
+   coarsening_strategy = Atm(mygrid)%coarse_graining%strategy
+ end subroutine atmosphere_coarsening_strategy
 
 end module atmosphere_mod
