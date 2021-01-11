@@ -13,7 +13,8 @@ module coarse_graining_mod
        weighted_block_edge_average_x, weighted_block_edge_average_y, MODEL_LEVEL, &
        block_upsample, mask_area_weights, PRESSURE_LEVEL, vertical_remapping_requirements, &
        vertically_remap_field, mask_mass_weights, remap_edges_along_x, remap_edges_along_y, &
-       block_edge_sum_x, block_edge_sum_y, block_mode, block_min, block_max
+       block_edge_sum_x, block_edge_sum_y, block_mode, block_min, block_max, &
+       eddy_covariance, eddy_covariance_2d_weights, eddy_covariance_3d_weights
   
   interface block_sum
      module procedure block_sum_2d_real4
@@ -69,6 +70,11 @@ module coarse_graining_mod
      module procedure weighted_block_edge_average_y_pre_downsampled_unmasked
      module procedure weighted_block_edge_average_y_pre_downsampled_masked
   end interface weighted_block_edge_average_y_pre_downsampled
+
+  interface eddy_covariance
+     module procedure eddy_covariance_2d_weights
+     module procedure eddy_covariance_3d_weights
+  end interface eddy_covariance
 
   interface block_mode
      module procedure block_mode_2d_real4
@@ -1340,6 +1346,85 @@ contains
        enddo
     enddo
   end subroutine block_edge_sum_y_2d_full_input
+
+  ! Needed for computing variances over coarse grid cells.
+  subroutine anomaly_2d(weights, fine, anom)
+    real, intent(in) :: weights(is:ie,js:je), fine(is:ie,js:je)
+    real, intent(out) :: anom(is:ie,js:je)
+
+    integer :: i, j, i_coarse, j_coarse, offset
+    real, allocatable :: coarse(:,:)
+
+    allocate(coarse(is_coarse:ie_coarse,js_coarse:je_coarse))
+
+    ! First compute the coarse-grained field
+    call weighted_block_average(weights, fine, coarse)
+
+    ! Then subtract it off
+    offset = coarsening_factor - 1
+    do i = is, ie, coarsening_factor
+       i_coarse = (i - 1) / coarsening_factor + 1
+       do j = js, je, coarsening_factor
+          j_coarse = (j - 1) / coarsening_factor + 1
+          anom(i:i+offset,j:j+offset) = fine(i:i+offset,j:j+offset) - coarse(i_coarse,j_coarse)
+       enddo
+    enddo
+  end subroutine anomaly_2d
+
+  subroutine anomaly_3d_weights_3d_array(weights, fine, anom)
+    real, intent(in) :: weights(is:ie,js:je,1:npz), fine(is:ie,js:je,1:npz)
+    real, intent(out) :: anom(is:ie,js:je,1:npz)
+
+    integer :: k
+    do k = 1,npz
+       call anomaly_2d(weights(is:ie,js:je,k), fine(is:ie,js:je,k), anom(is:ie,js:je,k))
+    enddo
+  end subroutine anomaly_3d_weights_3d_array
+
+  subroutine anomaly_2d_weights_3d_array(weights, fine, anom)
+    real, intent(in) :: weights(is:ie,js:je)
+    real, intent(in) :: fine(is:ie,js:je,1:npz)
+    real, intent(out) :: anom(is:ie,js:je,1:npz)
+
+    integer :: k
+    do k = 1,npz
+       call anomaly_2d(weights(is:ie,js:je), fine(is:ie,js:je,k), anom(is:ie,js:je,k))
+    enddo
+  end subroutine anomaly_2d_weights_3d_array
+
+  subroutine eddy_covariance_2d_weights(weights, field_a, field_b, coarse)
+    real, intent(in) :: weights(is:ie,js:je)
+    real, intent(in) :: field_a(is:ie,js:je,1:npz)
+    real, intent(in) :: field_b(is:ie,js:je,1:npz)
+    real, intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz)
+
+    real, allocatable :: anom_a(:,:,:)
+    real, allocatable :: anom_b(:,:,:)
+
+    allocate(anom_a(is:ie,js:je,1:npz))
+    allocate(anom_b(is:ie,js:je,1:npz))
+
+    call anomaly_2d_weights_3d_array(weights, field_a, anom_a)
+    call anomaly_2d_weights_3d_array(weights, field_b, anom_b)
+    call weighted_block_average(weights, anom_a * anom_b, coarse)
+  end subroutine eddy_covariance_2d_weights
+  
+  subroutine eddy_covariance_3d_weights(weights, field_a, field_b, coarse)
+    real, intent(in) :: weights(is:ie,js:je,1:npz)
+    real, intent(in) :: field_a(is:ie,js:je,1:npz)
+    real, intent(in) :: field_b(is:ie,js:je,1:npz)
+    real, intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz)
+
+    real, allocatable :: anom_a(:,:,:)
+    real, allocatable :: anom_b(:,:,:)
+
+    allocate(anom_a(is:ie,js:je,1:npz))
+    allocate(anom_b(is:ie,js:je,1:npz))
+
+    call anomaly_3d_weights_3d_array(weights, field_a, anom_a)
+    call anomaly_3d_weights_3d_array(weights, field_b, anom_b)
+    call weighted_block_average(weights, anom_a * anom_b, coarse)
+  end subroutine eddy_covariance_3d_weights
 
 ! Port mappm for single and double precision
  subroutine mappm_real4(km, pe1, q1, kn, pe2, q2, i1, i2, iv, kord, ptop)
@@ -3289,6 +3374,5 @@ else ! all others
 
       endif
 
- end subroutine ppm_limiters_real8
-  
+ end subroutine ppm_limiters_real8  
 end module coarse_graining_mod
