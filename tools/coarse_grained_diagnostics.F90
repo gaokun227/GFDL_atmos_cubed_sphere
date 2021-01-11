@@ -323,6 +323,94 @@ contains
     coarse_diagnostics(index)%description = 'coarse-grained meridional wind tendency from nudging'
     coarse_diagnostics(index)%units = 'm/s/s'
     coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'qv_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained specific humidity tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'ql_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained total liquid water tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'qi_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained total ice water tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'liq_wat_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained liquid water tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'ice_wat_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained ice water tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'qr_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained rain water tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'qs_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained snow water tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'qg_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained graupel water tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 't_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained temperature tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'K/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'u_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained zonal wind tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'm/s/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'v_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained meridional wind tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'm/s/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
     
     ! Vertically integrated diagnostics
     index = index + 1
@@ -447,6 +535,105 @@ contains
     coarse_diagnostics(index)%module_name = DYNAMICS
     coarse_diagnostics(index)%name = 'int_v_dt_nudge_coarse'
     coarse_diagnostics(index)%description = 'coarse-grained vertically integrated meridional wind tendency from nudging'
+    coarse_diagnostics(index)%units = 'kg/m s/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_qv_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated water vapor specific humidity tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/m**2/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+    
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_ql_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated total liquid water tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/m**2/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_qi_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated total ice water tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/m**2/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_liq_wat_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated liquid water tracer tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/m**2/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_ice_wat_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated ice water tracer tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/m**2/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_qr_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated rain water tracer tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/m**2/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_qs_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated snow water tracer tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/m**2/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_qg_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated graupel tracer tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/m**2/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_t_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated temperature tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'W/m**2'
+    coarse_diagnostics(index)%scaled_by_specific_heat_and_vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_u_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated zonal wind tendency from GFDL MP'
+    coarse_diagnostics(index)%units = 'kg/m s/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_v_dt_gfdlmp_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated meridional wind tendency from GFDL MP'
     coarse_diagnostics(index)%units = 'kg/m s/s'
     coarse_diagnostics(index)%vertically_integrated = .true.
     coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
@@ -699,6 +886,72 @@ contains
              allocate(Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure(isd:ied,jsd:jed,1:npz))
              Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure = 0.0
           endif
+       elseif (ends_with(coarse_diagnostic%name, 'qv_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%qv_dt)) then
+             allocate(Atm(tile_count)%inline_mp%qv_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%qv_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%qv_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'ql_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%ql_dt)) then
+             allocate(Atm(tile_count)%inline_mp%ql_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%ql_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%ql_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'qi_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%qi_dt)) then
+             allocate(Atm(tile_count)%inline_mp%qi_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%qi_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%qi_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'liq_wat_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%liq_wat_dt)) then
+             allocate(Atm(tile_count)%inline_mp%liq_wat_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%liq_wat_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%liq_wat_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'ice_wat_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%ice_wat_dt)) then
+             allocate(Atm(tile_count)%inline_mp%ice_wat_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%ice_wat_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%ice_wat_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'qr_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%qr_dt)) then
+             allocate(Atm(tile_count)%inline_mp%qr_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%qr_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%qr_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'qs_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%qs_dt)) then
+             allocate(Atm(tile_count)%inline_mp%qs_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%qs_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%qs_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'qg_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%qg_dt)) then
+             allocate(Atm(tile_count)%inline_mp%qg_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%qg_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%qg_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 't_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%t_dt)) then
+             allocate(Atm(tile_count)%inline_mp%t_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%t_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%t_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'u_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%u_dt)) then
+             allocate(Atm(tile_count)%inline_mp%u_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%u_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%u_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'v_dt_gfdlmp_coarse')) then
+          if (.not. allocated(Atm(tile_count)%inline_mp%v_dt)) then
+             allocate(Atm(tile_count)%inline_mp%v_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%inline_mp%v_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%v_dt(is:ie,js:je,1:npz)
        endif
     endif
   end subroutine maybe_allocate_reference_array
