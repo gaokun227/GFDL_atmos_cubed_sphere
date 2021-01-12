@@ -1226,7 +1226,7 @@ contains
     character(len=*),    intent(in)    :: timestamp
 
     if (Atm%coarse_graining%write_coarse_restart_files) then
-       call fv_io_write_restart(Atm, timestamp)
+       call fv_io_write_restart_coarse(Atm, timestamp)
        if (.not. Atm%coarse_graining%write_only_coarse_intermediate_restarts) then
           call fv_io_write_restart(Atm, timestamp)
        endif
