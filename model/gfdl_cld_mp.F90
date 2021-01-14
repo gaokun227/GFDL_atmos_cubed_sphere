@@ -117,7 +117,6 @@ module gfdl_cld_mp_mod
     ! predefined parameters
     ! -----------------------------------------------------------------------
     
-    real, parameter :: qvmin = 1.0e-20 ! min value for water vapor (treated as zero) (kg/kg)
     real, parameter :: qcmin = 1.0e-12 ! min value for cloud condensates (kg/kg)
     real, parameter :: qfmin = 1.0e-8 ! min value for sedimentation (kg/kg)
     
@@ -136,9 +135,7 @@ module gfdl_cld_mp_mod
     real, parameter :: rhog = 0.4e3 ! density of graupel (Rutledge and Hobbs 1984) (kg/m^3)
     real, parameter :: rhoh = 9.17e2 ! density of hail (Lin et al. 1983) (kg/m^3)
     
-    real, parameter :: dt_fr = 8.0 ! homogeneous freezing of all cloud water at t_wfr - dt_fr
-    ! minimum temperature water can exist (Moore and Molinero 2011)
-    ! dt_fr can be considered as the error bar (K)
+    real, parameter :: dt_fr = 8.0 ! t_wfr - dt_fr: minimum temperature water can exist (Moore and Molinero 2011)
     
     real, parameter :: p0_min = 100.0 ! minimum pressure for mp to operate (Pa)
     
@@ -222,8 +219,8 @@ module gfdl_cld_mp_mod
     logical :: const_vg = .false. ! if .ture., the constants are specified by v * _fac
     logical :: const_vr = .false. ! if .ture., the constants are specified by v * _fac
     
-    logical :: liq_ice_combine = .true. ! combine all liquid water, combine all solid water
-    logical :: snow_grauple_combine = .false. ! combine snow and graupel
+    logical :: liq_ice_combine = .false. ! combine all liquid water, combine all solid water
+    logical :: snow_grauple_combine = .true. ! combine snow and graupel
     
     logical :: prog_ccn = .false. ! do prognostic ccn (Yi Ming's method)
 
@@ -319,13 +316,12 @@ module gfdl_cld_mp_mod
     
     real :: qi0_rei = 0.8e-4 ! maximum cloud ice value (by other sources) (kg/kg)
     
-    real :: qmin = 1.0e-12 ! minimum mass mixing ratio (kg/kg)
     real :: beta = 1.22 ! defined in Heymsfield and Mcfarquhar (1996)
     
-    real :: rewmin = 5.0, rewmax = 10.0 ! minimum and maximum effective radius for cloud water (micron)
+    real :: rewmin = 5.0, rewmax = 15.0 ! minimum and maximum effective radius for cloud water (micron)
     real :: reimin = 10.0, reimax = 150.0 ! minimum and maximum effective radius for cloud ice (micron)
-    real :: rermin = 0.0, rermax = 10000.0 ! minimum and maximum effective radius for rain (micron)
-    real :: resmin = 0.0, resmax = 10000.0 ! minimum and maximum effective radius for snow (micron)
+    real :: rermin = 15.0, rermax = 10000.0 ! minimum and maximum effective radius for rain (micron)
+    real :: resmin = 150.0, resmax = 10000.0 ! minimum and maximum effective radius for snow (micron)
     real :: regmin = 0.0, regmax = 10000.0 ! minimum and maximum effective radius for graupel
     !real :: rewmax = 15.0, rermin = 15.0 ! Kokhanovsky (2004)
     
@@ -363,7 +359,7 @@ module gfdl_cld_mp_mod
         irain_f, xr_a, xr_b, xr_c, ntimes, do_disp_heat, tau_revp, tice_mlt, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_rhc_cevap, &
         use_rhc_revap, do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
-        rhc_cevap, rhc_revap, qi0_rei, qmin, beta, liq_ice_combine, rewflag, &
+        rhc_cevap, rhc_revap, qi0_rei, beta, liq_ice_combine, rewflag, &
         reiflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
         regmin, regmax
     
@@ -955,8 +951,6 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         ! -----------------------------------------------------------------------
         ! calculate cloud droplet concentration based on cloud condensation nuclei (CCN)
-        ! it is used in cloud water to rain autoconversion
-        ! convert # / cm^3 to # / m^3 for CCN
         ! -----------------------------------------------------------------------
         
         cpaut = c_paut * 0.104 * grav / 1.717e-5
@@ -979,7 +973,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         ! -----------------------------------------------------------------------
         ! calculate horizontal subgrid variability
-        ! total water subgrid deviation in horizontal direction
+        ! subgrid deviation in horizontal direction
         ! default area dependent form: use dx ~ 100 km as the base
         ! -----------------------------------------------------------------------
         
@@ -1507,8 +1501,6 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     
     ! -----------------------------------------------------------------------
     ! autoconversion
-    ! assuming linear subgrid vertical distribution of cloud water
-    ! following Lin et al. (1994)
     ! -----------------------------------------------------------------------
     
     if (irain_f .eq. 0) then
@@ -1516,7 +1508,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         do k = ks, ke
             qc = fac_rc * ccn (k)
             if (tz (k) .gt. t_wfr) then
-                dl (k) = min (max (1.e-6, dl (k)), 0.5 * ql (k))
+                dl (k) = min (max (qcmin, dl (k)), 0.5 * ql (k))
                 dq = 0.5 * (ql (k) + dl (k) - qc)
                 if (dq .gt. 0.) then
                     sink = min (1., dq / dl (k)) * dt * c_praut (k) * den (k) * exp (so3 * log (ql (k)))
@@ -1544,7 +1536,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
 end subroutine warm_rain
 
 ! =======================================================================
-! evaporation of rain
+! rain evaporation and accretion
 ! =======================================================================
 
 subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
@@ -1595,7 +1587,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
         if (tz (k) .gt. t_wfr .and. qr (k) .gt. qcmin) then
             
             ! -----------------------------------------------------------------------
-            ! define heat capacity and latent heat coefficient
+            ! calculate heat capacities and latent heat coefficients
             ! -----------------------------------------------------------------------
             
             q_liq (k) = ql (k) + qr (k)
@@ -1607,16 +1599,12 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             
             qpz = qv (k) + ql (k)
             qsat = wqs (tin, den (k), dqsdt)
+            dqv = qsat - qv (k)
+
             dqh = max (ql (k), h_var * max (qpz, qcmin))
-            dqh = min (dqh, 0.2 * qpz) ! new limiter
-            dqv = qsat - qv (k) ! use this to prevent super - sat the gird box
+            dqh = min (dqh, 0.2 * qpz)
             q_minus = qpz - dqh
             q_plus = qpz + dqh
-            
-            ! -----------------------------------------------------------------------
-            ! qsat must be > q_minus to activate evaporation
-            ! qsat must be < q_plus to activate accretion
-            ! -----------------------------------------------------------------------
             
             ! -----------------------------------------------------------------------
             ! rain evaporation
@@ -1624,14 +1612,10 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             
             rh_tem = qpz / iqs (tin, den (k))
             
-            if (dqv .gt. qvmin .and. qsat .gt. q_minus) then
+            if (dqv .gt. 0.0 .and. qsat .gt. q_minus) then
                 if (qsat .gt. q_plus) then
                     dq = qsat - qpz
                 else
-                    ! -----------------------------------------------------------------------
-                    ! q_minus < qsat < q_plus
-                    ! dq == dqh if qsat == q_minus
-                    ! -----------------------------------------------------------------------
                     dq = 0.25 * (qsat - q_minus) ** 2 / dqh
                 endif
                 qden = qr (k) * den (k)
@@ -1649,12 +1633,11 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
                     evap = min (qr (k), dt * fac_revp * evap, dqv / (1. + lcpk (k) * dqsdt))
                 endif
                 reevap = reevap + evap * dp (k)
-                
                 ! -----------------------------------------------------------------------
                 ! alternative minimum evap in dry environmental air
+                ! -----------------------------------------------------------------------
                 ! sink = min (qr (k), dim (rh_rain * qsat, qv (k)) / (1. + lcpk (k) * dqsdt))
                 ! evap = max (evap, sink)
-                ! -----------------------------------------------------------------------
                 qr (k) = qr (k) - evap
                 qv (k) = qv (k) + evap
                 q_liq (k) = q_liq (k) - evap
@@ -1662,7 +1645,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             endif
             
             ! -----------------------------------------------------------------------
-            ! accretion: pracc
+            ! rain accretion
             ! -----------------------------------------------------------------------
             
             if (qr (k) .gt. qcmin .and. ql (k) .gt. qcmin .and. qsat .lt. q_minus) then
@@ -1722,11 +1705,11 @@ subroutine linear_prof (km, q, dm, z_var, h_var)
         ! -----------------------------------------------------------------------
         
         do k = 1, km
-            dm (k) = max (dm (k), qvmin, h_var * q (k))
+            dm (k) = max (dm (k), 0.0, h_var * q (k))
         enddo
     else
         do k = 1, km
-            dm (k) = max (qvmin, h_var * q (k))
+            dm (k) = max (0.0, h_var * q (k))
         enddo
     endif
     
@@ -2273,7 +2256,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             ! -----------------------------------------------------------------------
             
             if (tz (k) .lt. t_min) then
-                sink = dim (qv (k), 1.e-7)
+                sink = dim (qv (k), qcmin)
                 dep = dep + sink * dp1 (k)
                 qv (k) = qv (k) - sink
                 qi (k) = qi (k) + sink
@@ -2837,7 +2820,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     
     call check_column (ks, ke, qi, no_fall)
     
-    if (vi_fac .lt. 1.e-5 .or. no_fall) then
+    if (no_fall) then
         i1 = 0.
     else
         
@@ -3489,10 +3472,6 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     
     ! fall velocity constants:
     
-    real, parameter :: thi = 1.0e-8 ! cloud ice threshold for terminal fall
-    real, parameter :: thg = 1.0e-8
-    real, parameter :: ths = 1.0e-8
-    
     real, parameter :: aa = - 4.14122e-5
     real, parameter :: bb = - 0.00538922
     real, parameter :: cc = - 0.0516344
@@ -3530,7 +3509,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
         ! -----------------------------------------------------------------------
         vi0 = 0.01 * vi_fac
         do k = ks, ke
-            if (qi (k) .lt. thi) then ! this is needed as the fall - speed maybe problematic for small qi
+            if (qi (k) .lt. qfmin) then ! this is needed as the fall - speed maybe problematic for small qi
                 vti (k) = 0.0
             else
                 tc (k) = tk (k) - tice
@@ -3553,7 +3532,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
         vts (:) = vs_fac ! 1. ifs_2016
     else
         do k = ks, ke
-            if (qs (k) .lt. ths) then
+            if (qs (k) .lt. qfmin) then
                 vts (k) = 0.0
             else
                 vts (k) = vs_fac * vcons * rhof (k) * exp (0.0625 * log (qs (k) * den (k) / norms))
@@ -3571,7 +3550,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     else
         if (do_hail) then
             do k = ks, ke
-                if (qg (k) .lt. thg) then
+                if (qg (k) .lt. qfmin) then
                     vtg (k) = 0.0
                 else
                     vtg (k) = vg_fac * vconh * rhof (k) * sqrt (sqrt (sqrt (qg (k) * den (k) / normh))) / sqrt (den (k))
@@ -3580,7 +3559,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
             enddo
         else
             do k = ks, ke
-                if (qg (k) .lt. thg) then
+                if (qg (k) .lt. qfmin) then
                     vtg (k) = 0.0
                 else
                     vtg (k) = vg_fac * vcong * rhof (k) * sqrt (sqrt (sqrt (qg (k) * den (k) / normg))) / sqrt (den (k))
@@ -4089,7 +4068,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         do i = is, ie
             src (i) = 0.
             if (pt1 (i) .lt. t_sub) then
-                src (i) = dim (qv (i, j), 1.e-6)
+                src (i) = dim (qv (i, j), qcmin)
             elseif (pt1 (i) .lt. tice) then
                 tin = pt1 (i)
                 qsi = iqs (tin, den (i), dqsdt)
@@ -4527,7 +4506,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     0.67 * (- 2.10e-4 * (ccnl ** 2) + 0.568 * ccnl - 27.9) * (1.0 - abs (mask - 1.0))
 #endif
                 
-                if (qmw (i, k) .gt. qmin) then
+                if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / (4.0 * pi * rhow * ccnw))) * 1.0e4
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
@@ -4546,7 +4525,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 ccnw = 1.077 * ccno * abs (mask - 1.0) + 1.143 * ccnl * (1.0 - abs (mask - 1.0))
                 
-                if (qmw (i, k) .gt. qmin) then
+                if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / (4.0 * pi * rhow * ccnw))) * 1.0e4
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
@@ -4563,7 +4542,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! cloud water (kiehl et al., 1994)
                 ! -----------------------------------------------------------------------
                 
-                if (qmw (i, k) .gt. qmin) then
+                if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = 14.0 * abs (mask - 1.0) + &
                          (8.0 + (14.0 - 8.0) * min (1.0, max (0.0, - tc0 / 30.0))) * (1.0 - abs (mask - 1.0))
@@ -4582,7 +4561,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! cloud ice (heymsfield and mcfarquhar, 1996)
                 ! -----------------------------------------------------------------------
                 
-                if (qmi (i, k) .gt. qmin) then
+                if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     rei_fac = log (1.0e3 * qmi (i, k) * rho)
                     if (tc0 .lt. - 50) then
@@ -4608,7 +4587,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! cloud ice (donner et al., 1997)
                 ! -----------------------------------------------------------------------
                 
-                if (qmi (i, k) .gt. qmin) then
+                if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     if (tc0 .le. - 55) then
                         rei (i, k) = 15.41627
@@ -4641,7 +4620,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! cloud ice (fu, 2007)
                 ! -----------------------------------------------------------------------
                 
-                if (qmi (i, k) .gt. qmin) then
+                if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     rei (i, k) = 47.05 + tc0 * (0.6624 + 0.001741 * tc0)
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
@@ -4658,7 +4637,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! cloud ice (kristjansson et al., 2000)
                 ! -----------------------------------------------------------------------
                 
-                if (qmi (i, k) .gt. qmin) then
+                if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     ind = min (max (int (t (i, k) - 136.0), 44), 138 - 1)
                     cor = t (i, k) - int (t (i, k))
@@ -4677,7 +4656,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 ! cloud ice (wyser, 1998)
                 ! -----------------------------------------------------------------------
                 
-                if (qmi (i, k) .gt. qmin) then
+                if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / 50.e-3) * max (0.0, - tc0) ** 1.5
                     rei (i, k) = 377.4 + bw * (203.3 + bw * (37.91 + 2.3696 * bw))
@@ -4693,7 +4672,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             ! rain (lin et al., 1983)
             ! -----------------------------------------------------------------------
             
-            if (qmr (i, k) .gt. qmin) then
+            if (qmr (i, k) .gt. qcmin) then
                 qcr (i, k) = dpg * qmr (i, k) * 1.0e3
                 lambdar = exp (0.25 * log (normr / qmr (i, k) / rho))
                 rer (i, k) = 0.5 * exp (log (gam480 / 6) / 0.80) / lambdar * 1.0e6
@@ -4707,7 +4686,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             ! snow (lin et al., 1983)
             ! -----------------------------------------------------------------------
             
-            if (qms (i, k) .gt. qmin) then
+            if (qms (i, k) .gt. qcmin) then
                 qcs (i, k) = dpg * qms (i, k) * 1.0e3
                 lambdas = exp (0.25 * log (norms / qms (i, k) / rho))
                 res (i, k) = 0.5 * exp (log (gam425 / 6) / 0.25) / lambdas * 1.0e6
@@ -4721,7 +4700,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             ! graupel (lin et al., 1983)
             ! -----------------------------------------------------------------------
             
-            if (qmg (i, k) .gt. qmin) then
+            if (qmg (i, k) .gt. qcmin) then
                 qcg (i, k) = dpg * qmg (i, k) * 1.0e3
                 lambdag = exp (0.25 * log (normg / qmg (i, k) / rho))
                 reg (i, k) = 0.5 * exp (log (gam450 / 6) / 0.50) / lambdag * 1.0e6
@@ -4808,7 +4787,6 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
     ! constants for variable intercepts
     ! will need to be changed based on mp scheme
     
-    real, parameter :: r1 = 1.e-15
     real, parameter :: ron = 8.e6
     real, parameter :: ron2 = 1.e10
     real, parameter :: son = 2.e7
@@ -4877,7 +4855,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
                     ! gfdl_mp terminal fall speeds are used
                     ! date modified 20170701
                     ! account for excessively high cloud water - > autoconvert (diag only) excess cloud water
-                    t1 = rhoair (i) * max (qmin, q (i, j, k, rainwat) + dim (q (i, j, k, liq_wat), 1.0e-3))
+                    t1 = rhoair (i) * max (qcmin, q (i, j, k, rainwat) + dim (q (i, j, k, liq_wat), 1.0e-3))
                     vtr = max (1.e-3, vconr * denfac (i) * exp (0.2 * log (t1 / normr)))
                     z_e (i) = 200. * exp (1.6 * log (3.6e6 * t1 / rhor * vtr))
                     ! z_e = 200. * (exp (1.6 * log (3.6e6 * t1 / rhor * vtr)) + &
@@ -4887,14 +4865,14 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
             endif
             if (graupel .gt. 0) then
                 do i = is, ie
-                    t3 = rhoair (i) * max (qmin, q (i, j, k, graupel))
+                    t3 = rhoair (i) * max (qcmin, q (i, j, k, graupel))
                     vtg = max (1.e-3, vcongh * denfac (i) * exp (0.125 * log (t3 / normgh))) / sqrt (rhoair (i))
                     z_e (i) = z_e (i) + 200. * exp (1.6 * log (3.6e6 * t3 / rhogh * vtg))
                 enddo
             endif
             if (snowwat .gt. 0) then
                 do i = is, ie
-                    t2 = rhoair (i) * max (qmin, q (i, j, k, snowwat))
+                    t2 = rhoair (i) * max (qcmin, q (i, j, k, snowwat))
                     ! vts = max (1.e-3, vcons * denfac * exp (0.0625 * log (t2 / norms)))
                     z_e (i) = z_e (i) + (factor_s / alpha) * t2 * exp (0.75 * log (t2 / rnzs))
                     ! z_e = 200. * (exp (1.6 * log (3.6e6 * t1 / rhor * vtr)) + &
