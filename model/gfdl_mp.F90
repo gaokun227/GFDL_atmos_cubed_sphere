@@ -556,7 +556,7 @@ subroutine setup_mp
         t_wfr = t_min
     else
         t_wfr = tice - 40.0
-    endif
+    endif ! do_warm_rain_mp
     
     ! -----------------------------------------------------------------------
     ! cloud water autoconversion threshold in mass
@@ -806,18 +806,20 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! conversion of temperature
         ! -----------------------------------------------------------------------
     
-        do k = ks, ke
-            if (do_inline_mp) then
+        if (do_inline_mp) then
+            do k = ks, ke
 #ifdef MOIST_CAPPA
                 tz (k) = pt (i, k) / ((1. + zvir * qv (i, k)) * &
                    (1. - (ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k))))
 #else
                 tz (k) = pt (i, k) / (1. + zvir * qv (i, k))
 #endif
-            else
+            enddo
+        else
+            do k = ks, ke
                 tz (k) = pt (i, k)
-            endif
-        enddo
+            enddo
+        endif
         
         ! -----------------------------------------------------------------------
         ! total energy checker
@@ -899,7 +901,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             u1 (k) = u0 (k)
             v1 (k) = v0 (k)
 
-        enddo
+        enddo ! k loop
         
         ! -----------------------------------------------------------------------
         ! calculate total energy
@@ -954,7 +956,6 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         
         cpaut = c_paut * 0.104 * grav / 1.717e-5
-        
         if (prog_ccn) then
             do k = ks, ke
                 ccn (k) = max (10.0, qnl (i, k)) * 1.e6
@@ -1093,7 +1094,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             call icloud (ks, ke, tz, p1, qvz, qlz, qrz, qiz, qsz, qgz, dp1, den, ccn, &
-                cin, denfac, vtsz, vtgz, vtrz, qaz, rh_adj, rh_rain, dts, h_var, gsize (i), &
+                cin, denfac, vtsz, vtgz, vtrz, qaz, rh_adj, dts, h_var, gsize (i), &
                 cond, dep, reevap, sub, last_step)
 
             condensation (i) = condensation (i) + cond * convt
@@ -1101,7 +1102,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             evaporation (i) = evaporation (i) + reevap * convt
             sublimation (i) = sublimation (i) + sub * convt
             
-        enddo
+        enddo ! n loop
         
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
@@ -1224,7 +1225,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 pt (i, k) = pt (i, k) + (tz (k) - pt (i, k)) * cvm (k) / cp_air
             endif
 
-        enddo
+        enddo ! k loop
         
         ! -----------------------------------------------------------------------
         ! total energy checker
@@ -1274,7 +1275,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             qa (i, k) = qaz (k)
         enddo
         
-    enddo
+    enddo ! i loop
     
     ! -----------------------------------------------------------------------
     ! total energy checker
@@ -1300,7 +1301,7 @@ end subroutine mpdrv
 
 ! =======================================================================
 ! warm rain cloud microphysics
-! includes: rain evaporation, accretion, and autoconversion
+! includes: rain evaporation, accretion, autoconversion, and sedimentation
 ! =======================================================================
 
 subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
@@ -1349,9 +1350,17 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     ! initialization
     ! -----------------------------------------------------------------------
     
-	zs = 0.0
+    zs = 0.0
     dt5 = 0.5 * dt
     
+    reevap = 0
+    
+    ! -----------------------------------------------------------------------
+    ! rain evaporation and accretion for the first 1 / 2 time step
+    ! -----------------------------------------------------------------------
+    
+    call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
+
     ! -----------------------------------------------------------------------
     ! sedimentation of rain
     ! -----------------------------------------------------------------------
@@ -1360,8 +1369,6 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     
     call check_column (ks, ke, qr, no_fall)
 
-    reevap = 0
-    
     if (no_fall) then
 
         vtr (:) = 0.0
@@ -1387,12 +1394,6 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
                 endif
             enddo
         endif
-        
-        ! -----------------------------------------------------------------------
-        ! evaporation and accretion of rain for the first 1 / 2 time step
-        ! -----------------------------------------------------------------------
-        
-        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
         
         if (do_sedi_w) then
             do k = ks, ke
@@ -1452,7 +1453,6 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         ! -----------------------------------------------------------------------
         
         if (do_sedi_w) then
-            ! conservation of vertical momentum:
             w1 (ks) = w1 (ks) + m1_rain (ks) * vtr (ks) / dm (ks)
             do k = ks + 1, ke
                 w1 (k) = (dm (k) * w1 (k) + m1_rain (k - 1) * (w1 (k - 1) - vtr (k - 1)) + m1_rain (k) * vtr (k)) &
@@ -1491,14 +1491,14 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
             dte = dte + sum (te1) - sum (te2)
         endif
         
-        ! -----------------------------------------------------------------------
-        ! evaporation and accretion of rain for the remaing 1 / 2 time step
-        ! -----------------------------------------------------------------------
-        
-        call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
-        
-    endif
+    endif ! no_fall
     
+    ! -----------------------------------------------------------------------
+    ! rain evaporation and accretion for the remaing 1 / 2 time step
+    ! -----------------------------------------------------------------------
+    
+    call revap_racc (ks, ke, dt5, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
+        
     ! -----------------------------------------------------------------------
     ! autoconversion
     ! -----------------------------------------------------------------------
@@ -1506,12 +1506,13 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     if (irain_f .eq. 0) then
         call linear_prof (ke - ks + 1, ql (ks), dl (ks), z_slope_liq, h_var)
         do k = ks, ke
-            qc = fac_rc * ccn (k)
-            if (tz (k) .gt. t_wfr) then
+            if (tz (k) .gt. t_wfr .and. ql (k) .gt. qcmin) then
+                qc = fac_rc * ccn (k)
                 dl (k) = min (max (qcmin, dl (k)), 0.5 * ql (k))
                 dq = 0.5 * (ql (k) + dl (k) - qc)
                 if (dq .gt. 0.) then
                     sink = min (1., dq / dl (k)) * dt * c_praut (k) * den (k) * exp (so3 * log (ql (k)))
+                    sink = min (ql (k), sink)
                     ql (k) = ql (k) - sink
                     qr (k) = qr (k) + sink
                 endif
@@ -1521,11 +1522,12 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     
     if (irain_f .eq. 1) then
         do k = ks, ke
-            qc = fac_rc * ccn (k)
-            if (tz (k) .gt. t_wfr) then
+            if (tz (k) .gt. t_wfr .and. ql (k) .gt. qcmin) then
+                qc = fac_rc * ccn (k)
                 dq = ql (k) - qc
                 if (dq .gt. 0.) then
                     sink = min (dq, dt * c_praut (k) * den (k) * exp (so3 * log (ql (k))))
+                    sink = min (ql (k), sink)
                     ql (k) = ql (k) - sink
                     qr (k) = qr (k) + sink
                 endif
@@ -1565,7 +1567,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
 
     integer :: k
     
-    real :: dqv, qsat, dqsdt, evap, t2, qden, q_plus, q_minus, sink
+    real :: dqv, qsat, dqsdt, tmp, t2, qden, q_plus, q_minus, sink
     real :: qpz, dq, dqh, tin, fac_revp, rh_tem
     
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk
@@ -1584,86 +1586,93 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
     
     do k = ks, ke
         
-        if (tz (k) .gt. t_wfr .and. qr (k) .gt. qcmin) then
-            
-            ! -----------------------------------------------------------------------
-            ! calculate heat capacities and latent heat coefficients
-            ! -----------------------------------------------------------------------
-            
-            q_liq (k) = ql (k) + qr (k)
-            q_sol (k) = qi (k) + qs (k) + qg (k)
-            
-            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-            lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
-            tin = (tz (k) * cvm (k) - lv00 * ql (k)) / (1. + (qv (k) + ql (k)) * c1_vap + qr (k) * c1_liq + q_sol (k) * c1_ice)
-            
-            qpz = qv (k) + ql (k)
-            qsat = wqs (tin, den (k), dqsdt)
-            dqv = qsat - qv (k)
+        ! -----------------------------------------------------------------------
+        ! calculate heat capacities and latent heat coefficients
+        ! -----------------------------------------------------------------------
+        
+        q_liq (k) = ql (k) + qr (k)
+        q_sol (k) = qi (k) + qs (k) + qg (k)
+        
+        cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+        lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
+        tin = (tz (k) * cvm (k) - lv00 * ql (k)) / (1. + (qv (k) + ql (k)) * c1_vap + qr (k) * c1_liq + q_sol (k) * c1_ice)
+        
+        ! -----------------------------------------------------------------------
+        ! calculate supersaturation and subgrid variability of water
+        ! -----------------------------------------------------------------------
+        
+        qpz = qv (k) + ql (k)
+        qsat = wqs (tin, den (k), dqsdt)
+        dqv = qsat - qv (k)
 
-            dqh = max (ql (k), h_var * max (qpz, qcmin))
-            dqh = min (dqh, 0.2 * qpz)
-            q_minus = qpz - dqh
-            q_plus = qpz + dqh
+        dqh = max (ql (k), h_var * max (qpz, qcmin))
+        dqh = min (dqh, 0.2 * qpz)
+        q_minus = qpz - dqh
+        q_plus = qpz + dqh
+        
+        ! -----------------------------------------------------------------------
+        ! rain evaporation
+        ! -----------------------------------------------------------------------
+        
+        rh_tem = qpz / iqs (tin, den (k))
             
-            ! -----------------------------------------------------------------------
-            ! rain evaporation
-            ! -----------------------------------------------------------------------
-            
-            rh_tem = qpz / iqs (tin, den (k))
-            
-            if (dqv .gt. 0.0 .and. qsat .gt. q_minus) then
-                if (qsat .gt. q_plus) then
-                    dq = qsat - qpz
-                else
-                    dq = 0.25 * (qsat - q_minus) ** 2 / dqh
-                endif
-                qden = qr (k) * den (k)
-                t2 = tin * tin
-                if (use_rhc_revap) then
-                    evap = 0.0
-                    if (rh_tem .lt. rhc_revap) then
-                        evap = crevp (1) * t2 * dq * (crevp (2) * sqrt (qden) + crevp (3) * &
-                            exp (0.725 * log (qden)) * sqrt (denfac (k))) / (crevp (4) * t2 + crevp (5) * qsat * den (k))
-                        evap = min (qr (k), dt * fac_revp * evap, dqv / (1. + lcpk (k) * dqsdt))
-                    endif
-                else
-                    evap = crevp (1) * t2 * dq * (crevp (2) * sqrt (qden) + crevp (3) * &
-                        exp (0.725 * log (qden))) / (crevp (4) * t2 + crevp (5) * qsat * den (k))
-                    evap = min (qr (k), dt * fac_revp * evap, dqv / (1. + lcpk (k) * dqsdt))
-                endif
-                reevap = reevap + evap * dp (k)
-                ! -----------------------------------------------------------------------
-                ! alternative minimum evap in dry environmental air
-                ! -----------------------------------------------------------------------
-                ! sink = min (qr (k), dim (rh_rain * qsat, qv (k)) / (1. + lcpk (k) * dqsdt))
-                ! evap = max (evap, sink)
-                qr (k) = qr (k) - evap
-                qv (k) = qv (k) + evap
-                q_liq (k) = q_liq (k) - evap
-                tz (k) = (cvm (k) * tz (k) - lv00 * evap) / (one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice)
+        if (tz (k) .gt. t_wfr .and. qr (k) .gt. qcmin .and. dqv .gt. 0.0 .and. qsat .gt. q_minus) then
+
+            if (qsat .gt. q_plus) then
+                dq = qsat - qpz
+            else
+                dq = 0.25 * (qsat - q_minus) ** 2 / dqh
             endif
-            
-            ! -----------------------------------------------------------------------
-            ! rain accretion
-            ! -----------------------------------------------------------------------
-            
-            if (qr (k) .gt. qcmin .and. ql (k) .gt. qcmin .and. qsat .lt. q_minus) then
-                sink = dt * denfac (k) * cracw * exp (0.95 * log (qr (k) * den (k)))
-                sink = sink / (1. + sink) * ql (k)
-                ql (k) = ql (k) - sink
-                qr (k) = qr (k) + sink
+            qden = qr (k) * den (k)
+            t2 = tin * tin
+            if (use_rhc_revap) then
+                sink = 0.0
+                if (rh_tem .lt. rhc_revap) then
+                    sink = crevp (1) * t2 * dq * (crevp (2) * sqrt (qden) + crevp (3) * &
+                        exp (0.725 * log (qden)) * sqrt (denfac (k))) / (crevp (4) * t2 + crevp (5) * qsat * den (k))
+                    sink = min (qr (k), dt * fac_revp * sink, dqv / (1. + lcpk (k) * dqsdt))
+                endif
+            else
+                sink = crevp (1) * t2 * dq * (crevp (2) * sqrt (qden) + crevp (3) * &
+                    exp (0.725 * log (qden))) / (crevp (4) * t2 + crevp (5) * qsat * den (k))
+                sink = min (qr (k), dt * fac_revp * sink, dqv / (1. + lcpk (k) * dqsdt))
             endif
-            
+
+            ! -----------------------------------------------------------------------
+            ! alternative minimum evaporation in dry environmental air
+            ! -----------------------------------------------------------------------
+            ! tmp = min (qr (k), dim (rh_rain * qsat, qv (k)) / (1. + lcpk (k) * dqsdt))
+            ! sink = max (sink, tmp)
+
+            reevap = reevap + sink * dp (k)
+            qr (k) = qr (k) - sink
+            qv (k) = qv (k) + sink
+            q_liq (k) = q_liq (k) - sink
+
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = (cvm (k) * tz (k) - lv00 * sink) / cvm (k)
+
         endif
-    enddo
+            
+        ! -----------------------------------------------------------------------
+        ! rain accretion
+        ! -----------------------------------------------------------------------
+            
+        if (tz (k) .gt. t_wfr .and. qr (k) .gt. qcmin .and. ql (k) .gt. qcmin) then
+
+            sink = dt * denfac (k) * cracw * exp (0.95 * log (qr (k) * den (k)))
+            sink = sink / (1. + sink) * ql (k)
+            ql (k) = ql (k) - sink
+            qr (k) = qr (k) + sink
+
+        endif
+
+    enddo ! k loop
     
 end subroutine revap_racc
 
 ! =======================================================================
-! definition of vertical subgrid variability
-! used for cloud ice and cloud water autoconversion
-! qi -- > ql & ql -- > qr
+! vertical subgrid variability used for cloud ice and cloud water autoconversion
 ! edges: qe == qbar + / - dm
 ! =======================================================================
 
@@ -1671,27 +1680,38 @@ subroutine linear_prof (km, q, dm, z_var, h_var)
     
     implicit none
     
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
     integer, intent (in) :: km
-    real, intent (in) :: q (km), h_var
-    real, intent (out) :: dm (km)
+
     logical, intent (in) :: z_var
-    real :: dq (km)
+
+    real, intent (in) :: q (km), h_var
+
+    real, intent (out) :: dm (km)
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
     integer :: k
     
+    real :: dq (km)
+
     if (z_var) then
         do k = 2, km
             dq (k) = 0.5 * (q (k) - q (k - 1))
         enddo
         dm (1) = 0.
-        
         ! -----------------------------------------------------------------------
-        ! use twice the strength of the positive definiteness limiter (lin et al 1994)
+        ! use twice the strength of the positive definiteness limiter (Lin et al. 1994)
         ! -----------------------------------------------------------------------
-        
         do k = 2, km - 1
             dm (k) = 0.5 * min (abs (dq (k) + dq (k + 1)), 0.5 * q (k))
             if (dq (k) * dq (k + 1) .le. 0.) then
-                if (dq (k) .gt. 0.) then ! local max
+                if (dq (k) .gt. 0.) then
                     dm (k) = min (dm (k), dq (k), - dq (k + 1))
                 else
                     dm (k) = 0.
@@ -1699,11 +1719,9 @@ subroutine linear_prof (km, q, dm, z_var, h_var)
             endif
         enddo
         dm (km) = 0.
-        
         ! -----------------------------------------------------------------------
         ! impose a presumed background horizontal variability that is proportional to the value itself
         ! -----------------------------------------------------------------------
-        
         do k = 1, km
             dm (k) = max (dm (k), 0.0, h_var * q (k))
         enddo
@@ -1717,132 +1735,117 @@ end subroutine linear_prof
 
 ! =======================================================================
 ! ice cloud microphysics processes
-! bulk cloud micro - physics; processes splitting
-! with some un - split sub - grouping
-! time implicit (when possible) accretion and autoconversion
-! author: shian - jiann lin, gfdl
 ! =======================================================================
 
-subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
-        ccn, cin, denfac, vts, vtg, vtr, qak, rh_adj, rh_rain, dts, h_var, &
+subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
+        ccn, cin, denfac, vts, vtg, vtr, qa, rh_adj, dts, h_var, &
         gsize, cond, dep, reevap, sub, last_step)
     
     implicit none
     
-    logical, intent (in) :: last_step
-    integer, intent (in) :: ks, ke
-    real, intent (in), dimension (ks:ke) :: p1, dp1, den, denfac, vts, vtg, vtr, ccn
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tzk
-    real, intent (inout), dimension (ks:ke) :: qvk, qlk, qrk, qik, qsk, qgk, qak
-    real, intent (inout), dimension (ks:ke) :: cin
-    real, intent (in) :: rh_adj, rh_rain, dts, h_var, gsize
-    real, intent (out) :: cond, dep, reevap, sub
-    ! local:
-    real, dimension (ks:ke) :: icpk, di, qim
-    real, dimension (ks:ke) :: q_liq, q_sol
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
-    real (kind = r_grid) :: tz
-    real :: rdts, fac_i2s, fac_imlt
-    real :: qv, ql, qr, qi, qs, qg, melt
-    real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, praci, psaci
-    real :: pgmlt, psmlt, pgfr, psaut
-    real :: tc, dqs0, qden, qsm
-    real :: dt5, factor, sink
-    real :: tmp, qsw, qsi, dqsdt, dq
-    real :: dtmp, qc, q_plus, q_minus
-    integer :: k
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
+    integer, intent (in) :: ks, ke
+
+    logical, intent (in) :: last_step
+
+    real, intent (in) :: rh_adj, dts, h_var, gsize
+
+    real, intent (in), dimension (ks:ke) :: p1, dp1, den, denfac, vts, vtg, vtr, ccn
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa, cin
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (out) :: cond, dep, reevap, sub
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real, dimension (ks:ke) :: icpk, di, q_liq, q_sol
+
+    real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, psaci, pgacs
+    real :: pgmlt, psmlt, pgfr, psaut, pgaut
+    real :: tmp, dq, dtmp, q_plus, sink, factor, qim, tin
+    real :: rdts, fac_i2s, fac_imlt, tc, qden, qsm, dt5
+    
+    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+
     dt5 = 0.5 * dts
     rdts = 1. / dts
     
     ! -----------------------------------------------------------------------
-    ! define conversion scalar / factor
+    ! time-scale factor
     ! -----------------------------------------------------------------------
     
     fac_i2s = 1. - exp (- dts / tau_i2s)
     fac_imlt = 1. - exp (- dt5 / tau_imlt)
     
     ! -----------------------------------------------------------------------
-    ! define heat capacity and latent heat coefficient
+    ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        q_liq (k) = qlk (k) + qrk (k)
-        q_sol (k) = qik (k) + qsk (k) + qgk (k)
-        cvm (k) = one_r8 + qvk (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-        te8 (k) = cvm (k) * tzk (k) + lv00 * qvk (k) - li00 * q_sol (k)
-        icpk (k) = (li00 + d1_ice * tzk (k)) / cvm (k)
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! similar to lfo 1983: eq. 21 solved implicitly
-    ! threshold from wsm6 scheme, hong et al 2004, eq (13) : qi0_crt ~0.8e-4
-    ! -----------------------------------------------------------------------
-    
-    do k = ks, ke
-        if (qi0_crt .lt. 0.) then
-            qim (k) = - qi0_crt
-        else
-            qim (k) = qi0_crt / den (k)
-        endif
+        q_liq (k) = ql (k) + qr (k)
+        q_sol (k) = qi (k) + qs (k) + qg (k)
+        cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+        te8 (k) = cvm (k) * tz (k) + lv00 * qv (k) - li00 * q_sol (k)
+        icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
     enddo
     
     if (.not. do_warm_rain_mp) then
 
-        ! -----------------------------------------------------------------------
-        ! sources of cloud ice: pihom, cold rain, and the sat_adj
-        ! (initiation plus deposition)
-        ! sources of snow: cold rain, auto conversion + accretion (from cloud ice)
-        ! sat_adj (deposition; requires pre - existing snow) ; initial snow comes from auto conversion
-        ! -----------------------------------------------------------------------
-        
         do k = ks, ke
-            if (tzk (k) .gt. tice_mlt .and. qik (k) .gt. qcmin) then
+
+            if (tz (k) .gt. tice_mlt .and. qi (k) .gt. qcmin) then
                 
                 ! -----------------------------------------------------------------------
-                ! pimlt: instant melting of cloud ice
+                ! melting of cloud ice
                 ! -----------------------------------------------------------------------
                 
-                melt = min (qik (k), fac_imlt * (tzk (k) - tice_mlt) / icpk (k))
-                tmp = min (melt, dim (ql_mlt, qlk (k))) ! max ql amount
-                qlk (k) = qlk (k) + tmp
-                qrk (k) = qrk (k) + melt - tmp
-                qik (k) = qik (k) - melt
-                q_liq (k) = q_liq (k) + melt
-                q_sol (k) = q_sol (k) - melt
-            elseif (tzk (k) .lt. t_wfr .and. qlk (k) .gt. qcmin) then
+                sink = min (qi (k), fac_imlt * (tz (k) - tice_mlt) / icpk (k))
+                tmp = min (sink, dim (ql_mlt, ql (k)))
+                qi (k) = qi (k) - sink
+                ql (k) = ql (k) + tmp
+                qr (k) = qr (k) + sink - tmp
+                q_sol (k) = q_sol (k) - sink
+                q_liq (k) = q_liq (k) + sink
+
+            elseif (tz (k) .lt. t_wfr .and. ql (k) .gt. qcmin) then
                 
                 ! -----------------------------------------------------------------------
-                ! pihom: homogeneous freezing of cloud water into cloud ice
+                ! homogeneous freezing of cloud water
                 ! -----------------------------------------------------------------------
                 
-                dtmp = t_wfr - tzk (k)
+                dtmp = t_wfr - tz (k)
                 factor = min (1., dtmp / dt_fr)
-                sink = min (qlk (k) * factor, dtmp / icpk (k))
-                tmp = min (sink, dim (qim (k), qik (k)))
-                qlk (k) = qlk (k) - sink
-                qsk (k) = qsk (k) + sink - tmp
-                qik (k) = qik (k) + tmp
+                sink = min (ql (k) * factor, dtmp / icpk (k))
+                qim = qi0_crt / den (k)
+                tmp = min (sink, dim (qim, qi (k)))
+                ql (k) = ql (k) - sink
+                qs (k) = qs (k) + sink - tmp
+                qi (k) = qi (k) + tmp
                 q_liq (k) = q_liq (k) - sink
                 q_sol (k) = q_sol (k) + sink
+
             endif
+        
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
+            icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
+
         enddo
         
         ! -----------------------------------------------------------------------
         ! vertical subgrid variability
         ! -----------------------------------------------------------------------
         
-        call linear_prof (ke - ks + 1, qik (ks), di (ks), z_slope_ice, h_var)
-        
-        ! -----------------------------------------------------------------------
-        ! update capacity heat and latent heat coefficient
-        ! -----------------------------------------------------------------------
-        
-        do k = ks, ke
-            cvm (k) = one_r8 + qvk (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-            tzk (k) = (te8 (k) - lv00 * qvk (k) + li00 * q_sol (k)) / cvm (k)
-            icpk (k) = (li00 + d1_ice * tzk (k)) / cvm (k)
-        enddo
+        call linear_prof (ke - ks + 1, qi (ks), di (ks), z_slope_ice, h_var)
         
         do k = ks, ke
             
@@ -1852,328 +1855,228 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
             
             if (p1 (k) .lt. p_min) cycle
             
-            tz = tzk (k)
-            qv = qvk (k)
-            ql = qlk (k)
-            qi = qik (k)
-            qr = qrk (k)
-            qs = qsk (k)
-            qg = qgk (k)
-            
-            pgacr = 0.
-            pgacw = 0.
-            tc = tz - tice
+            tc = tz (k) - tice
             
             if (tc .ge. 0.) then
                 
                 ! -----------------------------------------------------------------------
-                ! melting of snow
+                ! melting of snow (includes snow accretion with cloud water and rain)
                 ! -----------------------------------------------------------------------
                 
-                dqs0 = e00 * eps / p1 (k) - qv ! not sure if this is correct; check again
-                
-                if (qs .gt. qcmin) then
+                if (qs (k) .gt. qcmin) then
                     
-                    ! -----------------------------------------------------------------------
-                    ! psacw: accretion of cloud water by snow
-                    ! only rate is used (for snow melt) since tc > 0.
-                    ! -----------------------------------------------------------------------
-                    
-                    if (ql .gt. qcmin) then
-                        factor = denfac (k) * csacw * exp (0.8125 * log (qs * den (k)))
-                        psacw = factor / (1. + dts * factor) * ql ! rate
-                    else
-                        psacw = 0.
+                    psacw = 0.
+                    if (ql (k) .gt. qcmin) then
+                        factor = denfac (k) * csacw * exp (0.8125 * log (qs (k) * den (k)))
+                        psacw = factor / (1. + dts * factor) * ql (k)
                     endif
                     
-                    ! -----------------------------------------------------------------------
-                    ! psacr: accretion of rain by melted snow
-                    ! pracs: accretion of snow by rain
-                    ! -----------------------------------------------------------------------
-                    
-                    if (qr .gt. qcmin) then
-                        psacr = min (acr3d (vts (k), vtr (k), qr, qs, csacr, acco (1, 2), &
-                            den (k)), qr * rdts)
-                        pracs = acr3d (vtr (k), vts (k), qs, qr, cracs, acco (1, 1), den (k))
-                    else
-                        psacr = 0.
-                        pracs = 0.
+                    psacr = 0.
+                    pracs = 0.
+                    if (qr (k) .gt. qcmin) then
+                        psacr = min (acr3d (vts (k), vtr (k), qr (k), qs (k), csacr, acco (1, 2), &
+                            den (k)), qr (k) * rdts)
+                        pracs = acr3d (vtr (k), vts (k), qs (k), qr (k), cracs, acco (1, 1), den (k))
                     endif
                     
-                    ! -----------------------------------------------------------------------
-                    ! total snow sink:
-                    ! psmlt: snow melt (due to rain accretion)
-                    ! -----------------------------------------------------------------------
-                    
-                    psmlt = max (0., smlt (tc, dqs0, qs * den (k), psacw, psacr, csmlt, &
+                    tin = tz (k)
+                    dq = wqs (tin, den (k)) - qv (k)
+                    psmlt = max (0., smlt (tc, dq, qs (k) * den (k), psacw, psacr, csmlt, &
                         den (k), denfac (k)))
-                    sink = min (qs, dts * (psmlt + pracs), tc / icpk (k))
-                    qs = qs - sink
-                    tmp = min (sink, dim (qs_mlt, ql)) ! max ql due to snow melt
-                    ql = ql + tmp
-                    qr = qr + sink - tmp
-                    q_liq (k) = q_liq (k) + sink
+
+                    sink = min (qs (k), dts * (psmlt + pracs), tc / icpk (k))
+                    tmp = min (sink, dim (qs_mlt, ql (k)))
+                    qs (k) = qs (k) - sink
+                    ql (k) = ql (k) + tmp
+                    qr (k) = qr (k) + sink - tmp
                     q_sol (k) = q_sol (k) - sink
+                    q_liq (k) = q_liq (k) + sink
                     
-                    cvm (k) = one_r8 + qv * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-                    tz = (te8 (k) - lv00 * qv + li00 * q_sol (k)) / cvm (k)
-                    tc = tz - tice
-                    icpk (k) = (li00 + d1_ice * tz) / cvm (k)
-                    
+                    cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+                    tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
+                    icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
+
                 endif
                 
                 ! -----------------------------------------------------------------------
-                ! melting of graupel
+                ! melting of graupel (includes graupel accretion with cloud water and rain)
                 ! -----------------------------------------------------------------------
                 
-                if (qg .gt. qcmin .and. tc .gt. 0.) then
+                if (qg (k) .gt. qcmin) then
                     
-                    ! -----------------------------------------------------------------------
-                    ! pgacr: accretion of rain by graupel
-                    ! -----------------------------------------------------------------------
-                    
-                    if (qr .gt. qcmin) &
-                        pgacr = min (acr3d (vtg (k), vtr (k), qr, qg, cgacr, acco (1, 3), &
-                        den (k)), rdts * qr)
-                    
-                    ! -----------------------------------------------------------------------
-                    ! pgacw: accretion of cloud water by graupel
-                    ! -----------------------------------------------------------------------
-                    
-                    qden = qg * den (k)
-                    if (ql .gt. qcmin) then
-                        factor = cgacw * qden / sqrt (den (k) * sqrt (sqrt (qden)))
-                        pgacw = factor / (1. + dts * factor) * ql ! rate
+                    pgacr = 0.
+                    if (qr (k) .gt. qcmin) then
+                        pgacr = min (acr3d (vtg (k), vtr (k), qr (k), qg (k), cgacr, acco (1, 3), &
+                        den (k)), rdts * qr (k))
                     endif
                     
-                    ! -----------------------------------------------------------------------
-                    ! pgmlt: graupel melt
-                    ! -----------------------------------------------------------------------
+                    pgacw = 0.
+                    qden = qg (k) * den (k)
+                    if (ql (k) .gt. qcmin) then
+                        factor = cgacw * qden / sqrt (den (k) * sqrt (sqrt (qden)))
+                        pgacw = factor / (1. + dts * factor) * ql (k)
+                    endif
                     
-                    pgmlt = dts * gmlt (tc, dqs0, qden, pgacw, pgacr, cgmlt, den (k))
-                    pgmlt = min (max (0., pgmlt), qg, tc / icpk (k))
-                    qg = qg - pgmlt
-                    qr = qr + pgmlt
-                    q_liq (k) = q_liq (k) + pgmlt
-                    q_sol (k) = q_sol (k) - pgmlt
-                    cvm (k) = one_r8 + qv * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-                    tz = (te8 (k) - lv00 * qv + li00 * q_sol (k)) / cvm (k)
+                    tin = tz (k)
+                    dq = wqs (tin, den (k)) - qv (k)
+                    pgmlt = dts * gmlt (tc, dq, qden, pgacw, pgacr, cgmlt, den (k))
+
+                    sink = min (max (0., pgmlt), qg (k), tc / icpk (k))
+                    qg (k) = qg (k) - sink
+                    qr (k) = qr (k) + sink
+                    q_sol (k) = q_sol (k) - sink
+                    q_liq (k) = q_liq (k) + sink
+
+                    cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+                    tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
+
                 endif
                 
+
             else
                 
                 ! -----------------------------------------------------------------------
-                ! cloud ice proc:
+                ! cloud ice sink terms (includes cloud ice accretion with snow and graupel, autoconversion)
                 ! -----------------------------------------------------------------------
-                
-                ! -----------------------------------------------------------------------
-                ! psaci: accretion of cloud ice by snow
-                ! -----------------------------------------------------------------------
-                
-                if (qi .gt. qcmin) then ! cloud ice sink terms
+        
+                if (qi (k) .gt. qcmin) then
                     
-                    if (qs .gt. qcmin) then
-                        ! -----------------------------------------------------------------------
-                        ! sjl added (following lin eq. 23) the temperature dependency
-                        ! to reduce accretion, use esi = exp (0.05 * tc) as in hong et al 2004
-                        ! -----------------------------------------------------------------------
-                        factor = dts * denfac (k) * csaci * exp (0.05 * tc + 0.8125 * log (qs * den (k)))
-                        psaci = factor / (1. + factor) * qi
-                    else
-                        psaci = 0.
+                    psaci = 0.
+                    if (qs (k) .gt. qcmin) then
+                        factor = dts * denfac (k) * csaci * exp (0.05 * tc + 0.8125 * log (qs (k) * den (k)))
+                        psaci = factor / (1. + factor) * qi (k)
                     endif
                     
-                    ! -----------------------------------------------------------------------
-                    ! assuming linear subgrid vertical distribution of cloud ice
-                    ! the mismatch computation following lin et al. 1994, mwr
-                    ! -----------------------------------------------------------------------
-                    
-                    if (const_vi) then
-                        tmp = fac_i2s
-                    else
-                        tmp = fac_i2s * exp (0.025 * tc)
-                    endif
-                    
+                    psaut = 0.
+                    tmp = fac_i2s * exp (0.025 * tc)
                     di (k) = max (di (k), qcmin)
-                    q_plus = qi + di (k)
-                    if (q_plus .gt. (qim (k) + qcmin)) then
-                        if (qim (k) .gt. (qi - di (k))) then
-                            dq = (0.25 * (q_plus - qim (k)) ** 2) / di (k)
+                    q_plus = qi (k) + di (k)
+                    qim = qi0_crt / den (k)
+                    if (q_plus .gt. (qim + qcmin)) then
+                        if (qim .gt. (qi (k) - di (k))) then
+                            dq = (0.25 * (q_plus - qim) ** 2) / di (k)
                         else
-                            dq = qi - qim (k)
+                            dq = qi (k) - qim
                         endif
                         psaut = tmp * dq
-                    else
-                        psaut = 0.
                     endif
-                    ! -----------------------------------------------------------------------
-                    ! sink is no greater than 75% of qi
-                    ! -----------------------------------------------------------------------
-                    sink = min (0.75 * qi, psaci + psaut)
-                    qi = qi - sink
-                    qs = qs + sink
+
+                    sink = min (0.75 * qi (k), psaci + psaut)
+                    qi (k) = qi (k) - sink
+                    qs (k) = qs (k) + sink
                     
-                    ! -----------------------------------------------------------------------
-                    ! pgaci: accretion of cloud ice by graupel
-                    ! -----------------------------------------------------------------------
-                    
-                    if (qg .gt. qcmin) then
-                        ! -----------------------------------------------------------------------
-                        ! factor = dts * cgaci / sqrt (den (k)) * exp (0.05 * tc + 0.875 * log (qg * den (k)))
-                        ! simplified form: remove temp dependency & set the exponent "0.875" -- > 1
-                        ! -----------------------------------------------------------------------
-                        factor = dts * cgaci / sqrt (den (k)) * exp (0.875 * log (qg * den (k)))
-                        pgaci = factor / (1. + factor) * qi
-                        qi = qi - pgaci
-                        qg = qg + pgaci
+                    pgaci = 0.
+                    if (qg (k) .gt. qcmin) then
+                        factor = dts * cgaci / sqrt (den (k)) * exp (0.875 * log (qg (k) * den (k)))
+                        pgaci = factor / (1. + factor) * qi (k)
                     endif
+
+                    sink = min (qi (k), pgaci)
+                    qi (k) = qi (k) - sink
+                    qg (k) = qg (k) + sink
                     
                 endif
                 
                 ! -----------------------------------------------------------------------
-                ! cold - rain proc:
+                ! rain sink terms (includes rain accretion with snow, freezing)
                 ! -----------------------------------------------------------------------
                 
-                ! -----------------------------------------------------------------------
-                ! rain to ice, snow, graupel processes:
-                ! -----------------------------------------------------------------------
-                
-                tc = tz - tice
-                
-                if (qr .gt. qcmin .and. tc .lt. 0.) then
+                if (qr (k) .gt. qcmin) then
                     
-                    ! -----------------------------------------------------------------------
-                    ! * sink * terms to qr: psacr + pgfr
-                    ! source terms to qs: psacr
-                    ! source terms to qg: pgfr
-                    ! -----------------------------------------------------------------------
-                    
-                    ! -----------------------------------------------------------------------
-                    ! psacr accretion of rain by snow
-                    ! -----------------------------------------------------------------------
-                    
-                    if (qs .gt. qcmin) then ! if snow exists
-                        psacr = dts * acr3d (vts (k), vtr (k), qr, qs, csacr, acco (1, 2), den (k))
-                    else
-                        psacr = 0.
+                    psacr = 0.
+                    if (qs (k) .gt. qcmin) then
+                        psacr = dts * acr3d (vts (k), vtr (k), qr (k), qs (k), csacr, acco (1, 2), den (k))
                     endif
                     
-                    ! -----------------------------------------------------------------------
-                    ! pgfr: rain freezing -- > graupel
-                    ! -----------------------------------------------------------------------
-                    
                     pgfr = dts * cgfr (1) / den (k) * (exp (- cgfr (2) * tc) - 1.) * &
-                        exp (1.75 * log (qr * den (k)))
-                    
-                    ! -----------------------------------------------------------------------
-                    ! total sink to qr
-                    ! -----------------------------------------------------------------------
+                        exp (1.75 * log (qr (k) * den (k)))
                     
                     sink = psacr + pgfr
-                    factor = min (sink, qr, - tc / icpk (k)) / max (sink, qcmin)
-                    
+                    factor = min (sink, qr (k), - tc / icpk (k)) / max (sink, qcmin)
                     psacr = factor * psacr
                     pgfr = factor * pgfr
                     
-                    sink = psacr + pgfr
-                    qr = qr - sink
-                    qs = qs + psacr
-                    qg = qg + pgfr
+                    sink = min (qr (k), psacr + pgfr)
+                    qr (k) = qr (k) - sink
+                    qs (k) = qs (k) + psacr
+                    qg (k) = qg (k) + pgfr
                     q_liq (k) = q_liq (k) - sink
                     q_sol (k) = q_sol (k) + sink
                     
-                    cvm (k) = one_r8 + qv * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-                    tz = (te8 (k) - lv00 * qv + li00 * q_sol (k)) / cvm (k)
-                    icpk (k) = (li00 + d1_ice * tz) / cvm (k)
+                    cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+                    tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
+                    icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
+
                 endif
                 
                 ! -----------------------------------------------------------------------
-                ! graupel production terms:
+                ! graupel production terms (includes graupel accretion with cloud water and autoconversion)
                 ! -----------------------------------------------------------------------
                 
-                if (qs .gt. qcmin) then
+                if (qs (k) .gt. qcmin) then
                     
-                    ! -----------------------------------------------------------------------
-                    ! accretion: snow -- > graupel
-                    ! -----------------------------------------------------------------------
-                    
-                    if (qg .gt. qcmin) then
-                        sink = dts * acr3d (vtg (k), vts (k), qs, qg, cgacs, acco (1, 4), den (k))
-                    else
-                        sink = 0.
+                    pgacs = 0
+                    if (qg (k) .gt. qcmin) then
+                        pgacs = dts * acr3d (vtg (k), vts (k), qs (k), qg (k), cgacs, acco (1, 4), den (k))
                     endif
                     
-                    ! -----------------------------------------------------------------------
-                    ! autoconversion snow -- > graupel
-                    ! -----------------------------------------------------------------------
-                    
+                    pgaut = 0
                     qsm = qs0_crt / den (k)
-                    if (qs .gt. qsm) then
-                        factor = dts * 1.e-3 * exp (0.09 * (tz - tice))
-                        sink = sink + factor / (1. + factor) * (qs - qsm)
+                    if (qs (k) .gt. qsm) then
+                        factor = dts * 1.e-3 * exp (0.09 * (tz (k) - tice))
+                        pgaut = factor / (1. + factor) * (qs (k) - qsm)
                     endif
-                    sink = min (qs, sink)
-                    qs = qs - sink
-                    qg = qg + sink
+
+                    sink = min (qs (k), pgacs + pgaut)
+                    qs (k) = qs (k) - sink
+                    qg (k) = qg (k) + sink
                     
-                endif ! snow existed
+                endif
                 
-                if (qg .gt. qcmin .and. tz .lt. tice) then
+                ! -----------------------------------------------------------------------
+                ! graupel production terms (includes graupel accretion with cloud water and rain)
+                ! -----------------------------------------------------------------------
+                
+                if (qg (k) .gt. qcmin) then
                     
-                    ! -----------------------------------------------------------------------
-                    ! pgacw: accretion of cloud water by graupel
-                    ! -----------------------------------------------------------------------
-                    
-                    if (ql .gt. qcmin) then
-                        qden = qg * den (k)
+                    pgacw = 0.
+                    if (ql (k) .gt. qcmin) then
+                        qden = qg (k) * den (k)
                         factor = dts * cgacw * qden / sqrt (den (k) * sqrt (sqrt (qden)))
-                        pgacw = factor / (1. + factor) * ql
-                    else
-                        pgacw = 0.
+                        pgacw = factor / (1. + factor) * ql (k)
                     endif
                     
-                    ! -----------------------------------------------------------------------
-                    ! pgacr: accretion of rain by graupel
-                    ! -----------------------------------------------------------------------
-                    
-                    if (qr .gt. qcmin) then
-                        pgacr = min (dts * acr3d (vtg (k), vtr (k), qr, qg, cgacr, acco (1, 3), &
-                            den (k)), qr)
-                    else
-                        pgacr = 0.
+                    pgacr = 0.
+                    if (qr (k) .gt. qcmin) then
+                        pgacr = min (dts * acr3d (vtg (k), vtr (k), qr (k), qg (k), cgacr, acco (1, 3), &
+                            den (k)), qr (k))
                     endif
                     
                     sink = pgacr + pgacw
-                    factor = min (sink, dim (tice, tz) / icpk (k)) / max (sink, qcmin)
+                    factor = min (sink, dim (tice, tz (k)) / icpk (k)) / max (sink, qcmin)
                     pgacr = factor * pgacr
                     pgacw = factor * pgacw
                     
                     sink = pgacr + pgacw
-                    qg = qg + sink
-                    qr = qr - pgacr
-                    ql = ql - pgacw
-                    
+                    qg (k) = qg (k) + sink
+                    qr (k) = qr (k) - pgacr
+                    ql (k) = ql (k) - pgacw
                     q_liq (k) = q_liq (k) - sink
                     q_sol (k) = q_sol (k) + sink
-                    tz = (te8 (k) - lv00 * qv + li00 * q_sol (k)) / (one_r8 + qv * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice)
+
+                    cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+                    tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
+
                 endif
                 
-            endif
+            endif ! tc .ge. 0.
             
-            tzk (k) = tz
-            qvk (k) = qv
-            qlk (k) = ql
-            qik (k) = qi
-            qrk (k) = qr
-            qsk (k) = qs
-            qgk (k) = qg
-            
-        enddo
+        enddo ! k loop
 
-    endif
+    endif ! do_warm_rain_mp
     
-    call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tzk, qvk, qlk, &
-        qrk, qik, qsk, qgk, qak, dp1, h_var, rh_rain, te8, ccn, cin, gsize, &
+    call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, &
+        qr, qi, qs, qg, qa, dp1, h_var, te8, ccn, cin, gsize, &
         cond, dep, reevap, sub, last_step)
     
 end subroutine icloud
@@ -2183,12 +2086,12 @@ end subroutine icloud
 ! =======================================================================
 
 subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
-        qi, qs, qg, qa, dp1, h_var, rh_rain, te8, ccn, cin, gsize, cond, dep, reevap, sub, last_step)
+        qi, qs, qg, qa, dp1, h_var, te8, ccn, cin, gsize, cond, dep, reevap, sub, last_step)
     
     implicit none
     
     integer, intent (in) :: ks, ke
-    real, intent (in) :: dts, rh_adj, h_var, rh_rain, gsize
+    real, intent (in) :: dts, rh_adj, h_var, gsize
     real, intent (in), dimension (ks:ke) :: p1, den, denfac, ccn, dp1
     real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
