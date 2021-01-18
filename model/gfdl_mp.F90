@@ -246,7 +246,6 @@ module gfdl_mp_mod
     real :: rh_ins = 0.25 ! rh increment for sublimation of snow
     
     real :: tau_r2g = 900.0 ! rain freezing to graupel time scale (s)
-    real :: tau_g2r = 600.0 ! graupel melting to rain time scale (s)
     real :: tau_i2s = 1000.0 ! cloud ice to snow autoconversion time scale (s)
     real :: tau_l2r = 900.0 ! cloud water to rain autoconversion time scale (s)
     real :: tau_v2l = 150.0 ! water vapor to cloud water condensation time scale (s)
@@ -254,6 +253,7 @@ module gfdl_mp_mod
     real :: tau_revp = 0.0 ! rain evaporation time scale (s)
     real :: tau_imlt = 1200.0 ! cloud ice melting time scale (s)
     real :: tau_smlt = 900.0 ! snow melting time scale (s)
+    real :: tau_gmlt = 600.0 ! graupel melting time scale (s)
     
     real :: dw_land = 0.20 ! base value for subgrid deviation / variability over land
     real :: dw_ocean = 0.10 ! base value for subgrid deviation / variability over ocean
@@ -348,7 +348,7 @@ module gfdl_mp_mod
     ! -----------------------------------------------------------------------
     
     namelist / gfdl_mp_nml / &
-        t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, vi_fac, &
+        t_min, t_sub, tau_r2g, tau_smlt, tau_gmlt, dw_land, dw_ocean, vi_fac, &
         vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, vs_max, &
         vg_max, vr_max, qs_mlt, qs0_crt, ql0_max, qi0_max, qi0_crt, ifflag, &
         rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, &
@@ -1033,7 +1033,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             call fall_speed (ks, ke, den, qsz, qiz, qgz, qlz, tz, vtsz, vtiz, vtgz)
             
             call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
-                dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, dte (i))
+                dz1, dp1, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, dte (i))
             
             rain (i) = rain (i) + r1 * convt
             snow (i) = snow (i) + s1 * convt
@@ -1041,7 +1041,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ice (i) = ice (i) + i1 * convt
             
             ! -----------------------------------------------------------------------
-            ! energy loss during sedimentation heating
+            ! energy change during sedimentation heating
             ! -----------------------------------------------------------------------
             
             if (consv_checker) then
@@ -1062,7 +1062,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             endif
             
             ! -----------------------------------------------------------------------
-            ! energy loss during sedimentation heating
+            ! energy change during sedimentation heating
             ! -----------------------------------------------------------------------
             
             if (consv_checker) then
@@ -1168,7 +1168,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             te_b_end (i) = (dte (i) - li00 * c_air * (ice (i) + snow (i) + graupel (i)) * dt_in / 86400) * &
                 gsize (i) ** 2.0
             tw_b_end (i) = (rain (i) + ice (i) + snow (i) + graupel (i)) * dt_in / 86400 * gsize (i) ** 2.0
-            ! total energy loss due to sedimentation and its heating
+            ! total energy change due to sedimentation and its heating
             te_loss (i) = dte (i) * gsize (i) ** 2.0
         endif
         
@@ -2579,36 +2579,57 @@ end subroutine subgrid_z_proc
 ! =======================================================================
 
 subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
-        den, vtg, vts, vti, r1, g1, s1, i1, m1_sol, w1, dte)
+        vtg, vts, vti, r1, g1, s1, i1, m1_sol, w1, dte)
     
     implicit none
     
-    integer, intent (in) :: ks, ke
-    real, intent (in) :: dtm ! time step (s)
-    real, intent (in), dimension (ks:ke) :: vtg, vts, vti, den, dp, dz
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, m1_sol, w1
-    real (kind = r_grid), intent (inout) :: dte
-    real, intent (out) :: r1, g1, s1, i1
-    ! local:
-    real, dimension (ks:ke + 1) :: ze, zt
-    real :: qsat, dqsdt, dt5, evap, dtime
-    real :: factor, frac
-    real :: tmp, precip, tc, sink
-    real, dimension (ks:ke) :: lcpk, icpk, cvm, q_liq, q_sol
-    real, dimension (ks:ke) :: m1, dm
-    real (kind = r_grid), dimension (ks:ke) :: te1, te2
-    real :: zs = 0.
-    real :: fac_imlt
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dtm
+
+    real, intent (in), dimension (ks:ke) :: vtg, vts, vti, dp, dz
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, m1_sol, w1
+
+    real, intent (out) :: r1, g1, s1, i1
+
+    real (kind = r_grid), intent (inout) :: dte
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
     integer :: k, k0, m
+
     logical :: no_fall
     
+    real :: dt5, dtime, tmp, tc, sink, zs, fac_imlt
+    
+    real, dimension (ks:ke + 1) :: ze, zt
+
+    real, dimension (ks:ke) :: lcpk, icpk, cvm, q_liq, q_sol, m1, dm
+
+    real (kind = r_grid), dimension (ks:ke) :: te1, te2
+
+    zs = 0.0
     dt5 = 0.5 * dtm
+
+    r1 = 0.
+    
+    ! -----------------------------------------------------------------------
+    ! time-scale factor
+    ! -----------------------------------------------------------------------
+            
     fac_imlt = 1. - exp (- dtm / tau_imlt)
     
     ! -----------------------------------------------------------------------
-    ! define heat capacity and latent heat coefficient
+    ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
@@ -2616,12 +2637,13 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         q_liq (k) = ql (k) + qr (k)
         q_sol (k) = qi (k) + qs (k) + qg (k)
         cvm (k) = 1. + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+        te8 (k) = cvm (k) * tz (k) + lv00 * qv (k) - li00 * q_sol (k)
         lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
         icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
     enddo
     
     ! -----------------------------------------------------------------------
-    ! find significant melting level
+    ! find the first melting level
     ! -----------------------------------------------------------------------
     
     k0 = ke
@@ -2633,7 +2655,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     enddo
     
     ! -----------------------------------------------------------------------
-    ! melting of cloud_ice (before fall) :
+    ! melting of cloud_ice
     ! -----------------------------------------------------------------------
     
     do k = k0, ke
@@ -2641,15 +2663,14 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         if (qi (k) .gt. qcmin .and. tc .gt. 0.) then
             sink = min (qi (k), fac_imlt * tc / icpk (k))
             tmp = min (sink, dim (ql_mlt, ql (k)))
+            qi (k) = qi (k) - sink
             ql (k) = ql (k) + tmp
             qr (k) = qr (k) + sink - tmp
-            qi (k) = qi (k) - sink
-            q_liq (k) = q_liq (k) + sink
             q_sol (k) = q_sol (k) - sink
-            tz (k) = tz (k) * cvm (k) - li00 * sink
-            cvm (k) = 1. + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-            tz (k) = tz (k) / cvm (k)
-            tc = tz (k) - tice
+            q_liq (k) = q_liq (k) + sink
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
+            icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
         endif
     enddo
     
@@ -2657,25 +2678,14 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     ! turn off melting when cloud microphysics time step is small
     ! -----------------------------------------------------------------------
     
-    ! sjl, turn off melting of falling cloud ice, snow and graupel
-    ! if (dtm < 60.) k0 = ke
-    k0 = ke
-    ! sjl, turn off melting of falling cloud ice, snow and graupel
+    if (dtm .lt. 60.) k0 = ke
     
     ze (ke + 1) = zs
     do k = ke, ks, - 1
-        ze (k) = ze (k + 1) - dz (k) ! dz < 0
+        ze (k) = ze (k + 1) - dz (k)
     enddo
-    
+
     zt (ks) = ze (ks)
-    
-    ! -----------------------------------------------------------------------
-    ! update capacity heat and latent heat coefficient
-    ! -----------------------------------------------------------------------
-    
-    do k = k0, ke
-        icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
-    enddo
     
     ! -----------------------------------------------------------------------
     ! melting of falling cloud ice into cloud water and rain
@@ -2683,7 +2693,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     
     call check_column (ks, ke, qi, no_fall)
     
-    if (no_fall) then
+    if (vti (k) .lt. 1.e-10 .and. no_fall) then
         i1 = 0.
     else
         
@@ -2702,15 +2712,21 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
                     do m = k + 1, ke
                         if (zt (k + 1) .ge. ze (m)) exit
                         if (zt (k) .lt. ze (m + 1) .and. tz (m) .gt. tice) then
-                            dtime = min (1.0, (ze (m) - ze (m + 1)) / (max (0.0, vti (k)) * tau_imlt))
+                            dtime = min (dtm, (ze (m) - ze (m + 1)) / vti (k))
+                            dtime = min (1.0,  dtime / tau_imlt)
                             sink = min (qi (k) * dp (k) / dp (m), dtime * (tz (m) - tice) / icpk (m))
                             tmp = min (sink, dim (ql_mlt, ql (m)))
-                            ql (m) = ql (m) + tmp
-                            qr (m) = qr (m) - tmp + sink
                             qi (k) = qi (k) - sink * dp (m) / dp (k)
+                            ql (m) = ql (m) + tmp
+                            if (zt (k) .lt. zs) then
+                                r1 = r1 + (sink - tmp) * dp (m)
+                            else
+                                qr (m) = qr (m) - tmp + sink
+                            endif
                             tz (m) = (tz (m) * cvm (m) - li00 * sink) / &
                                  (1. + qv (m) * c1_vap + (ql (m) + qr (m)) * c1_liq + (qi (m) + qs (m) + qg (m)) * c1_ice)
                         endif
+                        if (qi (k) .lt. qcmin) exit
                     enddo
                 endif
             enddo
@@ -2723,7 +2739,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! energy loss during sedimentation
+        ! energy change during sedimentation
         ! -----------------------------------------------------------------------
         
         if (consv_checker) then
@@ -2734,13 +2750,13 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         if (use_ppm) then
-            call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qi, i1, m1_sol, mono_prof)
+            call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qi, i1, m1, mono_prof)
         else
-            call implicit_fall (dtm, ks, ke, ze, vti, dp, qi, i1, m1_sol)
+            call implicit_fall (dtm, ks, ke, ze, vti, dp, qi, i1, m1)
         endif
         
         ! -----------------------------------------------------------------------
-        ! energy loss during sedimentation
+        ! energy change during sedimentation
         ! -----------------------------------------------------------------------
         
         if (consv_checker) then
@@ -2751,11 +2767,15 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             dte = dte + sum (te1) - sum (te2)
         endif
         
+        do k = ks, ke
+            m1_sol (k) = m1_sol (k) + m1 (k)
+        enddo
+        
         if (do_sedi_w) then
-            w1 (ks) = w1 (ks) + m1_sol (ks) * vti (ks) / dm (ks)
+            w1 (ks) = w1 (ks) + m1 (ks) * vti (ks) / dm (ks)
             do k = ks + 1, ke
-                w1 (k) = (dm (k) * w1 (k) + m1_sol (k - 1) * (w1 (k - 1) - vti (k - 1)) + m1_sol (k) * vti (k)) &
-                     / (dm (k) + m1_sol (k - 1))
+                w1 (k) = (dm (k) * w1 (k) + m1 (k - 1) * (w1 (k - 1) - vti (k - 1)) + m1 (k) * vti (k)) &
+                     / (dm (k) + m1 (k - 1))
             enddo
         endif
         
@@ -2765,11 +2785,9 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     ! melting of falling snow into rain
     ! -----------------------------------------------------------------------
     
-    r1 = 0.
-    
     call check_column (ks, ke, qs, no_fall)
     
-    if (no_fall) then
+    if (vts (k) .lt. 1.e-10 .and. no_fall) then
         s1 = 0.
     else
         
@@ -2787,18 +2805,18 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
                 if (qs (k) .gt. qcmin) then
                     do m = k + 1, ke
                         if (zt (k + 1) .ge. ze (m)) exit
-                        dtime = min (dtm, (ze (m) - ze (m + 1)) / (0.0 + vts (k)))
                         if (zt (k) .lt. ze (m + 1) .and. tz (m) .gt. tice) then
+                            dtime = min (dtm, (ze (m) - ze (m + 1)) / vts (k))
                             dtime = min (1.0, dtime / tau_smlt)
                             sink = min (qs (k) * dp (k) / dp (m), dtime * (tz (m) - tice) / icpk (m))
-                            tz (m) = tz (m) - sink * icpk (m)
                             qs (k) = qs (k) - sink * dp (m) / dp (k)
                             if (zt (k) .lt. zs) then
-                                r1 = r1 + sink * dp (m) ! precip as rain
+                                r1 = r1 + sink * dp (m)
                             else
-                                ! qr source here will fall next time step (therefore, can evap)
                                 qr (m) = qr (m) + sink
                             endif
+                            tz (m) = (tz (m) * cvm (m) - li00 * sink) / &
+                                 (1. + qv (m) * c1_vap + (ql (m) + qr (m)) * c1_liq + (qi (m) + qs (m) + qg (m)) * c1_ice)
                         endif
                         if (qs (k) .lt. qcmin) exit
                     enddo
@@ -2813,7 +2831,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! energy loss during sedimentation
+        ! energy change during sedimentation
         ! -----------------------------------------------------------------------
         
         if (consv_checker) then
@@ -2830,7 +2848,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! energy loss during sedimentation
+        ! energy change during sedimentation
         ! -----------------------------------------------------------------------
         
         if (consv_checker) then
@@ -2861,7 +2879,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     
     call check_column (ks, ke, qg, no_fall)
     
-    if (no_fall) then
+    if (vtg (k) .lt. 1.e-10 .and. no_fall) then
         g1 = 0.
     else
         
@@ -2879,17 +2897,18 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
                 if (qg (k) .gt. qcmin) then
                     do m = k + 1, ke
                         if (zt (k + 1) .ge. ze (m)) exit
-                        dtime = min (dtm, (ze (m) - ze (m + 1)) / vtg (k))
                         if (zt (k) .lt. ze (m + 1) .and. tz (m) .gt. tice) then
-                            dtime = min (1., dtime / tau_g2r)
+                            dtime = min (dtm, (ze (m) - ze (m + 1)) / vtg (k))
+                            dtime = min (1., dtime / tau_gmlt)
                             sink = min (qg (k) * dp (k) / dp (m), dtime * (tz (m) - tice) / icpk (m))
-                            tz (m) = tz (m) - sink * icpk (m)
                             qg (k) = qg (k) - sink * dp (m) / dp (k)
                             if (zt (k) .lt. zs) then
                                 r1 = r1 + sink * dp (m)
                             else
                                 qr (m) = qr (m) + sink
                             endif
+                            tz (m) = (tz (m) * cvm (m) - li00 * sink) / &
+                                 (1. + qv (m) * c1_vap + (ql (m) + qr (m)) * c1_liq + (qi (m) + qs (m) + qg (m)) * c1_ice)
                         endif
                         if (qg (k) .lt. qcmin) exit
                     enddo
@@ -2904,7 +2923,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! energy loss during sedimentation
+        ! energy change during sedimentation
         ! -----------------------------------------------------------------------
         
         if (consv_checker) then
@@ -2921,7 +2940,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! energy loss during sedimentation
+        ! energy change during sedimentation
         ! -----------------------------------------------------------------------
         
         if (consv_checker) then
