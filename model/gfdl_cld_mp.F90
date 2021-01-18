@@ -2615,7 +2615,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
 
     real, dimension (ks:ke) :: lcpk, icpk, cvm, q_liq, q_sol, m1, dm
 
-    real (kind = r_grid), dimension (ks:ke) :: te1, te2
+    real (kind = r_grid), dimension (ks:ke) :: te8, te1, te2
 
     zs = 0.0
     dt5 = 0.5 * dtm
@@ -2968,50 +2968,53 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
 end subroutine terminal_fall
 
 ! =======================================================================
-! time - implicit monotonic scheme
-! developed by sj lin, 2016
+! time-implicit monotonic scheme
 ! =======================================================================
 
 subroutine implicit_fall (dt, ks, ke, ze, vt, dp, q, precip, m1)
     
     implicit none
     
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
     integer, intent (in) :: ks, ke
+
     real, intent (in) :: dt
+
     real, intent (in), dimension (ks:ke + 1) :: ze
+
     real, intent (in), dimension (ks:ke) :: vt, dp
+
     real, intent (inout), dimension (ks:ke) :: q
-    real, intent (out), dimension (ks:ke) :: m1
+
     real, intent (out) :: precip
-    real, dimension (ks:ke) :: dz, qm, dd
+
+    real, intent (out), dimension (ks:ke) :: m1
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
     integer :: k
     
+    real, dimension (ks:ke) :: dz, qm, dd
+
     do k = ks, ke
         dz (k) = ze (k) - ze (k + 1)
         dd (k) = dt * vt (k)
         q (k) = q (k) * dp (k)
     enddo
     
-    ! -----------------------------------------------------------------------
-    ! sedimentation: non - vectorizable loop
-    ! -----------------------------------------------------------------------
-    
     qm (ks) = q (ks) / (dz (ks) + dd (ks))
     do k = ks + 1, ke
         qm (k) = (q (k) + dd (k - 1) * qm (k - 1)) / (dz (k) + dd (k))
     enddo
     
-    ! -----------------------------------------------------------------------
-    ! qm is density at this stage
-    ! -----------------------------------------------------------------------
-    
     do k = ks, ke
         qm (k) = qm (k) * dz (k)
     enddo
-    
-    ! -----------------------------------------------------------------------
-    ! output mass fluxes: non - vectorizable loop
-    ! -----------------------------------------------------------------------
     
     m1 (ks) = q (ks) - qm (ks)
     do k = ks + 1, ke
@@ -3019,47 +3022,56 @@ subroutine implicit_fall (dt, ks, ke, ze, vt, dp, q, precip, m1)
     enddo
     precip = m1 (ke)
     
-    ! -----------------------------------------------------------------------
-    ! update:
-    ! -----------------------------------------------------------------------
-    
     do k = ks, ke
-        q (k) = qm (k) / dp (k) !dry dp used inside MP
+        q (k) = qm (k) / dp (k)
     enddo
     
 end subroutine implicit_fall
 
 ! =======================================================================
-! lagrangian scheme
-! developed by sj lin, around 2006
+! piecewise parabolic lagrangian scheme
 ! =======================================================================
 
 subroutine lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, precip, m1, mono)
     
     implicit none
     
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
     integer, intent (in) :: ks, ke
-    real, intent (in) :: zs
+
     logical, intent (in) :: mono
+
+    real, intent (in) :: zs
+
     real, intent (in), dimension (ks:ke + 1) :: ze, zt
+
     real, intent (in), dimension (ks:ke) :: dp
     
-    ! m1: flux
     real, intent (inout), dimension (ks:ke) :: q, m1
+
     real, intent (out) :: precip
-    real, dimension (ks:ke) :: qm, dz
-    
-    real :: a4 (4, ks:ke)
-    real :: pl, pr, delz, esl
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
     integer :: k, k0, n, m
+
+    real :: a4 (4, ks:ke), pl, pr, delz, esl
+
     real, parameter :: r3 = 1. / 3., r23 = 2. / 3.
+    
+    real, dimension (ks:ke) :: qm, dz
     
     ! -----------------------------------------------------------------------
     ! density:
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        dz (k) = zt (k) - zt (k + 1) ! note: dz is positive
+        dz (k) = zt (k) - zt (k + 1)
         q (k) = q (k) * dp (k)
         a4 (1, k) = q (k) / dz (k)
         qm (k) = 0.
@@ -3115,8 +3127,10 @@ subroutine lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, precip, m1, mono)
     enddo
     precip = m1 (ke)
     
+    ! -----------------------------------------------------------------------
     ! convert back to * dry * mixing ratio:
     ! dp must be dry air_mass (because moist air mass will be changed due to terminal fall) .
+    ! -----------------------------------------------------------------------
     
     do k = ks, ke
         q (k) = qm (k) / dp (k)
@@ -3125,26 +3139,37 @@ subroutine lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, precip, m1, mono)
 end subroutine lagrangian_fall_ppm
 
 ! =======================================================================
+! construct vertical profile
 ! =======================================================================
 
 subroutine cs_profile (a4, del, km, do_mono)
     
     implicit none
     
-    integer, intent (in) :: km ! vertical dimension
-    real, intent (in) :: del (km)
-    logical, intent (in) :: do_mono
-    real, intent (inout) :: a4 (4, km)
-    real, parameter :: qp_min = 1.e-6
-    real :: gam (km)
-    real :: q (km + 1)
-    real :: d4, bet, a_bot, grat, pmp, lac
-    real :: pmp_1, lac_1, pmp_2, lac_2
-    real :: da1, da2, a6da
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
+    integer, intent (in) :: km
+
+    logical, intent (in) :: do_mono
+
+    real, intent (in) :: del (km)
+
+    real, intent (inout) :: a4 (4, km)
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
     integer :: k
     
-    logical extm (km)
+    logical :: extm (km)
+    
+    real, parameter :: qp_min = 1.e-6
+
+    real :: gam (km), q (km + 1), d4, bet, a_bot, grat, pmp, lac
+    real :: pmp_1, lac_1, pmp_2, lac_2, da1, da2, a6da
     
     grat = del (2) / del (1) ! grid ratio
     bet = grat * (grat + 0.5)
@@ -3300,19 +3325,28 @@ subroutine cs_profile (a4, del, km, do_mono)
 end subroutine cs_profile
 
 ! =======================================================================
+! construct vertical profile limiter
 ! =======================================================================
 
 subroutine cs_limiters (km, a4)
     
     implicit none
     
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
     integer, intent (in) :: km
     
     real, intent (inout) :: a4 (4, km) ! ppm array
     
-    real, parameter :: r12 = 1. / 12.
-    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
     integer :: k
+    
+    real, parameter :: r12 = 1. / 12.
     
     ! -----------------------------------------------------------------------
     ! positive definite constraint
@@ -3346,13 +3380,25 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     
     implicit none
     
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
     integer, intent (in) :: ks, ke
     
     real (kind = r_grid), intent (in), dimension (ks:ke) :: tk
+
     real, intent (in), dimension (ks:ke) :: den, qs, qi, qg, ql
+
     real, intent (out), dimension (ks:ke) :: vts, vti, vtg
     
-    ! fall velocity constants:
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+    
+    real :: vi0
     
     real, parameter :: aa = - 4.14122e-5
     real, parameter :: bb = - 0.00538922
@@ -3360,15 +3406,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     real, parameter :: dd = 0.00216078
     real, parameter :: ee = 1.9714
     
-    real, dimension (ks:ke) :: qden, tc, rhof
-    
-    real :: vi0
-    
-    integer :: k
-    
-    ! -----------------------------------------------------------------------
-    ! marshall - palmer formula
-    ! -----------------------------------------------------------------------
+    real, dimension (ks:ke) :: tc, rhof
     
     ! -----------------------------------------------------------------------
     ! try the local air density -- for global model; the true value could be
@@ -3380,18 +3418,15 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     enddo
     
     ! -----------------------------------------------------------------------
-    ! ice:
+    ! cloud ice terminal fall velocity
     ! -----------------------------------------------------------------------
     
     if (const_vi) then
         vti (:) = vi_fac
     else
-        ! -----------------------------------------------------------------------
-        ! use deng and mace (2008, grl), which gives smaller fall speed than hd90 formula
-        ! -----------------------------------------------------------------------
         vi0 = 0.01 * vi_fac
         do k = ks, ke
-            if (qi (k) .lt. qfmin) then ! this is needed as the fall - speed maybe problematic for small qi
+            if (qi (k) .lt. qfmin) then
                 vti (k) = 0.0
             else
                 tc (k) = tk (k) - tice
@@ -3407,11 +3442,11 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     endif
     
     ! -----------------------------------------------------------------------
-    ! snow:
+    ! snow terminal fall velocity
     ! -----------------------------------------------------------------------
     
     if (const_vs) then
-        vts (:) = vs_fac ! 1. ifs_2016
+        vts (:) = vs_fac
     else
         do k = ks, ke
             if (qs (k) .lt. qfmin) then
@@ -3424,11 +3459,11 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     endif
     
     ! -----------------------------------------------------------------------
-    ! graupel:
+    ! graupel or hail terminal fall velocity
     ! -----------------------------------------------------------------------
     
     if (const_vg) then
-        vtg (:) = vg_fac ! 2.
+        vtg (:) = vg_fac
     else
         if (do_hail) then
             do k = ks, ke
