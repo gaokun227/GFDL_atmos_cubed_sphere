@@ -254,7 +254,7 @@ module gfdl_cld_mp_mod
     real :: tau_v2l = 150.0 ! water vapor to cloud water condensation time scale (s)
     real :: tau_l2v = 300.0 ! cloud water to water vapor evaporation time scale (s)
     real :: tau_revp = 0.0 ! rain evaporation time scale (s)
-    real :: tau_imlt = 600.0 ! cloud ice melting time scale (s)
+    real :: tau_imlt = 1200.0 ! cloud ice melting time scale (s)
     real :: tau_smlt = 900.0 ! snow melting time scale (s)
     
     real :: dw_land = 0.20 ! base value for subgrid deviation / variability over land
@@ -313,6 +313,9 @@ module gfdl_cld_mp_mod
 
     real :: f_dq_p = 1.0 ! cloud fraction adjustment for supersaturation
     real :: f_dq_m = 1.0 ! cloud fraction adjustment for undersaturation
+
+    real :: fi2s_fac = 0.75 ! maximum sink of cloud ice to form snow: 0-1
+    real :: fs2g_fac = 1.0 ! maximum sink of snow to form graupel: 0-1
     
     real :: qi0_rei = 0.8e-4 ! maximum cloud ice value (by other sources) (kg/kg)
     
@@ -361,7 +364,7 @@ module gfdl_cld_mp_mod
         use_rhc_revap, do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
         rhc_cevap, rhc_revap, qi0_rei, beta, liq_ice_combine, rewflag, &
         reiflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
-        regmin, regmax
+        regmin, regmax, fs2g_fac, fi2s_fac
     
 contains
 
@@ -1773,11 +1776,10 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
     real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, psaci, pgacs
     real :: pgmlt, psmlt, pgfr, psaut, pgaut
     real :: tmp, dq, dtmp, q_plus, sink, factor, qim, tin
-    real :: rdts, fac_i2s, fac_imlt, tc, qden, qsm, dt5
+    real :: rdts, fac_i2s, fac_imlt, tc, qden, qsm
     
     real (kind = r_grid), dimension (ks:ke) :: cvm, te8
 
-    dt5 = 0.5 * dts
     rdts = 1. / dts
     
     ! -----------------------------------------------------------------------
@@ -1785,7 +1787,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
     ! -----------------------------------------------------------------------
     
     fac_i2s = 1. - exp (- dts / tau_i2s)
-    fac_imlt = 1. - exp (- dt5 / tau_imlt)
+    fac_imlt = 1. - exp (- dts / tau_imlt)
     
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
@@ -1962,7 +1964,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                         psaut = tmp * dq
                     endif
 
-                    sink = min (0.75 * qi (k), psaci + psaut)
+                    sink = min (fi2s_fac * qi (k), psaci + psaut)
                     qi (k) = qi (k) - sink
                     qs (k) = qs (k) + sink
                     
@@ -1997,7 +1999,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                     psacr = factor * psacr
                     pgfr = factor * pgfr
                     
-                    sink = min (qr (k), psacr + pgfr)
+                    sink = psacr + pgfr
                     qr (k) = qr (k) - sink
                     qs (k) = qs (k) + psacr
                     qg (k) = qg (k) + pgfr
@@ -2014,10 +2016,10 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                 ! graupel production terms (includes graupel accretion with cloud water and autoconversion)
                 ! -----------------------------------------------------------------------
                 
-                if (qs (k) .gt. qcmin) then
+                if (qg (k) .gt. qcmin) then
                     
                     pgacs = 0
-                    if (qg (k) .gt. qcmin) then
+                    if (qs (k) .gt. qcmin) then
                         pgacs = dts * acr3d (vtg (k), vts (k), qs (k), qg (k), cgacs, acco (1, 4), den (k))
                     endif
                     
@@ -2028,7 +2030,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                         pgaut = factor / (1. + factor) * (qs (k) - qsm)
                     endif
 
-                    sink = min (qs (k), pgacs + pgaut)
+                    sink = min (fs2g_fac * qs (k), pgacs + pgaut)
                     qs (k) = qs (k) - sink
                     qg (k) = qg (k) + sink
                     
@@ -2077,8 +2079,8 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
     endif ! do_warm_rain_mp
     
     call subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, &
-        qr, qi, qs, qg, qa, dp1, h_var, te8, ccn, cin, gsize, &
-        cond, dep, reevap, sub, last_step)
+        qr, qi, qs, qg, qa, dp1, h_var, te8, ccn, cin, gsize, cond, dep, &
+        reevap, sub, last_step)
     
 end subroutine icloud
 
@@ -2646,7 +2648,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     logical :: no_fall
     
     dt5 = 0.5 * dtm
-    fac_imlt = 1. - exp (- dt5 / tau_imlt)
+    fac_imlt = 1. - exp (- dtm / tau_imlt)
     
     ! -----------------------------------------------------------------------
     ! define heat capacity and latent heat coefficient
@@ -3543,7 +3545,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     fac_l2v = 1. - exp (- sdt / tau_l2v)
     fac_l2v = min (sat_adj0, fac_l2v)
     
-    fac_imlt = 1. - exp (- sdt / tau_imlt)
+    fac_imlt = 1. - exp (- mdt / tau_imlt)
     fac_smlt = 1. - exp (- mdt / tau_smlt)
     
     ! -----------------------------------------------------------------------
