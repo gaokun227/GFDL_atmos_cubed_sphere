@@ -1572,7 +1572,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
     
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk
 
-    real (kind = r_grid), dimension (ks:ke) :: cvm
+    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
 
     ! -----------------------------------------------------------------------
     ! time-scale factor
@@ -1594,6 +1594,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
         q_sol (k) = qi (k) + qs (k) + qg (k)
         
         cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+        te8 (k) = cvm (k) * tz (k) + lv00 * qv (k) - li00 * q_sol (k)
         lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
         tin = (tz (k) * cvm (k) - lv00 * ql (k)) / (1. + (qv (k) + ql (k)) * c1_vap + qr (k) * c1_liq + q_sol (k) * c1_ice)
         
@@ -1650,7 +1651,7 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             q_liq (k) = q_liq (k) - sink
 
             cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-            tz (k) = (cvm (k) * tz (k) - lv00 * sink) / cvm (k)
+            tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
 
         endif
             
