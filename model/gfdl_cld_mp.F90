@@ -85,11 +85,8 @@ module gfdl_cld_mp_mod
     real, parameter :: hlv = 2.5e6 ! latent heat of evaporation (J/kg)
     real, parameter :: hlf = 3.3358e5 ! latent heat of fusion (J/kg)
 
-    real, parameter :: hlv0 = hlv ! evaporation latent heat coefficient at 0 deg C (J/kg)
-    real, parameter :: hlf0 = hlf ! fussion latent heat coefficient at 0 deg C (J/kg)
-    
-    real, parameter :: lv0 = hlv0 - dc_vap * tice ! 3.14893552e6, evaporation latent heat coeff. at 0 deg K (J/kg)
-    real, parameter :: li0 = hlf0 - dc_ice * tice ! - 2.2691392e5, fussion latent heat coeff. at 0 deg K (J/kg)
+    real, parameter :: lv0 = hlv - dc_vap * tice ! 3.14893552e6, evaporation latent heat coeff. at 0 deg K (J/kg)
+    real, parameter :: li0 = hlf - dc_ice * tice ! - 2.2691392e5, fussion latent heat coeff. at 0 deg K (J/kg)
     
     real (kind = r_grid), parameter :: gam263 = 1.4625080991084523 ! Gamma function (2.63)
     real (kind = r_grid), parameter :: gam275 = 1.6083594219855455 ! Gamma function (2.75)
@@ -265,8 +262,6 @@ module gfdl_cld_mp_mod
     
     real :: cld_min = 0.05 ! minimum cloud fraction
 
-    real :: sat_adj0 = 0.90 ! adjustment factor (0: no, 1: full) during fast_sat_adj
-    
     real :: qi_lim = 1.0 ! cloud ice limiter (0: no, 1: full, >1: extra) to prevent large ice build up
     
     real :: ql_mlt = 2.0e-3 ! maximum cloud water allowed from melted cloud ice (kg/kg)
@@ -352,7 +347,7 @@ module gfdl_cld_mp_mod
         vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, vs_max, &
         vg_max, vr_max, qs_mlt, qs0_crt, ql0_max, qi0_max, qi0_crt, ifflag, &
         rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, &
-        const_vr, rthresh, ccn_l, ccn_o, sat_adj0, igflag, c_paut, tau_imlt, &
+        const_vr, rthresh, ccn_l, ccn_o, igflag, c_paut, tau_imlt, &
         tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen, do_hail, inflag, &
         c_psaci, c_pgacs, c_pgaci, z_slope_liq, z_slope_ice, prog_ccn, &
         c_pracw, alin, clin, rad_snow, rad_graupel, rad_rain, cld_min, &
@@ -493,8 +488,8 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, w, &
     d1_vap = d0_vap / c_air
     d1_ice = dc_ice / c_air
     
-    lv00 = (hlv0 - d0_vap * tice) / c_air
-    li00 = (hlf0 - dc_ice * tice) / c_air
+    lv00 = (hlv - d0_vap * tice) / c_air
+    li00 = (hlf - dc_ice * tice) / c_air
     li20 = lv00 + li00
     
     c1_vap = c_vap / c_air
@@ -3490,10 +3485,6 @@ end subroutine fall_speed
 
 ! =======================================================================
 ! fast saturation adjustments
-! this is designed for single - moment 6 - class cloud microphysics schemes
-! handles the heat release due to in situ phase changes.
-! it mainly consists of melting / freezing, condensation / evaporation,
-! sublimation / deposition, and autoconversion processes.
 ! =======================================================================
 
 subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
@@ -3502,65 +3493,64 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     
     implicit none
     
-    logical, intent (in) :: hydrostatic, consv_te, out_dt, last_step
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
     integer, intent (in) :: is, ie, js, je, ng
     
+    logical, intent (in) :: hydrostatic, consv_te, out_dt, last_step
+    
     real, intent (in) :: mdt
     
-    real, intent (in), dimension (is - ng:ie + ng, js - ng:je + ng) :: delp, hs
-    real, intent (in), dimension (is:ie, js:je) :: dpln
-    real, intent (in), dimension (is:ie, js:je) :: delz
+    real, intent (in), dimension (is:ie, js:je) :: dpln, delz
     
+    real, intent (in), dimension (is - ng:ie + ng, js - ng:je + ng) :: delp, hs
+
     real (kind = r_grid), intent (in), dimension (is:ie, js:je) :: gsize
     
     real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: pt, qv, ql, qr
     real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: qi, qs, qg
+    real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: qa, te, qnl, qni
+
     real, intent (inout), dimension (is - ng:, js - ng:) :: q_con, cappa
+
     real, intent (inout), dimension (is:ie, js:je) :: dtdt
     
-    real, intent (inout), dimension (is - ng:ie + ng, js - ng:je + ng) :: qa, te, qnl, qni
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: i, j
+    
+    real :: d0_vap, lv00, li00, qsw, rh, ccn0, rqi, q_plus, q_minus
+    real :: tc, qsi, dqsdt, dq, dq0, pidep, qi_gen, qi_crt, tmp
+    real :: tin, sdt, factor, qim, c_air, c_vap, dw
+    real :: fac_smlt, fac_r2g, fac_i2s, fac_imlt, fac_l2r, fac_v2l, fac_l2v
+    
+    real, dimension (is:ie) :: wqsat, dq2dt, qpz, cvm, t0, qstar, mc_air, lhl, lhi, ccn, cin
+    real, dimension (is:ie) :: den, q_liq, q_sol, q_cond, src, sink, hvar, icp2, lcp2, tcp2, tcp3
     
     real (kind = r_grid), dimension (is:ie, js:je) :: te_beg, te_end, tw_beg, tw_end
     
     real (kind = r_grid), dimension (is:ie) :: pt1
-    real, dimension (is:ie) :: wqsat, dq2dt, qpz, cvm, t0, qstar
-    real, dimension (is:ie) :: icp2, lcp2, tcp2, tcp3
-    real, dimension (is:ie) :: den, q_liq, q_sol, q_cond, src, sink, hvar
-    real, dimension (is:ie) :: mc_air, lhl, lhi, ccn, cin
-    
-    real :: d0_vap ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
-    real :: lv00 ! the same as lv0, except that cp_vap can be cp_vap or cv_vap
-    real :: li00
-    real :: qsw, rh, ccn0
-    real :: tc, qsi, dqsdt, dq, dq0, pidep, qi_gen, qi_crt, tmp
-    real :: rqi, q_plus, q_minus
-    real :: tin, sdt, dt_bigg, adj_fac
-    real :: fac_smlt, fac_r2g, fac_i2s, fac_imlt, fac_l2r, fac_v2l, fac_l2v
-    real :: factor, qim, c_air, c_vap, dw
-    
-    integer :: i, j
-    
+
     sdt = 0.5 * mdt
-    dt_bigg = mdt
     
     ! -----------------------------------------------------------------------
-    ! conversion scalar / factor
+    ! time-scale factor
     ! -----------------------------------------------------------------------
     
     fac_i2s = 1. - exp (- mdt / tau_i2s)
     fac_r2g = 1. - exp (- mdt / tau_r2g)
     fac_l2r = 1. - exp (- mdt / tau_l2r)
     fac_v2l = 1. - exp (- sdt / tau_v2l)
-    
     fac_l2v = 1. - exp (- sdt / tau_l2v)
-    fac_l2v = min (sat_adj0, fac_l2v)
-    
     fac_imlt = 1. - exp (- mdt / tau_imlt)
     fac_smlt = 1. - exp (- mdt / tau_smlt)
     
     ! -----------------------------------------------------------------------
-    ! heat capacity of dry air and water vapor based on hydrostatical property
+    ! define various heat capacities and latent heat coefficients at 0 deg K
     ! -----------------------------------------------------------------------
     
     if (hydrostatic) then
@@ -3571,13 +3561,14 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         c_vap = cv_vap
     endif
     d0_vap = c_vap - c_liq
+
     lv00 = hlv - d0_vap * tice
     li00 = hlf - dc_ice * tice
     
     do j = js, je
         
         ! -----------------------------------------------------------------------
-        ! compute true temperature
+        ! conversion of temperature
         ! -----------------------------------------------------------------------
         
         do i = is, ie
@@ -3772,13 +3763,12 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         ! condensation / evaporation between water vapor and cloud water
         ! -----------------------------------------------------------------------
         
-        adj_fac = sat_adj0
         do i = is, ie
             tin = pt1 (i)
             wqsat (i) = wqs (tin, den (i), dq2dt (i))
             dq0 = (qv (i, j) - wqsat (i)) / (1. + tcp3 (i) * dq2dt (i))
             if (dq0 .gt. 0.) then
-                src (i) = min (adj_fac * dq0, max (ql_gen - ql (i, j), fac_v2l * dq0))
+                src (i) = min (dq0, max (ql_gen - ql (i, j), fac_v2l * dq0))
             else
                 ! sjl, 20170703
                 ! factor = - min (1., fac_l2v * sqrt (max (0., ql (i, j)) / 1.e-5) * &
@@ -3830,7 +3820,6 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                     factor = - min (1., fac_l2v * 10. * (1. - qv (i, j) / wqsat (i)))
                     src (i) = - min (ql (i, j), factor * dq0)
                 endif
-                adj_fac = 1.
                 qv (i, j) = qv (i, j) - src (i)
                 ql (i, j) = ql (i, j) + src (i)
                 q_liq (i) = q_liq (i) + src (i)
@@ -3885,7 +3874,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
         do i = is, ie
             tc = tice - pt1 (i)
             if (ql (i, j) .gt. qcmin .and. tc .gt. 0.) then
-                sink (i) = 100. / (rhow * ccn (i)) * dt_bigg * (exp (0.66 * tc) - 1.) * ql (i, j) ** 2
+                sink (i) = 100. / (rhow * ccn (i)) * mdt * (exp (0.66 * tc) - 1.) * ql (i, j) ** 2
                 sink (i) = min (ql (i, j), tc / icp2 (i), sink (i))
                 ql (i, j) = ql (i, j) - sink (i)
                 qi (i, j) = qi (i, j) + sink (i)
@@ -3990,7 +3979,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 tin = pt1 (i)
                 qsi = iqs (tin, den (i), dqsdt)
                 dq = qv (i, j) - qsi
-                sink (i) = adj_fac * dq / (1. + tcp2 (i) * dqsdt)
+                sink (i) = dq / (1. + tcp2 (i) * dqsdt)
                 if (qi (i, j) .gt. qcmin) then
                     if (.not. prog_ccn) then
                         if (inflag .eq. 1) &
@@ -4009,7 +3998,7 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                             ! flecther, 1962
                             cin (i) = 1.e-5 * exp (0.5 * (tice - pt1 (i))) * 1000.0 ! convert from L^-1 to m^-3
                     endif
-                    pidep = sdt * dq * 4.0 * 11.9 * exp (0.5 * log (qi (i, j) * den (i) * cin (i))) &
+                    pidep = mdt * dq * 4.0 * 11.9 * exp (0.5 * log (qi (i, j) * den (i) * cin (i))) &
                          / (qsi * den (i) * (hlv + hlf) ** 2 / (0.0243 * rvgas * pt1 (i) ** 2) + 4.42478e4)
                 else
                     pidep = 0.
@@ -4289,42 +4278,36 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     
     implicit none
     
-    integer, intent (in) :: is, ie
-    integer, intent (in) :: ks, ke
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
-    real, intent (in), dimension (is:ie) :: lsm ! land sea mask, 0: ocean, 1: land, 2: sea ice
-    real, intent (in), dimension (is:ie) :: snowd ! snow depth (mm)
+    integer, intent (in) :: is, ie, ks, ke
     
-    real, intent (in), dimension (is:ie, ks:ke) :: delp, t, p
-    real, intent (in), dimension (is:ie, ks:ke) :: cloud ! cloud fraction
-    real, intent (in), dimension (is:ie, ks:ke) :: qw, qi, qr, qs, qg ! mass mixing ratio (kg / kg)
+    real, intent (in), dimension (is:ie) :: lsm, snowd
     
-    real, intent (in), dimension (is:ie, ks:ke), optional :: cnvw, cnvi ! convective cloud water / ice mass mixing ratio (kg / kg)
-    real, intent (in), dimension (is:ie, ks:ke), optional :: cnvc ! convective cloud fraction
+    real, intent (in), dimension (is:ie, ks:ke) :: delp, t, p, cloud
+    real, intent (in), dimension (is:ie, ks:ke) :: qw, qi, qr, qs, qg
     
-    real, intent (inout), dimension (is:ie, ks:ke) :: qcw, qci, qcr, qcs, qcg ! units: g / m^2
-    real, intent (inout), dimension (is:ie, ks:ke) :: rew, rei, rer, res, reg ! radii (micron)
-    real, intent (inout), dimension (is:ie, ks:ke) :: cld ! total cloud fraction
+    real, intent (in), dimension (is:ie, ks:ke), optional :: cnvw, cnvi, cnvc
     
+    real, intent (inout), dimension (is:ie, ks:ke) :: qcw, qci, qcr, qcs, qcg
+    real, intent (inout), dimension (is:ie, ks:ke) :: rew, rei, rer, res, reg
+    real, intent (inout), dimension (is:ie, ks:ke) :: cld
+    
+    ! -----------------------------------------------------------------------
     ! local variables
-    
+    ! -----------------------------------------------------------------------
+
     integer :: i, k, ind
     
-    real, dimension (is:ie, ks:ke) :: qmw, qmr, qmi, qms, qmg ! mass mixing ratio (kg / kg)
+    real, dimension (is:ie, ks:ke) :: qmw, qmr, qmi, qms, qmg
     
-    real :: dpg ! dp / g
-    real :: rho ! density (kg / m^3)
-    real :: ccnw ! cloud condensate nuclei for cloud water (cm^ - 3)
-    real :: mask
-    real :: cor
-    real :: tc0
-    real :: bw
+    real :: dpg, rho, ccnw, mask, cor, tc0, bw
+    real :: lambdar, lambdas, lambdag, rei_fac
     
-    real :: lambdar, lambdas, lambdag
-    real :: rei_fac
-    
-    real :: ccno = 90. ! ccn over ocean (cm^ - 3)
-    real :: ccnl = 270. ! ccn over land (cm^ - 3)
+    real :: ccno = 90.
+    real :: ccnl = 270.
     
     real :: retab (138) = (/ &
         0.05000, 0.05000, 0.05000, 0.05000, 0.05000, 0.05000, &
@@ -4358,6 +4341,10 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     qmg = qg
     cld = cloud
     
+    ! -----------------------------------------------------------------------
+    ! merge convective cloud to total cloud
+    ! -----------------------------------------------------------------------
+
     if (present (cnvw)) then
         qmw = qmw + cnvw
     endif
@@ -4368,6 +4355,10 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
         cld = cnvc + (1 - cnvc) * cld
     endif
     
+    ! -----------------------------------------------------------------------
+    ! combine liquid and solid phases
+    ! -----------------------------------------------------------------------
+
     if (liq_ice_combine) then
         do k = ks, ke
             do i = is, ie
@@ -4380,6 +4371,10 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
         enddo
     endif
     
+    ! -----------------------------------------------------------------------
+    ! combine snow and graupel
+    ! -----------------------------------------------------------------------
+
     if (snow_grauple_combine) then
         do k = ks, ke
             do i = is, ie
@@ -4404,23 +4399,21 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             mask = min (max (lsm (i), 0.0), 2.0)
             
             dpg = abs (delp (i, k)) / grav
-            ! rho = p (i, k) / (rdgas * t (i, k) * (1. + zvir * qv)) ! needs qv
             rho = p (i, k) / (rdgas * t (i, k))
-            ! use rho = dpg / delz ! needs delz
             
             tc0 = t (i, k) - tice
             
             if (rewflag .eq. 1) then
                 
                 ! -----------------------------------------------------------------------
-                ! cloud water (martin et al., 1994)
+                ! cloud water (Martin et al. 1994)
                 ! -----------------------------------------------------------------------
                 
-#ifndef MARTIN_CCN
-                ccnw = ccno * abs (mask - 1.0) + ccnl * (1.0 - abs (mask - 1.0))
-#else
+#ifdef MARTIN_CCN
                 ccnw = 0.80 * (- 1.15e-3 * (ccno ** 2) + 0.963 * ccno + 5.30) * abs (mask - 1.0) + &
                     0.67 * (- 2.10e-4 * (ccnl ** 2) + 0.568 * ccnl - 27.9) * (1.0 - abs (mask - 1.0))
+#else
+                ccnw = ccno * abs (mask - 1.0) + ccnl * (1.0 - abs (mask - 1.0))
 #endif
                 
                 if (qmw (i, k) .gt. qcmin) then
@@ -4437,7 +4430,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (rewflag .eq. 2) then
                 
                 ! -----------------------------------------------------------------------
-                ! cloud water (martin et al., 1994, gfdl revision)
+                ! cloud water (Martin et al. 1994, gfdl revision)
                 ! -----------------------------------------------------------------------
                 
                 ccnw = 1.077 * ccno * abs (mask - 1.0) + 1.143 * ccnl * (1.0 - abs (mask - 1.0))
@@ -4456,7 +4449,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (rewflag .eq. 3) then
                 
                 ! -----------------------------------------------------------------------
-                ! cloud water (kiehl et al., 1994)
+                ! cloud water (Kiehl et al. 1994)
                 ! -----------------------------------------------------------------------
                 
                 if (qmw (i, k) .gt. qcmin) then
@@ -4475,7 +4468,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (reiflag .eq. 1) then
                 
                 ! -----------------------------------------------------------------------
-                ! cloud ice (heymsfield and mcfarquhar, 1996)
+                ! cloud ice (Heymsfield and Mcfarquhar 1996)
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qcmin) then
@@ -4501,7 +4494,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (reiflag .eq. 2) then
                 
                 ! -----------------------------------------------------------------------
-                ! cloud ice (donner et al., 1997)
+                ! cloud ice (Donner et al. 1997)
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qcmin) then
@@ -4534,7 +4527,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (reiflag .eq. 3) then
                 
                 ! -----------------------------------------------------------------------
-                ! cloud ice (fu, 2007)
+                ! cloud ice (Fu 2007)
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qcmin) then
@@ -4551,7 +4544,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (reiflag .eq. 4) then
                 
                 ! -----------------------------------------------------------------------
-                ! cloud ice (kristjansson et al., 2000)
+                ! cloud ice (Kristjansson et al. 2000)
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qcmin) then
@@ -4570,7 +4563,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (reiflag .eq. 5) then
                 
                 ! -----------------------------------------------------------------------
-                ! cloud ice (wyser, 1998)
+                ! cloud ice (Wyser 1998)
                 ! -----------------------------------------------------------------------
                 
                 if (qmi (i, k) .gt. qcmin) then
@@ -4586,7 +4579,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             endif
             
             ! -----------------------------------------------------------------------
-            ! rain (lin et al., 1983)
+            ! rain (Lin et al. 1983)
             ! -----------------------------------------------------------------------
             
             if (qmr (i, k) .gt. qcmin) then
@@ -4600,7 +4593,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             endif
             
             ! -----------------------------------------------------------------------
-            ! snow (lin et al., 1983)
+            ! snow (Lin et al. 1983)
             ! -----------------------------------------------------------------------
             
             if (qms (i, k) .gt. qcmin) then
@@ -4614,7 +4607,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             endif
             
             ! -----------------------------------------------------------------------
-            ! graupel (lin et al., 1983)
+            ! graupel (Lin et al. 1983)
             ! -----------------------------------------------------------------------
             
             if (qmg (i, k) .gt. qcmin) then
@@ -4637,11 +4630,12 @@ end subroutine cld_eff_rad
 ! radar reflectivity
 ! =======================================================================
 
-subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
-        q, pt, delp, peln, delz, dbz, maxdbz, allmax, &
-        npz, ncnst, hydrostatic, zvir, in0r, in0s, in0g, iliqskin, do_inline_mp, &
-        sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, mp_top)
+subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
+        delz, dbz, maxdbz, allmax, npz, ncnst, hydrostatic, zvir, &
+        do_inline_mp, sphum, liq_wat, ice_wat, &
+        rainwat, snowwat, graupel, mp_top)
     
+    ! -----------------------------------------------------------------------
     ! code from mark stoelinga's dbzcalc.f from the rip package.
     ! currently just using values taken directly from that code, which is
     ! consistent for the mm5 reisner - 2 microphysics. from that file:
@@ -4682,60 +4676,58 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
     ! that the gfdl mp assumes a constant intercept (in0x = .false.)
     ! ferrier - aligo has an option for fixed slope (rather than fixed intercept) .
     ! thompson presumably is an extension of reisner mp.
+    ! -----------------------------------------------------------------------
     
     implicit none
     
-    logical, intent (in) :: hydrostatic, in0r, in0s, in0g, iliqskin, do_inline_mp
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    logical, intent (in) :: hydrostatic, do_inline_mp
     
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed
     integer, intent (in) :: npz, ncnst, mp_top
     integer, intent (in) :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel
     
-    real, intent (in), dimension (isd:ied, jsd:jed, npz) :: pt, delp
-    real, intent (in), dimension (is:, js:, 1:) :: delz
-    real, intent (in), dimension (isd:ied, jsd:jed, npz, ncnst) :: q
-    real, intent (in), dimension (is :ie, npz + 1, js:je) :: peln
-    real, intent (out), dimension (is :ie, js :je, npz) :: dbz
-    real, intent (out), dimension (is :ie, js :je) :: maxdbz
-    
     real, intent (in) :: zvir
+
     real, intent (out) :: allmax
     
-    ! constants for variable intercepts
-    ! will need to be changed based on mp scheme
+    real, intent (in), dimension (isd:ied, jsd:jed, npz) :: pt, delp
+
+    real, intent (in), dimension (is:, js:, 1:) :: delz
+
+    real, intent (in), dimension (isd:ied, jsd:jed, npz, ncnst) :: q
+
+    real, intent (in), dimension (is :ie, npz + 1, js:je) :: peln
+
+    real, intent (out), dimension (is :ie, js :je) :: maxdbz
+
+    real, intent (out), dimension (is :ie, js :je, npz) :: dbz
     
-    real, parameter :: ron = 8.e6
-    real, parameter :: ron2 = 1.e10
-    real, parameter :: son = 2.e7
-    real, parameter :: gon = 5.e7
-    real, parameter :: ron_min = 8.e6
-    real, parameter :: ron_qr0 = 0.00010
-    real, parameter :: ron_delqr0 = 0.25 * ron_qr0
-    real, parameter :: ron_const1r = (ron2 - ron_min) * 0.5
-    real, parameter :: ron_const2r = (ron2 + ron_min) * 0.5
-    
-    ! other constants
-    
-    real, parameter :: gamma_seven = 720.
-    real, parameter :: alpha = 0.224
-    real (kind = r_grid), parameter :: factor_s = gamma_seven * 1.e18 * (1. / (pi * rhos)) ** 1.75 &
-         * (rhos / rhor) ** 2 * alpha
-    
-    ! double precision
-    
-    real (kind = r_grid), dimension (is:ie) :: rhoair, denfac, z_e
-    real (kind = r_grid) :: qr1, qs1, qg1, t1, t2, t3, rwat, vtr, vtg, vts
-    real (kind = r_grid) :: factorb_s, factorb_g
-    real (kind = r_grid) :: temp_c, pres, sonv, gonv, ronv
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: i, j, k
     
     real :: rhogh, vcongh, normgh
     
-    integer :: i, j, k
+    real, parameter :: gamma_seven = 720.
+    real, parameter :: alpha = 0.224
+
+    real (kind = r_grid) :: t1, t2, t3, vtr, vtg, vts
     
+    real (kind = r_grid), parameter :: factor_s = gamma_seven * 1.e18 * (1. / (pi * rhos)) ** 1.75 &
+         * (rhos / rhor) ** 2 * alpha
+    
+    real (kind = r_grid), dimension (is:ie) :: rhoair, denfac, z_e
+
     if (rainwat .lt. 1) return
     
     dbz (:, :, 1:mp_top) = - 20.
-    maxdbz (:, :) = - 20. ! minimum value
+    maxdbz (:, :) = - 20.
     allmax = - 20.
     
     if (do_hail .and. .not. do_inline_mp) then
@@ -4748,9 +4740,9 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
         normgh = normg
     endif
     
-    !$omp parallel do default (shared) private (rhoair, t1, t2, t3, denfac, vtr, vtg, vts, z_e)
     do k = mp_top + 1, npz
         do j = js, je
+
             if (hydrostatic) then
                 do i = is, ie
                     rhoair (i) = delp (i, j, k) / ((peln (i, k + 1, j) - peln (i, k, j)) * &
@@ -4760,11 +4752,12 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
                 enddo
             else
                 do i = is, ie
-                    rhoair (i) = - delp (i, j, k) / (grav * delz (i, j, k)) ! moist air density
+                    rhoair (i) = - delp (i, j, k) / (grav * delz (i, j, k))
                     denfac (i) = sqrt (min (10., 1.2 / rhoair (i)))
                     z_e (i) = 0.
                 enddo
             endif
+
             if (rainwat .gt. 0) then
                 do i = is, ie
                     ! the following form vectorizes better & more consistent with gfdl_mp
@@ -4780,6 +4773,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
                     ! exp (1.6 * log (3.6e6 * t2 / rhos * vts)))
                 enddo
             endif
+
             if (graupel .gt. 0) then
                 do i = is, ie
                     t3 = rhoair (i) * max (qcmin, q (i, j, k, graupel))
@@ -4787,6 +4781,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
                     z_e (i) = z_e (i) + 200. * exp (1.6 * log (3.6e6 * t3 / rhogh * vtg))
                 enddo
             endif
+
             if (snowwat .gt. 0) then
                 do i = is, ie
                     t2 = rhoair (i) * max (qcmin, q (i, j, k, snowwat))
@@ -4797,13 +4792,14 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
                     ! exp (1.6 * log (3.6e6 * t2 / rhos * vts)))
                 enddo
             endif
+
             do i = is, ie
                 dbz (i, j, k) = 10. * log10 (max (0.01, z_e (i)))
             enddo
+
         enddo
     enddo
     
-    !$omp parallel do default (shared)
     do j = js, je
         do k = mp_top + 1, npz
             do i = is, ie
@@ -4821,46 +4817,45 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, &
 end subroutine rad_ref
 
 ! =======================================================================
-! accretion function (lin et al. 1983)
+! accretion function (Lin et al. 1983)
 ! =======================================================================
 
 real function acr3d (v1, v2, q1, q2, c, cac, rho)
     
     implicit none
     
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
     real, intent (in) :: v1, v2, c, rho
-    real, intent (in) :: q1, q2 ! mixing ratio!!!
+    real, intent (in) :: q1, q2
     real, intent (in) :: cac (3)
     
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
     real :: t1, s1, s2
-    
-    ! integer :: k
-    !
-    ! real :: a
-    !
-    ! a = 0.0
-    ! do k = 1, 3
-    ! a = a + cac (k) * ((q1 * rho) ** ((7 - k) * 0.25) * (q2 * rho) ** (k * 0.25))
-    ! enddo
-    ! acr3d = c * abs (v1 - v2) * a / rho
-    
-    ! optimized
     
     t1 = sqrt (q1 * rho)
     s1 = sqrt (q2 * rho)
-    s2 = sqrt (s1) ! s1 = s2 ** 2
+    s2 = sqrt (s1)
     acr3d = c * abs (v1 - v2) * q1 * s2 * (cac (1) * t1 + cac (2) * sqrt (t1) * s2 + cac (3) * s1)
     
 end function acr3d
 
 ! =======================================================================
-! melting of snow function (lin et al. 1983)
-! note: psacw and psacr must be calc before smlt is called
+! melting of snow function (Lin et al. 1983)
 ! =======================================================================
 
 real function smlt (tc, dqs, qsrho, psacw, psacr, c, rho, rhofac)
     
     implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
     real, intent (in) :: tc, dqs, qsrho, psacw, psacr, c (5), rho, rhofac
     
@@ -4870,13 +4865,16 @@ real function smlt (tc, dqs, qsrho, psacw, psacr, c, rho, rhofac)
 end function smlt
 
 ! =======================================================================
-! melting of graupel function (lin et al. 1983)
-! note: pgacw and pgacr must be calc before gmlt is called
+! melting of graupel function (Lin et al. 1983)
 ! =======================================================================
 
 real function gmlt (tc, dqs, qgrho, pgacw, pgacr, c, rho)
     
     implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
     real, intent (in) :: tc, dqs, qgrho, pgacw, pgacr, c (5), rho
     
@@ -4890,30 +4888,35 @@ end function gmlt
 ! =======================================================================
 
 subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
-    ! revised with a precise energy conserving form: s. - j. lin, jan 22, 2018
-    ! input q fields are dry mixing ratios, and dm is dry air mass
+
     implicit none
-    integer, intent (in) :: ks, ke
-    real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-    real, intent (in) :: cw ! heat capacity
-    ! local:
-    real, dimension (ks:ke) :: dgz, cv0
-    integer :: k
+
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
     
-    ! this is the vectorized loop
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: cw
+
+    real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real, dimension (ks:ke) :: dgz, cv0
+    
     do k = ks + 1, ke
         dgz (k) = - 0.5 * grav * (dz (k - 1) + dz (k))
         cv0 (k) = dm (k) * (cv_air + qv (k) * cv_vap + (qr (k) + ql (k)) * c_liq + &
              (qi (k) + qs (k) + qg (k)) * c_ice) + cw * (m1 (k) - m1 (k - 1))
-        ! cvm_new + cw * m1 (k) = cvm_old + cw * m1 (k - 1)
     enddo
-    ! -----------------------------------------------------------------------
-    ! implicit algorithm: can't be vectorized
-    ! needs an inner i - loop for vectorization
-    ! -----------------------------------------------------------------------
-    ! top layer: cv0 = cvn + cw * m1 (k)
-    ! tz (k) = cv0 (k) * tz (k) / (cvn (k) + cw * m1 (k)) = tz (k) -- > no change
+
     do k = ks + 1, ke
         tz (k) = (cv0 (k) * tz (k) + m1 (k - 1) * (cw * tz (k - 1) + dgz (k))) / (cv0 (k) + cw * m1 (k - 1))
     enddo

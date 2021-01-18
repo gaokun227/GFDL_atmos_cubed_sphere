@@ -3140,7 +3140,7 @@ contains
                Atm(n)%bd%isd, Atm(n)%bd%ied, Atm(n)%bd%jsd, Atm(n)%bd%jed, &
                Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
                a3, a2, allmax, npz, Atm(n)%ncnst, Atm(n)%flagstruct%hydrostatic, &
-               zvir, .false., .false., .false., .true., Atm(n)%flagstruct%do_inline_mp, &
+               zvir, Atm(n)%flagstruct%do_inline_mp, &
                sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, mp_top) ! GFDL MP has constant N_0 intercept
 
           if (id_dbz > 0) used=send_data(id_dbz, a3, time)
