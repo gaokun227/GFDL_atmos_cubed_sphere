@@ -2165,12 +2165,12 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             ! instant deposit all water vapor to cloud ice when temperature is super low
             ! -----------------------------------------------------------------------
             
-            if (tz (k) .lt. t_min .and. qv (k) .gt. 0.0) then
-                qpz = qv (k) + qi (k)
-                dep = dep + qv (k) * dp1 (k)
-                qi (k) = qpz
-                qv (k) = 0.0
-                q_sol (k) = q_sol (k) + qv (k)
+            if (tz (k) .lt. t_min .and. qv (k) .gt. qcmin) then
+                sink = dim (qv (k), qcmin)
+                dep = dep + sink * dp1 (k)
+                qv (k) = qv (k) - sink
+                qi (k) = qi (k) + sink
+                q_sol (k) = q_sol (k) + sink
                 cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
                 tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
                 if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
@@ -2181,7 +2181,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             ! instant evaporation / sublimation of all clouds when rh < rh_adj
             ! -----------------------------------------------------------------------
 
-            qpz = qv (k) + ql (k) +qi (k)
+            qpz = qv (k) + ql (k) + qi (k)
             tin = tz (k)
             rh = qpz / iqs (tin, den (k))
             if (tz (k) .gt. t_sub .and. ql (k) + qi (k) .gt. 0.0 .and. rh .lt. rh_adj) then
@@ -2194,7 +2194,6 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                 q_liq (k) = q_liq (k) - ql (k)
                 cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
                 tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
-                if (do_qa) qa (k) = 0. ! cloud free
                 cycle
             endif
             
