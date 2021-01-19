@@ -2687,7 +2687,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     
     call check_column (ks, ke, qi, no_fall)
     
-    if (vti (k) .lt. 1.e-10 .and. no_fall) then
+    if (no_fall) then
         i1 = 0.
     else
         
@@ -2702,6 +2702,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         
         if (k0 .lt. ke) then
             do k = ke - 1, k0, - 1
+                if (vti (k) .lt. 1.e-10) cycle
                 if (qi (k) .gt. qcmin) then
                     do m = k + 1, ke
                         if (zt (k + 1) .ge. ze (m)) exit
@@ -2781,7 +2782,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     
     call check_column (ks, ke, qs, no_fall)
     
-    if (vts (k) .lt. 1.e-10 .and. no_fall) then
+    if (no_fall) then
         s1 = 0.
     else
         
@@ -2796,6 +2797,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         
         if (k0 .lt. ke) then
             do k = ke - 1, k0, - 1
+                if (vts (k) .lt. 1.e-10) cycle
                 if (qs (k) .gt. qcmin) then
                     do m = k + 1, ke
                         if (zt (k + 1) .ge. ze (m)) exit
@@ -2873,7 +2875,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     
     call check_column (ks, ke, qg, no_fall)
     
-    if (vtg (k) .lt. 1.e-10 .and. no_fall) then
+    if (no_fall) then
         g1 = 0.
     else
         
@@ -2888,6 +2890,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         
         if (k0 .lt. ke) then
             do k = ke - 1, k0, - 1
+                if (vtg (k) .lt. 1.e-10) cycle
                 if (qg (k) .gt. qcmin) then
                     do m = k + 1, ke
                         if (zt (k + 1) .ge. ze (m)) exit
