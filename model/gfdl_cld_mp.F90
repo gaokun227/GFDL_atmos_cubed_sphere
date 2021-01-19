@@ -1992,7 +1992,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                     psacr = factor * psacr
                     pgfr = factor * pgfr
                     
-                    sink = psacr + pgfr
+                    sink = min (qr (k), psacr + pgfr)
                     qr (k) = qr (k) - sink
                     qs (k) = qs (k) + psacr
                     qg (k) = qg (k) + pgfr
@@ -2009,10 +2009,10 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                 ! graupel production terms (includes graupel accretion with cloud water and autoconversion)
                 ! -----------------------------------------------------------------------
                 
-                if (qg (k) .gt. qcmin) then
+                if (qs (k) .gt. qcmin) then
                     
                     pgacs = 0
-                    if (qs (k) .gt. qcmin) then
+                    if (qg (k) .gt. qcmin) then
                         pgacs = dts * acr3d (vtg (k), vts (k), qs (k), qg (k), cgacs, acco (1, 4), den (k))
                     endif
                     
@@ -2160,7 +2160,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             ! instant deposit all water vapor to cloud ice when temperature is super low
             ! -----------------------------------------------------------------------
             
-            if (tz (k) .lt. t_min .and. qv (k) .gt. qcmin) then
+            if (tz (k) .lt. t_min) then
                 sink = dim (qv (k), qcmin)
                 dep = dep + sink * dp1 (k)
                 qv (k) = qv (k) - sink
@@ -2264,7 +2264,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             ! -----------------------------------------------------------------------
             
             tc = tice - tz (k)
-            if (tc .gt. 0. .and. ql (k) .gt. qcmin) then
+            if (tc .gt. 0.1 .and. ql (k) .gt. qcmin) then
                 sink = 100. / (rhow * ccn (k)) * dts * (exp (0.66 * tc) - 1.) * ql (k) ** 2
                 sink = min (ql (k), tc / icpk (k), sink)
                 ql (k) = ql (k) - sink
@@ -2672,7 +2672,8 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     ! turn off melting when cloud microphysics time step is small
     ! -----------------------------------------------------------------------
     
-    if (dtm .lt. 60.) k0 = ke
+    ! if (dtm .lt. 60.) k0 = ke
+    k0 = ke
     
     ze (ke + 1) = zs
     do k = ke, ks, - 1
