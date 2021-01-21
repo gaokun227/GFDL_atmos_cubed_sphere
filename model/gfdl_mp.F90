@@ -231,6 +231,8 @@ module gfdl_mp_mod
 
     logical :: do_warm_rain_mp = .false. ! do warm rain cloud microphysics only
 
+    logical :: do_melt_ice = .true. ! melt cloud ice before falling
+
     real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
     real :: tice_mlt = 273.16 ! can set ice melting temperature to 268 based on observation (Kay et al. 2016) (K)
@@ -357,7 +359,7 @@ module gfdl_mp_mod
         use_rhc_revap, do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
         rhc_cevap, rhc_revap, qi0_rei, beta, liq_ice_combine, rewflag, &
         reiflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
-        regmin, regmax, fs2g_fac, fi2s_fac
+        regmin, regmax, fs2g_fac, fi2s_fac, do_melt_ice
     
 contains
 
@@ -2609,7 +2611,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
 
     real, dimension (ks:ke) :: lcpk, icpk, cvm, q_liq, q_sol, m1, dm
 
-    real (kind = r_grid), dimension (ks:ke) :: te8, te1, te2
+    real (kind = r_grid), dimension (ks:ke) :: te1, te2
 
     zs = 0.0
     dt5 = 0.5 * dtm
@@ -2631,7 +2633,6 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         q_liq (k) = ql (k) + qr (k)
         q_sol (k) = qi (k) + qs (k) + qg (k)
         cvm (k) = 1. + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-        te8 (k) = cvm (k) * tz (k) + lv00 * qv (k) - li00 * q_sol (k)
         lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
         icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
     enddo
@@ -2652,21 +2653,24 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     ! melting of cloud_ice
     ! -----------------------------------------------------------------------
     
-    do k = k0, ke
-        tc = tz (k) - tice
-        if (qi (k) .gt. qcmin .and. tc .gt. 0.) then
-            sink = min (qi (k), fac_imlt * tc / icpk (k))
-            tmp = min (sink, dim (ql_mlt, ql (k)))
-            qi (k) = qi (k) - sink
-            ql (k) = ql (k) + tmp
-            qr (k) = qr (k) + sink - tmp
-            q_sol (k) = q_sol (k) - sink
-            q_liq (k) = q_liq (k) + sink
-            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
-            tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
+    if (do_melt_ice) then
+        do k = k0, ke
+            tc = tz (k) - tice
+            if (qi (k) .gt. qcmin .and. tc .gt. 0.) then
+                sink = min (qi (k), fac_imlt * tc / icpk (k))
+                tmp = min (sink, dim (ql_mlt, ql (k)))
+                qi (k) = qi (k) - sink
+                ql (k) = ql (k) + tmp
+                qr (k) = qr (k) + sink - tmp
+                q_sol (k) = q_sol (k) - sink
+                q_liq (k) = q_liq (k) + sink
+                tz (k) = tz (k) * cvm (k) - li00 * sink
+                cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+                tz (k) = tz (k) / cvm (k)
+            endif
             icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
-        endif
-    enddo
+        enddo
+    endif
     
     ! -----------------------------------------------------------------------
     ! turn off melting when cloud microphysics time step is small
