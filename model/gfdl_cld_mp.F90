@@ -190,6 +190,7 @@ module gfdl_cld_mp_mod
     ! 3: Fu (2007)
     ! 4: Kristjansson et al. (2000)
     ! 5: Wyser (1998)
+    ! 6: Sun and Rikus (1999), Sun (2001)
     
     logical :: do_sedi_uv = .true. ! transport of horizontal momentum in sedimentation
     logical :: do_sedi_w = .true. ! transport of vertical momentum in sedimentation
@@ -4577,6 +4578,25 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / 50.e-3) * max (0.0, - tc0) ** 1.5
                     rei (i, k) = 377.4 + bw * (203.3 + bw * (37.91 + 2.3696 * bw))
+                    rei (i, k) = max (reimin, min (reimax, rei (i, k)))
+                else
+                    qci (i, k) = 0.0
+                    rei (i, k) = reimin
+                endif
+                
+            endif
+            
+            if (reiflag .eq. 6) then
+                
+                ! -----------------------------------------------------------------------
+                ! cloud ice (Sun and Rikus 1999, Sun 2001)
+                ! -----------------------------------------------------------------------
+                
+                if (qmi (i, k) .gt. qcmin) then
+                    qci (i, k) = dpg * qmi (i, k) * 1.0e3
+                    rei_fac = log (1.0e3 * qmi (i, k) * rho)
+                    rei (i, k) = 45.8966 * exp (0.2214 * rei_fac) + 0.7957 * exp (0.2535 * rei_fac) * (tc0 + 190.0)
+                    rei (i, k) = (1.2351 + 0.0105 * tc0) * rei (i, k)
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
                     qci (i, k) = 0.0
