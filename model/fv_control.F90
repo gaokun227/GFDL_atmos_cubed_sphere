@@ -65,7 +65,7 @@ module fv_control_mod
                                   mpp_declare_pelist, mpp_root_pe, mpp_recv, mpp_sync_self, read_input_nml, &
                                   mpp_max
    use fv_diagnostics_mod,  only: fv_diag_init_gn
-   use fv_coarse_graining_mod, only: fv_coarse_graining_init
+   use coarse_grained_restart_files_mod, only: deallocate_coarse_restart_type
 
    implicit none
    private
@@ -298,6 +298,11 @@ module fv_control_mod
 
      character(len=16), pointer :: restart_resolution
      integer, pointer :: layout(:), io_layout(:)
+     logical, pointer :: write_coarse_restart_files
+     logical, pointer :: write_coarse_diagnostics
+     logical, pointer :: write_only_coarse_intermediate_restarts
+     logical, pointer :: write_coarse_agrid_vel_rst
+     logical, pointer :: write_coarse_dgrid_vel_rst
      !!!!!!!!!! END POINTERS !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
      this_grid = -1 ! default
@@ -562,10 +567,6 @@ module fv_control_mod
              Atm(n)%flagstruct%npx,    Atm(n)%flagstruct%npy,   Atm(n)%flagstruct%npz, &
              Atm(n)%flagstruct%ndims,  Atm(n)%flagstruct%ncnst, Atm(n)%flagstruct%ncnst-Atm(n)%flagstruct%pnats, &
              n/=this_grid, n==this_grid, ngrids) !TODO don't need both of the last arguments
-
-        ! Initialize coarse graining module if toggled in
-        ! fv_coarse_graining_nml namelist
-        call fv_coarse_graining_init(Atm(n), n)
      enddo
      if ( (Atm(this_grid)%bd%iec-Atm(this_grid)%bd%isc+1).lt.4 .or. (Atm(this_grid)%bd%jec-Atm(this_grid)%bd%jsc+1).lt.4 ) then
         if (is_master()) write(*,'(6I6)') Atm(this_grid)%bd%isc, Atm(this_grid)%bd%iec, Atm(this_grid)%bd%jsc, Atm(this_grid)%bd%jec, this_grid
@@ -853,7 +854,11 @@ module fv_control_mod
        layout                        => Atm%layout
        io_layout                     => Atm%io_layout
 
-       restart_resolution            => Atm%flagstruct%restart_resolution
+       write_coarse_restart_files    => Atm%coarse_graining%write_coarse_restart_files
+       write_coarse_diagnostics      => Atm%coarse_graining%write_coarse_diagnostics
+       write_only_coarse_intermediate_restarts => Atm%coarse_graining%write_only_coarse_intermediate_restarts
+       write_coarse_agrid_vel_rst    => Atm%coarse_graining%write_coarse_agrid_vel_rst
+       write_coarse_dgrid_vel_rst    => Atm%coarse_graining%write_coarse_dgrid_vel_rst
      end subroutine set_namelist_pointers
 
 
@@ -966,7 +971,10 @@ module fv_control_mod
             nestbctype, nestupdate, nsponge, s_weight, &
             check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
             do_uni_zfull, adj_mass_vmr, update_blend, regional,&
-            bc_update_interval, nrows_blend, write_restart_with_bcs, regional_bcs_from_gsi, restart_resolution, w_limiter
+            bc_update_interval,  nrows_blend, write_restart_with_bcs, regional_bcs_from_gsi, &
+            w_limiter, write_coarse_restart_files, write_coarse_diagnostics,&
+            write_only_coarse_intermediate_restarts, &
+            write_coarse_agrid_vel_rst, write_coarse_dgrid_vel_rst
 
 #ifdef INTERNAL_FILE_NML
        ! Read FVCORE namelist
@@ -1168,6 +1176,7 @@ module fv_control_mod
 
     do n = 1, ngrids
        call deallocate_fv_atmos_type(Atm(n))
+       call deallocate_coarse_restart_type(Atm(n)%coarse_graining%restart)
     end do
 
 

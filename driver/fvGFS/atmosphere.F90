@@ -83,6 +83,9 @@ use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
 use cld_eff_rad_mod,    only: cld_eff_rad_init
 use diag_manager_mod,   only: send_data
 use external_aero_mod,  only: load_aero, read_aero, clean_aero
+use coarse_graining_mod, only: coarse_graining_init
+use coarse_grained_diagnostics_mod, only: fv_coarse_diag_init, fv_coarse_diag
+use coarse_grained_restart_files_mod, only: fv_coarse_restart_init
 
 implicit none
 private
@@ -101,10 +104,13 @@ public :: atmosphere_resolution, atmosphere_grid_bdry, &
 ! atmosphere_diss_est, &
           atmosphere_nggps_diag, &
           get_bottom_mass, get_bottom_wind,   &
-          get_stock_pe, set_atmosphere_pelist
+          get_stock_pe, set_atmosphere_pelist, &
+          atmosphere_coarse_diag_axes
 
 !--- physics/radiation data exchange routines
 public :: atmos_phys_driver_statein
+public :: atmosphere_coarse_graining_parameters
+public :: atmosphere_coarsening_strategy
 
 !-----------------------------------------------------------------------
 ! version number of this module
@@ -114,7 +120,7 @@ character(len=20)   :: mod_name = 'fvGFS/atmosphere_mod'
 
 !---- private data ----
   type (time_type) :: Time_step_atmos
-  public Atm
+  public Atm, mygrid
 
   !These are convenience variables for local use only, and are set to values in Atm%
   real    :: dt_atmos
@@ -187,6 +193,17 @@ contains
 
    call fv_control_init( Atm, dt_atmos, mygrid, grids_on_this_pe, p_split )  ! allocates Atm components; sets mygrid
 
+
+   if (Atm(mygrid)%coarse_graining%write_coarse_restart_files .or. &
+        Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
+      call coarse_graining_init(Atm(mygrid)%flagstruct%npx, Atm(mygrid)%npz, &
+           Atm(mygrid)%layout, Atm(mygrid)%bd%is, Atm(mygrid)%bd%ie, &
+           Atm(mygrid)%bd%js, Atm(mygrid)%bd%je, Atm(mygrid)%coarse_graining%factor, &
+           Atm(mygrid)%coarse_graining%nx_coarse, &
+           Atm(mygrid)%coarse_graining%strategy, &
+           Atm(mygrid)%coarse_graining%domain)
+   endif
+   
    Atm(mygrid)%Time_init = Time_init
 
 !----- write version and namelist to log file -----
@@ -282,6 +299,20 @@ contains
        Atm(mygrid)%peln(isc:iec,:,jsc:jec), Atm(mygrid)%q(isc:iec,jsc:jec,:,:))
    endif
 
+   if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
+      call fv_coarse_diag_init(Atm, Time, Atm(mygrid)%atmos_axes(3), &
+           Atm(mygrid)%atmos_axes(4), Atm(mygrid)%coarse_graining)
+   endif
+   if (Atm(mygrid)%coarse_graining%write_coarse_restart_files) then
+      call fv_coarse_restart_init(mygrid, Atm(mygrid)%npz, Atm(mygrid)%flagstruct%nt_prog, &
+           Atm(mygrid)%flagstruct%nt_phys, Atm(mygrid)%flagstruct%hydrostatic, &
+           Atm(mygrid)%flagstruct%hybrid_z, Atm(mygrid)%flagstruct%fv_land, &
+           Atm(mygrid)%coarse_graining%write_coarse_dgrid_vel_rst, &
+           Atm(mygrid)%coarse_graining%write_coarse_agrid_vel_rst, &
+           Atm(mygrid)%coarse_graining%domain, &
+           Atm(mygrid)%coarse_graining%restart)
+   endif
+   
 !---------- reference profile -----------
     ps1 = 101325.
     ps2 =  81060.
@@ -332,6 +363,9 @@ contains
 #ifdef DEBUG
    call nullify_domain()
    call fv_diag(Atm(mygrid:mygrid), zvir, Time, -1)
+   if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
+      call fv_coarse_diag(Atm(mygrid:mygrid), fv_time)
+   endif
 #endif
 
    call set_domain(Atm(mygrid)%domain)
@@ -444,7 +478,8 @@ contains
                       Atm(n)%flagstruct%hybrid_z,                          &
                       Atm(n)%gridstruct, Atm(n)%flagstruct,                &
                       Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
-                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp)
+                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp, &
+                      Atm(n)%lagrangian_tendency_of_hydrostatic_pressure)
 
      call timing_off('fv_dynamics')
 
@@ -540,6 +575,9 @@ contains
       call timing_on('FV_DIAG')
       call fv_diag(Atm(mygrid:mygrid), zvir, fv_time, Atm(mygrid)%flagstruct%print_freq)
       call fv_nggps_diag(Atm(mygrid:mygrid), zvir, fv_time)
+      if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
+         call fv_coarse_diag(Atm(mygrid:mygrid), fv_time)
+      endif
       first_diag = .false.
       call timing_off('FV_DIAG')
    endif
@@ -685,7 +723,18 @@ contains
 
  end subroutine atmosphere_diag_axes
 
+ !>@brief The subroutine 'atmosphere_coarse_diag_axes' is an API to return the axis indices
+ !! for the coarse atmospheric (mass) grid.
+  subroutine atmosphere_coarse_diag_axes(coarse_axes)
+    integer, intent(out) :: coarse_axes(4)
 
+    coarse_axes = (/ &
+         Atm(mygrid)%coarse_graining%id_xt_coarse, &
+         Atm(mygrid)%coarse_graining%id_yt_coarse, &
+         Atm(mygrid)%coarse_graining%id_pfull, &
+         Atm(mygrid)%coarse_graining%id_phalf /)
+  end subroutine atmosphere_coarse_diag_axes
+ 
  subroutine atmosphere_etalvls (ak, bk, flip)
    real(kind=kind_phys), pointer, dimension(:), intent(inout) :: ak, bk
    logical, intent(in) :: flip
@@ -1258,6 +1307,9 @@ contains
      call nullify_domain()
      call timing_on('FV_DIAG')
      call fv_diag(Atm(mygrid:mygrid), zvir, fv_time, Atm(mygrid)%flagstruct%print_freq)
+     if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
+        call fv_coarse_diag(Atm(mygrid:mygrid), fv_time)
+     endif
      first_diag = .false.
      call timing_off('FV_DIAG')
 
@@ -1367,7 +1419,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Backward
     call fv_dynamics(Atm(mygrid)%npx, Atm(mygrid)%npy, npz,  nq, Atm(mygrid)%ng, -dt_atmos, 0.,      &
                      Atm(mygrid)%flagstruct%fill, Atm(mygrid)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1381,7 +1433,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mygrid, nudge_dz, dz0) &
@@ -1453,7 +1505,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Forward call
     call fv_dynamics(Atm(mygrid)%npx, Atm(mygrid)%npy, npz,  nq, Atm(mygrid)%ng, dt_atmos, 0.,      &
                      Atm(mygrid)%flagstruct%fill, Atm(mygrid)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1467,7 +1519,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mygrid) &
@@ -1691,7 +1743,9 @@ contains
               IPD_Data(nb)%Statein%prsik(i,k) = exp( kappa*IPD_Data(nb)%Statein%prsik(i,k) )*pk0inv
            enddo
         enddo
-    endif
+     endif
+    IPD_Data(nb)%Statein%dycore_hydrostatic = Atm(mygrid)%flagstruct%hydrostatic
+    IPD_Data(nb)%Statein%nwat = Atm(mygrid)%flagstruct%nwat
   enddo
 
  end subroutine atmos_phys_driver_statein
@@ -1792,5 +1846,20 @@ contains
    endif
 
  end subroutine atmos_phys_qdt_diag
+
+ subroutine atmosphere_coarse_graining_parameters(coarse_domain, write_coarse_restart_files, write_only_coarse_intermediate_restarts)
+   type(domain2d), intent(out) :: coarse_domain
+   logical, intent(out) :: write_coarse_restart_files, write_only_coarse_intermediate_restarts
+
+   coarse_domain = Atm(mygrid)%coarse_graining%domain
+   write_coarse_restart_files = Atm(mygrid)%coarse_graining%write_coarse_restart_files
+   write_only_coarse_intermediate_restarts = Atm(mygrid)%coarse_graining%write_only_coarse_intermediate_restarts
+ end subroutine atmosphere_coarse_graining_parameters
+
+ subroutine atmosphere_coarsening_strategy(coarsening_strategy)
+   character(len=64), intent(out) :: coarsening_strategy
+
+   coarsening_strategy = Atm(mygrid)%coarse_graining%strategy
+ end subroutine atmosphere_coarsening_strategy
 
 end module atmosphere_mod
