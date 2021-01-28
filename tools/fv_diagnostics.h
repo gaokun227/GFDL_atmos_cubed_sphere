@@ -91,5 +91,6 @@
                 id_iuu, id_iuv, id_iuw, id_ivv, id_ivw, id_iww   ! vertically integral of momentum flux
 
      integer :: id_uw, id_vw
-     
+     integer :: id_lagrangian_tendency_of_hydrostatic_pressure
+     integer :: id_t_dt_nudge, id_ps_dt_nudge, id_delp_dt_nudge, id_u_dt_nudge, id_v_dt_nudge
 #endif _FV_DIAG__
