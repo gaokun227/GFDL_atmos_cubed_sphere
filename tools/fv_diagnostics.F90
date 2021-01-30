@@ -26,9 +26,9 @@ module fv_diagnostics_mod
 
  use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, radius, kappa, WTMAIR, WTMCO2, &
                                omega, hlv, cp_air, cp_vapor, TFREEZE
- use fms_mod,            only: write_version_number, lowercase
+ use fms_mod,            only: write_version_number
  use fms_io_mod,         only: set_domain, nullify_domain, write_version_number
- use time_manager_mod,   only: time_type, get_date, get_time, month_name
+ use time_manager_mod,   only: time_type, get_date, get_time
  use mpp_domains_mod,    only: domain2d, mpp_update_domains, DGRID_NE, NORTH, EAST
  use diag_manager_mod,   only: diag_axis_init, register_diag_field, &
                                register_static_field, send_data, diag_grid_init
@@ -37,13 +37,13 @@ module fv_diagnostics_mod
  use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp, mappm
  use fv_mp_mod,          only: mp_reduce_sum, mp_reduce_min, mp_reduce_max, is_master
  use fv_eta_mod,         only: get_eta_level, gw_1d
- use fv_grid_utils_mod,  only: g_sum, v_prod, latlon2xyz
+ use fv_grid_utils_mod,  only: g_sum
  use a2b_edge_mod,       only: a2b_ord2, a2b_ord4
  use fv_surf_map_mod,    only: zs_g
 
  use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
  use field_manager_mod,  only: MODEL_ATMOS
- use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, mpp_max, NOTE, input_nml_file, get_unit
+ use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, mpp_max, NOTE, input_nml_file
  use mpp_io_mod,         only: mpp_flush
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
@@ -148,7 +148,7 @@ contains
 
     logical :: used
 
-    character(len=64) :: plev, plev2, plevf
+    character(len=64) :: plev
     character(len=64) :: field
     integer              :: ntprog
     integer              :: unit
@@ -792,6 +792,7 @@ contains
                                     trim(adjustl(plev))//'-mb omega', 'Pa/s', missing_value=missing_value)
       enddo
 
+      if (Atm(n)%flagstruct%write_3d_diags) then
       id_u_plev = register_diag_field ( trim(field), 'u_plev', axe2(1:3), Time,        &
            'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
       id_v_plev = register_diag_field ( trim(field), 'v_plev', axe2(1:3), Time,        &
@@ -816,7 +817,7 @@ contains
            'cloud fraction', '1', missing_value=missing_value )
       id_omg_plev = register_diag_field ( trim(field), 'omg_plev', axe2(1:3), Time,        &
            'omega', 'Pa/s', missing_value=missing_value )
-
+      endif
       
       !Layer averages for temperature, moisture, etc.
         id_t_plev_ave   = register_diag_field(trim(field), 't_plev_ave', axe_ave(1:3), Time, &
@@ -968,6 +969,10 @@ contains
           !--------------------
           id_pv = register_diag_field ( trim(field), 'pv', axes(1:3), Time,       &
                'potential vorticity', '1/s', missing_value=missing_value )
+          id_pv350K = register_diag_field ( trim(field), 'pv350K', axes(1:2), Time,       &
+                '350-K potential vorticity; needs x350 scaling', '(K m**2) / (kg s)', missing_value=missing_value)
+          id_pv550K = register_diag_field ( trim(field), 'pv550K', axes(1:2), Time,       &
+                '550-K potential vorticity; needs x550 scaling', '(K m**2) / (kg s)', missing_value=missing_value)
 
 !--------------------
 ! 3D flux terms
@@ -1736,8 +1741,8 @@ contains
        endif
 
        if ( id_vort200>0 .or. id_vort500>0 .or. id_vort850>0 .or. id_vorts>0   &
-            .or. id_vort>0 .or. id_pv>0 .or. id_rh>0 .or. id_x850>0 .or.  &
-            id_uh03>0 .or. id_uh25>0) then
+            .or. id_vort>0 .or. id_pv>0 .or. id_pv350k>0 .or. id_pv550k>0 &
+            .or. id_rh>0 .or. id_x850>0 .or. id_uh03>0 .or. id_uh25>0) then
           call get_vorticity(isc, iec, jsc, jec, isd, ied, jsd, jed, npz, Atm(n)%u, Atm(n)%v, wk, &
                Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy, Atm(n)%gridstruct%rarea)
 
@@ -1891,11 +1896,36 @@ contains
           endif
 
 
-          if ( id_pv > 0 ) then
-             ! Note: this is expensive computation.
+          if ( id_pv > 0 .or. id_pv350K >0 .or. id_pv550K >0 ) then
+              if (allocated(a3)) deallocate(a3)
+              allocate ( a3(isc:iec,jsc:jec,npz+1) )
+            ! Modified pv_entropy to get potential temperature at layer interfaces (last variable)
+            ! The values are needed for interpolate_z
+            ! Note: this is expensive computation.
               call pv_entropy(isc, iec, jsc, jec, ngc, npz, wk,    &
-                              Atm(n)%gridstruct%f0, Atm(n)%pt, Atm(n)%pkz, Atm(n)%delp, grav)
-              used = send_data ( id_pv, wk, Time )
+                              Atm(n)%gridstruct%f0, Atm(n)%pt, Atm(n)%pkz, Atm(n)%delp, grav, a3)
+              if ( id_pv > 0) then
+                used = send_data ( id_pv, wk, Time )
+              endif
+              if( id_pv350K > 0 .or. id_pv550K >0 ) then
+                !"pot temp" from pv_entropy is only semi-finished; needs p0^kappa (pk0)
+                do k=1,npz+1
+                  do j=jsc,jec
+                    do i=isc,iec
+                      a3(i,j,k) = a3(i,j,k) * pk0
+                    enddo
+                  enddo
+                enddo
+                !wk as input, which stores pv from pv_entropy;
+                !use z interpolation, both potential temp and z increase monotonically with height
+                !interpolate_vertical will apply log operation to 350, and also assumes a different vertical order
+                call interpolate_z(isc, iec, jsc, jec, npz, 350., a3, wk, a2)
+                used = send_data( id_pv350K, a2, Time)
+                !interpolate_vertical will apply log operation to 350, and also assumes a different vertical order
+                call interpolate_z(isc, iec, jsc, jec, npz, 550., a3, wk, a2)
+                used = send_data( id_pv550K, a2, Time)
+              endif
+                deallocate ( a3 ) 
               if (prt_minmax) call prt_maxmin('PV', wk, isc, iec, jsc, jec, 0, 1, 1.)
           endif
 
@@ -5274,7 +5304,8 @@ contains
  end subroutine updraft_helicity
 
 
- subroutine pv_entropy(is, ie, js, je, ng, km, vort, f_d, pt, pkz, delp, grav)
+
+ subroutine pv_entropy(is, ie, js, je, ng, km, vort, f_d, pt, pkz, delp, grav, te)
 
 ! !INPUT PARAMETERS:
    integer, intent(in)::  is, ie, js, je, ng, km
@@ -5285,7 +5316,9 @@ contains
    real, intent(in):: f_d(is-ng:ie+ng,js-ng:je+ng)
 
 ! vort is relative vorticity as input. Becomes PV on output
-      real, intent(inout):: vort(is:ie,js:je,km)
+   real, intent(inout):: vort(is:ie,js:je,km)
+! output potential temperature at the interface so it can be used for diagnostics
+   real, intent(out):: te(is:ie,js:je,km+1)
 
 ! !DESCRIPTION:
 !        EPV = 1/r * (vort+f_d) * d(S)/dz; where S is a conservative scalar
@@ -5296,7 +5329,7 @@ contains
 ! z-surface is not that different from the hybrid sigma-p coordinate.
 ! See page 39, Pedlosky 1979: Geophysical Fluid Dynamics
 !
-! The follwoing simplified form is strictly correct only if vort is computed on
+! The following simplified form is strictly correct only if vort is computed on
 ! constant z surfaces. In addition hydrostatic approximation is made.
 !        EPV = - GRAV * (vort+f_d) / del(p) * del(pt) / pt
 ! where del() is the vertical difference operator.
@@ -5309,7 +5342,7 @@ contains
 !---------------------------------------------------------------------
 !BOC
       real w3d(is:ie,js:je,km)
-      real te(is:ie,js:je,km+1), t2(is:ie,km), delp2(is:ie,km)
+      real t2(is:ie,km), delp2(is:ie,km)
       real te2(is:ie,km+1)
       integer i, j, k
 
