@@ -51,8 +51,6 @@ module fv_diagnostics_mod
  use fv_arrays_mod, only: max_step 
  use gfdl_mp_mod, only: wqs, qsmith_init, c_liq, rad_ref
 
- use fv_coarse_graining_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
- use rad_ref_mod, only: rad_ref
  use fv_diag_column_mod, only: fv_diag_column_init, sounding_column, debug_column
  
  implicit none
