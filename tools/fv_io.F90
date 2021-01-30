@@ -53,7 +53,7 @@ module fv_io_mod
                                      set_tracer_profile, &
                                      get_tracer_index
   use field_manager_mod,       only: MODEL_ATMOS
-  use external_sst_mod,        only: sst_ncep, sst_anom, use_ncep_sst
+  use external_sst_mod,        only: sst_ncep, sst_anom, use_ncep_sst, load_ec_sst
   use fv_arrays_mod,           only: fv_atmos_type, fv_nest_BC_type_3D
   use fv_eta_mod,              only: set_external_eta
 
@@ -134,6 +134,10 @@ contains
        call mpp_error(NOTE, 'READING FROM SST_RESTART DISABLED')
        !call restore_state(Atm(1)%SST_restart)
     endif
+
+    if (Atm(1)%flagstruct%read_ec_sst) then
+       call load_ec_sst(Atm(1))
+    endif    
 
 ! fix for single tile runs where you need fv_core.res.nc and fv_core.res.tile1.nc
     ntiles = mpp_get_ntile_count(fv_domain)

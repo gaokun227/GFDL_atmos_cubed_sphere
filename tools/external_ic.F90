@@ -27,7 +27,7 @@
 
 module external_ic_mod
 
-   use external_sst_mod,   only: i_sst, j_sst, sst_ncep
+   use external_sst_mod,   only: i_sst, j_sst, sst_ncep, load_ec_sst
    use fms_mod,            only: file_exist, read_data, field_exist, write_version_number
    use fms_mod,            only: open_namelist_file, check_nml_error, close_file
    use fms_mod,            only: get_mosaic_tile_file, read_data, error_mesg
@@ -147,6 +147,10 @@ contains
          if (.not. Atm%neststruct%nested) Atm%phis = 0. !TODO: Not sure about this line --- lmh 30 may 18
       endif
 
+      if (Atm%flagstruct%read_ec_sst) then
+         call load_ec_sst(Atm)
+      endif
+      
 ! Read in the specified external dataset and do all the needed transformation
       if ( Atm%flagstruct%ncep_ic ) then
            nq = 1
@@ -2005,6 +2009,12 @@ contains
 
           if(is_master())  write(*,*) fname
           if(is_master())  write(*,*) ' ECMWF IC dimensions:', tsize
+          if(is_master())  write(*,*) ' NOTE: The amount of EC IC data read from disk depends on '
+          if(is_master())  write(*,*) '       the latitudinal extent of a processor decomposition.'
+          if(is_master())  write(*,*) '       This could potentially be memory-intensive. If the '
+          if(is_master())  write(*,*) '       model crashes reading in the ICs try using more'
+          if(is_master())  write(*,*) '       processor cores, at least to create the initial'
+          if(is_master())  write(*,*) '       conditions.'
 
           allocate (  lon(im) )
           allocate (  lat(jm) )
