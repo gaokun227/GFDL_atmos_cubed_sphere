@@ -277,6 +277,7 @@ module fv_control_mod
      logical , pointer :: Make_NH
      logical , pointer :: make_hybrid_z
      logical , pointer :: nudge_qv
+     logical , pointer :: read_ec_sst
      real,     pointer :: add_noise
 
      integer , pointer :: a2b_ord
@@ -815,6 +816,7 @@ module fv_control_mod
        external_ic                   => Atm%flagstruct%external_ic
        external_eta                  => Atm%flagstruct%external_eta
        read_increment                => Atm%flagstruct%read_increment
+       read_ec_sst                   => Atm%flagstruct%read_ec_sst
 
        hydrostatic                   => Atm%flagstruct%hydrostatic
        phys_hydrostatic              => Atm%flagstruct%phys_hydrostatic
@@ -969,7 +971,7 @@ module fv_control_mod
             phys_hydrostatic, use_hydro_pressure, make_hybrid_z, old_divg_damp, add_noise, &
             nested, twowaynest, nudge_qv, &
             nestbctype, nestupdate, nsponge, s_weight, &
-            check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
+            check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst, read_ec_sst,    &
             do_uni_zfull, adj_mass_vmr, update_blend, regional,&
             bc_update_interval,  nrows_blend, write_restart_with_bcs, regional_bcs_from_gsi, &
             w_limiter, write_coarse_restart_files, write_coarse_diagnostics,&
