@@ -40,7 +40,6 @@ module fv_diagnostics_mod
  use fv_grid_utils_mod,  only: g_sum, v_prod, latlon2xyz
  use a2b_edge_mod,       only: a2b_ord2, a2b_ord4
  use fv_surf_map_mod,    only: zs_g
- use fv_sg_mod,          only: qsmith
 
  use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
  use field_manager_mod,  only: MODEL_ATMOS
@@ -49,10 +48,8 @@ module fv_diagnostics_mod
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
  use fv_arrays_mod, only: max_step 
- use gfdl_mp_mod, only: wqs, qsmith_init, c_liq, rad_ref
+ use gfdl_mp_mod, only: wqs, mqs3d, qs_init, c_liq, rad_ref
 
- use fv_coarse_graining_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
- use rad_ref_mod, only: rad_ref
  use fv_diag_column_mod, only: fv_diag_column_init, sounding_column, debug_column
  
  implicit none
@@ -1358,7 +1355,7 @@ contains
     module_is_initialized=.true.
     istep = 0
 #ifndef GFS_PHYS
-    if(id_theta_e >0 ) call qsmith_init
+    if(id_theta_e >0 ) call qs_init
 #endif
 
     call fv_diag_column_init(Atm(n), yr_init, mo_init, dy_init, hr_init, do_diag_debug, do_diag_sonde, sound_freq)
@@ -1943,7 +1940,7 @@ contains
                    a2(i,j) = Atm(n)%delp(i,j,k)/(Atm(n)%peln(i,k+1,j)-Atm(n)%peln(i,k,j))
                 enddo
              enddo
-             call qsmith(iec-isc+1, jec-jsc+1, 1, Atm(n)%pt(isc:iec,jsc:jec,k),   &
+             call mqs3d(iec-isc+1, jec-jsc+1, 1, Atm(n)%pt(isc:iec,jsc:jec,k),   &
                   a2, Atm(n)%q(isc:iec,jsc:jec,k,sphum), wk(isc,jsc,k))
              do j=jsc,jec
                 do i=isc,iec
@@ -5555,7 +5552,7 @@ subroutine eqv_pot(theta_e, pt, delp, delz, peln, pkz, q, is, ie, js, je, ng, np
         if ( moist ) then
             do i=is,ie
                rq(i) = max(0., q(i,j,k))
-!              rh(i) = max(1.e-12, rq(i)/wqs(pt(i,j,k),den(i)))   ! relative humidity
+!              rh(i) = max(1.e-12, rq(i)/wqs(pt(i,j,k),den(i),rh(i)))   ! relative humidity
 !              theta_e(i,j,k) = exp(rq(i)/cp_air*((hlv+dc_vap*(pt(i,j,k)-tice))/pt(i,j,k) -   &
 !                                   rvgas*log(rh(i))) + kappa*log(1.e5/pd(i))) * pt(i,j,k)
 ! Simplified form: (ignoring the RH term)

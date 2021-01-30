@@ -23,7 +23,7 @@ module fv_phys_mod
 
 use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, radius, kappa, OMEGA
 use time_manager_mod,      only: time_type, get_time
-use gfdl_cld_mp_mod,       only: gfdl_cld_mp_driver, qsmith, wet_bulb
+use gfdl_cld_mp_mod,       only: gfdl_cld_mp_driver, mqs3d, wet_bulb
 use hswf_mod,              only: Held_Suarez_Tend
 use fv_sg_mod,             only: fv_subgrid_z
 use fv_update_phys_mod,    only: fv_update_phys
@@ -866,8 +866,8 @@ contains
 
 if( do_mon_obkv ) then
 
-  call qsmith(ie-is+1, je-js+1, 1, sst, ps, q3(is:ie,js:je,km,sphum), qs)
-  call qsmith(ie-is+1, je-js+1, 1, sst, ps, qs, qs) ! Iterate once
+  call mqs3d(ie-is+1, je-js+1, 1, sst, ps, q3(is:ie,js:je,km,sphum), qs)
+  call mqs3d(ie-is+1, je-js+1, 1, sst, ps, qs, qs) ! Iterate once
 
 ! Need to save ustar in a restart file (sim_phys)
 ! Because u_star is prognostic but not saved

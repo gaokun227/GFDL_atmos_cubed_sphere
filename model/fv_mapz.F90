@@ -37,7 +37,7 @@ module fv_mapz_mod
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
 #ifndef DYCORE_SOLO
-  use gfdl_mp_mod,       only: gfdl_mp_driver, c_liq, c_ice, fast_sat_adj, qsmith_init
+  use gfdl_mp_mod,       only: gfdl_mp_driver, c_liq, c_ice, fast_sat_adj, qs_init
 #endif
 
   implicit none
@@ -186,7 +186,7 @@ contains
                kmp = k
                if ( pfull(k) > 10.E2 ) exit
             enddo
-            call qsmith_init
+            call qs_init
        endif
 
 !$OMP parallel do default(none) shared(is,ie,js,je,km,pe,ptop,kord_tm,hydrostatic, &

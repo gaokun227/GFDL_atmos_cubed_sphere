@@ -68,7 +68,7 @@ subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel
   ! use physics_types     , only: physics_dme_adjust   ! This is for CESM/CAM
   ! use cam_diagnostics,    only: diag_phys_writeout   ! This is for CESM/CAM
 
-  use fv_sg_mod, only: qsmith
+  use gfdl_cld_mp_mod, only: mqs3d
   implicit none
 !
 ! Input arguments - MODEL DEPENDENT
@@ -256,7 +256,7 @@ subroutine reed_simple_physics (pcols, pver, dtime, t, q, u, v, pmid, pint, pdel
 !
 ! Calculate Tendencies
 !
-     call qsmith(pcols,pver,1, t, pmid, q, qsat)
+     call mqs3d(pcols,pver,1, t, pmid, q, qsat)
       do k=1,pver
          do i=1,pcols
             !qsat = epsilo*e0/pmid(i,k)*exp(-latvap/rh2o*((1./t(i,k))-1./T0))  ! saturation specific humidity
@@ -349,7 +349,7 @@ if (.not. cond_only) then
 !===============================================================================
 
       !Here qsats is only one in the y-direction
-      call qsmith(pcols,1,1, reshape(tsurf, (/pcols,1/)), reshape(ps, (/pcols,1/)), q(:,pver:pver), qsats)
+      call mqs3d(pcols,1,1, reshape(tsurf, (/pcols,1/)), reshape(ps, (/pcols,1/)), q(:,pver:pver), qsats)
 
 
       !uup = u
