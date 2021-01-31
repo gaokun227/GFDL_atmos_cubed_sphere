@@ -476,8 +476,8 @@ module fv_arrays_mod
   !f1p
   logical  :: adj_mass_vmr = .false. !TER: This is to reproduce answers for verona patch.  This default can be changed
                                      !     to .true. in the next city release if desired
-  !integer, pointer :: test_case
-  !real,    pointer :: alpha
+
+  logical :: read_ec_sst = .false.
 
   logical :: w_limiter = .true. ! Fix excessive w - momentum conserving --- sjl
   ! options related to regional mode

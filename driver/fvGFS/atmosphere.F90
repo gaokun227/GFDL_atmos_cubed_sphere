@@ -31,6 +31,7 @@ module atmosphere_mod
 !-----------------
 ! FMS modules:
 !-----------------
+use external_sst_mod,       only: get_ec_sst
 use block_control_mod,      only: block_control_type
 use constants_mod,          only: cp_air, rdgas, grav, rvgas, kappa, pstd_mks, pi
 use time_manager_mod,       only: time_type, get_time, set_time, operator(+), &
@@ -534,6 +535,10 @@ contains
        qv_dt(:,:,:) = rdt*(Atm(1)%q(isc:iec,jsc:jec,:,sphum) - qv_dt(:,:,:))
        used = send_data(Atm(1)%idiag%id_qv_dt_sg, qv_dt, fv_time)
     end if
+
+   if (Atm(n)%flagstruct%read_ec_sst) then
+       call get_ec_sst(Time, isc, iec, jsc, jec, Atm(n)%ts(isc:iec,jsc:jec))
+   endif
 
    call mpp_clock_end (id_subgridz)
 
@@ -1244,14 +1249,16 @@ contains
 
 !LMH 7jan2020: Update PBL and other clock tracers, if present
    tracer_clock = time_type_to_real(Time_next - Atm(n)%Time_init)*1.e-6
+   lat_thresh = 15.*pi/180.
    do iq = 1, nq
       call get_tracer_names (MODEL_ATMOS, iq, tracer_name)
-      if (trim(tracer_name) == 'pbl_clock') then
+      if (trim(tracer_name) == 'pbl_clock' .or. trim(tracer_name) == 'tro_pbl_clock') then
          do nb = 1,Atm_block%nblks
             blen = Atm_block%blksz(nb)
             do ix = 1, blen
                i = Atm_block%index(nb)%ii(ix)
                j = Atm_block%index(nb)%jj(ix)
+               if (trim(tracer_name) == 'tro_pbl_clock' .and. abs(Atm(n)%gridstruct%agrid(i,j,2)) > lat_thresh) cycle
                do k=1,npz
                   k1 = npz+1-k !reverse the k direction
                   Atm(n)%q(i,j,k1,iq) = tracer_clock
@@ -1266,7 +1273,6 @@ contains
          enddo
          enddo
       else if (trim(tracer_name) == 'itcz_clock' ) then
-         lat_thresh = 15.*pi/180.
          do k=1,npz
          do j=jsc,jec
          do i=isc,iec

@@ -1503,8 +1503,12 @@ contains
     integer :: string_length, suffix_length
 
     string_length = len(trim(string))
-    suffix_length = len(trim(suffix))
-    ends_with = string(string_length - suffix_length + 1:string_length) .eq. trim(suffix)
+    suffix_length = len(trim(suffix))	
+    if (string_length .lt. suffix_length) then
+       ends_with = .false.
+    else
+       ends_with = string(string_length - suffix_length + 1:string_length) .eq. trim(suffix)
+    endif
     return
   end function ends_with
   
