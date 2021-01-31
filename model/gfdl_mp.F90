@@ -2401,7 +2401,20 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
 
         ! calculate saturated specific humidity
         
-        qstar = mqs (tin, den (k), dqdt)
+        if (tin .le. t_wfr) then
+            qstar = iqs (tin, den (k), dqdt)
+        elseif (tin .ge. tice) then
+            qstar = wqs (tin, den (k), dqdt)
+        else
+            qsi = iqs (tin, den (k), dqdt)
+            qsw = wqs (tin, den (k), dqdt)
+            if (q_cond (k) .gt. qcmin) then
+                rqi = q_sol (k) / q_cond (k)
+            else
+                rqi = (tice - tin) / (tice - t_wfr)
+            endif
+            qstar = rqi * qsi + (1. - rqi) * qsw
+        endif
         
         ! cloud schemes
         
@@ -4124,7 +4137,20 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
                 ! compute saturated specific humidity
                 ! -----------------------------------------------------------------------
                 
-                qstar (i) = mqs (tin, den (i), dqdt)
+                if (tin .le. t_wfr) then
+                    qstar (i) = iqs (tin, den (i), dqdt)
+                elseif (tin .ge. tice) then
+                    qstar (i) = wqs (tin, den (i), dqdt)
+                else
+                    qsi = iqs (tin, den (i), dqdt)
+                    qsw = wqs (tin, den (i), dqdt)
+                    if (q_cond (i) .gt. qcmin) then
+                        rqi = q_sol (i) / q_cond (i)
+                    else
+                        rqi = ((tice - tin) / (tice - t_wfr))
+                    endif
+                    qstar (i) = rqi * qsi + (1. - rqi) * qsw
+                endif
                 
                 ! -----------------------------------------------------------------------
                 ! compute sub - grid variability
