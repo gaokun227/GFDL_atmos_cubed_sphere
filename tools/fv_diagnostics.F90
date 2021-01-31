@@ -1861,11 +1861,11 @@ contains
               allocate ( a3(isc:iec,jsc:jec,npz+1) )
             ! Modified pv_entropy to get potential temperature at layer interfaces (last variable)
             ! The values are needed for interpolate_z
-            ! Note: this is expensive computation.
+             ! Note: this is expensive computation.
               call pv_entropy(isc, iec, jsc, jec, ngc, npz, wk,    &
                               Atm(n)%gridstruct%f0, Atm(n)%pt, Atm(n)%pkz, Atm(n)%delp, grav, a3)
               if ( id_pv > 0) then
-                used = send_data ( id_pv, wk, Time )
+              used = send_data ( id_pv, wk, Time )
               endif
               if( id_pv350K > 0 .or. id_pv550K >0 ) then
                 !"pot temp" from pv_entropy is only semi-finished; needs p0^kappa (pk0)
@@ -5112,7 +5112,7 @@ contains
    real, intent(in):: f_d(is-ng:ie+ng,js-ng:je+ng)
 
 ! vort is relative vorticity as input. Becomes PV on output
-   real, intent(inout):: vort(is:ie,js:je,km)
+      real, intent(inout):: vort(is:ie,js:je,km)
 ! output potential temperature at the interface so it can be used for diagnostics
    real, intent(out):: te(is:ie,js:je,km+1)
 
