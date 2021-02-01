@@ -210,7 +210,6 @@ module gfdl_mp_mod
     logical :: do_sedi_uv = .true. ! transport of horizontal momentum in sedimentation
     logical :: do_sedi_w = .true. ! transport of vertical momentum in sedimentation
     logical :: do_sedi_heat = .true. ! transport of heat in sedimentation
-    logical :: do_disp_heat = .true. ! dissipative heating due to sedimentation
 
     logical :: do_qa = .true. ! do inline cloud fraction
     logical :: rad_snow = .true. ! include snow in cloud fraciton calculation
@@ -369,8 +368,8 @@ module gfdl_mp_mod
         tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen, do_hail, inflag, &
         c_psaci, c_pgacs, c_pgaci, z_slope_liq, z_slope_ice, prog_ccn, &
         c_pracw, alin, clin, rad_snow, rad_graupel, rad_rain, cld_min, &
-        use_ppm, mono_prof, do_sedi_heat, do_sedi_uv, do_sedi_w, icloud_f, &
-        irain_f, xr_a, xr_b, xr_c, ntimes, do_disp_heat, tau_revp, tice_mlt, &
+        use_ppm, mono_prof, do_sedi_uv, do_sedi_w, do_sedi_heat, icloud_f, &
+        irain_f, xr_a, xr_b, xr_c, ntimes, tau_revp, tice_mlt, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_rhc_cevap, &
         use_rhc_revap, do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
         rhc_cevap, rhc_revap, qi0_rei, beta, liq_ice_combine, rewflag, &
@@ -446,7 +445,7 @@ end subroutine gfdl_mp_init
 ! GFDL cloud microphysics driver
 ! =======================================================================
 
-subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, w, &
+subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, wa, &
         ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, graupel, &
         hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, te, &
         condensation, deposition, evaporation, sublimation, last_step, &
@@ -468,7 +467,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, w, &
     
     real, intent (in), dimension (is:ie, ks:ke) :: dz, qnl, qni
     
-    real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt, ua, va, w, te
+    real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt, ua, va, wa, te
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
 
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
@@ -518,7 +517,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, w, &
     ! major cloud microphysics driver
     ! -----------------------------------------------------------------------
     
-    call mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, qg, qa, &
+    call mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, qa, &
         qnl, qni, dz, is, ie, ks, ke, dts, rain, snow, graupel, ice, gsize, &
         hs, q_con, cappa, consv_te, te, condensation, deposition, evaporation, &
         sublimation, last_step, do_inline_mp)
@@ -736,7 +735,7 @@ end subroutine setup_mp
 ! major cloud microphysics driver
 ! =======================================================================
 
-subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
+subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qnl, qni, dz, is, ie, ks, ke, dt_in, rain, snow, graupel, &
         ice, gsize, hs, q_con, cappa, consv_te, te, condensation, &
         deposition, evaporation, sublimation, last_step, do_inline_mp)
@@ -757,7 +756,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
 
     real, intent (in), dimension (is:ie, ks:ke) :: dz, qnl, qni
     
-    real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt, ua, va, w
+    real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt, ua, va, wa
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
 
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
@@ -780,7 +779,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, dimension (ks:ke) :: q_liq, q_sol, vtiz, vtsz, vtgz, vtrz, dp1, dz1
     real, dimension (ks:ke) :: qvz, qlz, qrz, qiz, qsz, qgz, qaz, c_praut, m1
     real, dimension (ks:ke) :: den, p1, denfac, ccn, cin, m1_rain, m1_sol
-    real, dimension (ks:ke) :: u0, v0, u1, v1, w1
+    real, dimension (ks:ke) :: u, v, w
 
     real, dimension (is:ie, ks:ke) :: m2_rain, m2_sol
     
@@ -851,7 +850,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 if (hydrostatic) then
                     te_beg_0 (i, k) = te_beg_0 (i, k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2)
                 else
-                    te_beg_0 (i, k) = te_beg_0 (i, k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2 + w (i, k) ** 2)
+                    te_beg_0 (i, k) = te_beg_0 (i, k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2 + wa (i, k) ** 2)
                 endif
                 te_beg_0 (i, k) = rgrav * te_beg_0 (i, k) * delp (i, k) * gsize (i) ** 2.0
                 tw_beg_0 (i, k) = rgrav * (qv (i, k) + q_liq (k) + q_sol (k)) * delp (i, k) * gsize (i) ** 2.0
@@ -909,13 +908,11 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! for sedi_momentum transport
             ! -----------------------------------------------------------------------
             
-            u0 (k) = ua (i, k)
-            v0 (k) = va (i, k)
+            u (k) = ua (i, k)
+            v (k) = va (i, k)
             if (.not. hydrostatic) then
-                w1 (k) = w (i, k)
+                w (k) = wa (i, k)
             endif
-            u1 (k) = u0 (k)
-            v1 (k) = v0 (k)
 
         enddo ! k loop
         
@@ -955,9 +952,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 cvm (k) = c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 te_beg (i, k) = cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)
                 if (hydrostatic) then
-                    te_beg (i, k) = te_beg (i, k) + 0.5 * (u1 (k) ** 2 + v1 (k) ** 2)
+                    te_beg (i, k) = te_beg (i, k) + 0.5 * (u (k) ** 2 + v (k) ** 2)
                 else
-                    te_beg (i, k) = te_beg (i, k) + 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2)
+                    te_beg (i, k) = te_beg (i, k) + 0.5 * (u (k) ** 2 + v (k) ** 2 + w (k) ** 2)
                 endif
                 te_beg (i, k) = rgrav * te_beg (i, k) * dp1 (k) * gsize (i) ** 2.0
                 tw_beg (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
@@ -1031,7 +1028,8 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, reevap, dte (i))
+                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, u, v, w, &
+                h_var, reevap, dte (i))
             
             evaporation (i) = evaporation (i) + reevap * convt
             rain (i) = rain (i) + r1 * convt
@@ -1048,7 +1046,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             call fall_speed (ks, ke, den, qsz, qiz, qgz, qlz, tz, vtsz, vtiz, vtgz)
             
             call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
-                dz1, dp1, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, dte (i))
+                dz1, dp1, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, u, v, w, dte (i))
             
             rain (i) = rain (i) + r1 * convt
             snow (i) = snow (i) + s1 * convt
@@ -1056,45 +1054,12 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ice (i) = ice (i) + i1 * convt
             
             ! -----------------------------------------------------------------------
-            ! energy change during sedimentation heating
-            ! -----------------------------------------------------------------------
-            
-            if (consv_checker) then
-                do k = ks, ke
-                    te1 (k) = one_r8 + qvz (k) * c1_vap + (qlz (k) + qrz (k)) * c1_liq + &
-                        (qiz (k) + qsz (k) + qgz (k)) * c1_ice
-                    te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp1 (k)
-                enddo
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! heat transportation during sedimentation
-            ! -----------------------------------------------------------------------
-            
-            if (do_sedi_heat) then
-                call sedi_heat (ks, ke, dp1, m1_sol, dz1, tz, qvz, qlz, qrz, qiz, &
-                    qsz, qgz, c_ice)
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! energy change during sedimentation heating
-            ! -----------------------------------------------------------------------
-            
-            if (consv_checker) then
-                do k = ks, ke
-                    te2 (k) = one_r8 + qvz (k) * c1_vap + (qlz (k) + qrz (k)) * c1_liq + &
-                        (qiz (k) + qsz (k) + qgz (k)) * c1_ice
-                    te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp1 (k)
-                enddo
-                dte (i) = dte (i) + sum (te1) - sum (te2)
-            endif
-            
-            ! -----------------------------------------------------------------------
             ! time-split warm rain processes: 2nd pass
             ! -----------------------------------------------------------------------
             
             call warm_rain (dt_rain, ks, ke, dp1, dz1, tz, qvz, qlz, qrz, qiz, qsz, &
-                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, w1, h_var, reevap, dte (i))
+                qgz, den, denfac, ccn, c_praut, rh_rain, vtrz, r1, m1_rain, u, v, w, &
+                h_var, reevap, dte (i))
             
             evaporation (i) = evaporation (i) + reevap * convt
             rain (i) = rain (i) + r1 * convt
@@ -1127,38 +1092,32 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         
         if (do_sedi_uv) then
             do k = ks + 1, ke
-                u1 (k) = (dp0 (k) * u1 (k) + m1 (k - 1) * u1 (k - 1)) / (dp0 (k) + m1 (k - 1))
-                v1 (k) = (dp0 (k) * v1 (k) + m1 (k - 1) * v1 (k - 1)) / (dp0 (k) + m1 (k - 1))
-                ua (i, k) = u1 (k)
-                va (i, k) = v1 (k)
-            enddo
-            if (do_disp_heat) then
-                do k = ks + 1, ke
 #ifdef MOIST_CAPPA
-                    c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + &
-                        (qiz (k) + qsz (k) + qgz (k)) * c_ice
-                    tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / c8
+                c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + &
+                    (qiz (k) + qsz (k) + qgz (k)) * c_ice
+                tz (k) = tz (k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2 - (u (k) ** 2 + v (k) ** 2)) / c8
 #else
-                    tz (k) = tz (k) + 0.5 * (u0 (k) ** 2 + v0 (k) ** 2 - (u1 (k) ** 2 + v1 (k) ** 2)) / c_air
+                tz (k) = tz (k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2 - (u (k) ** 2 + v (k) ** 2)) / c_air
 #endif
-                enddo
-            endif
+            enddo
+            do k = ks + 1, ke
+                ua (i, k) = u (k)
+                va (i, k) = v (k)
+            enddo
         endif
         
         if (do_sedi_w) then
-            if (do_disp_heat) then
-                do k = ks, ke
-#ifdef MOIST_CAPPA
-                    c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + &
-                        (qiz (k) + qsz (k) + qgz (k)) * c_ice
-                    tz (k) = tz (k) + 0.5 * (w (i, k) ** 2 - w1 (k) ** 2) / c8
-#else
-                    tz (k) = tz (k) + 0.5 * (w (i, k) ** 2 - w1 (k) ** 2) / c_air
-#endif
-                enddo
-            endif
             do k = ks, ke
-                w (i, k) = w1 (k)
+#ifdef MOIST_CAPPA
+                c8 = c_air + qvz (k) * c_vap + (qrz (k) + qlz (k)) * c_liq + &
+                    (qiz (k) + qsz (k) + qgz (k)) * c_ice
+                tz (k) = tz (k) + 0.5 * (wa (i, k) ** 2 - w (k) ** 2) / c8
+#else
+                tz (k) = tz (k) + 0.5 * (wa (i, k) ** 2 - w (k) ** 2) / c_air
+#endif
+            enddo
+            do k = ks, ke
+                wa (i, k) = w (k)
             enddo
         endif
         
@@ -1173,9 +1132,9 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 cvm (k) = c_air + qvz (k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 te_end (i, k) = cvm (k) * tz (k) + lv00 * c_air * qvz (k) - li00 * c_air * q_sol (k)
                 if (hydrostatic) then
-                    te_end (i, k) = te_end (i, k) + 0.5 * (u1 (k) ** 2 + v1 (k) ** 2)
+                    te_end (i, k) = te_end (i, k) + 0.5 * (u (k) ** 2 + v (k) ** 2)
                 else
-                    te_end (i, k) = te_end (i, k) + 0.5 * (u1 (k) ** 2 + v1 (k) ** 2 + w1 (k) ** 2)
+                    te_end (i, k) = te_end (i, k) + 0.5 * (u (k) ** 2 + v (k) ** 2 + w (k) ** 2)
                 endif
                 te_end (i, k) = rgrav * te_end (i, k) * dp1 (k) * gsize (i) ** 2.0
                 tw_end (i, k) = rgrav * (qvz (k) + q_liq (k) + q_sol (k)) * dp1 (k) * gsize (i) ** 2.0
@@ -1254,7 +1213,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
                 cvm (k) = c_air * (1.0 - qv (i, k) - q_liq (k) - q_sol (k)) + &
                     qv (i, k) * c_vap + q_liq (k) * c_liq + q_sol (k) * c_ice
                 te_end_0 (i, k) = cvm (k) * tz (k) + lv00 * c_air * qv (i, k) - li00 * c_air * q_sol (k)
-                te_end_0 (i, k) = te_end_0 (i, k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2 + w (i, k) ** 2)
+                te_end_0 (i, k) = te_end_0 (i, k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2 + wa (i, k) ** 2)
                 te_end_0 (i, k) = rgrav * te_end_0 (i, k) * delp (i, k) * gsize (i) ** 2.0
                 tw_end_0 (i, k) = rgrav * (qv (i, k) + q_liq (k) + q_sol (k)) * delp (i, k) * gsize (i) ** 2.0
             enddo
@@ -1321,8 +1280,8 @@ end subroutine mpdrv
 ! =======================================================================
 
 subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
-        den, denfac, ccn, c_praut, rh_rain, vtr, r1, m1_rain, w1, h_var, &
-        reevap, dte)
+        den, denfac, ccn, c_praut, rh_rain, vtr, r1, m1_rain, u, v, w, &
+        h_var, reevap, dte)
     
     implicit none
     
@@ -1336,7 +1295,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
 
     real, intent (in), dimension (ks:ke) :: dp, dz, den, denfac, ccn, c_praut
     
-    real, intent (inout), dimension (ks:ke) :: vtr, qv, ql, qr, qi, qs, qg, m1_rain, w1
+    real, intent (inout), dimension (ks:ke) :: vtr, qv, ql, qr, qi, qs, qg, m1_rain, u, v, w
 
     real (kind = r_grid), intent (inout) :: dte
 
@@ -1465,15 +1424,15 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         endif
         
         ! -----------------------------------------------------------------------
-        ! vertical velocity transportation during sedimentation
+        ! momentum transportation during sedimentation
         ! -----------------------------------------------------------------------
         
+        if (do_sedi_uv) then
+            call sedi_uv (ks, ke, m1_rain, dp, u, v)
+        endif
+        
         if (do_sedi_w) then
-            w1 (ks) = w1 (ks) + m1_rain (ks) * vtr (ks) / dm (ks)
-            do k = ks + 1, ke
-                w1 (k) = (dm (k) * w1 (k) + m1_rain (k - 1) * (w1 (k - 1) - vtr (k - 1)) + m1_rain (k) * vtr (k)) &
-                     / (dm (k) + m1_rain (k - 1))
-            enddo
+            call sedi_w (ks, ke, m1_rain, w, vtr, dm)
         endif
         
         ! -----------------------------------------------------------------------
@@ -2531,7 +2490,7 @@ end subroutine subgrid_z_proc
 ! =======================================================================
 
 subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
-        vtg, vts, vti, r1, g1, s1, i1, m1_sol, w1, dte)
+        vtg, vts, vti, r1, g1, s1, i1, m1_sol, u, v, w, dte)
     
     implicit none
     
@@ -2545,7 +2504,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
 
     real, intent (in), dimension (ks:ke) :: vtg, vts, vti, dp, dz
 
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, m1_sol, w1
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, m1_sol, u, v, w
 
     real, intent (out) :: r1, g1, s1, i1
 
@@ -2727,12 +2686,47 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             m1_sol (k) = m1_sol (k) + m1 (k)
         enddo
         
+        ! -----------------------------------------------------------------------
+        ! momentum transportation during sedimentation
+        ! -----------------------------------------------------------------------
+        
+        if (do_sedi_uv) then
+            call sedi_uv (ks, ke, m1, dp, u, v)
+        endif
+        
         if (do_sedi_w) then
-            w1 (ks) = w1 (ks) + m1 (ks) * vti (ks) / dm (ks)
-            do k = ks + 1, ke
-                w1 (k) = (dm (k) * w1 (k) + m1 (k - 1) * (w1 (k - 1) - vti (k - 1)) + m1 (k) * vti (k)) &
-                     / (dm (k) + m1 (k - 1))
+            call sedi_w (ks, ke, m1, w, vti, dm)
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! energy change during sedimentation heating
+        ! -----------------------------------------------------------------------
+        
+        if (consv_checker) then
+            do k = ks, ke
+                te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
             enddo
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! heat exchanges during sedimentation
+        ! -----------------------------------------------------------------------
+        
+        if (do_sedi_heat) then
+            call sedi_heat (ks, ke, dp, m1, dz, tz, qv, ql, qr, qi, qs, qg, c_ice)
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! energy change during sedimentation heating
+        ! -----------------------------------------------------------------------
+        
+        if (consv_checker) then
+            do k = ks, ke
+                te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
+            enddo
+            dte = dte + sum (te1) - sum (te2)
         endif
         
     endif
@@ -2820,12 +2814,47 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             m1_sol (k) = m1_sol (k) + m1 (k)
         enddo
         
+        ! -----------------------------------------------------------------------
+        ! momentum transportation during sedimentation
+        ! -----------------------------------------------------------------------
+        
+        if (do_sedi_uv) then
+            call sedi_uv (ks, ke, m1, dp, u, v)
+        endif
+        
         if (do_sedi_w) then
-            w1 (ks) = w1 (ks) + m1 (ks) * vts (ks) / dm (ks)
-            do k = ks + 1, ke
-                w1 (k) = (dm (k) * w1 (k) + m1 (k - 1) * (w1 (k - 1) - vts (k - 1)) + m1 (k) * vts (k)) &
-                     / (dm (k) + m1 (k - 1))
+            call sedi_w (ks, ke, m1, w, vts, dm)
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! energy change during sedimentation heating
+        ! -----------------------------------------------------------------------
+        
+        if (consv_checker) then
+            do k = ks, ke
+                te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
             enddo
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! heat exchanges during sedimentation
+        ! -----------------------------------------------------------------------
+        
+        if (do_sedi_heat) then
+            call sedi_heat (ks, ke, dp, m1, dz, tz, qv, ql, qr, qi, qs, qg, c_ice)
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! energy change during sedimentation heating
+        ! -----------------------------------------------------------------------
+        
+        if (consv_checker) then
+            do k = ks, ke
+                te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
+            enddo
+            dte = dte + sum (te1) - sum (te2)
         endif
         
     endif
@@ -2913,12 +2942,47 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             m1_sol (k) = m1_sol (k) + m1 (k)
         enddo
         
+        ! -----------------------------------------------------------------------
+        ! momentum transportation during sedimentation
+        ! -----------------------------------------------------------------------
+        
+        if (do_sedi_uv) then
+            call sedi_uv (ks, ke, m1, dp, u, v)
+        endif
+        
         if (do_sedi_w) then
-            w1 (ks) = w1 (ks) + m1 (ks) * vtg (ks) / dm (ks)
-            do k = ks + 1, ke
-                w1 (k) = (dm (k) * w1 (k) + m1 (k - 1) * (w1 (k - 1) - vtg (k - 1)) + m1 (k) * vtg (k)) &
-                     / (dm (k) + m1 (k - 1))
+            call sedi_w (ks, ke, m1, w, vtg, dm)
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! energy change during sedimentation heating
+        ! -----------------------------------------------------------------------
+        
+        if (consv_checker) then
+            do k = ks, ke
+                te1 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te1 (k) = rgrav * te1 (k) * c_air * tz (k) * dp (k)
             enddo
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! heat exchanges during sedimentation
+        ! -----------------------------------------------------------------------
+        
+        if (do_sedi_heat) then
+            call sedi_heat (ks, ke, dp, m1, dz, tz, qv, ql, qr, qi, qs, qg, c_ice)
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! energy change during sedimentation heating
+        ! -----------------------------------------------------------------------
+        
+        if (consv_checker) then
+            do k = ks, ke
+                te2 (k) = one_r8 + qv (k) * c1_vap + (ql (k) + qr (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
+                te2 (k) = rgrav * te2 (k) * c_air * tz (k) * dp (k)
+            enddo
+            dte = dte + sum (te1) - sum (te2)
         endif
         
     endif
@@ -4866,6 +4930,69 @@ real function gmlt (tc, dqs, qgrho, pgacw, pgacr, c, rho)
 end function gmlt
 
 ! =======================================================================
+! sedimentation of horizontal momentum
+! =======================================================================
+
+subroutine sedi_uv (ks, ke, m1, dp, u, v)
+
+    implicit none
+
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in), dimension (ks:ke) :: m1, dp
+
+    real, intent (inout), dimension (ks:ke) :: u, v
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    do k = ks + 1, ke
+        u (k) = (dp (k) * u (k) + m1 (k - 1) * u (k - 1)) / (dp (k) + m1 (k - 1))
+        v (k) = (dp (k) * v (k) + m1 (k - 1) * v (k - 1)) / (dp (k) + m1 (k - 1))
+    enddo
+
+end subroutine sedi_uv
+
+! =======================================================================
+! sedimentation of vertical momentum
+! =======================================================================
+
+subroutine sedi_w (ks, ke, m1, w, vt, dm)
+
+    implicit none
+
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in), dimension (ks:ke) :: m1, vt, dm
+
+    real, intent (inout), dimension (ks:ke) :: w
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    w (ks) = w (ks) + m1 (ks) * vt (ks) / dm (ks)
+    do k = ks + 1, ke
+        w (k) = (dm (k) * w (k) + m1 (k - 1) * (w (k - 1) - vt (k - 1)) + m1 (k) * vt (k)) / &
+             (dm (k) + m1 (k - 1))
+    enddo
+
+end subroutine sedi_w
+
+! =======================================================================
 ! sedimentation of heat
 ! =======================================================================
 
@@ -5006,7 +5133,7 @@ end subroutine check_column
 ! fix negative water species
 ! =======================================================================
 
-subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
+subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
     
     implicit none
     
@@ -5018,7 +5145,7 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
 
     real, intent (in), dimension (ks:ke) :: dp
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: pt
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
@@ -5030,18 +5157,21 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
 
     integer :: k
     
-    real :: dq, cvm
+    real :: dq, sink
     
-    real, dimension (ks:ke) :: lcpk, icpk
+    real, dimension (ks:ke) :: q_liq, q_sol
     
+    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+
     ! -----------------------------------------------------------------------
     ! calculate moist heat capacity and latent heat coefficients
     ! -----------------------------------------------------------------------
     
     do k = ks, ke
-        cvm = 1. + qv (k) * c1_vap + (qr (k) + ql (k)) * c1_liq + (qi (k) + qs (k) + qg (k)) * c1_ice
-        lcpk (k) = (lv00 + d1_vap * pt (k)) / cvm
-        icpk (k) = (li00 + d1_ice * pt (k)) / cvm
+        q_liq (k) = ql (k) + qr (k)
+        q_sol (k) = qi (k) + qs (k) + qg (k)
+        cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+        te8 (k) = cvm (k) * tz (k) + lv00 * qv (k) - li00 * q_sol (k)
     enddo
 
     cond = 0
@@ -5066,9 +5196,13 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
 
         ! if graupel < 0, borrow from rain
         if (qg (k) .lt. 0.) then
+            sink = - qg (k)
             qr (k) = qr (k) + qg (k)
-            pt (k) = pt (k) - qg (k) * icpk (k)
             qg (k) = 0.
+            q_liq (k) = q_liq (k) - sink
+            q_sol (k) = q_sol (k) + sink
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
         endif
         
         ! -----------------------------------------------------------------------
@@ -5083,10 +5217,13 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
 
         ! if cloud water < 0, borrow from water vapor
         if (ql (k) .lt. 0.) then
-            cond = cond - ql (k) * dp (k)
+            sink = - ql (k)
             qv (k) = qv (k) + ql (k)
-            pt (k) = pt (k) - ql (k) * lcpk (k)
             ql (k) = 0.
+            cond = cond + sink * dp (k)
+            q_liq (k) = q_liq (k) + sink
+            cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
+            tz (k) = (te8 (k) - lv00 * qv (k) + li00 * q_sol (k)) / cvm (k)
         endif
         
     enddo
@@ -5734,6 +5871,7 @@ end subroutine mqs3d
 
 ! =======================================================================
 ! compute wet buld temperature
+! Knox et al. (2017)
 ! =======================================================================
 
 real function wet_bulb (qv, ta, den)
@@ -5750,17 +5888,19 @@ real function wet_bulb (qv, ta, den)
     ! local variables
     ! -----------------------------------------------------------------------
 
+    logical :: do_adjust = .false.
+
+    real :: factor = 1 / 3.
     real :: qs, tp, dqdt, lcp
     
     lcp = hlv / cp_air
     
     wet_bulb = ta
     qs = wqs (wet_bulb, den, dqdt)
-    tp = 0.5 * (qs - qv) / (1. + lcp * dqdt) * lcp
+    tp = factor * (qs - qv) / (1. + lcp * dqdt) * lcp
     wet_bulb = wet_bulb - tp
     
-    ! tp is negative if supersaturated
-    if (tp .gt. 0.01) then
+    if (do_adjust .and. tp .gt. 0.0) then
         qs = wqs (wet_bulb, den, dqdt)
         tp = (qs - qv) / (1. + lcp * dqdt) * lcp
         wet_bulb = wet_bulb - tp
