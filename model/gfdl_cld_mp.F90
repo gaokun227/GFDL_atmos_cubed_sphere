@@ -51,6 +51,11 @@ module gfdl_cld_mp_mod
         procedure iqs_ptqv
     end interface iqs
     
+    interface wet_bulb
+        procedure wet_bulb_dry
+        procedure wet_bulb_moist
+    end interface wet_bulb
+    
     ! -----------------------------------------------------------------------
     ! public subroutines, functions, and variables
     ! -----------------------------------------------------------------------
@@ -129,6 +134,8 @@ module gfdl_cld_mp_mod
     ! predefined parameters
     ! -----------------------------------------------------------------------
     
+    integer, parameter :: length = 2621 ! length of the saturation table
+
     real, parameter :: qcmin = 1.0e-12 ! min value for cloud condensates (kg/kg)
     real, parameter :: qfmin = 1.0e-8 ! min value for sedimentation (kg/kg)
     
@@ -1568,7 +1575,6 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
         
         q_liq (k) = ql (k) + qr (k)
         q_sol (k) = qi (k) + qs (k) + qg (k)
-        
         cvm (k) = one_r8 + qv (k) * c1_vap + q_liq (k) * c1_liq + q_sol (k) * c1_ice
         te8 (k) = cvm (k) * tz (k) + lv00 * qv (k) - li00 * q_sol (k)
         lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
@@ -1780,8 +1786,9 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                 if (qs (k) .gt. qcmin) then
                     
                     psacw = 0.
+                    qden = qs (k) * den (k)
                     if (ql (k) .gt. qcmin) then
-                        factor = denfac (k) * csacw * exp (0.8125 * log (qs (k) * den (k)))
+                        factor = denfac (k) * csacw * exp (0.8125 * log (qden))
                         psacw = factor / (1. + dts * factor) * ql (k)
                     endif
                     
@@ -1795,10 +1802,9 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                     
                     tin = tz (k)
                     dq = iqs (tin, den (k), dqdt) - qv (k)
-                    psmlt = max (0., smlt (tc, dq, qs (k) * den (k), psacw, psacr, csmlt, &
-                        den (k), denfac (k)))
+                    psmlt = max (0., smlt (tc, dq, qden, psacw, psacr, csmlt, den (k), denfac (k)))
 
-                    sink = min (qs (k), dts * (psmlt + pracs), tc / icpk (k))
+                    sink = min (qs (k), (psmlt + pracs) * dts, tc / icpk (k))
                     tmp = min (sink, dim (qs_mlt, ql (k)))
                     qs (k) = qs (k) - sink
                     ql (k) = ql (k) + tmp
@@ -1818,12 +1824,6 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                 
                 if (qg (k) .gt. qcmin) then
                     
-                    pgacr = 0.
-                    if (qr (k) .gt. qcmin) then
-                        pgacr = min (acr3d (vtg (k), vtr (k), qr (k), qg (k), cgacr, acco (1, 3), &
-                        den (k)), rdts * qr (k))
-                    endif
-                    
                     pgacw = 0.
                     qden = qg (k) * den (k)
                     if (ql (k) .gt. qcmin) then
@@ -1831,11 +1831,17 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                         pgacw = factor / (1. + dts * factor) * ql (k)
                     endif
                     
+                    pgacr = 0.
+                    if (qr (k) .gt. qcmin) then
+                        pgacr = min (acr3d (vtg (k), vtr (k), qr (k), qg (k), cgacr, acco (1, 3), &
+                        den (k)), rdts * qr (k))
+                    endif
+                    
                     tin = tz (k)
                     dq = iqs (tin, den (k), dqdt) - qv (k)
-                    pgmlt = dts * gmlt (tc, dq, qden, pgacw, pgacr, cgmlt, den (k))
+                    pgmlt = max (0., gmlt (tc, dq, qden, pgacw, pgacr, cgmlt, den (k)))
 
-                    sink = min (max (0., pgmlt), qg (k), tc / icpk (k))
+                    sink = min (qg (k), pgmlt * dts, tc / icpk (k))
                     qg (k) = qg (k) - sink
                     qr (k) = qr (k) + sink
                     q_sol (k) = q_sol (k) - sink
@@ -4874,9 +4880,7 @@ real function acr3d (v1, v2, q1, q2, c, cac, rho)
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    real, intent (in) :: v1, v2, c, rho
-    real, intent (in) :: q1, q2
-    real, intent (in) :: cac (3)
+    real, intent (in) :: v1, v2, c, rho, q1, q2, cac (3)
     
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5027,7 +5031,8 @@ subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
     enddo
 
     do k = ks + 1, ke
-        tz (k) = (cv0 (k) * tz (k) + m1 (k - 1) * (cw * tz (k - 1) + dgz (k))) / (cv0 (k) + cw * m1 (k - 1))
+        tz (k) = (cv0 (k) * tz (k) + m1 (k - 1) * (cw * tz (k - 1) + dgz (k))) / &
+            (cv0 (k) + cw * m1 (k - 1))
     enddo
     
 end subroutine sedi_heat
@@ -5257,8 +5262,6 @@ subroutine qs_init
     
     implicit none
     
-    integer, parameter :: length = 2621
-    
     integer :: i
     
     if (.not. tables_are_initialized) then
@@ -5299,6 +5302,113 @@ subroutine qs_init
     endif
     
 end subroutine qs_init
+
+! =======================================================================
+! saturation water vapor pressure table, core function
+! =======================================================================
+
+subroutine qs_table_core (n, n_blend, do_smith_table, table)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: n, n_blend
+
+    logical, intent (in) :: do_smith_table
+
+    real, intent (out), dimension (n) :: table
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: i
+    integer, parameter :: n_min = 1600
+    
+    real (kind = r_grid) :: delt = 0.1
+    real (kind = r_grid) :: tmin, tem, esh
+    real (kind = r_grid) :: wice, wh2o, fac0, fac1, fac2
+    real (kind = r_grid) :: esbasw, tbasw, esbasi, a, b, c, d, e
+    real (kind = r_grid) :: esupc (n_blend)
+    
+    esbasw = 1013246.0
+    tbasw = tice + 100.
+    esbasi = 6107.1
+    tmin = tice - n_min * delt
+    
+    ! -----------------------------------------------------------------------
+    ! compute es over ice between - (n_min * delt) deg C and 0 deg C
+    ! -----------------------------------------------------------------------
+    
+    if (do_smith_table) then
+        do i = 1, n_min
+            tem = tmin + delt * real (i - 1)
+            a = - 9.09718 * (tice / tem - 1.)
+            b = - 3.56654 * log10 (tice / tem)
+            c = 0.876793 * (1. - tem / tice)
+            e = log10 (esbasi)
+            table (i) = 0.1 * 10 ** (a + b + c + e)
+        enddo
+    else
+        do i = 1, n_min
+            tem = tmin + delt * real (i - 1)
+            fac0 = (tem - tice) / (tem * tice)
+            fac1 = fac0 * li2
+            fac2 = (d2ice * log (tem / tice) + fac1) / rvgas
+            table (i) = e00 * exp (fac2)
+        enddo
+    endif
+    
+    ! -----------------------------------------------------------------------
+    ! compute es over water between - (n_blend * delt) deg C and [(n - n_min - 1) * delt] deg C
+    ! -----------------------------------------------------------------------
+    
+    if (do_smith_table) then
+        do i = 1, n - n_min + n_blend
+            tem = tice + delt * (real (i - 1) - n_blend)
+            a = - 7.90298 * (tbasw / tem - 1.)
+            b = 5.02808 * log10 (tbasw / tem)
+            c = - 1.3816e-7 * (10 ** ((1. - tem / tbasw) * 11.344) - 1.)
+            d = 8.1328e-3 * (10 ** ((tbasw / tem - 1.) * (- 3.49149)) - 1.)
+            e = log10 (esbasw)
+            esh = 0.1 * 10 ** (a + b + c + d + e)
+            if (i .le. n_blend) then
+                esupc (i) = esh
+            else
+                table (i + n_min - n_blend) = esh
+            endif
+        enddo
+    else
+        do i = 1, n - n_min + n_blend
+            tem = tice + delt * (real (i - 1) - n_blend)
+            fac0 = (tem - tice) / (tem * tice)
+            fac1 = fac0 * lv0
+            fac2 = (dc_vap * log (tem / tice) + fac1) / rvgas
+            esh = e00 * exp (fac2)
+            if (i .le. n_blend) then
+                esupc (i) = esh
+            else
+                table (i + n_min - n_blend) = esh
+            endif
+        enddo
+    endif
+    
+    ! -----------------------------------------------------------------------
+    ! derive blended es over ice and supercooled water between - (n_blend * delt) deg C and 0 deg C
+    ! -----------------------------------------------------------------------
+    
+    do i = 1, n_blend
+        tem = tice + delt * (real (i - 1) - n_blend)
+        wice = 1.0 / n_blend * (tice - tem)
+        wh2o = 1.0 / n_blend * (tem - tice + delt * n_blend)
+        table (i + n_min - n_blend) = wice * table (i + n_min - n_blend) + &
+            wh2o * esupc (i)
+    enddo
+    
+end subroutine qs_table_core
 
 ! =======================================================================
 ! saturation water vapor pressure table 0, water only
@@ -5356,59 +5466,8 @@ subroutine qs_table1 (n)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: n
-    
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
 
-    integer :: i
-    
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem, esh20
-    real (kind = r_grid) :: wice, wh2o, fac0, fac1, fac2
-    real (kind = r_grid) :: esupc (200)
-    
-    tmin = tice - 160.
-    
-    ! -----------------------------------------------------------------------
-    ! compute es over ice between - 160 deg C and 0 deg C
-    ! -----------------------------------------------------------------------
-    
-    do i = 1, 1600
-        tem = tmin + delt * real (i - 1)
-        fac0 = (tem - tice) / (tem * tice)
-        fac1 = fac0 * li2
-        fac2 = (d2ice * log (tem / tice) + fac1) / rvgas
-        table1 (i) = e00 * exp (fac2)
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! compute es over water between - 20 deg C and 102 deg C
-    ! -----------------------------------------------------------------------
-    
-    do i = 1, 1221
-        tem = 253.16 + delt * real (i - 1)
-        fac0 = (tem - tice) / (tem * tice)
-        fac1 = fac0 * lv0
-        fac2 = (dc_vap * log (tem / tice) + fac1) / rvgas
-        esh20 = e00 * exp (fac2)
-        if (i .le. 200) then
-            esupc (i) = esh20
-        else
-            table1 (i + 1400) = esh20
-        endif
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! derive blended es over ice and supercooled water between - 20 deg C and 0 deg C
-    ! -----------------------------------------------------------------------
-    
-    do i = 1, 200
-        tem = 253.16 + delt * real (i - 1)
-        wice = 0.05 * (tice - tem)
-        wh2o = 0.05 * (tem - 253.16)
-        table1 (i + 1400) = wice * table1 (i + 1400) + wh2o * esupc (i)
-    enddo
+    call qs_table_core (n, 200, .false., table1)
     
 end subroutine qs_table1
 
@@ -5429,47 +5488,7 @@ subroutine qs_table2 (n)
     
     integer, intent (in) :: n
     
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: i, i0, i1
-    
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem, fac0, fac1, fac2
-    real (kind = r_grid) :: tem0, tem1
-    
-    tmin = tice - 160.
-    
-    do i = 1, n
-        tem = tmin + delt * real (i - 1)
-        fac0 = (tem - tice) / (tem * tice)
-        if (i .le. 1600) then
-            ! -----------------------------------------------------------------------
-            ! compute es over ice between - 160 deg C and 0 deg C
-            ! -----------------------------------------------------------------------
-            fac1 = fac0 * li2
-            fac2 = (d2ice * log (tem / tice) + fac1) / rvgas
-        else
-            ! -----------------------------------------------------------------------
-            ! compute es over water between 0 deg C and 102 deg C
-            ! -----------------------------------------------------------------------
-            fac1 = fac0 * lv0
-            fac2 = (dc_vap * log (tem / tice) + fac1) / rvgas
-        endif
-        table2 (i) = e00 * exp (fac2)
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! smoother around 0 deg C
-    ! -----------------------------------------------------------------------
-    
-    i0 = 1600
-    i1 = 1601
-    tem0 = 0.25 * (table2 (i0 - 1) + 2. * table1 (i0) + table2 (i0 + 1))
-    tem1 = 0.25 * (table2 (i1 - 1) + 2. * table1 (i1) + table2 (i1 + 1))
-    table2 (i0) = tem0
-    table2 (i1) = tem1
+    call qs_table_core (n, 0, .false., table2)
     
 end subroutine qs_table2
 
@@ -5489,64 +5508,7 @@ subroutine qs_table3 (n)
     
     integer, intent (in) :: n
     
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: i
-    
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem, esh20
-    real (kind = r_grid) :: wice, wh2o, esbasw, tbasw, esbasi, a, b, c, d, e
-    real (kind = r_grid) :: esupc (200)
-    
-    esbasw = 1013246.0
-    tbasw = tice + 100.
-    esbasi = 6107.1
-    tmin = tice - 160.
-    
-    ! -----------------------------------------------------------------------
-    ! compute es over ice between - 160 deg C and 0 deg C
-    ! -----------------------------------------------------------------------
-    
-    do i = 1, 1600
-        tem = tmin + delt * real (i - 1)
-        a = - 9.09718 * (tice / tem - 1.)
-        b = - 3.56654 * log10 (tice / tem)
-        c = 0.876793 * (1. - tem / tice)
-        e = log10 (esbasi)
-        table3 (i) = 0.1 * 10 ** (a + b + c + e)
-    enddo
-
-    ! -----------------------------------------------------------------------
-    ! compute es over water between - 20 deg C and 102 deg C
-    ! -----------------------------------------------------------------------
-    
-    do i = 1, 1221
-        tem = 253.16 + delt * real (i - 1)
-        a = - 7.90298 * (tbasw / tem - 1.)
-        b = 5.02808 * log10 (tbasw / tem)
-        c = - 1.3816e-7 * (10 ** ((1. - tem / tbasw) * 11.344) - 1.)
-        d = 8.1328e-3 * (10 ** ((tbasw / tem - 1.) * (- 3.49149)) - 1.)
-        e = log10 (esbasw)
-        esh20 = 0.1 * 10 ** (a + b + c + d + e)
-        if (i .le. 200) then
-            esupc (i) = esh20
-        else
-            table3 (i + 1400) = esh20
-        endif
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! derive blended es over ice and supercooled water between - 20 deg C and 0 deg C
-    ! -----------------------------------------------------------------------
-    
-    do i = 1, 200
-        tem = 253.16 + delt * real (i - 1)
-        wice = 0.05 * (tice - tem)
-        wh2o = 0.05 * (tem - 253.16)
-        table3 (i + 1400) = wice * table3 (i + 1400) + wh2o * esupc (i)
-    enddo
+    call qs_table_core (n, 200, .true., table3)
     
 end subroutine qs_table3
 
@@ -5566,57 +5528,49 @@ subroutine qs_table4 (n)
     
     integer, intent (in) :: n
     
+    call qs_table_core (n, 0, .true., table4)
+    
+end subroutine qs_table4
+
+! =======================================================================
+! compute the saturated specific humidity, core function
+! =======================================================================
+
+real function qs_core (ta, den, dqdt, table, des)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: ta, den
+
+    real, intent (in), dimension (length) :: table, des
+
+    real, intent (out) :: dqdt
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
 
-    integer :: i, i0, i1
+    integer :: it
     
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem, esbasw, tbasw, esbasi, a, b, c, d, e
-    real (kind = r_grid) :: tem0, tem1
+    real :: es, ap1, tmin
     
-    esbasw = 1013246.0
-    tbasw = tice + 100.
-    esbasi = 6107.1
+    if (.not. tables_are_initialized) call qs_init
+    
     tmin = tice - 160.
+    ap1 = 10. * dim (ta, tmin) + 1.
+    ap1 = min (2621., ap1)
+    it = ap1
+    es = table (it) + (ap1 - it) * des (it)
+    qs_core = es / (rvgas * ta * den)
+    it = ap1 - 0.5
+    dqdt = 10. * (des (it) + (ap1 - it) * (des (it + 1) - des (it))) / &
+        (rvgas * ta * den)
     
-    do i = 1, n
-        tem = tmin + delt * real (i - 1)
-        if (i .le. 1600) then
-            ! -----------------------------------------------------------------------
-            ! compute es over ice between - 160 deg C and 0 deg C
-            ! -----------------------------------------------------------------------
-            a = - 9.09718 * (tice / tem - 1.)
-            b = - 3.56654 * log10 (tice / tem)
-            c = 0.876793 * (1. - tem / tice)
-            e = log10 (esbasi)
-            table4 (i) = 0.1 * 10 ** (a + b + c + e)
-        else
-            ! -----------------------------------------------------------------------
-            ! compute es over water between 0 deg C and 102 deg C
-            ! -----------------------------------------------------------------------
-            a = - 7.90298 * (tbasw / tem - 1.)
-            b = 5.02808 * log10 (tbasw / tem)
-            c = - 1.3816e-7 * (10 ** ((1. - tem / tbasw) * 11.344) - 1.)
-            d = 8.1328e-3 * (10 ** ((tbasw / tem - 1.) * (- 3.49149)) - 1.)
-            e = log10 (esbasw)
-            table4 (i) = 0.1 * 10 ** (a + b + c + d + e)
-        endif
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! smoother around 0 deg C
-    ! -----------------------------------------------------------------------
-    
-    i0 = 1600
-    i1 = 1601
-    tem0 = 0.25 * (table4 (i0 - 1) + 2. * table3 (i0) + table4 (i0 + 1))
-    tem1 = 0.25 * (table4 (i1 - 1) + 2. * table3 (i1) + table4 (i1 + 1))
-    table4 (i0) = tem0
-    table4 (i1) = tem1
-    
-end subroutine qs_table4
+end function qs_core
 
 ! =======================================================================
 ! compute the saturated specific humidity based on table 0, water only
@@ -5636,24 +5590,7 @@ real function wqs_trho (ta, den, dqdt)
 
     real, intent (out) :: dqdt
     
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: it
-    
-    real :: es, ap1, tmin
-    
-    if (.not. tables_are_initialized) call qs_init
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table0 (it) + (ap1 - it) * des0 (it)
-    wqs_trho = es / (rvgas * ta * den)
-    it = ap1 - 0.5
-    dqdt = 10. * (des0 (it) + (ap1 - it) * (des0 (it + 1) - des0 (it))) / (rvgas * ta * den)
+    wqs_trho = qs_core (ta, den, dqdt, table0, des0)
     
 end function wqs_trho
 
@@ -5674,24 +5611,7 @@ real function mqs_trho (ta, den, dqdt)
 
     real, intent (out) :: dqdt
 
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: it
-    
-    real :: es, ap1, tmin
-
-    if (.not. tables_are_initialized) call qs_init
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table1 (it) + (ap1 - it) * des1 (it)
-    mqs_trho = es / (rvgas * ta * den)
-    it = ap1 - 0.5
-    dqdt = 10. * (des1 (it) + (ap1 - it) * (des1 (it + 1) - des1 (it))) / (rvgas * ta * den)
+    mqs_trho = qs_core (ta, den, dqdt, table1, des1)
     
 end function mqs_trho
 
@@ -5713,24 +5633,7 @@ real function iqs_trho (ta, den, dqdt)
 
     real, intent (out) :: dqdt
 
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: it
-    
-    real :: es, ap1, tmin
-
-    if (.not. tables_are_initialized) call qs_init
-    
-    tmin = tice - 160.
-    ap1 = 10. * dim (ta, tmin) + 1.
-    ap1 = min (2621., ap1)
-    it = ap1
-    es = table2 (it) + (ap1 - it) * des2 (it)
-    iqs_trho = es / (rvgas * ta * den)
-    it = ap1 - 0.5
-    dqdt = 10. * (des2 (it) + (ap1 - it) * (des2 (it + 1) - des2 (it))) / (rvgas * ta * den)
+    iqs_trho = qs_core (ta, den, dqdt, table2, des2)
     
 end function iqs_trho
 
@@ -5760,7 +5663,7 @@ real function wqs_ptqv (ta, pa, qv, dqdt)
 
     den = pa / (rdgas * ta * (1. + zvir * qv))
 
-    wqs_ptqv = wqs_trho (ta, den, dqdt)
+    wqs_ptqv = wqs (ta, den, dqdt)
 
 end function wqs_ptqv
 
@@ -5789,7 +5692,7 @@ real function mqs_ptqv (ta, pa, qv, dqdt)
 
     den = pa / (rdgas * ta * (1. + zvir * qv))
 
-    mqs_ptqv = mqs_trho (ta, den, dqdt)
+    mqs_ptqv = mqs (ta, den, dqdt)
 
 end function mqs_ptqv
 
@@ -5819,7 +5722,7 @@ real function iqs_ptqv (ta, pa, qv, dqdt)
 
     den = pa / (rdgas * ta * (1. + zvir * qv))
 
-    iqs_ptqv = iqs_trho (ta, den, dqdt)
+    iqs_ptqv = iqs (ta, den, dqdt)
 
 end function iqs_ptqv
 
@@ -5870,11 +5773,47 @@ subroutine mqs3d (im, km, ks, ta, pa, qv, qs, dqdt)
 end subroutine mqs3d
 
 ! =======================================================================
-! compute wet buld temperature
+! compute wet buld temperature, core function
 ! Knox et al. (2017)
 ! =======================================================================
 
-real function wet_bulb (qv, ta, den)
+real function wet_bulb_core (qv, ta, den, lcp)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: qv, ta, den, lcp
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    logical :: do_adjust = .false.
+
+    real :: factor = 1 / 3.
+    real :: qsat, tp, dqdt 
+
+    wet_bulb_core = ta
+    qsat = wqs (wet_bulb_core, den, dqdt)
+    tp = factor * (qsat - qv) / (1. + lcp * dqdt) * lcp
+    wet_bulb_core = wet_bulb_core - tp
+    
+    if (do_adjust .and. tp .gt. 0.0) then
+        qsat = wqs (wet_bulb_core, den, dqdt)
+        tp = (qsat - qv) / (1. + lcp * dqdt) * lcp
+        wet_bulb_core = wet_bulb_core - tp
+    endif
+    
+end function wet_bulb_core
+
+! =======================================================================
+! compute wet buld temperature, dry air case
+! =======================================================================
+
+real function wet_bulb_dry (qv, ta, den)
     
     implicit none
     
@@ -5888,24 +5827,43 @@ real function wet_bulb (qv, ta, den)
     ! local variables
     ! -----------------------------------------------------------------------
 
-    logical :: do_adjust = .false.
-
-    real :: factor = 1 / 3.
-    real :: qs, tp, dqdt, lcp
+    real :: lcp
     
     lcp = hlv / cp_air
     
-    wet_bulb = ta
-    qs = wqs (wet_bulb, den, dqdt)
-    tp = factor * (qs - qv) / (1. + lcp * dqdt) * lcp
-    wet_bulb = wet_bulb - tp
+    wet_bulb_dry = wet_bulb_core (qv, ta, den, lcp)
     
-    if (do_adjust .and. tp .gt. 0.0) then
-        qs = wqs (wet_bulb, den, dqdt)
-        tp = (qs - qv) / (1. + lcp * dqdt) * lcp
-        wet_bulb = wet_bulb - tp
-    endif
+end function wet_bulb_dry
+
+! =======================================================================
+! compute wet buld temperature, moist air case
+! =======================================================================
+
+real function wet_bulb_moist (qv, ql, qi, qr, qs, qg, ta, den)
     
-end function wet_bulb
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: qv, ql, qi, qr, qs, qg, ta, den
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    real :: lcp, q_liq, q_sol
+
+    real (kind = r_grid) :: cvm
+    
+    q_liq = ql + qr
+    q_sol = qi + qs + qg
+    cvm = one_r8 + qv * c1_vap + q_liq * c1_liq + q_sol * c1_ice
+    lcp = (lv00 + d1_vap * ta) / cvm
+    
+    wet_bulb_moist = wet_bulb_core (qv, ta, den, lcp)
+    
+end function wet_bulb_moist
 
 end module gfdl_cld_mp_mod
