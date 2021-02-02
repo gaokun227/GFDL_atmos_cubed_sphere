@@ -108,18 +108,6 @@ module gfdl_mp_mod
     real, parameter :: lv0 = hlv - dc_vap * tice ! 3.14893552e6, evaporation latent heat coeff. at 0 deg K (J/kg)
     real, parameter :: li0 = hlf - dc_ice * tice ! - 2.2691392e5, fussion latent heat coeff. at 0 deg K (J/kg)
     
-    real (kind = r_grid), parameter :: gam263 = 1.4625080991084523 ! Gamma function (2.63)
-    real (kind = r_grid), parameter :: gam275 = 1.6083594219855455 ! Gamma function (2.75)
-    real (kind = r_grid), parameter :: gam290 = 1.8273550806240362 ! Gamma function (2.9)
-    real (kind = r_grid), parameter :: gam325 = 2.549256966718529 ! Gamma function (3.25)
-    real (kind = r_grid), parameter :: gam350 = 3.323350970447843 ! Gamma function (3.5)
-    real (kind = r_grid), parameter :: gam380 = 4.694174205740422 ! Gamma function (3.8)
-    real (kind = r_grid), parameter :: gam425 = 8.28508514183522 ! Gamma function (4.25)
-    real (kind = r_grid), parameter :: gam450 = 11.63172839656745 ! Gamma function (4.5)
-    real (kind = r_grid), parameter :: gam480 = 17.837861981813603 ! Gamma function (4.8)
-    real (kind = r_grid), parameter :: gam625 = 184.86096222719834 ! Gamma functio (6.25)
-    real (kind = r_grid), parameter :: gam680 = 496.60607757369075 ! Gamma functio (6.8)
-    
     real, parameter :: visk = 1.259e-5 ! kinematic viscosity of air (cm^2/s)
     real, parameter :: vdifu = 2.11e-5 ! diffusivity of water vapor in air (cm^2/s)
     real, parameter :: tcond = 2.36e-2 ! thermal conductivity of air (J/m/s/K)
@@ -300,13 +288,23 @@ module gfdl_mp_mod
     real :: qs0_crt = 1.0e-3 ! snow to graupel autoconversion threshold (0.6e-3 in Purdue Lin scheme) (kg/m^3)
     
     real :: c_paut = 0.55 ! cloud water to rain autoconversion efficiency
+    real :: c_psacw = 1.0 ! cloud water to snow accretion efficiency
     real :: c_psaci = 0.02 ! cloud ice to snow accretion efficiency (was 0.1 in ZETAC)
     real :: c_pracw = 0.9 ! cloud water to rain accretion efficiency
-    real :: c_pgacs = 2.0e-3 ! snow to graupel accretion efficiency (was 0.1 in ZETAC)
+    real :: c_praci = 1.0 ! cloud ice to rain accretion efficiency
+    real :: c_pgacw = 1.0 ! cloud water to graupel accretion efficiency
     real :: c_pgaci = 0.05 ! cloud ice to graupel accretion efficiency (was 0.1 in ZETAC)
+    real :: c_pracs = 1.0 ! snow to rain accretion efficiency
+    real :: c_psacr = 1.0 ! rain to snow accretion efficiency
+    real :: c_pgacr = 1.0 ! rain to graupel accretion efficiency
+    real :: c_pgacs = 2.0e-3 ! snow to graupel accretion efficiency (was 0.1 in ZETAC)
     
     real :: alin = 842.0 ! "a" in Lin et al. (1983)
+    real :: blin = 0.8 ! "b" in Lin et al. (1983)
     real :: clin = 4.8 ! "c" in Lin et al. (1983), 4.8 -- > 6. (to ehance ql -- > qs)
+    real :: dlin = 0.25 ! "d" in Lin et al. (1983)
+    real :: elin = 1.0 ! "e" in Lin et al. (1983), similar to a, but for graupel
+    real :: flin = 0.5 ! "f" in Lin et al. (1983), similar to b, but for graupel
     
     real :: vi_fac = 1.0 ! IFS: if const_vi: 1 / 3
     real :: vs_fac = 1.0 ! IFS: if const_vs: 1.
@@ -373,8 +371,9 @@ module gfdl_mp_mod
         rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, &
         const_vr, rthresh, ccn_l, ccn_o, igflag, c_paut, tau_imlt, &
         tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen, do_hail, inflag, &
-        c_psaci, c_pgacs, c_pgaci, z_slope_liq, z_slope_ice, prog_ccn, &
-        c_pracw, alin, clin, rad_snow, rad_graupel, rad_rain, cld_min, &
+        c_psacw, c_psaci, c_pracs, c_psacr, c_pgacr, c_pgacs, c_pgacw, c_pgaci, &
+        z_slope_liq, z_slope_ice, prog_ccn, c_pracw, c_praci, alin, blin, clin, &
+        dlin, elin, flin, rad_snow, rad_graupel, rad_rain, cld_min, &
         use_ppm, mono_prof, do_sedi_uv, do_sedi_w, do_sedi_heat, icloud_f, &
         irain_f, xr_a, xr_b, xr_c, ntimes, tau_revp, tice_mlt, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_rhc_cevap, &
@@ -590,12 +589,12 @@ subroutine setup_mp
     ! terminal fall speed for rain, snow, and graupel or hail
     ! -----------------------------------------------------------------------
     
-    gcon = 40.74 * sqrt (sfcrho)
+    gcon = 40.74
     
-    vconr = alin * gam480 / 6.0
-    vcons = clin * gam425 / 6.0
-    vcong = gam450 / 6.0 * gcon
-    vconh = vcong * sqrt (rhoh / rhog)
+    vconr = alin * gamma (4 + blin) / 6.0
+    vcons = clin * gamma (4 + dlin) / 6.0
+    vcong = elin * gamma (4 + flin) / 6.0 * gcon
+    vconh = elin * vcong * sqrt (rhoh / rhog)
 
     normr = pi * rhor * rnzr
     norms = pi * rhos * rnzs
@@ -606,7 +605,7 @@ subroutine setup_mp
     ! physics constants
     ! -----------------------------------------------------------------------
     
-    scm3 = (visk / vdifu) ** (1. / 3.)
+    scm3 = exp (1. / 3. * log (visk / vdifu))
     
     ! -----------------------------------------------------------------------
     ! accretion between rain, snow, and graupel or hail
@@ -615,14 +614,18 @@ subroutine setup_mp
     pisq = pi * pi
     
     cracs = pisq * rnzr * rnzs * rhos
-    csacr = pisq * rnzr * rnzs * rhor
+    csacr = pisq * rnzs * rnzr * rhor
     if (do_hail) then
-        cgacr = pisq * rnzr * rnzh * rhor
+        cgacr = pisq * rnzh * rnzr * rhor
         cgacs = pisq * rnzh * rnzs * rhos
     else
-        cgacr = pisq * rnzr * rnzg * rhor
+        cgacr = pisq * rnzg * rnzr * rhor
         cgacs = pisq * rnzg * rnzs * rhos
     endif
+
+    cracs = cracs * c_pracs
+    csacr = csacr * c_psacr
+    cgacr = cgacr * c_pgacr
     cgacs = cgacs * c_pgacs
     
     ! act:
@@ -633,82 +636,81 @@ subroutine setup_mp
     
     act (1) = norms
     act (2) = normr
+    act (3) = act (2)
+    act (4) = act (1)
+    act (5) = act (2)
     if (do_hail) then
         act (6) = normh
     else
         act (6) = normg
     endif
-    act (3) = act (2)
-    act (4) = act (1)
-    act (5) = act (2)
     act (7) = act (1)
     act (8) = act (6)
     
     do i = 1, 3
         do k = 1, 4
-            acco (i, k) = acc (i) / (act (2 * k - 1) ** ((7 - i) * 0.25) * act (2 * k) ** (i * 0.25))
+            acco (i, k) = acc (i) / &
+                (exp ((7 - i) * 0.25 * log (act (2 * k - 1))) * exp (i * 0.25 * log (act (2 * k))))
         enddo
     enddo
     
     ! -----------------------------------------------------------------------
-    ! accretion between cloud water, cloud ice, rain, and snow
+    ! accretion between cloud water, cloud ice, rain, snow, and graupel or hail
     ! -----------------------------------------------------------------------
     
-    csacw = pi * rnzs * clin * gam325 / (4. * act (1) ** 0.8125)
-    craci = pi * rnzr * alin * gam380 / (4. * act (2) ** 0.95)
-    csaci = csacw * c_psaci
-    cracw = craci * c_pracw
-    
-    ! -----------------------------------------------------------------------
-    ! accretion between cloud water, cloud ice, and graupel or hail
-    ! -----------------------------------------------------------------------
-    
+    cracw = pi * rnzr * alin * gamma (3 + blin) / (4. * exp (0.25 * (3 + blin) * log (act (2))))
+    craci = pi * rnzr * alin * gamma (3 + blin) / (4. * exp (0.25 * (3 + blin) * log (act (2))))
+    csacw = pi * rnzs * clin * gamma (3 + dlin) / (4. * exp (0.25 * (3 + dlin) * log (act (1))))
+    csaci = pi * rnzs * clin * gamma (3 + dlin) / (4. * exp (0.25 * (3 + dlin) * log (act (1))))
     if (do_hail) then
-        cgacw = pi * rnzh * gam350 * gcon / (4. * act (6) ** 0.875)
+        cgacw = pi * rnzh * elin * gamma (3 + flin) * gcon / (4. * exp (0.25 * (3 + flin) * log (act (6))))
+        cgaci = pi * rnzh * elin * gamma (3 + flin) * gcon / (4. * exp (0.25 * (3 + flin) * log (act (6))))
     else
-        cgacw = pi * rnzg * gam350 * gcon / (4. * act (6) ** 0.875)
+        cgacw = pi * rnzg * elin * gamma (3 + flin) * gcon / (4. * exp (0.25 * (3 + flin) * log (act (6))))
+        cgaci = pi * rnzg * elin * gamma (3 + flin) * gcon / (4. * exp (0.25 * (3 + flin) * log (act (6))))
     endif
-    cgaci = cgacw * c_pgaci
+
+    cracw = cracw * c_pracw
+    craci = craci * c_praci
+    csacw = csacw * c_psacw
+    csaci = csaci * c_psaci
+    cgacw = cgacw * c_pgacw
+    cgaci = cgaci * c_pgaci
     
     ! -----------------------------------------------------------------------
-    ! snow sublimation
+    ! rain evaporation, snow sublimation, and graupel or hail sublimation
     ! -----------------------------------------------------------------------
-
+    
+    crevp (1) = 2. * pi * vdifu * tcond * rvgas * rnzr
+    crevp (2) = 0.78 / sqrt (act (2))
+    crevp (3) = 0.31 * scm3 * gamma ((5 + blin) / 2) * sqrt (alin / visk) / &
+        exp (0.25 * (5 + blin) / 2 * log (act (2)))
+    crevp (4) = tcond * rvgas
+    crevp (5) = hlv ** 2 * vdifu
+    
     cssub (1) = 2. * pi * vdifu * tcond * rvgas * rnzs
     cssub (2) = 0.78 / sqrt (act (1))
-    cssub (3) = 0.31 * scm3 * gam263 * sqrt (clin / visk) / act (1) ** 0.65625
+    cssub (3) = 0.31 * scm3 * gamma ((5 + dlin) / 2) * sqrt (clin / visk) / &
+        exp (0.25 * (5 + dlin) / 2 * log (act (1)))
     cssub (4) = tcond * rvgas
     cssub (5) = (hlv + hlf) ** 2 * vdifu
 
-    ! -----------------------------------------------------------------------
-    ! graupel or hail sublimation
-    ! -----------------------------------------------------------------------
-    
     if (do_hail) then
         cgsub (1) = 2. * pi * vdifu * tcond * rvgas * rnzh
     else
         cgsub (1) = 2. * pi * vdifu * tcond * rvgas * rnzg
     endif
     cgsub (2) = 0.78 / sqrt (act (6))
-    cgsub (3) = 0.31 * scm3 * gam275 * sqrt (gcon / visk) / act (6) ** 0.6875
-    cgsub (4) = cssub (4)
-    cgsub (5) = cssub (5)
+    cgsub (3) = 0.31 * scm3 * gamma ((5 + flin) / 2) * sqrt (elin * gcon / visk) / &
+        exp (0.25 * (5 + flin) / 2 * log (act (6)))
+    cgsub (4) = tcond * rvgas
+    cgsub (5) = (hlv + hlf) ** 2 * vdifu
 
-    ! -----------------------------------------------------------------------
-    ! rain evaporation
-    ! -----------------------------------------------------------------------
-    
-    crevp (1) = 2. * pi * vdifu * tcond * rvgas * rnzr
-    crevp (2) = 0.78 / sqrt (act (2))
-    crevp (3) = 0.31 * scm3 * gam290 * sqrt (alin / visk) / act (2) ** 0.725
-    crevp (4) = cssub (4)
-    crevp (5) = hlv ** 2 * vdifu
-    
     ! -----------------------------------------------------------------------
     ! rain freezing
     ! -----------------------------------------------------------------------
     
-    cgfr (1) = 20.e2 * pisq * rnzr * rhor / act (2) ** 1.75
+    cgfr (1) = 20.e2 * pisq * rnzr * rhor / exp (1.75 * log (act (2)))
     cgfr (2) = 0.66
     
     ! -----------------------------------------------------------------------
@@ -981,14 +983,14 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
                 ccn (k) = max (10.0, qnl (i, k)) * 1.e6
                 cin (k) = max (10.0, qni (i, k)) * 1.e6
                 ccn (k) = ccn (k) / den (k)
-                c_praut (k) = cpaut * (ccn (k) * rhor) ** (- 1. / 3.)
+                c_praut (k) = cpaut * exp (- 1. / 3. * log (ccn (k) * rhor))
             enddo
         else
             ccn0 = (ccn_l * min (1., abs (hs (i)) / (10. * grav)) + &
                 ccn_o * (1. - min (1., abs (hs (i)) / (10. * grav)))) * 1.e6
             do k = ks, ke
                 ccn (k) = ccn0 / den (k)
-                c_praut (k) = cpaut * (ccn (k) * rhor) ** (- 1. / 3.)
+                c_praut (k) = cpaut * exp (- 1. / 3. * log (ccn (k) * rhor))
             enddo
         endif
         
@@ -1371,7 +1373,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
                     vtr (k) = 0.0
                 else
                     vtr (k) = vr_fac * vconr * sqrt (min (10., sfcrho / den (k))) * &
-                        exp (0.2 * log (qden / normr))
+                        exp (0.25 * blin * log (qden / normr))
                     vtr (k) = min (vr_max, max (0.0, vtr (k)))
                 endif
             enddo
@@ -1611,13 +1613,11 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             if (use_rhc_revap) then
                 sink = 0.0
                 if (rh_tem .lt. rhc_revap) then
-                    sink = crevp (1) * t2 * dq * (crevp (2) * sqrt (qden) + crevp (3) * &
-                        exp (0.725 * log (qden)) * sqrt (denfac (k))) / (crevp (4) * t2 + crevp (5) * qsat * den (k))
+                    sink = psub (t2, dq, qden, qsat, crevp, den (k), denfac (k), blin)
                     sink = min (qr (k), dt * fac_revp * sink, dqv / (1. + lcpk (k) * dqdt))
                 endif
             else
-                sink = crevp (1) * t2 * dq * (crevp (2) * sqrt (qden) + crevp (3) * &
-                    exp (0.725 * log (qden))) / (crevp (4) * t2 + crevp (5) * qsat * den (k))
+                sink = psub (t2, dq, qden, qsat, crevp, den (k), denfac (k), blin)
                 sink = min (qr (k), dt * fac_revp * sink, dqv / (1. + lcpk (k) * dqdt))
             endif
 
@@ -1643,7 +1643,8 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
             
         if (tz (k) .gt. t_wfr .and. qr (k) .gt. qcmin .and. ql (k) .gt. qcmin) then
 
-            sink = dt * denfac (k) * cracw * exp (0.95 * log (qr (k) * den (k)))
+            qden = qr (k) * den (k)
+            sink = dt * acr2d (qden, cracw, denfac (k), blin)
             sink = sink / (1. + sink) * ql (k)
             ql (k) = ql (k) - sink
             qr (k) = qr (k) + sink
@@ -1788,7 +1789,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                     psacw = 0.
                     qden = qs (k) * den (k)
                     if (ql (k) .gt. qcmin) then
-                        factor = denfac (k) * csacw * exp (0.8125 * log (qden))
+                        factor = acr2d (qden, csacw, denfac (k), dlin)
                         psacw = factor / (1. + dts * factor) * ql (k)
                     endif
                     
@@ -1802,7 +1803,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                     
                     tin = tz (k)
                     dq = iqs (tin, den (k), dqdt) - qv (k)
-                    psmlt = max (0., smlt (tc, dq, qden, psacw, psacr, csmlt, den (k), denfac (k)))
+                    psmlt = max (0., pmlt (tc, dq, qden, psacw, psacr, csmlt, den (k), denfac (k), dlin))
 
                     sink = min (qs (k), (psmlt + pracs) * dts, tc / icpk (k))
                     tmp = min (sink, dim (qs_mlt, ql (k)))
@@ -1827,7 +1828,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                     pgacw = 0.
                     qden = qg (k) * den (k)
                     if (ql (k) .gt. qcmin) then
-                        factor = cgacw * qden / sqrt (den (k) * sqrt (sqrt (qden)))
+                        factor = acr2d (qden, cgacw, denfac (k), flin)
                         pgacw = factor / (1. + dts * factor) * ql (k)
                     endif
                     
@@ -1839,7 +1840,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                     
                     tin = tz (k)
                     dq = iqs (tin, den (k), dqdt) - qv (k)
-                    pgmlt = max (0., gmlt (tc, dq, qden, pgacw, pgacr, cgmlt, den (k)))
+                    pgmlt = max (0., pmlt (tc, dq, qden, pgacw, pgacr, cgmlt, den (k), denfac (k), flin))
 
                     sink = min (qg (k), pgmlt * dts, tc / icpk (k))
                     qg (k) = qg (k) - sink
@@ -1861,8 +1862,9 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                 if (qi (k) .gt. qcmin) then
                     
                     psaci = 0.
+                    qden = qs (k) * den (k)
                     if (qs (k) .gt. qcmin) then
-                        factor = dts * denfac (k) * csaci * exp (0.05 * tc + 0.8125 * log (qs (k) * den (k)))
+                        factor = dts * acr2d (qden, csaci, denfac (k), dlin)
                         psaci = factor / (1. + factor) * qi (k)
                     endif
                     
@@ -1885,8 +1887,9 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                     qs (k) = qs (k) + sink
                     
                     pgaci = 0.
+                    qden = qg (k) * den (k)
                     if (qg (k) .gt. qcmin) then
-                        factor = dts * cgaci / sqrt (den (k)) * exp (0.875 * log (qg (k) * den (k)))
+                        factor = dts * acr2d (qden, cgaci, denfac (k), flin)
                         pgaci = factor / (1. + factor) * qi (k)
                     endif
 
@@ -1961,7 +1964,7 @@ subroutine icloud (ks, ke, tz, p1, qv, ql, qr, qi, qs, qg, dp1, den, &
                     pgacw = 0.
                     if (ql (k) .gt. qcmin) then
                         qden = qg (k) * den (k)
-                        factor = dts * cgacw * qden / sqrt (den (k) * sqrt (sqrt (qden)))
+                        factor = dts * acr2d (qden, cgacw, denfac (k), flin)
                         pgacw = factor / (1. + factor) * ql (k)
                     endif
                     
@@ -2038,7 +2041,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     real :: pidep, qi_gen, qi_crt, q_plus, q_minus
     real :: rh, rqi, tin, qsw, qsi, qpz, qstar, rh_tem, sigma, gam
     real :: dqdt, dq, dq0, factor, tmp, liq, ice, fac_l2v, fac_v2l
-    real :: evap, sink, tc, qa10, qa100, pssub, pgsub, tsq, qden
+    real :: evap, sink, tc, qa10, qa100, pssub, pgsub, t2, qden
 
     real, dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3, q_liq, q_sol, q_cond
     
@@ -2267,12 +2270,11 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                 tin = tz (k)
                 qsi = iqs (tin, den (k), dqdt)
                 qden = qs (k) * den (k)
-                tmp = exp (0.65625 * log (qden))
-                tsq = tz (k) * tz (k)
-                dq = (qsi - qv (k)) / (1. + tcpk (k) * dqdt)
-                pssub = cssub (1) * tsq * (cssub (2) * sqrt (qden) + cssub (3) * tmp * &
-                    sqrt (denfac (k))) / (cssub (4) * tsq + cssub (5) * qsi * den (k))
-                pssub = (qsi - qv (k)) * dts * pssub
+                t2 = tz (k) * tz (k)
+                dq = qsi - qv (k)
+                pssub = psub (t2, dq, qden, qsi, cssub, den (k), denfac (k), dlin)
+                pssub = dts * pssub
+                dq = dq / (1. + tcpk (k) * dqdt)
                 if (pssub .gt. 0.) then
                     sink = min (pssub * min (1., dim (tz (k), t_sub) * 0.2), qs (k))
                     sub = sub + sink * dp1 (k)
@@ -2303,12 +2305,11 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
                 tin = tz (k)
                 qsi = iqs (tin, den (k), dqdt)
                 qden = qg (k) * den (k)
-                tmp = exp (0.6875 * log (qden))
-                tsq = tz (k) * tz (k)
-                dq = (qsi - qv (k)) / (1. + tcpk (k) * dqdt)
-                pgsub = cgsub (1) * tsq * (cgsub (2) * sqrt (qden) + cgsub (3) * tmp / &
-                    sqrt (sqrt (den (k)))) / (cgsub (4) * tsq + cgsub (5) * qsi * den (k))
-                pgsub = (qsi - qv (k)) * dts * pgsub
+                t2 = tz (k) * tz (k)
+                dq = qsi - qv (k)
+                pgsub = psub (t2, dq, qden, qsi, cgsub, den (k), denfac (k), flin)
+                pgsub = dts * pgsub
+                dq = dq / (1. + tcpk (k) * dqdt)
                 if (pgsub .gt. 0.) then
                     sink = min (pgsub * min (1., dim (tz (k), t_sub) * 0.2), qg (k))
                     sub = sub + sink * dp1 (k)
@@ -2444,8 +2445,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
             if (rh .ge. 1.0) then
                 qa (k) = 1.0
             elseif (rh .gt. rh_thres .and. q_cond (k) .gt. qcmin) then
-                qa (k) = rh ** xr_a * (1.0 - exp (- xr_b * max (0.0, q_cond (k)) / &
-                    max (1.e-5, (max (1.e-10, 1.0 - rh) * qstar) ** xr_c)))
+                qa (k) = exp (xr_a * log (rh)) * (1.0 - exp (- xr_b * max (0.0, q_cond (k)) / &
+                    max (1.e-5, exp (xr_c * log (max (1.e-10, 1.0 - rh) * qstar)))))
                 qa (k) = max (0.0, min (1., qa (k)))
             else
                 qa (k) = 0.0
@@ -2454,8 +2455,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
 
         if (cfflag .eq. 3) then
             if (q_cond (k) .gt. qcmin) then
-                qa (k) = 1. / 50. * (5.77 * (100. - gsize / 1000.) * max (0.0, q_cond (k) * 1000.) ** 1.07 + &
-                    4.82 * (gsize / 1000. - 50.) * max (0.0, q_cond (k) * 1000.) ** 0.94)
+                qa (k) = 1. / 50. * (5.77 * (100. - gsize / 1000.) * exp (1.07 * log (max (qcmin * 1000., q_cond (k) * 1000.))) + &
+                    4.82 * (gsize / 1000. - 50.) * exp (0.94 * log (max (qcmin * 1000., q_cond (k) * 1000.))))
                 qa (k) = qa (k) * (0.92 / 0.96 * q_liq (k) / q_cond (k) + 1.0 / 0.96 * q_sol (k) / q_cond (k))
                 qa (k) = max (0.0, min (1., qa (k)))
             else
@@ -2464,7 +2465,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
         endif
 
         if (cfflag .eq. 4) then
-            sigma = 0.28 + max (0.0, q_cond (k) * 1000.) ** 0.49
+            sigma = 0.28 + exp (0.49 * log (max (qcmin * 1000., q_cond (k) * 1000.)))
             gam = max (0.0, q_cond (k) * 1000.) / sigma
             if (gam .lt. 0.18) then
                 qa10 = 0.
@@ -3426,7 +3427,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
 
     integer :: k
     
-    real :: vi0
+    real :: vi0, qden
     
     real, parameter :: aa = - 4.14122e-5
     real, parameter :: bb = - 0.00538922
@@ -3463,7 +3464,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
                     vti (k) = vi0 * exp (log (10.) * vti (k))
                 endif
                 if (ifflag .eq. 2) &
-                    vti (k) = vi_fac * 3.29 * (qi (k) * den (k)) ** 0.16
+                    vti (k) = vi_fac * 3.29 * exp (0.16 * log (qi (k) * den (k)))
                 vti (k) = min (vi_max, max (0.0, vti (k)))
             endif
         enddo
@@ -3480,7 +3481,8 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
             if (qs (k) .lt. qfmin) then
                 vts (k) = 0.0
             else
-                vts (k) = vs_fac * vcons * rhof (k) * exp (0.0625 * log (qs (k) * den (k) / norms))
+                qden = qs (k) * den (k)
+                vts (k) = vs_fac * vcons * rhof (k) * exp (0.25 * dlin * log (qden / norms))
                 vts (k) = min (vs_max, max (0.0, vts (k)))
             endif
         enddo
@@ -3498,7 +3500,8 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
                 if (qg (k) .lt. qfmin) then
                     vtg (k) = 0.0
                 else
-                    vtg (k) = vg_fac * vconh * rhof (k) * sqrt (sqrt (sqrt (qg (k) * den (k) / normh))) / sqrt (den (k))
+                    qden = qg (k) * den (k)
+                    vtg (k) = vg_fac * vconh * rhof (k) * exp (0.25 * flin * log (qden / normh))
                     vtg (k) = min (vg_max, max (0.0, vtg (k)))
                 endif
             enddo
@@ -3507,7 +3510,8 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
                 if (qg (k) .lt. qfmin) then
                     vtg (k) = 0.0
                 else
-                    vtg (k) = vg_fac * vcong * rhof (k) * sqrt (sqrt (sqrt (qg (k) * den (k) / normg))) / sqrt (den (k))
+                    qden = qg (k) * den (k)
+                    vtg (k) = vg_fac * vcong * rhof (k) * exp (0.25 * flin * log (qden / normg))
                     vtg (k) = min (vg_max, max (0.0, vtg (k)))
                 endif
             enddo
@@ -4601,7 +4605,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
-                    bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / 50.e-3) * max (0.0, - tc0) ** 1.5
+                    bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / 50.e-3) * exp (1.5 * log (max (1.e-10, - tc0)))
                     rei (i, k) = 377.4 + bw * (203.3 + bw * (37.91 + 2.3696 * bw))
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
@@ -4637,7 +4641,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (qmr (i, k) .gt. qcmin) then
                 qcr (i, k) = dpg * qmr (i, k) * 1.0e3
                 lambdar = exp (0.25 * log (normr / qmr (i, k) / rho))
-                rer (i, k) = 0.5 * exp (log (gam480 / 6) / 0.80) / lambdar * 1.0e6
+                rer (i, k) = 0.5 * exp (log (gamma (4 + blin) / 6) / 0.80) / lambdar * 1.0e6
                 rer (i, k) = max (rermin, min (rermax, rer (i, k)))
             else
                 qcr (i, k) = 0.0
@@ -4651,7 +4655,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (qms (i, k) .gt. qcmin) then
                 qcs (i, k) = dpg * qms (i, k) * 1.0e3
                 lambdas = exp (0.25 * log (norms / qms (i, k) / rho))
-                res (i, k) = 0.5 * exp (log (gam425 / 6) / 0.25) / lambdas * 1.0e6
+                res (i, k) = 0.5 * exp (log (gamma (4 + dlin) / 6) / 0.25) / lambdas * 1.0e6
                 res (i, k) = max (resmin, min (resmax, res (i, k)))
             else
                 qcs (i, k) = 0.0
@@ -4665,7 +4669,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             if (qmg (i, k) .gt. qcmin) then
                 qcg (i, k) = dpg * qmg (i, k) * 1.0e3
                 lambdag = exp (0.25 * log (normg / qmg (i, k) / rho))
-                reg (i, k) = 0.5 * exp (log (gam450 / 6) / 0.50) / lambdag * 1.0e6
+                reg (i, k) = 0.5 * exp (log (gamma (4 + flin) / 6) / 0.50) / lambdag * 1.0e6
                 reg (i, k) = max (regmin, min (regmax, reg (i, k)))
             else
                 qcg (i, k) = 0.0
@@ -4771,7 +4775,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
 
     real (kind = r_grid) :: t1, t2, t3, vtr, vtg, vts
     
-    real (kind = r_grid), parameter :: factor_s = gamma_seven * 1.e18 * (1. / (pi * rhos)) ** 1.75 &
+    real (kind = r_grid), parameter :: factor_s = gamma_seven * 1.e18 * exp (1.75 * log (1. / (pi * rhos))) &
          * (rhos / rhor) ** 2 * alpha
     
     real (kind = r_grid), dimension (is:ie) :: rhoair, denfac, z_e
@@ -4818,7 +4822,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                     ! date modified 20170701
                     ! account for excessively high cloud water - > autoconvert (diag only) excess cloud water
                     t1 = rhoair (i) * max (qcmin, q (i, j, k, rainwat) + dim (q (i, j, k, liq_wat), 1.0e-3))
-                    vtr = max (1.e-3, vconr * denfac (i) * exp (0.2 * log (t1 / normr)))
+                    vtr = max (1.e-3, vconr * denfac (i) * exp (0.25 * blin * log (t1 / normr)))
                     z_e (i) = 200. * exp (1.6 * log (3.6e6 * t1 / rhor * vtr))
                     ! z_e = 200. * (exp (1.6 * log (3.6e6 * t1 / rhor * vtr)) + &
                     ! exp (1.6 * log (3.6e6 * t3 / rhogh * vtg)) + &
@@ -4829,7 +4833,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
             if (graupel .gt. 0) then
                 do i = is, ie
                     t3 = rhoair (i) * max (qcmin, q (i, j, k, graupel))
-                    vtg = max (1.e-3, vcongh * denfac (i) * exp (0.125 * log (t3 / normgh))) / sqrt (rhoair (i))
+                    vtg = max (1.e-3, vcongh * denfac (i) * exp (0.25 * flin * log (t3 / normgh)))
                     z_e (i) = z_e (i) + 200. * exp (1.6 * log (3.6e6 * t3 / rhogh * vtg))
                 enddo
             endif
@@ -4837,7 +4841,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
             if (snowwat .gt. 0) then
                 do i = is, ie
                     t2 = rhoair (i) * max (qcmin, q (i, j, k, snowwat))
-                    ! vts = max (1.e-3, vcons * denfac * exp (0.0625 * log (t2 / norms)))
+                    ! vts = max (1.e-3, vcons * denfac * exp (0.25 * dlin * log (t2 / norms)))
                     z_e (i) = z_e (i) + (factor_s / alpha) * t2 * exp (0.75 * log (t2 / rnzs))
                     ! z_e = 200. * (exp (1.6 * log (3.6e6 * t1 / rhor * vtr)) + &
                     ! exp (1.6 * log (3.6e6 * t3 / rhogh * vtg)) + &
@@ -4872,6 +4876,24 @@ end subroutine rad_ref
 ! accretion function (Lin et al. 1983)
 ! =======================================================================
 
+real function acr2d (qden, c, denfac, lin)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: qden, c, denfac, lin
+    
+    acr2d = denfac * c * exp (0.25 * (3 + lin) * log (qden))
+    
+end function acr2d
+
+! =======================================================================
+! accretion function (Lin et al. 1983)
+! =======================================================================
+
 real function acr3d (v1, v2, q1, q2, c, cac, rho)
     
     implicit none
@@ -4896,10 +4918,10 @@ real function acr3d (v1, v2, q1, q2, c, cac, rho)
 end function acr3d
 
 ! =======================================================================
-! melting of snow function (Lin et al. 1983)
+! ventilation coefficient (Lin et al. 1983)
 ! =======================================================================
 
-real function smlt (tc, dqs, qsrho, psacw, psacr, c, rho, rhofac)
+real function vent_coeff (qden, c1, c2, denfac, lin)
     
     implicit none
     
@@ -4907,18 +4929,17 @@ real function smlt (tc, dqs, qsrho, psacw, psacr, c, rho, rhofac)
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    real, intent (in) :: tc, dqs, qsrho, psacw, psacr, c (5), rho, rhofac
+    real, intent (in) :: qden, c1, c2, denfac, lin
     
-    smlt = (c (1) * tc / rho - c (2) * dqs) * (c (3) * sqrt (qsrho) + &
-        c (4) * qsrho ** 0.65625 * sqrt (rhofac)) + c (5) * tc * (psacw + psacr)
+    vent_coeff = c1 * sqrt (qden) + c1 * exp (0.25 * (5 + lin) / 2 * log (qden)) * sqrt (denfac)
     
-end function smlt
+end function vent_coeff
 
 ! =======================================================================
-! melting of graupel function (Lin et al. 1983)
+! sublimation or evaporation function (Lin et al. 1983)
 ! =======================================================================
 
-real function gmlt (tc, dqs, qgrho, pgacw, pgacr, c, rho)
+real function psub (t2, dq, qden, qsat, c, den, denfac, lin)
     
     implicit none
     
@@ -4926,12 +4947,31 @@ real function gmlt (tc, dqs, qgrho, pgacw, pgacr, c, rho)
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    real, intent (in) :: tc, dqs, qgrho, pgacw, pgacr, c (5), rho
+    real, intent (in) :: t2, dq, qden, qsat, c (5), den, denfac, lin
     
-    gmlt = (c (1) * tc / rho - c (2) * dqs) * (c (3) * sqrt (qgrho) + &
-        c (4) * qgrho ** 0.6875 / rho ** 0.25) + c (5) * tc * (pgacw + pgacr)
+    psub = c (1) * t2 * dq * vent_coeff (qden, c (2), c (3), denfac, lin) / &
+        (c (4) * t2 + c (5) * qsat * den)
     
-end function gmlt
+end function psub
+
+! =======================================================================
+! melting function (Lin et al. 1983)
+! =======================================================================
+
+real function pmlt (tc, dq, qden, pxacw, pxacr, c, den, denfac, lin)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: tc, dq, qden, pxacw, pxacr, c (5), den, denfac, lin
+    
+    pmlt = (c (1) * tc / den - c (2) * dq) * vent_coeff (qden, c (3), c (4), denfac, lin) + &
+        c (5) * tc * (pxacw + pxacr)
+    
+end function pmlt
 
 ! =======================================================================
 ! sedimentation of horizontal momentum
@@ -5350,7 +5390,7 @@ subroutine qs_table_core (n, n_blend, do_smith_table, table)
             b = - 3.56654 * log10 (tice / tem)
             c = 0.876793 * (1. - tem / tice)
             e = log10 (esbasi)
-            table (i) = 0.1 * 10 ** (a + b + c + e)
+            table (i) = 0.1 * exp ((a + b + c + e) * log (10.))
         enddo
     else
         do i = 1, n_min
@@ -5371,10 +5411,10 @@ subroutine qs_table_core (n, n_blend, do_smith_table, table)
             tem = tice + delt * (real (i - 1) - n_blend)
             a = - 7.90298 * (tbasw / tem - 1.)
             b = 5.02808 * log10 (tbasw / tem)
-            c = - 1.3816e-7 * (10 ** ((1. - tem / tbasw) * 11.344) - 1.)
-            d = 8.1328e-3 * (10 ** ((tbasw / tem - 1.) * (- 3.49149)) - 1.)
+            c = - 1.3816e-7 * (exp ((1. - tem / tbasw) * 11.344 * log (10.)) - 1.)
+            d = 8.1328e-3 * (exp((tbasw / tem - 1.) * (- 3.49149) * log (10.)) - 1.)
             e = log10 (esbasw)
-            esh = 0.1 * 10 ** (a + b + c + d + e)
+            esh = 0.1 * exp ((a + b + c + d + e) * log (10.))
             if (i .le. n_blend) then
                 esupc (i) = esh
             else
