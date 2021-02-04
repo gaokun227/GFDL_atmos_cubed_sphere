@@ -56,6 +56,7 @@ use field_manager_mod,      only: MODEL_ATMOS
 use tracer_manager_mod,     only: get_tracer_index, get_number_tracers, &
                                   NO_TRACER, get_tracer_names
 use IPD_typedefs,           only: IPD_data_type, kind_phys
+use data_override_mod,      only: data_override_init
 
 !-----------------
 ! FV core modules:
@@ -366,6 +367,8 @@ contains
 
    call set_domain(Atm(mygrid)%domain)
 
+   call data_override_init(Atm_domain_in = Atm(mygrid)%domain)
+   
  end subroutine atmosphere_init
 
 

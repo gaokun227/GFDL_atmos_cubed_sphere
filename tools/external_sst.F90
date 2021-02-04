@@ -30,6 +30,7 @@ module external_sst_mod
   use time_manager_mod,    only: time_type, get_date, operator(==), &
                                  operator(>), operator(<)
   use get_cal_time_mod,    only: get_cal_time
+  use data_override_mod,   only: data_override
 
 #ifdef NO_GFDL_SHARED
 !----------------- Public Data -----------------------------------
@@ -80,36 +81,36 @@ subroutine load_ec_sst(Atm)
         write(*,*) "EC SST update frequency depends on the time interval of EC SST dataset."
     endif
 
-    if (file_exist(fn_ec_time)) then
-
-        call field_size(fn_ec_time, "tnew", siz)
- 
-        time_len = siz(1)
- 
-        if (time_len .lt. 1) then
-            call mpp_error("external_sst_mod", "Invalid number of time records in file: "//trim(fn_ec_time), FATAL)
-        endif
-
-        allocate(time(time_len))
-        allocate(sst_time(time_len))
- 
-        call read_data(fn_ec_time, "tnew", time, no_domain=.true.)
-        call get_var_att_value(fn_ec_time, "tnew", "units", units)
- 
-        do n = 1, time_len
-            sst_time(n) = get_cal_time(time(n), units, "gregorian")
-        enddo
- 
-        allocate(ec_sst(is:ie,js:je,time_len))
- 
-        id_res = register_restart_field (SST_restart, fn_ec_sst, "sst", ec_sst, domain=Atm%domain)
-        call restore_state (SST_restart)
-
-    else
-
-        call mpp_error("external_sst_mod","file: "//trim(fn_ec_time)//" does not exist.", FATAL)
-
-    endif
+!!$    if (file_exist(fn_ec_time)) then
+!!$
+!!$        call field_size(fn_ec_time, "tnew", siz)
+!!$ 
+!!$        time_len = siz(1)
+!!$ 
+!!$        if (time_len .lt. 1) then
+!!$            call mpp_error("external_sst_mod", "Invalid number of time records in file: "//trim(fn_ec_time), FATAL)
+!!$        endif
+!!$
+!!$        allocate(time(time_len))
+!!$        allocate(sst_time(time_len))
+!!$ 
+!!$        call read_data(fn_ec_time, "tnew", time, no_domain=.true.)
+!!$        call get_var_att_value(fn_ec_time, "tnew", "units", units)
+!!$ 
+!!$        do n = 1, time_len
+!!$            sst_time(n) = get_cal_time(time(n), units, "gregorian")
+!!$        enddo
+!!$ 
+!!$        allocate(ec_sst(is:ie,js:je,time_len))
+!!$ 
+!!$        id_res = register_restart_field (SST_restart, fn_ec_sst, "sst", ec_sst, domain=Atm%domain)
+!!$        call restore_state (SST_restart)
+!!$
+!!$    else
+!!$
+!!$        call mpp_error("external_sst_mod","file: "//trim(fn_ec_time)//" does not exist.", FATAL)
+!!$
+!!$    endif
 
 end subroutine load_ec_sst
 
@@ -124,30 +125,36 @@ subroutine get_ec_sst(time, is, ie, js, je, sst)
 
     real, intent(inout), dimension(is:ie,js:je) :: sst
 
-    integer :: n
-    integer :: year, month, day, hour, minute, second
+!!$    integer :: n
+!!$    integer :: year, month, day, hour, minute, second
+    logical :: used
 
-    call get_date(Time, year, month, day, hour, minute, second)
-    if (.not. (hour .eq. 0 .and. minute .eq. 0 .and. second .eq. 0)) return ! this requires daily data
+!!$    call get_date(Time, year, month, day, hour, minute, second)
+!!$    if (.not. (hour .eq. 0 .and. minute .eq. 0 .and. second .eq. 0)) return ! this requires daily data
+!!$
+!!$    if (time < sst_time(1) .or. time > sst_time(time_len)) then
+!!$        call mpp_error("external_sst_mod","model time falls outside the range of SST data time.", FATAL)
+!!$    endif
+!!$
+!!$    if (.not. (allocated(sst_time) .and. allocated(ec_sst))) then
+!!$        call mpp_error("external_sst_mod","neither sst_time nor ec_sst is allocated.", FATAL)
+!!$    endif
+!!$
+!!$    do n = 1, time_len
+!!$        if (time == sst_time(n)) then
+!!$            sst = ec_sst(:,:,n)
+!!$            if (mpp_pe() .eq. mpp_root_pe()) then
+!!$                write(*,'(A,i4,A,i2,A,i2)') "Using EC SST on: ",year,"-",month,"-",day
+!!$            endif
+!!$            exit
+!!$        endif
+!!$    enddo
 
-    if (time < sst_time(1) .or. time > sst_time(time_len)) then
-        call mpp_error("external_sst_mod","model time falls outside the range of SST data time.", FATAL)
+    call data_override('ATM', 'sst', sst, time, override=used)
+    if (.not. used) then
+       call mpp_error(FATAL, " SST dataset not specified in data_table.")
     endif
-
-    if (.not. (allocated(sst_time) .and. allocated(ec_sst))) then
-        call mpp_error("external_sst_mod","neither sst_time nor ec_sst is allocated.", FATAL)
-    endif
-
-    do n = 1, time_len
-        if (time == sst_time(n)) then
-            sst = ec_sst(:,:,n)
-            if (mpp_pe() .eq. mpp_root_pe()) then
-                write(*,'(A,i4,A,i2,A,i2)') "Using EC SST on: ",year,"-",month,"-",day
-            endif
-            exit
-        endif
-    enddo
-
+    
 end subroutine get_ec_sst
 
 end module external_sst_mod
