@@ -4528,6 +4528,7 @@ subroutine sedi_melt (dtm, k0, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
 
     real (kind = r_grid), dimension (ks:ke) :: te1, te2
 
+    zs = 0.0
     dt5 = 0.5 * dtm
 
     select case (qflag)
@@ -4634,11 +4635,11 @@ subroutine sedi_melt (dtm, k0, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         
         select case (qflag)
             case (1)
-               qi (k) = q (k)
+               qi = q
             case (2)
-               qs (k) = q (k)
+               qs = q
             case (3)
-               qg (k) = q (k)
+               qg = q
         end select
 
         ! -----------------------------------------------------------------------
