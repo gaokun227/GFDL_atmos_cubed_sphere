@@ -4540,7 +4540,7 @@ subroutine sedi_melt (dtm, k0, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
 
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
 
-    character (len = 2) :: qflag
+    character (len = 2), intent (in) :: qflag
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -4561,11 +4561,13 @@ subroutine sedi_melt (dtm, k0, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
 
     select case (qflag)
         case ("qi")
-           q = qi
+            q = qi
         case ("qs")
-           q = qs
+            q = qs
         case ("qg")
-           q = qg
+            q = qg
+        case default
+            print *, "gfdl_mp: qflag error!"
     end select
 
     call check_column (ks, ke, q, no_fall)
@@ -4607,11 +4609,13 @@ subroutine sedi_melt (dtm, k0, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
                             endif
                             select case (qflag)
                                 case ("qi")
-                                   qi (k) = q (k)
+                                    qi (k) = q (k)
                                 case ("qs")
-                                   qs (k) = q (k)
+                                    qs (k) = q (k)
                                 case ("qg")
-                                   qg (k) = q (k)
+                                    qg (k) = q (k)
+                                case default
+                                    print *, "gfdl_mp: qflag error!"
                             end select
                             tz (m) = (tz (m) * cvm (m) - li00 * sink) / &
                                  mhc (qv (k), ql (m), qr (m), qi (m), qs (m), qg (m))
@@ -4648,11 +4652,13 @@ subroutine sedi_melt (dtm, k0, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         
         select case (qflag)
             case ("qi")
-               q = qi
+                q = qi
             case ("qs")
-               q = qs
+                q = qs
             case ("qg")
-               q = qg
+                q = qg
+            case default
+                print *, "gfdl_mp: qflag error!"
         end select
 
         if (use_ppm) then
@@ -4663,11 +4669,13 @@ subroutine sedi_melt (dtm, k0, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
         
         select case (qflag)
             case ("qi")
-               qi = q
+                qi = q
             case ("qs")
-               qs = q
+                qs = q
             case ("qg")
-               qg = q
+                qg = q
+            case default
+                print *, "gfdl_mp: qflag error!"
         end select
 
         ! -----------------------------------------------------------------------
