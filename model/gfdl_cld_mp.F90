@@ -1142,7 +1142,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
                 enddo
             else
                 do k = ks, ke
-                    te (i, k) = te (i, k) - mte (qv (i, k), ql (i, k), qr (i, k), qi (i, k), &
+                    te (i, k) = te (i, k) + mte (qv (i, k), ql (i, k), qr (i, k), qi (i, k), &
                         qs (i, k), qg (i, k), tz (k), delp (i, k), .true.) * grav
                 enddo
             endif
@@ -1154,10 +1154,18 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
     
         if (do_inline_mp) then
             do k = ks, ke
+                q_liq (k) = qlz (k) + qrz (k)
+                q_sol (k) = qiz (k) + qsz (k) + qgz (k)
+                q_cond = q_liq (k) + q_sol (k)
                 pt (i, k) = tz (k) * (1. + zvir * qvz (k)) * (1. - q_cond)
             enddo
         else
             do k = ks, ke
+                q_liq (k) = qlz (k) + qrz (k)
+                q_sol (k) = qiz (k) + qsz (k) + qgz (k)
+                q_cond = q_liq (k) + q_sol (k)
+                con_r8 = one_r8 - (qvz (k) + q_cond)
+                c8 = mhc (con_r8, qvz (k), q_liq (k), q_sol (k)) * c_air
                 pt (i, k) = pt (i, k) + (tz (k) - pt (i, k)) * c8 / cp_air
             enddo
         endif
