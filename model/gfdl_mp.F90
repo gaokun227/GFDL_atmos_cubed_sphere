@@ -1027,17 +1027,17 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             evaporation (i) = evaporation (i) + reevap * convt
             sublimation (i) = sublimation (i) + sub * convt
             
-            ! -----------------------------------------------------------------------
-            ! cloud fraction diagnostic
-            ! -----------------------------------------------------------------------
-            
-            if (.not. (do_qa .and. last_step)) cycle
-        
-            call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, &
-                tz, h_var, gsize (i))
-    
         enddo ! n loop
         
+        ! -----------------------------------------------------------------------
+        ! cloud fraction diagnostic
+        ! -----------------------------------------------------------------------
+        
+        if (.not. (do_qa .and. last_step)) cycle
+        
+        call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, &
+            tz, h_var, gsize (i))
+    
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
         ! -----------------------------------------------------------------------
