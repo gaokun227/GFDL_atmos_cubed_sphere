@@ -1045,7 +1045,8 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         if (do_sedi_uv) then
             do k = ks + 1, ke
                 c8 = mhc (qvz (k), qlz (k), qrz (k), qiz (k), qsz (k), qgz (k)) * c_air
-                tz (k) = tz (k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2 - (u (k) ** 2 + v (k) ** 2)) / c8
+                tz (k) = tz (k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2 - &
+                    (u (k) ** 2 + v (k) ** 2)) / c8
             enddo
             do k = ks + 1, ke
                 ua (i, k) = u (k)
@@ -1192,6 +1193,663 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
 end subroutine mpdrv
 
 ! =======================================================================
+! fix negative water species
+! =======================================================================
+
+subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in), dimension (ks:ke) :: dp
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+
+    real, intent (out) :: cond
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+    
+    real :: dq, sink
+    
+    real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
+    
+    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+
+    cond = 0
+    
+    ! -----------------------------------------------------------------------
+    ! calculate moist heat capacity and latent heat coefficients
+    ! -----------------------------------------------------------------------
+    
+    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, &
+        lcpk, icpk, tcpk, tcp3)
+    
+    do k = ks, ke
+        
+        ! -----------------------------------------------------------------------
+        ! fix negative solid-phase hydrometeors
+        ! -----------------------------------------------------------------------
+        
+        ! if cloud ice < 0, borrow from snow
+        if (qi (k) .lt. 0.) then
+            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., 0., - qi (k), qi (k), 0.)
+        endif
+
+        ! if snow < 0, borrow from graupel
+        if (qs (k) .lt. 0.) then
+            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., 0., 0., - qs (k), qs (k))
+        endif
+
+        ! if graupel < 0, borrow from rain
+        if (qg (k) .lt. 0.) then
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., qg (k), 0., 0., - qg (k), te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! fix negative liquid-phase hydrometeors
+        ! -----------------------------------------------------------------------
+        
+        ! if rain < 0, borrow from cloud water
+        if (qr (k) .lt. 0.) then
+            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., qr (k), - qr (k), 0., 0., 0.)
+        endif
+
+        ! if cloud water < 0, borrow from water vapor
+        if (ql (k) .lt. 0.) then
+            cond = cond - ql (k) * dp (k)
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                ql (k), - ql (k), 0., 0., 0., 0., te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+        endif
+        
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! fix negative water vapor
+    ! -----------------------------------------------------------------------
+    
+    ! if water vapor < 0, borrow water vapor from below
+    do k = ks, ke - 1
+        if (qv (k) .lt. 0.) then
+            qv (k + 1) = qv (k + 1) + qv (k) * dp (k) / dp (k + 1)
+            qv (k) = 0.
+        endif
+    enddo
+    
+    ! if water vapor < 0, borrow water vapor from above
+    if (qv (ke) .lt. 0. .and. qv (ke - 1) .gt. 0.) then
+        dq = min (- qv (ke) * dp (ke), qv (ke - 1) * dp (ke - 1))
+        qv (ke - 1) = qv (ke - 1) - dq / dp (ke - 1)
+        qv (ke) = qv (ke) + dq / dp (ke)
+    endif
+    
+end subroutine neg_adj
+
+! =======================================================================
+! sedimentation of cloud ice, snow, graupel or hail, and rain
+! =======================================================================
+
+subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+        vtr, vti, vts, vtg, r1, i1, s1, g1, u, v, w, den, denfac, dte)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: dp, dz, den, denfac
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, u, v, w
+
+    real, intent (out) :: r1, i1, s1, g1
+
+    real, intent (out), dimension (ks:ke) :: vtr, vti, vts, vtg
+
+    real (kind = r_grid), intent (inout) :: dte
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), dimension (ks:ke) :: te8, cvm
+
+    r1 = 0.
+    i1 = 0.
+    s1 = 0.
+    g1 = 0.
+    
+    ! -----------------------------------------------------------------------
+    ! calculate heat capacities and latent heat coefficients
+    ! -----------------------------------------------------------------------
+    
+    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, &
+        lcpk, icpk, tcpk, tcp3)
+    
+    ! -----------------------------------------------------------------------
+    ! terminal fall and melting of falling cloud ice into rain
+    ! -----------------------------------------------------------------------
+    
+    call term_ice (ks, ke, tz, qi, den, vi_fac, vi_max, const_vi, vti)
+    
+    if (do_sedi_melt) then
+        call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+            vti, r1, tau_imlt, cvm, icpk, "qi")
+    endif
+
+    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+        vti, i1, u, v, w, dte, "qi")
+    
+    ! -----------------------------------------------------------------------
+    ! terminal fall and melting of falling snow into rain
+    ! -----------------------------------------------------------------------
+    
+    call term_rsg (ks, ke, qs, den, denfac, vs_fac, vcons, dlin, norms, vs_max, const_vs, vts)
+        
+    if (do_sedi_melt) then
+        call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+            vts, r1, tau_smlt, cvm, icpk, "qs")
+    endif
+
+    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+        vts, s1, u, v, w, dte, "qs")
+    
+    ! ----------------------------------------------
+    ! terminal fall and melting of falling graupel into rain
+    ! ----------------------------------------------
+    
+    if (do_hail) then
+        call term_rsg (ks, ke, qg, den, denfac, vg_fac, vconh, flin, normh, vg_max, const_vg, vtg)
+    else
+        call term_rsg (ks, ke, qg, den, denfac, vg_fac, vcong, flin, normg, vg_max, const_vg, vtg)
+    endif
+
+    if (do_sedi_melt) then
+        call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+            vtg, r1, tau_gmlt, cvm, icpk, "qg")
+    endif
+
+    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+        vtg, g1, u, v, w, dte, "qg")
+    
+    ! ----------------------------------------------
+    ! terminal fall of rain
+    ! ----------------------------------------------
+    
+    call term_rsg (ks, ke, qr, den, denfac, vr_fac, vconr, blin, normr, vr_max, const_vr, vtr)
+        
+    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
+        vtr, r1, u, v, w, dte, "qr")
+    
+end subroutine sedimentation
+
+! =======================================================================
+! terminal velocity for cloud ice
+! =======================================================================
+
+subroutine term_ice (ks, ke, tz, q, den, v_fac, v_max, const_v, vt)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    logical, intent (in) :: const_v
+    
+    real, intent (in) :: v_fac, v_max
+    
+    real, intent (in), dimension (ks:ke) :: q, den
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: tz
+    
+    real, intent (out), dimension (ks:ke) :: vt
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: vi0, qden
+
+    real, parameter :: aa = - 4.14122e-5
+    real, parameter :: bb = - 0.00538922
+    real, parameter :: cc = - 0.0516344
+    real, parameter :: dd = 0.00216078
+    real, parameter :: ee = 1.9714
+    
+    real, dimension (ks:ke) :: tc
+    
+    if (const_v) then
+        vt (:) = v_fac
+    else
+        vi0 = 0.01 * v_fac
+        do k = ks, ke
+            qden = q (k) * den (k)
+            if (q (k) .lt. qfmin) then
+                vt (k) = 0.0
+            else
+                tc (k) = tz (k) - tice
+                if (ifflag .eq. 1) then
+                    vt (k) = (3. + log10 (qden)) * (tc (k) * (aa * tc (k) + bb) + cc) + &
+                        dd * tc (k) + ee
+                    vt (k) = vi0 * exp (vt (k) * log (10.))
+                endif
+                if (ifflag .eq. 2) &
+                    vt (k) = v_fac * 3.29 * exp (0.16 * log (qden))
+                vt (k) = min (v_max, max (0.0, vt (k)))
+            endif
+        enddo
+    endif
+    
+end subroutine term_ice
+
+! =======================================================================
+! terminal velocity for rain, snow, and graupel (Lin et al. 1983)
+! =======================================================================
+
+subroutine term_rsg (ks, ke, q, den, denfac, v_fac, vcon, lin, norm, v_max, const_v, vt)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    logical, intent (in) :: const_v
+    
+    real, intent (in) :: v_fac, lin, v_max
+    
+    real (kind = r_grid), intent (in) :: vcon, norm
+    
+    real, intent (in), dimension (ks:ke) :: q, den, denfac
+    
+    real, intent (out), dimension (ks:ke) :: vt
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: qden
+
+    if (const_v) then
+        vt (:) = v_fac
+    else
+        do k = ks, ke
+            qden = q (k) * den (k)
+            if (q (k) .lt. qfmin) then
+                vt (k) = 0.0
+            else
+                vt (k) = v_fac * vcon * denfac (k) * exp (0.25 * lin * log (qden / norm))
+                vt (k) = min (v_max, max (0.0, vt (k)))
+            endif
+        enddo
+    endif
+    
+end subroutine term_rsg
+
+! =======================================================================
+! melting during sedimentation
+! =======================================================================
+
+subroutine sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+        vt, r1, tau_mlt, cvm, icpk, qflag)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts, tau_mlt
+
+    real, intent (in), dimension (ks:ke) :: vt, dp, dz, icpk
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: cvm
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi
+
+    real, intent (inout) :: r1
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    character (len = 2), intent (in) :: qflag
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k, m
+
+    real :: dt5, dtime, sink, zs
+    
+    real, dimension (ks:ke) :: q
+
+    real, dimension (ks:ke + 1) :: ze, zt
+
+    dt5 = 0.5 * dts
+    zs = 0.0
+    ze (ke + 1) = zs
+    do k = ke, ks, - 1
+        ze (k) = ze (k + 1) - dz (k)
+    enddo
+    zt (ks) = ze (ks)
+    do k = ks + 1, ke
+        zt (k) = ze (k) - dt5 * (vt (k - 1) + vt (k))
+    enddo
+    zt (ke + 1) = zs - dts * vt (ke)
+    do k = ks, ke
+        if (zt (k + 1) .ge. zt (k)) zt (k + 1) = zt (k) - dz_min
+    enddo
+    
+    select case (qflag)
+        case ("qi")
+            q = qi
+        case ("qs")
+            q = qs
+        case ("qg")
+            q = qg
+        case default
+            print *, "gfdl_mp: qflag error!"
+    end select
+
+    ! -----------------------------------------------------------------------
+    ! melting to rain
+    ! -----------------------------------------------------------------------
+    
+    do k = ke - 1, ks, - 1
+        if (vt (k) .lt. 1.e-10) cycle
+        if (q (k) .gt. qcmin) then
+            do m = k + 1, ke
+                if (zt (k + 1) .ge. ze (m)) exit
+                if (zt (k) .lt. ze (m + 1) .and. tz (m) .gt. tice) then
+                    dtime = min (dts, (ze (m) - ze (m + 1)) / vt (k))
+                    dtime = min (1.0,  dtime / tau_mlt)
+                    sink = min (q (k) * dp (k) / dp (m), dtime * (tz (m) - tice) / icpk (m))
+                    q (k) = q (k) - sink * dp (m) / dp (k)
+                    if (zt (k) .lt. zs) then
+                        r1 = r1 + sink * dp (m)
+                    else
+                        qr (m) = qr (m) + sink
+                    endif
+                    select case (qflag)
+                        case ("qi")
+                            qi (k) = q (k)
+                        case ("qs")
+                            qs (k) = q (k)
+                        case ("qg")
+                            qg (k) = q (k)
+                        case default
+                            print *, "gfdl_mp: qflag error!"
+                    end select
+                    tz (m) = (tz (m) * cvm (m) - li00 * sink) / &
+                         mhc (qv (k), ql (m), qr (m), qi (m), qs (m), qg (m))
+                endif
+                if (q (k) .lt. qcmin) exit
+            enddo
+        endif
+    enddo
+        
+end subroutine sedi_melt
+
+! =======================================================================
+! melting during sedimentation
+! =======================================================================
+
+subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+        vt, x1, u, v, w, dte, qflag)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: vt, dp, dz
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, u, v, w
+
+    real, intent (inout) :: x1
+
+    real (kind = r_grid), intent (inout) :: dte
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    character (len = 2), intent (in) :: qflag
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    logical :: no_fall
+    
+    real :: dt5, zs
+    
+    real, dimension (ks:ke) :: m1, dm, q
+
+    real, dimension (ks:ke + 1) :: ze, zt
+
+    real (kind = r_grid), dimension (ks:ke) :: te1, te2
+
+    dt5 = 0.5 * dts
+    zs = 0.0
+    ze (ke + 1) = zs
+    do k = ke, ks, - 1
+        ze (k) = ze (k + 1) - dz (k)
+    enddo
+    zt (ks) = ze (ks)
+    do k = ks + 1, ke
+        zt (k) = ze (k) - dt5 * (vt (k - 1) + vt (k))
+    enddo
+    zt (ke + 1) = zs - dts * vt (ke)
+    do k = ks, ke
+        if (zt (k + 1) .ge. zt (k)) zt (k + 1) = zt (k) - dz_min
+    enddo
+    
+    select case (qflag)
+        case ("qr")
+            q = qr
+        case ("qi")
+            q = qi
+        case ("qs")
+            q = qs
+        case ("qg")
+            q = qg
+        case default
+            print *, "gfdl_mp: qflag error!"
+    end select
+
+    call check_column (ks, ke, q, no_fall)
+    
+    if (no_fall) return
+
+    ! -----------------------------------------------------------------------
+    ! momentum transportation during sedimentation
+    ! -----------------------------------------------------------------------
+    
+    if (do_sedi_w) then
+        do k = ks, ke
+            dm (k) = dp (k) * (1. + qv (k) + ql (k) + qr (k) + qi (k) + qs (k) + qg (k))
+        enddo
+    endif
+    
+    ! -----------------------------------------------------------------------
+    ! energy change during sedimentation
+    ! -----------------------------------------------------------------------
+    
+    if (consv_checker) then
+        do k = ks, ke
+            te1 (k) = mte (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), tz (k), dp (k), .false.)
+        enddo
+    endif
+    
+    ! -----------------------------------------------------------------------
+    ! sedimentation
+    ! -----------------------------------------------------------------------
+    
+    select case (qflag)
+        case ("qr")
+            q = qr
+        case ("qi")
+            q = qi
+        case ("qs")
+            q = qs
+        case ("qg")
+            q = qg
+        case default
+            print *, "gfdl_mp: qflag error!"
+    end select
+
+    if (use_ppm) then
+        call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, x1, m1, mono_prof)
+    else
+        call implicit_fall (dts, ks, ke, ze, vt, dp, q, x1, m1)
+    endif
+    
+    select case (qflag)
+        case ("qr")
+            qr = q
+        case ("qi")
+            qi = q
+        case ("qs")
+            qs = q
+        case ("qg")
+            qg = q
+        case default
+            print *, "gfdl_mp: qflag error!"
+    end select
+
+    ! -----------------------------------------------------------------------
+    ! energy change during sedimentation
+    ! -----------------------------------------------------------------------
+    
+    if (consv_checker) then
+        do k = ks, ke
+            te2 (k) = mte (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), tz (k), dp (k), .false.)
+        enddo
+        dte = dte + sum (te1) - sum (te2)
+    endif
+    
+    ! -----------------------------------------------------------------------
+    ! momentum transportation during sedimentation
+    ! -----------------------------------------------------------------------
+    
+    if (do_sedi_uv) then
+        call sedi_uv (ks, ke, m1, dp, u, v)
+    endif
+    
+    if (do_sedi_w) then
+        call sedi_w (ks, ke, m1, w, vt, dm)
+    endif
+    
+    ! -----------------------------------------------------------------------
+    ! energy change during sedimentation heating
+    ! -----------------------------------------------------------------------
+    
+    if (consv_checker) then
+        do k = ks, ke
+            te1 (k) = mte (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), tz (k), dp (k), .false.)
+        enddo
+    endif
+    
+    ! -----------------------------------------------------------------------
+    ! heat exchanges during sedimentation
+    ! -----------------------------------------------------------------------
+    
+    if (do_sedi_heat) then
+        call sedi_heat (ks, ke, dp, m1, dz, tz, qv, ql, qr, qi, qs, qg, c_ice)
+    endif
+    
+    ! -----------------------------------------------------------------------
+    ! energy change during sedimentation heating
+    ! -----------------------------------------------------------------------
+    
+    if (consv_checker) then
+        do k = ks, ke
+            te2 (k) = mte (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), tz (k), dp (k), .false.)
+        enddo
+        dte = dte + sum (te1) - sum (te2)
+    endif
+        
+end subroutine terminal_fall
+
+! =======================================================================
+! check if water species is large enough to fall
+! =======================================================================
+
+subroutine check_column (ks, ke, q, no_fall)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: q (ks:ke)
+
+    logical, intent (out) :: no_fall
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+    
+    no_fall = .true.
+    
+    do k = ks, ke
+        if (q (k) .gt. qfmin) then
+            no_fall = .false.
+            exit
+        endif
+    enddo
+    
+end subroutine check_column
+
+! =======================================================================
 ! warm rain cloud microphysics
 ! =======================================================================
 
@@ -1294,7 +1952,8 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
         
-    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
+    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, &
+        lcpk, icpk, tcpk, tcp3)
 
     do k = ks, ke
         
@@ -1447,7 +2106,8 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
                 dq = 0.5 * (ql (k) + dl (k) - qc)
                 if (dq .gt. 0.) then
                     c_praut (k) = cpaut * exp (- 1. / 3. * log (ccn (k) * rhor))
-                    sink = min (1., dq / dl (k)) * dts * c_praut (k) * den (k) * exp (so3 * log (ql (k)))
+                    sink = min (1., dq / dl (k)) * dts * c_praut (k) * den (k) * &
+                        exp (so3 * log (ql (k)))
                     sink = min (ql (k), sink)
                     call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                         0., - sink, sink, 0., 0., 0.)
@@ -1509,7 +2169,8 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
     
-    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
+    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, &
+        lcpk, icpk, tcpk, tcp3)
     
     if (.not. do_warm_rain_mp) then
 
@@ -2275,7 +2936,8 @@ subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
     
-    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
+    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, &
+        lcpk, icpk, tcpk, tcp3)
     
     ! -----------------------------------------------------------------------
     ! instant processes (include deposition, evaporation, and sublimation)
@@ -2852,7 +3514,8 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
     
-    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
+    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, &
+        lcpk, icpk, tcpk, tcp3)
 
     do k = ks, ke
         
@@ -2908,7 +3571,8 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
                 
                 dq = h_var * qpz
                 if (do_cld_adj) then
-                    q_plus = qpz + dq * f_dq_p * min(1.0, max(0.0, (pz (k) - 200.e2) / (1000.e2 - 200.e2)))
+                    q_plus = qpz + dq * f_dq_p * min(1.0, max(0.0, (pz (k) - 200.e2) / &
+                        (1000.e2 - 200.e2)))
                 else
                     q_plus = qpz + dq * f_dq_p
                 endif
@@ -2942,7 +3606,8 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
                             if (icloud_f .eq. 0) then
                                 qa (k) = (q_plus - qstar) / (dq * f_dq_p + dq * f_dq_m)
                             else
-                                qa (k) = (q_plus - qstar) / ((dq * f_dq_p + dq * f_dq_m) * (1. - q_cond (k)))
+                                qa (k) = (q_plus - qstar) / ((dq * f_dq_p + dq * f_dq_m) * &
+                                    (1. - q_cond (k)))
                             endif
                         else
                             qa (k) = 0.
@@ -2972,9 +3637,12 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
 
         if (cfflag .eq. 3) then
             if (q_cond (k) .gt. qcmin) then
-                qa (k) = 1. / 50. * (5.77 * (100. - gsize / 1000.) * exp (1.07 * log (max (qcmin * 1000., q_cond (k) * 1000.))) + &
-                    4.82 * (gsize / 1000. - 50.) * exp (0.94 * log (max (qcmin * 1000., q_cond (k) * 1000.))))
-                qa (k) = qa (k) * (0.92 / 0.96 * q_liq (k) / q_cond (k) + 1.0 / 0.96 * q_sol (k) / q_cond (k))
+                qa (k) = 1. / 50. * (5.77 * (100. - gsize / 1000.) * &
+                    exp (1.07 * log (max (qcmin * 1000., q_cond (k) * 1000.))) + &
+                    4.82 * (gsize / 1000. - 50.) * &
+                    exp (0.94 * log (max (qcmin * 1000., q_cond (k) * 1000.))))
+                qa (k) = qa (k) * (0.92 / 0.96 * q_liq (k) / q_cond (k) + &
+                    1.0 / 0.96 * q_sol (k) / q_cond (k))
                 qa (k) = max (0.0, min (1., qa (k)))
             else
                 qa (k) = 0.0
@@ -3007,174 +3675,6 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
     enddo
     
 end subroutine cloud_fraction
-
-! =======================================================================
-! sedimentation of cloud ice, snow, graupel or hail, and rain
-! =======================================================================
-
-subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vtr, vti, vts, vtg, r1, i1, s1, g1, u, v, w, den, denfac, dte)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    integer, intent (in) :: ks, ke
-
-    real, intent (in) :: dts
-
-    real, intent (in), dimension (ks:ke) :: dp, dz, den, denfac
-
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, u, v, w
-
-    real, intent (out) :: r1, i1, s1, g1
-
-    real, intent (out), dimension (ks:ke) :: vtr, vti, vts, vtg
-
-    real (kind = r_grid), intent (inout) :: dte
-
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-
-    real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
-
-    real (kind = r_grid), dimension (ks:ke) :: te8, cvm
-
-    r1 = 0.
-    i1 = 0.
-    s1 = 0.
-    g1 = 0.
-    
-    ! -----------------------------------------------------------------------
-    ! calculate heat capacities and latent heat coefficients
-    ! -----------------------------------------------------------------------
-    
-    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
-    
-    ! -----------------------------------------------------------------------
-    ! terminal fall and melting of falling cloud ice into rain
-    ! -----------------------------------------------------------------------
-    
-    call term_ice (ks, ke, tz, qi, den, vi_fac, vi_max, const_vi, vti)
-    
-    if (do_sedi_melt) then
-        call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-            vti, r1, tau_imlt, cvm, icpk, "qi")
-    endif
-
-    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vti, i1, u, v, w, dte, "qi")
-    
-    ! -----------------------------------------------------------------------
-    ! terminal fall and melting of falling snow into rain
-    ! -----------------------------------------------------------------------
-    
-    call term_rsg (ks, ke, qs, den, denfac, vs_fac, vcons, dlin, norms, vs_max, const_vs, vts)
-        
-    if (do_sedi_melt) then
-        call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-            vts, r1, tau_smlt, cvm, icpk, "qs")
-    endif
-
-    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vts, s1, u, v, w, dte, "qs")
-    
-    ! ----------------------------------------------
-    ! terminal fall and melting of falling graupel into rain
-    ! ----------------------------------------------
-    
-    if (do_hail) then
-        call term_rsg (ks, ke, qg, den, denfac, vg_fac, vconh, flin, normh, vg_max, const_vg, vtg)
-    else
-        call term_rsg (ks, ke, qg, den, denfac, vg_fac, vcong, flin, normg, vg_max, const_vg, vtg)
-    endif
-
-    if (do_sedi_melt) then
-        call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-            vtg, r1, tau_gmlt, cvm, icpk, "qg")
-    endif
-
-    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vtg, g1, u, v, w, dte, "qg")
-    
-    ! ----------------------------------------------
-    ! terminal fall of rain
-    ! ----------------------------------------------
-    
-    call term_rsg (ks, ke, qr, den, denfac, vr_fac, vconr, blin, normr, vr_max, const_vr, vtr)
-        
-    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
-        vtr, r1, u, v, w, dte, "qr")
-    
-end subroutine sedimentation
-
-! =======================================================================
-! time-implicit monotonic scheme
-! =======================================================================
-
-subroutine implicit_fall (dts, ks, ke, ze, vt, dp, q, precip, m1)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    integer, intent (in) :: ks, ke
-
-    real, intent (in) :: dts
-
-    real, intent (in), dimension (ks:ke + 1) :: ze
-
-    real, intent (in), dimension (ks:ke) :: vt, dp
-
-    real, intent (inout), dimension (ks:ke) :: q
-
-    real, intent (inout) :: precip
-
-    real, intent (out), dimension (ks:ke) :: m1
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-    
-    real, dimension (ks:ke) :: dz, qm, dd
-
-    do k = ks, ke
-        dz (k) = ze (k) - ze (k + 1)
-        dd (k) = dts * vt (k)
-        q (k) = q (k) * dp (k)
-    enddo
-    
-    qm (ks) = q (ks) / (dz (ks) + dd (ks))
-    do k = ks + 1, ke
-        qm (k) = (q (k) + dd (k - 1) * qm (k - 1)) / (dz (k) + dd (k))
-    enddo
-    
-    do k = ks, ke
-        qm (k) = qm (k) * dz (k)
-    enddo
-    
-    m1 (ks) = q (ks) - qm (ks)
-    do k = ks + 1, ke
-        m1 (k) = m1 (k - 1) + q (k) - qm (k)
-    enddo
-    precip = precip + m1 (ke)
-    
-    do k = ks, ke
-        q (k) = qm (k) / dp (k)
-    enddo
-    
-end subroutine implicit_fall
 
 ! =======================================================================
 ! piecewise parabolic lagrangian scheme
@@ -3287,6 +3787,579 @@ subroutine lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, precip, m1, mono)
 end subroutine lagrangian_fall_ppm
 
 ! =======================================================================
+! construct vertical profile
+! =======================================================================
+
+subroutine cs_profile (a4, del, km, do_mono)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: km
+
+    logical, intent (in) :: do_mono
+
+    real, intent (in) :: del (km)
+
+    real, intent (inout) :: a4 (4, km)
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+    
+    logical :: extm (km)
+    
+    real, parameter :: qp_min = 1.e-6
+
+    real :: gam (km), q (km + 1), d4, bet, a_bot, grat, pmp, lac
+    real :: pmp_1, lac_1, pmp_2, lac_2, da1, da2, a6da
+    
+    grat = del (2) / del (1) ! grid ratio
+    bet = grat * (grat + 0.5)
+    q (1) = (2. * grat * (grat + 1.) * a4 (1, 1) + a4 (1, 2)) / bet
+    gam (1) = (1. + grat * (grat + 1.5)) / bet
+    
+    do k = 2, km
+        d4 = del (k - 1) / del (k)
+        bet = 2. + 2. * d4 - gam (k - 1)
+        q (k) = (3. * (a4 (1, k - 1) + d4 * a4 (1, k)) - q (k - 1)) / bet
+        gam (k) = d4 / bet
+    enddo
+    
+    a_bot = 1. + d4 * (d4 + 1.5)
+    q (km + 1) = (2. * d4 * (d4 + 1.) * a4 (1, km) + a4 (1, km - 1) - a_bot * q (km)) &
+         / (d4 * (d4 + 0.5) - a_bot * gam (km))
+    
+    do k = km, 1, - 1
+        q (k) = q (k) - gam (k) * q (k + 1)
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! apply constraints
+    ! -----------------------------------------------------------------------
+    
+    do k = 2, km
+        gam (k) = a4 (1, k) - a4 (1, k - 1)
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! apply large - scale constraints to all fields if not local max / min
+    ! -----------------------------------------------------------------------
+    
+    ! -----------------------------------------------------------------------
+    ! top:
+    ! -----------------------------------------------------------------------
+    
+    q (1) = max (q (1), 0.)
+    q (2) = min (q (2), max (a4 (1, 1), a4 (1, 2)))
+    q (2) = max (q (2), min (a4 (1, 1), a4 (1, 2)), 0.)
+    
+    ! -----------------------------------------------------------------------
+    ! interior:
+    ! -----------------------------------------------------------------------
+    
+    do k = 3, km - 1
+        if (gam (k - 1) * gam (k + 1) .gt. 0.) then
+            q (k) = min (q (k), max (a4 (1, k - 1), a4 (1, k)))
+            q (k) = max (q (k), min (a4 (1, k - 1), a4 (1, k)))
+        else
+            if (gam (k - 1) .gt. 0.) then
+                ! there exists a local max
+                q (k) = max (q (k), min (a4 (1, k - 1), a4 (1, k)))
+            else
+                ! there exists a local min
+                q (k) = min (q (k), max (a4 (1, k - 1), a4 (1, k)))
+                q (k) = max (q (k), 0.0)
+            endif
+        endif
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! bottom :
+    ! -----------------------------------------------------------------------
+    
+    q (km) = min (q (km), max (a4 (1, km - 1), a4 (1, km)))
+    q (km) = max (q (km), min (a4 (1, km - 1), a4 (1, km)), 0.)
+    ! q (km + 1) = max (q (km + 1), 0.)
+    
+    ! -----------------------------------------------------------------------
+    ! f (s) = al + s * [ (ar - al) + a6 * (1 - s) ] (0 <= s <= 1)
+    ! -----------------------------------------------------------------------
+    
+    do k = 1, km - 1
+        a4 (2, k) = q (k)
+        a4 (3, k) = q (k + 1)
+    enddo
+    
+    do k = 2, km - 1
+        if (gam (k) * gam (k + 1) .gt. 0.0) then
+            extm (k) = .false.
+        else
+            extm (k) = .true.
+        endif
+    enddo
+    
+    if (do_mono) then
+        do k = 3, km - 2
+            if (extm (k)) then
+                ! positive definite constraint only if true local extrema
+                if (a4 (1, k) .lt. qp_min .or. extm (k - 1) .or. extm (k + 1)) then
+                    a4 (2, k) = a4 (1, k)
+                    a4 (3, k) = a4 (1, k)
+                endif
+            else
+                a4 (4, k) = 6. * a4 (1, k) - 3. * (a4 (2, k) + a4 (3, k))
+                if (abs (a4 (4, k)) .gt. abs (a4 (2, k) - a4 (3, k))) then
+                    ! check within the smooth region if subgrid profile is non - monotonic
+                    pmp_1 = a4 (1, k) - 2.0 * gam (k + 1)
+                    lac_1 = pmp_1 + 1.5 * gam (k + 2)
+                    a4 (2, k) = min (max (a4 (2, k), min (a4 (1, k), pmp_1, lac_1)), &
+                        max (a4 (1, k), pmp_1, lac_1))
+                    pmp_2 = a4 (1, k) + 2.0 * gam (k)
+                    lac_2 = pmp_2 - 1.5 * gam (k - 1)
+                    a4 (3, k) = min (max (a4 (3, k), min (a4 (1, k), pmp_2, lac_2)), &
+                        max (a4 (1, k), pmp_2, lac_2))
+                endif
+            endif
+        enddo
+    else
+        do k = 3, km - 2
+            if (extm (k)) then
+                if (a4 (1, k) .lt. qp_min .or. extm (k - 1) .or. extm (k + 1)) then
+                    a4 (2, k) = a4 (1, k)
+                    a4 (3, k) = a4 (1, k)
+                endif
+            endif
+        enddo
+    endif
+    
+    do k = 1, km - 1
+        a4 (4, k) = 6. * a4 (1, k) - 3. * (a4 (2, k) + a4 (3, k))
+    enddo
+    
+    k = km - 1
+    if (extm (k)) then
+        a4 (2, k) = a4 (1, k)
+        a4 (3, k) = a4 (1, k)
+        a4 (4, k) = 0.
+    else
+        da1 = a4 (3, k) - a4 (2, k)
+        da2 = da1 ** 2
+        a6da = a4 (4, k) * da1
+        if (a6da .lt. - da2) then
+            a4 (4, k) = 3. * (a4 (2, k) - a4 (1, k))
+            a4 (3, k) = a4 (2, k) - a4 (4, k)
+        elseif (a6da .gt. da2) then
+            a4 (4, k) = 3. * (a4 (3, k) - a4 (1, k))
+            a4 (2, k) = a4 (3, k) - a4 (4, k)
+        endif
+    endif
+    
+    call cs_limiters (km - 1, a4)
+    
+    ! -----------------------------------------------------------------------
+    ! bottom layer:
+    ! -----------------------------------------------------------------------
+    
+    a4 (2, km) = a4 (1, km)
+    a4 (3, km) = a4 (1, km)
+    a4 (4, km) = 0.
+    
+end subroutine cs_profile
+
+! =======================================================================
+! construct vertical profile limiter
+! =======================================================================
+
+subroutine cs_limiters (km, a4)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: km
+    
+    real, intent (inout) :: a4 (4, km) ! ppm array
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+    
+    real, parameter :: r12 = 1. / 12.
+    
+    ! -----------------------------------------------------------------------
+    ! positive definite constraint
+    ! -----------------------------------------------------------------------
+    
+    do k = 1, km
+        if (abs (a4 (3, k) - a4 (2, k)) .lt. - a4 (4, k)) then
+            if ((a4 (1, k) + 0.25 * (a4 (3, k) - a4 (2, k)) ** 2 / a4 (4, k) + &
+                a4 (4, k) * r12) .lt. 0.) then
+                if (a4 (1, k) .lt. a4 (3, k) .and. a4 (1, k) .lt. a4 (2, k)) then
+                    a4 (3, k) = a4 (1, k)
+                    a4 (2, k) = a4 (1, k)
+                    a4 (4, k) = 0.
+                elseif (a4 (3, k) .gt. a4 (2, k)) then
+                    a4 (4, k) = 3. * (a4 (2, k) - a4 (1, k))
+                    a4 (3, k) = a4 (2, k) - a4 (4, k)
+                else
+                    a4 (4, k) = 3. * (a4 (3, k) - a4 (1, k))
+                    a4 (2, k) = a4 (3, k) - a4 (4, k)
+                endif
+            endif
+        endif
+    enddo
+    
+end subroutine cs_limiters
+
+! =======================================================================
+! time-implicit monotonic scheme
+! =======================================================================
+
+subroutine implicit_fall (dts, ks, ke, ze, vt, dp, q, precip, m1)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke + 1) :: ze
+
+    real, intent (in), dimension (ks:ke) :: vt, dp
+
+    real, intent (inout), dimension (ks:ke) :: q
+
+    real, intent (inout) :: precip
+
+    real, intent (out), dimension (ks:ke) :: m1
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+    
+    real, dimension (ks:ke) :: dz, qm, dd
+
+    do k = ks, ke
+        dz (k) = ze (k) - ze (k + 1)
+        dd (k) = dts * vt (k)
+        q (k) = q (k) * dp (k)
+    enddo
+    
+    qm (ks) = q (ks) / (dz (ks) + dd (ks))
+    do k = ks + 1, ke
+        qm (k) = (q (k) + dd (k - 1) * qm (k - 1)) / (dz (k) + dd (k))
+    enddo
+    
+    do k = ks, ke
+        qm (k) = qm (k) * dz (k)
+    enddo
+    
+    m1 (ks) = q (ks) - qm (ks)
+    do k = ks + 1, ke
+        m1 (k) = m1 (k - 1) + q (k) - qm (k)
+    enddo
+    precip = precip + m1 (ke)
+    
+    do k = ks, ke
+        q (k) = qm (k) / dp (k)
+    enddo
+    
+end subroutine implicit_fall
+
+! =======================================================================
+! vertical subgrid variability used for cloud ice and cloud water autoconversion
+! edges: qe == qbar + / - dm
+! =======================================================================
+
+subroutine linear_prof (km, q, dm, z_var, h_var)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: km
+
+    logical, intent (in) :: z_var
+
+    real, intent (in) :: q (km), h_var
+
+    real, intent (out) :: dm (km)
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+    
+    real :: dq (km)
+
+    if (z_var) then
+        do k = 2, km
+            dq (k) = 0.5 * (q (k) - q (k - 1))
+        enddo
+        dm (1) = 0.
+        ! -----------------------------------------------------------------------
+        ! use twice the strength of the positive definiteness limiter (Lin et al. 1994)
+        ! -----------------------------------------------------------------------
+        do k = 2, km - 1
+            dm (k) = 0.5 * min (abs (dq (k) + dq (k + 1)), 0.5 * q (k))
+            if (dq (k) * dq (k + 1) .le. 0.) then
+                if (dq (k) .gt. 0.) then
+                    dm (k) = min (dm (k), dq (k), - dq (k + 1))
+                else
+                    dm (k) = 0.
+                endif
+            endif
+        enddo
+        dm (km) = 0.
+        ! -----------------------------------------------------------------------
+        ! impose a presumed background horizontal variability that is proportional to the value itself
+        ! -----------------------------------------------------------------------
+        do k = 1, km
+            dm (k) = max (dm (k), 0.0, h_var * q (k))
+        enddo
+    else
+        do k = 1, km
+            dm (k) = max (0.0, h_var * q (k))
+        enddo
+    endif
+    
+end subroutine linear_prof
+
+! =======================================================================
+! accretion function (Lin et al. 1983)
+! =======================================================================
+
+function acr2d (qden, c, denfac, lin)
+    
+    implicit none
+    
+    real :: acr2d
+
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: qden, c, denfac, lin
+    
+    acr2d = denfac * c * exp (0.25 * (3 + lin) * log (qden))
+    
+end function acr2d
+
+! =======================================================================
+! accretion function (Lin et al. 1983)
+! =======================================================================
+
+function acr3d (v1, v2, q1, q2, c, cac, rho)
+    
+    implicit none
+    
+    real :: acr3d
+
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: v1, v2, c, rho, q1, q2, cac (3)
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    real :: t1, s1, s2
+    
+    t1 = sqrt (q1 * rho)
+    s1 = sqrt (q2 * rho)
+    s2 = sqrt (s1)
+    acr3d = c * abs (v1 - v2) * q1 * s2 * (cac (1) * t1 + cac (2) * sqrt (t1) * s2 + cac (3) * s1)
+    
+end function acr3d
+
+! =======================================================================
+! ventilation coefficient (Lin et al. 1983)
+! =======================================================================
+
+function vent_coeff (qden, c1, c2, denfac, lin)
+    
+    implicit none
+
+    real :: vent_coeff
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: qden, c1, c2, denfac, lin
+    
+    vent_coeff = c1 * sqrt (qden) + c1 * exp (0.25 * (5 + lin) / 2 * log (qden)) * sqrt (denfac)
+    
+end function vent_coeff
+
+! =======================================================================
+! sublimation or evaporation function (Lin et al. 1983)
+! =======================================================================
+
+function psub (t2, dq, qden, qsat, c, den, denfac, lin)
+    
+    implicit none
+
+    real :: psub
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: t2, dq, qden, qsat, c (5), den, denfac, lin
+    
+    psub = c (1) * t2 * dq * vent_coeff (qden, c (2), c (3), denfac, lin) / &
+        (c (4) * t2 + c (5) * qsat * den)
+    
+end function psub
+
+! =======================================================================
+! melting function (Lin et al. 1983)
+! =======================================================================
+
+function pmlt (tc, dq, qden, pxacw, pxacr, c, den, denfac, lin)
+    
+    implicit none
+
+    real :: pmlt
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    real, intent (in) :: tc, dq, qden, pxacw, pxacr, c (5), den, denfac, lin
+    
+    pmlt = (c (1) * tc / den - c (2) * dq) * vent_coeff (qden, c (3), c (4), denfac, lin) + &
+        c (5) * tc * (pxacw + pxacr)
+    
+end function pmlt
+
+! =======================================================================
+! sedimentation of horizontal momentum
+! =======================================================================
+
+subroutine sedi_uv (ks, ke, m1, dp, u, v)
+
+    implicit none
+
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in), dimension (ks:ke) :: m1, dp
+
+    real, intent (inout), dimension (ks:ke) :: u, v
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    do k = ks + 1, ke
+        u (k) = (dp (k) * u (k) + m1 (k - 1) * u (k - 1)) / (dp (k) + m1 (k - 1))
+        v (k) = (dp (k) * v (k) + m1 (k - 1) * v (k - 1)) / (dp (k) + m1 (k - 1))
+    enddo
+
+end subroutine sedi_uv
+
+! =======================================================================
+! sedimentation of vertical momentum
+! =======================================================================
+
+subroutine sedi_w (ks, ke, m1, w, vt, dm)
+
+    implicit none
+
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in), dimension (ks:ke) :: m1, vt, dm
+
+    real, intent (inout), dimension (ks:ke) :: w
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    w (ks) = w (ks) + m1 (ks) * vt (ks) / dm (ks)
+    do k = ks + 1, ke
+        w (k) = (dm (k) * w (k) + m1 (k - 1) * (w (k - 1) - vt (k - 1)) + m1 (k) * vt (k)) / &
+             (dm (k) + m1 (k - 1))
+    enddo
+
+end subroutine sedi_w
+
+! =======================================================================
+! sedimentation of heat
+! =======================================================================
+
+subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
+
+    implicit none
+
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: cw
+
+    real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real, dimension (ks:ke) :: dgz, cv0
+    
+    do k = ks + 1, ke
+        dgz (k) = - 0.5 * grav * (dz (k - 1) + dz (k))
+        cv0 (k) = dm (k) * (cv_air + qv (k) * cv_vap + (qr (k) + ql (k)) * c_liq + &
+             (qi (k) + qs (k) + qg (k)) * c_ice) + cw * (m1 (k) - m1 (k - 1))
+    enddo
+
+    do k = ks + 1, ke
+        tz (k) = (cv0 (k) * tz (k) + m1 (k - 1) * (cw * tz (k - 1) + dgz (k))) / &
+            (cv0 (k) + cw * m1 (k - 1))
+    enddo
+    
+end subroutine sedi_heat
+
+! =======================================================================
 ! fast saturation adjustments
 ! =======================================================================
 
@@ -3332,7 +4405,8 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
     real :: fac_smlt, fac_r2g, fac_i2s, fac_imlt, fac_l2r, fac_v2l, fac_l2v
     
     real, dimension (is:ie) :: wqsat, qpz, t0, qstar, mc_air, lhl, lhi, ccn, cin
-    real, dimension (is:ie) :: den, q_liq, q_sol, q_cond, src, sink, hvar, icp2, lcp2, tcp2, tcp3
+    real, dimension (is:ie) :: den, src, sink, hvar
+    real, dimension (is:ie) :: q_liq, q_sol, q_cond, icp2, lcp2, tcp2, tcp3
     
     real (kind = r_grid), dimension (is:ie, js:je) :: te_beg, te_end, tw_beg, tw_end
     
@@ -3862,7 +4936,8 @@ subroutine fast_sat_adj (mdt, is, ie, js, je, ng, hydrostatic, consv_te, &
             do i = is, ie
                 te_end (i, j) = cvm (i) * pt1 (i) + lv00 * qv (i, j) - li00 * q_sol (i)
                 te_end (i, j) = rgrav * te_end (i, j) * delp (i, j) * gsize (i, j) ** 2.0
-                tw_end (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * delp (i, j) * gsize (i, j) ** 2.0
+                tw_end (i, j) = rgrav * (qv (i, j) + q_liq (i) + q_sol (i)) * &
+                    delp (i, j) * gsize (i, j) ** 2.0
             enddo
         endif
         
@@ -4205,7 +5280,8 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
-                    rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / (4.0 * pi * rhow * ccnw))) * 1.0e4
+                    rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / &
+                        (4.0 * pi * rhow * ccnw))) * 1.0e4
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
                     qcw (i, k) = 0.0
@@ -4224,7 +5300,8 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
-                    rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / (4.0 * pi * rhow * ccnw))) * 1.0e4
+                    rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / &
+                        (4.0 * pi * rhow * ccnw))) * 1.0e4
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
                     qcw (i, k) = 0.0
@@ -4242,8 +5319,10 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = 14.0 * abs (mask - 1.0) + &
-                         (8.0 + (14.0 - 8.0) * min (1.0, max (0.0, - tc0 / 30.0))) * (1.0 - abs (mask - 1.0))
-                    rew (i, k) = rew (i, k) + (14.0 - rew (i, k)) * min (1.0, max (0.0, snowd (i) / 1000.0))
+                         (8.0 + (14.0 - 8.0) * min (1.0, max (0.0, - tc0 / 30.0))) * &
+                         (1.0 - abs (mask - 1.0))
+                    rew (i, k) = rew (i, k) + (14.0 - rew (i, k)) * &
+                         min (1.0, max (0.0, snowd (i) / 1000.0))
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
                     qcw (i, k) = 0.0
@@ -4355,7 +5434,8 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
-                    bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / 50.e-3) * exp (1.5 * log (max (1.e-10, - tc0)))
+                    bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / 50.e-3) * &
+                        exp (1.5 * log (max (1.e-10, - tc0)))
                     rei (i, k) = 377.4 + bw * (203.3 + bw * (37.91 + 2.3696 * bw))
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
@@ -4374,7 +5454,8 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     rei_fac = log (1.0e3 * qmi (i, k) * rho)
-                    rei (i, k) = 45.8966 * exp (0.2214 * rei_fac) + 0.7957 * exp (0.2535 * rei_fac) * (tc0 + 190.0)
+                    rei (i, k) = 45.8966 * exp (0.2214 * rei_fac) + &
+                        0.7957 * exp (0.2535 * rei_fac) * (tc0 + 190.0)
                     rei (i, k) = (1.2351 + 0.0105 * tc0) * rei (i, k)
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
@@ -4525,8 +5606,9 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
 
     real (kind = r_grid) :: t1, t2, t3, vtr, vtg, vts
     
-    real (kind = r_grid), parameter :: factor_s = gamma_seven * 1.e18 * exp (1.75 * log (1. / (pi * rhos))) &
-         * (rhos / rhor) ** 2 * alpha
+    real (kind = r_grid), parameter :: factor_s = gamma_seven * 1.e18 * &
+         exp (1.75 * log (1. / (pi * rhos))) * &
+         (rhos / rhor) ** 2 * alpha
     
     real (kind = r_grid), dimension (is:ie) :: rhoair, denfac, z_e
 
@@ -4623,734 +5705,28 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
 end subroutine rad_ref
 
 ! =======================================================================
-! construct vertical profile
+! moist heat capacity, 3 input variables
 ! =======================================================================
 
-subroutine cs_profile (a4, del, km, do_mono)
-    
+function mhc3 (qv, q_liq, q_sol)
+
     implicit none
     
+    real (kind = r_grid) :: mhc3
+
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-    
-    integer, intent (in) :: km
 
-    logical, intent (in) :: do_mono
-
-    real, intent (in) :: del (km)
-
-    real, intent (inout) :: a4 (4, km)
+    real, intent (in) :: qv, q_liq, q_sol
 
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
 
-    integer :: k
+    mhc3 = one_r8 + qv * c1_vap + q_liq * c1_liq + q_sol * c1_ice
     
-    logical :: extm (km)
-    
-    real, parameter :: qp_min = 1.e-6
-
-    real :: gam (km), q (km + 1), d4, bet, a_bot, grat, pmp, lac
-    real :: pmp_1, lac_1, pmp_2, lac_2, da1, da2, a6da
-    
-    grat = del (2) / del (1) ! grid ratio
-    bet = grat * (grat + 0.5)
-    q (1) = (2. * grat * (grat + 1.) * a4 (1, 1) + a4 (1, 2)) / bet
-    gam (1) = (1. + grat * (grat + 1.5)) / bet
-    
-    do k = 2, km
-        d4 = del (k - 1) / del (k)
-        bet = 2. + 2. * d4 - gam (k - 1)
-        q (k) = (3. * (a4 (1, k - 1) + d4 * a4 (1, k)) - q (k - 1)) / bet
-        gam (k) = d4 / bet
-    enddo
-    
-    a_bot = 1. + d4 * (d4 + 1.5)
-    q (km + 1) = (2. * d4 * (d4 + 1.) * a4 (1, km) + a4 (1, km - 1) - a_bot * q (km)) &
-         / (d4 * (d4 + 0.5) - a_bot * gam (km))
-    
-    do k = km, 1, - 1
-        q (k) = q (k) - gam (k) * q (k + 1)
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! apply constraints
-    ! -----------------------------------------------------------------------
-    
-    do k = 2, km
-        gam (k) = a4 (1, k) - a4 (1, k - 1)
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! apply large - scale constraints to all fields if not local max / min
-    ! -----------------------------------------------------------------------
-    
-    ! -----------------------------------------------------------------------
-    ! top:
-    ! -----------------------------------------------------------------------
-    
-    q (1) = max (q (1), 0.)
-    q (2) = min (q (2), max (a4 (1, 1), a4 (1, 2)))
-    q (2) = max (q (2), min (a4 (1, 1), a4 (1, 2)), 0.)
-    
-    ! -----------------------------------------------------------------------
-    ! interior:
-    ! -----------------------------------------------------------------------
-    
-    do k = 3, km - 1
-        if (gam (k - 1) * gam (k + 1) .gt. 0.) then
-            q (k) = min (q (k), max (a4 (1, k - 1), a4 (1, k)))
-            q (k) = max (q (k), min (a4 (1, k - 1), a4 (1, k)))
-        else
-            if (gam (k - 1) .gt. 0.) then
-                ! there exists a local max
-                q (k) = max (q (k), min (a4 (1, k - 1), a4 (1, k)))
-            else
-                ! there exists a local min
-                q (k) = min (q (k), max (a4 (1, k - 1), a4 (1, k)))
-                q (k) = max (q (k), 0.0)
-            endif
-        endif
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! bottom :
-    ! -----------------------------------------------------------------------
-    
-    q (km) = min (q (km), max (a4 (1, km - 1), a4 (1, km)))
-    q (km) = max (q (km), min (a4 (1, km - 1), a4 (1, km)), 0.)
-    ! q (km + 1) = max (q (km + 1), 0.)
-    
-    ! -----------------------------------------------------------------------
-    ! f (s) = al + s * [ (ar - al) + a6 * (1 - s) ] (0 <= s <= 1)
-    ! -----------------------------------------------------------------------
-    
-    do k = 1, km - 1
-        a4 (2, k) = q (k)
-        a4 (3, k) = q (k + 1)
-    enddo
-    
-    do k = 2, km - 1
-        if (gam (k) * gam (k + 1) .gt. 0.0) then
-            extm (k) = .false.
-        else
-            extm (k) = .true.
-        endif
-    enddo
-    
-    if (do_mono) then
-        do k = 3, km - 2
-            if (extm (k)) then
-                ! positive definite constraint only if true local extrema
-                if (a4 (1, k) .lt. qp_min .or. extm (k - 1) .or. extm (k + 1)) then
-                    a4 (2, k) = a4 (1, k)
-                    a4 (3, k) = a4 (1, k)
-                endif
-            else
-                a4 (4, k) = 6. * a4 (1, k) - 3. * (a4 (2, k) + a4 (3, k))
-                if (abs (a4 (4, k)) .gt. abs (a4 (2, k) - a4 (3, k))) then
-                    ! check within the smooth region if subgrid profile is non - monotonic
-                    pmp_1 = a4 (1, k) - 2.0 * gam (k + 1)
-                    lac_1 = pmp_1 + 1.5 * gam (k + 2)
-                    a4 (2, k) = min (max (a4 (2, k), min (a4 (1, k), pmp_1, lac_1)), &
-                        max (a4 (1, k), pmp_1, lac_1))
-                    pmp_2 = a4 (1, k) + 2.0 * gam (k)
-                    lac_2 = pmp_2 - 1.5 * gam (k - 1)
-                    a4 (3, k) = min (max (a4 (3, k), min (a4 (1, k), pmp_2, lac_2)), &
-                        max (a4 (1, k), pmp_2, lac_2))
-                endif
-            endif
-        enddo
-    else
-        do k = 3, km - 2
-            if (extm (k)) then
-                if (a4 (1, k) .lt. qp_min .or. extm (k - 1) .or. extm (k + 1)) then
-                    a4 (2, k) = a4 (1, k)
-                    a4 (3, k) = a4 (1, k)
-                endif
-            endif
-        enddo
-    endif
-    
-    do k = 1, km - 1
-        a4 (4, k) = 6. * a4 (1, k) - 3. * (a4 (2, k) + a4 (3, k))
-    enddo
-    
-    k = km - 1
-    if (extm (k)) then
-        a4 (2, k) = a4 (1, k)
-        a4 (3, k) = a4 (1, k)
-        a4 (4, k) = 0.
-    else
-        da1 = a4 (3, k) - a4 (2, k)
-        da2 = da1 ** 2
-        a6da = a4 (4, k) * da1
-        if (a6da .lt. - da2) then
-            a4 (4, k) = 3. * (a4 (2, k) - a4 (1, k))
-            a4 (3, k) = a4 (2, k) - a4 (4, k)
-        elseif (a6da .gt. da2) then
-            a4 (4, k) = 3. * (a4 (3, k) - a4 (1, k))
-            a4 (2, k) = a4 (3, k) - a4 (4, k)
-        endif
-    endif
-    
-    call cs_limiters (km - 1, a4)
-    
-    ! -----------------------------------------------------------------------
-    ! bottom layer:
-    ! -----------------------------------------------------------------------
-    
-    a4 (2, km) = a4 (1, km)
-    a4 (3, km) = a4 (1, km)
-    a4 (4, km) = 0.
-    
-end subroutine cs_profile
-
-! =======================================================================
-! construct vertical profile limiter
-! =======================================================================
-
-subroutine cs_limiters (km, a4)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    integer, intent (in) :: km
-    
-    real, intent (inout) :: a4 (4, km) ! ppm array
-    
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-    
-    real, parameter :: r12 = 1. / 12.
-    
-    ! -----------------------------------------------------------------------
-    ! positive definite constraint
-    ! -----------------------------------------------------------------------
-    
-    do k = 1, km
-        if (abs (a4 (3, k) - a4 (2, k)) .lt. - a4 (4, k)) then
-            if ((a4 (1, k) + 0.25 * (a4 (3, k) - a4 (2, k)) ** 2 / a4 (4, k) + &
-                a4 (4, k) * r12) .lt. 0.) then
-                if (a4 (1, k) .lt. a4 (3, k) .and. a4 (1, k) .lt. a4 (2, k)) then
-                    a4 (3, k) = a4 (1, k)
-                    a4 (2, k) = a4 (1, k)
-                    a4 (4, k) = 0.
-                elseif (a4 (3, k) .gt. a4 (2, k)) then
-                    a4 (4, k) = 3. * (a4 (2, k) - a4 (1, k))
-                    a4 (3, k) = a4 (2, k) - a4 (4, k)
-                else
-                    a4 (4, k) = 3. * (a4 (3, k) - a4 (1, k))
-                    a4 (2, k) = a4 (3, k) - a4 (4, k)
-                endif
-            endif
-        endif
-    enddo
-    
-end subroutine cs_limiters
-
-! =======================================================================
-! vertical subgrid variability used for cloud ice and cloud water autoconversion
-! edges: qe == qbar + / - dm
-! =======================================================================
-
-subroutine linear_prof (km, q, dm, z_var, h_var)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    integer, intent (in) :: km
-
-    logical, intent (in) :: z_var
-
-    real, intent (in) :: q (km), h_var
-
-    real, intent (out) :: dm (km)
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-    
-    real :: dq (km)
-
-    if (z_var) then
-        do k = 2, km
-            dq (k) = 0.5 * (q (k) - q (k - 1))
-        enddo
-        dm (1) = 0.
-        ! -----------------------------------------------------------------------
-        ! use twice the strength of the positive definiteness limiter (Lin et al. 1994)
-        ! -----------------------------------------------------------------------
-        do k = 2, km - 1
-            dm (k) = 0.5 * min (abs (dq (k) + dq (k + 1)), 0.5 * q (k))
-            if (dq (k) * dq (k + 1) .le. 0.) then
-                if (dq (k) .gt. 0.) then
-                    dm (k) = min (dm (k), dq (k), - dq (k + 1))
-                else
-                    dm (k) = 0.
-                endif
-            endif
-        enddo
-        dm (km) = 0.
-        ! -----------------------------------------------------------------------
-        ! impose a presumed background horizontal variability that is proportional to the value itself
-        ! -----------------------------------------------------------------------
-        do k = 1, km
-            dm (k) = max (dm (k), 0.0, h_var * q (k))
-        enddo
-    else
-        do k = 1, km
-            dm (k) = max (0.0, h_var * q (k))
-        enddo
-    endif
-    
-end subroutine linear_prof
-
-! =======================================================================
-! update hydrometeors
-! =======================================================================
-
-subroutine update_qq (qv, ql, qr, qi, qs, qg, dqv, dql, dqr, dqi, dqs, dqg)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-
-    real, intent (in) :: dqv, dql, dqr, dqi, dqs, dqg
-
-    real, intent (inout) :: qv, ql, qr, qi, qs, qg
-
-    qv = qv + dqv
-    ql = ql + dql
-    qr = qr + dqr
-    qi = qi + dqi
-    qs = qs + dqs
-    qg = qg + dqg
-
-end subroutine update_qq
-
-! =======================================================================
-! calculate heat capacities and latent heat coefficients
-! =======================================================================
-
-subroutine cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
-
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-
-    integer, intent (in) :: ks, ke
-
-    real, intent (in), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: tz
-
-    real, intent (out), dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
-
-    real (kind = r_grid), intent (out), dimension (ks:ke) :: cvm, te8
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-
-    do k = ks, ke
-        q_liq (k) = ql (k) + qr (k)
-        q_sol (k) = qi (k) + qs (k) + qg (k)
-        cvm (k) = mhc (qv (k), q_liq (k), q_sol (k))
-        te8 (k) = cvm (k) * tz (k) + lv00 * qv (k) - li00 * q_sol (k)
-        lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
-        icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
-        tcpk (k) = (li20 + (d1_vap + d1_ice) * tz (k)) / cvm (k)
-        tcp3 (k) = lcpk (k) + icpk (k) * min (1., dim (tice, tz (k)) / (tice - t_wfr))
-    enddo
-
-end subroutine cal_mhc_lhc
-    
-! =======================================================================
-! update hydrometeors and temperature
-! =======================================================================
-
-subroutine update_qt (qv, ql, qr, qi, qs, qg, dqv, dql, dqr, dqi, dqs, dqg, te8, &
-        tk, lcpk, icpk, tcpk, tcp3)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-
-    real, intent (in) :: dqv, dql, dqr, dqi, dqs, dqg
-
-    real (kind = r_grid), intent (in) :: te8
-
-    real, intent (inout) :: qv, ql, qr, qi, qs, qg
-
-    real, intent (out) :: lcpk, icpk, tcpk, tcp3
-
-    real (kind = r_grid), intent (out) :: tk
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    real (kind = r_grid) :: cvm
-
-    qv = qv + dqv
-    ql = ql + dql
-    qr = qr + dqr
-    qi = qi + dqi
-    qs = qs + dqs
-    qg = qg + dqg
-
-    cvm = mhc (qv, ql, qr, qi, qs, qg)
-    tk = (te8 - lv00 * qv + li00 * (qi + qs + qg)) / cvm
-
-    lcpk = (lv00 + d1_vap * tk) / cvm
-    icpk = (li00 + d1_ice * tk) / cvm
-    tcpk = (li20 + (d1_vap + d1_ice) * tk) / cvm
-    tcp3 = lcpk + icpk * min (1., dim (tice, tk) / (tice - t_wfr))
-
-end subroutine update_qt
-
-! =======================================================================
-! melting during sedimentation
-! =======================================================================
-
-subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vt, x1, u, v, w, dte, qflag)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-
-    integer, intent (in) :: ks, ke
-
-    real, intent (in) :: dts
-
-    real, intent (in), dimension (ks:ke) :: vt, dp, dz
-
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, u, v, w
-
-    real, intent (inout) :: x1
-
-    real (kind = r_grid), intent (inout) :: dte
-
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-
-    character (len = 2), intent (in) :: qflag
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-
-    logical :: no_fall
-    
-    real :: dt5, zs
-    
-    real, dimension (ks:ke) :: m1, dm, q
-
-    real, dimension (ks:ke + 1) :: ze, zt
-
-    real (kind = r_grid), dimension (ks:ke) :: te1, te2
-
-    dt5 = 0.5 * dts
-    zs = 0.0
-    ze (ke + 1) = zs
-    do k = ke, ks, - 1
-        ze (k) = ze (k + 1) - dz (k)
-    enddo
-    zt (ks) = ze (ks)
-    do k = ks + 1, ke
-        zt (k) = ze (k) - dt5 * (vt (k - 1) + vt (k))
-    enddo
-    zt (ke + 1) = zs - dts * vt (ke)
-    do k = ks, ke
-        if (zt (k + 1) .ge. zt (k)) zt (k + 1) = zt (k) - dz_min
-    enddo
-    
-    select case (qflag)
-        case ("qr")
-            q = qr
-        case ("qi")
-            q = qi
-        case ("qs")
-            q = qs
-        case ("qg")
-            q = qg
-        case default
-            print *, "gfdl_mp: qflag error!"
-    end select
-
-    call check_column (ks, ke, q, no_fall)
-    
-    if (no_fall) return
-
-    ! -----------------------------------------------------------------------
-    ! momentum transportation during sedimentation
-    ! -----------------------------------------------------------------------
-    
-    if (do_sedi_w) then
-        do k = ks, ke
-            dm (k) = dp (k) * (1. + qv (k) + ql (k) + qr (k) + qi (k) + qs (k) + qg (k))
-        enddo
-    endif
-    
-    ! -----------------------------------------------------------------------
-    ! energy change during sedimentation
-    ! -----------------------------------------------------------------------
-    
-    if (consv_checker) then
-        do k = ks, ke
-            te1 (k) = mte (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), tz (k), dp (k), .false.)
-        enddo
-    endif
-    
-    ! -----------------------------------------------------------------------
-    ! sedimentation
-    ! -----------------------------------------------------------------------
-    
-    select case (qflag)
-        case ("qr")
-            q = qr
-        case ("qi")
-            q = qi
-        case ("qs")
-            q = qs
-        case ("qg")
-            q = qg
-        case default
-            print *, "gfdl_mp: qflag error!"
-    end select
-
-    if (use_ppm) then
-        call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, x1, m1, mono_prof)
-    else
-        call implicit_fall (dts, ks, ke, ze, vt, dp, q, x1, m1)
-    endif
-    
-    select case (qflag)
-        case ("qr")
-            qr = q
-        case ("qi")
-            qi = q
-        case ("qs")
-            qs = q
-        case ("qg")
-            qg = q
-        case default
-            print *, "gfdl_mp: qflag error!"
-    end select
-
-    ! -----------------------------------------------------------------------
-    ! energy change during sedimentation
-    ! -----------------------------------------------------------------------
-    
-    if (consv_checker) then
-        do k = ks, ke
-            te2 (k) = mte (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), tz (k), dp (k), .false.)
-        enddo
-        dte = dte + sum (te1) - sum (te2)
-    endif
-    
-    ! -----------------------------------------------------------------------
-    ! momentum transportation during sedimentation
-    ! -----------------------------------------------------------------------
-    
-    if (do_sedi_uv) then
-        call sedi_uv (ks, ke, m1, dp, u, v)
-    endif
-    
-    if (do_sedi_w) then
-        call sedi_w (ks, ke, m1, w, vt, dm)
-    endif
-    
-    ! -----------------------------------------------------------------------
-    ! energy change during sedimentation heating
-    ! -----------------------------------------------------------------------
-    
-    if (consv_checker) then
-        do k = ks, ke
-            te1 (k) = mte (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), tz (k), dp (k), .false.)
-        enddo
-    endif
-    
-    ! -----------------------------------------------------------------------
-    ! heat exchanges during sedimentation
-    ! -----------------------------------------------------------------------
-    
-    if (do_sedi_heat) then
-        call sedi_heat (ks, ke, dp, m1, dz, tz, qv, ql, qr, qi, qs, qg, c_ice)
-    endif
-    
-    ! -----------------------------------------------------------------------
-    ! energy change during sedimentation heating
-    ! -----------------------------------------------------------------------
-    
-    if (consv_checker) then
-        do k = ks, ke
-            te2 (k) = mte (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), tz (k), dp (k), .false.)
-        enddo
-        dte = dte + sum (te1) - sum (te2)
-    endif
-        
-end subroutine terminal_fall
-
-! =======================================================================
-! melting during sedimentation
-! =======================================================================
-
-subroutine sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vt, r1, tau_mlt, cvm, icpk, qflag)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-
-    integer, intent (in) :: ks, ke
-
-    real, intent (in) :: dts, tau_mlt
-
-    real, intent (in), dimension (ks:ke) :: vt, dp, dz, icpk
-
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: cvm
-
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi
-
-    real, intent (inout) :: r1
-
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-
-    character (len = 2), intent (in) :: qflag
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k, m
-
-    real :: dt5, dtime, sink, zs
-    
-    real, dimension (ks:ke) :: q
-
-    real, dimension (ks:ke + 1) :: ze, zt
-
-    dt5 = 0.5 * dts
-    zs = 0.0
-    ze (ke + 1) = zs
-    do k = ke, ks, - 1
-        ze (k) = ze (k + 1) - dz (k)
-    enddo
-    zt (ks) = ze (ks)
-    do k = ks + 1, ke
-        zt (k) = ze (k) - dt5 * (vt (k - 1) + vt (k))
-    enddo
-    zt (ke + 1) = zs - dts * vt (ke)
-    do k = ks, ke
-        if (zt (k + 1) .ge. zt (k)) zt (k + 1) = zt (k) - dz_min
-    enddo
-    
-    select case (qflag)
-        case ("qi")
-            q = qi
-        case ("qs")
-            q = qs
-        case ("qg")
-            q = qg
-        case default
-            print *, "gfdl_mp: qflag error!"
-    end select
-
-    ! -----------------------------------------------------------------------
-    ! melting to rain
-    ! -----------------------------------------------------------------------
-    
-    do k = ke - 1, ks, - 1
-        if (vt (k) .lt. 1.e-10) cycle
-        if (q (k) .gt. qcmin) then
-            do m = k + 1, ke
-                if (zt (k + 1) .ge. ze (m)) exit
-                if (zt (k) .lt. ze (m + 1) .and. tz (m) .gt. tice) then
-                    dtime = min (dts, (ze (m) - ze (m + 1)) / vt (k))
-                    dtime = min (1.0,  dtime / tau_mlt)
-                    sink = min (q (k) * dp (k) / dp (m), dtime * (tz (m) - tice) / icpk (m))
-                    q (k) = q (k) - sink * dp (m) / dp (k)
-                    if (zt (k) .lt. zs) then
-                        r1 = r1 + sink * dp (m)
-                    else
-                        qr (m) = qr (m) + sink
-                    endif
-                    select case (qflag)
-                        case ("qi")
-                            qi (k) = q (k)
-                        case ("qs")
-                            qs (k) = q (k)
-                        case ("qg")
-                            qg (k) = q (k)
-                        case default
-                            print *, "gfdl_mp: qflag error!"
-                    end select
-                    tz (m) = (tz (m) * cvm (m) - li00 * sink) / &
-                         mhc (qv (k), ql (m), qr (m), qi (m), qs (m), qg (m))
-                endif
-                if (q (k) .lt. qcmin) exit
-            enddo
-        endif
-    enddo
-        
-end subroutine sedi_melt
-
-! =======================================================================
-! moist heat capacity, 6 input variables
-! =======================================================================
-
-function mhc6 (qv, ql, qr, qi, qs, qg)
-
-    implicit none
-    
-    real (kind = r_grid) :: mhc6
-
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-
-    real, intent (in) :: qv, ql, qr, qi, qs, qg
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    real :: q_liq, q_sol
-
-    q_liq = ql + qr
-    q_sol = qi + qs + qg
-    mhc6 = mhc (qv, q_liq, q_sol)
-    
-end function mhc6
+end function mhc3
     
 ! =======================================================================
 ! moist heat capacity, 4 input variables
@@ -5379,28 +5755,32 @@ function mhc4 (qd, qv, q_liq, q_sol)
 end function mhc4
     
 ! =======================================================================
-! moist heat capacity, 3 input variables
+! moist heat capacity, 6 input variables
 ! =======================================================================
 
-function mhc3 (qv, q_liq, q_sol)
+function mhc6 (qv, ql, qr, qi, qs, qg)
 
     implicit none
     
-    real (kind = r_grid) :: mhc3
+    real (kind = r_grid) :: mhc6
 
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
 
-    real, intent (in) :: qv, q_liq, q_sol
+    real, intent (in) :: qv, ql, qr, qi, qs, qg
 
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
 
-    mhc3 = one_r8 + qv * c1_vap + q_liq * c1_liq + q_sol * c1_ice
+    real :: q_liq, q_sol
+
+    q_liq = ql + qr
+    q_sol = qi + qs + qg
+    mhc6 = mhc (qv, q_liq, q_sol)
     
-end function mhc3
+end function mhc6
     
 ! =======================================================================
 ! moist total energy
@@ -5515,245 +5895,27 @@ subroutine mtetw (ks, ke, qv, ql, qr, qi, qs, qg, tz, ua, va, wa, delp, &
 end subroutine mtetw
     
 ! =======================================================================
-! terminal velocity for cloud ice
+! calculate heat capacities and latent heat coefficients
 ! =======================================================================
 
-subroutine term_ice (ks, ke, tz, q, den, v_fac, v_max, const_v, vt)
-    
+subroutine cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, &
+        cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
+
     implicit none
     
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-    
+
     integer, intent (in) :: ks, ke
 
-    logical, intent (in) :: const_v
-    
-    real, intent (in) :: v_fac, v_max
-    
-    real, intent (in), dimension (ks:ke) :: q, den
+    real, intent (in), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
     real (kind = r_grid), intent (in), dimension (ks:ke) :: tz
-    
-    real, intent (out), dimension (ks:ke) :: vt
-    
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
 
-    integer :: k
+    real, intent (out), dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
 
-    real :: vi0, qden
-
-    real, parameter :: aa = - 4.14122e-5
-    real, parameter :: bb = - 0.00538922
-    real, parameter :: cc = - 0.0516344
-    real, parameter :: dd = 0.00216078
-    real, parameter :: ee = 1.9714
-    
-    real, dimension (ks:ke) :: tc
-    
-    if (const_v) then
-        vt (:) = v_fac
-    else
-        vi0 = 0.01 * v_fac
-        do k = ks, ke
-            qden = q (k) * den (k)
-            if (q (k) .lt. qfmin) then
-                vt (k) = 0.0
-            else
-                tc (k) = tz (k) - tice
-                if (ifflag .eq. 1) then
-                    vt (k) = (3. + log10 (qden)) * (tc (k) * (aa * tc (k) + bb) + cc) + &
-                        dd * tc (k) + ee
-                    vt (k) = vi0 * exp (vt (k) * log (10.))
-                endif
-                if (ifflag .eq. 2) &
-                    vt (k) = v_fac * 3.29 * exp (0.16 * log (qden))
-                vt (k) = min (v_max, max (0.0, vt (k)))
-            endif
-        enddo
-    endif
-    
-end subroutine term_ice
-
-! =======================================================================
-! terminal velocity for rain, snow, and graupel (Lin et al. 1983)
-! =======================================================================
-
-subroutine term_rsg (ks, ke, q, den, denfac, v_fac, vcon, lin, norm, v_max, const_v, vt)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-
-    integer, intent (in) :: ks, ke
-
-    logical, intent (in) :: const_v
-    
-    real, intent (in) :: v_fac, lin, v_max
-    
-    real (kind = r_grid), intent (in) :: vcon, norm
-    
-    real, intent (in), dimension (ks:ke) :: q, den, denfac
-    
-    real, intent (out), dimension (ks:ke) :: vt
-    
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-
-    real :: qden
-
-    if (const_v) then
-        vt (:) = v_fac
-    else
-        do k = ks, ke
-            qden = q (k) * den (k)
-            if (q (k) .lt. qfmin) then
-                vt (k) = 0.0
-            else
-                vt (k) = v_fac * vcon * denfac (k) * exp (0.25 * lin * log (qden / norm))
-                vt (k) = min (v_max, max (0.0, vt (k)))
-            endif
-        enddo
-    endif
-    
-end subroutine term_rsg
-
-! =======================================================================
-! accretion function (Lin et al. 1983)
-! =======================================================================
-
-function acr2d (qden, c, denfac, lin)
-    
-    implicit none
-    
-    real :: acr2d
-
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    real, intent (in) :: qden, c, denfac, lin
-    
-    acr2d = denfac * c * exp (0.25 * (3 + lin) * log (qden))
-    
-end function acr2d
-
-! =======================================================================
-! accretion function (Lin et al. 1983)
-! =======================================================================
-
-function acr3d (v1, v2, q1, q2, c, cac, rho)
-    
-    implicit none
-    
-    real :: acr3d
-
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    real, intent (in) :: v1, v2, c, rho, q1, q2, cac (3)
-    
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    real :: t1, s1, s2
-    
-    t1 = sqrt (q1 * rho)
-    s1 = sqrt (q2 * rho)
-    s2 = sqrt (s1)
-    acr3d = c * abs (v1 - v2) * q1 * s2 * (cac (1) * t1 + cac (2) * sqrt (t1) * s2 + cac (3) * s1)
-    
-end function acr3d
-
-! =======================================================================
-! ventilation coefficient (Lin et al. 1983)
-! =======================================================================
-
-function vent_coeff (qden, c1, c2, denfac, lin)
-    
-    implicit none
-
-    real :: vent_coeff
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    real, intent (in) :: qden, c1, c2, denfac, lin
-    
-    vent_coeff = c1 * sqrt (qden) + c1 * exp (0.25 * (5 + lin) / 2 * log (qden)) * sqrt (denfac)
-    
-end function vent_coeff
-
-! =======================================================================
-! sublimation or evaporation function (Lin et al. 1983)
-! =======================================================================
-
-function psub (t2, dq, qden, qsat, c, den, denfac, lin)
-    
-    implicit none
-
-    real :: psub
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    real, intent (in) :: t2, dq, qden, qsat, c (5), den, denfac, lin
-    
-    psub = c (1) * t2 * dq * vent_coeff (qden, c (2), c (3), denfac, lin) / &
-        (c (4) * t2 + c (5) * qsat * den)
-    
-end function psub
-
-! =======================================================================
-! melting function (Lin et al. 1983)
-! =======================================================================
-
-function pmlt (tc, dq, qden, pxacw, pxacr, c, den, denfac, lin)
-    
-    implicit none
-
-    real :: pmlt
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    real, intent (in) :: tc, dq, qden, pxacw, pxacr, c (5), den, denfac, lin
-    
-    pmlt = (c (1) * tc / den - c (2) * dq) * vent_coeff (qden, c (3), c (4), denfac, lin) + &
-        c (5) * tc * (pxacw + pxacr)
-    
-end function pmlt
-
-! =======================================================================
-! sedimentation of horizontal momentum
-! =======================================================================
-
-subroutine sedi_uv (ks, ke, m1, dp, u, v)
-
-    implicit none
-
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    integer, intent (in) :: ks, ke
-
-    real, intent (in), dimension (ks:ke) :: m1, dp
-
-    real, intent (inout), dimension (ks:ke) :: u, v
+    real (kind = r_grid), intent (out), dimension (ks:ke) :: cvm, te8
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5761,228 +5923,89 @@ subroutine sedi_uv (ks, ke, m1, dp, u, v)
 
     integer :: k
 
-    do k = ks + 1, ke
-        u (k) = (dp (k) * u (k) + m1 (k - 1) * u (k - 1)) / (dp (k) + m1 (k - 1))
-        v (k) = (dp (k) * v (k) + m1 (k - 1) * v (k - 1)) / (dp (k) + m1 (k - 1))
-    enddo
-
-end subroutine sedi_uv
-
-! =======================================================================
-! sedimentation of vertical momentum
-! =======================================================================
-
-subroutine sedi_w (ks, ke, m1, w, vt, dm)
-
-    implicit none
-
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    integer, intent (in) :: ks, ke
-
-    real, intent (in), dimension (ks:ke) :: m1, vt, dm
-
-    real, intent (inout), dimension (ks:ke) :: w
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-
-    w (ks) = w (ks) + m1 (ks) * vt (ks) / dm (ks)
-    do k = ks + 1, ke
-        w (k) = (dm (k) * w (k) + m1 (k - 1) * (w (k - 1) - vt (k - 1)) + m1 (k) * vt (k)) / &
-             (dm (k) + m1 (k - 1))
-    enddo
-
-end subroutine sedi_w
-
-! =======================================================================
-! sedimentation of heat
-! =======================================================================
-
-subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
-
-    implicit none
-
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    integer, intent (in) :: ks, ke
-
-    real, intent (in) :: cw
-
-    real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
-
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-
-    real, dimension (ks:ke) :: dgz, cv0
-    
-    do k = ks + 1, ke
-        dgz (k) = - 0.5 * grav * (dz (k - 1) + dz (k))
-        cv0 (k) = dm (k) * (cv_air + qv (k) * cv_vap + (qr (k) + ql (k)) * c_liq + &
-             (qi (k) + qs (k) + qg (k)) * c_ice) + cw * (m1 (k) - m1 (k - 1))
-    enddo
-
-    do k = ks + 1, ke
-        tz (k) = (cv0 (k) * tz (k) + m1 (k - 1) * (cw * tz (k - 1) + dgz (k))) / &
-            (cv0 (k) + cw * m1 (k - 1))
-    enddo
-    
-end subroutine sedi_heat
-
-! =======================================================================
-! check if water species is large enough to fall
-! =======================================================================
-
-subroutine check_column (ks, ke, q, no_fall)
-    
-    implicit none
-    
-    ! -----------------------------------------------------------------------
-    ! input / output arguments
-    ! -----------------------------------------------------------------------
-    
-    integer, intent (in) :: ks, ke
-
-    real, intent (in) :: q (ks:ke)
-
-    logical, intent (out) :: no_fall
-
-    ! -----------------------------------------------------------------------
-    ! local variables
-    ! -----------------------------------------------------------------------
-
-    integer :: k
-    
-    no_fall = .true.
-    
     do k = ks, ke
-        if (q (k) .gt. qfmin) then
-            no_fall = .false.
-            exit
-        endif
+        q_liq (k) = ql (k) + qr (k)
+        q_sol (k) = qi (k) + qs (k) + qg (k)
+        cvm (k) = mhc (qv (k), q_liq (k), q_sol (k))
+        te8 (k) = cvm (k) * tz (k) + lv00 * qv (k) - li00 * q_sol (k)
+        lcpk (k) = (lv00 + d1_vap * tz (k)) / cvm (k)
+        icpk (k) = (li00 + d1_ice * tz (k)) / cvm (k)
+        tcpk (k) = (li20 + (d1_vap + d1_ice) * tz (k)) / cvm (k)
+        tcp3 (k) = lcpk (k) + icpk (k) * min (1., dim (tice, tz (k)) / (tice - t_wfr))
     enddo
+
+end subroutine cal_mhc_lhc
     
-end subroutine check_column
-
 ! =======================================================================
-! fix negative water species
+! update hydrometeors
 ! =======================================================================
 
-subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
+subroutine update_qq (qv, ql, qr, qi, qs, qg, dqv, dql, dqr, dqi, dqs, dqg)
     
     implicit none
     
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
+
+    real, intent (in) :: dqv, dql, dqr, dqi, dqs, dqg
+
+    real, intent (inout) :: qv, ql, qr, qi, qs, qg
+
+    qv = qv + dqv
+    ql = ql + dql
+    qr = qr + dqr
+    qi = qi + dqi
+    qs = qs + dqs
+    qg = qg + dqg
+
+end subroutine update_qq
+
+! =======================================================================
+! update hydrometeors and temperature
+! =======================================================================
+
+subroutine update_qt (qv, ql, qr, qi, qs, qg, dqv, dql, dqr, dqi, dqs, dqg, te8, &
+        tk, lcpk, icpk, tcpk, tcp3)
     
-    integer, intent (in) :: ks, ke
-
-    real, intent (in), dimension (ks:ke) :: dp
-
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
-    real, intent (out) :: cond
+    implicit none
     
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    real, intent (in) :: dqv, dql, dqr, dqi, dqs, dqg
+
+    real (kind = r_grid), intent (in) :: te8
+
+    real, intent (inout) :: qv, ql, qr, qi, qs, qg
+
+    real, intent (out) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (out) :: tk
+
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
 
-    integer :: k
-    
-    real :: dq, sink
-    
-    real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
-    
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+    real (kind = r_grid) :: cvm
 
-    cond = 0
-    
-    ! -----------------------------------------------------------------------
-    ! calculate moist heat capacity and latent heat coefficients
-    ! -----------------------------------------------------------------------
-    
-    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
-    
-    do k = ks, ke
-        
-        ! -----------------------------------------------------------------------
-        ! fix negative solid-phase hydrometeors
-        ! -----------------------------------------------------------------------
-        
-        ! if cloud ice < 0, borrow from snow
-        if (qi (k) .lt. 0.) then
-            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                0., 0., 0., - qi (k), qi (k), 0.)
-        endif
+    qv = qv + dqv
+    ql = ql + dql
+    qr = qr + dqr
+    qi = qi + dqi
+    qs = qs + dqs
+    qg = qg + dqg
 
-        ! if snow < 0, borrow from graupel
-        if (qs (k) .lt. 0.) then
-            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                0., 0., 0., 0., - qs (k), qs (k))
-        endif
+    cvm = mhc (qv, ql, qr, qi, qs, qg)
+    tk = (te8 - lv00 * qv + li00 * (qi + qs + qg)) / cvm
 
-        ! if graupel < 0, borrow from rain
-        if (qg (k) .lt. 0.) then
-            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                0., 0., qg (k), 0., 0., - qg (k), te8 (k), tz (k), &
-                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-        endif
-        
-        ! -----------------------------------------------------------------------
-        ! fix negative liquid-phase hydrometeors
-        ! -----------------------------------------------------------------------
-        
-        ! if rain < 0, borrow from cloud water
-        if (qr (k) .lt. 0.) then
-            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                0., qr (k), - qr (k), 0., 0., 0.)
-        endif
+    lcpk = (lv00 + d1_vap * tk) / cvm
+    icpk = (li00 + d1_ice * tk) / cvm
+    tcpk = (li20 + (d1_vap + d1_ice) * tk) / cvm
+    tcp3 = lcpk + icpk * min (1., dim (tice, tk) / (tice - t_wfr))
 
-        ! if cloud water < 0, borrow from water vapor
-        if (ql (k) .lt. 0.) then
-            cond = cond - ql (k) * dp (k)
-            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                ql (k), - ql (k), 0., 0., 0., 0., te8 (k), tz (k), &
-                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-        endif
-        
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! fix negative water vapor
-    ! -----------------------------------------------------------------------
-    
-    ! if water vapor < 0, borrow water vapor from below
-    do k = ks, ke - 1
-        if (qv (k) .lt. 0.) then
-            qv (k + 1) = qv (k + 1) + qv (k) * dp (k) / dp (k + 1)
-            qv (k) = 0.
-        endif
-    enddo
-    
-    ! if water vapor < 0, borrow water vapor from above
-    if (qv (ke) .lt. 0. .and. qv (ke - 1) .gt. 0.) then
-        dq = min (- qv (ke) * dp (ke), qv (ke - 1) * dp (ke - 1))
-        qv (ke - 1) = qv (ke - 1) - dq / dp (ke - 1)
-        qv (ke) = qv (ke) + dq / dp (ke)
-    endif
-    
-end subroutine neg_adj
+end subroutine update_qt
 
 ! =======================================================================
 ! prepare saturation water vapor pressure tables
