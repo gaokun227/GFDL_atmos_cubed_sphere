@@ -334,6 +334,7 @@ module gfdl_mp_mod
     real :: f_dq_m = 1.0 ! cloud fraction adjustment for undersaturation
 
     real :: fi2s_fac = 0.75 ! maximum sink of cloud ice to form snow: 0-1
+    real :: fi2g_fac = 1.0 ! maximum sink of cloud ice to form graupel: 0-1
     real :: fs2g_fac = 1.0 ! maximum sink of snow to form graupel: 0-1
     
     real :: qi0_rei = 0.8e-4 ! maximum cloud ice value (by other sources) (kg/kg)
@@ -384,7 +385,7 @@ module gfdl_mp_mod
         use_rhc_revap, do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
         rhc_cevap, rhc_revap, qi0_rei, beta, liq_ice_combine, rewflag, &
         reiflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
-        regmin, regmax, fs2g_fac, fi2s_fac, do_sedi_melt
+        regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt
     
 contains
 
@@ -1011,15 +1012,29 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             ! ice cloud microphysics
             ! -----------------------------------------------------------------------
             
-            call ice_cloud (ks, ke, tz, pz, qvz, qlz, qrz, qiz, qsz, qgz, dp, den, ccn, &
-                cin, denfac, vts, vtg, vtr, qaz, rh_adj, dts, h_var, gsize (i), &
-                cond, dep, reevap, sub, last_step)
+            call ice_cloud (ks, ke, tz, qvz, qlz, qrz, qiz, qsz, qgz, den, &
+                denfac, vtr, vts, vtg, dts, h_var)
 
+            ! -----------------------------------------------------------------------
+            ! temperature sentive high vertical resolution processes
+            ! -----------------------------------------------------------------------
+            
+            call subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qvz, qlz, &
+                qrz, qiz, qsz, qgz, qaz, dp, ccn, cin, cond, dep, reevap, sub)
+    
             condensation (i) = condensation (i) + cond * convt
             deposition (i) = deposition (i) + dep * convt
             evaporation (i) = evaporation (i) + reevap * convt
             sublimation (i) = sublimation (i) + sub * convt
             
+            ! -----------------------------------------------------------------------
+            ! cloud fraction diagnostic
+            ! -----------------------------------------------------------------------
+            
+            if (.not. (do_qa .and. last_step)) cycle
+        
+            call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, h_var, gsize (i))
+    
         enddo ! n loop
         
         ! -----------------------------------------------------------------------
@@ -1210,19 +1225,19 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     ! rain evaporation
     ! -----------------------------------------------------------------------
     
-    call revap (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
+    call prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
         
     ! -----------------------------------------------------------------------
     ! rain evaporation
     ! -----------------------------------------------------------------------
     
-    call raccr (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
+    call pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
         
     ! -----------------------------------------------------------------------
     ! rain autoconversion
     ! -----------------------------------------------------------------------
     
-    call rauto (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
+    call praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
     
 end subroutine warm_rain
 
@@ -1230,7 +1245,7 @@ end subroutine warm_rain
 ! rain evaporation
 ! =======================================================================
 
-subroutine revap (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
+subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
     
     implicit none
     
@@ -1332,20 +1347,20 @@ subroutine revap (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
             reevap = reevap + sink * dp (k)
 
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                sink, 0., - sink, 0., 0., 0., te8 (k), cvm (k), tz (k), &
+                sink, 0., - sink, 0., 0., 0., te8 (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
 
         endif
             
     enddo ! k loop
     
-end subroutine revap
+end subroutine prevp
 
 ! =======================================================================
 ! rain accretion
 ! =======================================================================
 
-subroutine raccr (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
+subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
     
     implicit none
     
@@ -1386,13 +1401,13 @@ subroutine raccr (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
         endif
     enddo
     
-end subroutine raccr
+end subroutine pracw
 
 ! =======================================================================
 ! rain autoconversion
 ! =======================================================================
 
-subroutine rauto (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
+subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
     
     implicit none
     
@@ -1456,15 +1471,14 @@ subroutine rauto (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
         enddo
     endif
 
-end subroutine rauto
+end subroutine praut
     
 ! =======================================================================
 ! ice cloud microphysics
 ! =======================================================================
 
-subroutine ice_cloud (ks, ke, tz, pz, qv, ql, qr, qi, qs, qg, dp, den, &
-        ccn, cin, denfac, vts, vtg, vtr, qa, rh_adj, dts, h_var, &
-        gsize, cond, dep, reevap, sub, last_step)
+subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
+        denfac, vtr, vts, vtg, dts, h_var)
     
     implicit none
     
@@ -1474,42 +1488,22 @@ subroutine ice_cloud (ks, ke, tz, pz, qv, ql, qr, qi, qs, qg, dp, den, &
     
     integer, intent (in) :: ks, ke
 
-    logical, intent (in) :: last_step
+    real, intent (in) :: dts, h_var
 
-    real, intent (in) :: rh_adj, dts, h_var, gsize
+    real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts, vtg
 
-    real, intent (in), dimension (ks:ke) :: pz, dp, den, denfac, vts, vtg, vtr, ccn
-
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa, cin
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-
-    real, intent (out) :: cond, dep, reevap, sub
 
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
 
-    integer :: k
-
     real, dimension (ks:ke) :: di, q_liq, q_sol, lcpk, icpk, tcpk, tcp3
 
-    real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, psaci, pgacs
-    real :: pgmlt, psmlt, pgfr, psaut, pgaut
-    real :: tmp, dq, q_plus, sink, factor, qim, tin, dqdt
-    real :: rdts, fac_i2s, fac_imlt, tc, qden, qsm
-    
     real (kind = r_grid), dimension (ks:ke) :: cvm, te8
 
-    rdts = 1. / dts
-    
-    ! -----------------------------------------------------------------------
-    ! time-scale factor
-    ! -----------------------------------------------------------------------
-    
-    fac_i2s = 1. - exp (- dts / tau_i2s)
-    fac_imlt = 1. - exp (- dts / tau_imlt)
-    
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
@@ -1518,274 +1512,732 @@ subroutine ice_cloud (ks, ke, tz, pz, qv, ql, qr, qi, qs, qg, dp, den, &
     
     if (.not. do_warm_rain_mp) then
 
-        do k = ks, ke
+        call pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, lcpk, icpk, tcpk, tcp3)
 
-            if (tz (k) .gt. tice_mlt .and. qi (k) .gt. qcmin) then
+        call pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, te8, den, lcpk, icpk, tcpk, tcp3)
+    
+        ! -----------------------------------------------------------------------
+        ! melting of snow (includes snow accretion with cloud water and rain)
+        ! -----------------------------------------------------------------------
                 
-                ! -----------------------------------------------------------------------
-                ! melting of cloud ice
-                ! -----------------------------------------------------------------------
+        call psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, den, denfac, &
+            vtr, vts, lcpk, icpk, tcpk, tcp3)
+    
+        ! -----------------------------------------------------------------------
+        ! melting of graupel (includes graupel accretion with cloud water and rain)
+        ! -----------------------------------------------------------------------
                 
-                sink = min (qi (k), fac_imlt * (tz (k) - tice_mlt) / icpk (k))
-                tmp = min (sink, dim (ql_mlt, ql (k)))
-
-                call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                    0., tmp, sink - tmp, - sink, 0., 0., te8 (k), cvm (k), tz (k), &
-                    lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-            elseif (tz (k) .lt. t_wfr .and. ql (k) .gt. qcmin) then
+        call pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, den, denfac, &
+            vtr, vtg, lcpk, icpk, tcpk, tcp3)
+    
+        ! -----------------------------------------------------------------------
+        ! snow accretion
+        ! -----------------------------------------------------------------------
                 
-                ! -----------------------------------------------------------------------
-                ! homogeneous freezing of cloud water
-                ! -----------------------------------------------------------------------
-                
-                tc = t_wfr - tz (k)
-                factor = min (1., tc / dt_fr)
-                sink = min (ql (k) * factor, tc / icpk (k))
-                qim = qi0_crt / den (k)
-                tmp = min (sink, dim (qim, qi (k)))
-
-                call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                    0., - sink, 0., tmp, sink - tmp, 0., te8 (k), cvm (k), tz (k), &
-                    lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-            endif
-        
-        enddo
-        
+        call psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
+    
         ! -----------------------------------------------------------------------
         ! vertical subgrid variability
         ! -----------------------------------------------------------------------
         
-        call linear_prof (ke - ks + 1, qi (ks), di (ks), z_slope_ice, h_var)
+        call linear_prof (ke - ks + 1, qi, di, z_slope_ice, h_var)
         
-        do k = ks, ke
-            
-            ! -----------------------------------------------------------------------
-            ! do nothing above p_min
-            ! -----------------------------------------------------------------------
-            
-            if (pz (k) .lt. p_min) cycle
-            
-            tc = tz (k) - tice
-            
-            if (tc .ge. 0.) then
-                
-                ! -----------------------------------------------------------------------
-                ! melting of snow (includes snow accretion with cloud water and rain)
-                ! -----------------------------------------------------------------------
-                
-                if (qs (k) .gt. qcmin) then
-                    
-                    psacw = 0.
-                    qden = qs (k) * den (k)
-                    if (ql (k) .gt. qcmin) then
-                        factor = acr2d (qden, csacw, denfac (k), dlin)
-                        psacw = factor / (1. + dts * factor) * ql (k)
-                    endif
-                    
-                    psacr = 0.
-                    pracs = 0.
-                    if (qr (k) .gt. qcmin) then
-                        psacr = min (acr3d (vts (k), vtr (k), qr (k), qs (k), csacr, acco (1, 2), &
-                            den (k)), qr (k) * rdts)
-                        pracs = acr3d (vtr (k), vts (k), qs (k), qr (k), cracs, acco (1, 1), den (k))
-                    endif
-                    
-                    tin = tz (k)
-                    dq = iqs (tin, den (k), dqdt) - qv (k)
-                    psmlt = max (0., pmlt (tc, dq, qden, psacw, psacr, csmlt, den (k), denfac (k), dlin))
+        ! -----------------------------------------------------------------------
+        ! snow autoconversion
+        ! -----------------------------------------------------------------------
 
-                    sink = min (qs (k), (psmlt + pracs) * dts, tc / icpk (k))
-                    tmp = min (sink, dim (qs_mlt, ql (k)))
-                    
-                    call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                        0., tmp, sink - tmp, 0., - sink, 0., te8 (k), cvm (k), tz (k), &
-                        lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-                endif
-                
-                ! -----------------------------------------------------------------------
-                ! melting of graupel (includes graupel accretion with cloud water and rain)
-                ! -----------------------------------------------------------------------
-                
-                if (qg (k) .gt. qcmin) then
-                    
-                    pgacw = 0.
-                    qden = qg (k) * den (k)
-                    if (ql (k) .gt. qcmin) then
-                        factor = acr2d (qden, cgacw, denfac (k), flin)
-                        pgacw = factor / (1. + dts * factor) * ql (k)
-                    endif
-                    
-                    pgacr = 0.
-                    if (qr (k) .gt. qcmin) then
-                        pgacr = min (acr3d (vtg (k), vtr (k), qr (k), qg (k), cgacr, acco (1, 3), &
-                        den (k)), rdts * qr (k))
-                    endif
-                    
-                    tin = tz (k)
-                    dq = iqs (tin, den (k), dqdt) - qv (k)
-                    pgmlt = max (0., pmlt (tc, dq, qden, pgacw, pgacr, cgmlt, den (k), denfac (k), flin))
-
-                    sink = min (qg (k), pgmlt * dts, tc / icpk (k))
-
-                    call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                        0., 0., sink, 0., 0., - sink, te8 (k), cvm (k), tz (k), &
-                        lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-                endif
-                
-            else
-                
-                ! -----------------------------------------------------------------------
-                ! cloud ice sink terms (includes cloud ice accretion with snow and graupel, autoconversion)
-                ! -----------------------------------------------------------------------
-        
-                if (qi (k) .gt. qcmin) then
-                    
-                    psaci = 0.
-                    qden = qs (k) * den (k)
-                    if (qs (k) .gt. qcmin) then
-                        factor = dts * acr2d (qden, csaci, denfac (k), dlin)
-                        psaci = factor / (1. + factor) * qi (k)
-                    endif
-                    
-                    psaut = 0.
-                    tmp = fac_i2s * exp (0.025 * tc)
-                    di (k) = max (di (k), qcmin)
-                    q_plus = qi (k) + di (k)
-                    qim = qi0_crt / den (k)
-                    if (q_plus .gt. (qim + qcmin)) then
-                        if (qim .gt. (qi (k) - di (k))) then
-                            dq = (0.25 * (q_plus - qim) ** 2) / di (k)
-                        else
-                            dq = qi (k) - qim
-                        endif
-                        psaut = tmp * dq
-                    endif
-
-                    sink = min (fi2s_fac * qi (k), psaci + psaut)
-                    
-                    call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                        0., 0., 0., - sink, sink, 0.)
-
-                    pgaci = 0.
-                    qden = qg (k) * den (k)
-                    if (qg (k) .gt. qcmin) then
-                        factor = dts * acr2d (qden, cgaci, denfac (k), flin)
-                        pgaci = factor / (1. + factor) * qi (k)
-                    endif
-
-                    sink = min (qi (k), pgaci)
-                    
-                    call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                        0., 0., 0., - sink, 0., sink)
-
-                endif
-                
-                ! -----------------------------------------------------------------------
-                ! rain sink terms (includes rain accretion with snow, freezing)
-                ! -----------------------------------------------------------------------
-                
-                if (qr (k) .gt. qcmin) then
-                    
-                    psacr = 0.
-                    if (qs (k) .gt. qcmin) then
-                        psacr = dts * acr3d (vts (k), vtr (k), qr (k), qs (k), csacr, acco (1, 2), den (k))
-                    endif
-                    
-                    pgfr = dts * cgfr (1) / den (k) * (exp (- cgfr (2) * tc) - 1.) * &
-                        exp (1.75 * log (qr (k) * den (k)))
-                    
-                    sink = psacr + pgfr
-                    factor = min (sink, qr (k), - tc / icpk (k)) / max (sink, qcmin)
-                    psacr = factor * psacr
-                    pgfr = factor * pgfr
-                    
-                    sink = min (qr (k), psacr + pgfr)
-
-                    call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                        0., 0., - sink, 0., psacr, pgfr, te8 (k), cvm (k), tz (k), &
-                        lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-                endif
-                
-                ! -----------------------------------------------------------------------
-                ! graupel production terms (includes graupel accretion with cloud water and autoconversion)
-                ! -----------------------------------------------------------------------
-                
-                if (qs (k) .gt. qcmin) then
-                    
-                    pgacs = 0
-                    if (qg (k) .gt. qcmin) then
-                        pgacs = dts * acr3d (vtg (k), vts (k), qs (k), qg (k), cgacs, acco (1, 4), den (k))
-                    endif
-                    
-                    pgaut = 0
-                    qsm = qs0_crt / den (k)
-                    if (qs (k) .gt. qsm) then
-                        factor = dts * 1.e-3 * exp (0.09 * (tz (k) - tice))
-                        pgaut = factor / (1. + factor) * (qs (k) - qsm)
-                    endif
-
-                    sink = min (fs2g_fac * qs (k), pgacs + pgaut)
-                    
-                    call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                        0., 0., 0., 0., - sink, sink)
-
-                endif
-                
-                ! -----------------------------------------------------------------------
-                ! graupel production terms (includes graupel accretion with cloud water and rain)
-                ! -----------------------------------------------------------------------
-                
-                if (qg (k) .gt. qcmin) then
-                    
-                    pgacw = 0.
-                    if (ql (k) .gt. qcmin) then
-                        qden = qg (k) * den (k)
-                        factor = dts * acr2d (qden, cgacw, denfac (k), flin)
-                        pgacw = factor / (1. + factor) * ql (k)
-                    endif
-                    
-                    pgacr = 0.
-                    if (qr (k) .gt. qcmin) then
-                        pgacr = min (dts * acr3d (vtg (k), vtr (k), qr (k), qg (k), cgacr, acco (1, 3), &
-                            den (k)), qr (k))
-                    endif
-                    
-                    sink = pgacr + pgacw
-                    factor = min (sink, dim (tice, tz (k)) / icpk (k)) / max (sink, qcmin)
-                    pgacr = factor * pgacr
-                    pgacw = factor * pgacw
-                    
-                    sink = pgacr + pgacw
-
-                    call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                        0., - pgacw, - pgacr, 0., 0., sink, te8 (k), cvm (k), tz (k), &
-                        lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-                endif
-                
-            endif ! tc .ge. 0.
-            
-        enddo ! k loop
-
-    endif ! do_warm_rain_mp
+        call psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
     
-    call subgrid_z_proc (ks, ke, pz, den, denfac, dts, rh_adj, tz, qv, ql, &
-        qr, qi, qs, qg, qa, dp, h_var, ccn, cin, gsize, cond, dep, &
-        reevap, sub, last_step)
+        ! -----------------------------------------------------------------------
+        ! graupel accretion
+        ! -----------------------------------------------------------------------
+                
+        call pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
+    
+        ! -----------------------------------------------------------------------
+        ! snow accretion and graupel freezing
+        ! -----------------------------------------------------------------------
+                
+        call psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, den, denfac, &
+            vtr, vts, lcpk, icpk, tcpk, tcp3)
+    
+        ! =======================================================================
+        ! graupel accretion
+        ! =======================================================================
+
+        call pgacs (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, vts, vtg)
+    
+        ! =======================================================================
+        ! graupel autoconversion
+        ! =======================================================================
+
+        call pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
+    
+        ! =======================================================================
+        ! graupel accretion
+        ! =======================================================================
+
+        call pgacw_pgacr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, den, denfac, &
+            vtr, vtg, lcpk, icpk, tcpk, tcp3)
+    
+    endif ! do_warm_rain_mp
     
 end subroutine ice_cloud
 
 ! =======================================================================
+! melting of cloud ice
+! =======================================================================
+
+subroutine pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, lcpk, icpk, tcpk, tcp3)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tmp, sink, fac_imlt
+
+    fac_imlt = 1. - exp (- dts / tau_imlt)
+    
+    do k = ks, ke
+        if (tz (k) .gt. tice_mlt .and. qi (k) .gt. qcmin) then
+            sink = min (qi (k), fac_imlt * (tz (k) - tice_mlt) / icpk (k))
+            tmp = min (sink, dim (ql_mlt, ql (k)))
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., tmp, sink - tmp, - sink, 0., 0., te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+        endif
+    enddo
+        
+end subroutine pimlt
+    
+! =======================================================================
+! homogeneous freezing of cloud water
+! =======================================================================
+
+subroutine pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, te8, den, lcpk, icpk, tcpk, tcp3)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in), dimension (ks:ke) :: den
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, factor, tmp, sink, qim
+
+    do k = ks, ke
+        if (tz (k) .lt. t_wfr .and. ql (k) .gt. qcmin) then
+            tc = t_wfr - tz (k)
+            factor = min (1., tc / dt_fr)
+            sink = min (ql (k) * factor, tc / icpk (k))
+            qim = qi0_crt / den (k)
+            tmp = min (sink, dim (qim, qi (k)))
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., - sink, 0., tmp, sink - tmp, 0., te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+        endif
+    enddo
+        
+end subroutine pifr
+    
+! =======================================================================
+! melting of snow (includes snow accretion with cloud water and rain)
+! =======================================================================
+
+subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, den, denfac, &
+        vtr, vts, lcpk, icpk, tcpk, tcp3)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, factor, tmp, sink, qden, dqdt, tin, dq
+    real :: psacw, psacr, pracs
+
+    do k = ks, ke
+
+        tc = tz (k) - tice
+        
+        if (tc .ge. 0. .and. qs (k) .gt. qcmin) then
+            
+            psacw = 0.
+            qden = qs (k) * den (k)
+            if (ql (k) .gt. qcmin) then
+                factor = acr2d (qden, csacw, denfac (k), dlin)
+                psacw = factor / (1. + dts * factor) * ql (k)
+            endif
+            
+            psacr = 0.
+            pracs = 0.
+            if (qr (k) .gt. qcmin) then
+                psacr = min (acr3d (vts (k), vtr (k), qr (k), qs (k), csacr, acco (1, 2), &
+                    den (k)), qr (k) / dts)
+                pracs = acr3d (vtr (k), vts (k), qs (k), qr (k), cracs, acco (1, 1), den (k))
+            endif
+            
+            tin = tz (k)
+            dq = iqs (tin, den (k), dqdt) - qv (k)
+            sink = max (0., pmlt (tc, dq, qden, psacw, psacr, csmlt, den (k), denfac (k), dlin))
+
+            sink = min (qs (k), (sink + pracs) * dts, tc / icpk (k))
+            tmp = min (sink, dim (qs_mlt, ql (k)))
+            
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., tmp, sink - tmp, 0., - sink, 0., te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
+        endif
+            
+    enddo
+        
+end subroutine psmlt
+    
+! =======================================================================
+! melting of graupel (includes graupel accretion with cloud water and rain)
+! =======================================================================
+
+subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, den, denfac, &
+        vtr, vtg, lcpk, icpk, tcpk, tcp3)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vtg
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, factor, sink, qden, dqdt, tin, dq
+    real :: pgacw, pgacr
+
+    do k = ks, ke
+
+        tc = tz (k) - tice
+        
+        if (tc .ge. 0. .and. qg (k) .gt. qcmin) then
+            
+            pgacw = 0.
+            qden = qg (k) * den (k)
+            if (ql (k) .gt. qcmin) then
+                factor = acr2d (qden, cgacw, denfac (k), flin)
+                pgacw = factor / (1. + dts * factor) * ql (k)
+            endif
+            
+            pgacr = 0.
+            if (qr (k) .gt. qcmin) then
+                pgacr = min (acr3d (vtg (k), vtr (k), qr (k), qg (k), cgacr, acco (1, 3), &
+                    den (k)), qr (k) / dts)
+            endif
+            
+            tin = tz (k)
+            dq = iqs (tin, den (k), dqdt) - qv (k)
+            sink = max (0., pmlt (tc, dq, qden, pgacw, pgacr, cgmlt, den (k), denfac (k), flin))
+
+            sink = min (qg (k), sink * dts, tc / icpk (k))
+
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., sink, 0., 0., - sink, te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
+        endif
+                
+    enddo
+        
+end subroutine pgmlt
+    
+! =======================================================================
+! snow accretion
+! =======================================================================
+
+subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, denfac
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, factor, sink, qden
+
+    do k = ks, ke
+
+        tc = tz (k) - tice
+        
+        if (tc .lt. 0. .and. qi (k) .gt. qcmin) then
+            
+            sink = 0.
+            qden = qs (k) * den (k)
+            if (qs (k) .gt. qcmin) then
+                factor = dts * acr2d (qden, csaci, denfac (k), dlin)
+                sink = factor / (1. + factor) * qi (k)
+            endif
+            
+            sink = min (fi2s_fac * qi (k), sink)
+            
+            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., 0., - sink, sink, 0.)
+
+        endif
+                
+    enddo
+        
+end subroutine psaci
+    
+! =======================================================================
+! snow autoconversion
+! =======================================================================
+
+subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, di
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, sink, fac_i2s, q_plus, qim, dq, tmp
+
+    fac_i2s = 1. - exp (- dts / tau_i2s)
+
+    do k = ks, ke
+
+        tc = tz (k) - tice
+        
+        if (tc .lt. 0. .and. qi (k) .gt. qcmin) then
+            
+            sink = 0.
+            tmp = fac_i2s * exp (0.025 * tc)
+            di (k) = max (di (k), qcmin)
+            q_plus = qi (k) + di (k)
+            qim = qi0_crt / den (k)
+            if (q_plus .gt. (qim + qcmin)) then
+                if (qim .gt. (qi (k) - di (k))) then
+                    dq = (0.25 * (q_plus - qim) ** 2) / di (k)
+                else
+                    dq = qi (k) - qim
+                endif
+                sink = tmp * dq
+            endif
+
+            sink = min (fi2s_fac * qi (k), sink)
+            
+            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., 0., - sink, sink, 0.)
+
+        endif
+
+    enddo
+        
+end subroutine psaut
+    
+! =======================================================================
+! graupel accretion
+! =======================================================================
+
+subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, denfac
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, factor, sink, qden
+
+    do k = ks, ke
+
+        tc = tz (k) - tice
+        
+        if (tc .lt. 0. .and. qi (k) .gt. qcmin) then
+            
+            sink = 0.
+            qden = qg (k) * den (k)
+            if (qg (k) .gt. qcmin) then
+                factor = dts * acr2d (qden, cgaci, denfac (k), flin)
+                sink = factor / (1. + factor) * qi (k)
+            endif
+
+            sink = min (fi2g_fac * qi (k), sink)
+            
+            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., 0., - sink, 0., sink)
+
+        endif
+                
+    enddo
+        
+end subroutine pgaci
+    
+! =======================================================================
+! snow accretion and graupel freezing
+! =======================================================================
+
+subroutine psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, den, denfac, &
+        vtr, vts, lcpk, icpk, tcpk, tcp3)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, factor, sink
+    real :: psacr, pgfr
+
+    do k = ks, ke
+
+        tc = tz (k) - tice
+        
+        if (tc .lt. 0. .and. qr (k) .gt. qcmin) then
+            
+            psacr = 0.
+            if (qs (k) .gt. qcmin) then
+                psacr = dts * acr3d (vts (k), vtr (k), qr (k), qs (k), csacr, acco (1, 2), den (k))
+            endif
+            
+            pgfr = dts * cgfr (1) / den (k) * (exp (- cgfr (2) * tc) - 1.) * &
+                exp (1.75 * log (qr (k) * den (k)))
+            
+            sink = psacr + pgfr
+            factor = min (sink, qr (k), - tc / icpk (k)) / max (sink, qcmin)
+            psacr = factor * psacr
+            pgfr = factor * pgfr
+            
+            sink = min (qr (k), psacr + pgfr)
+
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., - sink, 0., psacr, pgfr, te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
+        endif
+                
+    enddo
+        
+end subroutine psacr_pgfr
+    
+! =======================================================================
+! graupel accretion
+! =======================================================================
+
+subroutine pgacs (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, vts, vtg)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, vts, vtg
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, factor, sink
+
+    do k = ks, ke
+
+        tc = tz (k) - tice
+        
+        if (tc .lt. 0. .and. qs (k) .gt. qcmin) then
+            
+            sink = 0
+            if (qg (k) .gt. qcmin) then
+                sink = dts * acr3d (vtg (k), vts (k), qs (k), qg (k), cgacs, acco (1, 4), den (k))
+            endif
+            
+            sink = min (fs2g_fac * qs (k), sink)
+            
+            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., 0., 0., - sink, sink)
+
+        endif
+                
+    enddo
+        
+end subroutine pgacs
+    
+! =======================================================================
+! graupel autoconversion
+! =======================================================================
+
+subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, factor, sink, qsm
+
+    do k = ks, ke
+
+        tc = tz (k) - tice
+        
+        if (tc .lt. 0. .and. qs (k) .gt. qcmin) then
+            
+            sink = 0
+            qsm = qs0_crt / den (k)
+            if (qs (k) .gt. qsm) then
+                factor = dts * 1.e-3 * exp (0.09 * (tz (k) - tice))
+                sink = factor / (1. + factor) * (qs (k) - qsm)
+            endif
+
+            sink = min (fs2g_fac * qs (k), sink)
+            
+            call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., 0., 0., 0., - sink, sink)
+
+        endif
+                
+    enddo
+        
+end subroutine pgaut
+        
+! =======================================================================
+! graupel accretion
+! =======================================================================
+
+subroutine pgacw_pgacr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, den, denfac, &
+        vtr, vtg, lcpk, icpk, tcpk, tcp3)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vtg
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: tc, factor, sink, qden
+    real :: pgacw, pgacr
+
+    do k = ks, ke
+
+        tc = tz (k) - tice
+        
+        if (tc .lt. 0. .and. qg (k) .gt. qcmin) then
+            
+            pgacw = 0.
+            if (ql (k) .gt. qcmin) then
+                qden = qg (k) * den (k)
+                factor = dts * acr2d (qden, cgacw, denfac (k), flin)
+                pgacw = factor / (1. + factor) * ql (k)
+            endif
+            
+            pgacr = 0.
+            if (qr (k) .gt. qcmin) then
+                pgacr = min (dts * acr3d (vtg (k), vtr (k), qr (k), qg (k), cgacr, acco (1, 3), &
+                    den (k)), qr (k))
+            endif
+            
+            sink = pgacr + pgacw
+            factor = min (sink, dim (tice, tz (k)) / icpk (k)) / max (sink, qcmin)
+            pgacr = factor * pgacr
+            pgacw = factor * pgacw
+            
+            sink = pgacr + pgacw
+
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., - pgacw, - pgacr, 0., 0., sink, te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
+        endif
+                
+    enddo
+        
+end subroutine pgacw_pgacr
+    
+! =======================================================================
 ! temperature sentive high vertical resolution processes
 ! =======================================================================
 
-subroutine subgrid_z_proc (ks, ke, pz, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
-        qi, qs, qg, qa, dp, h_var, ccn, cin, gsize, cond, dep, reevap, sub, last_step)
+subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
+        qi, qs, qg, qa, dp, ccn, cin, cond, dep, reevap, sub)
     
     implicit none
     
@@ -1795,11 +2247,9 @@ subroutine subgrid_z_proc (ks, ke, pz, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     
     integer, intent (in) :: ks, ke
 
-    logical, intent (in) :: last_step
+    real, intent (in) :: dts, rh_adj
 
-    real, intent (in) :: dts, rh_adj, h_var, gsize
-
-    real, intent (in), dimension (ks:ke) :: pz, den, denfac, ccn, dp
+    real, intent (in), dimension (ks:ke) :: den, denfac, ccn, dp
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa, cin
 
@@ -1810,13 +2260,6 @@ subroutine subgrid_z_proc (ks, ke, pz, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
-    integer :: k
-
-    real :: pidep, qi_gen, qi_crt, q_plus, q_minus
-    real :: rh, rqi, tin, qsw, qsi, qpz, qstar, rh_tem, sigma, gam
-    real :: dqdt, dq, dq0, factor, tmp, liq, ice, fac_l2v, fac_v2l
-    real :: evap, sink, tc, qa10, qa100, pssub, pgsub, t2, qden
 
     real, dimension (ks:ke) :: q_liq, q_sol, q_cond, lcpk, icpk, tcpk, tcp3
     
@@ -1828,258 +2271,582 @@ subroutine subgrid_z_proc (ks, ke, pz, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     sub = 0
     
     ! -----------------------------------------------------------------------
-    ! time-scale factor
-    ! -----------------------------------------------------------------------
-    
-    fac_l2v = 1. - exp (- dts / tau_l2v)
-    fac_v2l = 1. - exp (- dts / tau_v2l)
-    
-    ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
     
     call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
     
-    do k = ks, ke
-        
-        ! -----------------------------------------------------------------------
-        ! do nothing above p_min
-        ! -----------------------------------------------------------------------
-            
-        if (pz (k) .lt. p_min) cycle ! cloud free
-        
-        if (.not. do_warm_rain_mp) then
+    ! -----------------------------------------------------------------------
+    ! instant processes (include deposition, evaporation, and sublimation)
+    ! -----------------------------------------------------------------------
+    
+    if (.not. do_warm_rain_mp) then
 
-            ! -----------------------------------------------------------------------
-            ! instant deposit all water vapor to cloud ice when temperature is super low
-            ! -----------------------------------------------------------------------
+        call pinst (ks, ke, qv, ql, qr, qi, qs, qg, qa, tz, dp, te8, den, &
+            lcpk, icpk, tcpk, tcp3, rh_adj, dep, sub, reevap)
+
+    endif
+
+    ! -----------------------------------------------------------------------
+    ! cloud water condensation and evaporation
+    ! -----------------------------------------------------------------------
+    
+    call pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, qa, tz, dp, te8, den, &
+        lcpk, icpk, tcpk, tcp3, cond, reevap)
+
+    if (.not. do_warm_rain_mp) then
+
+        ! -----------------------------------------------------------------------
+        ! enforce complete freezing below t_wfr
+        ! -----------------------------------------------------------------------
+                
+        call pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, te8, lcpk, icpk, tcpk, tcp3)
+ 
+        ! -----------------------------------------------------------------------
+        ! bigg freezing mechanism
+        ! -----------------------------------------------------------------------
+                
+        call pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, ccn, lcpk, icpk, tcpk, tcp3)
+
+        ! -----------------------------------------------------------------------
+        ! cloud ice deposition and sublimation
+        ! -----------------------------------------------------------------------
             
-            if (tz (k) .lt. t_min) then
-                sink = dim (qv (k), qcmin)
-                dep = dep + sink * dp (k)
+        call pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, te8, den, &
+            lcpk, icpk, tcpk, tcp3, cin, dep, sub)
+
+        ! -----------------------------------------------------------------------
+        ! snow deposition and sublimation
+        ! -----------------------------------------------------------------------
+            
+        call psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, te8, den, &
+            denfac, lcpk, icpk, tcpk, tcp3, dep, sub)
+
+        ! -----------------------------------------------------------------------
+        ! graupel deposition and sublimation
+        ! -----------------------------------------------------------------------
+            
+        call pgdep_pgsub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, te8, den, &
+            denfac, lcpk, icpk, tcpk, tcp3, dep, sub)
+
+    endif
+
+end subroutine subgrid_z_proc
+
+! =======================================================================
+! instant processes (include deposition, evaporation, and sublimation)
+! =======================================================================
+
+subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, qa, tz, dp, te8, den, &
+        lcpk, icpk, tcpk, tcp3, rh_adj, dep, sub, reevap)
+
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: rh_adj
+
+    real, intent (in), dimension (ks:ke) :: den, dp
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (out) :: dep, reevap, sub
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: sink, tin, qpz, rh, dqdt
+
+    do k = ks, ke
+
+        ! -----------------------------------------------------------------------
+        ! instant deposit all water vapor to cloud ice when temperature is super low
+        ! -----------------------------------------------------------------------
+        
+        if (tz (k) .lt. t_min) then
+            sink = dim (qv (k), qcmin)
+            dep = dep + sink * dp (k)
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                - sink, 0., 0., sink, 0., 0., te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+            if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
+            cycle
+        endif
+        
+        ! -----------------------------------------------------------------------
+        ! instant evaporation / sublimation of all clouds when rh < rh_adj
+        ! -----------------------------------------------------------------------
+
+        qpz = qv (k) + ql (k) + qi (k)
+        tin = (te8 (k) - lv00 * qpz + li00 * (qs (k) + qg (k))) / &
+             mhc (qpz, qr (k), qs (k) + qg (k))
+        if (tin .gt. t_sub + 6.) then
+            rh = qpz / iqs (tin, den (k), dqdt)
+            if (rh .lt. rh_adj) then
+                reevap = reevap + ql (k) * dp (k)
+                sub = sub + qi (k) * dp (k)
                 call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                    - sink, 0., 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
+                    ql (k) + qi (k), - ql (k), 0., - qi (k), 0., 0., te8 (k), tz (k), &
                     lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-                if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
                 cycle
             endif
+        endif
             
-            ! -----------------------------------------------------------------------
-            ! instant evaporation / sublimation of all clouds when rh < rh_adj
-            ! -----------------------------------------------------------------------
+    enddo
+        
+end subroutine pinst
 
-            qpz = qv (k) + ql (k) + qi (k)
-            tin = (te8 (k) - lv00 * qpz + li00 * (qs (k) + qg (k))) / &
-                 mhc (qpz, qr (k), qs (k) + qg (k))
-            if (tin .gt. t_sub + 6.) then
-                rh = qpz / iqs (tin, den (k), dqdt)
-                if (rh .lt. rh_adj) then
-                    reevap = reevap + ql (k) * dp (k)
-                    sub = sub + qi (k) * dp (k)
-                    call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                        ql (k) + qi (k), - ql (k), 0., - qi (k), 0., 0., te8 (k), cvm (k), tz (k), &
-                        lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-                    cycle
-                endif
-            endif
-            
-        endif ! do_warm_rain_mp
-        
-        ! -----------------------------------------------------------------------
-        ! cloud water < -- > vapor adjustment
-        ! -----------------------------------------------------------------------
-        
+! =======================================================================
+! cloud water condensation and evaporation
+! =======================================================================
+
+subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, qa, tz, dp, te8, den, &
+        lcpk, icpk, tcpk, tcp3, cond, reevap)
+
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, dp
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (out) :: cond, reevap
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: sink, tin, qpz, dqdt, qsw, rh_tem, dq, factor, fac_l2v, fac_v2l
+
+    fac_l2v = 1. - exp (- dts / tau_l2v)
+    fac_v2l = 1. - exp (- dts / tau_v2l)
+    
+    do k = ks, ke
+
         tin = tz (k)
         qsw = wqs (tin, den (k), dqdt)
         rh_tem = qpz / qsw
-        dq0 = qsw - qv (k)
+        dq = qsw - qv (k)
         if (use_rhc_cevap) then
             sink = 0.
             if (rh_tem .lt. rhc_cevap) then
-                if (dq0 .gt. 0.) then
-                    factor = min (1., fac_l2v * (10. * dq0 / qsw))
-                    sink = min (ql (k), factor * dq0 / (1. + tcp3 (k) * dqdt))
+                if (dq .gt. 0.) then
+                    factor = min (1., fac_l2v * (10. * dq / qsw))
+                    sink = min (ql (k), factor * dq / (1. + tcp3 (k) * dqdt))
                     reevap = reevap + sink * dp (k)
                 elseif (do_cond_timescale) then
-                    factor = min (1., fac_v2l * (10. * (- dq0) / qsw))
-                    sink = - min (qv (k), factor * (- dq0) / (1. + tcp3 (k) * dqdt))
+                    factor = min (1., fac_v2l * (10. * (- dq) / qsw))
+                    sink = - min (qv (k), factor * (- dq) / (1. + tcp3 (k) * dqdt))
                     cond = cond - sink * dp (k)
                 else
-                    sink = dq0 / (1. + tcp3 (k) * dqdt)
+                    sink = dq / (1. + tcp3 (k) * dqdt)
                     cond = cond - sink * dp (k)
                 endif
             endif
         else
-            if (dq0 .gt. 0.) then
-                factor = min (1., fac_l2v * (10. * dq0 / qsw))
-                sink = min (ql (k), factor * dq0 / (1. + tcp3 (k) * dqdt))
+            if (dq .gt. 0.) then
+                factor = min (1., fac_l2v * (10. * dq / qsw))
+                sink = min (ql (k), factor * dq / (1. + tcp3 (k) * dqdt))
                 reevap = reevap + sink * dp (k)
             elseif (do_cond_timescale) then
-                factor = min (1., fac_v2l * (10. * (- dq0) / qsw))
-                sink = - min (qv (k), factor * (- dq0) / (1. + tcp3 (k) * dqdt))
+                factor = min (1., fac_v2l * (10. * (- dq) / qsw))
+                sink = - min (qv (k), factor * (- dq) / (1. + tcp3 (k) * dqdt))
                 cond = cond - sink * dp (k)
             else
-                sink = dq0 / (1. + tcp3 (k) * dqdt)
+                sink = dq / (1. + tcp3 (k) * dqdt)
                 cond = cond - sink * dp (k)
             endif
         endif
 
         call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-            sink, - sink, 0., 0., 0., 0., te8 (k), cvm (k), tz (k), &
+            sink, - sink, 0., 0., 0., 0., te8 (k), tz (k), &
             lcpk (k), icpk (k), tcpk (k), tcp3 (k))
 
-        if (.not. do_warm_rain_mp) then
-
-            ! -----------------------------------------------------------------------
-            ! enforce complete freezing below t_wfr
-            ! -----------------------------------------------------------------------
-            
-            tc = t_wfr - tz (k)
-            if (tc .gt. 0. .and. ql (k) .gt. qcmin) then
-                sink = min (ql (k), ql (k) * tc * 0.125, tc / icpk (k))
-                call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                    0., - sink, 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
-                    lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! bigg mechanism
-            ! -----------------------------------------------------------------------
-            
-            tc = tice - tz (k)
-            if (tc .gt. 0.1 .and. ql (k) .gt. qcmin) then
-                sink = 100. / (rhow * ccn (k)) * dts * (exp (0.66 * tc) - 1.) * ql (k) ** 2
-                sink = min (ql (k), tc / icpk (k), sink)
-                call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                    0., - sink, 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
-                    lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! sublimation / deposition of ice
-            ! -----------------------------------------------------------------------
-            
-            if (tz (k) .lt. tice) then
-
-                pidep = 0.
-                tin = tz (k)
-                qsi = iqs (tin, den (k), dqdt)
-                dq = qv (k) - qsi
-                tmp = dq / (1. + tcpk (k) * dqdt)
-
-                if (qi (k) .gt. qcmin) then
-                    if (.not. prog_ccn) then
-                        if (inflag .eq. 1) &
-                            cin (k) = 5.38e7 * exp (0.75 * log (qi (k) * den (k)))
-                        if (inflag .eq. 2) &
-                            cin (k) = exp (-2.80 + 0.262 * (tice - tz (k))) * 1000.0
-                        if (inflag .eq. 3) &
-                            cin (k) = exp (-0.639 + 12.96 * (qv (k) / qsi - 1.0)) * 1000.0
-                        if (inflag .eq. 4) &
-                            cin (k) = 5.e-3 * exp (0.304 * (tice - tz (k))) * 1000.0
-                        if (inflag .eq. 5) &
-                            cin (k) = 1.e-5 * exp (0.5 * (tice - tz (k))) * 1000.0
-                    endif
-                    pidep = dts * dq * 4.0 * 11.9 * exp (0.5 * log (qi (k) * den (k) * cin (k))) &
-                         / (qsi * den (k) * (hlv + hlf) ** 2 / (0.0243 * rvgas * tz (k) ** 2) + 4.42478e4)
-                endif
-
-                if (dq .gt. 0.) then
-                    tc = tice - tz (k)
-                    qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tc)))
-                    if (igflag .eq. 1) &
-                        qi_crt = qi_gen / den (k)
-                    if (igflag .eq. 2) &
-                        qi_crt = qi_gen * min (qi_lim, 0.1 * tc) / den (k)
-                    if (igflag .eq. 3) &
-                        qi_crt = 1.82e-6 * min (qi_lim, 0.1 * tc) / den (k)
-                    if (igflag .eq. 4) &
-                        qi_crt = max (qi_gen, 1.82e-6) * min (qi_lim, 0.1 * tc) / den (k)
-                    sink = min (tmp, max (qi_crt - qi (k), pidep), tc / tcpk (k))
-                    dep = dep + sink * dp (k)
-                else
-                    pidep = pidep * min (1., dim (tz (k), t_sub) * 0.2)
-                    sink = max (pidep, tmp, - qi (k))
-                    sub = sub - sink * dp (k)
-                endif
-
-                call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                    - sink, 0., 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
-                    lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! sublimation / deposition of snow
-            ! -----------------------------------------------------------------------
-            
-            if (qs (k) .gt. qcmin) then
-
-                tin = tz (k)
-                qsi = iqs (tin, den (k), dqdt)
-                qden = qs (k) * den (k)
-                t2 = tz (k) * tz (k)
-                dq = qsi - qv (k)
-                pssub = psub (t2, dq, qden, qsi, cssub, den (k), denfac (k), dlin)
-                pssub = dts * pssub
-                dq = dq / (1. + tcpk (k) * dqdt)
-                if (pssub .gt. 0.) then
-                    sink = min (pssub * min (1., dim (tz (k), t_sub) * 0.2), qs (k))
-                    sub = sub + sink * dp (k)
-                else
-                    sink = 0.
-                    if (tz (k) .le. tice) then
-                        sink = max (pssub, dq, (tz (k) - tice) / tcpk (k))
-                    endif
-                    dep = dep - sink * dp (k)
-                endif
-
-                call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                    sink, 0., 0., 0., - sink, 0., te8 (k), cvm (k), tz (k), &
-                    lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-            endif
-            
-            ! -----------------------------------------------------------------------
-            ! sublimation / deposition of graupel
-            ! -----------------------------------------------------------------------
-            
-            if (qg (k) .gt. qcmin) then
-
-                tin = tz (k)
-                qsi = iqs (tin, den (k), dqdt)
-                qden = qg (k) * den (k)
-                t2 = tz (k) * tz (k)
-                dq = qsi - qv (k)
-                pgsub = psub (t2, dq, qden, qsi, cgsub, den (k), denfac (k), flin)
-                pgsub = dts * pgsub
-                dq = dq / (1. + tcpk (k) * dqdt)
-                if (pgsub .gt. 0.) then
-                    sink = min (pgsub * min (1., dim (tz (k), t_sub) * 0.2), qg (k))
-                    sub = sub + sink * dp (k)
-                else
-                    sink = 0.
-                    if (tz (k) .le. tice) then
-                        sink = max (pgsub, dq, (tz (k) - tice) / tcpk (k))
-                    endif
-                    dep = dep - sink * dp (k)
-                endif
-
-                call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                    sink, 0., 0., 0., 0., - sink, te8 (k), cvm (k), tz (k), &
-                    lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-            endif
-            
-        endif ! do_warm_rain_mp
+    enddo
         
-        ! -----------------------------------------------------------------------
-        ! compute cloud fraction
-        ! -----------------------------------------------------------------------
+end subroutine pcond_pevap
+
+! =======================================================================
+! enforce complete freezing below t_wfr
+! =======================================================================
+
+subroutine pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, te8, lcpk, icpk, tcpk, tcp3)
+
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: sink, tc
+
+    do k = ks, ke
+        tc = t_wfr - tz (k)
+        if (tc .gt. 0. .and. ql (k) .gt. qcmin) then
+            sink = min (ql (k), ql (k) * tc * 0.125, tc / icpk (k))
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., - sink, 0., sink, 0., 0., te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+        endif
+    enddo
+        
+end subroutine pcomp
+
+! =======================================================================
+! bigg freezing mechanism
+! =======================================================================
+
+subroutine pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, te8, ccn, lcpk, icpk, tcpk, tcp3)
+
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: ccn
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: sink, tc
+
+    do k = ks, ke
+        tc = tice - tz (k)
+        if (tc .gt. 0.1 .and. ql (k) .gt. qcmin) then
+            sink = 100. / (rhow * ccn (k)) * dts * (exp (0.66 * tc) - 1.) * ql (k) ** 2
+            sink = min (ql (k), tc / icpk (k), sink)
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                0., - sink, 0., sink, 0., 0., te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+        endif
+    enddo
+
+end subroutine pbigg
+        
+! =======================================================================
+! cloud ice deposition and sublimation
+! =======================================================================
+
+subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, te8, den, &
+        lcpk, icpk, tcpk, tcp3, cin, dep, sub)
+
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, dp
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, cin
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (out) :: dep, sub
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: sink, tin, dqdt, qsi, dq, pidep, tmp, tc, qi_gen, qi_crt
+
+    do k = ks, ke
+
+        if (tz (k) .lt. tice) then
+
+            pidep = 0.
+            tin = tz (k)
+            qsi = iqs (tin, den (k), dqdt)
+            dq = qv (k) - qsi
+            tmp = dq / (1. + tcpk (k) * dqdt)
+
+            if (qi (k) .gt. qcmin) then
+                if (.not. prog_ccn) then
+                    if (inflag .eq. 1) &
+                        cin (k) = 5.38e7 * exp (0.75 * log (qi (k) * den (k)))
+                    if (inflag .eq. 2) &
+                        cin (k) = exp (-2.80 + 0.262 * (tice - tz (k))) * 1000.0
+                    if (inflag .eq. 3) &
+                        cin (k) = exp (-0.639 + 12.96 * (qv (k) / qsi - 1.0)) * 1000.0
+                    if (inflag .eq. 4) &
+                        cin (k) = 5.e-3 * exp (0.304 * (tice - tz (k))) * 1000.0
+                    if (inflag .eq. 5) &
+                        cin (k) = 1.e-5 * exp (0.5 * (tice - tz (k))) * 1000.0
+                endif
+                pidep = dts * dq * 4.0 * 11.9 * exp (0.5 * log (qi (k) * den (k) * cin (k))) &
+                     / (qsi * den (k) * (hlv + hlf) ** 2 / (0.0243 * rvgas * tz (k) ** 2) + 4.42478e4)
+            endif
+
+            if (dq .gt. 0.) then
+                tc = tice - tz (k)
+                qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tc)))
+                if (igflag .eq. 1) &
+                    qi_crt = qi_gen / den (k)
+                if (igflag .eq. 2) &
+                    qi_crt = qi_gen * min (qi_lim, 0.1 * tc) / den (k)
+                if (igflag .eq. 3) &
+                    qi_crt = 1.82e-6 * min (qi_lim, 0.1 * tc) / den (k)
+                if (igflag .eq. 4) &
+                    qi_crt = max (qi_gen, 1.82e-6) * min (qi_lim, 0.1 * tc) / den (k)
+                sink = min (tmp, max (qi_crt - qi (k), pidep), tc / tcpk (k))
+                dep = dep + sink * dp (k)
+            else
+                pidep = pidep * min (1., dim (tz (k), t_sub) * 0.2)
+                sink = max (pidep, tmp, - qi (k))
+                sub = sub - sink * dp (k)
+            endif
+
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                - sink, 0., 0., sink, 0., 0., te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
+        endif
+            
+    enddo
+        
+end subroutine pidep_pisub
+
+! =======================================================================
+! snow deposition and sublimation
+! =======================================================================
+
+subroutine psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, te8, den, &
+        denfac, lcpk, icpk, tcpk, tcp3, dep, sub)
+
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, dp, denfac
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (out) :: dep, sub
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: sink, tin, dqdt, qsi, qden, t2, dq, pssub
+
+    do k = ks, ke
+
+        if (qs (k) .gt. qcmin) then
+
+            tin = tz (k)
+            qsi = iqs (tin, den (k), dqdt)
+            qden = qs (k) * den (k)
+            t2 = tz (k) * tz (k)
+            dq = qsi - qv (k)
+            pssub = psub (t2, dq, qden, qsi, cssub, den (k), denfac (k), dlin)
+            pssub = dts * pssub
+            dq = dq / (1. + tcpk (k) * dqdt)
+            if (pssub .gt. 0.) then
+                sink = min (pssub * min (1., dim (tz (k), t_sub) * 0.2), qs (k))
+                sub = sub + sink * dp (k)
+            else
+                sink = 0.
+                if (tz (k) .le. tice) then
+                    sink = max (pssub, dq, (tz (k) - tice) / tcpk (k))
+                endif
+                dep = dep - sink * dp (k)
+            endif
+
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                sink, 0., 0., 0., - sink, 0., te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
+        endif
+            
+    enddo
+        
+end subroutine psdep_pssub
+
+! =======================================================================
+! graupel deposition and sublimation
+! =======================================================================
+
+subroutine pgdep_pgsub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, te8, den, &
+        denfac, lcpk, icpk, tcpk, tcp3, dep, sub)
+
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke) :: den, dp, denfac
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
+    real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
+
+    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (out) :: dep, sub
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: sink, tin, dqdt, qsi, qden, t2, dq, pgsub
+
+    do k = ks, ke
+
+        if (qg (k) .gt. qcmin) then
+
+            tin = tz (k)
+            qsi = iqs (tin, den (k), dqdt)
+            qden = qg (k) * den (k)
+            t2 = tz (k) * tz (k)
+            dq = qsi - qv (k)
+            pgsub = psub (t2, dq, qden, qsi, cgsub, den (k), denfac (k), flin)
+            pgsub = dts * pgsub
+            dq = dq / (1. + tcpk (k) * dqdt)
+            if (pgsub .gt. 0.) then
+                sink = min (pgsub * min (1., dim (tz (k), t_sub) * 0.2), qg (k))
+                sub = sub + sink * dp (k)
+            else
+                sink = 0.
+                if (tz (k) .le. tice) then
+                    sink = max (pgsub, dq, (tz (k) - tice) / tcpk (k))
+                endif
+                dep = dep - sink * dp (k)
+            endif
+
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                sink, 0., 0., 0., 0., - sink, te8 (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
+        endif
+            
+    enddo
+        
+end subroutine pgdep_pgsub
+
+! =======================================================================
+! cloud fraction diagnostic
+! =======================================================================
+
+subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, h_var, gsize)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: h_var, gsize
+
+    real, intent (in), dimension (ks:ke) :: pz, den
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: q_plus, q_minus
+    real :: rh, rqi, tin, qsw, qsi, qpz, qstar, sigma, gam
+    real :: dqdt, dq, liq, ice
+    real :: qa10, qa100
+
+    real, dimension (ks:ke) :: q_liq, q_sol, q_cond
+    
+    real (kind = r_grid), dimension (ks:ke) :: te8
+
+    do k = ks, ke
         
         ! combine water species
-        
-        if (.not. (do_qa .and. last_step)) cycle
         
         ice = q_sol (k)
         q_sol (k) = qi (k)
@@ -2229,7 +2996,7 @@ subroutine subgrid_z_proc (ks, ke, pz, den, denfac, dts, rh_adj, tz, qv, ql, qr,
 
     enddo
     
-end subroutine subgrid_z_proc
+end subroutine cloud_fraction
 
 ! =======================================================================
 ! sedimentation of cloud ice, snow, graupel or hail, and rain
@@ -4213,7 +4980,7 @@ end subroutine cal_mhc_lhc
 ! =======================================================================
 
 subroutine update_qt (qv, ql, qr, qi, qs, qg, dqv, dql, dqr, dqi, dqs, dqg, te8, &
-        cvm, tk, lcpk, icpk, tcpk, tcp3)
+        tk, lcpk, icpk, tcpk, tcp3)
     
     implicit none
     
@@ -4229,7 +4996,13 @@ subroutine update_qt (qv, ql, qr, qi, qs, qg, dqv, dql, dqr, dqi, dqs, dqg, te8,
 
     real, intent (out) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (out) :: tk, cvm
+    real (kind = r_grid), intent (out) :: tk
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    real (kind = r_grid) :: cvm
 
     qv = qv + dqv
     ql = ql + dql
@@ -5156,7 +5929,7 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
         ! if graupel < 0, borrow from rain
         if (qg (k) .lt. 0.) then
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                0., 0., qg (k), 0., 0., - qg (k), te8 (k), cvm (k), tz (k), &
+                0., 0., qg (k), 0., 0., - qg (k), te8 (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
         endif
         
@@ -5174,7 +5947,7 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
         if (ql (k) .lt. 0.) then
             cond = cond - ql (k) * dp (k)
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                ql (k), - ql (k), 0., 0., 0., 0., te8 (k), cvm (k), tz (k), &
+                ql (k), - ql (k), 0., 0., 0., 0., te8 (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
         endif
         
