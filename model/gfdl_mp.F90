@@ -1033,7 +1033,8 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             
             if (.not. (do_qa .and. last_step)) cycle
         
-            call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, h_var, gsize (i))
+            call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, &
+                tz, h_var, gsize (i))
     
         enddo ! n loop
         
@@ -1517,6 +1518,12 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
         call pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, te8, den, lcpk, icpk, tcpk, tcp3)
     
         ! -----------------------------------------------------------------------
+        ! vertical subgrid variability
+        ! -----------------------------------------------------------------------
+        
+        call linear_prof (ke - ks + 1, qi, di, z_slope_ice, h_var)
+        
+        ! -----------------------------------------------------------------------
         ! melting of snow (includes snow accretion with cloud water and rain)
         ! -----------------------------------------------------------------------
                 
@@ -1536,12 +1543,6 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
                 
         call psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
     
-        ! -----------------------------------------------------------------------
-        ! vertical subgrid variability
-        ! -----------------------------------------------------------------------
-        
-        call linear_prof (ke - ks + 1, qi, di, z_slope_ice, h_var)
-        
         ! -----------------------------------------------------------------------
         ! snow autoconversion
         ! -----------------------------------------------------------------------
@@ -2451,6 +2452,7 @@ subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, qa, tz, dp, te8, de
 
         tin = tz (k)
         qsw = wqs (tin, den (k), dqdt)
+        qpz = qv (k) + ql (k) + qi (k)
         rh_tem = qpz / qsw
         dq = qsw - qv (k)
         if (use_rhc_cevap) then
@@ -2813,7 +2815,7 @@ end subroutine pgdep_pgsub
 ! cloud fraction diagnostic
 ! =======================================================================
 
-subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, h_var, gsize)
+subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_var, gsize)
     
     implicit none
     
@@ -2826,6 +2828,8 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, h_var, g
     real, intent (in) :: h_var, gsize
 
     real, intent (in), dimension (ks:ke) :: pz, den
+
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: tz
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
 
@@ -2840,9 +2844,15 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, h_var, g
     real :: dqdt, dq, liq, ice
     real :: qa10, qa100
 
-    real, dimension (ks:ke) :: q_liq, q_sol, q_cond
+    real, dimension (ks:ke) :: q_liq, q_sol, q_cond, lcpk, icpk, tcpk, tcp3
     
-    real (kind = r_grid), dimension (ks:ke) :: te8
+    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+
+    ! -----------------------------------------------------------------------
+    ! calculate heat capacities and latent heat coefficients
+    ! -----------------------------------------------------------------------
+    
+    call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
 
     do k = ks, ke
         
