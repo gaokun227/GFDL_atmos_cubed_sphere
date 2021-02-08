@@ -1035,10 +1035,10 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         ! cloud fraction diagnostic
         ! -----------------------------------------------------------------------
         
-        if (.not. (do_qa .and. last_step)) cycle
-        
-        call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, &
-            tz, h_var, gsize (i))
+        if (do_qa .and. last_step) then
+            call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, &
+                tz, h_var, gsize (i))
+        endif
     
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
