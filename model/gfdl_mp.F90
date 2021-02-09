@@ -339,8 +339,6 @@ module gfdl_mp_mod
     real :: fi2g_fac = 1.0 ! maximum sink of cloud ice to form graupel: 0-1
     real :: fs2g_fac = 1.0 ! maximum sink of snow to form graupel: 0-1
     
-    real :: qi0_rei = 0.8e-4 ! maximum cloud ice value (by other sources) (kg/kg)
-    
     real :: beta = 1.22 ! defined in Heymsfield and Mcfarquhar (1996)
     
     real :: rewmin = 5.0, rewmax = 15.0 ! minimum and maximum effective radius for cloud water (micron)
@@ -385,7 +383,7 @@ module gfdl_mp_mod
         irain_f, xr_a, xr_b, xr_c, ntimes, tau_revp, tice_mlt, &
         do_cond_timescale, mp_time, consv_checker, te_err, use_rhc_cevap, &
         use_rhc_revap, do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
-        rhc_cevap, rhc_revap, qi0_rei, beta, liq_ice_combine, rewflag, &
+        rhc_cevap, rhc_revap, beta, liq_ice_combine, rewflag, &
         reiflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
         regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt
     
