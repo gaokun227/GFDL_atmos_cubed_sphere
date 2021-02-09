@@ -237,7 +237,7 @@ module gfdl_mp_mod
     
     logical :: prog_ccn = .false. ! do prognostic ccn (Yi Ming's method)
 
-    logical :: fix_negative = .false. ! fix negative water species
+    logical :: fix_negative = .true. ! fix negative water species
 
     logical :: do_cond_timescale = .false. ! whether to apply a timescale to condensation
 
@@ -303,7 +303,7 @@ module gfdl_mp_mod
     real :: c_pracs = 1.0 ! snow to rain accretion efficiency
     real :: c_psacr = 1.0 ! rain to snow accretion efficiency
     real :: c_pgacr = 1.0 ! rain to graupel accretion efficiency
-    real :: c_pgacs = 2.0e-3 ! snow to graupel accretion efficiency (was 0.1 in ZETAC)
+    real :: c_pgacs = 0.01 ! snow to graupel accretion efficiency (was 0.1 in ZETAC)
     
     real :: alin = 842.0 ! "a" in Lin et al. (1983)
     real :: blin = 0.8 ! "b" in Lin et al. (1983)
