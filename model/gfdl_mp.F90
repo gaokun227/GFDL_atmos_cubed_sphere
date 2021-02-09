@@ -152,8 +152,6 @@ module gfdl_mp_mod
     
     real, parameter :: dt_fr = 8.0 ! t_wfr - dt_fr: minimum temperature water can exist (Moore and Molinero 2011)
     
-    real, parameter :: p0_min = 100.0 ! minimum pressure for mp to operate (Pa)
-    
     real, parameter :: acc (3) = (/ 5.0, 2.0, 0.5 /) ! accretion coefficients
     
     real (kind = r_grid), parameter :: one_r8 = 1.0 ! constant 1
@@ -360,7 +358,7 @@ module gfdl_mp_mod
     real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw
     real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (4), cgmlt (4)
     
-    real :: t_wfr, p_min, fac_rc, c_air, c_vap, d0_vap
+    real :: t_wfr, fac_rc, c_air, c_vap, d0_vap
 
     real (kind = r_grid) :: lv00, li00, li20, cpaut
     real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
@@ -491,16 +489,6 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, wa, &
     real, intent (inout), dimension (is:ie) :: condensation, deposition
     real, intent (inout), dimension (is:ie) :: evaporation, sublimation
 
-    ! -----------------------------------------------------------------------
-    ! top level for microphysical processes
-    ! -----------------------------------------------------------------------
-    
-    if (last_step) then
-        p_min = p0_min ! final cleanup
-    else
-        p_min = 30.e2 ! time saving trick
-    endif
-    
     ! -----------------------------------------------------------------------
     ! define various heat capacities and latent heat coefficients at 0 deg K
     ! -----------------------------------------------------------------------
@@ -811,7 +799,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
     real (kind = r_grid), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
     real (kind = r_grid), dimension (is:ie) :: te_b_beg_0, te_b_end_0, tw_b_beg_0, tw_b_end_0
 
-    real (kind = r_grid), dimension (ks:ke) :: tz, te1, te2
+    real (kind = r_grid), dimension (ks:ke) :: tz
     
     ! -----------------------------------------------------------------------
     ! time steps
@@ -1022,14 +1010,14 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             ! -----------------------------------------------------------------------
             
             call subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qvz, qlz, &
-                qrz, qiz, qsz, qgz, qaz, dp, ccn, cin, cond, dep, reevap, sub)
+                qrz, qiz, qsz, qgz, dp, ccn, cin, cond, dep, reevap, sub)
     
             condensation (i) = condensation (i) + cond * convt
             deposition (i) = deposition (i) + dep * convt
             evaporation (i) = evaporation (i) + reevap * convt
             sublimation (i) = sublimation (i) + sub * convt
             
-        enddo ! n loop
+        enddo
         
         ! -----------------------------------------------------------------------
         ! cloud fraction diagnostic
@@ -1441,7 +1429,7 @@ subroutine term_ice (ks, ke, tz, q, den, v_fac, v_max, const_v, vt)
 
     integer :: k
 
-    real :: vi0, qden
+    real :: qden
 
     real, parameter :: aa = - 4.14122e-5
     real, parameter :: bb = - 0.00538922
@@ -1454,7 +1442,6 @@ subroutine term_ice (ks, ke, tz, q, den, v_fac, v_max, const_v, vt)
     if (const_v) then
         vt (:) = v_fac
     else
-        vi0 = 0.01 * v_fac
         do k = ks, ke
             qden = q (k) * den (k)
             if (q (k) .lt. qfmin) then
@@ -1464,7 +1451,7 @@ subroutine term_ice (ks, ke, tz, q, den, v_fac, v_max, const_v, vt)
                 if (ifflag .eq. 1) then
                     vt (k) = (3. + log10 (qden)) * (tc (k) * (aa * tc (k) + bb) + cc) + &
                         dd * tc (k) + ee
-                    vt (k) = vi0 * exp (vt (k) * log (10.))
+                    vt (k) = 0.01 * v_fac * exp (vt (k) * log (10.))
                 endif
                 if (ifflag .eq. 2) &
                     vt (k) = v_fac * 3.29 * exp (0.16 * log (qden))
@@ -1476,7 +1463,7 @@ subroutine term_ice (ks, ke, tz, q, den, v_fac, v_max, const_v, vt)
 end subroutine term_ice
 
 ! =======================================================================
-! terminal velocity for rain, snow, and graupel (Lin et al. 1983)
+! terminal velocity for rain, snow, and graupel, Lin et al. (1983)
 ! =======================================================================
 
 subroutine term_rsg (ks, ke, q, den, denfac, v_fac, vcon, lin, norm, v_max, const_v, vt)
@@ -1558,27 +1545,14 @@ subroutine sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     integer :: k, m
 
-    real :: dt5, dtime, sink, zs
+    real :: dtime, sink, zs
     
     real, dimension (ks:ke) :: q
 
     real, dimension (ks:ke + 1) :: ze, zt
 
-    dt5 = 0.5 * dts
-    zs = 0.0
-    ze (ke + 1) = zs
-    do k = ke, ks, - 1
-        ze (k) = ze (k + 1) - dz (k)
-    enddo
-    zt (ks) = ze (ks)
-    do k = ks + 1, ke
-        zt (k) = ze (k) - dt5 * (vt (k - 1) + vt (k))
-    enddo
-    zt (ke + 1) = zs - dts * vt (ke)
-    do k = ks, ke
-        if (zt (k + 1) .ge. zt (k)) zt (k + 1) = zt (k) - dz_min
-    enddo
-    
+    call zezt (ks, ke, dts, zs, dz, vt, ze, zt)
+
     select case (qflag)
         case ("qi")
             q = qi
@@ -1666,7 +1640,7 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     logical :: no_fall
     
-    real :: dt5, zs
+    real :: zs
     
     real, dimension (ks:ke) :: m1, dm, q
 
@@ -1674,21 +1648,8 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     real (kind = r_grid), dimension (ks:ke) :: te1, te2
 
-    dt5 = 0.5 * dts
-    zs = 0.0
-    ze (ke + 1) = zs
-    do k = ke, ks, - 1
-        ze (k) = ze (k + 1) - dz (k)
-    enddo
-    zt (ks) = ze (ks)
-    do k = ks + 1, ke
-        zt (k) = ze (k) - dt5 * (vt (k - 1) + vt (k))
-    enddo
-    zt (ke + 1) = zs - dts * vt (ke)
-    do k = ks, ke
-        if (zt (k + 1) .ge. zt (k)) zt (k + 1) = zt (k) - dz_min
-    enddo
-    
+    call zezt (ks, ke, dts, zs, dz, vt, ze, zt)
+
     select case (qflag)
         case ("qr")
             q = qr
@@ -1817,6 +1778,53 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 end subroutine terminal_fall
 
 ! =======================================================================
+! calculate ze zt for sedimentation
+! =======================================================================
+
+subroutine zezt (ks, ke, dts, zs, dz, vt, ze, zt)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+    
+    real, intent (in), dimension (ks:ke) :: dz, vt
+    
+    real, intent (out) :: zs
+    
+    real, intent (out), dimension (ks:ke + 1) :: ze, zt
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: k
+
+    real :: dt5
+    
+    dt5 = 0.5 * dts
+    zs = 0.0
+    ze (ke + 1) = zs
+    do k = ke, ks, - 1
+        ze (k) = ze (k + 1) - dz (k)
+    enddo
+    zt (ks) = ze (ks)
+    do k = ks + 1, ke
+        zt (k) = ze (k) - dt5 * (vt (k - 1) + vt (k))
+    enddo
+    zt (ke + 1) = zs - dts * vt (ke)
+    do k = ks, ke
+        if (zt (k + 1) .ge. zt (k)) zt (k + 1) = zt (k) - dz_min
+    enddo
+    
+end subroutine zezt
+
+! =======================================================================
 ! check if water species is large enough to fall
 ! =======================================================================
 
@@ -1883,19 +1891,19 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     reevap = 0
     
     ! -----------------------------------------------------------------------
-    ! rain evaporation
+    ! rain evaporation to form water vapor
     ! -----------------------------------------------------------------------
     
     call prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
         
     ! -----------------------------------------------------------------------
-    ! rain evaporation
+    ! rain accretion with cloud water
     ! -----------------------------------------------------------------------
     
     call pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
         
     ! -----------------------------------------------------------------------
-    ! rain autoconversion
+    ! cloud water to rain autoconversion
     ! -----------------------------------------------------------------------
     
     call praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
@@ -1903,7 +1911,7 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
 end subroutine warm_rain
 
 ! =======================================================================
-! rain evaporation
+! rain evaporation to form water vapor, Lin et al. (1983)
 ! =======================================================================
 
 subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
@@ -1989,15 +1997,10 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
             endif
             qden = qr (k) * den (k)
             t2 = tin * tin
-            if (use_rhc_revap) then
+            sink = psub (t2, dq, qden, qsat, crevp, den (k), denfac (k), blin, lcpk (k), cvm (k))
+            sink = min (qr (k), dts * fac_revp * sink, dqv / (1. + lcpk (k) * dqdt))
+            if (use_rhc_revap .and. rh_tem .ge. rhc_revap) then
                 sink = 0.0
-                if (rh_tem .lt. rhc_revap) then
-                    sink = psub (t2, dq, qden, qsat, crevp, den (k), denfac (k), blin, lcpk (k), cvm (k))
-                    sink = min (qr (k), dts * fac_revp * sink, dqv / (1. + lcpk (k) * dqdt))
-                endif
-            else
-                sink = psub (t2, dq, qden, qsat, crevp, den (k), denfac (k), blin, lcpk (k), cvm (k))
-                sink = min (qr (k), dts * fac_revp * sink, dqv / (1. + lcpk (k) * dqdt))
             endif
 
             ! -----------------------------------------------------------------------
@@ -2019,7 +2022,7 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
 end subroutine prevp
 
 ! =======================================================================
-! rain accretion
+! rain accretion with cloud water, Lin et al. (1983)
 ! =======================================================================
 
 subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
@@ -2054,19 +2057,24 @@ subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
     real (kind = r_grid), dimension (ks:ke) :: cvm, te8
 
     do k = ks, ke
+
         if (tz (k) .gt. t_wfr .and. qr (k) .gt. qcmin .and. ql (k) .gt. qcmin) then
+
             qden = qr (k) * den (k)
             sink = dts * acr2d (qden, cracw, denfac (k), blin)
             sink = sink / (1. + sink) * ql (k)
+
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, sink, 0., 0., 0.)
+
         endif
+
     enddo
     
 end subroutine pracw
 
 ! =======================================================================
-! rain autoconversion
+! cloud water to rain autoconversion, Hong et al. (2004)
 ! =======================================================================
 
 subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
@@ -2092,6 +2100,7 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
     ! -----------------------------------------------------------------------
 
     real, parameter :: so3 = 7.0 / 3.0
+    real, parameter :: so1 = - 1.0 / 3.0
     
     integer :: k
     
@@ -2100,38 +2109,59 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
     real, dimension (ks:ke) :: dl, c_praut
 
     if (irain_f .eq. 0) then
+
         call linear_prof (ke - ks + 1, ql (ks), dl (ks), z_slope_liq, h_var)
+
         do k = ks, ke
+
             if (tz (k) .gt. t_wfr .and. ql (k) .gt. qcmin) then
+
                 qc = fac_rc * ccn (k)
                 dl (k) = min (max (qcmin, dl (k)), 0.5 * ql (k))
                 dq = 0.5 * (ql (k) + dl (k) - qc)
+
                 if (dq .gt. 0.) then
-                    c_praut (k) = cpaut * exp (- 1. / 3. * log (ccn (k) * rhor))
+
+                    c_praut (k) = cpaut * exp (so1 * log (ccn (k) * rhor))
                     sink = min (1., dq / dl (k)) * dts * c_praut (k) * den (k) * &
                         exp (so3 * log (ql (k)))
                     sink = min (ql (k), sink)
+
                     call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                         0., - sink, sink, 0., 0., 0.)
+
                 endif
+
             endif
+
         enddo
+
     endif
     
     if (irain_f .eq. 1) then
+
         do k = ks, ke
+
             if (tz (k) .gt. t_wfr .and. ql (k) .gt. qcmin) then
+
                 qc = fac_rc * ccn (k)
                 dq = ql (k) - qc
+
                 if (dq .gt. 0.) then
-                    c_praut (k) = cpaut * exp (- 1. / 3. * log (ccn (k) * rhor))
+
+                    c_praut (k) = cpaut * exp (so1 * log (ccn (k) * rhor))
                     sink = min (dq, dts * c_praut (k) * den (k) * exp (so3 * log (ql (k))))
                     sink = min (ql (k), sink)
+
                     call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                         0., - sink, sink, 0., 0., 0.)
+
                 endif
+
             endif
+
         enddo
+
     endif
 
 end subroutine praut
@@ -2176,8 +2206,16 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
     
     if (.not. do_warm_rain_mp) then
 
+        ! -----------------------------------------------------------------------
+        ! cloud ice melting to form cloud water and rain
+        ! -----------------------------------------------------------------------
+                
         call pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk, tcp3)
 
+        ! -----------------------------------------------------------------------
+        ! cloud water freezing to form cloud ice and snow
+        ! -----------------------------------------------------------------------
+        
         call pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, icpk, tcpk, tcp3)
     
         ! -----------------------------------------------------------------------
@@ -2187,59 +2225,59 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
         call linear_prof (ke - ks + 1, qi, di, z_slope_ice, h_var)
         
         ! -----------------------------------------------------------------------
-        ! melting of snow (includes snow accretion with cloud water and rain)
+        ! snow melting (includes snow accretion with cloud water and rain) to form cloud water and rain
         ! -----------------------------------------------------------------------
                 
         call psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
             vtr, vts, lcpk, icpk, tcpk, tcp3)
     
         ! -----------------------------------------------------------------------
-        ! melting of graupel (includes graupel accretion with cloud water and rain)
+        ! graupel melting (includes graupel accretion with cloud water and rain) to form rain
         ! -----------------------------------------------------------------------
                 
         call pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
             vtr, vtg, lcpk, icpk, tcpk, tcp3)
     
         ! -----------------------------------------------------------------------
-        ! snow accretion
+        ! snow accretion with cloud ice
         ! -----------------------------------------------------------------------
                 
         call psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
     
         ! -----------------------------------------------------------------------
-        ! snow autoconversion
+        ! cloud ice to snow autoconversion
         ! -----------------------------------------------------------------------
 
         call psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
     
         ! -----------------------------------------------------------------------
-        ! graupel accretion
+        ! graupel accretion with cloud ice
         ! -----------------------------------------------------------------------
                 
         call pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
     
         ! -----------------------------------------------------------------------
-        ! snow accretion and graupel freezing
+        ! snow accretion with rain and rain freezing to form graupel
         ! -----------------------------------------------------------------------
                 
         call psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
             vtr, vts, lcpk, icpk, tcpk, tcp3)
     
-        ! =======================================================================
-        ! graupel accretion
-        ! =======================================================================
+        ! -----------------------------------------------------------------------
+        ! graupel accretion with snow
+        ! -----------------------------------------------------------------------
 
         call pgacs (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, vts, vtg)
     
-        ! =======================================================================
-        ! graupel autoconversion
-        ! =======================================================================
+        ! -----------------------------------------------------------------------
+        ! snow to graupel autoconversion
+        ! -----------------------------------------------------------------------
 
         call pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
     
-        ! =======================================================================
-        ! graupel accretion
-        ! =======================================================================
+        ! -----------------------------------------------------------------------
+        ! graupel accretion with cloud water and rain
+        ! -----------------------------------------------------------------------
 
         call pgacw_pgacr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
             vtr, vtg, lcpk, icpk, tcpk, tcp3)
@@ -2249,7 +2287,7 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
 end subroutine ice_cloud
 
 ! =======================================================================
-! melting of cloud ice
+! cloud ice melting to form cloud water and rain
 ! =======================================================================
 
 subroutine pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk, tcp3)
@@ -2282,19 +2320,24 @@ subroutine pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk,
     fac_imlt = 1. - exp (- dts / tau_imlt)
     
     do k = ks, ke
+
         if (tz (k) .gt. tice_mlt .and. qi (k) .gt. qcmin) then
+
             sink = min (qi (k), fac_imlt * (tz (k) - tice_mlt) / icpk (k))
             tmp = min (sink, dim (ql_mlt, ql (k)))
+
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., tmp, sink - tmp, - sink, 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
         endif
+
     enddo
         
 end subroutine pimlt
     
 ! =======================================================================
-! homogeneous freezing of cloud water
+! cloud water freezing to form cloud ice and snow
 ! =======================================================================
 
 subroutine pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, icpk, tcpk, tcp3)
@@ -2325,22 +2368,28 @@ subroutine pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, icpk, 
     real :: tc, factor, tmp, sink, qim
 
     do k = ks, ke
+
         if (tz (k) .lt. t_wfr .and. ql (k) .gt. qcmin) then
+
             tc = t_wfr - tz (k)
             factor = min (1., tc / dt_fr)
             sink = min (ql (k) * factor, tc / icpk (k))
             qim = qi0_crt / den (k)
             tmp = min (sink, dim (qim, qi (k)))
+
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, 0., tmp, sink - tmp, 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
         endif
+
     enddo
         
 end subroutine pifr
     
 ! =======================================================================
-! melting of snow (includes snow accretion with cloud water and rain)
+! snow melting (includes snow accretion with cloud water and rain) to form cloud water and rain
+! Lin et al. (1983)
 ! =======================================================================
 
 subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
@@ -2414,7 +2463,8 @@ subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
 end subroutine psmlt
     
 ! =======================================================================
-! melting of graupel (includes graupel accretion with cloud water and rain)
+! graupel melting (includes graupel accretion with cloud water and rain) to form rain
+! Lin et al. (1983)
 ! =======================================================================
 
 subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
@@ -2485,7 +2535,7 @@ subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
 end subroutine pgmlt
     
 ! =======================================================================
-! snow accretion
+! snow accretion with cloud ice, Lin et al. (1983)
 ! =======================================================================
 
 subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
@@ -2539,7 +2589,7 @@ subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
 end subroutine psaci
     
 ! =======================================================================
-! snow autoconversion
+! cloud ice to snow autoconversion, Lin et al. (1983)
 ! =======================================================================
 
 subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
@@ -2602,7 +2652,7 @@ subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
 end subroutine psaut
     
 ! =======================================================================
-! graupel accretion
+! graupel accretion with cloud ice, Lin et al. (1983)
 ! =======================================================================
 
 subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
@@ -2656,7 +2706,7 @@ subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
 end subroutine pgaci
     
 ! =======================================================================
-! snow accretion and graupel freezing
+! snow accretion with rain and rain freezing to form graupel, Lin et al. (1983)
 ! =======================================================================
 
 subroutine psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
@@ -2722,7 +2772,7 @@ subroutine psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, d
 end subroutine psacr_pgfr
     
 ! =======================================================================
-! graupel accretion
+! graupel accretion with snow, Lin et al. (1983)
 ! =======================================================================
 
 subroutine pgacs (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, vts, vtg)
@@ -2774,7 +2824,7 @@ subroutine pgacs (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, vts, vtg)
 end subroutine pgacs
     
 ! =======================================================================
-! graupel autoconversion
+! snow to graupel autoconversion, Lin et al. (1983)
 ! =======================================================================
 
 subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
@@ -2828,7 +2878,7 @@ subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
 end subroutine pgaut
         
 ! =======================================================================
-! graupel accretion
+! graupel accretion with cloud water and rain, Lin et al. (1983)
 ! =======================================================================
 
 subroutine pgacw_pgacr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
@@ -2903,7 +2953,7 @@ end subroutine pgacw_pgacr
 ! =======================================================================
 
 subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
-        qi, qs, qg, qa, dp, ccn, cin, cond, dep, reevap, sub)
+        qi, qs, qg, dp, ccn, cin, cond, dep, reevap, sub)
     
     implicit none
     
@@ -2917,7 +2967,7 @@ subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
 
     real, intent (in), dimension (ks:ke) :: den, denfac, ccn, dp
 
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa, cin
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, cin
 
     real, intent (out) :: cond, dep, reevap, sub
 
@@ -2949,7 +2999,7 @@ subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
     
     if (.not. do_warm_rain_mp) then
 
-        call pinst (ks, ke, qv, ql, qr, qi, qs, qg, qa, tz, dp, cvm, te8, den, &
+        call pinst (ks, ke, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
             lcpk, icpk, tcpk, tcp3, rh_adj, dep, sub, reevap)
 
     endif
@@ -2958,7 +3008,7 @@ subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
     ! cloud water condensation and evaporation
     ! -----------------------------------------------------------------------
     
-    call pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, qa, tz, dp, cvm, te8, den, &
+    call pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         lcpk, icpk, tcpk, tcp3, cond, reevap)
 
     if (.not. do_warm_rain_mp) then
@@ -3004,7 +3054,7 @@ end subroutine subgrid_z_proc
 ! instant processes (include deposition, evaporation, and sublimation)
 ! =======================================================================
 
-subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, qa, tz, dp, cvm, te8, den, &
+subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         lcpk, icpk, tcpk, tcp3, rh_adj, dep, sub, reevap)
 
     implicit none
@@ -3021,7 +3071,7 @@ subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, qa, tz, dp, cvm, te8, den, &
 
     real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
 
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
@@ -3043,13 +3093,14 @@ subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, qa, tz, dp, cvm, te8, den, &
         ! -----------------------------------------------------------------------
         
         if (tz (k) .lt. t_min) then
+
             sink = dim (qv (k), qcmin)
             dep = dep + sink * dp (k)
+
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 - sink, 0., 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-            if (do_qa) qa (k) = 1. ! air fully saturated; 100 % cloud cover
-            cycle
+
         endif
         
         ! -----------------------------------------------------------------------
@@ -3059,16 +3110,21 @@ subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, qa, tz, dp, cvm, te8, den, &
         qpz = qv (k) + ql (k) + qi (k)
         tin = (te8 (k) - lv00 * qpz + li00 * (qs (k) + qg (k))) / &
              mhc (qpz, qr (k), qs (k) + qg (k))
+
         if (tin .gt. t_sub + 6.) then
+
             rh = qpz / iqs (tin, den (k), dqdt)
             if (rh .lt. rh_adj) then
+
                 reevap = reevap + ql (k) * dp (k)
                 sub = sub + qi (k) * dp (k)
+
                 call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                     ql (k) + qi (k), - ql (k), 0., - qi (k), 0., 0., te8 (k), cvm (k), tz (k), &
                     lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-                cycle
+
             endif
+
         endif
             
     enddo
@@ -3079,7 +3135,7 @@ end subroutine pinst
 ! cloud water condensation and evaporation
 ! =======================================================================
 
-subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, qa, tz, dp, cvm, te8, den, &
+subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         lcpk, icpk, tcpk, tcp3, cond, reevap)
 
     implicit none
@@ -3096,7 +3152,7 @@ subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, qa, tz, dp, cvm, te
 
     real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
 
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
@@ -3121,35 +3177,20 @@ subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, qa, tz, dp, cvm, te
         qpz = qv (k) + ql (k) + qi (k)
         rh_tem = qpz / qsw
         dq = qsw - qv (k)
-        if (use_rhc_cevap) then
-            sink = 0.
-            if (rh_tem .lt. rhc_cevap) then
-                if (dq .gt. 0.) then
-                    factor = min (1., fac_l2v * (10. * dq / qsw))
-                    sink = min (ql (k), factor * dq / (1. + tcp3 (k) * dqdt))
-                    reevap = reevap + sink * dp (k)
-                elseif (do_cond_timescale) then
-                    factor = min (1., fac_v2l * (10. * (- dq) / qsw))
-                    sink = - min (qv (k), factor * (- dq) / (1. + tcp3 (k) * dqdt))
-                    cond = cond - sink * dp (k)
-                else
-                    sink = dq / (1. + tcp3 (k) * dqdt)
-                    cond = cond - sink * dp (k)
-                endif
-            endif
+        if (dq .gt. 0.) then
+            factor = min (1., fac_l2v * (10. * dq / qsw))
+            sink = min (ql (k), factor * dq / (1. + tcp3 (k) * dqdt))
+            reevap = reevap + sink * dp (k)
+        elseif (do_cond_timescale) then
+            factor = min (1., fac_v2l * (10. * (- dq) / qsw))
+            sink = - min (qv (k), factor * (- dq) / (1. + tcp3 (k) * dqdt))
+            cond = cond - sink * dp (k)
         else
-            if (dq .gt. 0.) then
-                factor = min (1., fac_l2v * (10. * dq / qsw))
-                sink = min (ql (k), factor * dq / (1. + tcp3 (k) * dqdt))
-                reevap = reevap + sink * dp (k)
-            elseif (do_cond_timescale) then
-                factor = min (1., fac_v2l * (10. * (- dq) / qsw))
-                sink = - min (qv (k), factor * (- dq) / (1. + tcp3 (k) * dqdt))
-                cond = cond - sink * dp (k)
-            else
-                sink = dq / (1. + tcp3 (k) * dqdt)
-                cond = cond - sink * dp (k)
-            endif
+            sink = dq / (1. + tcp3 (k) * dqdt)
+            cond = cond - sink * dp (k)
+        endif
+        if (use_rhc_cevap .and. rh_tem .ge. rhc_cevap) then
+            sink = 0.
         endif
 
         call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
@@ -3190,19 +3231,25 @@ subroutine pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk
     real :: sink, tc
 
     do k = ks, ke
+
         tc = t_wfr - tz (k)
+
         if (tc .gt. 0. .and. ql (k) .gt. qcmin) then
+
             sink = min (ql (k), ql (k) * tc * 0.125, tc / icpk (k))
+
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
         endif
+
     enddo
         
 end subroutine pcomp
 
 ! =======================================================================
-! bigg freezing mechanism
+! bigg freezing mechanism, Bigg (1953)
 ! =======================================================================
 
 subroutine pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, ccn, lcpk, icpk, tcpk, tcp3)
@@ -3235,20 +3282,26 @@ subroutine pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, ccn, lcpk, 
     real :: sink, tc
 
     do k = ks, ke
+ 
         tc = tice - tz (k)
+
         if (tc .gt. 0.1 .and. ql (k) .gt. qcmin) then
+
             sink = 100. / (rhow * ccn (k)) * dts * (exp (0.66 * tc) - 1.) * ql (k) ** 2
             sink = min (ql (k), tc / icpk (k), sink)
+
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+
         endif
+
     enddo
 
 end subroutine pbigg
         
 ! =======================================================================
-! cloud ice deposition and sublimation
+! cloud ice deposition and sublimation, Hong et al. (2004)
 ! =======================================================================
 
 subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
@@ -3340,7 +3393,7 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
 end subroutine pidep_pisub
 
 ! =======================================================================
-! snow deposition and sublimation
+! snow deposition and sublimation, Lin et al. (1983)
 ! =======================================================================
 
 subroutine psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
@@ -3409,7 +3462,7 @@ subroutine psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
 end subroutine psdep_pssub
 
 ! =======================================================================
-! graupel deposition and sublimation
+! graupel deposition and sublimation, Lin et al. (1983)
 ! =======================================================================
 
 subroutine pgdep_pgsub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
@@ -4149,7 +4202,7 @@ subroutine linear_prof (km, q, dm, z_var, h_var)
 end subroutine linear_prof
 
 ! =======================================================================
-! accretion function (Lin et al. 1983)
+! accretion function, Lin et al. (1983)
 ! =======================================================================
 
 function acr2d (qden, c, denfac, lin)
@@ -4169,7 +4222,7 @@ function acr2d (qden, c, denfac, lin)
 end function acr2d
 
 ! =======================================================================
-! accretion function (Lin et al. 1983)
+! accretion function, Lin et al. (1983)
 ! =======================================================================
 
 function acr3d (v1, v2, q1, q2, c, cac, rho)
@@ -4198,7 +4251,7 @@ function acr3d (v1, v2, q1, q2, c, cac, rho)
 end function acr3d
 
 ! =======================================================================
-! ventilation coefficient (Lin et al. 1983)
+! ventilation coefficient, Lin et al. (1983)
 ! =======================================================================
 
 function vent_coeff (qden, c1, c2, denfac, lin)
@@ -4218,7 +4271,7 @@ function vent_coeff (qden, c1, c2, denfac, lin)
 end function vent_coeff
 
 ! =======================================================================
-! sublimation or evaporation function (Lin et al. 1983)
+! sublimation or evaporation function, Lin et al. (1983)
 ! =======================================================================
 
 function psub (t2, dq, qden, qsat, c, den, denfac, lin, cpk, cvm)
@@ -4241,7 +4294,7 @@ function psub (t2, dq, qden, qsat, c, den, denfac, lin, cpk, cvm)
 end function psub
 
 ! =======================================================================
-! melting function (Lin et al. 1983)
+! melting function, Lin et al. (1983)
 ! =======================================================================
 
 function pmlt (tc, dq, qden, pxacw, pxacr, c, den, denfac, lin, lcpk, icpk, cvm)

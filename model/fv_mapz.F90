@@ -849,32 +849,38 @@ endif        ! end last_step check
 
   if ((.not. do_adiabatic_init) .and. do_inline_mp) then
 
-    allocate(dz(is:ie,km))
-    allocate(wa(is:ie,km))
+    ! time saving trick, LZ
+    if (last_step) then
+        kmp = 1
+    else
+        do k = 1, km
+            kmp = k
+            if (pfull(k) .gt. 50.E2) exit
+        enddo
+    endif
 
-!$OMP parallel do default(none) shared(is,ie,js,je,isd,jsd,km,pe,ua,va, &
-!$OMP                                  te,delp,hydrostatic,hs,pt,peln, &
-!$OMP                                  delz,rainwat,liq_wat,ice_wat,snowwat, &
-!$OMP                                  graupel,q_con,sphum,w,pk,pkz,last_step,consv, &
-!$OMP                                  do_adiabatic_init,te0_2d, &
-!$OMP                                  gridstruct,q, &
-!$OMP                                  mdt,cld_amt,cappa,rrg,akap, &
-!$OMP                                  ccn_cm3,cin_cm3,inline_mp, &
-!$OMP                                  do_inline_mp,ps) &
+    allocate(dz(is:ie,kmp:km))
+    allocate(wa(is:ie,kmp:km))
+
+!$OMP parallel do default(none) shared(is,ie,js,je,isd,jsd,kmp,km,pe,ua,va,te,delp,hydrostatic,hs, &
+!$OMP                                  pt,peln,delz,rainwat,liq_wat,ice_wat,snowwat,graupel,q_con, &
+!$OMP                                  sphum,w,pk,pkz,last_step,consv,do_adiabatic_init,te0_2d, &
+!$OMP                                  gridstruct,q,mdt,cld_amt,cappa,rrg,akap,ccn_cm3,cin_cm3, &
+!$OMP                                  inline_mp,do_inline_mp,ps) &
 !$OMP                          private(u_dt,v_dt,q2,q3,gsize,dp2,t0,dz,wa)
     do j = js, je
 
         gsize(is:ie) = sqrt(gridstruct%area_64(is:ie,j))
 
         if (ccn_cm3 .gt. 0) then
-          q2(is:ie,:) = q(is:ie,j,:,ccn_cm3)
+          q2(is:ie,kmp:km) = q(is:ie,j,kmp:km,ccn_cm3)
         else
-          q2(is:ie,:) = 0.0
+          q2(is:ie,kmp:km) = 0.0
         endif
         if (cin_cm3 .gt. 0) then
-          q3(is:ie,:) = q(is:ie,j,:,cin_cm3)
+          q3(is:ie,kmp:km) = q(is:ie,j,kmp:km,cin_cm3)
         else
-          q3(is:ie,:) = 0.0
+          q3(is:ie,kmp:km) = 0.0
         endif
  
         ! note: ua and va are A-grid variables
@@ -888,81 +894,106 @@ endif        ! end last_step check
         ! note: the unit of cond, dep, reevap, sub is mm/day
 
         ! save ua, va for wind tendency calculation
-        u_dt(is:ie,j,:) = ua(is:ie,j,:)
-        v_dt(is:ie,j,:) = va(is:ie,j,:)
+        u_dt(is:ie,j,kmp:km) = ua(is:ie,j,kmp:km)
+        v_dt(is:ie,j,kmp:km) = va(is:ie,j,kmp:km)
 
         !save temperature and qv for tendencies
-        dp2(is:ie,:) = q(is:ie,j,:,sphum)
-        t0(is:ie,:) = pt(is:ie,j,:)
+        dp2(is:ie,kmp:km) = q(is:ie,j,kmp:km,sphum)
+        t0(is:ie,kmp:km) = pt(is:ie,j,kmp:km)
 
-        if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt(is:ie,j,:) = inline_mp%liq_wat_dt(is:ie,j,:) - q(is:ie,j,:,liq_wat)
-        if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt(is:ie,j,:) = inline_mp%ice_wat_dt(is:ie,j,:) - q(is:ie,j,:,ice_wat)
-        if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt(is:ie,j,:) = inline_mp%qv_dt(is:ie,j,:) - q(is:ie,j,:,sphum)
-        if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,:) = inline_mp%ql_dt(is:ie,j,:) - (q(is:ie,j,:,liq_wat) + q(is:ie,j,:,rainwat))
-        if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,:) = inline_mp%qi_dt(is:ie,j,:) - (q(is:ie,j,:,ice_wat) + q(is:ie,j,:,snowwat) + q(is:ie,j,:,graupel))
-        if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt(is:ie,j,:) = inline_mp%qr_dt(is:ie,j,:) - q(is:ie,j,:,rainwat)
-        if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt(is:ie,j,:) = inline_mp%qs_dt(is:ie,j,:) - q(is:ie,j,:,snowwat)
-        if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt(is:ie,j,:) = inline_mp%qg_dt(is:ie,j,:) - q(is:ie,j,:,graupel)
-        if (allocated(inline_mp%t_dt)) inline_mp%t_dt(is:ie,j,:) = inline_mp%t_dt(is:ie,j,:) - pt(is:ie,j,:)
-        if (allocated(inline_mp%u_dt)) inline_mp%u_dt(is:ie,j,:) = inline_mp%u_dt(is:ie,j,:) - ua(is:ie,j,:)
-        if (allocated(inline_mp%v_dt)) inline_mp%v_dt(is:ie,j,:) = inline_mp%v_dt(is:ie,j,:) - va(is:ie,j,:)
+        if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt(is:ie,j,kmp:km) = &
+            inline_mp%liq_wat_dt(is:ie,j,kmp:km) - q(is:ie,j,kmp:km,liq_wat)
+        if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt(is:ie,j,kmp:km) = &
+            inline_mp%ice_wat_dt(is:ie,j,kmp:km) - q(is:ie,j,kmp:km,ice_wat)
+        if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt(is:ie,j,kmp:km) = &
+            inline_mp%qv_dt(is:ie,j,kmp:km) - q(is:ie,j,kmp:km,sphum)
+        if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,kmp:km) = &
+            inline_mp%ql_dt(is:ie,j,kmp:km) - (q(is:ie,j,kmp:km,liq_wat) + q(is:ie,j,kmp:km,rainwat))
+        if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,kmp:km) = &
+            inline_mp%qi_dt(is:ie,j,kmp:km) - (q(is:ie,j,kmp:km,ice_wat) + &
+            q(is:ie,j,kmp:km,snowwat) + q(is:ie,j,kmp:km,graupel))
+        if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt(is:ie,j,kmp:km) = &
+            inline_mp%qr_dt(is:ie,j,kmp:km) - q(is:ie,j,kmp:km,rainwat)
+        if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt(is:ie,j,kmp:km) = &
+            inline_mp%qs_dt(is:ie,j,kmp:km) - q(is:ie,j,kmp:km,snowwat)
+        if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt(is:ie,j,kmp:km) = &
+            inline_mp%qg_dt(is:ie,j,kmp:km) - q(is:ie,j,kmp:km,graupel)
+        if (allocated(inline_mp%t_dt)) inline_mp%t_dt(is:ie,j,kmp:km) = &
+            inline_mp%t_dt(is:ie,j,kmp:km) - pt(is:ie,j,kmp:km)
+        if (allocated(inline_mp%u_dt)) inline_mp%u_dt(is:ie,j,kmp:km) = &
+            inline_mp%u_dt(is:ie,j,kmp:km) - ua(is:ie,j,kmp:km)
+        if (allocated(inline_mp%v_dt)) inline_mp%v_dt(is:ie,j,kmp:km) = &
+            inline_mp%v_dt(is:ie,j,kmp:km) - va(is:ie,j,kmp:km)
 
         if (.not. hydrostatic) then
-            wa(is:ie,:) = w(is:ie,j,:)
-            dz(is:ie,:) = delz(is:ie,j,:)
+            wa(is:ie,kmp:km) = w(is:ie,j,kmp:km)
+            dz(is:ie,kmp:km) = delz(is:ie,j,kmp:km)
         else
-            dz(is:ie,:) = (peln(is:je,1:km,j) - peln(is:ie,2:km+1,j)) * rdgas * pt(is:ie,j,:) / grav
+            dz(is:ie,kmp:km) = (peln(is:je,kmp:km,j) - peln(is:ie,kmp+1:km+1,j)) * &
+                rdgas * pt(is:ie,j,kmp:km) / grav
         endif
 
 #ifndef DYCORE_SOLO
-        call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
-                       q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
-                       q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), q3(is:ie,:),  &
-                       pt(is:ie,j,:), wa(is:ie,:), ua(is:ie,j,:), va(is:ie,j,:), &
-                       dz(is:ie,:), delp(is:ie,j,:), gsize, abs(mdt), &
-                       hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
-                       inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), hydrostatic, &
-                       is, ie, 1, km, &
+        call gfdl_mp_driver(q(is:ie,j,kmp:km,sphum), q(is:ie,j,kmp:km,liq_wat), &
+                 q(is:ie,j,kmp:km,rainwat), q(is:ie,j,kmp:km,ice_wat), q(is:ie,j,kmp:km,snowwat), &
+                 q(is:ie,j,kmp:km,graupel), q(is:ie,j,kmp:km,cld_amt), q2(is:ie,kmp:km), &
+                 q3(is:ie,kmp:km), pt(is:ie,j,kmp:km), wa(is:ie,kmp:km), ua(is:ie,j,kmp:km), &
+                 va(is:ie,j,kmp:km), dz(is:ie,kmp:km), delp(is:ie,j,kmp:km), gsize, abs(mdt), &
+                 hs(is:ie,j), inline_mp%prer(is:ie,j), inline_mp%pres(is:ie,j), &
+                 inline_mp%prei(is:ie,j), inline_mp%preg(is:ie,j), hydrostatic, &
+                 is, ie, kmp, km, &
 #ifdef USE_COND
-                       q_con(is:ie,j,:), &
+                 q_con(is:ie,j,kmp:km), &
 #else
-                       q_con(isd:,jsd,1:), &
+                 q_con(isd:,jsd,1:), &
 #endif
 #ifdef MOIST_CAPPA
-                       cappa(is:ie,j,:), &
+                 cappa(is:ie,j,kmp:km), &
 #else
-                       cappa(isd:,jsd,1:), &
+                 cappa(isd:,jsd,1:), &
 #endif
-                       consv>consv_min, &
-                       te(is:ie,j,:), inline_mp%cond(is:ie,j), inline_mp%dep(is:ie,j), &
-                       inline_mp%reevap(is:ie,j), inline_mp%sub(is:ie,j), last_step, do_inline_mp)
+                 consv .gt. consv_min, te(is:ie,j,kmp:km), inline_mp%cond(is:ie,j), &
+                 inline_mp%dep(is:ie,j), inline_mp%reevap(is:ie,j), inline_mp%sub(is:ie,j), &
+                 last_step, do_inline_mp)
 #endif
 
         if (.not. hydrostatic) then
-            w(is:ie,j,:) = wa(is:ie,:)
+            w(is:ie,j,kmp:km) = wa(is:ie,kmp:km)
         endif
 
         ! compute wind tendency at A grid fori D grid wind update
-        u_dt(is:ie,j,:) = (ua(is:ie,j,:) - u_dt(is:ie,j,:)) / abs(mdt)
-        v_dt(is:ie,j,:) = (va(is:ie,j,:) - v_dt(is:ie,j,:)) / abs(mdt)
+        u_dt(is:ie,j,kmp:km) = (ua(is:ie,j,kmp:km) - u_dt(is:ie,j,kmp:km)) / abs(mdt)
+        v_dt(is:ie,j,kmp:km) = (va(is:ie,j,kmp:km) - v_dt(is:ie,j,kmp:km)) / abs(mdt)
 
-        if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt(is:ie,j,:) = inline_mp%liq_wat_dt(is:ie,j,:) + q(is:ie,j,:,liq_wat)
-        if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt(is:ie,j,:) = inline_mp%ice_wat_dt(is:ie,j,:) + q(is:ie,j,:,ice_wat)
-        if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt(is:ie,j,:) = inline_mp%qv_dt(is:ie,j,:) + q(is:ie,j,:,sphum)
-        if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,:) = inline_mp%ql_dt(is:ie,j,:) + (q(is:ie,j,:,liq_wat) + q(is:ie,j,:,rainwat))
-        if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,:) = inline_mp%qi_dt(is:ie,j,:) + (q(is:ie,j,:,ice_wat) + q(is:ie,j,:,snowwat) + q(is:ie,j,:,graupel))
-        if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt(is:ie,j,:) = inline_mp%qr_dt(is:ie,j,:) + q(is:ie,j,:,rainwat)
-        if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt(is:ie,j,:) = inline_mp%qs_dt(is:ie,j,:) + q(is:ie,j,:,snowwat)
-        if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt(is:ie,j,:) = inline_mp%qg_dt(is:ie,j,:) + q(is:ie,j,:,graupel)
-        if (allocated(inline_mp%t_dt)) inline_mp%t_dt(is:ie,j,:) = inline_mp%t_dt(is:ie,j,:) + pt(is:ie,j,:)
-        if (allocated(inline_mp%u_dt)) inline_mp%u_dt(is:ie,j,:) = inline_mp%u_dt(is:ie,j,:) + ua(is:ie,j,:)
-        if (allocated(inline_mp%v_dt)) inline_mp%v_dt(is:ie,j,:) = inline_mp%v_dt(is:ie,j,:) + va(is:ie,j,:)
+        if (allocated(inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt(is:ie,j,kmp:km) = &
+            inline_mp%liq_wat_dt(is:ie,j,kmp:km) + q(is:ie,j,kmp:km,liq_wat)
+        if (allocated(inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt(is:ie,j,kmp:km) = &
+            inline_mp%ice_wat_dt(is:ie,j,kmp:km) + q(is:ie,j,kmp:km,ice_wat)
+        if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt(is:ie,j,kmp:km) = &
+            inline_mp%qv_dt(is:ie,j,kmp:km) + q(is:ie,j,kmp:km,sphum)
+        if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt(is:ie,j,kmp:km) = &
+            inline_mp%ql_dt(is:ie,j,kmp:km) + (q(is:ie,j,kmp:km,liq_wat) + q(is:ie,j,kmp:km,rainwat))
+        if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt(is:ie,j,kmp:km) = &
+            inline_mp%qi_dt(is:ie,j,kmp:km) + (q(is:ie,j,kmp:km,ice_wat) + &
+            q(is:ie,j,kmp:km,snowwat) + q(is:ie,j,kmp:km,graupel))
+        if (allocated(inline_mp%qr_dt)) inline_mp%qr_dt(is:ie,j,kmp:km) = &
+            inline_mp%qr_dt(is:ie,j,kmp:km) + q(is:ie,j,kmp:km,rainwat)
+        if (allocated(inline_mp%qs_dt)) inline_mp%qs_dt(is:ie,j,kmp:km) = &
+            inline_mp%qs_dt(is:ie,j,kmp:km) + q(is:ie,j,kmp:km,snowwat)
+        if (allocated(inline_mp%qg_dt)) inline_mp%qg_dt(is:ie,j,kmp:km) = &
+            inline_mp%qg_dt(is:ie,j,kmp:km) + q(is:ie,j,kmp:km,graupel)
+        if (allocated(inline_mp%t_dt)) inline_mp%t_dt(is:ie,j,kmp:km) = &
+            inline_mp%t_dt(is:ie,j,kmp:km) + pt(is:ie,j,kmp:km)
+        if (allocated(inline_mp%u_dt)) inline_mp%u_dt(is:ie,j,kmp:km) = &
+            inline_mp%u_dt(is:ie,j,kmp:km) + ua(is:ie,j,kmp:km)
+        if (allocated(inline_mp%v_dt)) inline_mp%v_dt(is:ie,j,kmp:km) = &
+            inline_mp%v_dt(is:ie,j,kmp:km) + va(is:ie,j,kmp:km)
 
         ! update pe, peln, pk, ps
-        do k=2,km+1
-            pe(is:ie,k,j) = pe(is:ie,k-1,j)+delp(is:ie,j,k-1)
+        do k=kmp+1,km+1
+            pe(is:ie,k,j) = pe(is:ie,k-1,j) + delp(is:ie,j,k-1)
             peln(is:ie,k,j) = log(pe(is:ie,k,j))
-            pk(is:ie,j,k) = exp(akap*peln(is:ie,k,j))
+            pk(is:ie,j,k) = exp(akap * peln(is:ie,k,j))
         enddo
 
         ps(is:ie,j) = pe(is:ie,km+1,j)
@@ -970,15 +1001,17 @@ endif        ! end last_step check
         ! update pkz
         if (.not. hydrostatic) then
 #ifdef MOIST_CAPPA
-            pkz(is:ie,j,:) = exp(cappa(is:ie,j,:)*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
+            pkz(is:ie,j,kmp:km) = exp(cappa(is:ie,j,kmp:km)*log(rrg*delp(is:ie,j,kmp:km)/&
+                delz(is:ie,j,kmp:km)*pt(is:ie,j,kmp:km)))
 #else
-            pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
+            pkz(is:ie,j,kmp:km) = exp(akap*log(rrg*delp(is:ie,j,kmp:km)/&
+                delz(is:ie,j,kmp:km)*pt(is:ie,j,kmp:km)))
 #endif
         endif
  
         if (consv .gt. consv_min) then
             do i = is, ie
-                do k = 1, km
+                do k = kmp, km
                     te0_2d(i, j) = te0_2d(i, j) + te(i, j, k)
                 enddo
             enddo
