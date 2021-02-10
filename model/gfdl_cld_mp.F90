@@ -5593,51 +5593,6 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
         delz, dbz, maxdbz, allmax, npz, ncnst, hydrostatic, zvir, &
         do_inline_mp, sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, mp_top)
     
-    ! -----------------------------------------------------------------------
-    ! code from mark stoelinga's dbzcalc.f from the rip package.
-    ! currently just using values taken directly from that code, which is
-    ! consistent for the mm5 reisner - 2 microphysics. from that file:
-    !
-    ! this routine computes equivalent reflectivity factor (in dbz) at
-    ! each model grid point. in calculating ze, the rip algorithm makes
-    ! assumptions consistent with those made in an early version
-    ! (ca. 1996) of the bulk mixed - phase microphysical scheme in the mm5
-    ! model (i.e., the scheme known as "resiner - 2") . for each species:
-    !
-    ! 1. particles are assumed to be spheres of constant density. the
-    ! densities of rain drops, snow particles, and graupel particles are
-    ! taken to be rho_r = rho_l = 1000 kg m^ - 3, rho_s = 100 kg m^ - 3, and
-    ! rho_g = 400 kg m^ - 3, respectively. (l refers to the density of
-    ! liquid water.)
-    !
-    ! 2. the size distribution (in terms of the actual diameter of the
-    ! particles, rather than the melted diameter or the equivalent solid
-    ! ice sphere diameter) is assumed to follow an exponential
-    ! distribution of the form n (d) = n_0 * exp (lambda * d) .
-    !
-    ! 3. if in0x = 0, the intercept parameter is assumed constant (as in
-    ! early reisner - 2), with values of 8x10^6, 2x10^7, and 4x10^6 m^ - 4,
-    ! for rain, snow, and graupel, respectively. various choices of
-    ! in0x are available (or can be added) . currently, in0x = 1 gives the
-    ! variable intercept for each species that is consistent with
-    ! thompson, rasmussen, and manning (2004, monthly weather review,
-    ! vol. 132, no. 2, pp. 519 - 542.)
-    !
-    ! 4. if iliqskin = 1, frozen particles that are at a temperature above
-    ! freezing are assumed to scatter as a liquid particle.
-    !
-    ! more information on the derivation of simulated reflectivity in rip
-    ! can be found in stoelinga (2005, unpublished write - up) . contact
-    ! mark stoelinga (stoeling@atmos.washington.edu) for a copy.
-    !
-    ! 22sep16: modifying to use the gfdl mp parameters. if doing so remember
-    ! that the gfdl mp assumes a constant intercept (in0x = .false.)
-    ! ferrier - aligo has an option for fixed slope (rather than fixed intercept) .
-    ! thompson presumably is an extension of reisner mp.
-    !
-    ! 09feb21: the whole package has been rewritten to match the GFDL MP
-    ! -----------------------------------------------------------------------
-    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -5652,8 +5607,6 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
     
     real, intent (in) :: zvir
 
-    real, intent (out) :: allmax
-    
     real, intent (in), dimension (is:, js:, 1:) :: delz
 
     real, intent (in), dimension (isd:ied, jsd:jed, npz) :: pt, delp
@@ -5662,6 +5615,8 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
 
     real, intent (in), dimension (is:ie, npz + 1, js:je) :: peln
 
+    real, intent (out) :: allmax
+    
     real, intent (out), dimension (is:ie, js:je) :: maxdbz
 
     real, intent (out), dimension (is:ie, js:je, npz) :: dbz
