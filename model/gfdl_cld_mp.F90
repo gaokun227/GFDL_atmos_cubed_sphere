@@ -207,6 +207,18 @@ module gfdl_cld_mp_mod
     ! 4: Kristjansson et al. (2000)
     ! 5: Wyser (1998)
     ! 6: Sun and Rikus (1999), Sun (2001)
+
+    integer :: radr_flag = 1 ! radar reflectivity for rain
+    ! 1: Mark Stoelinga (2005)
+    ! 2: Marshall-Palmer formula (https://en.wikipedia.org/wiki/DBZ_(meteorology))
+    
+    integer :: rads_flag = 1 ! radar reflectivity for snow
+    ! 1: Mark Stoelinga (2005)
+    ! 2: Marshall-Palmer formula (https://en.wikipedia.org/wiki/DBZ_(meteorology))
+    
+    integer :: radg_flag = 1 ! radar reflectivity for graupel
+    ! 1: Mark Stoelinga (2005)
+    ! 2: Marshall-Palmer formula (https://en.wikipedia.org/wiki/DBZ_(meteorology))
     
     logical :: do_sedi_uv = .true. ! transport of horizontal momentum in sedimentation
     logical :: do_sedi_w = .true. ! transport of vertical momentum in sedimentation
@@ -385,7 +397,8 @@ module gfdl_cld_mp_mod
         use_rhc_revap, do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
         rhc_cevap, rhc_revap, beta, liq_ice_combine, rewflag, &
         reiflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
-        regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt
+        regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt, &
+        radr_flag, rads_flag, radg_flag
     
 contains
 
@@ -5191,7 +5204,6 @@ end subroutine fast_sat_adj
 
 ! =======================================================================
 ! cloud radii diagnosis built for gfdl cloud microphysics
-! radius of cloud species diagnosis
 ! =======================================================================
 
 subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
@@ -5579,14 +5591,13 @@ end subroutine cld_eff_rad
 
 subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
         delz, dbz, maxdbz, allmax, npz, ncnst, hydrostatic, zvir, &
-        do_inline_mp, sphum, liq_wat, ice_wat, &
-        rainwat, snowwat, graupel, mp_top)
+        do_inline_mp, sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, mp_top)
     
     ! -----------------------------------------------------------------------
     ! code from mark stoelinga's dbzcalc.f from the rip package.
     ! currently just using values taken directly from that code, which is
     ! consistent for the mm5 reisner - 2 microphysics. from that file:
-    
+    !
     ! this routine computes equivalent reflectivity factor (in dbz) at
     ! each model grid point. in calculating ze, the rip algorithm makes
     ! assumptions consistent with those made in an early version
@@ -5618,11 +5629,13 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
     ! more information on the derivation of simulated reflectivity in rip
     ! can be found in stoelinga (2005, unpublished write - up) . contact
     ! mark stoelinga (stoeling@atmos.washington.edu) for a copy.
-    
+    !
     ! 22sep16: modifying to use the gfdl mp parameters. if doing so remember
     ! that the gfdl mp assumes a constant intercept (in0x = .false.)
     ! ferrier - aligo has an option for fixed slope (rather than fixed intercept) .
     ! thompson presumably is an extension of reisner mp.
+    !
+    ! 09feb21: the whole package has been rewritten to match the GFDL MP
     ! -----------------------------------------------------------------------
     
     implicit none
@@ -5641,17 +5654,17 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
 
     real, intent (out) :: allmax
     
-    real, intent (in), dimension (isd:ied, jsd:jed, npz) :: pt, delp
-
     real, intent (in), dimension (is:, js:, 1:) :: delz
+
+    real, intent (in), dimension (isd:ied, jsd:jed, npz) :: pt, delp
 
     real, intent (in), dimension (isd:ied, jsd:jed, npz, ncnst) :: q
 
-    real, intent (in), dimension (is :ie, npz + 1, js:je) :: peln
+    real, intent (in), dimension (is:ie, npz + 1, js:je) :: peln
 
-    real, intent (out), dimension (is :ie, js :je) :: maxdbz
+    real, intent (out), dimension (is:ie, js:je) :: maxdbz
 
-    real, intent (out), dimension (is :ie, js :je, npz) :: dbz
+    real, intent (out), dimension (is:ie, js:je, npz) :: dbz
     
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5659,106 +5672,156 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
 
     integer :: i, j, k
     
-    real :: rhogh, vcongh, normgh
-    
-    real, parameter :: gamma_seven = 720.
-    real, parameter :: alpha = 0.224
+    real, parameter :: alpha = 0.224, MP_const = 200 * exp (1.6 * log (3.6e6))
 
-    real (kind = r_grid) :: t1, t2, t3, vtr, vtg, vts
+    real (kind = r_grid) :: qden, z_e, fac_r, fac_s, fac_g
     
-    real (kind = r_grid), parameter :: factor_s = gamma_seven * 1.e18 * &
-         exp (1.75 * log (1. / (pi * rhos))) * &
-         (rhos / rhor) ** 2 * alpha
+    real, dimension (npz) :: den, denfac, qmr, qms, qmg, vtr, vts, vtg
     
-    real (kind = r_grid), dimension (is:ie) :: rhoair, denfac, z_e
+    ! -----------------------------------------------------------------------
+    ! return if the microphysics scheme doesn't include rain
+    ! -----------------------------------------------------------------------
 
     if (rainwat .lt. 1) return
     
-    dbz (:, :, 1:mp_top) = - 20.
-    maxdbz (:, :) = - 20.
+    ! -----------------------------------------------------------------------
+    ! initialization
+    ! -----------------------------------------------------------------------
+
+    dbz = - 20.
+    maxdbz = - 20.
     allmax = - 20.
     
-    if (do_hail .and. .not. do_inline_mp) then
-        rhogh = rhoh
-        vcongh = vconh
-        normgh = normh
-    else
-        rhogh = rhog
-        vcongh = vcong
-        normgh = normg
+    ! -----------------------------------------------------------------------
+    ! constants for radar reflectivity
+    ! -----------------------------------------------------------------------
+
+    if (radr_flag .eq. 1) &
+        fac_r = 720 * exp (- 0.25 * 7 * log (pi * rhor * rnzr)) * rnzr * 1.e18
+
+    if (rads_flag .eq. 1) &
+        fac_s = 720 * exp (- 0.25 * 7 * log (pi * rhos * rnzs)) * rnzs * 1.e18 * &
+            alpha * (rhos / rhor) ** 2
+
+    if (radg_flag .eq. 1) then
+        if (do_hail .and. .not. do_inline_mp) then
+            fac_g = 720 * exp (- 0.25 * 7 * log (pi * rhoh * rnzh)) * rnzh * 1.e18 * &
+                alpha * (rhoh / rhor) ** 2
+        else
+            fac_g = 720 * exp (- 0.25 * 7 * log (pi * rhog * rnzh)) * rnzg * 1.e18 * &
+                alpha * (rhog / rhor) ** 2
+        endif
     endif
-    
-    do k = mp_top + 1, npz
-        do j = js, je
 
-            if (hydrostatic) then
-                do i = is, ie
-                    rhoair (i) = delp (i, j, k) / ((peln (i, k + 1, j) - peln (i, k, j)) * &
-                        rdgas * pt (i, j, k) * (1. + zvir * q (i, j, k, sphum)))
-                    denfac (i) = sqrt (min (10., 1.2 / rhoair (i)))
-                    z_e (i) = 0.
-                enddo
-            else
-                do i = is, ie
-                    rhoair (i) = - delp (i, j, k) / (grav * delz (i, j, k))
-                    denfac (i) = sqrt (min (10., 1.2 / rhoair (i)))
-                    z_e (i) = 0.
-                enddo
-            endif
+    ! -----------------------------------------------------------------------
+    ! calculate radar reflectivity
+    ! -----------------------------------------------------------------------
 
-            if (rainwat .gt. 0) then
-                do i = is, ie
-                    ! the following form vectorizes better & more consistent with gfdl_mp
-                    ! sjl notes: marshall - palmer, dbz = 200 * precip ** 1.6, precip = 3.6e6 * t1 / rhor * vtr ! [mm / hr]
-                    ! gfdl_mp terminal fall speeds are used
-                    ! date modified 20170701
-                    ! account for excessively high cloud water - > autoconvert (diag only) excess cloud water
-                    t1 = rhoair (i) * max (qcmin, q (i, j, k, rainwat) + dim (q (i, j, k, liq_wat), 1.0e-3))
-                    vtr = max (1.e-3, vconr * denfac (i) * exp (0.25 * blin * log (t1 / normr)))
-                    z_e (i) = 200. * exp (1.6 * log (3.6e6 * t1 / rhor * vtr))
-                    ! z_e = 200. * (exp (1.6 * log (3.6e6 * t1 / rhor * vtr)) + &
-                    ! exp (1.6 * log (3.6e6 * t3 / rhogh * vtg)) + &
-                    ! exp (1.6 * log (3.6e6 * t2 / rhos * vts)))
-                enddo
-            endif
-
-            if (graupel .gt. 0) then
-                do i = is, ie
-                    t3 = rhoair (i) * max (qcmin, q (i, j, k, graupel))
-                    vtg = max (1.e-3, vcongh * denfac (i) * exp (0.25 * flin * log (t3 / normgh)))
-                    z_e (i) = z_e (i) + 200. * exp (1.6 * log (3.6e6 * t3 / rhogh * vtg))
-                enddo
-            endif
-
-            if (snowwat .gt. 0) then
-                do i = is, ie
-                    t2 = rhoair (i) * max (qcmin, q (i, j, k, snowwat))
-                    ! vts = max (1.e-3, vcons * denfac * exp (0.25 * dlin * log (t2 / norms)))
-                    z_e (i) = z_e (i) + (factor_s / alpha) * t2 * exp (0.75 * log (t2 / rnzs))
-                    ! z_e = 200. * (exp (1.6 * log (3.6e6 * t1 / rhor * vtr)) + &
-                    ! exp (1.6 * log (3.6e6 * t3 / rhogh * vtg)) + &
-                    ! exp (1.6 * log (3.6e6 * t2 / rhos * vts)))
-                enddo
-            endif
-
-            do i = is, ie
-                dbz (i, j, k) = 10. * log10 (max (0.01, z_e (i)))
-            enddo
-
-        enddo
-    enddo
-    
-    do j = js, je
-        do k = mp_top + 1, npz
-            do i = is, ie
-                maxdbz (i, j) = max (dbz (i, j, k), maxdbz (i, j))
-            enddo
-        enddo
-    enddo
-    
     do j = js, je
         do i = is, ie
+
+            ! -----------------------------------------------------------------------
+            ! air density
+            ! -----------------------------------------------------------------------
+
+            do k = 1, npz
+                if (hydrostatic) then
+                    den (k) = delp (i, j, k) / ((peln (i, k + 1, j) - peln (i, k, j)) * &
+                        rdgas * pt (i, j, k) * (1. + zvir * q (i, j, k, sphum)))
+                else
+                    den (k) = - delp (i, j, k) / (grav * delz (i, j, k))
+                endif
+                qmr (k) = max (qcmin, q (i, j, k, rainwat))
+                qms (k) = max (qcmin, q (i, j, k, snowwat))
+                qmg (k) = max (qcmin, q (i, j, k, graupel))
+            enddo
+
+            do k = 1, npz
+                denfac (k) = sqrt (den (npz) / den (k))
+            enddo
+
+            ! -----------------------------------------------------------------------
+            ! fall speed
+            ! -----------------------------------------------------------------------
+
+            if (radr_flag .eq. 2) then
+                call term_rsg (1, npz, qmr, den, denfac, vr_fac, vconr, blin, normr, &
+                    vr_max, const_vr, vtr)
+                vtr = vtr / rhor
+            endif
+
+            if (rads_flag .eq. 2)  then
+                call term_rsg (1, npz, qms, den, denfac, vs_fac, vcons, dlin, norms, &
+                    vs_max, const_vs, vts)
+                vts = vts / rhos
+            endif
+
+            if (radg_flag .eq. 2)  then
+                if (do_hail .and. .not. do_inline_mp) then
+                    call term_rsg (1, npz, qmg, den, denfac, vg_fac, vconh, flin, normh, &
+                        vg_max, const_vg, vtg)
+                    vtg = vtg / rhoh
+                else
+                    call term_rsg (1, npz, qmg, den, denfac, vg_fac, vcong, flin, normg, &
+                        vg_max, const_vg, vtg)
+                    vtg = vtg / rhog
+                endif
+            endif
+
+            ! -----------------------------------------------------------------------
+            ! radar reflectivity
+            ! -----------------------------------------------------------------------
+
+            do k = mp_top + 1, npz
+                z_e = 0.
+
+                if (rainwat .gt. 0) then
+                    qden = den (k) * qmr (k)
+                    if (radr_flag .eq. 1) then
+                        z_e = z_e + fac_r * exp (0.25 * 7 * log (qden))
+                    endif
+                    if (radr_flag .eq. 2)  then
+                        z_e = z_e + MP_const * exp (1.6 * log (qden * vtr (k)))
+                    endif
+                endif
+
+                if (snowwat .gt. 0) then
+                    qden = den (k) * qms (k)
+                    if (rads_flag .eq. 1) then
+                        if (pt (i, j, k) .lt. tice) then
+                            z_e = z_e + fac_s * exp (0.25 * 7 * log (qden))
+                        else
+                            z_e = z_e + fac_s * exp (0.25 * 7 * log (qden)) / alpha
+                        endif
+                    endif
+                    if (rads_flag .eq. 2)  then
+                        z_e = z_e + MP_const * exp (1.6 * log (qden * vts (k)))
+                    endif
+                endif
+
+                if (graupel .gt. 0) then
+                    qden = den (k) * qmg (k)
+                    if (radg_flag .eq. 1) then
+                        if (pt (i, j, k) .lt. tice) then
+                            z_e = z_e + fac_g * exp (0.25 * 7 * log (qden))
+                        else
+                            z_e = z_e + fac_g * exp (0.25 * 7 * log (qden)) / alpha
+                        endif
+                    endif
+                    if (radg_flag .eq. 2)  then
+                        z_e = z_e + MP_const * exp (1.6 * log (qden * vtg (k)))
+                    endif
+                endif
+
+                dbz (i, j, k) = 10. * log10 (max (0.01, z_e))
+            enddo
+
+            do k = mp_top + 1, npz
+                maxdbz (i, j) = max (dbz (i, j, k), maxdbz (i, j))
+            enddo
+
             allmax = max (maxdbz (i, j), allmax)
+
         enddo
     enddo
     
