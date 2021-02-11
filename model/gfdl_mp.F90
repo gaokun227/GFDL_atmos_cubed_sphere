@@ -1244,20 +1244,23 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
         
         ! if cloud ice < 0, borrow from snow
         if (qi (k) .lt. 0.) then
+            sink = - qi (k)
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                0., 0., 0., - qi (k), qi (k), 0.)
+                0., 0., 0., sink, - sink, 0.)
         endif
 
         ! if snow < 0, borrow from graupel
         if (qs (k) .lt. 0.) then
+            sink = - qs (k)
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                0., 0., 0., 0., - qs (k), qs (k))
+                0., 0., 0., 0., sink, - sink)
         endif
 
         ! if graupel < 0, borrow from rain
         if (qg (k) .lt. 0.) then
+            sink = - qg (k)
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                0., 0., qg (k), 0., 0., - qg (k), te8 (k), cvm (k), tz (k), &
+                0., 0., - sink, 0., 0., sink, te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
         endif
         
@@ -1267,15 +1270,17 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
         
         ! if rain < 0, borrow from cloud water
         if (qr (k) .lt. 0.) then
+            sink = - qr (k)
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                0., qr (k), - qr (k), 0., 0., 0.)
+                0., - sink, sink, 0., 0., 0.)
         endif
 
         ! if cloud water < 0, borrow from water vapor
         if (ql (k) .lt. 0.) then
-            cond = cond - ql (k) * dp (k)
+            sink = - ql (k)
+            cond = cond + sink * dp (k)
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                ql (k), - ql (k), 0., 0., 0., 0., te8 (k), cvm (k), tz (k), &
+                - sink, sink, 0., 0., 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
         endif
         
@@ -3095,7 +3100,7 @@ subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
 
     integer :: k
 
-    real :: sink, tin, qpz, rh, dqdt
+    real :: sink, tin, qpz, rh, dqdt, tmp
 
     do k = ks, ke
 
@@ -3127,11 +3132,14 @@ subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
             rh = qpz / iqs (tin, den (k), dqdt)
             if (rh .lt. rh_adj) then
 
-                reevap = reevap + ql (k) * dp (k)
-                sub = sub + qi (k) * dp (k)
+                sink = ql (k)
+                tmp = qi (k)
+
+                reevap = reevap + sink * dp (k)
+                sub = sub + tmp * dp (k)
 
                 call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                    ql (k) + qi (k), - ql (k), 0., - qi (k), 0., 0., te8 (k), cvm (k), tz (k), &
+                    sink + tmp, - sink, 0., - tmp, 0., 0., te8 (k), cvm (k), tz (k), &
                     lcpk (k), icpk (k), tcpk (k), tcp3 (k))
 
             endif
