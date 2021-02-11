@@ -1405,7 +1405,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     
     call term_rsg (ks, ke, qr, den, denfac, vr_fac, vconr, blin, normr, vr_max, const_vr, vtr)
         
-    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
+    call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vtr, r1, u, v, w, dte, "qr")
     
 end subroutine sedimentation
@@ -1542,7 +1542,7 @@ subroutine sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     real (kind = r_grid), intent (in), dimension (ks:ke) :: cvm
 
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
     real, intent (inout) :: r1
 
@@ -1633,15 +1633,15 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     real, intent (in), dimension (ks:ke) :: vt, dp, dz
 
-    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, u, v, w
+    character (len = 2), intent (in) :: qflag
+
+    real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, u, v, w
 
     real, intent (inout) :: x1
 
     real (kind = r_grid), intent (inout) :: dte
 
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-
-    character (len = 2), intent (in) :: qflag
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5923,11 +5923,15 @@ subroutine mtetw (ks, ke, qv, ql, qr, qi, qs, qg, tz, ua, va, wa, delp, &
 
     real, intent (in), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, ua, va, wa, delp
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: tz, dte
+    real (kind = r_grid), intent (in) :: dte
 
-    real (kind = r_grid), intent (out), dimension (ks:ke) :: te, tw, te_b, tw_b
+    real (kind = r_grid), intent (in), dimension (ks:ke) :: tz
 
-    real (kind = r_grid), intent (out), dimension (ks:ke), optional :: te_loss
+    real (kind = r_grid), intent (out) :: te_b, tw_b
+
+    real (kind = r_grid), intent (out), optional :: te_loss
+
+    real (kind = r_grid), intent (out), dimension (ks:ke) :: te, tw
 
     ! -----------------------------------------------------------------------
     ! local variables
