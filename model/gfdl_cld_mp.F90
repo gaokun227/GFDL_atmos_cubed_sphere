@@ -5868,14 +5868,14 @@ function mte (qv, ql, qr, qi, qs, qg, tk, dp, moist_q)
 
     implicit none
 
-    logical, intent (in) :: moist_q
-    
     real (kind = r_grid) :: mte
 
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
 
+    logical, intent (in) :: moist_q
+    
     real, intent (in) :: qv, ql, qr, qi, qs, qg, dp
 
     real (kind = r_grid), intent (in) :: tk
