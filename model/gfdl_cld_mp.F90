@@ -223,6 +223,7 @@ module gfdl_cld_mp_mod
     logical :: do_sedi_uv = .true. ! transport of horizontal momentum in sedimentation
     logical :: do_sedi_w = .true. ! transport of vertical momentum in sedimentation
     logical :: do_sedi_heat = .true. ! transport of heat in sedimentation
+    logical :: do_sedi_melt = .true. ! melt cloud ice, snow, and graupel during sedimentation
 
     logical :: do_qa = .true. ! do inline cloud fraction
     logical :: rad_snow = .true. ! include snow in cloud fraciton calculation
@@ -258,8 +259,6 @@ module gfdl_cld_mp_mod
     logical :: consv_checker = .false. ! turn on energy and water conservation checker
 
     logical :: do_warm_rain_mp = .false. ! do warm rain cloud microphysics only
-
-    logical :: do_sedi_melt = .false. ! melt cloud ice, snow, and graupel during sedimentation
 
     real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
