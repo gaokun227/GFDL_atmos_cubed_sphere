@@ -1228,6 +1228,10 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
     
     real (kind = r_grid), dimension (ks:ke) :: cvm, te8
 
+    ! -----------------------------------------------------------------------
+    ! initialization
+    ! -----------------------------------------------------------------------
+
     cond = 0
     
     ! -----------------------------------------------------------------------
@@ -1430,6 +1434,15 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
 
     real (kind = r_grid), dimension (ks:ke) :: cvm, te8
 
+    ! -----------------------------------------------------------------------
+    ! initialization
+    ! -----------------------------------------------------------------------
+
+    cond = 0
+    dep = 0
+    reevap = 0
+    sub = 0
+    
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
@@ -2180,6 +2193,10 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
 
     real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+
+    ! -----------------------------------------------------------------------
+    ! initialization
+    ! -----------------------------------------------------------------------
 
     reevap = 0
 
@@ -3214,6 +3231,10 @@ subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
     real, dimension (ks:ke) :: q_liq, q_sol, q_cond, lcpk, icpk, tcpk, tcp3
     
     real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+
+    ! -----------------------------------------------------------------------
+    ! initialization
+    ! -----------------------------------------------------------------------
 
     cond = 0
     dep = 0
