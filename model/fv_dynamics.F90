@@ -158,7 +158,7 @@ contains
       real:: m_fac(bd%is:bd%ie,bd%js:bd%je)
       real:: pfull(npz)
       real, dimension(bd%is:bd%ie):: cvm
-      real, allocatable :: dp1(:,:,:), dtdt_m(:,:,:), cappa(:,:,:)
+      real, allocatable :: dp1(:,:,:), cappa(:,:,:)
       real:: akap, rdg, ph1, ph2, mdt, gam, amdt, u0
       real:: recip_k_split,reg_bc_update_time
       integer:: kord_tracer(ncnst)
@@ -422,18 +422,6 @@ contains
   last_step = .false.
   mdt = bdt / real(k_split)
 
-  if ( idiag%id_mdt > 0 .and. (.not. do_adiabatic_init) ) then
-       allocate ( dtdt_m(is:ie,js:je,npz) )
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,dtdt_m)
-       do k=1,npz
-          do j=js,je
-             do i=is,ie
-                dtdt_m(i,j,k) = 0.
-             enddo
-          enddo
-       enddo
-  endif
-
   ! Initialize rain, ice, snow and graupel precipitaiton
   if (flagstruct%do_inline_mp) then
       inline_mp%prer = 0.0
@@ -613,7 +601,7 @@ contains
                      zvir, cp_air, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
                      kord_tracer, flagstruct%kord_tm, peln, te_2d,               &
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
-                     idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
+                     ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, &
                      hybrid_z, do_omega,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
@@ -699,20 +687,6 @@ contains
   endif
 
                                                   call timing_off('FV_DYN_LOOP')
-  if ( idiag%id_mdt > 0 .and. (.not.do_adiabatic_init) ) then
-! Output temperature tendency due to inline moist physics:
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,dtdt_m,bdt)
-       do k=1,npz
-          do j=js,je
-             do i=is,ie
-                dtdt_m(i,j,k) = dtdt_m(i,j,k) / bdt * 86400.
-             enddo
-          enddo
-       enddo
-!      call prt_mxm('Fast DTDT (deg/Day)', dtdt_m, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
-       used = send_data(idiag%id_mdt, dtdt_m, fv_time)
-       deallocate ( dtdt_m )
-  endif
 
   if( nwat==6 ) then
      if (cld_amt > 0) then
