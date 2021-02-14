@@ -346,7 +346,7 @@ module gfdl_cld_mp_mod
     real :: f_dq_p = 1.0 ! cloud fraction adjustment for supersaturation
     real :: f_dq_m = 1.0 ! cloud fraction adjustment for undersaturation
 
-    real :: fi2s_fac = 0.75 ! maximum sink of cloud ice to form snow: 0-1
+    real :: fi2s_fac = 1.0 ! maximum sink of cloud ice to form snow: 0-1
     real :: fi2g_fac = 1.0 ! maximum sink of cloud ice to form graupel: 0-1
     real :: fs2g_fac = 1.0 ! maximum sink of snow to form graupel: 0-1
     
