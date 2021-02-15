@@ -1006,15 +1006,6 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         condensation (i) = condensation (i) + cond * convt * ntimes
             
         ! -----------------------------------------------------------------------
-        ! cloud fraction diagnostic
-        ! -----------------------------------------------------------------------
-        
-        if (do_qa .and. last_step) then
-            call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, &
-                tz, h_var, gsize (i))
-        endif
-
-        ! -----------------------------------------------------------------------
         ! fast microphysics loop
         ! -----------------------------------------------------------------------
         
@@ -1039,6 +1030,15 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
 
         endif
     
+        ! -----------------------------------------------------------------------
+        ! cloud fraction diagnostic
+        ! -----------------------------------------------------------------------
+        
+        if (do_qa .and. last_step) then
+            call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, &
+                tz, h_var, gsize (i))
+        endif
+
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
         ! -----------------------------------------------------------------------
