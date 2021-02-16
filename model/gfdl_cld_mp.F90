@@ -201,7 +201,7 @@ module gfdl_cld_mp_mod
     ! 2: Martin et al. (1994), GFDL revision
     ! 3: Kiehl et al. (1994)
 
-    integer :: reiflag = 1 ! cloud ice effective radius scheme
+    integer :: reiflag = 5 ! cloud ice effective radius scheme
     ! 1: Heymsfield and Mcfarquhar (1996)
     ! 2: Donner et al. (1997)
     ! 3: Fu (2007)
