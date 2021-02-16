@@ -146,6 +146,7 @@ module gfdl_mp_mod
     
     real, parameter :: rhow = 1.0e3 ! density of cloud water (kg/m^3)
     real, parameter :: rhor = 1.0e3 ! density of rain (Lin et al. 1983) (kg/m^3)
+    real, parameter :: rhoi = 9.17e2 ! density of cloud ice (kg/m^3)
     real, parameter :: rhos = 0.1e3 ! density of snow (Lin et al. 1983) (kg/m^3)
     real, parameter :: rhog = 0.4e3 ! density of graupel (Rutledge and Hobbs 1984) (kg/m^3)
     real, parameter :: rhoh = 9.17e2 ! density of hail (Lin et al. 1983) (kg/m^3)
@@ -183,7 +184,7 @@ module gfdl_mp_mod
     ! 2: Meyers et al. (1992)
     ! 3: Meyers et al. (1992)
     ! 4: Cooper (1986)
-    ! 5: Flecther (1962)
+    ! 5: Fletcher (1962)
 
     integer :: igflag = 3 ! ice generation scheme
     ! 1: WSM6
@@ -208,17 +209,32 @@ module gfdl_mp_mod
     ! 5: Wyser (1998)
     ! 6: Sun and Rikus (1999), Sun (2001)
 
+    integer :: rerflag = 1 ! rain effective radius scheme
+    ! 1: effective radius
+    ! 2: mass-weighted effective radius
+
+    integer :: resflag = 1 ! snow effective radius scheme
+    ! 1: effective radius
+    ! 2: mass-weighted effective radius
+
+    integer :: regflag = 1 ! graupel effective radius scheme
+    ! 1: effective radius
+    ! 2: mass-weighted effective radius
+
     integer :: radr_flag = 1 ! radar reflectivity for rain
     ! 1: Mark Stoelinga (2005)
-    ! 2: Marshall-Palmer formula (https://en.wikipedia.org/wiki/DBZ_(meteorology))
+    ! 2: Smith et al. (1975), Tong and Xue (2005)
+    ! 3: Marshall-Palmer formula (https://en.wikipedia.org/wiki/DBZ_(meteorology))
     
     integer :: rads_flag = 1 ! radar reflectivity for snow
     ! 1: Mark Stoelinga (2005)
-    ! 2: Marshall-Palmer formula (https://en.wikipedia.org/wiki/DBZ_(meteorology))
+    ! 2: Smith et al. (1975), Tong and Xue (2005)
+    ! 3: Marshall-Palmer formula (https://en.wikipedia.org/wiki/DBZ_(meteorology))
     
     integer :: radg_flag = 1 ! radar reflectivity for graupel
     ! 1: Mark Stoelinga (2005)
-    ! 2: Marshall-Palmer formula (https://en.wikipedia.org/wiki/DBZ_(meteorology))
+    ! 2: Smith et al. (1975), Tong and Xue (2005)
+    ! 3: Marshall-Palmer formula (https://en.wikipedia.org/wiki/DBZ_(meteorology))
     
     logical :: do_sedi_uv = .true. ! transport of horizontal momentum in sedimentation
     logical :: do_sedi_w = .true. ! transport of vertical momentum in sedimentation
@@ -299,7 +315,7 @@ module gfdl_mp_mod
     real :: ql_gen = 1.0e-3 ! maximum cloud water generation during remapping step (kg/kg)
     
     real :: ql0_max = 2.0e-3 ! maximum cloud water value (autoconverted to rain) (kg/kg)
-    real :: qi0_max = 1.0e-4 ! maximum cloud ice value (by other sources) (kg/m^3)
+    real :: qi0_max = 1.0e-4 ! maximum cloud ice value (autoconverted to snow) (kg/m^3)
     
     real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold (kg/m^3)
     real :: qs0_crt = 1.0e-3 ! snow to graupel autoconversion threshold (0.6e-3 in Purdue Lin scheme) (kg/m^3)
@@ -384,19 +400,18 @@ module gfdl_mp_mod
         t_min, t_sub, tau_r2g, tau_smlt, tau_gmlt, dw_land, dw_ocean, vi_fac, &
         vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, vs_max, &
         vg_max, vr_max, qs_mlt, qs0_crt, ql0_max, qi0_max, qi0_crt, ifflag, &
-        rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, &
-        const_vr, rthresh, ccn_l, ccn_o, igflag, c_paut, tau_imlt, &
-        tau_v2l, tau_l2v, tau_i2s, tau_l2r, qi_lim, ql_gen, do_hail, inflag, &
-        c_psacw, c_psaci, c_pracs, c_psacr, c_pgacr, c_pgacs, c_pgacw, c_pgaci, &
-        z_slope_liq, z_slope_ice, prog_ccn, c_pracw, c_praci, alin, blin, clin, &
-        dlin, elin, flin, rad_snow, rad_graupel, rad_rain, cld_min, &
-        use_ppm, mono_prof, do_sedi_uv, do_sedi_w, do_sedi_heat, icloud_f, &
-        irain_f, xr_a, xr_b, xr_c, ntimes, tau_revp, tice_mlt, &
-        do_cond_timescale, mp_time, consv_checker, te_err, use_rhc_cevap, &
+        rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, const_vr, rthresh, &
+        ccn_l, ccn_o, igflag, c_paut, tau_imlt, tau_v2l, tau_l2v, tau_i2s, &
+        tau_l2r, qi_lim, ql_gen, do_hail, inflag, c_psacw, c_psaci, c_pracs, &
+        c_psacr, c_pgacr, c_pgacs, c_pgacw, c_pgaci, z_slope_liq, z_slope_ice, &
+        prog_ccn, c_pracw, c_praci, alin, blin, clin, dlin, elin, flin, rad_snow, &
+        rad_graupel, rad_rain, cld_min, use_ppm, mono_prof, do_sedi_uv, do_sedi_w, &
+        do_sedi_heat, icloud_f, irain_f, xr_a, xr_b, xr_c, ntimes, tau_revp, &
+        tice_mlt, do_cond_timescale, mp_time, consv_checker, te_err, use_rhc_cevap, &
         use_rhc_revap, do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, &
-        rhc_cevap, rhc_revap, beta, liq_ice_combine, rewflag, &
-        reiflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, resmax, &
-        regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt, &
+        rhc_cevap, rhc_revap, beta, liq_ice_combine, rewflag, reiflag, rerflag, &
+        resflag, regflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, &
+        resmax, regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt, &
         radr_flag, rads_flag, radg_flag
     
 contains
@@ -1248,21 +1263,21 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
         
         ! if cloud ice < 0, borrow from snow
         if (qi (k) .lt. 0.) then
-            sink = - qi (k)
+            sink = min (- qi (k), max (0., qs (k)))
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., sink, - sink, 0.)
         endif
 
         ! if snow < 0, borrow from graupel
         if (qs (k) .lt. 0.) then
-            sink = - qs (k)
+            sink = min (- qs (k), max (0., qg (k)))
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., 0., sink, - sink)
         endif
 
         ! if graupel < 0, borrow from rain
         if (qg (k) .lt. 0.) then
-            sink = - qg (k)
+            sink = min (- qg (k), max (0., qr (k)))
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., - sink, 0., 0., sink, te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
@@ -1274,14 +1289,14 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
         
         ! if rain < 0, borrow from cloud water
         if (qr (k) .lt. 0.) then
-            sink = - qr (k)
+            sink = min (- qr (k), max (0., ql (k)))
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, sink, 0., 0., 0.)
         endif
 
         ! if cloud water < 0, borrow from water vapor
         if (ql (k) .lt. 0.) then
-            sink = - ql (k)
+            sink = min (- ql (k), max (0., qv (k)))
             cond = cond + sink * dp (k)
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 - sink, sink, 0., 0., 0., 0., te8 (k), cvm (k), tz (k), &
@@ -2537,7 +2552,7 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
 end subroutine ice_cloud
 
 ! =======================================================================
-! cloud ice melting to form cloud water and rain
+! cloud ice melting to form cloud water and rain, Lin et al. (1983)
 ! =======================================================================
 
 subroutine pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk, tcp3)
@@ -2565,15 +2580,18 @@ subroutine pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk,
 
     integer :: k
 
-    real :: tmp, sink, fac_imlt
+    real :: tc, tmp, sink, fac_imlt
 
     fac_imlt = 1. - exp (- dts / tau_imlt)
     
     do k = ks, ke
 
-        if (tz (k) .gt. tice_mlt .and. qi (k) .gt. qcmin) then
+        tc = tz (k) - tice_mlt
 
-            sink = min (qi (k), fac_imlt * (tz (k) - tice_mlt) / icpk (k))
+        if (tc .gt. 0 .and. qi (k) .gt. qcmin) then
+
+            sink = fac_imlt * tc / icpk (k)
+            sink = min (qi (k), sink)
             tmp = min (sink, dim (ql_mlt, ql (k)))
 
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
@@ -2587,7 +2605,7 @@ subroutine pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk,
 end subroutine pimlt
     
 ! =======================================================================
-! cloud water freezing to form cloud ice and snow
+! cloud water freezing to form cloud ice and snow, Lin et al. (1983)
 ! =======================================================================
 
 subroutine pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, icpk, tcpk, tcp3)
@@ -2615,15 +2633,16 @@ subroutine pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, icpk, 
 
     integer :: k
 
-    real :: tc, factor, tmp, sink, qim
+    real :: tc, tmp, sink, qim
 
     do k = ks, ke
 
-        if (tz (k) .lt. t_wfr .and. ql (k) .gt. qcmin) then
+        tc = t_wfr - tz (k)
 
-            tc = t_wfr - tz (k)
-            factor = min (1., tc / dt_fr)
-            sink = min (ql (k) * factor, tc / icpk (k))
+        if (tc .gt. 0. .and. ql (k) .gt. qcmin) then
+
+            sink = ql (k) * tc / dt_fr
+            sink = min (ql (k), sink, tc / icpk (k))
             qim = qi0_crt / den (k)
             tmp = min (sink, dim (qim, qi (k)))
 
@@ -3389,7 +3408,7 @@ subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
 end subroutine pinst
 
 ! =======================================================================
-! cloud water condensation and evaporation
+! cloud water condensation and evaporation, Hong and Lim (2006)
 ! =======================================================================
 
 subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
@@ -3437,17 +3456,17 @@ subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
         if (dq .gt. 0.) then
             factor = min (1., fac_l2v * (10. * dq / qsw))
             sink = min (ql (k), factor * dq / (1. + tcp3 (k) * dqdt))
+            if (use_rhc_cevap .and. rh_tem .ge. rhc_cevap) then
+                sink = 0.
+            endif
             reevap = reevap + sink * dp (k)
         elseif (do_cond_timescale) then
             factor = min (1., fac_v2l * (10. * (- dq) / qsw))
             sink = - min (qv (k), factor * (- dq) / (1. + tcp3 (k) * dqdt))
             cond = cond - sink * dp (k)
         else
-            sink = dq / (1. + tcp3 (k) * dqdt)
+            sink = - min (qv (k), - dq / (1. + tcp3 (k) * dqdt))
             cond = cond - sink * dp (k)
-        endif
-        if (use_rhc_cevap .and. rh_tem .ge. rhc_cevap) then
-            sink = 0.
         endif
 
         call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
@@ -3459,7 +3478,7 @@ subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
 end subroutine pcond_pevap
 
 ! =======================================================================
-! enforce complete freezing below t_wfr
+! enforce complete freezing below t_wfr, Lin et al. (1983)
 ! =======================================================================
 
 subroutine pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk, tcp3)
@@ -3485,7 +3504,7 @@ subroutine pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk
 
     integer :: k
 
-    real :: sink, tc
+    real :: tc, sink
 
     do k = ks, ke
 
@@ -3493,7 +3512,8 @@ subroutine pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk
 
         if (tc .gt. 0. .and. ql (k) .gt. qcmin) then
 
-            sink = min (ql (k), ql (k) * tc * 0.125, tc / icpk (k))
+            sink = ql (k) * tc / dt_fr
+            sink = min (ql (k), sink, tc / icpk (k))
 
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
@@ -3542,10 +3562,10 @@ subroutine pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, ccn, lcpk, 
  
         tc = tice - tz (k)
 
-        if (tc .gt. 0.1 .and. ql (k) .gt. qcmin) then
+        if (tc .gt. 0 .and. ql (k) .gt. qcmin) then
 
             sink = 100. / (rhow * ccn (k)) * dts * (exp (0.66 * tc) - 1.) * ql (k) ** 2
-            sink = min (ql (k), tc / icpk (k), sink)
+            sink = min (ql (k), sink, tc / icpk (k))
 
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
@@ -3616,8 +3636,9 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
                     if (inflag .eq. 5) &
                         cin (k) = 1.e-5 * exp (0.5 * (tice - tz (k))) * 1000.0
                 endif
-                pidep = dts * dq * 4.0 * 11.9 * exp (0.5 * log (qi (k) * den (k) * cin (k))) &
-                     / (qsi * den (k) * (tcpk (k) * cvm (k)) ** 2 / (0.0243 * rvgas * tz (k) ** 2) + 4.42478e4)
+                pidep = dts * dq * 4.0 * 11.9 * exp (0.5 * log (qi (k) * den (k) * cin (k))) / &
+                     (qsi * den (k) * (tcpk (k) * cvm (k)) ** 2 / (tcond * rvgas * tz (k) ** 2) + &
+                     1 / vdifu)
             endif
 
             if (dq .gt. 0.) then
@@ -4789,8 +4810,8 @@ subroutine pgfr_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
         
         if (tc .lt. 0. .and. qr (k) .gt. qcmin) then
             
-            sink = min (1., (tc * 0.025) ** 2) * qr (k)
-            sink = min (sink, fac_r2g * tc / icpk (k))
+            sink = (tc * 0.025) ** 2 * qr (k)
+            sink = min (qr (k), sink, fac_r2g * tc / icpk (k))
 
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., - sink, 0., 0., sink, te8 (k), cvm (k), tz (k), &
@@ -4842,8 +4863,8 @@ subroutine psmlt_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
         
         if (tc .ge. 0. .and. qs (k) .gt. qcmin) then
             
-            sink = min (1., (tc * 0.1) ** 2) * qs (k)
-            sink = min (sink, fac_smlt * tc / icpk (k))
+            sink = (tc * 0.1) ** 2 * qs (k)
+            sink = min (qs (k), sink, fac_smlt * tc / icpk (k))
             tmp = min (sink, dim (qs_mlt, ql (k)))
             
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
@@ -4882,13 +4903,15 @@ subroutine praut_simp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg)
 
     integer :: k
     
-    real :: sink, fac_l2r
+    real :: tc, sink, fac_l2r
     
     fac_l2r = 1. - exp (- dts / tau_l2r)
 
     do k = ks, ke
 
-        if (tz (k) .gt. t_wfr .and. ql (k) .gt. ql0_max) then
+        tc = tz (k) - t_wfr
+
+        if (tc .gt. 0 .and. ql (k) .gt. ql0_max) then
 
             sink = fac_l2r * (ql (k) - ql0_max)
 
@@ -4987,7 +5010,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     
     real, dimension (is:ie, ks:ke) :: qmw, qmr, qmi, qms, qmg
     
-    real :: dpg, rho, ccnw, mask, cor, tc0, bw
+    real :: dpg, rho, ccnw, mask, cor, tc, bw
     real :: lambdar, lambdas, lambdag, rei_fac
     
     real :: ccno = 90.
@@ -5086,7 +5109,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
             dpg = abs (delp (i, k)) / grav
             rho = p (i, k) / (rdgas * t (i, k))
             
-            tc0 = t (i, k) - tice
+            tc = t (i, k) - tice
             
             if (rewflag .eq. 1) then
                 
@@ -5142,7 +5165,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = 14.0 * abs (mask - 1.0) + &
-                         (8.0 + (14.0 - 8.0) * min (1.0, max (0.0, - tc0 / 30.0))) * &
+                         (8.0 + (14.0 - 8.0) * min (1.0, max (0.0, - tc / 30.0))) * &
                          (1.0 - abs (mask - 1.0))
                     rew (i, k) = rew (i, k) + (14.0 - rew (i, k)) * &
                          min (1.0, max (0.0, snowd (i) / 1000.0))
@@ -5163,11 +5186,11 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     rei_fac = log (1.0e3 * qmi (i, k) * rho)
-                    if (tc0 .lt. - 50) then
+                    if (tc .lt. - 50) then
                         rei (i, k) = beta / 9.917 * exp (0.109 * rei_fac) * 1.0e3
-                    elseif (tc0 .lt. - 40) then
+                    elseif (tc .lt. - 40) then
                         rei (i, k) = beta / 9.337 * exp (0.080 * rei_fac) * 1.0e3
-                    elseif (tc0 .lt. - 30) then
+                    elseif (tc .lt. - 30) then
                         rei (i, k) = beta / 9.208 * exp (0.055 * rei_fac) * 1.0e3
                     else
                         rei (i, k) = beta / 9.387 * exp (0.031 * rei_fac) * 1.0e3
@@ -5188,19 +5211,19 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
-                    if (tc0 .le. - 55) then
+                    if (tc .le. - 55) then
                         rei (i, k) = 15.41627
-                    elseif (tc0 .le. - 50) then
+                    elseif (tc .le. - 50) then
                         rei (i, k) = 16.60895
-                    elseif (tc0 .le. - 45) then
+                    elseif (tc .le. - 45) then
                         rei (i, k) = 32.89967
-                    elseif (tc0 .le. - 40) then
+                    elseif (tc .le. - 40) then
                         rei (i, k) = 35.29989
-                    elseif (tc0 .le. - 35) then
+                    elseif (tc .le. - 35) then
                         rei (i, k) = 55.65818
-                    elseif (tc0 .le. - 30) then
+                    elseif (tc .le. - 30) then
                         rei (i, k) = 85.19071
-                    elseif (tc0 .le. - 25) then
+                    elseif (tc .le. - 25) then
                         rei (i, k) = 72.35392
                     else
                         rei (i, k) = 92.46298
@@ -5221,7 +5244,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
                 if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
-                    rei (i, k) = 47.05 + tc0 * (0.6624 + 0.001741 * tc0)
+                    rei (i, k) = 47.05 + tc * (0.6624 + 0.001741 * tc)
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
                     qci (i, k) = 0.0
@@ -5258,7 +5281,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     bw = - 2. + 1.e-3 * log10 (rho * qmi (i, k) / 50.e-3) * &
-                        exp (1.5 * log (max (1.e-10, - tc0)))
+                        exp (1.5 * log (max (1.e-10, - tc)))
                     rei (i, k) = 377.4 + bw * (203.3 + bw * (37.91 + 2.3696 * bw))
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
@@ -5278,8 +5301,8 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     rei_fac = log (1.0e3 * qmi (i, k) * rho)
                     rei (i, k) = 45.8966 * exp (0.2214 * rei_fac) + &
-                        0.7957 * exp (0.2535 * rei_fac) * (tc0 + 190.0)
-                    rei (i, k) = (1.2351 + 0.0105 * tc0) * rei (i, k)
+                        0.7957 * exp (0.2535 * rei_fac) * (tc + 190.0)
+                    rei (i, k) = (1.2351 + 0.0105 * tc) * rei (i, k)
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
                     qci (i, k) = 0.0
@@ -5288,46 +5311,120 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
             endif
             
-            ! -----------------------------------------------------------------------
-            ! rain (Lin et al. 1983)
-            ! -----------------------------------------------------------------------
+            if (rerflag .eq. 1) then
+                
+                ! -----------------------------------------------------------------------
+                ! rain (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qmr (i, k) .gt. qcmin) then
+                    qcr (i, k) = dpg * qmr (i, k) * 1.0e3
+                    lambdar = exp (0.25 * log (normr / qmr (i, k) / rho))
+                    rer (i, k) = 0.5 * 3 / lambdar * 1.0e6
+                    rer (i, k) = max (rermin, min (rermax, rer (i, k)))
+                else
+                    qcr (i, k) = 0.0
+                    rer (i, k) = rermin
+                endif
             
-            if (qmr (i, k) .gt. qcmin) then
-                qcr (i, k) = dpg * qmr (i, k) * 1.0e3
-                lambdar = exp (0.25 * log (normr / qmr (i, k) / rho))
-                rer (i, k) = 0.5 * exp (log (gamma (4 + blin) / 6) / 0.80) / lambdar * 1.0e6
-                rer (i, k) = max (rermin, min (rermax, rer (i, k)))
-            else
-                qcr (i, k) = 0.0
-                rer (i, k) = rermin
             endif
             
-            ! -----------------------------------------------------------------------
-            ! snow (Lin et al. 1983)
-            ! -----------------------------------------------------------------------
+            if (rerflag .eq. 2) then
+                
+                ! -----------------------------------------------------------------------
+                ! rain (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qmr (i, k) .gt. qcmin) then
+                    qcr (i, k) = dpg * qmr (i, k) * 1.0e3
+                    lambdar = exp (0.25 * log (normr / qmr (i, k) / rho))
+                    rer (i, k) = 0.5 * exp (log (gamma (4 + blin) / 6) / blin) / lambdar * 1.0e6
+                    rer (i, k) = max (rermin, min (rermax, rer (i, k)))
+                else
+                    qcr (i, k) = 0.0
+                    rer (i, k) = rermin
+                endif
             
-            if (qms (i, k) .gt. qcmin) then
-                qcs (i, k) = dpg * qms (i, k) * 1.0e3
-                lambdas = exp (0.25 * log (norms / qms (i, k) / rho))
-                res (i, k) = 0.5 * exp (log (gamma (4 + dlin) / 6) / 0.25) / lambdas * 1.0e6
-                res (i, k) = max (resmin, min (resmax, res (i, k)))
-            else
-                qcs (i, k) = 0.0
-                res (i, k) = resmin
             endif
             
-            ! -----------------------------------------------------------------------
-            ! graupel (Lin et al. 1983)
-            ! -----------------------------------------------------------------------
+            if (resflag .eq. 1) then
+                
+                ! -----------------------------------------------------------------------
+                ! snow (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qms (i, k) .gt. qcmin) then
+                    qcs (i, k) = dpg * qms (i, k) * 1.0e3
+                    lambdas = exp (0.25 * log (norms / qms (i, k) / rho))
+                    res (i, k) = 0.5 * 3 / lambdas * 1.0e6
+                    res (i, k) = max (resmin, min (resmax, res (i, k)))
+                else
+                    qcs (i, k) = 0.0
+                    res (i, k) = resmin
+                endif
             
-            if (qmg (i, k) .gt. qcmin) then
-                qcg (i, k) = dpg * qmg (i, k) * 1.0e3
-                lambdag = exp (0.25 * log (normg / qmg (i, k) / rho))
-                reg (i, k) = 0.5 * exp (log (gamma (4 + flin) / 6) / 0.50) / lambdag * 1.0e6
-                reg (i, k) = max (regmin, min (regmax, reg (i, k)))
-            else
-                qcg (i, k) = 0.0
-                reg (i, k) = regmin
+            endif
+            
+            if (resflag .eq. 2) then
+                
+                ! -----------------------------------------------------------------------
+                ! snow (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qms (i, k) .gt. qcmin) then
+                    qcs (i, k) = dpg * qms (i, k) * 1.0e3
+                    lambdas = exp (0.25 * log (norms / qms (i, k) / rho))
+                    res (i, k) = 0.5 * exp (log (gamma (4 + dlin) / 6) / dlin) / lambdas * 1.0e6
+                    res (i, k) = max (resmin, min (resmax, res (i, k)))
+                else
+                    qcs (i, k) = 0.0
+                    res (i, k) = resmin
+                endif
+            
+            endif
+            
+            if (regflag .eq. 1) then
+                
+                ! -----------------------------------------------------------------------
+                ! graupel (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qmg (i, k) .gt. qcmin) then
+                    qcg (i, k) = dpg * qmg (i, k) * 1.0e3
+                    if (do_hail) then
+                        lambdag = exp (0.25 * log (normh / qmg (i, k) / rho))
+                    else
+                        lambdag = exp (0.25 * log (normg / qmg (i, k) / rho))
+                    endif
+                    reg (i, k) = 0.5 * 3 / lambdag * 1.0e6
+                    reg (i, k) = max (regmin, min (regmax, reg (i, k)))
+                else
+                    qcg (i, k) = 0.0
+                    reg (i, k) = regmin
+                endif
+            
+            endif
+            
+            if (regflag .eq. 2) then
+                
+                ! -----------------------------------------------------------------------
+                ! graupel (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qmg (i, k) .gt. qcmin) then
+                    qcg (i, k) = dpg * qmg (i, k) * 1.0e3
+                    if (do_hail) then
+                        lambdag = exp (0.25 * log (normh / qmg (i, k) / rho))
+                    else
+                        lambdag = exp (0.25 * log (normg / qmg (i, k) / rho))
+                    endif
+                    reg (i, k) = 0.5 * exp (log (gamma (4 + flin) / 6) / flin) / lambdag * 1.0e6
+                    reg (i, k) = max (regmin, min (regmax, reg (i, k)))
+                else
+                    qcg (i, k) = 0.0
+                    reg (i, k) = regmin
+                endif
+            
             endif
             
         enddo
@@ -5380,7 +5477,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
     
     real, parameter :: alpha = 0.224, MP_const = 200 * exp (1.6 * log (3.6e6))
 
-    real (kind = r_grid) :: qden, z_e, fac_r, fac_s, fac_g
+    real (kind = r_grid) :: qden, z_e, fac_r, fac_s, fac_g, fac_sw, fac_sd
     
     real, dimension (npz) :: den, denfac, qmr, qms, qmg, vtr, vts, vtg
     
@@ -5402,12 +5499,17 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
     ! constants for radar reflectivity
     ! -----------------------------------------------------------------------
 
-    if (radr_flag .eq. 1) &
+    if (radr_flag .eq. 1 .or. radr_flag .eq. 2) &
         fac_r = 720 * exp (- 0.25 * 7 * log (pi * rhor * rnzr)) * rnzr * 1.e18
 
     if (rads_flag .eq. 1) &
         fac_s = 720 * exp (- 0.25 * 7 * log (pi * rhos * rnzs)) * rnzs * 1.e18 * &
             alpha * (rhos / rhor) ** 2
+    if (rads_flag .eq. 2) then
+        fac_sw = 720 * exp (- 0.25 * 7 * log (pi * rhos * rnzs)) * rnzs * 1.e18
+        fac_sd = 720 * exp (- 0.25 * 7 * log (pi * rhos * rnzs)) * rnzs * 1.e18 * &
+            alpha * (rhos / rhoi) ** 2
+    endif
 
     if (radg_flag .eq. 1) then
         if (do_hail .and. .not. do_inline_mp) then
@@ -5416,6 +5518,13 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
         else
             fac_g = 720 * exp (- 0.25 * 7 * log (pi * rhog * rnzh)) * rnzg * 1.e18 * &
                 alpha * (rhog / rhor) ** 2
+        endif
+    endif
+    if (radg_flag .eq. 2) then
+        if (do_hail .and. .not. do_inline_mp) then
+            fac_g = 720 * exp (- 0.25 * 7 * log (pi * rhoh * rnzh)) * rnzh * 1.e18
+        else
+            fac_g = 720 * exp (- 0.25 * 7 * log (pi * rhog * rnzh)) * rnzg * 1.e18
         endif
     endif
 
@@ -5450,19 +5559,19 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
             ! fall speed
             ! -----------------------------------------------------------------------
 
-            if (radr_flag .eq. 2) then
+            if (radr_flag .eq. 3) then
                 call term_rsg (1, npz, qmr, den, denfac, vr_fac, vconr, blin, normr, &
                     vr_max, const_vr, vtr)
                 vtr = vtr / rhor
             endif
 
-            if (rads_flag .eq. 2)  then
+            if (rads_flag .eq. 3)  then
                 call term_rsg (1, npz, qms, den, denfac, vs_fac, vcons, dlin, norms, &
                     vs_max, const_vs, vts)
                 vts = vts / rhos
             endif
 
-            if (radg_flag .eq. 2)  then
+            if (radg_flag .eq. 3)  then
                 if (do_hail .and. .not. do_inline_mp) then
                     call term_rsg (1, npz, qmg, den, denfac, vg_fac, vconh, flin, normh, &
                         vg_max, const_vg, vtg)
@@ -5483,10 +5592,10 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
 
                 if (rainwat .gt. 0) then
                     qden = den (k) * qmr (k)
-                    if (radr_flag .eq. 1) then
+                    if (radr_flag .eq. 1 .or. radr_flag .eq. 2) then
                         z_e = z_e + fac_r * exp (0.25 * 7 * log (qden))
                     endif
-                    if (radr_flag .eq. 2)  then
+                    if (radr_flag .eq. 3)  then
                         z_e = z_e + MP_const * exp (1.6 * log (qden * vtr (k)))
                     endif
                 endif
@@ -5500,7 +5609,14 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                             z_e = z_e + fac_s * exp (0.25 * 7 * log (qden)) / alpha
                         endif
                     endif
-                    if (rads_flag .eq. 2)  then
+                    if (rads_flag .eq. 2) then
+                        if (pt (i, j, k) .lt. tice) then
+                            z_e = z_e + fac_sd * exp (0.25 * 7 * log (qden))
+                        else
+                            z_e = z_e + fac_sw * exp (0.25 * 7 * log (qden))
+                        endif
+                    endif
+                    if (rads_flag .eq. 3)  then
                         z_e = z_e + MP_const * exp (1.6 * log (qden * vts (k)))
                     endif
                 endif
@@ -5514,7 +5630,10 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                             z_e = z_e + fac_g * exp (0.25 * 7 * log (qden)) / alpha
                         endif
                     endif
-                    if (radg_flag .eq. 2)  then
+                    if (radg_flag .eq. 2) then
+                        z_e = z_e + fac_g * exp (0.25 * 7 * log (qden))
+                    endif
+                    if (radg_flag .eq. 3)  then
                         z_e = z_e + MP_const * exp (1.6 * log (qden * vtg (k)))
                     endif
                 endif
