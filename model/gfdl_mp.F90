@@ -167,7 +167,7 @@ module gfdl_mp_mod
     ! 1: GFDL cloud scheme
     ! 2: Xu and Randall (1996)
     ! 3: Park et al. (2016)
-    ! 4: Pultepe and Isaac (2007)
+    ! 4: Gultepe and Isaac (2007)
     
     integer :: icloud_f = 0 ! GFDL cloud scheme
     ! 0: subgrid variability based scheme
