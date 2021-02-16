@@ -540,7 +540,7 @@ contains
     end if
 
    if (Atm(n)%flagstruct%read_ec_sst) then
-       call get_ec_sst(Time, isc, iec, jsc, jec, Atm(n)%ts(isc:iec,jsc:jec))
+       call get_ec_sst(Time, isc, iec, jsc, jec, Atm(n)%ts(isc:iec,jsc:jec), Atm(n)%ci)
    endif
 
    call mpp_clock_end (id_subgridz)
@@ -1627,6 +1627,7 @@ contains
        i = Atm_block%index(nb)%ii(ix)
        j = Atm_block%index(nb)%jj(ix)
        IPD_Data(nb)%Statein%sst(ix) = _DBL_(_RL_(Atm(mygrid)%ts(i,j)))
+       if (Atm(mygrid)%flagstruct%read_ec_sst) IPD_Data(nb)%Statein%ci(ix) = _DBL_(_RL_(Atm(mygrid)%ci(i,j)))
      enddo
 
      do k = 1, npz
