@@ -592,7 +592,7 @@ subroutine setup_mp
     ! terminal velocities parameters of rain, snow, and graupel or hail, Lin et al. (1983)
     ! -----------------------------------------------------------------------
     
-    gcon = 40.74 ! 4*g*rhog/(3*CD*rho0) in Lin et al. (1983)
+    gcon = 40.74 ! (4*g*rhog/(3*CD*rho0))**0.5 in Lin et al. (1983)
     
     vconr = alin * gamma (4 + blin) / 6.0
     vcons = clin * gamma (4 + dlin) / 6.0
@@ -3021,7 +3021,7 @@ subroutine psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, d
             endif
             
             pgfr = dts * cgfr (1) / den (k) * (exp (- cgfr (2) * tc) - 1.) * &
-                exp (1.75 * log (qr (k) * den (k)))
+                exp (0.25 * 7 * log (qr (k) * den (k)))
             
             sink = psacr + pgfr
             factor = min (sink, qr (k), - tc / icpk (k)) / max (sink, qcmin)
