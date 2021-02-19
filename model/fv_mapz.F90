@@ -159,7 +159,7 @@ contains
   real, allocatable, dimension(:,:) :: vulcan_pe3
   integer:: i,j,k
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
-  integer:: ccn_cm3, cin_cm3
+  integer:: ccn_cm3, cin_cm3, aerosol
 
        k1k = rdgas/cv_air   ! akap / (1.-akap) = rg/Cv=0.4
         rg = rdgas
@@ -174,6 +174,7 @@ contains
        cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
        ccn_cm3 = get_tracer_index (MODEL_ATMOS, 'ccn_cm3')
        cin_cm3 = get_tracer_index (MODEL_ATMOS, 'cin_cm3')
+       aerosol = get_tracer_index (MODEL_ATMOS, 'aerosol')
 
        if (allocated(lagrangian_tendency_of_hydrostatic_pressure)) allocate(vulcan_pe3(is:ie+1,km+1))
 
@@ -789,14 +790,16 @@ endif        ! end last_step check
 !$OMP parallel do default(none) shared(is,ie,js,je,isd,jsd,kmp,km,pe,te,delp,hydrostatic,hs, &
 !$OMP                                  pt,peln,delz,rainwat,liq_wat,ice_wat,snowwat,graupel,q_con, &
 !$OMP                                  sphum,pkz,last_step,consv,te0_2d,gridstruct,q,mdt,cld_amt, &
-!$OMP                                  cappa,rrg,akap,ccn_cm3,cin_cm3,inline_mp) &
+!$OMP                                  cappa,rrg,akap,ccn_cm3,cin_cm3,inline_mp,aerosol) &
 !$OMP                          private(q2,q3,gsize,dz)
 
         do j = js, je
 
             gsize(is:ie) = sqrt(gridstruct%area_64(is:ie,j))
 
-            if (ccn_cm3 .gt. 0) then
+            if (aerosol .gt. 0) then
+                q2(is:ie,kmp:km) = q(is:ie,j,kmp:km,aerosol)
+            elseif (ccn_cm3 .gt. 0) then
                 q2(is:ie,kmp:km) = q(is:ie,j,kmp:km,ccn_cm3)
             else
                 q2(is:ie,kmp:km) = 0.0
@@ -889,14 +892,16 @@ endif        ! end last_step check
 !$OMP parallel do default(none) shared(is,ie,js,je,isd,jsd,kmp,km,pe,ua,va,te,delp,hydrostatic,hs, &
 !$OMP                                  pt,peln,delz,rainwat,liq_wat,ice_wat,snowwat,graupel,q_con, &
 !$OMP                                  sphum,w,pk,pkz,last_step,consv,te0_2d,gridstruct,q,mdt,cld_amt, &
-!$OMP                                  cappa,rrg,akap,ccn_cm3,cin_cm3,inline_mp,do_inline_mp,ps) &
+!$OMP                                  cappa,rrg,akap,ccn_cm3,cin_cm3,inline_mp,do_inline_mp,ps,aerosol) &
 !$OMP                          private(u_dt,v_dt,q2,q3,gsize,dz,wa)
 
         do j = js, je
 
             gsize(is:ie) = sqrt(gridstruct%area_64(is:ie,j))
 
-            if (ccn_cm3 .gt. 0) then
+            if (aerosol .gt. 0) then
+                q2(is:ie,kmp:km) = q(is:ie,j,kmp:km,aerosol)
+            elseif (ccn_cm3 .gt. 0) then
                 q2(is:ie,kmp:km) = q(is:ie,j,kmp:km,ccn_cm3)
             else
                 q2(is:ie,kmp:km) = 0.0
