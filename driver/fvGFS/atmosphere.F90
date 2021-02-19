@@ -341,7 +341,6 @@ contains
    endif
    call fv_io_register_nudge_restart ( Atm )
 
-
    if ( Atm(mygrid)%flagstruct%na_init>0 ) then
       call nullify_domain ( )
       if ( .not. Atm(mygrid)%flagstruct%hydrostatic ) then
