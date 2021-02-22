@@ -56,6 +56,7 @@ use field_manager_mod,      only: MODEL_ATMOS
 use tracer_manager_mod,     only: get_tracer_index, get_number_tracers, &
                                   NO_TRACER, get_tracer_names
 use IPD_typedefs,           only: IPD_data_type, kind_phys
+use data_override_mod,      only: data_override_init
 
 !-----------------
 ! FV core modules:
@@ -366,6 +367,8 @@ contains
 
    call set_domain(Atm(mygrid)%domain)
 
+   call data_override_init(Atm_domain_in = Atm(mygrid)%domain)
+   
  end subroutine atmosphere_init
 
 
@@ -537,7 +540,7 @@ contains
     end if
 
    if (Atm(n)%flagstruct%read_ec_sst) then
-       call get_ec_sst(Time, isc, iec, jsc, jec, Atm(n)%ts(isc:iec,jsc:jec))
+       call get_ec_sst(Time, isc, iec, jsc, jec, Atm(n)%ts(isc:iec,jsc:jec), Atm(n)%ci)
    endif
 
    call mpp_clock_end (id_subgridz)
@@ -1624,6 +1627,7 @@ contains
        i = Atm_block%index(nb)%ii(ix)
        j = Atm_block%index(nb)%jj(ix)
        IPD_Data(nb)%Statein%sst(ix) = _DBL_(_RL_(Atm(mygrid)%ts(i,j)))
+       if (Atm(mygrid)%flagstruct%read_ec_sst) IPD_Data(nb)%Statein%ci(ix) = _DBL_(_RL_(Atm(mygrid)%ci(i,j)))
      enddo
 
      do k = 1, npz
