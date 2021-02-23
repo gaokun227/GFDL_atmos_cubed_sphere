@@ -360,7 +360,7 @@ contains
    call nullify_domain()
    call fv_diag(Atm(mygrid:mygrid), zvir, Time, -1)
    if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
-      call fv_coarse_diag(Atm(mygrid:mygrid), fv_time)
+      call fv_coarse_diag(Atm(mygrid:mygrid), fv_time, zvir)
    endif
 #endif
 
@@ -567,7 +567,7 @@ contains
       call fv_diag(Atm(mygrid:mygrid), zvir, fv_time, Atm(mygrid)%flagstruct%print_freq)
       call fv_nggps_diag(Atm(mygrid:mygrid), zvir, fv_time)
       if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
-         call fv_coarse_diag(Atm(mygrid:mygrid), fv_time)
+         call fv_coarse_diag(Atm(mygrid:mygrid), fv_time, zvir)
       endif
       first_diag = .false.
       call timing_off('FV_DIAG')
@@ -1300,7 +1300,7 @@ contains
      call timing_on('FV_DIAG')
      call fv_diag(Atm(mygrid:mygrid), zvir, fv_time, Atm(mygrid)%flagstruct%print_freq)
      if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
-        call fv_coarse_diag(Atm(mygrid:mygrid), fv_time)
+        call fv_coarse_diag(Atm(mygrid:mygrid), fv_time, zvir)
      endif
      first_diag = .false.
      call timing_off('FV_DIAG')
