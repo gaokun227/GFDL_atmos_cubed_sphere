@@ -639,6 +639,15 @@ module fv_arrays_mod
 
   end type nudge_diag_type
 
+  type sg_diag_type
+
+     real, _ALLOCATABLE :: t_dt(:,:,:)
+     real, _ALLOCATABLE :: u_dt(:,:,:)
+     real, _ALLOCATABLE :: v_dt(:,:,:)
+     real, _ALLOCATABLE :: qv_dt(:,:,:)
+
+  end type sg_diag_type
+
   type coarse_restart_type
 
      real, _ALLOCATABLE :: u(:,:,:)
@@ -868,6 +877,7 @@ module fv_arrays_mod
      type(inline_mp_type) :: inline_mp
      type(phys_diag_type) :: phys_diag
      type(nudge_diag_type) :: nudge_diag
+     type(sg_diag_type) :: sg_diag
      type(coarse_restart_type) :: coarse_restart
      type(fv_coarse_graining_type) :: coarse_graining
      

@@ -524,20 +524,20 @@ contains
     endif
 #endif
 
-    if (Atm(1)%idiag%id_u_dt_sg > 0) then
-       used = send_data(Atm(1)%idiag%id_u_dt_sg, u_dt(isc:iec,jsc:jec,:), fv_time)
-    end if
-    if (Atm(1)%idiag%id_v_dt_sg > 0) then
-       used = send_data(Atm(1)%idiag%id_v_dt_sg, v_dt(isc:iec,jsc:jec,:), fv_time)
-    end if
-    if (Atm(1)%idiag%id_t_dt_sg > 0) then
+    if (allocated(Atm(n)%sg_diag%u_dt)) then
+       Atm(n)%sg_diag%u_dt = u_dt(isc:iec,jsc:jec,:)
+    endif
+    if (allocated(Atm(n)%sg_diag%v_dt)) then
+       Atm(n)%sg_diag%v_dt = v_dt(isc:iec,jsc:jec,:)
+    endif
+    if (allocated(Atm(n)%sg_diag%t_dt)) then
        t_dt(:,:,:) = rdt*(Atm(1)%pt(isc:iec,jsc:jec,:) - t_dt(:,:,:))
-       used = send_data(Atm(1)%idiag%id_t_dt_sg, t_dt, fv_time)
-    end if
-    if (Atm(1)%idiag%id_qv_dt_sg > 0) then
+       Atm(n)%sg_diag%t_dt = t_dt(isc:iec,jsc:jec,:)
+    endif
+    if (allocated(Atm(n)%sg_diag%qv_dt)) then
        qv_dt(:,:,:) = rdt*(Atm(1)%q(isc:iec,jsc:jec,:,sphum) - qv_dt(:,:,:))
-       used = send_data(Atm(1)%idiag%id_qv_dt_sg, qv_dt, fv_time)
-    end if
+       Atm(n)%sg_diag%qv_dt = qv_dt(isc:iec,jsc:jec,:)
+    endif
 
    if (Atm(n)%flagstruct%read_ec_sst) then
        call get_ec_sst(Time, isc, iec, jsc, jec, Atm(n)%ts(isc:iec,jsc:jec), Atm(n)%ci)
