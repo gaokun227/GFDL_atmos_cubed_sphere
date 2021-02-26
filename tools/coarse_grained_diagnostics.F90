@@ -411,6 +411,38 @@ contains
     coarse_diagnostics(index)%description = 'coarse-grained meridional wind tendency from GFDL MP'
     coarse_diagnostics(index)%units = 'm/s/s'
     coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 't_dt_sg_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained temperature tendency from 2dz filter'
+    coarse_diagnostics(index)%units = 'K/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'u_dt_sg_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained zonal wind tendency from 2dz filter'
+    coarse_diagnostics(index)%units = 'm/s**2'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'v_dt_sg_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained meridional wind tendency from 2dz filter'
+    coarse_diagnostics(index)%units = 'm/s**2'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'qv_dt_sg_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained specific humidity tendency from 2dz filter'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
     
     ! Vertically integrated diagnostics
     index = index + 1
@@ -952,6 +984,31 @@ contains
              Atm(tile_count)%inline_mp%v_dt(is:ie,js:je,1:npz) = 0.0
           endif
           coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%v_dt(is:ie,js:je,1:npz)
+       elseif (coarse_diagnostic%name .eq. 't_dt_sg_coarse') then
+          if (.not. allocated(Atm(tile_count)%sg_diag%t_dt)) then
+             allocate(Atm(tile_count)%sg_diag%t_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%sg_diag%t_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%sg_diag%t_dt(is:ie,js:je,1:npz)
+       elseif (coarse_diagnostic%name .eq. 'u_dt_sg_coarse') then
+          if (.not. allocated(Atm(tile_count)%sg_diag%u_dt)) then
+             allocate(Atm(tile_count)%sg_diag%u_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%sg_diag%u_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%sg_diag%u_dt(is:ie,js:je,1:npz)
+       ! Note: don't use ends_with here, because qv_dt_sg_coarse also ends with v_dt_sg_coarse.
+       elseif (coarse_diagnostic%name .eq. 'v_dt_sg_coarse') then
+          if (.not. allocated(Atm(tile_count)%sg_diag%v_dt)) then
+             allocate(Atm(tile_count)%sg_diag%v_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%sg_diag%v_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%sg_diag%v_dt(is:ie,js:je,1:npz)
+       elseif (coarse_diagnostic%name .eq. 'qv_dt_sg_coarse') then
+          if (.not. allocated(Atm(tile_count)%sg_diag%qv_dt)) then
+             allocate(Atm(tile_count)%sg_diag%qv_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%sg_diag%qv_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%sg_diag%qv_dt(is:ie,js:je,1:npz)
        endif
     endif
   end subroutine maybe_allocate_reference_array
