@@ -4673,10 +4673,10 @@ function pmlt (tc, dq, qden, pxacw, pxacr, c, den, denfac, lin, mu, lcpk, icpk, 
     
     real (kind = r_grid), intent (in) :: cvm
     
-    pmlt = (c (1) / icpk * cvm * tc / den - c (2) * lcpk / icpk * dq) * &
+    pmlt = (c (1) / (icpk * cvm) * tc / den - c (2) * lcpk / icpk * dq) * &
         exp (0.25 * (1 + mu) * log (qden)) * &
         vent_coeff (qden, c (3), c (4), denfac, lin, mu) + &
-        c_liq / icpk * cvm * tc * (pxacw + pxacr)
+        c_liq / (icpk * cvm) * tc * (pxacw + pxacr)
     
 end function pmlt
 
