@@ -573,7 +573,7 @@ subroutine setup_mp
     
     integer :: i, k
     
-    real :: gcon, hcon, scm3, pisq, act (8)
+    real :: gcon, hcon, scm3, pisq, act (8), occ (3)
     
     ! -----------------------------------------------------------------------
     ! complete freezing temperature
@@ -704,9 +704,13 @@ subroutine setup_mp
     acc (7) = acc (1)
     acc (8) = acc (6)
 
+    occ (1) = 1.
+    occ (2) = 2.
+    occ (3) = 1.
+
     do i = 1, 3
         do k = 1, 4
-            acco (i, k) = gamma (6 + acc (2 * k - 1) - i) * gamma (acc (2 * k) + i - 1) / &
+            acco (i, k) = occ (i) * gamma (6 + acc (2 * k - 1) - i) * gamma (acc (2 * k) + i - 1) / &
                 (exp (0.25 * (6 + acc (2 * k - 1) - i) * log (act (2 * k - 1))) * &
                 exp (0.25 * (acc (2 * k) + i - 1) * log (act (2 * k))))
         enddo
@@ -4675,10 +4679,10 @@ function pmlt (tc, dq, qden, pxacw, pxacr, c, den, denfac, lin, mu, lcpk, icpk, 
     
     real (kind = r_grid), intent (in) :: cvm
     
-    pmlt = (c (1) / icpk * cvm * tc / den - c (2) * lcpk / icpk * dq) * &
+    pmlt = (c (1) / (icpk * cvm) * tc / den - c (2) * lcpk / icpk * dq) * &
         exp (0.25 * (1 + mu) * log (qden)) * &
         vent_coeff (qden, c (3), c (4), denfac, lin, mu) + &
-        c_liq / icpk * cvm * tc * (pxacw + pxacr)
+        c_liq / (icpk * cvm) * tc * (pxacw + pxacr)
     
 end function pmlt
 
