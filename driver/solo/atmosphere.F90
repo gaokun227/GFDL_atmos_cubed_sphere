@@ -52,7 +52,7 @@ use fv_restart_mod,     only: fv_restart
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
 use gfdl_cld_mp_mod,    only: gfdl_cld_mp_init, gfdl_cld_mp_end
-use gfdl_mp_mod,        only: gfdl_mp_init
+use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
 use cld_eff_rad_mod,    only: cld_eff_rad_init
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
 use field_manager_mod,  only: MODEL_ATMOS
@@ -280,7 +280,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Backward
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, -dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -294,7 +294,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Nudging back to IC
 !$omp parallel do default(shared)
        do k=1,npz
@@ -341,7 +341,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Forwardward call
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -355,7 +355,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%lagrangian_tendency_of_hydrostatic_pressure)
 ! Nudging back to IC
 !$omp parallel do default(shared)
        do k=1,npz
@@ -453,7 +453,7 @@ contains
             Atm(n)%ak, Atm(n)%bk, Atm(n)%mfx, Atm(n)%mfy, Atm(n)%cx, Atm(n)%cy,    &
             Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z, Atm(n)%gridstruct, Atm(n)%flagstruct, &
             Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid, Atm(n)%domain, &
-            Atm(n)%inline_mp, time_total=time_total)
+            Atm(n)%inline_mp, Atm(n)%lagrangian_tendency_of_hydrostatic_pressure, time_total=time_total)
                                               call timing_off('fv_dynamics')
     end do
 
