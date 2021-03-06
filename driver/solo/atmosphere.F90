@@ -52,9 +52,9 @@ use fv_restart_mod,     only: fv_restart
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
 use gfdl_cld_mp_mod,    only: gfdl_cld_mp_init, gfdl_cld_mp_end
+use gfdl_mp_mod,        only: gfdl_mp_init
 use cld_eff_rad_mod,    only: cld_eff_rad_init
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
-use fv_mp_mod,          only: switch_current_Atm
 use field_manager_mod,  only: MODEL_ATMOS
 use tracer_manager_mod, only: get_tracer_index
 !-----------------------------------------------------------------------
@@ -136,8 +136,6 @@ contains
 
      do n=1,ngrids
 
-        call switch_current_Atm(Atm(n))
-
         isc = Atm(n)%bd%isc
         iec = Atm(n)%bd%iec
         jsc = Atm(n)%bd%jsc
@@ -165,9 +163,10 @@ contains
            if ( grids_on_this_pe(n) ) then
                 call fv_phys_init(isc,iec,jsc,jec,Atm(n)%flagstruct%nwat, Atm(n)%ts,   &
                              Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
-                if ( Atm(n)%flagstruct%nwat==6) call gfdl_cld_mp_init(mpp_pe(),  &
-                                                mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml) 
-                if ( Atm(n)%flagstruct%nwat==6) call cld_eff_rad_init(nlunit, input_nml_file, stdlog(), fn_nml)
+!                if ( Atm(n)%flagstruct%nwat==6) call gfdl_cld_mp_init(mpp_pe(),  &
+!                                                mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml) 
+!                if ( Atm(n)%flagstruct%nwat==6) call cld_eff_rad_init(nlunit, input_nml_file, stdlog(), fn_nml)
+                if ( Atm(n)%flagstruct%nwat==6) call gfdl_mp_init (mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
            endif
         endif
 
@@ -427,8 +426,6 @@ contains
           cycle
        endif
 
-       call switch_current_Atm(Atm(n))
-
        call set_domain(Atm(n)%domain)  ! needed for diagnostic output done in fv_dynamics
 
        if ( Atm(n)%flagstruct%nudge_ic )     &
@@ -456,7 +453,7 @@ contains
             Atm(n)%ak, Atm(n)%bk, Atm(n)%mfx, Atm(n)%mfy, Atm(n)%cx, Atm(n)%cy,    &
             Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z, Atm(n)%gridstruct, Atm(n)%flagstruct, &
             Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid, Atm(n)%domain, &
-            Atm(n)%inline_mp, time_total)
+            Atm(n)%inline_mp, time_total=time_total)
                                               call timing_off('fv_dynamics')
     end do
 
@@ -489,7 +486,7 @@ contains
                     Atm(n)%flagstruct%fv_sg_adj, Atm(n)%flagstruct%do_Held_Suarez,  &
                     Atm(n)%gridstruct, Atm(n)%flagstruct, Atm(n)%neststruct,        &
                     Atm(n)%flagstruct%nwat, Atm(n)%bd,                              &
-                    Atm(n)%domain, fv_time, time_total)
+                    Atm(n)%domain, fv_time, Atm(n)%phys_diag, Atm(n)%nudge_diag, time_total)
                                                         call timing_off('FV_PHYS')
        endif
 
@@ -536,7 +533,8 @@ contains
     call get_time (fv_time, seconds,  days)
 
     do n=1,ngrids
-       if ( Atm(n)%flagstruct%moist_phys .and. Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(N)) call gfdl_cld_mp_end
+       if ( Atm(n)%flagstruct%moist_phys .and. Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(N)) call gfdl_mp_end
+       !if ( Atm(n)%flagstruct%moist_phys .and. Atm(n)%flagstruct%nwat==6 .and. grids_on_this_pe(N)) call gfdl_cld_mp_end
     enddo
 
     call fv_end(Atm, mytile)
