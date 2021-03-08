@@ -30,8 +30,6 @@
 
 module gfdl_mp_mod
     
-    use platform_mod, only: r_grid => r8_kind
-    
     implicit none
     
     private
@@ -76,6 +74,12 @@ module gfdl_mp_mod
     public :: fast_sat_adj, cld_eff_rad, rad_ref
     public :: qs_init, wqs, mqs, mqs3d
     public :: c_liq, c_ice, rhow, wet_bulb
+
+    ! -----------------------------------------------------------------------
+    ! precision definition
+    ! -----------------------------------------------------------------------
+    
+    integer, parameter :: r8 = 8 ! double precision
     
     ! -----------------------------------------------------------------------
     ! initialization conditions
@@ -120,11 +124,11 @@ module gfdl_mp_mod
     real, parameter :: vdifu = 2.11e-5 ! diffusivity of water vapor in air (cm^2/s)
     real, parameter :: tcond = 2.36e-2 ! thermal conductivity of air (J/m/s/K)
 
-    real (kind = r_grid), parameter :: lv0 = hlv - dc_vap * tice ! 3.14893552e6, evaporation latent heat coeff. at 0 deg K (J/kg)
-    real (kind = r_grid), parameter :: li0 = hlf - dc_ice * tice ! - 2.2691392e5, fussion latent heat coeff. at 0 deg K (J/kg)
-    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coeff. at 0 deg K (J/kg)
+    real (kind = r8), parameter :: lv0 = hlv - dc_vap * tice ! 3.14893552e6, evaporation latent heat coeff. at 0 deg K (J/kg)
+    real (kind = r8), parameter :: li0 = hlf - dc_ice * tice ! - 2.2691392e5, fussion latent heat coeff. at 0 deg K (J/kg)
+    real (kind = r8), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coeff. at 0 deg K (J/kg)
     
-    real (kind = r_grid), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg C (Pa)
+    real (kind = r8), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg C (Pa)
     
     ! -----------------------------------------------------------------------
     ! predefined parameters
@@ -167,7 +171,7 @@ module gfdl_mp_mod
     
     real, parameter :: dt_fr = 8.0 ! t_wfr - dt_fr: minimum temperature water can exist (Moore and Molinero 2011)
     
-    real (kind = r_grid), parameter :: one_r8 = 1.0 ! constant 1
+    real (kind = r8), parameter :: one_r8 = 1.0 ! constant 1
     
     ! -----------------------------------------------------------------------
     ! namelist parameters
@@ -390,9 +394,9 @@ module gfdl_mp_mod
     
     real :: t_wfr, fac_rc, c_air, c_vap, d0_vap
 
-    real (kind = r_grid) :: lv00, li00, li20, cpaut
-    real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
-    real (kind = r_grid) :: vconr, vcons, vcong, vconh, normr, norms, normg, normh
+    real (kind = r8) :: lv00, li00, li20, cpaut
+    real (kind = r8) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
+    real (kind = r8) :: vconr, vcons, vcong, vconh, normr, norms, normg, normh
     
     real, allocatable :: table0 (:), table1 (:), table2 (:), table3 (:), table4 (:)
     real, allocatable :: des0 (:), des1 (:), des2 (:), des3 (:), des4 (:)
@@ -885,15 +889,15 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
     real, dimension (ks:ke) :: den, pz, denfac, ccn, cin
     real, dimension (ks:ke) :: u, v, w
 
-    real (kind = r_grid) :: con_r8, c8
+    real (kind = r8) :: con_r8, c8
 
-    real (kind = r_grid), dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
-    real (kind = r_grid), dimension (is:ie, ks:ke) :: te_beg_0, te_end_0, tw_beg_0, tw_end_0
+    real (kind = r8), dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
+    real (kind = r8), dimension (is:ie, ks:ke) :: te_beg_0, te_end_0, tw_beg_0, tw_end_0
 
-    real (kind = r_grid), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
-    real (kind = r_grid), dimension (is:ie) :: te_b_beg_0, te_b_end_0, tw_b_beg_0, tw_b_end_0
+    real (kind = r8), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
+    real (kind = r8), dimension (is:ie) :: te_b_beg_0, te_b_end_0, tw_b_beg_0, tw_b_end_0
 
-    real (kind = r_grid), dimension (ks:ke) :: tz
+    real (kind = r8), dimension (ks:ke) :: tz
     
     ! -----------------------------------------------------------------------
     ! time steps
@@ -1279,7 +1283,7 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
 
     real, intent (in), dimension (ks:ke) :: dp
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
@@ -1295,7 +1299,7 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
     
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
     
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+    real (kind = r8), dimension (ks:ke) :: cvm, te8
 
     ! -----------------------------------------------------------------------
     ! initialization
@@ -1403,13 +1407,13 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, u, v, w, cin
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     
     real, intent (inout) :: rain, snow, ice, graupel
     real, intent (inout) :: condensation, deposition
     real, intent (inout) :: evaporation, sublimation
     
-    real (kind = r_grid), intent (inout) :: dte
+    real (kind = r8), intent (inout) :: dte
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -1488,7 +1492,7 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, cin
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     
     real, intent (inout) :: condensation, deposition
     real, intent (inout) :: evaporation, sublimation
@@ -1501,7 +1505,7 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
 
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+    real (kind = r8), dimension (ks:ke) :: cvm, te8
 
     ! -----------------------------------------------------------------------
     ! initialization
@@ -1632,9 +1636,9 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     real, intent (out), dimension (ks:ke) :: vtr, vti, vts, vtg
 
-    real (kind = r_grid), intent (inout) :: dte
+    real (kind = r8), intent (inout) :: dte
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -1644,7 +1648,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), dimension (ks:ke) :: te8, cvm
+    real (kind = r8), dimension (ks:ke) :: te8, cvm
 
     r1 = 0.
     i1 = 0.
@@ -1735,7 +1739,7 @@ subroutine term_ice (ks, ke, tz, q, den, v_fac, v_max, const_v, vt)
     
     real, intent (in), dimension (ks:ke) :: q, den
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: tz
+    real (kind = r8), intent (in), dimension (ks:ke) :: tz
     
     real, intent (out), dimension (ks:ke) :: vt
     
@@ -1796,7 +1800,7 @@ subroutine term_rsg (ks, ke, q, den, denfac, v_fac, vcon, lin, norm, v_max, cons
     
     real, intent (in) :: v_fac, lin, v_max
     
-    real (kind = r_grid), intent (in) :: vcon, norm
+    real (kind = r8), intent (in) :: vcon, norm
     
     real, intent (in), dimension (ks:ke) :: q, den, denfac
     
@@ -1845,13 +1849,13 @@ subroutine sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     real, intent (in), dimension (ks:ke) :: vt, dp, dz, icpk
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: cvm
+    real (kind = r8), intent (in), dimension (ks:ke) :: cvm
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
     real, intent (inout) :: r1
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     character (len = 2), intent (in) :: qflag
 
@@ -1944,9 +1948,9 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     real, intent (inout) :: x1
 
-    real (kind = r_grid), intent (inout) :: dte
+    real (kind = r8), intent (inout) :: dte
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -1962,7 +1966,7 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
 
     real, dimension (ks:ke + 1) :: ze, zt
 
-    real (kind = r_grid), dimension (ks:ke) :: te1, te2
+    real (kind = r8), dimension (ks:ke) :: te1, te2
 
     call zezt (ks, ke, dts, zs, dz, vt, ze, zt)
 
@@ -2196,7 +2200,7 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     real, intent (out) :: reevap
 
@@ -2244,7 +2248,7 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
 
     real, intent (in), dimension (ks:ke) :: den, denfac, dp
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     real, intent (inout), dimension (ks:ke) :: qv, qr, ql, qi, qs, qg
 
@@ -2261,7 +2265,7 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
     
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+    real (kind = r8), dimension (ks:ke) :: cvm, te8
 
     ! -----------------------------------------------------------------------
     ! initialization
@@ -2359,7 +2363,7 @@ subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
 
     real, intent (in), dimension (ks:ke) :: den, denfac
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     real, intent (inout), dimension (ks:ke) :: qv, qr, ql, qi, qs, qg
 
@@ -2374,7 +2378,7 @@ subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
     
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+    real (kind = r8), dimension (ks:ke) :: cvm, te8
 
     do k = ks, ke
 
@@ -2413,7 +2417,7 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -2507,7 +2511,7 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -2515,7 +2519,7 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
 
     real, dimension (ks:ke) :: di, q_liq, q_sol, lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+    real (kind = r8), dimension (ks:ke) :: cvm, te8
 
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
@@ -2622,12 +2626,12 @@ subroutine pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk,
 
     real, intent (in) :: dts
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -2675,12 +2679,12 @@ subroutine pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, icpk, 
 
     real, intent (in), dimension (ks:ke) :: den
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -2731,12 +2735,12 @@ subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
 
     real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -2807,12 +2811,12 @@ subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
 
     real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vtg
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -2888,7 +2892,7 @@ subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -2942,7 +2946,7 @@ subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, di
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3005,7 +3009,7 @@ subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3062,12 +3066,12 @@ subroutine psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, d
 
     real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3130,7 +3134,7 @@ subroutine pgacs (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, vts, vtg)
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3183,7 +3187,7 @@ subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3236,12 +3240,12 @@ subroutine pgacw_pgacr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, 
 
     real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vtg
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3315,7 +3319,7 @@ subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
 
     real, intent (out) :: cond, dep, reevap, sub
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3323,7 +3327,7 @@ subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
 
     real, dimension (ks:ke) :: q_liq, q_sol, q_cond, lcpk, icpk, tcpk, tcp3
     
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+    real (kind = r8), dimension (ks:ke) :: cvm, te8
 
     ! -----------------------------------------------------------------------
     ! initialization
@@ -3417,12 +3421,12 @@ subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
 
     real, intent (in), dimension (ks:ke) :: den, dp
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     real, intent (out) :: dep, reevap, sub
 
@@ -3501,12 +3505,12 @@ subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
 
     real, intent (in), dimension (ks:ke) :: den, dp
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     real, intent (out) :: cond, reevap
 
@@ -3566,12 +3570,12 @@ subroutine pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk
     
     integer, intent (in) :: ks, ke
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3618,12 +3622,12 @@ subroutine pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, ccn, lcpk, 
 
     real, intent (in), dimension (ks:ke) :: ccn
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3671,12 +3675,12 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
 
     real, intent (in), dimension (ks:ke) :: den, dp
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, cin
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     real, intent (out) :: dep, sub
 
@@ -3764,12 +3768,12 @@ subroutine psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
 
     real, intent (in), dimension (ks:ke) :: den, dp, denfac
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     real, intent (out) :: dep, sub
 
@@ -3833,12 +3837,12 @@ subroutine pgdep_pgsub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
 
     real, intent (in), dimension (ks:ke) :: den, dp, denfac
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     real, intent (out) :: dep, sub
 
@@ -3905,7 +3909,7 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
 
     real, intent (in), dimension (ks:ke) :: pz, den
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: tz
+    real (kind = r8), intent (in), dimension (ks:ke) :: tz
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
 
@@ -3922,7 +3926,7 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
 
     real, dimension (ks:ke) :: q_liq, q_sol, q_cond, lcpk, icpk, tcpk, tcp3
     
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
+    real (kind = r8), dimension (ks:ke) :: cvm, te8
 
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
@@ -4653,7 +4657,7 @@ function psub (t2, dq, qden, qsat, c, den, denfac, lin, mu, cpk, cvm)
     
     real, intent (in) :: t2, dq, qden, qsat, c (5), den, denfac, lin, cpk, mu
     
-    real (kind = r_grid), intent (in) :: cvm
+    real (kind = r8), intent (in) :: cvm
     
     psub = c (1) * t2 * dq * exp (0.25 * (1 + mu) * log (qden)) * &
         vent_coeff (qden, c (2), c (3), denfac, lin, mu) / &
@@ -4677,7 +4681,7 @@ function pmlt (tc, dq, qden, pxacw, pxacr, c, den, denfac, lin, mu, lcpk, icpk, 
     
     real, intent (in) :: tc, dq, qden, pxacw, pxacr, c (4), den, denfac, lin, lcpk, icpk, mu
     
-    real (kind = r_grid), intent (in) :: cvm
+    real (kind = r8), intent (in) :: cvm
     
     pmlt = (c (1) / (icpk * cvm) * tc / den - c (2) * lcpk / icpk * dq) * &
         exp (0.25 * (1 + mu) * log (qden)) * &
@@ -4767,7 +4771,7 @@ subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
 
     real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -4878,12 +4882,12 @@ subroutine pgfr_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
 
     real, intent (in) :: dts
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -4931,12 +4935,12 @@ subroutine psmlt_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
 
     real, intent (in) :: dts
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: cvm, tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -4986,7 +4990,7 @@ subroutine praut_simp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg)
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5035,7 +5039,7 @@ subroutine psaut_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5585,7 +5589,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
     
     real, parameter :: alpha = 0.224, MP_const = 200 * exp (1.6 * log (3.6e6))
 
-    real (kind = r_grid) :: qden, z_e, fac_r, fac_s, fac_g, fac_sw, fac_sd
+    real (kind = r8) :: qden, z_e, fac_r, fac_s, fac_g, fac_sw, fac_sd
     
     real, dimension (npz) :: den, denfac, qmr, qms, qmg, vtr, vts, vtg
     
@@ -5768,7 +5772,7 @@ function mhc3 (qv, q_liq, q_sol)
 
     implicit none
     
-    real (kind = r_grid) :: mhc3
+    real (kind = r8) :: mhc3
 
     ! -----------------------------------------------------------------------
     ! input / output arguments
@@ -5792,7 +5796,7 @@ function mhc4 (qd, qv, q_liq, q_sol)
 
     implicit none
     
-    real (kind = r_grid) :: mhc4
+    real (kind = r8) :: mhc4
 
     ! -----------------------------------------------------------------------
     ! input / output arguments
@@ -5800,7 +5804,7 @@ function mhc4 (qd, qv, q_liq, q_sol)
 
     real, intent (in) :: qv, q_liq, q_sol
 
-    real (kind = r_grid), intent (in) :: qd
+    real (kind = r8), intent (in) :: qd
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5818,7 +5822,7 @@ function mhc6 (qv, ql, qr, qi, qs, qg)
 
     implicit none
     
-    real (kind = r_grid) :: mhc6
+    real (kind = r8) :: mhc6
 
     ! -----------------------------------------------------------------------
     ! input / output arguments
@@ -5846,7 +5850,7 @@ function mte (qv, ql, qr, qi, qs, qg, tk, dp, moist_q)
 
     implicit none
 
-    real (kind = r_grid) :: mte
+    real (kind = r8) :: mte
 
     ! -----------------------------------------------------------------------
     ! input / output arguments
@@ -5856,7 +5860,7 @@ function mte (qv, ql, qr, qi, qs, qg, tk, dp, moist_q)
     
     real, intent (in) :: qv, ql, qr, qi, qs, qg, dp
 
-    real (kind = r_grid), intent (in) :: tk
+    real (kind = r8), intent (in) :: tk
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5864,7 +5868,7 @@ function mte (qv, ql, qr, qi, qs, qg, tk, dp, moist_q)
 
     real :: q_liq, q_sol, q_cond
 
-    real (kind = r_grid) :: cvm, con_r8
+    real (kind = r8) :: cvm, con_r8
 
     q_liq = ql + qr
     q_sol = qi + qs + qg
@@ -5901,15 +5905,15 @@ subroutine mtetw (ks, ke, qv, ql, qr, qi, qs, qg, tz, ua, va, wa, delp, &
 
     real, intent (in), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, ua, va, wa, delp
 
-    real (kind = r_grid), intent (in) :: dte
+    real (kind = r8), intent (in) :: dte
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: tz
+    real (kind = r8), intent (in), dimension (ks:ke) :: tz
 
-    real (kind = r_grid), intent (out) :: te_b, tw_b
+    real (kind = r8), intent (out) :: te_b, tw_b
 
-    real (kind = r_grid), intent (out), optional :: te_loss
+    real (kind = r8), intent (out), optional :: te_loss
 
-    real (kind = r_grid), intent (out), dimension (ks:ke) :: te, tw
+    real (kind = r8), intent (out), dimension (ks:ke) :: te, tw
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5919,11 +5923,11 @@ subroutine mtetw (ks, ke, qv, ql, qr, qi, qs, qg, tz, ua, va, wa, delp, &
 
     real :: q_cond
 
-    real (kind = r_grid) :: con_r8
+    real (kind = r8) :: con_r8
 
     real, dimension (ks:ke) :: q_liq, q_sol
 
-    real (kind = r_grid), dimension (ks:ke) :: cvm
+    real (kind = r8), dimension (ks:ke) :: cvm
 
      do k = ks, ke
          q_liq (k) = ql (k) + qr (k)
@@ -5971,11 +5975,11 @@ subroutine cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, &
 
     real, intent (in), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: tz
+    real (kind = r8), intent (in), dimension (ks:ke) :: tz
 
     real, intent (out), dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (out), dimension (ks:ke) :: cvm, te8
+    real (kind = r8), intent (out), dimension (ks:ke) :: cvm, te8
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -6036,13 +6040,13 @@ subroutine update_qt (qv, ql, qr, qi, qs, qg, dqv, dql, dqr, dqi, dqs, dqg, te8,
 
     real, intent (in) :: dqv, dql, dqr, dqi, dqs, dqg
 
-    real (kind = r_grid), intent (in) :: te8
+    real (kind = r8), intent (in) :: te8
 
     real, intent (inout) :: qv, ql, qr, qi, qs, qg
 
     real, intent (out) :: lcpk, icpk, tcpk, tcp3
 
-    real (kind = r_grid), intent (out) :: cvm, tk
+    real (kind = r8), intent (out) :: cvm, tk
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -6139,11 +6143,11 @@ subroutine qs_table_core (n, n_blend, do_smith_table, table)
     integer :: i
     integer, parameter :: n_min = 1600
     
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem, esh
-    real (kind = r_grid) :: wice, wh2o, fac0, fac1, fac2
-    real (kind = r_grid) :: esbasw, tbasw, esbasi, a, b, c, d, e
-    real (kind = r_grid) :: esupc (n_blend)
+    real (kind = r8) :: delt = 0.1
+    real (kind = r8) :: tmin, tem, esh
+    real (kind = r8) :: wice, wh2o, fac0, fac1, fac2
+    real (kind = r8) :: esbasw, tbasw, esbasi, a, b, c, d, e
+    real (kind = r8) :: esupc (n_blend)
     
     esbasw = 1013246.0
     tbasw = tice + 100.
@@ -6242,8 +6246,8 @@ subroutine qs_table0 (n)
 
     integer :: i
     
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem, fac0, fac1, fac2
+    real (kind = r8) :: delt = 0.1
+    real (kind = r8) :: tmin, tem, fac0, fac1, fac2
     
     tmin = tice - 160.
     
@@ -6684,7 +6688,7 @@ function wet_bulb_moist (qv, ql, qi, qr, qs, qg, tk, den)
 
     real :: lcp, q_liq, q_sol
 
-    real (kind = r_grid) :: cvm
+    real (kind = r8) :: cvm
     
     q_liq = ql + qr
     q_sol = qi + qs + qg
