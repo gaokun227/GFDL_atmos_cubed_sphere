@@ -29,7 +29,7 @@
 
 module gfdl_mp_mod
     
-    use fv_arrays_mod, only: r_grid
+    use platform_mod, only: r_grid => r8_kind
     
     implicit none
     
