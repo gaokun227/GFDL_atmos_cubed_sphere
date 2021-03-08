@@ -29,8 +29,6 @@
 
 module gfdl_cld_mp_mod
     
-    use platform_mod, only: r_grid => r8_kind
-    
     implicit none
     
     private
@@ -46,6 +44,8 @@ module gfdl_cld_mp_mod
         grav, hlv, hlf, cp_air, cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, &
         t_ice, t_wfr, e00, pi, zvir, rgrav
     
+    integer, parameter :: r8 = 8 ! double precision
+
     logical :: module_is_initialized = .false.
     logical :: qsmith_tables_initialized = .false.
     
@@ -98,8 +98,8 @@ module gfdl_cld_mp_mod
     real, parameter :: table_ice = 273.16 ! freezing point for qs table
     real :: t_wfr ! complete freezing temperature
     
-    real (kind = r_grid), parameter :: e00 = 611.21 ! ifs: saturation vapor pressure at 0 deg c
-    ! real (kind = r_grid), parameter :: e00 = 610.71 ! gfdl: saturation vapor pressure at 0 deg c
+    real (kind = r8), parameter :: e00 = 611.21 ! ifs: saturation vapor pressure at 0 deg c
+    ! real (kind = r8), parameter :: e00 = 610.71 ! gfdl: saturation vapor pressure at 0 deg c
     
     real, parameter :: hlv0 = hlv ! gfs: evaporation latent heat coefficient at 0 deg c
     ! real, parameter :: hlv0 = 2.501e6 ! emanuel value
@@ -109,8 +109,8 @@ module gfdl_cld_mp_mod
     real, parameter :: lv0 = hlv0 - dc_vap * t_ice ! 3.14893552e6, evaporation latent heat coefficient at 0 deg k
     real, parameter :: li0 = hlf0 - dc_ice * t_ice ! - 2.2691392e5, fussion latend heat coefficient at 0 deg k
     
-    real (kind = r_grid), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling
-    real (kind = r_grid), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coefficient at 0 deg k
+    real (kind = r8), parameter :: d2ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling
+    real (kind = r8), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coefficient at 0 deg k
     
     real, parameter :: qrmin = 1.e-8 ! min value for cloud condensates
     real, parameter :: qvmin = 1.e-20 ! min value for water vapor (treated as zero)
@@ -150,9 +150,9 @@ module gfdl_cld_mp_mod
     real :: lat2, lcp, icp, tcp ! used in bigg mechanism and wet bulk
     
     real :: d0_vap ! the same as dc_vap, except that cp_vap can be cp_vap or cv_vap
-    real (kind = r_grid) :: lv00, li00, li20
-    real (kind = r_grid) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
-    real (kind = r_grid), parameter :: one_r8 = 1.
+    real (kind = r8) :: lv00, li00, li20
+    real (kind = r8) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
+    real (kind = r8), parameter :: one_r8 = 1.
     
     real, allocatable :: table (:), table2 (:), table3 (:), tablew (:)
     real, allocatable :: des (:), des2 (:), des3 (:), desw (:)
@@ -509,18 +509,18 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     real, dimension (ks:ke) :: ccn, cin, c_praut, m1_rain, m1_sol, m1
     real, dimension (ks:ke) :: u0, v0, u1, v1, w1
     
-    real (kind = r_grid), dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
-    real (kind = r_grid), dimension (is:ie, ks:ke) :: te_beg_0, te_end_0, tw_beg_0, tw_end_0
-    real (kind = r_grid), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
-    real (kind = r_grid), dimension (is:ie) :: te_b_beg_0, te_b_end_0, tw_b_beg_0, tw_b_end_0
-    real (kind = r_grid), dimension (ks:ke) :: te1, te2
+    real (kind = r8), dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
+    real (kind = r8), dimension (is:ie, ks:ke) :: te_beg_0, te_end_0, tw_beg_0, tw_end_0
+    real (kind = r8), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
+    real (kind = r8), dimension (is:ie) :: te_b_beg_0, te_b_end_0, tw_b_beg_0, tw_b_end_0
+    real (kind = r8), dimension (ks:ke) :: te1, te2
     
     real :: cpaut, rh_adj, rh_rain
     real :: r1, s1, i1, g1, rdt, ccn0
     real :: dt_rain
     real :: s_leng, t_land, t_ocean, h_var, tmp
-    real (kind = r_grid), dimension (ks:ke) :: dp0, tz, cvm
-    real (kind = r_grid) :: con_r8, c8
+    real (kind = r8), dimension (ks:ke) :: dp0, tz, cvm
+    real (kind = r8) :: con_r8, c8
     real :: convt
     real :: dts, q_cond
     real :: cond, dep, reevap, sub
@@ -1015,7 +1015,7 @@ subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
     implicit none
     integer, intent (in) :: ks, ke
     real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     real, intent (in) :: cw ! heat capacity
     ! local:
     real, dimension (ks:ke) :: dgz, cv0
@@ -1055,9 +1055,9 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     real, intent (in), dimension (ks:ke) :: dp, dz, den
     real, intent (in), dimension (ks:ke) :: denfac, ccn, c_praut
     
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     real, intent (inout), dimension (ks:ke) :: vtr, qv, ql, qr, qi, qs, qg, m1_rain, w1
-    real (kind = r_grid), intent (inout) :: dte
+    real (kind = r8), intent (inout) :: dte
     real, intent (out) :: r1
     real, intent (out) :: reevap
     real, parameter :: so3 = 7. / 3.
@@ -1067,7 +1067,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     real, parameter :: thr = 1.e-8
     
     real, dimension (ks:ke) :: dl, dm
-    real (kind = r_grid), dimension (ks:ke) :: te1, te2
+    real (kind = r8), dimension (ks:ke) :: te1, te2
     real, dimension (ks:ke + 1) :: ze, zt
     real :: sink, dq, qc
     real :: qden
@@ -1295,11 +1295,11 @@ subroutine revap_racc (ks, ke, dt, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_r
     real, intent (in) :: dt ! time step (s)
     real, intent (in) :: rh_rain, h_var
     real, intent (in), dimension (ks:ke) :: den, denfac, dp
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     real, intent (inout), dimension (ks:ke) :: qv, qr, ql, qi, qs, qg
     real, intent (out) :: reevap
     ! local:
-    real (kind = r_grid), dimension (ks:ke) :: cvm
+    real (kind = r8), dimension (ks:ke) :: cvm
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk
     real :: dqv, qsat, dqsdt, evap, t2, qden, q_plus, q_minus, sink
     real :: qpz, dq, dqh, tin
@@ -1473,7 +1473,7 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     logical, intent (in) :: last_step
     integer, intent (in) :: ks, ke
     real, intent (in), dimension (ks:ke) :: p1, dp1, den, denfac, vts, vtg, vtr, ccn
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tzk
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tzk
     real, intent (inout), dimension (ks:ke) :: qvk, qlk, qrk, qik, qsk, qgk, qak
     real, intent (inout), dimension (ks:ke) :: cin
     real, intent (in) :: rh_adj, rh_rain, dts, h_var, gsize
@@ -1481,8 +1481,8 @@ subroutine icloud (ks, ke, tzk, p1, qvk, qlk, qrk, qik, qsk, qgk, dp1, den, &
     ! local:
     real, dimension (ks:ke) :: icpk, di, qim
     real, dimension (ks:ke) :: q_liq, q_sol
-    real (kind = r_grid), dimension (ks:ke) :: cvm, te8
-    real (kind = r_grid) :: tz
+    real (kind = r8), dimension (ks:ke) :: cvm, te8
+    real (kind = r8) :: tz
     real :: rdts, fac_g2v, fac_v2g, fac_i2s, fac_imlt
     real :: qv, ql, qr, qi, qs, qg, melt
     real :: pracs, psacw, pgacw, psacr, pgacr, pgaci, praci, psaci
@@ -1933,8 +1933,8 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     integer, intent (in) :: ks, ke
     real, intent (in) :: dts, rh_adj, h_var, rh_rain, gsize
     real, intent (in), dimension (ks:ke) :: p1, den, denfac, ccn, dp1
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: te8
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (in), dimension (ks:ke) :: te8
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
     real, intent (inout), dimension (ks:ke) :: cin
     logical, intent (in) :: last_step
@@ -1942,7 +1942,7 @@ subroutine subgrid_z_proc (ks, ke, p1, den, denfac, dts, rh_adj, tz, qv, ql, qr,
     ! local:
     real, dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
     real, dimension (ks:ke) :: q_liq, q_sol, q_cond
-    real (kind = r_grid), dimension (ks:ke) :: cvm
+    real (kind = r8), dimension (ks:ke) :: cvm
     real :: pidep, qi_crt
     real :: sigma, gam
     ! -----------------------------------------------------------------------
@@ -2547,9 +2547,9 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     integer, intent (in) :: ks, ke
     real, intent (in) :: dtm ! time step (s)
     real, intent (in), dimension (ks:ke) :: vtg, vts, vti, den, dp, dz
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
+    real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qg, qs, qi, m1_sol, w1
-    real (kind = r_grid), intent (inout) :: dte
+    real (kind = r8), intent (inout) :: dte
     real, intent (out) :: r1, g1, s1, i1
     ! local:
     real, dimension (ks:ke + 1) :: ze, zt
@@ -2558,7 +2558,7 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
     real :: tmp, precip, tc, sink
     real, dimension (ks:ke) :: lcpk, icpk, cvm, q_liq, q_sol
     real, dimension (ks:ke) :: m1, dm
-    real (kind = r_grid), dimension (ks:ke) :: te1, te2
+    real (kind = r8), dimension (ks:ke) :: te1, te2
     real :: zs = 0.
     real :: fac_imlt
     
@@ -3308,7 +3308,7 @@ subroutine fall_speed (ks, ke, den, qs, qi, qg, ql, tk, vts, vti, vtg)
     
     integer, intent (in) :: ks, ke
     
-    real (kind = r_grid), intent (in), dimension (ks:ke) :: tk
+    real (kind = r8), intent (in), dimension (ks:ke) :: tk
     real, intent (in), dimension (ks:ke) :: den, qs, qi, qg, ql
     real, intent (out), dimension (ks:ke) :: vts, vti, vtg
     
@@ -3953,10 +3953,10 @@ real function iqs2 (ta, den, dqdt)
     ! water - ice phase; universal dry / moist formular using air density
     ! input "den" can be either dry or moist air density
     
-    real (kind = r_grid), intent (in) :: ta
+    real (kind = r8), intent (in) :: ta
     real, intent (in) :: den
     real, intent (out) :: dqdt
-    real (kind = r_grid) :: tmin, es, ap1
+    real (kind = r8) :: tmin, es, ap1
     integer :: it
     
     tmin = table_ice - 160.
@@ -4238,8 +4238,8 @@ subroutine qs_tablew (n)
     
     integer, intent (in) :: n
     
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem, fac0, fac1, fac2
+    real (kind = r8) :: delt = 0.1
+    real (kind = r8) :: tmin, tem, fac0, fac1, fac2
     
     integer :: i
     
@@ -4270,8 +4270,8 @@ subroutine qs_table2 (n)
     
     integer, intent (in) :: n
     
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem0, tem1, fac0, fac1, fac2
+    real (kind = r8) :: delt = 0.1
+    real (kind = r8) :: tmin, tem0, tem1, fac0, fac1, fac2
     
     integer :: i, i0, i1
     
@@ -4320,9 +4320,9 @@ subroutine qs_table3 (n)
     
     integer, intent (in) :: n
     
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: esbasw, tbasw, esbasi, tmin, tem, aa, b, c, d, e
-    real (kind = r_grid) :: tem0, tem1
+    real (kind = r8) :: delt = 0.1
+    real (kind = r8) :: esbasw, tbasw, esbasi, tmin, tem, aa, b, c, d, e
+    real (kind = r8) :: tem0, tem1
     
     integer :: i, i0, i1
     
@@ -4406,10 +4406,10 @@ subroutine qs_table (n)
     
     integer, intent (in) :: n
     
-    real (kind = r_grid) :: delt = 0.1
-    real (kind = r_grid) :: tmin, tem, esh20
-    real (kind = r_grid) :: wice, wh2o, fac0, fac1, fac2
-    real (kind = r_grid) :: esupc (200)
+    real (kind = r8) :: delt = 0.1
+    real (kind = r8) :: tmin, tem, esh20
+    real (kind = r8) :: wice, wh2o, fac0, fac1, fac2
+    real (kind = r8) :: esupc (200)
     
     integer :: i
     
@@ -4521,7 +4521,7 @@ subroutine neg_adj (ks, ke, pt, dp, qv, ql, qr, qi, qs, qg, cond)
     
     integer, intent (in) :: ks, ke
     real, intent (in), dimension (ks:ke) :: dp
-    real (kind = r_grid), intent (inout), dimension (ks:ke) :: pt
+    real (kind = r8), intent (inout), dimension (ks:ke) :: pt
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (out) :: cond
     
