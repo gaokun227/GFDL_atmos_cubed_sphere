@@ -37,7 +37,7 @@ use fms_mod,               only: error_mesg, FATAL, file_exist, open_namelist_fi
 use fv_mp_mod,             only: is_master, mp_reduce_max
 use fv_diagnostics_mod,    only: prt_maxmin, gn
 
-use fv_arrays_mod,          only: fv_grid_type, fv_flags_type, fv_nest_type, fv_grid_bounds_type
+use fv_arrays_mod,          only: fv_grid_type, fv_flags_type, fv_nest_type, fv_grid_bounds_type, phys_diag_type, nudge_diag_type
 use mpp_domains_mod,       only: domain2d
 use diag_manager_mod,      only: register_diag_field, register_static_field, send_data
 use qs_tables_mod,         only: qs_wat_init, qs_wat
@@ -165,7 +165,7 @@ contains
                     oro, rayf, p_ref, fv_sg_adj,                 &
                     do_Held_Suarez, gridstruct, flagstruct,      &
                     neststruct, nwat, bd, domain,                & !S-J: Need to update fv_phys call
-                    Time, time_total)
+                    Time, phys_diag, nudge_diag, time_total)
 
     integer, INTENT(IN   ) :: npx, npy, npz
     integer, INTENT(IN   ) :: is, ie, js, je, ng, nq, nwat
@@ -197,6 +197,8 @@ contains
     real, INTENT(inout):: u_srf(is:ie,js:je)
     real, INTENT(inout):: v_srf(is:ie,js:je)
     real, INTENT(inout)::    ts(is:ie,js:je)
+    type(phys_diag_type), intent(inout) :: phys_diag
+    type(nudge_diag_type), intent(inout) :: nudge_diag
 
     type(fv_grid_type) :: gridstruct
     type(fv_flags_type) :: flagstruct
@@ -207,7 +209,7 @@ contains
     type (time_type), intent(in) :: Time
     real, INTENT(IN), optional:: time_total
     logical, intent(in) ::  hydrostatic
-    real, intent(inout) ::  delz(is:ie,js:je,npz)
+    real, intent(inout) ::  delz(is:,js:,1:)
 ! Local:
     real, parameter:: sigb = 0.7
     logical:: no_tendency = .true.
@@ -583,7 +585,7 @@ contains
                          moist_phys, Time, .false., gridstruct, &
                          gridstruct%agrid(:,:,1), gridstruct%agrid(:,:,2), &
                          npx, npy, npz, flagstruct, neststruct, bd, domain, ptop, &
-                         q_dt=q_dt)
+                         phys_diag, nudge_diag, q_dt=q_dt)
 
                         call timing_off('UPDATE_PHYS')
     endif
@@ -994,19 +996,20 @@ endif
 !!$                                  pdt, land, rain, snow, ice, graup, hydrostatic, phys_hydrostatic, &
 !!$                                  1,ie-is+1, 1,km, k_mp,npz, seconds ) !Time )
 !!$#else
-!$omp parallel do default(shared)
-   do j=js,je
-      call gfdl_cld_mp_driver(q3(is:ie,j,1:km,sphum),     q3(is:ie,j,1:km,liq_wat), q3(is:ie,j,1:km,rainwat),  &
-                                    q3(is:ie,j,1:km,ice_wat),   q3(is:ie,j,1:km,snowwat), q3(is:ie,j,1:km,graupel),  &
-                                    q3(is:ie,j,1:km,cld_amt),   q3(is:ie,j,1:km,cld_amt),   &
-                                  q_dt(is:ie,j,1:km,sphum),   q_dt(is:ie,j,1:km,liq_wat), q_dt(is:ie,j,1:km,rainwat), &
-                                  q_dt(is:ie,j,1:km,ice_wat), q_dt(is:ie,j,1:km,snowwat), q_dt(is:ie,j,1:km,graupel), &
-                                  q_dt(is:ie,j,1:km,cld_amt), t_dt(is:ie,j,1:km), t3(is:ie,j,1:km), w(is:ie,j,1:km), u3(is:ie,j,1:km), v3(is:ie,j,1:km), &
-                                  u_dt(is:ie,j,1:km),         v_dt(is:ie,j,1:km), dz(is:ie,j,1:km),      &
-                                  delp(is:ie,j,1:km), gridstruct%area(is:ie,j),  &
-                                  pdt, land(is:ie,j), rain(is:ie,j), snow(is:ie,j), ice(is:ie,j), graup(is:ie,j), hydrostatic, phys_hydrostatic, &
-                                  1,ie-is+1, 1,km, k_mp,npz, seconds ) ! Time )
-   enddo
+!$no-omp parallel do default(shared)
+!   do j=js,je  !--- ignoring for now
+!      call gfdl_cld_mp_driver(q3(is:ie,j,1:km,sphum),     q3(is:ie,j,1:km,liq_wat), q3(is:ie,j,1:km,rainwat),  &
+!                                    q3(is:ie,j,1:km,ice_wat),   q3(is:ie,j,1:km,snowwat), q3(is:ie,j,1:km,graupel),  &
+!                                    q3(is:ie,j,1:km,cld_amt),   q3(is:ie,j,1:km,cld_amt), q3(is:ie,j,1:km,cld_amt),   & !last 2 are dummies
+!                                    t3(is:ie,j,1:km), w(is:ie,j,1:km), u3(is:ie,j,1:km), v3(is:ie,j,1:km), &
+!                                    dz(is:ie,j,1:km), delp(is:ie,j,1:km), gridstruct%area(is:ie,j),  &
+!                                  pdt, land(is:ie,j), 
+!                                  q_dt(is:ie,j,1:km,sphum),   q_dt(is:ie,j,1:km,liq_wat), q_dt(is:ie,j,1:km,rainwat), &
+!                                  q_dt(is:ie,j,1:km,ice_wat), q_dt(is:ie,j,1:km,snowwat), q_dt(is:ie,j,1:km,graupel), &
+!                                  q_dt(is:ie,j,1:km,cld_amt), t_dt(is:ie,j,1:km), &
+!                                  u_dt(is:ie,j,1:km),         v_dt(is:ie,j,1:km), rain(is:ie,j), snow(is:ie,j), ice(is:ie,j), graup(is:ie,j), hydrostatic, phys_hydrostatic, &
+!                                  1,ie-is+1, 1,km, k_mp,npz, seconds ) ! Time )
+!   enddo
 !!$#endif
                                                                                           call timing_off('gfdl_mp')
      !GFDL MP outputs mm/d
