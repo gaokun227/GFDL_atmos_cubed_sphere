@@ -30,12 +30,8 @@
 
 module gfdl_mp_mod
     
-#ifdef GFS_PHYS
-    use machine, only: r_grid => kind_phys
-#else
-	use fv_arrays_mod, only: r_grid
-#endif
-
+    use platform_mod, only: r_grid => r8_kind
+    
     implicit none
     
     private
