@@ -641,6 +641,15 @@ module fv_arrays_mod
 
   end type nudge_diag_type
 
+  type sg_diag_type
+
+     real, _ALLOCATABLE :: t_dt(:,:,:)
+     real, _ALLOCATABLE :: u_dt(:,:,:)
+     real, _ALLOCATABLE :: v_dt(:,:,:)
+     real, _ALLOCATABLE :: qv_dt(:,:,:)
+
+  end type sg_diag_type
+
   type coarse_restart_type
 
      real, _ALLOCATABLE :: u(:,:,:)
@@ -790,6 +799,7 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: sgh(:,:)      _NULL  ! Terrain standard deviation
     real, _ALLOCATABLE :: oro(:,:)      _NULL  ! land fraction (1: all land; 0: all water)
     real, _ALLOCATABLE :: ts(:,:)       _NULL  ! skin temperature (sst) from NCEP/GFS (K) -- tile
+    real, _ALLOCATABLE :: ci(:,:)       _NULL  ! sea-ice fraction from external file
 
 !-----------------------------------------------------------------------
 ! Others:
@@ -869,6 +879,7 @@ module fv_arrays_mod
      type(inline_mp_type) :: inline_mp
      type(phys_diag_type) :: phys_diag
      type(nudge_diag_type) :: nudge_diag
+     type(sg_diag_type) :: sg_diag
      type(coarse_restart_type) :: coarse_restart
      type(fv_coarse_graining_type) :: coarse_graining
      
@@ -1017,6 +1028,7 @@ contains
 
     ! Allocate others
     allocate ( Atm%ts(is:ie,js:je) )
+    if (Atm%flagstruct%read_ec_sst) allocate ( Atm%ci(is:ie,js:je) )
     allocate ( Atm%phis(isd:ied  ,jsd:jed  ) )
     allocate ( Atm%omga(isd:ied  ,jsd:jed  ,npz) ); Atm%omga=0.
     allocate (   Atm%ua(isd:ied  ,jsd:jed  ,npz) )
@@ -1130,6 +1142,8 @@ contains
            Atm%inline_mp%sub(i,j) = real_big
 
            Atm%ts(i,j) = 300.
+           if (Atm%flagstruct%read_ec_sst) Atm%ci(i,j) = -999.
+
            Atm%phis(i,j) = real_big
         enddo
      enddo

@@ -34,9 +34,7 @@ module fast_phys_mod
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index
     use field_manager_mod, only: model_atmos
-#ifndef DYCORE_SOLO
     use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj
-#endif
     
     implicit none
     
@@ -354,7 +352,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
                     rdgas * pt (is:ie, j, kmp:km) / grav
             endif
 
-#ifndef DYCORE_SOLO
             call gfdl_mp_driver (q (is:ie, j, kmp:km, sphum), q (is:ie, j, kmp:km, liq_wat), &
                      q (is:ie, j, kmp:km, rainwat), q (is:ie, j, kmp:km, ice_wat), &
                      q (is:ie, j, kmp:km, snowwat), q (is:ie, j, kmp:km, graupel), &
@@ -378,7 +375,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
                      consv .gt. consv_min, te (is:ie, j, kmp:km), inline_mp%cond (is:ie, j), &
                      inline_mp%dep (is:ie, j), inline_mp%reevap (is:ie, j), inline_mp%sub (is:ie, j), &
                      last_step, do_inline_mp)
-#endif
 
             if (.not. hydrostatic) then
                 w (is:ie, j, kmp:km) = wa (is:ie, kmp:km)

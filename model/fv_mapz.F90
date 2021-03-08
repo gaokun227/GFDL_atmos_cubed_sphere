@@ -37,9 +37,7 @@ module fv_mapz_mod
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
   use fast_phys_mod,     only: fast_phys
-#ifndef DYCORE_SOLO
   use gfdl_mp_mod,       only: c_liq, c_ice
-#endif
 
   implicit none
   real, parameter:: consv_min = 0.001   ! below which no correction applies
