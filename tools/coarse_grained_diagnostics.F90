@@ -38,7 +38,7 @@ module coarse_grained_diagnostics_mod
     logical :: always_model_level_coarse_grain = .false.
     integer :: pressure_level = -1  ! If greater than 0, interpolate to this pressure level (in hPa)
     integer :: iv = 0  ! Controls type of pressure-level interpolation performed (-1, 0, or 1)
-    character(len=64) :: special_case  ! E.g. height is computed differently on pressure surfaces
+    character(len=64) :: special_case = ''  ! E.g. height is computed differently on pressure surfaces
     type(data_subtype) :: data
   end type coarse_diag_type
 
@@ -719,6 +719,33 @@ contains
     coarse_diagnostics(index)%units = 'kg/m s/s'
     coarse_diagnostics(index)%vertically_integrated = .true.
     coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'tq_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained total water path'
+    coarse_diagnostics(index)%units = 'kg/m**2'
+    coarse_diagnostics(index)%special_case = 'tq'
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'lw_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained liquid water path'
+    coarse_diagnostics(index)%units = 'kg/m**2'
+    coarse_diagnostics(index)%special_case = 'lw'
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'iw_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained ice water path'
+    coarse_diagnostics(index)%units = 'kg/m**2'
+    coarse_diagnostics(index)%special_case = 'iw'
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
     
     ! iv =-1: winds
     ! iv = 0: positive definite scalars
@@ -1343,18 +1370,23 @@ contains
     real, intent(in) :: height_on_interfaces(is:ie,js:je,1:npz+1)
     real, intent(out) :: result(is_coarse:ie_coarse,js_coarse:je_coarse)
 
+    integer :: nwat
     character(len=256) :: error_message
     real, allocatable :: work_2d(:,:)
 
+    nwat = Atm%flagstruct%nwat
+    
     if (coarse_diag%pressure_level > 0 .or. coarse_diag%vertically_integrated &
-         .or. coarse_diag%scaled_by_specific_heat_and_vertically_integrated) then 
+         .or. coarse_diag%scaled_by_specific_heat_and_vertically_integrated &
+         .or. coarse_diag%special_case .ne. '') then 
       allocate(work_2d(is:ie,js:je))
     endif
 
     if (trim(coarse_diag%reduction_method) .eq. AREA_WEIGHTED) then
       if (coarse_diag%pressure_level < 0 &
          .and. .not. coarse_diag%vertically_integrated &
-         .and. .not. coarse_diag%scaled_by_specific_heat_and_vertically_integrated) then
+         .and. .not. coarse_diag%scaled_by_specific_heat_and_vertically_integrated &
+         .and. coarse_diag%special_case .eq. '') then
         call weighted_block_average( &
           Atm%gridstruct%area(is:ie,js:je), &
           coarse_diag%data%var2, &
@@ -1377,7 +1409,58 @@ contains
           work_2d, &
           result &
           )
-      elseif (coarse_diag%vertically_integrated) then
+     elseif (trim(coarse_diag%special_case) .eq. 'tq') then
+        call total_water_path( &
+          is, &
+          ie, &
+          js, &
+          je, &
+          npz, &
+          nwat, &
+          Atm%q(is:ie,js:je,1:npz,1:nwat), &
+          Atm%delp(is:ie,js:je,1:npz), &
+          work_2d(is:ie,js:je) &
+        )
+        call weighted_block_average( &
+          Atm%gridstruct%area(is:ie,js:je), &
+          work_2d, &
+          result &
+          )
+     elseif (trim(coarse_diag%special_case) .eq. 'lw') then
+        call liquid_water_path( &
+          is, &
+          ie, &
+          js, &
+          je, &
+          npz, &
+          nwat, &
+          Atm%q(is:ie,js:je,1:npz,1:nwat), &
+          Atm%delp(is:ie,js:je,1:npz), &
+          work_2d(is:ie,js:je) &
+        )
+        call weighted_block_average( &
+          Atm%gridstruct%area(is:ie,js:je), &
+          work_2d, &
+          result &
+          )
+     elseif (trim(coarse_diag%special_case) .eq. 'iw') then
+        call ice_water_path( &
+          is, &
+          ie, &
+          js, &
+          je, &
+          npz, &
+          nwat, &
+          Atm%q(is:ie,js:je,1:npz,1:nwat), &
+          Atm%delp(is:ie,js:je,1:npz), &
+          work_2d(is:ie,js:je) &
+        )
+        call weighted_block_average( &
+          Atm%gridstruct%area(is:ie,js:je), &
+          work_2d, &
+          result &
+          )
+     elseif (coarse_diag%vertically_integrated) then
         call vertically_integrate( &
              is, &
              ie, &
@@ -1793,5 +1876,61 @@ contains
       enddo
 
  end subroutine get_height_field
-  
+
+ subroutine total_water_path(is, ie, js, je, npz, nwat, q, delp, tq)
+   integer, intent(in) :: is, ie, js, je, npz, nwat
+   real, intent(in) :: q(is:ie,js:je,1:npz,1:nwat), delp(is:ie,js:je,1:npz)
+   real, intent(out) :: tq(is:ie,js:je)
+
+   real :: ginv
+   
+   ginv = 1. / GRAV
+   tq = ginv * sum(sum(q, 4) * delp, 3)
+ end subroutine total_water_path
+
+  subroutine liquid_water_path(is, ie, js, je, npz, nwat, q, delp, lw)
+   integer, intent(in) :: is, ie, js, je, npz, nwat
+   real, intent(in) :: q(is:ie,js:je,1:npz,1:nwat), delp(is:ie,js:je,1:npz)
+   real, intent(out) :: lw(is:ie,js:je)
+
+   integer :: liq_wat, rainwat
+   real :: ginv
+   
+   liq_wat = get_tracer_index (MODEL_ATMOS, 'liq_wat')
+   rainwat = get_tracer_index (MODEL_ATMOS, 'rainwat')
+   
+   ginv = 1. / GRAV
+   lw = 0.0
+   if (liq_wat .gt. 0) then
+      lw = lw + ginv * sum(q(is:ie,js:je,1:npz,liq_wat) * delp(is:ie,js:je,1:npz), 3)
+   endif
+   if (rainwat .gt. 0) then
+      lw = lw + ginv * sum(q(is:ie,js:je,1:npz,rainwat) * delp(is:ie,js:je,1:npz), 3)
+   endif
+ end subroutine liquid_water_path
+
+  subroutine ice_water_path(is, ie, js, je, npz, nwat, q, delp, iw)
+   integer, intent(in) :: is, ie, js, je, npz, nwat
+   real, intent(in) :: q(is:ie,js:je,1:npz,1:nwat), delp(is:ie,js:je,1:npz)
+   real, intent(out) :: iw(is:ie,js:je)
+
+   integer :: ice_wat, snowwat, graupel
+   real :: ginv
+   
+   ice_wat = get_tracer_index (MODEL_ATMOS, 'ice_wat')
+   snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat')
+   graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
+   
+   ginv = 1. / GRAV
+   iw = 0.0
+   if (ice_wat .gt. 0) then
+      iw = iw + ginv * sum(q(is:ie,js:je,1:npz,ice_wat) * delp(is:ie,js:je,1:npz), 3)
+   endif
+   if (snowwat .gt. 0) then
+      iw = iw + ginv * sum(q(is:ie,js:je,1:npz,snowwat) * delp(is:ie,js:je,1:npz), 3)
+   endif
+   if (graupel .gt. 0) then
+      iw = iw + ginv * sum(q(is:ie,js:je,1:npz,graupel) * delp(is:ie,js:je,1:npz), 3)
+   endif
+ end subroutine ice_water_path
 end module coarse_grained_diagnostics_mod
