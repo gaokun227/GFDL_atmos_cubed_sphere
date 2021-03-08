@@ -367,7 +367,9 @@ contains
 
    call set_domain(Atm(mygrid)%domain)
 
-   call data_override_init(Atm_domain_in = Atm(mygrid)%domain)
+   if (Atm(n)%flagstruct%read_ec_sst) then
+      call data_override_init(Atm_domain_in = Atm(mygrid)%domain)
+   endif
    
  end subroutine atmosphere_init
 
