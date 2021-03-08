@@ -28,8 +28,10 @@
 ! =======================================================================
 
 module gfdl_cld_mp_mod
-    
+
+#ifdef GFS_PHYS
     use machine, only: r_grid => kind_phys
+#endif
     
     implicit none
     
@@ -45,6 +47,10 @@ module gfdl_cld_mp_mod
         wqs2_vect, rhow, rhor, rhos, rhog, rhoh, rnzr, rnzs, rnzg, rnzh, rvgas, rdgas, &
         grav, hlv, hlf, cp_air, cp_vap, cv_air, cv_vap, c_ice, c_liq, dc_vap, dc_ice, &
         t_ice, t_wfr, e00, pi, zvir, rgrav
+    
+#ifndef GFS_PHYS
+    integer, parameter :: r_grid = 8
+#endif
     
     logical :: module_is_initialized = .false.
     logical :: qsmith_tables_initialized = .false.

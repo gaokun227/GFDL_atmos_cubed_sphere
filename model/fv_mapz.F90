@@ -37,9 +37,7 @@ module fv_mapz_mod
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
   use fast_sat_adj_mod,  only: fast_sat_adj, qsmith_init
-#ifndef DYCORE_SOLO
   use gfdl_mp_mod,       only: gfdl_mp_driver, c_liq, c_ice
-#endif
 
   implicit none
   real, parameter:: consv_min = 0.001   ! below which no correction applies
@@ -920,7 +918,6 @@ endif        ! end last_step check
             dz(is:ie,:) = (peln(is:je,1:km,j) - peln(is:ie,2:km+1,j)) * rdgas * pt(is:ie,j,:) / grav
         endif
 
-#ifndef DYCORE_SOLO
         call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
                        q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), q3(is:ie,:),  &
@@ -942,7 +939,6 @@ endif        ! end last_step check
                        consv>consv_min, &
                        te(is:ie,j,:), inline_mp%cond(is:ie,j), inline_mp%dep(is:ie,j), &
                        inline_mp%reevap(is:ie,j), inline_mp%sub(is:ie,j), last_step, do_inline_mp)
-#endif
 
         if (.not. hydrostatic) then
             w(is:ie,j,:) = wa(is:ie,:)
