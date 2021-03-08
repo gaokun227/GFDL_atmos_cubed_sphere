@@ -47,7 +47,7 @@ contains
       integer, INTENT(IN   ) :: is, ie, js, je, ng, nq
       logical, intent(IN)    :: hydrostatic
       real   , INTENT(IN   ) :: phis(is-ng:ie+ng,js-ng:je+ng)
-      real   , INTENT(IN   ) :: delz(is:,js:,npz)
+      real   , INTENT(IN   ) :: delz(is:,js:,1:)
       real   , INTENT(IN) ::  pkz(is  :ie     ,js   :je     ,1:npz)
 
       real   , INTENT(INOUT) ::    u(is-ng:ie+  ng,js-ng:je+1+ng,npz)
