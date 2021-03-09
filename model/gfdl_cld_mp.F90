@@ -4526,7 +4526,7 @@ subroutine explicit_fall (dts, ks, ke, ze, vt, dp, q, precip, m1)
 
     integer :: n, k, nstep
     
-    real, dimension (ks:ke) :: dz, qm, dd
+    real, dimension (ks:ke) :: dz, qm, q0, dd
 
     do k = ks, ke
         dz (k) = ze (k) - ze (k + 1)
