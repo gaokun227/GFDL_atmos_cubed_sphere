@@ -4481,7 +4481,7 @@ subroutine implicit_fall (dts, ks, ke, ze, vt, dp, q, precip, m1)
     
     qm (ks) = q (ks) / (dz (ks) + dd (ks))
     do k = ks + 1, ke
-        qm (k) = (q (k) + dd (k - 1) * qm (k - 1)) / (dz (k) + dd (k))
+        qm (k) = (q (k) + qm (k - 1) * dd (k - 1)) / (dz (k) + dd (k))
     enddo
     
     do k = ks, ke
@@ -4499,6 +4499,72 @@ subroutine implicit_fall (dts, ks, ke, ze, vt, dp, q, precip, m1)
     enddo
     
 end subroutine implicit_fall
+
+! =======================================================================
+! time-explicit monotonic scheme
+! =======================================================================
+
+subroutine explicit_fall (dts, ks, ke, ze, vt, dp, q, precip, m1)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: ks, ke
+
+    real, intent (in) :: dts
+
+    real, intent (in), dimension (ks:ke + 1) :: ze
+
+    real, intent (in), dimension (ks:ke) :: vt, dp
+
+    real, intent (inout), dimension (ks:ke) :: q
+
+    real, intent (inout) :: precip
+
+    real, intent (out), dimension (ks:ke) :: m1
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: n, k, nstep
+    
+    real, dimension (ks:ke) :: dz, qm, dd
+
+    do k = ks, ke
+        dz (k) = ze (k) - ze (k + 1)
+        dd (k) = dts * vt (k)
+        q0 (k) = q (k) * dp (k)
+    enddo
+     
+    nstep = 1 + int (maxval (dd / dz))
+    do k = ks, ke
+        dd (k) = dd (k) / nstep
+        q (k) = q0 (k)
+    enddo
+
+    do n = 1, nstep
+        qm (ks) = q (ks) - q (ks) * dd (ks) / dz (ks)
+        do k = ks + 1, ke
+            qm (k) = q (k) - q (k) * dd (k) / dz (k) + q (k - 1) * dd (k - 1) / dz (k - 1)
+        enddo
+        q (k) = qm (k)
+    enddo
+    
+    m1 (ks) = q0 (ks) - qm (ks)
+    do k = ks + 1, ke
+        m1 (k) = m1 (k - 1) + q0 (k) - qm (k)
+    enddo
+    precip = precip + m1 (ke)
+    
+    do k = ks, ke
+        q (k) = qm (k) / dp (k)
+    enddo
+    
+end subroutine explicit_fall
 
 ! =======================================================================
 ! vertical subgrid variability used for cloud ice and cloud water autoconversion
