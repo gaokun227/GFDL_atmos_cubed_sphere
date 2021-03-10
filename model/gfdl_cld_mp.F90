@@ -5282,7 +5282,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, qa,
                     ! boucher and lohmann (1995)
                     ccnw = (1.0 - abs (mask - 1.0)) * &
                          (10. ** 2.24 * (0.7273 * qa (i, k) * rho * 1.e9) ** 0.257) + &
-                         abs (mask - 1.0) * &
+                        abs (mask - 1.0) * &
                          (10. ** 2.06 * (0.7273 * qa (i, k) * rho * 1.e9) ** 0.48)
                 else
 #ifdef MARTIN_CCN
@@ -5315,7 +5315,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, qa,
                     ! boucher and lohmann (1995)
                     ccnw = (1.0 - abs (mask - 1.0)) * &
                          (10. ** 2.24 * (0.7273 * qa (i, k) * rho * 1.e9) ** 0.257) + &
-                         abs (mask - 1.0) * &
+                        abs (mask - 1.0) * &
                          (10. ** 2.06 * (0.7273 * qa (i, k) * rho * 1.e9) ** 0.48)
                 else
                     ccnw = 1.077 * ccno * abs (mask - 1.0) + 1.143 * ccnl * (1.0 - abs (mask - 1.0))
