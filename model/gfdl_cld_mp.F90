@@ -33,7 +33,7 @@ module gfdl_cld_mp_mod
     implicit none
     
     private
-
+    
     ! -----------------------------------------------------------------------
     ! interface functions
     ! -----------------------------------------------------------------------
@@ -74,7 +74,7 @@ module gfdl_cld_mp_mod
     public :: fast_sat_adj, cld_eff_rad, rad_ref
     public :: qs_init, wqs, mqs, mqs3d
     public :: c_liq, c_ice, rhow, wet_bulb
-
+    
     ! -----------------------------------------------------------------------
     ! precision definition
     ! -----------------------------------------------------------------------
@@ -92,14 +92,14 @@ module gfdl_cld_mp_mod
     ! -----------------------------------------------------------------------
     
     real, parameter :: grav = 9.80665 ! acceleration due to gravity (m/s^2)
-
+    
     real, parameter :: rgrav = 1.0 / grav ! inversion of gravity acceleration (s^2/m)
-
+    
     real, parameter :: pi = 4.0 * atan (1.0) ! ratio of circle circumference to diameter
-
+    
     real, parameter :: rdgas = 287.05 ! gas constant for dry air (J/kg/K)
     real, parameter :: rvgas = 461.50 ! gas constant for water vapor (J/kg/K)
-
+    
     real, parameter :: eps = rdgas / rvgas ! 0.6219934995
     real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077338443
     
@@ -112,7 +112,7 @@ module gfdl_cld_mp_mod
     
     real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg C (J/kg/K)
     real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg C (J/kg/K)
-
+    
     real, parameter :: dc_vap = cp_vap - c_liq ! - 2.372e3, isobaric heating / cooling (J/kg/K)
     real, parameter :: dc_ice = c_liq - c_ice ! 2.112e3, isobaric heating / colling (J/kg/K)
     real, parameter :: d2_ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling (J/kg/K)
@@ -123,7 +123,7 @@ module gfdl_cld_mp_mod
     real, parameter :: visk = 1.259e-5 ! kinematic viscosity of air (cm^2/s)
     real, parameter :: vdifu = 2.11e-5 ! diffusivity of water vapor in air (cm^2/s)
     real, parameter :: tcond = 2.36e-2 ! thermal conductivity of air (J/m/s/K)
-
+    
     real (kind = r8), parameter :: lv0 = hlv - dc_vap * tice ! 3.14893552e6, evaporation latent heat coeff. at 0 deg K (J/kg)
     real (kind = r8), parameter :: li0 = hlf - dc_ice * tice ! - 2.2691392e5, fussion latent heat coeff. at 0 deg K (J/kg)
     real (kind = r8), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coeff. at 0 deg K (J/kg)
@@ -135,7 +135,7 @@ module gfdl_cld_mp_mod
     ! -----------------------------------------------------------------------
     
     integer, parameter :: length = 2621 ! length of the saturation table
-
+    
     real, parameter :: qcmin = 1.0e-12 ! min value for cloud condensates (kg/kg)
     real, parameter :: qfmin = 1.0e-8 ! min value for sedimentation (kg/kg)
     
@@ -189,8 +189,8 @@ module gfdl_cld_mp_mod
     ! 0: subgrid variability based scheme
     ! 1: same as 0, but for old fvgfs implementation
     ! 2: binary cloud scheme
-    ! 3: extension of  0
-
+    ! 3: extension of 0
+    
     integer :: irain_f = 0 ! cloud water to rain auto conversion scheme
     ! 0: subgrid variability based scheme
     ! 1: no subgrid varaibility
@@ -201,22 +201,22 @@ module gfdl_cld_mp_mod
     ! 3: Meyers et al. (1992)
     ! 4: Cooper (1986)
     ! 5: Fletcher (1962)
-
+    
     integer :: igflag = 3 ! ice generation scheme
     ! 1: WSM6
     ! 2: WSM6 with 0 at 0 C
     ! 3: WSM6 with 0 at 0 C and fixed value at - 10 C
     ! 4: combination of 1 and 3
-
+    
     integer :: ifflag = 1 ! ice fall scheme
     ! 1: Deng and Mace (2008)
     ! 2: Heymsfield and Donner (1990)
-
+    
     integer :: rewflag = 1 ! cloud water effective radius scheme
     ! 1: Martin et al. (1994)
     ! 2: Martin et al. (1994), GFDL revision
     ! 3: Kiehl et al. (1994)
-
+    
     integer :: reiflag = 5 ! cloud ice effective radius scheme
     ! 1: Heymsfield and Mcfarquhar (1996)
     ! 2: Donner et al. (1997)
@@ -224,19 +224,19 @@ module gfdl_cld_mp_mod
     ! 4: Kristjansson et al. (2000)
     ! 5: Wyser (1998)
     ! 6: Sun and Rikus (1999), Sun (2001)
-
+    
     integer :: rerflag = 1 ! rain effective radius scheme
     ! 1: effective radius
     ! 2: mass-weighted effective radius
-
+    
     integer :: resflag = 1 ! snow effective radius scheme
     ! 1: effective radius
     ! 2: mass-weighted effective radius
-
+    
     integer :: regflag = 1 ! graupel effective radius scheme
     ! 1: effective radius
     ! 2: mass-weighted effective radius
-
+    
     integer :: radr_flag = 1 ! radar reflectivity for rain
     ! 1: Mark Stoelinga (2005)
     ! 2: Smith et al. (1975), Tong and Xue (2005)
@@ -256,22 +256,22 @@ module gfdl_cld_mp_mod
     logical :: do_sedi_w = .true. ! transport of vertical momentum in sedimentation
     logical :: do_sedi_heat = .true. ! transport of heat in sedimentation
     logical :: do_sedi_melt = .true. ! melt cloud ice, snow, and graupel during sedimentation
-
+    
     logical :: do_qa = .true. ! do inline cloud fraction
     logical :: rad_snow = .true. ! include snow in cloud fraciton calculation
     logical :: rad_graupel = .true. ! include graupel in cloud fraction calculation
     logical :: rad_rain = .true. ! include rain in cloud fraction calculation
     logical :: do_cld_adj = .false. ! do cloud fraction adjustment
-
+    
     logical :: use_ppm = .false. ! use ppm fall scheme
     logical :: mono_prof = .true. ! perform terminal fall with mono ppm scheme
-
+    
     logical :: z_slope_liq = .true. ! use linear mono slope for autocconversions
     logical :: z_slope_ice = .true. ! use linear mono slope for autocconversions
-
+    
     logical :: use_rhc_cevap = .false. ! cap of rh for cloud water evaporation
     logical :: use_rhc_revap = .false. ! cap of rh for rain evaporation
-
+    
     logical :: const_vi = .false. ! if .ture., the constants are specified by v * _fac
     logical :: const_vs = .false. ! if .ture., the constants are specified by v * _fac
     logical :: const_vg = .false. ! if .ture., the constants are specified by v * _fac
@@ -281,24 +281,24 @@ module gfdl_cld_mp_mod
     logical :: snow_grauple_combine = .true. ! combine snow and graupel
     
     logical :: prog_ccn = .false. ! do prognostic ccn (Yi Ming's method)
-
+    
     logical :: fix_negative = .true. ! fix negative water species
-
+    
     logical :: do_cond_timescale = .false. ! whether to apply a timescale to condensation
-
+    
     logical :: do_hail = .false. ! use hail parameters instead of graupel
-
+    
     logical :: consv_checker = .false. ! turn on energy and water conservation checker
-
+    
     logical :: do_warm_rain_mp = .false. ! do warm rain cloud microphysics only
-
+    
     real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
     real :: tice_mlt = 273.16 ! can set ice melting temperature to 268 based on observation (Kay et al. 2016) (K)
     
     real :: t_min = 178.0 ! minimum temperature to freeze - dry all water vapor (K)
     real :: t_sub = 184.0 ! minimum temperature for sublimation of cloud ice (K)
-
+    
     real :: rh_inc = 0.25 ! rh increment for complete evaporation of cloud water and cloud ice
     real :: rh_inr = 0.25 ! rh increment for minimum evaporation of rain
     real :: rh_ins = 0.25 ! rh increment for sublimation of snow
@@ -322,7 +322,7 @@ module gfdl_cld_mp_mod
     real :: rthresh = 10.0e-6 ! critical cloud drop radius (micron) for autoconversion
     
     real :: cld_min = 0.05 ! minimum cloud fraction
-
+    
     real :: qi_lim = 1.0 ! cloud ice limiter (0: no, 1: full, >1: extra) to prevent large ice build up
     
     real :: ql_mlt = 2.0e-3 ! maximum cloud water allowed from melted cloud ice (kg/kg)
@@ -367,10 +367,10 @@ module gfdl_cld_mp_mod
     real :: rh_thres = 0.75 ! minimum relative humidity for cloud fraction
     real :: rhc_cevap = 0.85 ! maximum relative humidity for cloud water evaporation
     real :: rhc_revap = 0.85 ! maximum relative humidity for rain evaporation
-
+    
     real :: f_dq_p = 1.0 ! cloud fraction adjustment for supersaturation
     real :: f_dq_m = 1.0 ! cloud fraction adjustment for undersaturation
-
+    
     real :: fi2s_fac = 1.0 ! maximum sink of cloud ice to form snow: 0-1
     real :: fi2g_fac = 1.0 ! maximum sink of cloud ice to form graupel: 0-1
     real :: fs2g_fac = 1.0 ! maximum sink of snow to form graupel: 0-1
@@ -393,7 +393,7 @@ module gfdl_cld_mp_mod
     real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (4), cgmlt (4)
     
     real :: t_wfr, fac_rc, c_air, c_vap, d0_vap
-
+    
     real (kind = r8) :: lv00, li00, li20, cpaut
     real (kind = r8) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
     real (kind = r8) :: vconr, vcons, vcong, vconh, normr, norms, normg, normh
@@ -440,7 +440,7 @@ subroutine gfdl_cld_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml
     integer, intent (in) :: me, master, nlunit, logunit
     
     character (len = 64), intent (in) :: fn_nml
-
+    
     character (len = *), intent (in) :: input_nml_file (:)
     
     ! -----------------------------------------------------------------------
@@ -516,17 +516,17 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, wa, &
     
     real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt, ua, va, wa, te
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
-
+    
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
-
+    
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     real, intent (inout), dimension (is:ie) :: condensation, deposition
     real, intent (inout), dimension (is:ie) :: evaporation, sublimation
-
+    
     ! -----------------------------------------------------------------------
     ! define various heat capacities and latent heat coefficients at 0 deg K
     ! -----------------------------------------------------------------------
-
+    
     call setup_mhc_lhc (hydrostatic)
     
     ! -----------------------------------------------------------------------
@@ -596,19 +596,19 @@ subroutine setup_mp
     fac_rc = (4. / 3.) * pi * rhor * rthresh ** 3
     
     cpaut = c_paut * 0.104 * grav / 1.717e-5
-
+    
     ! -----------------------------------------------------------------------
     ! terminal velocities parameters of rain, snow, and graupel or hail, Lin et al. (1983)
     ! -----------------------------------------------------------------------
     
-    gcon = 40.74 ! (4*g*rhog/(3*CD*rho0))**0.5 in Lin et al. (1983)
+    gcon = 40.74 ! (4 * g * rhog / (3 * CD * rho0)) ** 0.5 in Lin et al. (1983)
     hcon = gcon * sqrt (rhoh / rhog)
     
     vconr = alin * gamma (3 + mur + blin) / gamma (3 + mur)
     vcons = clin * gamma (3 + mus + dlin) / gamma (3 + mus)
     vcong = elin * gamma (3 + mug + flin) / gamma (3 + mug) * gcon
     vconh = glin * gamma (3 + muh + hlin) / gamma (3 + muh) * hcon
-
+    
     ! -----------------------------------------------------------------------
     ! slope parameters of rain, snow, and graupel or hail, Lin et al. (1983)
     ! -----------------------------------------------------------------------
@@ -617,9 +617,9 @@ subroutine setup_mp
     norms = pi * rhos * n0s
     normg = pi * rhog * n0g
     normh = pi * rhoh * n0h
-
+    
     ! -----------------------------------------------------------------------
-    ! Schmidt number, Sc**(1/3) in Lin et al. (1983)
+    ! Schmidt number, Sc ** (1 / 3) in Lin et al. (1983)
     ! -----------------------------------------------------------------------
     
     scm3 = exp (1. / 3. * log (visk / vdifu))
@@ -629,25 +629,25 @@ subroutine setup_mp
     ! -----------------------------------------------------------------------
     
     cracw = pi * n0r * alin * gamma (2 + mur + blin) / &
-        (4. * exp (0.25 * (2 + mur + blin) * log (normr)))
+         (4. * exp (0.25 * (2 + mur + blin) * log (normr)))
     craci = pi * n0r * alin * gamma (2 + mur + blin) / &
-        (4. * exp (0.25 * (2 + mur + blin) * log (normr)))
+         (4. * exp (0.25 * (2 + mur + blin) * log (normr)))
     csacw = pi * n0s * clin * gamma (2 + mus + dlin) / &
-        (4. * exp (0.25 * (2 + mus + dlin) * log (norms)))
+         (4. * exp (0.25 * (2 + mus + dlin) * log (norms)))
     csaci = pi * n0s * clin * gamma (2 + mus + dlin) / &
-        (4. * exp (0.25 * (2 + mus + dlin) * log (norms)))
+         (4. * exp (0.25 * (2 + mus + dlin) * log (norms)))
     if (do_hail) then
         cgacw = pi * n0h * glin * gamma (2 + muh + hlin) * hcon / &
-            (4. * exp (0.25 * (2 + muh + hlin) * log (normh)))
+             (4. * exp (0.25 * (2 + muh + hlin) * log (normh)))
         cgaci = pi * n0h * glin * gamma (2 + muh + hlin) * hcon / &
-            (4. * exp (0.25 * (2 + muh + hlin) * log (normh)))
+             (4. * exp (0.25 * (2 + muh + hlin) * log (normh)))
     else
         cgacw = pi * n0g * elin * gamma (2 + mug + flin) * gcon / &
-            (4. * exp (0.25 * (2 + mug + flin) * log (normg)))
+             (4. * exp (0.25 * (2 + mug + flin) * log (normg)))
         cgaci = pi * n0g * elin * gamma (2 + mug + flin) * gcon / &
-            (4. * exp (0.25 * (2 + mug + flin) * log (normg)))
+             (4. * exp (0.25 * (2 + mug + flin) * log (normg)))
     endif
-
+    
     cracw = cracw * c_pracw
     craci = craci * c_praci
     csacw = csacw * c_psacw
@@ -670,17 +670,17 @@ subroutine setup_mp
         cgacr = pisq * n0g * n0r * rhor
         cgacs = pisq * n0g * n0s * rhos
     endif
-
+    
     cracs = cracs * c_pracs / 24.
     csacr = csacr * c_psacr / 24.
     cgacr = cgacr * c_pgacr / 24.
     cgacs = cgacs * c_pgacs / 24.
     
-    ! act/acc:
-    ! 1-2: racs (s-r)
-    ! 3-4: sacr (r-s)
-    ! 5-6: gacr (r-g)
-    ! 7-8: gacs (s-g)
+    ! act / acc:
+    ! 1 - 2: racs (s - r)
+    ! 3 - 4: sacr (r - s)
+    ! 5 - 6: gacr (r - g)
+    ! 7 - 8: gacs (s - g)
     
     act (1) = norms
     act (2) = normr
@@ -694,7 +694,7 @@ subroutine setup_mp
     endif
     act (7) = act (1)
     act (8) = act (6)
-
+    
     acc (1) = mus
     acc (2) = mur
     acc (3) = acc (2)
@@ -707,15 +707,15 @@ subroutine setup_mp
     endif
     acc (7) = acc (1)
     acc (8) = acc (6)
-
+    
     occ (1) = 1.
     occ (2) = 2.
     occ (3) = 1.
-
+    
     do i = 1, 3
         do k = 1, 4
             acco (i, k) = occ (i) * gamma (6 + acc (2 * k - 1) - i) * gamma (acc (2 * k) + i - 1) / &
-                (exp (0.25 * (6 + acc (2 * k - 1) - i) * log (act (2 * k - 1))) * &
+                 (exp (0.25 * (6 + acc (2 * k - 1) - i) * log (act (2 * k - 1))) * &
                 exp (0.25 * (acc (2 * k) + i - 1) * log (act (2 * k))))
         enddo
     enddo
@@ -741,7 +741,7 @@ subroutine setup_mp
         exp (0.25 * (1 + mus) * log (norms)) / gamma (1 + mus)
     cssub (4) = tcond * rvgas
     cssub (5) = vdifu
-
+    
     if (do_hail) then
         cgsub (1) = 2. * pi * vdifu * tcond * rvgas * n0h * gamma (1 + muh) / &
             exp (0.25 * (1 + muh) * log (normh))
@@ -759,7 +759,7 @@ subroutine setup_mp
     endif
     cgsub (4) = tcond * rvgas
     cgsub (5) = vdifu
-
+    
     ! -----------------------------------------------------------------------
     ! snow melting, Lin et al. (1983)
     ! -----------------------------------------------------------------------
@@ -803,13 +803,13 @@ end subroutine setup_mp
 ! =======================================================================
 
 subroutine setup_mhc_lhc (hydrostatic)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     logical, intent (in) :: hydrostatic
     
     if (hydrostatic) then
@@ -823,7 +823,7 @@ subroutine setup_mhc_lhc (hydrostatic)
     d0_vap = c_vap - c_liq
     
     ! scaled constants (to reduce float point errors for 32-bit)
-
+    
     d1_vap = d0_vap / c_air
     d1_ice = dc_ice / c_air
     
@@ -854,31 +854,31 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: is, ie, ks, ke
-
+    
     logical, intent (in) :: hydrostatic, last_step, consv_te, do_inline_mp
     logical, intent (in) :: do_mp_fast, do_mp_full
-
+    
     real, intent (in) :: dtm
-
+    
     real, intent (in), dimension (is:ie) :: gsize, hs
-
+    
     real, intent (in), dimension (is:ie, ks:ke) :: delz, qnl, qni
     
     real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt, ua, va, wa
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
-
+    
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
-
+    
     real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
     real, intent (inout), dimension (is:ie) :: condensation, deposition
     real, intent (inout), dimension (is:ie) :: evaporation, sublimation
     
     real, intent (out), dimension (is:ie, ks:ke) :: te
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: i, k, n
     
     real :: rh_adj, rh_rain, r1, s1, i1, g1, ccn0, cin0, cond, dep, reevap, sub
@@ -888,34 +888,34 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
     real, dimension (ks:ke) :: qvz, qlz, qrz, qiz, qsz, qgz, qaz
     real, dimension (ks:ke) :: den, pz, denfac, ccn, cin
     real, dimension (ks:ke) :: u, v, w
-
+    
     real (kind = r8) :: con_r8, c8
-
+    
     real (kind = r8), dimension (is:ie, ks:ke) :: te_beg, te_end, tw_beg, tw_end
     real (kind = r8), dimension (is:ie, ks:ke) :: te_beg_0, te_end_0, tw_beg_0, tw_end_0
-
+    
     real (kind = r8), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
     real (kind = r8), dimension (is:ie) :: te_b_beg_0, te_b_end_0, tw_b_beg_0, tw_b_end_0
-
+    
     real (kind = r8), dimension (ks:ke) :: tz
     
     ! -----------------------------------------------------------------------
     ! time steps
     ! -----------------------------------------------------------------------
-
+    
     ntimes = max (ntimes, int (dtm / min (dtm, mp_time)))
     dts = dtm / real (ntimes)
     
     ! -----------------------------------------------------------------------
     ! initialization of total energy difference
     ! -----------------------------------------------------------------------
-
+    
     dte = 0.0
     
     ! -----------------------------------------------------------------------
     ! unit convert to mm/day
     ! -----------------------------------------------------------------------
-
+    
     convt = 86400. * rgrav / dts
     
     do i = is, ie
@@ -923,7 +923,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         ! conversion of temperature
         ! -----------------------------------------------------------------------
-    
+        
         if (do_inline_mp) then
             do k = ks, ke
                 q_cond = ql (i, k) + qr (i, k) + qi (i, k) + qs (i, k) + qg (i, k)
@@ -965,11 +965,11 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         endif
         
         do k = ks, ke
-
+            
             ! -----------------------------------------------------------------------
             ! convert moist mixing ratios to dry mixing ratios
             ! -----------------------------------------------------------------------
-
+            
             qvz (k) = qv (i, k)
             qlz (k) = ql (i, k)
             qrz (k) = qr (i, k)
@@ -977,10 +977,10 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             qsz (k) = qs (i, k)
             qgz (k) = qg (i, k)
             qaz (k) = qa (i, k)
-
+            
             q_cond = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
             con_r8 = one_r8 - (qvz (k) + q_cond)
-
+            
             dp (k) = delp (i, k) * con_r8
             con_r8 = one_r8 / con_r8
             qvz (k) = qvz (k) * con_r8
@@ -1007,13 +1007,13 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             if (.not. hydrostatic) then
                 w (k) = wa (i, k)
             endif
-
+            
         enddo
         
         do k = ks, ke
             denfac (k) = sqrt (den (ke) / den (k))
         enddo
-
+        
         ! -----------------------------------------------------------------------
         ! total energy checker
         ! -----------------------------------------------------------------------
@@ -1072,32 +1072,32 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             call neg_adj (ks, ke, tz, dp, qvz, qlz, qrz, qiz, qsz, qgz, cond)
         
         condensation (i) = condensation (i) + cond * convt * ntimes
-            
+        
         ! -----------------------------------------------------------------------
         ! fast microphysics loop
         ! -----------------------------------------------------------------------
         
         if (do_mp_fast) then
-
+            
             call mp_fast (ks, ke, tz, qvz, qlz, qrz, qiz, qsz, qgz, dtm, dp, den, &
                 ccn, cin, condensation (i), deposition (i), evaporation (i), &
                 sublimation (i), convt)
-
+            
         endif
-    
+        
         ! -----------------------------------------------------------------------
         ! full microphysics loop
         ! -----------------------------------------------------------------------
         
         if (do_mp_full) then
-
+            
             call mp_full (ks, ke, ntimes, tz, qvz, qlz, qrz, qiz, qsz, qgz, dp, dz, &
                 u, v, w, den, denfac, ccn, cin, dts, rh_adj, rh_rain, h_var, &
                 dte (i), rain (i), snow (i), ice (i), graupel (i), condensation (i), &
                 deposition (i), evaporation (i), sublimation (i), convt)
-
+            
         endif
-    
+        
         ! -----------------------------------------------------------------------
         ! cloud fraction diagnostic
         ! -----------------------------------------------------------------------
@@ -1106,7 +1106,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             call cloud_fraction (ks, ke, pz, den, qvz, qlz, qrz, qiz, qsz, qgz, qaz, &
                 tz, h_var, gsize (i))
         endif
-
+        
         ! -----------------------------------------------------------------------
         ! momentum transportation during sedimentation
         ! -----------------------------------------------------------------------
@@ -1115,7 +1115,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             do k = ks + 1, ke
                 c8 = mhc (qvz (k), qlz (k), qrz (k), qiz (k), qsz (k), qgz (k)) * c_air
                 tz (k) = tz (k) + 0.5 * (ua (i, k) ** 2 + va (i, k) ** 2 - &
-                    (u (k) ** 2 + v (k) ** 2)) / c8
+                     (u (k) ** 2 + v (k) ** 2)) / c8
             enddo
             do k = ks + 1, ke
                 ua (i, k) = u (k)
@@ -1145,14 +1145,14 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         endif
         
         do k = ks, ke
-
+            
             ! -----------------------------------------------------------------------
             ! convert dry mixing ratios back to moist mixing ratios
             ! -----------------------------------------------------------------------
-
+            
             q_cond = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
             con_r8 = one_r8 + qvz (k) + q_cond
-
+            
             delp (i, k) = dp (k) * con_r8
             con_r8 = one_r8 / con_r8
             qvz (k) = qvz (k) * con_r8
@@ -1161,7 +1161,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             qiz (k) = qiz (k) * con_r8
             qsz (k) = qsz (k) * con_r8
             qgz (k) = qgz (k) * con_r8
-
+            
             qv (i, k) = qvz (k)
             ql (i, k) = qlz (k)
             qr (i, k) = qrz (k)
@@ -1169,23 +1169,23 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             qs (i, k) = qsz (k)
             qg (i, k) = qgz (k)
             qa (i, k) = qaz (k)
-
+            
             ! -----------------------------------------------------------------------
             ! calculate some more variables needed outside
             ! -----------------------------------------------------------------------
-    
+            
             q_liq (k) = qlz (k) + qrz (k)
             q_sol (k) = qiz (k) + qsz (k) + qgz (k)
             q_cond = q_liq (k) + q_sol (k)
             con_r8 = one_r8 - (qvz (k) + q_cond)
             c8 = mhc (con_r8, qvz (k), q_liq (k), q_sol (k)) * c_air
-
+            
             q_con (i, k) = q_cond
             tmp = rdgas * (1. + zvir * qvz (k))
             cappa (i, k) = tmp / (tmp + c8)
-
+            
         enddo
-
+        
         ! -----------------------------------------------------------------------
         ! total energy checker
         ! -----------------------------------------------------------------------
@@ -1218,7 +1218,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         ! -----------------------------------------------------------------------
         ! conversion of temperature
         ! -----------------------------------------------------------------------
-    
+        
         if (do_inline_mp) then
             do k = ks, ke
                 q_cond = qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
@@ -1243,20 +1243,20 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
     
     if (consv_checker) then
         if (abs (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / &
-            (sum (te_beg) + sum (te_b_beg)) .gt. te_err) then
+             (sum (te_beg) + sum (te_b_beg)) .gt. te_err) then
             print *, "GFDL MP TE: ", (sum (te_beg) + sum (te_b_beg)) / sum (gsize ** 2), &
                 (sum (te_end) + sum (te_b_end)) / sum (gsize ** 2), &
                 (sum (te_end) + sum (te_b_end) - sum (te_beg) - sum (te_b_beg)) / &
                 (sum (te_beg) + sum (te_b_beg))
         endif
         if (abs (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / &
-            (sum (tw_beg) + sum (tw_b_beg)) .gt. te_err) then
+             (sum (tw_beg) + sum (tw_b_beg)) .gt. te_err) then
             print *, "GFDL MP TW: ", (sum (tw_beg) + sum (tw_b_beg)) / sum (gsize ** 2), &
                 (sum (tw_end) + sum (tw_b_end)) / sum (gsize ** 2), &
                 (sum (tw_end) + sum (tw_b_end) - sum (tw_beg) - sum (tw_b_beg)) / &
                 (sum (tw_beg) + sum (tw_b_beg))
         endif
-        ! print *, "gfdl_mp te loss (%) : ", sum (te_loss) / (sum (te_beg) + sum (te_b_beg)) * 100.0
+        ! print *, "GFDL MP TE LOSS (%) : ", sum (te_loss) / (sum (te_beg) + sum (te_b_beg)) * 100.0
     endif
     
 end subroutine mpdrv
@@ -1274,19 +1274,19 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in), dimension (ks:ke) :: dp
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real, intent (out) :: cond
     
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
     
     real :: dq, sink
@@ -1294,11 +1294,11 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
     
     real (kind = r8), dimension (ks:ke) :: cvm, te8
-
+    
     ! -----------------------------------------------------------------------
     ! initialization
     ! -----------------------------------------------------------------------
-
+    
     cond = 0
     
     ! -----------------------------------------------------------------------
@@ -1320,14 +1320,14 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., sink, - sink, 0.)
         endif
-
+        
         ! if snow < 0, borrow from graupel
         if (qs (k) .lt. 0.) then
             sink = min (- qs (k), max (0., qg (k)))
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., 0., sink, - sink)
         endif
-
+        
         ! if graupel < 0, borrow from rain
         if (qg (k) .lt. 0.) then
             sink = min (- qg (k), max (0., qr (k)))
@@ -1346,13 +1346,13 @@ subroutine neg_adj (ks, ke, tz, dp, qv, ql, qr, qi, qs, qg, cond)
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, sink, 0., 0., 0.)
         endif
-
+        
         ! if cloud water < 0, borrow from water vapor
         if (ql (k) .lt. 0.) then
             sink = min (- ql (k), max (0., qv (k)))
             cond = cond + sink * dp (k)
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                - sink, sink, 0., 0., 0., 0., te8 (k), cvm (k), tz (k), &
+                 - sink, sink, 0., 0., 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
         endif
         
@@ -1386,7 +1386,7 @@ end subroutine neg_adj
 subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w, &
         den, denfac, ccn, cin, dts, rh_adj, rh_rain, h_var, dte, rain, snow, ice, &
         graupel, condensation, deposition, evaporation, sublimation, convt)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -1394,13 +1394,13 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke, ntimes
-
+    
     real, intent (in) :: dts, rh_adj, rh_rain, h_var, convt
-
+    
     real, intent (in), dimension (ks:ke) :: dp, dz, den, denfac, ccn
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, u, v, w, cin
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     
     real, intent (inout) :: rain, snow, ice, graupel
@@ -1408,17 +1408,17 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
     real, intent (inout) :: evaporation, sublimation
     
     real (kind = r8), intent (inout) :: dte
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: n
     
     real :: r1, s1, i1, g1, cond, dep, reevap, sub
-
+    
     real, dimension (ks:ke) :: vtr, vti, vts, vtg
-
+    
     do n = 1, ntimes
         
         ! -----------------------------------------------------------------------
@@ -1429,7 +1429,7 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
             dz, dp, vtr, vti, vts, vtg, r1, i1, s1, g1, u, v, w, den, denfac, dte)
         
         rain = rain + r1 * convt
-        ice = ice+ i1 * convt
+        ice = ice + i1 * convt
         snow = snow + s1 * convt
         graupel = graupel + g1 * convt
         
@@ -1448,21 +1448,21 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
         
         call ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
             denfac, vtr, vts, vtg, dts, h_var)
-
+        
         ! -----------------------------------------------------------------------
         ! temperature sentive high vertical resolution processes
         ! -----------------------------------------------------------------------
         
         call subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, &
             qr, qi, qs, qg, dp, ccn, cin, cond, dep, reevap, sub)
-    
+        
         condensation = condensation + cond * convt
         deposition = deposition + dep * convt
         evaporation = evaporation + reevap * convt
         sublimation = sublimation + sub * convt
         
     enddo
-        
+    
 end subroutine mp_full
 
 ! =======================================================================
@@ -1471,7 +1471,7 @@ end subroutine mp_full
 
 subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
         ccn, cin, condensation, deposition, evaporation, sublimation, convt)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -1479,13 +1479,13 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dtm, convt
-
+    
     real, intent (in), dimension (ks:ke) :: dp, den, ccn
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, cin
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     
     real, intent (inout) :: condensation, deposition
@@ -1494,17 +1494,17 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real :: cond, dep, reevap, sub
-
+    
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), dimension (ks:ke) :: cvm, te8
-
+    
     ! -----------------------------------------------------------------------
     ! initialization
     ! -----------------------------------------------------------------------
-
+    
     cond = 0
     dep = 0
     reevap = 0
@@ -1518,30 +1518,30 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
         lcpk, icpk, tcpk, tcp3)
     
     if (.not. do_warm_rain_mp) then
- 
+        
         ! -----------------------------------------------------------------------
         ! cloud ice melting to form cloud water and rain
         ! -----------------------------------------------------------------------
-                
+        
         call pimlt (ks, ke, dtm, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
             lcpk, icpk, tcpk, tcp3)
-    
+        
         ! -----------------------------------------------------------------------
         ! enforce complete freezing below t_wfr
         ! -----------------------------------------------------------------------
-                
+        
         call pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
             lcpk, icpk, tcpk, tcp3)
- 
+        
     endif
- 
+    
     ! -----------------------------------------------------------------------
     ! cloud water condensation and evaporation
     ! -----------------------------------------------------------------------
     
     call pcond_pevap (ks, ke, dtm, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         lcpk, icpk, tcpk, tcp3, cond, reevap)
-
+    
     condensation = condensation + cond * convt
     evaporation = evaporation + reevap * convt
         
@@ -1553,28 +1553,28 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
         
         call pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, &
             lcpk, icpk, tcpk, tcp3)
-    
+        
         ! -----------------------------------------------------------------------
         ! bigg freezing mechanism
         ! -----------------------------------------------------------------------
-                
+        
         call pbigg (ks, ke, dtm, qv, ql, qr, qi, qs, qg, tz, cvm, te8, ccn, &
             lcpk, icpk, tcpk, tcp3)
-     
+        
         ! -----------------------------------------------------------------------
         ! rain freezing to form graupel
         ! -----------------------------------------------------------------------
-                
+        
         call pgfr_simp (ks, ke, dtm, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
             lcpk, icpk, tcpk, tcp3)
-    
+        
         ! -----------------------------------------------------------------------
         ! snow melting to form cloud water and rain
         ! -----------------------------------------------------------------------
-                
+        
         call psmlt_simp (ks, ke, dtm, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
             lcpk, icpk, tcpk, tcp3)
-
+        
     endif
     
     ! -----------------------------------------------------------------------
@@ -1584,23 +1584,23 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
     call praut_simp (ks, ke, dtm, tz, qv, ql, qr, qi, qs, qg)
     
     if (.not. do_warm_rain_mp) then
- 
+        
         ! -----------------------------------------------------------------------
         ! cloud ice deposition and sublimation
         ! -----------------------------------------------------------------------
-            
+        
         call pidep_pisub (ks, ke, dtm, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
             lcpk, icpk, tcpk, tcp3, cin, dep, sub)
-     
+        
         deposition = deposition + dep * convt
         sublimation = sublimation + sub * convt
-
+        
         ! -----------------------------------------------------------------------
         ! cloud ice to snow autoconversion
         ! -----------------------------------------------------------------------
-     
+        
         call psaut_simp (ks, ke, dtm, qv, ql, qr, qi, qs, qg, tz, den)
-
+        
     endif
     
 end subroutine mp_fast
@@ -1619,31 +1619,31 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: dp, dz, den, denfac
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, u, v, w
-
+    
     real, intent (out) :: r1, i1, s1, g1
-
+    
     real, intent (out), dimension (ks:ke) :: vtr, vti, vts, vtg
-
+    
     real (kind = r8), intent (inout) :: dte
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), dimension (ks:ke) :: te8, cvm
-
+    
     r1 = 0.
     i1 = 0.
     s1 = 0.
@@ -1666,7 +1666,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
             vti, r1, tau_imlt, cvm, icpk, "qi")
     endif
-
+    
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vti, i1, u, v, w, dte, "qi")
     
@@ -1675,12 +1675,12 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     ! -----------------------------------------------------------------------
     
     call term_rsg (ks, ke, qs, den, denfac, vs_fac, vcons, dlin, norms, vs_max, const_vs, vts)
-        
+    
     if (do_sedi_melt) then
         call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
             vts, r1, tau_smlt, cvm, icpk, "qs")
     endif
-
+    
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vts, s1, u, v, w, dte, "qs")
     
@@ -1693,12 +1693,12 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     else
         call term_rsg (ks, ke, qg, den, denfac, vg_fac, vcong, flin, normg, vg_max, const_vg, vtg)
     endif
-
+    
     if (do_sedi_melt) then
         call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
             vtg, r1, tau_gmlt, cvm, icpk, "qg")
     endif
-
+    
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vtg, g1, u, v, w, dte, "qg")
     
@@ -1707,7 +1707,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     ! ----------------------------------------------
     
     call term_rsg (ks, ke, qr, den, denfac, vr_fac, vconr, blin, normr, vr_max, const_vr, vtr)
-        
+    
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vtr, r1, u, v, w, dte, "qr")
     
@@ -1726,13 +1726,13 @@ subroutine term_ice (ks, ke, tz, q, den, v_fac, v_max, const_v, vt)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     logical, intent (in) :: const_v
     
     real, intent (in) :: v_fac, v_max
     
     real, intent (in), dimension (ks:ke) :: q, den
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: tz
     
     real, intent (out), dimension (ks:ke) :: vt
@@ -1740,11 +1740,11 @@ subroutine term_ice (ks, ke, tz, q, den, v_fac, v_max, const_v, vt)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: qden
-
+    
     real, parameter :: aa = - 4.14122e-5
     real, parameter :: bb = - 0.00538922
     real, parameter :: cc = - 0.0516344
@@ -1787,9 +1787,9 @@ subroutine term_rsg (ks, ke, q, den, denfac, v_fac, vcon, lin, norm, v_max, cons
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     logical, intent (in) :: const_v
     
     real, intent (in) :: v_fac, lin, v_max
@@ -1803,11 +1803,11 @@ subroutine term_rsg (ks, ke, q, den, denfac, v_fac, vcon, lin, norm, v_max, cons
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: qden
-
+    
     if (const_v) then
         vt (:) = v_fac
     else
@@ -1836,37 +1836,37 @@ subroutine sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts, tau_mlt
-
+    
     real, intent (in), dimension (ks:ke) :: vt, dp, dz, icpk
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: cvm
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real, intent (inout) :: r1
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     character (len = 2), intent (in) :: qflag
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k, m
-
+    
     real :: dtime, sink, zs
     
     real, dimension (ks:ke) :: q
-
+    
     real, dimension (ks:ke + 1) :: ze, zt
-
+    
     call zezt (ks, ke, dts, zs, dz, vt, ze, zt)
-
+    
     select case (qflag)
         case ("qi")
             q = qi
@@ -1877,7 +1877,7 @@ subroutine sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         case default
             print *, "gfdl_mp: qflag error!"
     end select
-
+    
     ! -----------------------------------------------------------------------
     ! melting to rain
     ! -----------------------------------------------------------------------
@@ -1889,7 +1889,7 @@ subroutine sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
                 if (zt (k + 1) .ge. ze (m)) exit
                 if (zt (k) .lt. ze (m + 1) .and. tz (m) .gt. tice) then
                     dtime = min (dts, (ze (m) - ze (m + 1)) / vt (k))
-                    dtime = min (1.0,  dtime / tau_mlt)
+                    dtime = min (1.0, dtime / tau_mlt)
                     sink = min (q (k) * dp (k) / dp (m), dtime * (tz (m) - tice) / icpk (m))
                     q (k) = q (k) - sink * dp (m) / dp (k)
                     if (zt (k) .lt. zs) then
@@ -1908,13 +1908,13 @@ subroutine sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
                             print *, "gfdl_mp: qflag error!"
                     end select
                     tz (m) = (tz (m) * cvm (m) - li00 * sink) / &
-                         mhc (qv (k), ql (m), qr (m), qi (m), qs (m), qg (m))
+                        mhc (qv (k), ql (m), qr (m), qi (m), qs (m), qg (m))
                 endif
                 if (q (k) .lt. qcmin) exit
             enddo
         endif
     enddo
-        
+    
 end subroutine sedi_melt
 
 ! =======================================================================
@@ -1929,41 +1929,41 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: vt, dp, dz
-
+    
     character (len = 2), intent (in) :: qflag
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, u, v, w
-
+    
     real, intent (inout) :: x1
-
+    
     real (kind = r8), intent (inout) :: dte
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     logical :: no_fall
     
     real :: zs
     
     real, dimension (ks:ke) :: m1, dm, q
-
+    
     real, dimension (ks:ke + 1) :: ze, zt
-
+    
     real (kind = r8), dimension (ks:ke) :: te1, te2
-
+    
     call zezt (ks, ke, dts, zs, dz, vt, ze, zt)
-
+    
     select case (qflag)
         case ("qr")
             q = qr
@@ -1976,11 +1976,11 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         case default
             print *, "gfdl_mp: qflag error!"
     end select
-
+    
     call check_column (ks, ke, q, no_fall)
     
     if (no_fall) return
-
+    
     ! -----------------------------------------------------------------------
     ! momentum transportation during sedimentation
     ! -----------------------------------------------------------------------
@@ -2017,7 +2017,7 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         case default
             print *, "gfdl_mp: qflag error!"
     end select
-
+    
     if (use_ppm) then
         call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, x1, m1, mono_prof)
     else
@@ -2036,7 +2036,7 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         case default
             print *, "gfdl_mp: qflag error!"
     end select
-
+    
     ! -----------------------------------------------------------------------
     ! energy change during sedimentation
     ! -----------------------------------------------------------------------
@@ -2088,7 +2088,7 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         enddo
         dte = dte + sum (te1) - sum (te2)
     endif
-        
+    
 end subroutine terminal_fall
 
 ! =======================================================================
@@ -2102,9 +2102,9 @@ subroutine zezt (ks, ke, dts, zs, dz, vt, ze, zt)
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
     
     real, intent (in), dimension (ks:ke) :: dz, vt
@@ -2116,9 +2116,9 @@ subroutine zezt (ks, ke, dts, zs, dz, vt, ze, zt)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: dt5
     
     dt5 = 0.5 * dts
@@ -2151,15 +2151,15 @@ subroutine check_column (ks, ke, q, no_fall)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: q (ks:ke)
-
+    
     logical, intent (out) :: no_fall
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
     
     no_fall = .true.
@@ -2187,17 +2187,17 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts, rh_rain, h_var
-
+    
     real, intent (in), dimension (ks:ke) :: dp, dz, den, denfac, ccn
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     real, intent (out) :: reevap
-
+    
     ! -----------------------------------------------------------------------
     ! initialization
     ! -----------------------------------------------------------------------
@@ -2209,13 +2209,13 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     ! -----------------------------------------------------------------------
     
     call prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain, h_var, dp, reevap)
-        
+    
     ! -----------------------------------------------------------------------
     ! rain accretion with cloud water
     ! -----------------------------------------------------------------------
     
     call pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
-        
+    
     ! -----------------------------------------------------------------------
     ! cloud water to rain autoconversion
     ! -----------------------------------------------------------------------
@@ -2237,40 +2237,40 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts, rh_rain, h_var
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac, dp
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, qr, ql, qi, qs, qg
-
+    
     real, intent (out) :: reevap
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
     
     real :: dqv, qsat, dqdt, tmp, t2, qden, q_plus, q_minus, sink
     real :: qpz, dq, dqh, tin, fac_revp, rh_tem
     
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), dimension (ks:ke) :: cvm, te8
-
+    
     ! -----------------------------------------------------------------------
     ! initialization
     ! -----------------------------------------------------------------------
-
+    
     reevap = 0
-
+    
     ! -----------------------------------------------------------------------
     ! time-scale factor
     ! -----------------------------------------------------------------------
-            
+    
     fac_revp = 1.
     if (tau_revp .gt. 1.e-6) then
         fac_revp = 1. - exp (- dts / tau_revp)
@@ -2279,10 +2279,10 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
-        
+    
     call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, &
         lcpk, icpk, tcpk, tcp3)
-
+    
     do k = ks, ke
         
         tin = (tz (k) * cvm (k) - lv00 * ql (k)) / mhc (qv (k) + ql (k), qr (k), q_sol (k))
@@ -2294,7 +2294,7 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
         qpz = qv (k) + ql (k)
         qsat = wqs (tin, den (k), dqdt)
         dqv = qsat - qv (k)
-
+        
         dqh = max (ql (k), h_var * max (qpz, qcmin))
         dqh = min (dqh, 0.2 * qpz)
         q_minus = qpz - dqh
@@ -2320,21 +2320,21 @@ subroutine prevp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, rh_rain,
             if (use_rhc_revap .and. rh_tem .ge. rhc_revap) then
                 sink = 0.0
             endif
-
+            
             ! -----------------------------------------------------------------------
             ! alternative minimum evaporation in dry environmental air
             ! -----------------------------------------------------------------------
             ! tmp = min (qr (k), dim (rh_rain * qsat, qv (k)) / (1. + lcpk (k) * dqdt))
             ! sink = max (sink, tmp)
-
+            
             reevap = reevap + sink * dp (k)
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 sink, 0., - sink, 0., 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-        endif
             
+        endif
+        
     enddo ! k loop
     
 end subroutine prevp
@@ -2352,41 +2352,41 @@ subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, qr, ql, qi, qs, qg
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
     
     real :: dqv, qsat, dqdt, tmp, t2, qden, q_plus, q_minus, sink
     real :: qpz, dq, dqh, tin, fac_revp, rh_tem
     
     real, dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), dimension (ks:ke) :: cvm, te8
-
+    
     do k = ks, ke
-
+        
         if (tz (k) .gt. t_wfr .and. qr (k) .gt. qcmin .and. ql (k) .gt. qcmin) then
-
+            
             qden = qr (k) * den (k)
             sink = dts * acr2d (qden, cracw, denfac (k), blin, mur)
             sink = sink / (1. + sink) * ql (k)
-
+            
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, sink, 0., 0., 0.)
-
+            
         endif
-
+        
     enddo
     
 end subroutine pracw
@@ -2404,19 +2404,19 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts, h_var
-
+    
     real, intent (in), dimension (ks:ke) :: den, ccn
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real, parameter :: so3 = 7.0 / 3.0
     real, parameter :: so1 = - 1.0 / 3.0
     
@@ -2425,61 +2425,61 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
     real :: sink, dq, qc
     
     real, dimension (ks:ke) :: dl, c_praut
-
+    
     if (irain_f .eq. 0) then
-
+        
         call linear_prof (ke - ks + 1, ql (ks), dl (ks), z_slope_liq, h_var)
-
+        
         do k = ks, ke
-
+            
             if (tz (k) .gt. t_wfr .and. ql (k) .gt. qcmin) then
-
+                
                 qc = fac_rc * ccn (k)
                 dl (k) = min (max (qcmin, dl (k)), 0.5 * ql (k))
                 dq = 0.5 * (ql (k) + dl (k) - qc)
-
+                
                 if (dq .gt. 0.) then
-
+                    
                     c_praut (k) = cpaut * exp (so1 * log (ccn (k) * rhor))
                     sink = min (1., dq / dl (k)) * dts * c_praut (k) * den (k) * &
                         exp (so3 * log (ql (k)))
                     sink = min (ql (k), sink)
-
+                    
                     call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                         0., - sink, sink, 0., 0., 0.)
-
+                    
                 endif
-
+                
             endif
-
+            
         enddo
-
+        
     endif
     
     if (irain_f .eq. 1) then
-
+        
         do k = ks, ke
-
+            
             if (tz (k) .gt. t_wfr .and. ql (k) .gt. qcmin) then
-
+                
                 qc = fac_rc * ccn (k)
                 dq = ql (k) - qc
-
+                
                 if (dq .gt. 0.) then
-
+                    
                     c_praut (k) = cpaut * exp (so1 * log (ccn (k) * rhor))
                     sink = min (dq, dts * c_praut (k) * den (k) * exp (so3 * log (ql (k))))
                     sink = min (ql (k), sink)
-
+                    
                     call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                         0., - sink, sink, 0., 0., 0.)
-
+                    
                 endif
-
+                
             endif
-
+            
         enddo
-
+        
     endif
 
 end subroutine praut
@@ -2498,23 +2498,23 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts, h_var
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts, vtg
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real, dimension (ks:ke) :: di, q_liq, q_sol, lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), dimension (ks:ke) :: cvm, te8
-
+    
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
@@ -2523,19 +2523,19 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
         lcpk, icpk, tcpk, tcp3)
     
     if (.not. do_warm_rain_mp) then
-
+        
         ! -----------------------------------------------------------------------
         ! cloud ice melting to form cloud water and rain
         ! -----------------------------------------------------------------------
-                
+        
         call pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk, tcp3)
-
+        
         ! -----------------------------------------------------------------------
         ! cloud water freezing to form cloud ice and snow
         ! -----------------------------------------------------------------------
         
         call pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, icpk, tcpk, tcp3)
-    
+        
         ! -----------------------------------------------------------------------
         ! vertical subgrid variability
         ! -----------------------------------------------------------------------
@@ -2545,61 +2545,61 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
         ! -----------------------------------------------------------------------
         ! snow melting (includes snow accretion with cloud water and rain) to form cloud water and rain
         ! -----------------------------------------------------------------------
-                
+        
         call psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
             vtr, vts, lcpk, icpk, tcpk, tcp3)
-    
+        
         ! -----------------------------------------------------------------------
         ! graupel melting (includes graupel accretion with cloud water and rain) to form rain
         ! -----------------------------------------------------------------------
-                
+        
         call pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
             vtr, vtg, lcpk, icpk, tcpk, tcp3)
-    
+        
         ! -----------------------------------------------------------------------
         ! snow accretion with cloud ice
         ! -----------------------------------------------------------------------
-                
+        
         call psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
-    
+        
         ! -----------------------------------------------------------------------
         ! cloud ice to snow autoconversion
         ! -----------------------------------------------------------------------
-
+        
         call psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
-    
+        
         ! -----------------------------------------------------------------------
         ! graupel accretion with cloud ice
         ! -----------------------------------------------------------------------
-                
+        
         call pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
-    
+        
         ! -----------------------------------------------------------------------
         ! snow accretion with rain and rain freezing to form graupel
         ! -----------------------------------------------------------------------
-                
+        
         call psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
             vtr, vts, lcpk, icpk, tcpk, tcp3)
-    
+        
         ! -----------------------------------------------------------------------
         ! graupel accretion with snow
         ! -----------------------------------------------------------------------
-
+        
         call pgacs (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, vts, vtg)
-    
+        
         ! -----------------------------------------------------------------------
         ! snow to graupel autoconversion
         ! -----------------------------------------------------------------------
-
+        
         call pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
-    
+        
         ! -----------------------------------------------------------------------
         ! graupel accretion with cloud water and rain
         ! -----------------------------------------------------------------------
-
+        
         call pgacw_pgacr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
             vtr, vtg, lcpk, icpk, tcpk, tcp3)
-    
+        
     endif ! do_warm_rain_mp
     
 end subroutine ice_cloud
@@ -2615,48 +2615,48 @@ subroutine pimlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk,
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, tmp, sink, fac_imlt
-
+    
     fac_imlt = 1. - exp (- dts / tau_imlt)
     
     do k = ks, ke
-
+        
         tc = tz (k) - tice_mlt
-
+        
         if (tc .gt. 0 .and. qi (k) .gt. qcmin) then
-
+            
             sink = fac_imlt * tc / icpk (k)
             sink = min (qi (k), sink)
             tmp = min (sink, dim (ql_mlt, ql (k)))
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., tmp, sink - tmp, - sink, 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+            
         endif
-
-    enddo
         
-end subroutine pimlt
+    enddo
     
+end subroutine pimlt
+
 ! =======================================================================
 ! cloud water freezing to form cloud ice and snow, Lin et al. (1983)
 ! =======================================================================
@@ -2668,47 +2668,47 @@ subroutine pifr (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, icpk, 
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in), dimension (ks:ke) :: den
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, tmp, sink, qim
-
+    
     do k = ks, ke
-
+        
         tc = t_wfr - tz (k)
-
+        
         if (tc .gt. 0. .and. ql (k) .gt. qcmin) then
-
+            
             sink = ql (k) * tc / dt_fr
             sink = min (ql (k), sink, tc / icpk (k))
             qim = qi0_crt / den (k)
             tmp = min (sink, dim (qim, qi (k)))
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, 0., tmp, sink - tmp, 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+            
         endif
-
-    enddo
         
-end subroutine pifr
+    enddo
     
+end subroutine pifr
+
 ! =======================================================================
 ! snow melting (includes snow accretion with cloud water and rain) to form cloud water and rain
 ! Lin et al. (1983)
@@ -2722,31 +2722,31 @@ subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, factor, tmp, sink, qden, dqdt, tin, dq
     real :: psacw, psacr, pracs
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .ge. 0. .and. qs (k) .gt. qcmin) then
@@ -2771,20 +2771,20 @@ subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
             dq = iqs (tin, den (k), dqdt) - qv (k)
             sink = max (0., pmlt (tc, dq, qden, psacw, psacr, csmlt, den (k), denfac (k), dlin, mus, &
                 lcpk (k), icpk (k), cvm (k)))
-
+            
             sink = min (qs (k), (sink + pracs) * dts, tc / icpk (k))
             tmp = min (sink, dim (qs_mlt, ql (k)))
             
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., tmp, sink - tmp, 0., - sink, 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-        endif
             
-    enddo
+        endif
         
-end subroutine psmlt
+    enddo
     
+end subroutine psmlt
+
 ! =======================================================================
 ! graupel melting (includes graupel accretion with cloud water and rain) to form rain
 ! Lin et al. (1983)
@@ -2798,31 +2798,31 @@ subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vtg
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, factor, sink, qden, dqdt, tin, dq
     real :: pgacw, pgacr
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .ge. 0. .and. qg (k) .gt. qcmin) then
@@ -2853,19 +2853,19 @@ subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
                 sink = max (0., pmlt (tc, dq, qden, pgacw, pgacr, cgmlt, den (k), denfac (k), flin, mug, &
                     lcpk (k), icpk (k), cvm (k)))
             endif
-
+            
             sink = min (qg (k), sink * dts, tc / icpk (k))
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., sink, 0., 0., - sink, te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+            
         endif
-                
-    enddo
         
-end subroutine pgmlt
+    enddo
     
+end subroutine pgmlt
+
 ! =======================================================================
 ! snow accretion with cloud ice, Lin et al. (1983)
 ! =======================================================================
@@ -2877,27 +2877,27 @@ subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, factor, sink, qden
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .lt. 0. .and. qi (k) .gt. qcmin) then
@@ -2913,13 +2913,13 @@ subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
             
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., - sink, sink, 0.)
-
+            
         endif
-                
-    enddo
         
-end subroutine psaci
+    enddo
     
+end subroutine psaci
+
 ! =======================================================================
 ! cloud ice to snow autoconversion, Lin et al. (1983)
 ! =======================================================================
@@ -2931,29 +2931,29 @@ subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, di
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, sink, fac_i2s, q_plus, qim, dq, tmp
-
+    
     fac_i2s = 1. - exp (- dts / tau_i2s)
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .lt. 0. .and. qi (k) .gt. qcmin) then
@@ -2971,18 +2971,18 @@ subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
                 endif
                 sink = tmp * dq
             endif
-
+            
             sink = min (fi2s_fac * qi (k), sink)
             
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., - sink, sink, 0.)
-
+            
         endif
-
-    enddo
         
-end subroutine psaut
+    enddo
     
+end subroutine psaut
+
 ! =======================================================================
 ! graupel accretion with cloud ice, Lin et al. (1983)
 ! =======================================================================
@@ -2994,27 +2994,27 @@ subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, factor, sink, qden
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .lt. 0. .and. qi (k) .gt. qcmin) then
@@ -3029,18 +3029,18 @@ subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
                 endif
                 sink = factor / (1. + factor) * qi (k)
             endif
-
+            
             sink = min (fi2g_fac * qi (k), sink)
             
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., - sink, 0., sink)
-
+            
         endif
-                
-    enddo
         
-end subroutine pgaci
+    enddo
     
+end subroutine pgaci
+
 ! =======================================================================
 ! snow accretion with rain and rain freezing to form graupel, Lin et al. (1983)
 ! =======================================================================
@@ -3053,31 +3053,31 @@ subroutine psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, d
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, factor, sink
     real :: psacr, pgfr
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .lt. 0. .and. qr (k) .gt. qcmin) then
@@ -3097,17 +3097,17 @@ subroutine psacr_pgfr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, d
             pgfr = factor * pgfr
             
             sink = min (qr (k), psacr + pgfr)
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., - sink, 0., psacr, pgfr, te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+            
         endif
-                
-    enddo
         
-end subroutine psacr_pgfr
+    enddo
     
+end subroutine psacr_pgfr
+
 ! =======================================================================
 ! graupel accretion with snow, Lin et al. (1983)
 ! =======================================================================
@@ -3119,27 +3119,27 @@ subroutine pgacs (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, vts, vtg)
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, vts, vtg
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, factor, sink
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .lt. 0. .and. qs (k) .gt. qcmin) then
@@ -3154,13 +3154,13 @@ subroutine pgacs (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, vts, vtg)
             
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., 0., - sink, sink)
-
+            
         endif
-                
-    enddo
         
-end subroutine pgacs
+    enddo
     
+end subroutine pgacs
+
 ! =======================================================================
 ! snow to graupel autoconversion, Lin et al. (1983)
 ! =======================================================================
@@ -3172,27 +3172,27 @@ subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, factor, sink, qsm
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .lt. 0. .and. qs (k) .gt. qcmin) then
@@ -3203,18 +3203,18 @@ subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
                 factor = dts * 1.e-3 * exp (0.09 * (tz (k) - tice))
                 sink = factor / (1. + factor) * (qs (k) - qsm)
             endif
-
+            
             sink = min (fs2g_fac * qs (k), sink)
             
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., 0., - sink, sink)
-
+            
         endif
-                
+        
     enddo
-        
+    
 end subroutine pgaut
-        
+
 ! =======================================================================
 ! graupel accretion with cloud water and rain, Lin et al. (1983)
 ! =======================================================================
@@ -3227,31 +3227,31 @@ subroutine pgacw_pgacr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, 
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vtg
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, factor, sink, qden
     real :: pgacw, pgacr
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .lt. 0. .and. qg (k) .gt. qcmin) then
@@ -3279,17 +3279,17 @@ subroutine pgacw_pgacr (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, 
             pgacw = factor * pgacw
             
             sink = pgacr + pgacw
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - pgacw, - pgacr, 0., 0., sink, te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+            
         endif
-                
-    enddo
         
-end subroutine pgacw_pgacr
+    enddo
     
+end subroutine pgacw_pgacr
+
 ! =======================================================================
 ! temperature sentive high vertical resolution processes
 ! =======================================================================
@@ -3304,29 +3304,29 @@ subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts, rh_adj
-
+    
     real, intent (in), dimension (ks:ke) :: den, denfac, ccn, dp
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, cin
-
+    
     real, intent (out) :: cond, dep, reevap, sub
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real, dimension (ks:ke) :: q_liq, q_sol, q_cond, lcpk, icpk, tcpk, tcp3
     
     real (kind = r8), dimension (ks:ke) :: cvm, te8
-
+    
     ! -----------------------------------------------------------------------
     ! initialization
     ! -----------------------------------------------------------------------
-
+    
     cond = 0
     dep = 0
     reevap = 0
@@ -3344,56 +3344,56 @@ subroutine subgrid_z_proc (ks, ke, den, denfac, dts, rh_adj, tz, qv, ql, qr, &
     ! -----------------------------------------------------------------------
     
     if (.not. do_warm_rain_mp) then
-
+        
         call pinst (ks, ke, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
             lcpk, icpk, tcpk, tcp3, rh_adj, dep, sub, reevap)
-
+        
     endif
-
+    
     ! -----------------------------------------------------------------------
     ! cloud water condensation and evaporation
     ! -----------------------------------------------------------------------
     
     call pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         lcpk, icpk, tcpk, tcp3, cond, reevap)
-
+    
     if (.not. do_warm_rain_mp) then
-
+        
         ! -----------------------------------------------------------------------
         ! enforce complete freezing below t_wfr
         ! -----------------------------------------------------------------------
-                
+        
         call pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk, tcp3)
- 
+        
         ! -----------------------------------------------------------------------
         ! bigg freezing mechanism
         ! -----------------------------------------------------------------------
-                
+        
         call pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, ccn, lcpk, icpk, tcpk, tcp3)
-
+        
         ! -----------------------------------------------------------------------
         ! cloud ice deposition and sublimation
         ! -----------------------------------------------------------------------
-            
+        
         call pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
             lcpk, icpk, tcpk, tcp3, cin, dep, sub)
-
+        
         ! -----------------------------------------------------------------------
         ! snow deposition and sublimation
         ! -----------------------------------------------------------------------
-            
+        
         call psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
             denfac, lcpk, icpk, tcpk, tcp3, dep, sub)
-
+        
         ! -----------------------------------------------------------------------
         ! graupel deposition and sublimation
         ! -----------------------------------------------------------------------
-            
+        
         call pgdep_pgsub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
             denfac, lcpk, icpk, tcpk, tcp3, dep, sub)
-
+        
     endif
-
+    
 end subroutine subgrid_z_proc
 
 ! =======================================================================
@@ -3402,7 +3402,7 @@ end subroutine subgrid_z_proc
 
 subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         lcpk, icpk, tcpk, tcp3, rh_adj, dep, sub, reevap)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -3410,74 +3410,74 @@ subroutine pinst (ks, ke, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: rh_adj
-
+    
     real, intent (in), dimension (ks:ke) :: den, dp
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     real, intent (out) :: dep, reevap, sub
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: sink, tin, qpz, rh, dqdt, tmp
-
+    
     do k = ks, ke
-
+        
         ! -----------------------------------------------------------------------
         ! instant deposit all water vapor to cloud ice when temperature is super low
         ! -----------------------------------------------------------------------
         
         if (tz (k) .lt. t_min) then
-
+            
             sink = dim (qv (k), qcmin)
             dep = dep + sink * dp (k)
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                - sink, 0., 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
+                 - sink, 0., 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+            
         endif
         
         ! -----------------------------------------------------------------------
         ! instant evaporation / sublimation of all clouds when rh < rh_adj
         ! -----------------------------------------------------------------------
-
+        
         qpz = qv (k) + ql (k) + qi (k)
         tin = (te8 (k) - lv00 * qpz + li00 * (qs (k) + qg (k))) / &
-             mhc (qpz, qr (k), qs (k) + qg (k))
-
+            mhc (qpz, qr (k), qs (k) + qg (k))
+        
         if (tin .gt. t_sub + 6.) then
-
+            
             rh = qpz / iqs (tin, den (k), dqdt)
             if (rh .lt. rh_adj) then
-
+                
                 sink = ql (k)
                 tmp = qi (k)
-
+                
                 reevap = reevap + sink * dp (k)
                 sub = sub + tmp * dp (k)
-
+                
                 call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                     sink + tmp, - sink, 0., - tmp, 0., 0., te8 (k), cvm (k), tz (k), &
                     lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+                
             endif
-
-        endif
             
-    enddo
+        endif
         
+    enddo
+    
 end subroutine pinst
 
 ! =======================================================================
@@ -3486,7 +3486,7 @@ end subroutine pinst
 
 subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         lcpk, icpk, tcpk, tcp3, cond, reevap)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -3494,33 +3494,33 @@ subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, dp
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     real, intent (out) :: cond, reevap
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: sink, tin, qpz, dqdt, qsw, rh_tem, dq, factor, fac_l2v, fac_v2l
-
+    
     fac_l2v = 1. - exp (- dts / tau_l2v)
     fac_v2l = 1. - exp (- dts / tau_v2l)
     
     do k = ks, ke
-
+        
         tin = tz (k)
         qsw = wqs (tin, den (k), dqdt)
         qpz = qv (k) + ql (k) + qi (k)
@@ -3541,13 +3541,13 @@ subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
             sink = - min (qv (k), - dq / (1. + tcp3 (k) * dqdt))
             cond = cond - sink * dp (k)
         endif
-
+        
         call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
             sink, - sink, 0., 0., 0., 0., te8 (k), cvm (k), tz (k), &
             lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-    enddo
         
+    enddo
+    
 end subroutine pcond_pevap
 
 ! =======================================================================
@@ -3555,7 +3555,7 @@ end subroutine pcond_pevap
 ! =======================================================================
 
 subroutine pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk, tcp3)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -3563,39 +3563,39 @@ subroutine pcomp (ks, ke, qv, ql, qr, qi, qs, qg, tz, cvm, te8, lcpk, icpk, tcpk
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, sink
-
+    
     do k = ks, ke
-
+        
         tc = t_wfr - tz (k)
-
+        
         if (tc .gt. 0. .and. ql (k) .gt. qcmin) then
-
+            
             sink = ql (k) * tc / dt_fr
             sink = min (ql (k), sink, tc / icpk (k))
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+            
         endif
-
-    enddo
         
+    enddo
+    
 end subroutine pcomp
 
 ! =======================================================================
@@ -3603,7 +3603,7 @@ end subroutine pcomp
 ! =======================================================================
 
 subroutine pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, ccn, lcpk, icpk, tcpk, tcp3)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -3611,41 +3611,41 @@ subroutine pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, ccn, lcpk, 
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: ccn
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: sink, tc
-
+    
     do k = ks, ke
- 
+        
         tc = tice - tz (k)
-
+        
         if (tc .gt. 0 .and. ql (k) .gt. qcmin) then
-
+            
             sink = 100. / (rhow * ccn (k)) * dts * (exp (0.66 * tc) - 1.) * ql (k) ** 2
             sink = min (ql (k), sink, tc / icpk (k))
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+            
         endif
-
+        
     enddo
 
 end subroutine pbigg
@@ -3656,7 +3656,7 @@ end subroutine pbigg
 
 subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         lcpk, icpk, tcpk, tcp3, cin, dep, sub)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -3664,46 +3664,46 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, dp
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, cin
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     real, intent (out) :: dep, sub
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: sink, tin, dqdt, qsi, dq, pidep, tmp, tc, qi_gen, qi_crt
-
+    
     do k = ks, ke
-
+        
         if (tz (k) .lt. tice) then
-
+            
             pidep = 0.
             tin = tz (k)
             qsi = iqs (tin, den (k), dqdt)
             dq = qv (k) - qsi
             tmp = dq / (1. + tcpk (k) * dqdt)
-
+            
             if (qi (k) .gt. qcmin) then
                 if (.not. prog_ccn) then
                     if (inflag .eq. 1) &
                         cin (k) = 5.38e7 * exp (0.75 * log (qi (k) * den (k)))
                     if (inflag .eq. 2) &
-                        cin (k) = exp (-2.80 + 0.262 * (tice - tz (k))) * 1000.0
+                        cin (k) = exp (- 2.80 + 0.262 * (tice - tz (k))) * 1000.0
                     if (inflag .eq. 3) &
-                        cin (k) = exp (-0.639 + 12.96 * (qv (k) / qsi - 1.0)) * 1000.0
+                        cin (k) = exp (- 0.639 + 12.96 * (qv (k) / qsi - 1.0)) * 1000.0
                     if (inflag .eq. 4) &
                         cin (k) = 5.e-3 * exp (0.304 * (tice - tz (k))) * 1000.0
                     if (inflag .eq. 5) &
@@ -3711,9 +3711,9 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
                 endif
                 pidep = dts * dq * 4.0 * 11.9 * exp (0.5 * log (qi (k) * den (k) * cin (k))) / &
                      (qsi * den (k) * (tcpk (k) * cvm (k)) ** 2 / (tcond * rvgas * tz (k) ** 2) + &
-                     1 / vdifu)
+                    1 / vdifu)
             endif
-
+            
             if (dq .gt. 0.) then
                 tc = tice - tz (k)
                 qi_gen = 4.92e-11 * exp (1.33 * log (1.e3 * exp (0.1 * tc)))
@@ -3732,15 +3732,15 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
                 sink = max (pidep, tmp, - qi (k))
                 sub = sub - sink * dp (k)
             endif
-
-            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
-                - sink, 0., 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
-                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-        endif
             
-    enddo
+            call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
+                 - sink, 0., 0., sink, 0., 0., te8 (k), cvm (k), tz (k), &
+                lcpk (k), icpk (k), tcpk (k), tcp3 (k))
+            
+        endif
         
+    enddo
+    
 end subroutine pidep_pisub
 
 ! =======================================================================
@@ -3749,7 +3749,7 @@ end subroutine pidep_pisub
 
 subroutine psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         denfac, lcpk, icpk, tcpk, tcp3, dep, sub)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -3757,32 +3757,32 @@ subroutine psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, dp, denfac
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     real, intent (out) :: dep, sub
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: sink, tin, dqdt, qsi, qden, t2, dq, pssub
-
+    
     do k = ks, ke
-
+        
         if (qs (k) .gt. qcmin) then
-
+            
             tin = tz (k)
             qsi = iqs (tin, den (k), dqdt)
             qden = qs (k) * den (k)
@@ -3801,15 +3801,15 @@ subroutine psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
                 endif
                 dep = dep - sink * dp (k)
             endif
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 sink, 0., 0., 0., - sink, 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-        endif
             
-    enddo
+        endif
         
+    enddo
+    
 end subroutine psdep_pssub
 
 ! =======================================================================
@@ -3818,7 +3818,7 @@ end subroutine psdep_pssub
 
 subroutine pgdep_pgsub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, den, &
         denfac, lcpk, icpk, tcpk, tcp3, dep, sub)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
@@ -3826,32 +3826,32 @@ subroutine pgdep_pgsub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den, dp, denfac
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     real, intent (out) :: dep, sub
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: sink, tin, dqdt, qsi, qden, t2, dq, pgsub
-
+    
     do k = ks, ke
-
+        
         if (qg (k) .gt. qcmin) then
-
+            
             tin = tz (k)
             qsi = iqs (tin, den (k), dqdt)
             qden = qg (k) * den (k)
@@ -3874,15 +3874,15 @@ subroutine pgdep_pgsub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
                 endif
                 dep = dep - sink * dp (k)
             endif
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 sink, 0., 0., 0., 0., - sink, te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-        endif
             
-    enddo
+        endif
         
+    enddo
+    
 end subroutine pgdep_pgsub
 
 ! =======================================================================
@@ -3898,37 +3898,37 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: h_var, gsize
-
+    
     real, intent (in), dimension (ks:ke) :: pz, den
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: tz
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, qa
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: q_plus, q_minus
     real :: rh, rqi, tin, qsw, qsi, qpz, qstar, sigma, gam
     real :: dqdt, dq, liq, ice
     real :: qa10, qa100
-
+    
     real, dimension (ks:ke) :: q_liq, q_sol, q_cond, lcpk, icpk, tcpk, tcp3
     
     real (kind = r8), dimension (ks:ke) :: cvm, te8
-
+    
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
     
     call cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, cvm, te8, tz, &
         lcpk, icpk, tcpk, tcp3)
-
+    
     do k = ks, ke
         
         ! combine water species
@@ -3941,7 +3941,7 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
                 q_sol (k) = qi (k) + qs (k) + qg (k)
             endif
         endif
-
+        
         liq = q_liq (k)
         q_liq (k) = ql (k)
         if (rad_rain) then
@@ -3952,11 +3952,11 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
         qpz = qv (k) + q_cond (k)
         
         ! use the "liquid - frozen water temperature" (tin) to compute saturated specific humidity
-
+        
         ice = ice - q_sol (k)
         liq = liq - q_liq (k)
         tin = (te8 (k) - lv00 * qpz + li00 * ice) / mhc (qpz, liq, ice)
-
+        
         ! calculate saturated specific humidity
         
         if (tin .le. t_wfr) then
@@ -3983,8 +3983,8 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
                 
                 dq = h_var * qpz
                 if (do_cld_adj) then
-                    q_plus = qpz + dq * f_dq_p * min(1.0, max(0.0, (pz (k) - 200.e2) / &
-                        (1000.e2 - 200.e2)))
+                    q_plus = qpz + dq * f_dq_p * min (1.0, max (0.0, (pz (k) - 200.e2) / &
+                         (1000.e2 - 200.e2)))
                 else
                     q_plus = qpz + dq * f_dq_p
                 endif
@@ -4019,7 +4019,7 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
                                 qa (k) = (q_plus - qstar) / (dq * f_dq_p + dq * f_dq_m)
                             else
                                 qa (k) = (q_plus - qstar) / ((dq * f_dq_p + dq * f_dq_m) * &
-                                    (1. - q_cond (k)))
+                                     (1. - q_cond (k)))
                             endif
                         else
                             qa (k) = 0.
@@ -4046,7 +4046,7 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
                 qa (k) = 0.0
             endif
         endif
-
+        
         if (cfflag .eq. 3) then
             if (q_cond (k) .gt. qcmin) then
                 qa (k) = 1. / 50. * (5.77 * (100. - gsize / 1000.) * &
@@ -4060,7 +4060,7 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
                 qa (k) = 0.0
             endif
         endif
-
+        
         if (cfflag .eq. 4) then
             sigma = 0.28 + exp (0.49 * log (max (qcmin * 1000., q_cond (k) * 1000.)))
             gam = max (0.0, q_cond (k) * 1000.) / sigma
@@ -4083,7 +4083,7 @@ subroutine cloud_fraction (ks, ke, pz, den, qv, ql, qr, qi, qs, qg, qa, tz, h_va
             qa (k) = qa10 + (log10 (gsize / 1000.) - 1) * (qa100 - qa10)
             qa (k) = max (0.0, min (1., qa (k)))
         endif
-
+        
     enddo
     
 end subroutine cloud_fraction
@@ -4101,27 +4101,27 @@ subroutine lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, precip, m1, mono)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     logical, intent (in) :: mono
-
+    
     real, intent (in) :: zs
-
+    
     real, intent (in), dimension (ks:ke + 1) :: ze, zt
-
+    
     real, intent (in), dimension (ks:ke) :: dp
     
     real, intent (inout), dimension (ks:ke) :: q, m1
-
+    
     real, intent (inout) :: precip
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k, k0, n, m
-
+    
     real :: a4 (4, ks:ke), pl, pr, delz, esl
-
+    
     real, parameter :: r3 = 1. / 3., r23 = 2. / 3.
     
     real, dimension (ks:ke) :: qm, dz
@@ -4211,23 +4211,23 @@ subroutine cs_profile (a4, del, km, do_mono)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: km
-
+    
     logical, intent (in) :: do_mono
-
+    
     real, intent (in) :: del (km)
-
+    
     real, intent (inout) :: a4 (4, km)
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
     
     logical :: extm (km)
     
     real, parameter :: qp_min = 1.e-6
-
+    
     real :: gam (km), q (km + 1), d4, bet, a_bot, grat, pmp, lac
     real :: pmp_1, lac_1, pmp_2, lac_2, da1, da2, a6da
     
@@ -4403,7 +4403,7 @@ subroutine cs_limiters (km, a4)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
     
     real, parameter :: r12 = 1. / 12.
@@ -4446,27 +4446,27 @@ subroutine implicit_fall (dts, ks, ke, ze, vt, dp, q, precip, m1)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke + 1) :: ze
-
+    
     real, intent (in), dimension (ks:ke) :: vt, dp
-
+    
     real, intent (inout), dimension (ks:ke) :: q
-
+    
     real, intent (inout) :: precip
-
+    
     real, intent (out), dimension (ks:ke) :: m1
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
     
     real, dimension (ks:ke) :: dz, qm, dd
-
+    
     do k = ks, ke
         dz (k) = ze (k) - ze (k + 1)
         dd (k) = dts * vt (k)
@@ -4507,39 +4507,39 @@ subroutine explicit_fall (dts, ks, ke, ze, vt, dp, q, precip, m1)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke + 1) :: ze
-
+    
     real, intent (in), dimension (ks:ke) :: vt, dp
-
+    
     real, intent (inout), dimension (ks:ke) :: q
-
+    
     real, intent (inout) :: precip
-
+    
     real, intent (out), dimension (ks:ke) :: m1
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: n, k, nstep
     
     real, dimension (ks:ke) :: dz, qm, q0, dd
-
+    
     do k = ks, ke
         dz (k) = ze (k) - ze (k + 1)
         dd (k) = dts * vt (k)
         q0 (k) = q (k) * dp (k)
     enddo
-     
+    
     nstep = 1 + int (maxval (dd / dz))
     do k = ks, ke
         dd (k) = dd (k) / nstep
         q (k) = q0 (k)
     enddo
-
+    
     do n = 1, nstep
         qm (ks) = q (ks) - q (ks) * dd (ks) / dz (ks)
         do k = ks + 1, ke
@@ -4574,21 +4574,21 @@ subroutine linear_prof (km, q, dm, z_var, h_var)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: km
-
+    
     logical, intent (in) :: z_var
-
+    
     real, intent (in) :: q (km), h_var
-
+    
     real, intent (out) :: dm (km)
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
     
     real :: dq (km)
-
+    
     if (z_var) then
         do k = 2, km
             dq (k) = 0.5 * (q (k) - q (k - 1))
@@ -4631,7 +4631,7 @@ function acr2d (qden, c, denfac, lin, mu)
     implicit none
     
     real :: acr2d
-
+    
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
@@ -4651,7 +4651,7 @@ function acr3d (v1, v2, q1, q2, c, acco, acc1, acc2, den)
     implicit none
     
     real :: acr3d
-
+    
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
@@ -4661,21 +4661,21 @@ function acr3d (v1, v2, q1, q2, c, acco, acc1, acc2, den)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: i
-
+    
     real :: t1, t2, tmp
     
     t1 = exp (0.25 * log (q1 * den))
     t2 = exp (0.25 * log (q2 * den))
-
+    
     acr3d = c * abs (v1 - v2) / den
     
     tmp = 0
     do i = 1, 3
         tmp = tmp + acco (i) * exp ((6 + acc1 - i) * log (t1)) * exp ((acc2 + i - 1) * log (t2))
     enddo
-
+    
     acr3d = acr3d * tmp
     
 end function acr3d
@@ -4687,7 +4687,7 @@ end function acr3d
 function vent_coeff (qden, c1, c2, denfac, lin, mu)
     
     implicit none
-
+    
     real :: vent_coeff
     
     ! -----------------------------------------------------------------------
@@ -4708,7 +4708,7 @@ end function vent_coeff
 function psub (t2, dq, qden, qsat, c, den, denfac, lin, mu, cpk, cvm)
     
     implicit none
-
+    
     real :: psub
     
     ! -----------------------------------------------------------------------
@@ -4721,7 +4721,7 @@ function psub (t2, dq, qden, qsat, c, den, denfac, lin, mu, cpk, cvm)
     
     psub = c (1) * t2 * dq * exp (0.25 * (1 + mu) * log (qden)) * &
         vent_coeff (qden, c (2), c (3), denfac, lin, mu) / &
-        (c (4) * t2 + c (5) * (cpk * cvm) ** 2 * qsat * den)
+         (c (4) * t2 + c (5) * (cpk * cvm) ** 2 * qsat * den)
     
 end function psub
 
@@ -4732,7 +4732,7 @@ end function psub
 function pmlt (tc, dq, qden, pxacw, pxacr, c, den, denfac, lin, mu, lcpk, icpk, cvm)
     
     implicit none
-
+    
     real :: pmlt
     
     ! -----------------------------------------------------------------------
@@ -4755,30 +4755,30 @@ end function pmlt
 ! =======================================================================
 
 subroutine sedi_uv (ks, ke, m1, dp, u, v)
-
+    
     implicit none
-
+    
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in), dimension (ks:ke) :: m1, dp
-
+    
     real, intent (inout), dimension (ks:ke) :: u, v
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     do k = ks + 1, ke
         u (k) = (dp (k) * u (k) + m1 (k - 1) * u (k - 1)) / (dp (k) + m1 (k - 1))
         v (k) = (dp (k) * v (k) + m1 (k - 1) * v (k - 1)) / (dp (k) + m1 (k - 1))
     enddo
-
+    
 end subroutine sedi_uv
 
 ! =======================================================================
@@ -4786,31 +4786,31 @@ end subroutine sedi_uv
 ! =======================================================================
 
 subroutine sedi_w (ks, ke, m1, w, vt, dm)
-
+    
     implicit none
-
+    
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in), dimension (ks:ke) :: m1, vt, dm
-
+    
     real, intent (inout), dimension (ks:ke) :: w
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     w (ks) = w (ks) + m1 (ks) * vt (ks) / dm (ks)
     do k = ks + 1, ke
         w (k) = (dm (k) * w (k) + m1 (k - 1) * (w (k - 1) - vt (k - 1)) + m1 (k) * vt (k)) / &
              (dm (k) + m1 (k - 1))
     enddo
-
+    
 end subroutine sedi_w
 
 ! =======================================================================
@@ -4818,27 +4818,27 @@ end subroutine sedi_w
 ! =======================================================================
 
 subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
-
+    
     implicit none
-
+    
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: cw
-
+    
     real, intent (in), dimension (ks:ke) :: dm, m1, dz, qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real, dimension (ks:ke) :: dgz, cv0
     
     do k = ks + 1, ke
@@ -4846,10 +4846,10 @@ subroutine sedi_heat (ks, ke, dm, m1, dz, tz, qv, ql, qr, qi, qs, qg, cw)
         cv0 (k) = dm (k) * (cv_air + qv (k) * cv_vap + (qr (k) + ql (k)) * c_liq + &
              (qi (k) + qs (k) + qg (k)) * c_ice) + cw * (m1 (k) - m1 (k - 1))
     enddo
-
+    
     do k = ks + 1, ke
         tz (k) = (cv0 (k) * tz (k) + m1 (k - 1) * (cw * tz (k - 1) + dgz (k))) / &
-            (cv0 (k) + cw * m1 (k - 1))
+             (cv0 (k) + cw * m1 (k - 1))
     enddo
     
 end subroutine sedi_heat
@@ -4881,37 +4881,37 @@ subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
     
     real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt, te
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
-
+    
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
-
+    
     real, intent (inout), dimension (is:ie) :: condensation, deposition
     real, intent (inout), dimension (is:ie) :: evaporation, sublimation
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real, dimension (is:ie, ks:ke) :: ua, va, wa
-
+    
     real, dimension (is:ie) :: rain, snow, ice, graupel
-
+    
     ! -----------------------------------------------------------------------
     ! initialization
     ! -----------------------------------------------------------------------
-
+    
     ua = 0.0
     va = 0.0
     wa = 0.0
-
+    
     ice = 0.0
     rain = 0.0
     snow = 0.0
     graupel = 0.0
-
+    
     ! -----------------------------------------------------------------------
     ! define various heat capacities and latent heat coefficients at 0 deg K
     ! -----------------------------------------------------------------------
-
+    
     call setup_mhc_lhc (hydrostatic)
     
     ! -----------------------------------------------------------------------
@@ -4937,47 +4937,47 @@ subroutine pgfr_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, sink, fac_r2g
-
+    
     fac_r2g = 1. - exp (- dts / tau_r2g)
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .lt. 0. .and. qr (k) .gt. qcmin) then
             
             sink = (tc * 0.025) ** 2 * qr (k)
             sink = min (qr (k), sink, fac_r2g * tc / icpk (k))
-
+            
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., - sink, 0., 0., sink, te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
+            
         endif
-                
-    enddo
         
-end subroutine pgfr_simp
+    enddo
     
+end subroutine pgfr_simp
+
 ! =======================================================================
 ! snow melting to form cloud water and rain, simple version
 ! =======================================================================
@@ -4990,30 +4990,30 @@ subroutine psmlt_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     real, intent (inout), dimension (ks:ke) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: cvm, tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, tmp, sink, fac_smlt
-
+    
     fac_smlt = 1. - exp (- dts / tau_smlt)
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
         
         if (tc .ge. 0. .and. qs (k) .gt. qcmin) then
@@ -5025,13 +5025,13 @@ subroutine psmlt_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, &
             call update_qt (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., tmp, sink - tmp, 0., - sink, 0., te8 (k), cvm (k), tz (k), &
                 lcpk (k), icpk (k), tcpk (k), tcp3 (k))
-
-        endif
             
-    enddo
+        endif
         
-end subroutine psmlt_simp
+    enddo
     
+end subroutine psmlt_simp
+
 ! =======================================================================
 ! cloud water to rain autoconversion, simple version
 ! =======================================================================
@@ -5045,36 +5045,36 @@ subroutine praut_simp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
     
     real :: tc, sink, fac_l2r
     
     fac_l2r = 1. - exp (- dts / tau_l2r)
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - t_wfr
-
+        
         if (tc .gt. 0 .and. ql (k) .gt. ql0_max) then
-
+            
             sink = fac_l2r * (ql (k) - ql0_max)
-
+            
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, sink, 0., 0., 0.)
-
+            
         endif
-
+        
     enddo
 
 end subroutine praut_simp
@@ -5090,46 +5090,46 @@ subroutine psaut_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in) :: dts
-
+    
     real, intent (in), dimension (ks:ke) :: den
-
+    
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: tc, sink, fac_i2s, qim
-
+    
     fac_i2s = 1. - exp (- dts / tau_i2s)
-
+    
     do k = ks, ke
-
+        
         tc = tz (k) - tice
-
+        
         qim = qi0_max / den (k)
         
         if (tc .lt. 0. .and. qi (k) .gt. qim) then
-
+            
             sink = fac_i2s * (qi (k) - qim)
             
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., - sink, sink, 0.)
-
+            
         endif
-
-    enddo
         
-end subroutine psaut_simp
+    enddo
     
+end subroutine psaut_simp
+
 ! =======================================================================
 ! cloud radii diagnosis built for gfdl cloud microphysics
 ! =======================================================================
@@ -5160,7 +5160,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: i, k, ind
     
     real, dimension (is:ie, ks:ke) :: qmw, qmr, qmi, qms, qmg
@@ -5206,7 +5206,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     ! -----------------------------------------------------------------------
     ! merge convective cloud to total cloud
     ! -----------------------------------------------------------------------
-
+    
     if (present (cnvw)) then
         qmw = qmw + cnvw
     endif
@@ -5220,7 +5220,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     ! -----------------------------------------------------------------------
     ! combine liquid and solid phases
     ! -----------------------------------------------------------------------
-
+    
     if (liq_ice_combine) then
         do i = is, ie
             do k = ks, ke
@@ -5236,7 +5236,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     ! -----------------------------------------------------------------------
     ! combine snow and graupel
     ! -----------------------------------------------------------------------
-
+    
     if (snow_grauple_combine) then
         do i = is, ie
             do k = ks, ke
@@ -5282,7 +5282,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / &
-                        (4.0 * pi * rhow * ccnw))) * 1.0e4
+                         (4.0 * pi * rhow * ccnw))) * 1.0e4
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
                     qcw (i, k) = 0.0
@@ -5302,7 +5302,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / &
-                        (4.0 * pi * rhow * ccnw))) * 1.0e4
+                         (4.0 * pi * rhow * ccnw))) * 1.0e4
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
                     qcw (i, k) = 0.0
@@ -5323,7 +5323,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                          (8.0 + (14.0 - 8.0) * min (1.0, max (0.0, - tc / 30.0))) * &
                          (1.0 - abs (mask - 1.0))
                     rew (i, k) = rew (i, k) + (14.0 - rew (i, k)) * &
-                         min (1.0, max (0.0, snowd (i) / 1000.0))
+                        min (1.0, max (0.0, snowd (i) / 1000.0))
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
                     qcw (i, k) = 0.0
@@ -5481,7 +5481,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     qcr (i, k) = 0.0
                     rer (i, k) = rermin
                 endif
-            
+                
             endif
             
             if (rerflag .eq. 2) then
@@ -5499,7 +5499,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     qcr (i, k) = 0.0
                     rer (i, k) = rermin
                 endif
-            
+                
             endif
             
             if (resflag .eq. 1) then
@@ -5517,7 +5517,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     qcs (i, k) = 0.0
                     res (i, k) = resmin
                 endif
-            
+                
             endif
             
             if (resflag .eq. 2) then
@@ -5535,7 +5535,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     qcs (i, k) = 0.0
                     res (i, k) = resmin
                 endif
-            
+                
             endif
             
             if (regflag .eq. 1) then
@@ -5557,7 +5557,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     qcg (i, k) = 0.0
                     reg (i, k) = regmin
                 endif
-            
+                
             endif
             
             if (regflag .eq. 2) then
@@ -5580,7 +5580,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     qcg (i, k) = 0.0
                     reg (i, k) = regmin
                 endif
-            
+                
             endif
             
         enddo
@@ -5610,29 +5610,29 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
     integer, intent (in) :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel
     
     real, intent (in) :: zvir
-
+    
     real, intent (in), dimension (is:, js:, 1:) :: delz
-
+    
     real, intent (in), dimension (isd:ied, jsd:jed, npz) :: pt, delp
-
+    
     real, intent (in), dimension (isd:ied, jsd:jed, npz, ncnst) :: q
-
+    
     real, intent (in), dimension (is:ie, npz + 1, js:je) :: peln
-
+    
     real, intent (out) :: allmax
     
     real, intent (out), dimension (is:ie, js:je) :: maxdbz
-
+    
     real, intent (out), dimension (is:ie, js:je, npz) :: dbz
     
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: i, j, k
     
-    real, parameter :: alpha = 0.224, MP_const = 200 * exp (1.6 * log (3.6e6))
-
+    real, parameter :: alpha = 0.224, mp_const = 200 * exp (1.6 * log (3.6e6))
+    
     real (kind = r8) :: qden, z_e, fac_r, fac_s, fac_g, fac_sw, fac_sd
     
     real, dimension (npz) :: den, denfac, qmr, qms, qmg, vtr, vts, vtg
@@ -5640,13 +5640,13 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
     ! -----------------------------------------------------------------------
     ! return if the microphysics scheme doesn't include rain
     ! -----------------------------------------------------------------------
-
+    
     if (rainwat .lt. 1) return
     
     ! -----------------------------------------------------------------------
     ! initialization
     ! -----------------------------------------------------------------------
-
+    
     dbz = - 20.
     maxdbz = - 20.
     allmax = - 20.
@@ -5654,10 +5654,10 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
     ! -----------------------------------------------------------------------
     ! constants for radar reflectivity
     ! -----------------------------------------------------------------------
-
+    
     if (radr_flag .eq. 1 .or. radr_flag .eq. 2) &
         fac_r = 720 * exp (- 0.25 * 7 * log (pi * rhor * n0r)) * n0r * 1.e18
-
+    
     if (rads_flag .eq. 1) &
         fac_s = 720 * exp (- 0.25 * 7 * log (pi * rhos * n0s)) * n0s * 1.e18 * &
             alpha * (rhos / rhor) ** 2
@@ -5666,7 +5666,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
         fac_sd = 720 * exp (- 0.25 * 7 * log (pi * rhos * n0s)) * n0s * 1.e18 * &
             alpha * (rhos / rhoi) ** 2
     endif
-
+    
     if (radg_flag .eq. 1) then
         if (do_hail .and. .not. do_inline_mp) then
             fac_g = 720 * exp (- 0.25 * 7 * log (pi * rhoh * n0h)) * n0h * 1.e18 * &
@@ -5683,18 +5683,18 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
             fac_g = 720 * exp (- 0.25 * 7 * log (pi * rhog * n0h)) * n0g * 1.e18
         endif
     endif
-
+    
     ! -----------------------------------------------------------------------
     ! calculate radar reflectivity
     ! -----------------------------------------------------------------------
-
+    
     do j = js, je
         do i = is, ie
-
+            
             ! -----------------------------------------------------------------------
             ! air density
             ! -----------------------------------------------------------------------
-
+            
             do k = 1, npz
                 if (hydrostatic) then
                     den (k) = delp (i, j, k) / ((peln (i, k + 1, j) - peln (i, k, j)) * &
@@ -5706,28 +5706,28 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                 qms (k) = max (qcmin, q (i, j, k, snowwat))
                 qmg (k) = max (qcmin, q (i, j, k, graupel))
             enddo
-
+            
             do k = 1, npz
                 denfac (k) = sqrt (den (npz) / den (k))
             enddo
-
+            
             ! -----------------------------------------------------------------------
             ! fall speed
             ! -----------------------------------------------------------------------
-
+            
             if (radr_flag .eq. 3) then
                 call term_rsg (1, npz, qmr, den, denfac, vr_fac, vconr, blin, normr, &
                     vr_max, const_vr, vtr)
                 vtr = vtr / rhor
             endif
-
-            if (rads_flag .eq. 3)  then
+            
+            if (rads_flag .eq. 3) then
                 call term_rsg (1, npz, qms, den, denfac, vs_fac, vcons, dlin, norms, &
                     vs_max, const_vs, vts)
                 vts = vts / rhos
             endif
-
-            if (radg_flag .eq. 3)  then
+            
+            if (radg_flag .eq. 3) then
                 if (do_hail .and. .not. do_inline_mp) then
                     call term_rsg (1, npz, qmg, den, denfac, vg_fac, vconh, hlin, normh, &
                         vg_max, const_vg, vtg)
@@ -5738,24 +5738,24 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                     vtg = vtg / rhog
                 endif
             endif
-
+            
             ! -----------------------------------------------------------------------
             ! radar reflectivity
             ! -----------------------------------------------------------------------
-
+            
             do k = mp_top + 1, npz
                 z_e = 0.
-
+                
                 if (rainwat .gt. 0) then
                     qden = den (k) * qmr (k)
                     if (radr_flag .eq. 1 .or. radr_flag .eq. 2) then
                         z_e = z_e + fac_r * exp (0.25 * 7 * log (qden))
                     endif
-                    if (radr_flag .eq. 3)  then
-                        z_e = z_e + MP_const * exp (1.6 * log (qden * vtr (k)))
+                    if (radr_flag .eq. 3) then
+                        z_e = z_e + mp_const * exp (1.6 * log (qden * vtr (k)))
                     endif
                 endif
-
+                
                 if (snowwat .gt. 0) then
                     qden = den (k) * qms (k)
                     if (rads_flag .eq. 1) then
@@ -5772,11 +5772,11 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                             z_e = z_e + fac_sw * exp (0.25 * 7 * log (qden))
                         endif
                     endif
-                    if (rads_flag .eq. 3)  then
-                        z_e = z_e + MP_const * exp (1.6 * log (qden * vts (k)))
+                    if (rads_flag .eq. 3) then
+                        z_e = z_e + mp_const * exp (1.6 * log (qden * vts (k)))
                     endif
                 endif
-
+                
                 if (graupel .gt. 0) then
                     qden = den (k) * qmg (k)
                     if (radg_flag .eq. 1) then
@@ -5789,20 +5789,20 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                     if (radg_flag .eq. 2) then
                         z_e = z_e + fac_g * exp (0.25 * 7 * log (qden))
                     endif
-                    if (radg_flag .eq. 3)  then
-                        z_e = z_e + MP_const * exp (1.6 * log (qden * vtg (k)))
+                    if (radg_flag .eq. 3) then
+                        z_e = z_e + mp_const * exp (1.6 * log (qden * vtg (k)))
                     endif
                 endif
-
+                
                 dbz (i, j, k) = 10. * log10 (max (0.01, z_e))
             enddo
-
+            
             do k = mp_top + 1, npz
                 maxdbz (i, j) = max (dbz (i, j, k), maxdbz (i, j))
             enddo
-
+            
             allmax = max (maxdbz (i, j), allmax)
-
+            
         enddo
     enddo
     
@@ -5813,107 +5813,107 @@ end subroutine rad_ref
 ! =======================================================================
 
 function mhc3 (qv, q_liq, q_sol)
-
+    
     implicit none
     
     real (kind = r8) :: mhc3
-
+    
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     real, intent (in) :: qv, q_liq, q_sol
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     mhc3 = one_r8 + qv * c1_vap + q_liq * c1_liq + q_sol * c1_ice
     
 end function mhc3
-    
+
 ! =======================================================================
 ! moist heat capacity, 4 input variables
 ! =======================================================================
 
 function mhc4 (qd, qv, q_liq, q_sol)
-
+    
     implicit none
     
     real (kind = r8) :: mhc4
-
+    
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     real, intent (in) :: qv, q_liq, q_sol
-
+    
     real (kind = r8), intent (in) :: qd
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     mhc4 = qd + qv * c1_vap + q_liq * c1_liq + q_sol * c1_ice
     
 end function mhc4
-    
+
 ! =======================================================================
 ! moist heat capacity, 6 input variables
 ! =======================================================================
 
 function mhc6 (qv, ql, qr, qi, qs, qg)
-
+    
     implicit none
     
     real (kind = r8) :: mhc6
-
+    
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     real, intent (in) :: qv, ql, qr, qi, qs, qg
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real :: q_liq, q_sol
-
+    
     q_liq = ql + qr
     q_sol = qi + qs + qg
     mhc6 = mhc (qv, q_liq, q_sol)
     
 end function mhc6
-    
+
 ! =======================================================================
 ! moist total energy
 ! =======================================================================
 
 function mte (qv, ql, qr, qi, qs, qg, tk, dp, moist_q)
-
+    
     implicit none
-
+    
     real (kind = r8) :: mte
-
+    
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     logical, intent (in) :: moist_q
     
     real, intent (in) :: qv, ql, qr, qi, qs, qg, dp
-
+    
     real (kind = r8), intent (in) :: tk
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real :: q_liq, q_sol, q_cond
-
+    
     real (kind = r8) :: cvm, con_r8
-
+    
     q_liq = ql + qr
     q_sol = qi + qs + qg
     q_cond = q_liq + q_sol
@@ -5925,8 +5925,8 @@ function mte (qv, ql, qr, qi, qs, qg, tk, dp, moist_q)
     endif
     mte = rgrav * cvm * c_air * tk * dp
     
-end function mte 
-    
+end function mte
+
 ! =======================================================================
 ! moist total energy and total water
 ! =======================================================================
@@ -5934,43 +5934,43 @@ end function mte
 subroutine mtetw (ks, ke, qv, ql, qr, qi, qs, qg, tz, ua, va, wa, delp, &
         gsize, dte, rain, ice, snow, graupel, dts, te, tw, te_b, tw_b, &
         moist_q, hydrostatic, te_loss)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     logical, intent (in) :: moist_q, hydrostatic
-
+    
     real, intent (in) :: gsize, rain, ice, snow, graupel, dts
-
+    
     real, intent (in), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, ua, va, wa, delp
-
+    
     real (kind = r8), intent (in) :: dte
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: tz
-
+    
     real (kind = r8), intent (out) :: te_b, tw_b
-
+    
     real (kind = r8), intent (out), optional :: te_loss
-
+    
     real (kind = r8), intent (out), dimension (ks:ke) :: te, tw
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     real :: q_cond
-
+    
     real (kind = r8) :: con_r8
-
+    
     real, dimension (ks:ke) :: q_liq, q_sol
-
+    
     real (kind = r8), dimension (ks:ke) :: cvm
 
      do k = ks, ke
@@ -6008,29 +6008,29 @@ end subroutine mtetw
 
 subroutine cal_mhc_lhc (ks, ke, qv, ql, qr, qi, qs, qg, q_liq, q_sol, &
         cvm, te8, tz, lcpk, icpk, tcpk, tcp3)
-
+    
     implicit none
     
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     integer, intent (in) :: ks, ke
-
+    
     real, intent (in), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
-
+    
     real (kind = r8), intent (in), dimension (ks:ke) :: tz
-
+    
     real, intent (out), dimension (ks:ke) :: q_liq, q_sol, lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (out), dimension (ks:ke) :: cvm, te8
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: k
-
+    
     do k = ks, ke
         q_liq (k) = ql (k) + qr (k)
         q_sol (k) = qi (k) + qs (k) + qg (k)
@@ -6055,18 +6055,18 @@ subroutine update_qq (qv, ql, qr, qi, qs, qg, dqv, dql, dqr, dqi, dqs, dqg)
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     real, intent (in) :: dqv, dql, dqr, dqi, dqs, dqg
-
+    
     real, intent (inout) :: qv, ql, qr, qi, qs, qg
-
+    
     qv = qv + dqv
     ql = ql + dql
     qr = qr + dqr
     qi = qi + dqi
     qs = qs + dqs
     qg = qg + dqg
-
+    
 end subroutine update_qq
 
 ! =======================================================================
@@ -6081,36 +6081,36 @@ subroutine update_qt (qv, ql, qr, qi, qs, qg, dqv, dql, dqr, dqi, dqs, dqg, te8,
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
-
+    
     real, intent (in) :: dqv, dql, dqr, dqi, dqs, dqg
-
+    
     real (kind = r8), intent (in) :: te8
-
+    
     real, intent (inout) :: qv, ql, qr, qi, qs, qg
-
+    
     real, intent (out) :: lcpk, icpk, tcpk, tcp3
-
+    
     real (kind = r8), intent (out) :: cvm, tk
-
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     qv = qv + dqv
     ql = ql + dql
     qr = qr + dqr
     qi = qi + dqi
     qs = qs + dqs
     qg = qg + dqg
-
+    
     cvm = mhc (qv, ql, qr, qi, qs, qg)
     tk = (te8 - lv00 * qv + li00 * (qi + qs + qg)) / cvm
-
+    
     lcpk = (lv00 + d1_vap * tk) / cvm
     icpk = (li00 + d1_ice * tk) / cvm
     tcpk = (li20 + (d1_vap + d1_ice) * tk) / cvm
     tcp3 = lcpk + icpk * min (1., dim (tice, tk) / (tice - t_wfr))
-
+    
 end subroutine update_qt
 
 ! =======================================================================
@@ -6130,7 +6130,7 @@ subroutine qs_init
         allocate (table2 (length))
         allocate (table3 (length))
         allocate (table4 (length))
-
+        
         allocate (des0 (length))
         allocate (des1 (length))
         allocate (des2 (length))
@@ -6175,15 +6175,15 @@ subroutine qs_table_core (n, n_blend, do_smith_table, table)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: n, n_blend
-
+    
     logical, intent (in) :: do_smith_table
-
+    
     real, intent (out), dimension (n) :: table
     
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: i
     integer, parameter :: n_min = 1600
     
@@ -6222,7 +6222,7 @@ subroutine qs_table_core (n, n_blend, do_smith_table, table)
     endif
     
     ! -----------------------------------------------------------------------
-    ! compute es over water between - (n_blend * delt) deg C and [(n - n_min - 1) * delt] deg C
+    ! compute es over water between - (n_blend * delt) deg C and [ (n - n_min - 1) * delt] deg C
     ! -----------------------------------------------------------------------
     
     if (do_smith_table) then
@@ -6231,7 +6231,7 @@ subroutine qs_table_core (n, n_blend, do_smith_table, table)
             a = - 7.90298 * (tbasw / tem - 1.)
             b = 5.02808 * log10 (tbasw / tem)
             c = - 1.3816e-7 * (exp ((1. - tem / tbasw) * 11.344 * log (10.)) - 1.)
-            d = 8.1328e-3 * (exp((tbasw / tem - 1.) * (- 3.49149) * log (10.)) - 1.)
+            d = 8.1328e-3 * (exp ((tbasw / tem - 1.) * (- 3.49149) * log (10.)) - 1.)
             e = log10 (esbasw)
             esh = 0.1 * exp ((a + b + c + d + e) * log (10.))
             if (i .le. n_blend) then
@@ -6287,7 +6287,7 @@ subroutine qs_table0 (n)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: i
     
     real (kind = r8) :: delt = 0.1
@@ -6324,7 +6324,7 @@ subroutine qs_table1 (n)
     ! -----------------------------------------------------------------------
     
     integer, intent (in) :: n
-
+    
     call qs_table_core (n, 200, .false., table1)
     
 end subroutine qs_table1
@@ -6397,7 +6397,7 @@ end subroutine qs_table4
 function qs_core (tk, den, dqdt, table, des)
     
     implicit none
-
+    
     real :: qs_core
     
     ! -----------------------------------------------------------------------
@@ -6405,15 +6405,15 @@ function qs_core (tk, den, dqdt, table, des)
     ! -----------------------------------------------------------------------
     
     real, intent (in) :: tk, den
-
+    
     real, intent (in), dimension (length) :: table, des
-
+    
     real, intent (out) :: dqdt
     
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: it
     
     real :: es, ap1, tmin
@@ -6440,7 +6440,7 @@ end function qs_core
 function wqs_trho (tk, den, dqdt)
     
     implicit none
-
+    
     real :: wqs_trho
     
     ! -----------------------------------------------------------------------
@@ -6448,7 +6448,7 @@ function wqs_trho (tk, den, dqdt)
     ! -----------------------------------------------------------------------
     
     real, intent (in) :: tk, den
-
+    
     real, intent (out) :: dqdt
     
     wqs_trho = qs_core (tk, den, dqdt, table0, des0)
@@ -6463,7 +6463,7 @@ end function wqs_trho
 function mqs_trho (tk, den, dqdt)
     
     implicit none
-
+    
     real :: mqs_trho
     
     ! -----------------------------------------------------------------------
@@ -6471,9 +6471,9 @@ function mqs_trho (tk, den, dqdt)
     ! -----------------------------------------------------------------------
     
     real, intent (in) :: tk, den
-
+    
     real, intent (out) :: dqdt
-
+    
     mqs_trho = qs_core (tk, den, dqdt, table1, des1)
     
 end function mqs_trho
@@ -6487,7 +6487,7 @@ end function mqs_trho
 function iqs_trho (tk, den, dqdt)
     
     implicit none
-
+    
     real :: iqs_trho
     
     ! -----------------------------------------------------------------------
@@ -6495,9 +6495,9 @@ function iqs_trho (tk, den, dqdt)
     ! -----------------------------------------------------------------------
     
     real, intent (in) :: tk, den
-
+    
     real, intent (out) :: dqdt
-
+    
     iqs_trho = qs_core (tk, den, dqdt, table2, des2)
     
 end function iqs_trho
@@ -6511,7 +6511,7 @@ end function iqs_trho
 function wqs_ptqv (tk, pa, qv, dqdt)
     
     implicit none
-
+    
     real :: wqs_ptqv
     
     ! -----------------------------------------------------------------------
@@ -6525,13 +6525,13 @@ function wqs_ptqv (tk, pa, qv, dqdt)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real :: den
-
+    
     den = pa / (rdgas * tk * (1. + zvir * qv))
-
+    
     wqs_ptqv = wqs (tk, den, dqdt)
-
+    
 end function wqs_ptqv
 
 ! =======================================================================
@@ -6542,7 +6542,7 @@ end function wqs_ptqv
 function mqs_ptqv (tk, pa, qv, dqdt)
     
     implicit none
-
+    
     real :: mqs_ptqv
     
     ! -----------------------------------------------------------------------
@@ -6556,13 +6556,13 @@ function mqs_ptqv (tk, pa, qv, dqdt)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real :: den
-
+    
     den = pa / (rdgas * tk * (1. + zvir * qv))
-
+    
     mqs_ptqv = mqs (tk, den, dqdt)
-
+    
 end function mqs_ptqv
 
 ! =======================================================================
@@ -6574,7 +6574,7 @@ end function mqs_ptqv
 function iqs_ptqv (tk, pa, qv, dqdt)
     
     implicit none
-
+    
     real :: iqs_ptqv
     
     ! -----------------------------------------------------------------------
@@ -6588,13 +6588,13 @@ function iqs_ptqv (tk, pa, qv, dqdt)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real :: den
-
+    
     den = pa / (rdgas * tk * (1. + zvir * qv))
-
+    
     iqs_ptqv = iqs (tk, den, dqdt)
-
+    
 end function iqs_ptqv
 
 ! =======================================================================
@@ -6622,9 +6622,9 @@ subroutine mqs3d (im, km, ks, tk, pa, qv, qs, dqdt)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     integer :: i, k
-
+    
     real :: dqdt0
     
     if (present (dqdt)) then
@@ -6651,7 +6651,7 @@ end subroutine mqs3d
 function wet_bulb_core (qv, tk, den, lcp)
     
     implicit none
-
+    
     real :: wet_bulb_core
     
     ! -----------------------------------------------------------------------
@@ -6663,12 +6663,12 @@ function wet_bulb_core (qv, tk, den, lcp)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     logical :: do_adjust = .false.
-
+    
     real :: factor = 1 / 3.
-    real :: qsat, tp, dqdt 
-
+    real :: qsat, tp, dqdt
+    
     wet_bulb_core = tk
     qsat = wqs (wet_bulb_core, den, dqdt)
     tp = factor * (qsat - qv) / (1. + lcp * dqdt) * lcp
@@ -6689,7 +6689,7 @@ end function wet_bulb_core
 function wet_bulb_dry (qv, tk, den)
     
     implicit none
-
+    
     real :: wet_bulb_dry
     
     ! -----------------------------------------------------------------------
@@ -6701,7 +6701,7 @@ function wet_bulb_dry (qv, tk, den)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real :: lcp
     
     lcp = hlv / cp_air
@@ -6715,7 +6715,7 @@ end function wet_bulb_dry
 ! =======================================================================
 
 function wet_bulb_moist (qv, ql, qi, qr, qs, qg, tk, den)
-
+    
     implicit none
     
     real :: wet_bulb_moist
@@ -6729,9 +6729,9 @@ function wet_bulb_moist (qv, ql, qi, qr, qs, qg, tk, den)
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
-
+    
     real :: lcp, q_liq, q_sol
-
+    
     real (kind = r8) :: cvm
     
     q_liq = ql + qr
