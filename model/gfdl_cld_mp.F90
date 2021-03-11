@@ -4116,9 +4116,11 @@ subroutine lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, q, precip, m1, mono)
     
     real, intent (in), dimension (ks:ke) :: dp
     
-    real, intent (inout), dimension (ks:ke) :: q, m1
+    real, intent (inout), dimension (ks:ke) :: q
     
     real, intent (inout) :: precip
+    
+    real, intent (out), dimension (ks:ke) :: m1
     
     ! -----------------------------------------------------------------------
     ! local variables
@@ -6416,7 +6418,7 @@ end subroutine qs_table4
 ! compute the saturated specific humidity, core function
 ! =======================================================================
 
-function qs_core (tk, den, dqdt, table, des)
+function qs_core (length, tk, den, dqdt, table, des)
     
     implicit none
     
@@ -6425,6 +6427,8 @@ function qs_core (tk, den, dqdt, table, des)
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: length
     
     real, intent (in) :: tk, den
     
@@ -6473,7 +6477,7 @@ function wqs_trho (tk, den, dqdt)
     
     real, intent (out) :: dqdt
     
-    wqs_trho = qs_core (tk, den, dqdt, table0, des0)
+    wqs_trho = qs_core (length, tk, den, dqdt, table0, des0)
     
 end function wqs_trho
 
@@ -6496,7 +6500,7 @@ function mqs_trho (tk, den, dqdt)
     
     real, intent (out) :: dqdt
     
-    mqs_trho = qs_core (tk, den, dqdt, table1, des1)
+    mqs_trho = qs_core (length, tk, den, dqdt, table1, des1)
     
 end function mqs_trho
 
@@ -6520,7 +6524,7 @@ function iqs_trho (tk, den, dqdt)
     
     real, intent (out) :: dqdt
     
-    iqs_trho = qs_core (tk, den, dqdt, table2, des2)
+    iqs_trho = qs_core (length, tk, den, dqdt, table2, des2)
     
 end function iqs_trho
 
