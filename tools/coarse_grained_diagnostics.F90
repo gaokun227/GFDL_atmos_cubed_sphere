@@ -38,7 +38,7 @@ module coarse_grained_diagnostics_mod
     logical :: always_model_level_coarse_grain = .false.
     integer :: pressure_level = -1  ! If greater than 0, interpolate to this pressure level (in hPa)
     integer :: iv = 0  ! Controls type of pressure-level interpolation performed (-1, 0, or 1)
-    character(len=64) :: special_case  ! E.g. height is computed differently on pressure surfaces
+    character(len=64) :: special_case = ''  ! E.g. height is computed differently on pressure surfaces
     type(data_subtype) :: data
   end type coarse_diag_type
 
@@ -62,7 +62,7 @@ contains
 
     integer :: is, ie, js, je, npz, n_tracers, n_prognostic, t, p, n_pressure_levels
     integer :: index = 1
-    integer :: sphum
+    integer :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel
     character(len=128) :: tracer_name
     character(len=256) :: tracer_long_name, tracer_units
     character(len=8) :: DYNAMICS = 'dynamics'
@@ -74,6 +74,11 @@ contains
     n_prognostic = size(Atm(tile_count)%q, 4)
     n_tracers = Atm(tile_count)%ncnst
     sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
+    liq_wat = get_tracer_index (MODEL_ATMOS, 'liq_wat')
+    ice_wat = get_tracer_index (MODEL_ATMOS, 'ice_wat')
+    rainwat = get_tracer_index (MODEL_ATMOS, 'rainwat')
+    snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat')
+    graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
     call get_fine_array_bounds(is, ie, js, je)
 
     coarse_diagnostics(index)%axes = 3
@@ -194,6 +199,51 @@ contains
     coarse_diagnostics(index)%units = 'kg/kg Pa/s'
     coarse_diagnostics(index)%reduction_method = EDDY_COVARIANCE
     coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,sphum)
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'vertical_eddy_flux_of_liquid_water_coarse'
+    coarse_diagnostics(index)%description = 'vertical eddy flux of liquid water'
+    coarse_diagnostics(index)%units = 'kg/kg Pa/s'
+    coarse_diagnostics(index)%reduction_method = EDDY_COVARIANCE
+    coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,liq_wat)
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'vertical_eddy_flux_of_ice_water_coarse'
+    coarse_diagnostics(index)%description = 'vertical eddy flux of ice water'
+    coarse_diagnostics(index)%units = 'kg/kg Pa/s'
+    coarse_diagnostics(index)%reduction_method = EDDY_COVARIANCE
+    coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,ice_wat)
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'vertical_eddy_flux_of_rain_water_coarse'
+    coarse_diagnostics(index)%description = 'vertical eddy flux of liquid water'
+    coarse_diagnostics(index)%units = 'kg/kg Pa/s'
+    coarse_diagnostics(index)%reduction_method = EDDY_COVARIANCE
+    coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,rainwat)
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'vertical_eddy_flux_of_snow_water_coarse'
+    coarse_diagnostics(index)%description = 'vertical eddy flux of liquid water'
+    coarse_diagnostics(index)%units = 'kg/kg Pa/s'
+    coarse_diagnostics(index)%reduction_method = EDDY_COVARIANCE
+    coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,snowwat)
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'vertical_eddy_flux_of_graupel_water_coarse'
+    coarse_diagnostics(index)%description = 'vertical eddy flux of liquid water'
+    coarse_diagnostics(index)%units = 'kg/kg Pa/s'
+    coarse_diagnostics(index)%reduction_method = EDDY_COVARIANCE
+    coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,graupel)
     
     index = index + 1
     coarse_diagnostics(index)%axes = 3
@@ -410,6 +460,38 @@ contains
     coarse_diagnostics(index)%name = 'v_dt_gfdlmp_coarse'
     coarse_diagnostics(index)%description = 'coarse-grained meridional wind tendency from GFDL MP'
     coarse_diagnostics(index)%units = 'm/s/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 't_dt_sg_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained temperature tendency from 2dz filter'
+    coarse_diagnostics(index)%units = 'K/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'u_dt_sg_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained zonal wind tendency from 2dz filter'
+    coarse_diagnostics(index)%units = 'm/s**2'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'v_dt_sg_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained meridional wind tendency from 2dz filter'
+    coarse_diagnostics(index)%units = 'm/s**2'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'qv_dt_sg_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained specific humidity tendency from 2dz filter'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
     coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
     
     ! Vertically integrated diagnostics
@@ -636,6 +718,33 @@ contains
     coarse_diagnostics(index)%description = 'coarse-grained vertically integrated meridional wind tendency from GFDL MP'
     coarse_diagnostics(index)%units = 'kg/m s/s'
     coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'tq_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained total water path'
+    coarse_diagnostics(index)%units = 'kg/m**2'
+    coarse_diagnostics(index)%special_case = 'tq'
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'lw_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained liquid water path'
+    coarse_diagnostics(index)%units = 'kg/m**2'
+    coarse_diagnostics(index)%special_case = 'lw'
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'iw_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained ice water path'
+    coarse_diagnostics(index)%units = 'kg/m**2'
+    coarse_diagnostics(index)%special_case = 'iw'
     coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
     
     ! iv =-1: winds
@@ -952,6 +1061,31 @@ contains
              Atm(tile_count)%inline_mp%v_dt(is:ie,js:je,1:npz) = 0.0
           endif
           coarse_diagnostic%data%var3 => Atm(tile_count)%inline_mp%v_dt(is:ie,js:je,1:npz)
+       elseif (coarse_diagnostic%name .eq. 't_dt_sg_coarse') then
+          if (.not. allocated(Atm(tile_count)%sg_diag%t_dt)) then
+             allocate(Atm(tile_count)%sg_diag%t_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%sg_diag%t_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%sg_diag%t_dt(is:ie,js:je,1:npz)
+       elseif (coarse_diagnostic%name .eq. 'u_dt_sg_coarse') then
+          if (.not. allocated(Atm(tile_count)%sg_diag%u_dt)) then
+             allocate(Atm(tile_count)%sg_diag%u_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%sg_diag%u_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%sg_diag%u_dt(is:ie,js:je,1:npz)
+       ! Note: don't use ends_with here, because qv_dt_sg_coarse also ends with v_dt_sg_coarse.
+       elseif (coarse_diagnostic%name .eq. 'v_dt_sg_coarse') then
+          if (.not. allocated(Atm(tile_count)%sg_diag%v_dt)) then
+             allocate(Atm(tile_count)%sg_diag%v_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%sg_diag%v_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%sg_diag%v_dt(is:ie,js:je,1:npz)
+       elseif (coarse_diagnostic%name .eq. 'qv_dt_sg_coarse') then
+          if (.not. allocated(Atm(tile_count)%sg_diag%qv_dt)) then
+             allocate(Atm(tile_count)%sg_diag%qv_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%sg_diag%qv_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%sg_diag%qv_dt(is:ie,js:je,1:npz)
        endif
     endif
   end subroutine maybe_allocate_reference_array
@@ -1013,13 +1147,15 @@ contains
          Domain2=coarse_domain, tile_count=tile_count, domain_position=NORTH)
   end subroutine initialize_coarse_diagnostic_axes
   
-  subroutine fv_coarse_diag(Atm, Time)
+  subroutine fv_coarse_diag(Atm, Time, zvir)
     type(fv_atmos_type), intent(in), target :: Atm(:)
     type(time_type), intent(in) :: Time
+    real, intent(in) :: zvir
     
     real, allocatable :: work_2d(:,:), work_2d_coarse(:,:), work_3d_coarse(:,:,:)
     real, allocatable :: mass(:,:,:), height_on_interfaces(:,:,:), masked_area(:,:,:)
     real, allocatable :: phalf(:,:,:), upsampled_coarse_phalf(:,:,:)
+    real, allocatable :: zsurf(:,:)
     integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
     logical :: used
     logical :: need_2d_work_array, need_3d_work_array, need_mass_array, need_height_array, need_masked_area_array
@@ -1085,28 +1221,18 @@ contains
 
     if (need_height_array) then
       allocate(height_on_interfaces(is:ie,js:je,1:npz+1))
-      if(Atm(tile_count)%flagstruct%hydrostatic) then
-        call compute_height_on_interfaces_hydrostatic( &
-          is, &
-          ie, &
-          js, &
-          je, &
-          npz, &
-          Atm(tile_count)%pt(is:ie,js:je,1:npz), &
-          Atm(tile_count)%peln(is:ie,1:npz+1,js:je), &
-          height_on_interfaces(is:ie,js:je,1:npz) &
-        )
-      else
-        call compute_height_on_interfaces_nonhydrostatic( &
-          is, &
-          ie, &
-          js, &
-          je, &
-          npz, &
-          Atm(tile_count)%delz(is:ie,js:je,1:npz), &
-          height_on_interfaces(is:ie,js:je,1:npz) &
-        )
-      endif
+      allocate(zsurf(is:ie,js:je))
+      zsurf = Atm(tile_count)%phis(is:ie,js:je) / grav
+      call get_height_field(is, ie, js, je, Atm(tile_count)%ng, npz, &
+           Atm(tile_count)%flagstruct%hydrostatic, &
+           zsurf, &
+           Atm(tile_count)%delz, &
+           height_on_interfaces, &
+           Atm(tile_count)%pt, &
+           Atm(tile_count)%q, &
+           Atm(tile_count)%peln, &
+           zvir &
+      )
       if (.not. allocated(work_2d_coarse)) allocate(work_2d_coarse(is_coarse:ie_coarse,js_coarse:je_coarse))
       allocate(work_2d(is:ie,js:je))
     endif
@@ -1244,18 +1370,23 @@ contains
     real, intent(in) :: height_on_interfaces(is:ie,js:je,1:npz+1)
     real, intent(out) :: result(is_coarse:ie_coarse,js_coarse:je_coarse)
 
+    integer :: nwat
     character(len=256) :: error_message
     real, allocatable :: work_2d(:,:)
 
+    nwat = Atm%flagstruct%nwat
+    
     if (coarse_diag%pressure_level > 0 .or. coarse_diag%vertically_integrated &
-         .or. coarse_diag%scaled_by_specific_heat_and_vertically_integrated) then 
+         .or. coarse_diag%scaled_by_specific_heat_and_vertically_integrated &
+         .or. coarse_diag%special_case .ne. '') then 
       allocate(work_2d(is:ie,js:je))
     endif
 
     if (trim(coarse_diag%reduction_method) .eq. AREA_WEIGHTED) then
       if (coarse_diag%pressure_level < 0 &
          .and. .not. coarse_diag%vertically_integrated &
-         .and. .not. coarse_diag%scaled_by_specific_heat_and_vertically_integrated) then
+         .and. .not. coarse_diag%scaled_by_specific_heat_and_vertically_integrated &
+         .and. coarse_diag%special_case .eq. '') then
         call weighted_block_average( &
           Atm%gridstruct%area(is:ie,js:je), &
           coarse_diag%data%var2, &
@@ -1278,7 +1409,58 @@ contains
           work_2d, &
           result &
           )
-      elseif (coarse_diag%vertically_integrated) then
+     elseif (trim(coarse_diag%special_case) .eq. 'tq') then
+        call total_water_path( &
+          is, &
+          ie, &
+          js, &
+          je, &
+          npz, &
+          nwat, &
+          Atm%q(is:ie,js:je,1:npz,1:nwat), &
+          Atm%delp(is:ie,js:je,1:npz), &
+          work_2d(is:ie,js:je) &
+        )
+        call weighted_block_average( &
+          Atm%gridstruct%area(is:ie,js:je), &
+          work_2d, &
+          result &
+          )
+     elseif (trim(coarse_diag%special_case) .eq. 'lw') then
+        call liquid_water_path( &
+          is, &
+          ie, &
+          js, &
+          je, &
+          npz, &
+          nwat, &
+          Atm%q(is:ie,js:je,1:npz,1:nwat), &
+          Atm%delp(is:ie,js:je,1:npz), &
+          work_2d(is:ie,js:je) &
+        )
+        call weighted_block_average( &
+          Atm%gridstruct%area(is:ie,js:je), &
+          work_2d, &
+          result &
+          )
+     elseif (trim(coarse_diag%special_case) .eq. 'iw') then
+        call ice_water_path( &
+          is, &
+          ie, &
+          js, &
+          je, &
+          npz, &
+          nwat, &
+          Atm%q(is:ie,js:je,1:npz,1:nwat), &
+          Atm%delp(is:ie,js:je,1:npz), &
+          work_2d(is:ie,js:je) &
+        )
+        call weighted_block_average( &
+          Atm%gridstruct%area(is:ie,js:je), &
+          work_2d, &
+          result &
+          )
+     elseif (coarse_diag%vertically_integrated) then
         call vertically_integrate( &
              is, &
              ie, &
@@ -1432,43 +1614,6 @@ contains
     call cs3_interpolator(is, ie, js, je, npz, field, n_pressure_levels, output_pressures, height, phalf, ids, work, iv)
     result = work(is:ie,js:je,1)
   end subroutine interpolate_to_pressure_level
-
-  subroutine compute_height_on_interfaces_hydrostatic(is, ie, js, je, npz, temperature, phalf, height)
-    integer, intent(in) :: is, ie, js, je, npz
-    real, intent(in) :: temperature(is:ie,js:je,1:npz), phalf(is:ie,1:npz+1,js:je)
-    real, intent(out) :: height(is:ie,js:je,1:npz+1)
-
-    integer :: i, j, k
-    real :: rgrav
-
-    rgrav = 1.0 / grav
-
-    do j = js, je
-      do i = is, ie
-        height(i,j,npz+1) = 0.0
-        do k = npz, 1, -1
-          height(i,j,k) = height(i,j,k+1) - (rdgas / grav) * temperature(i,j,k) * (phalf(i,k,j) - phalf(i,k+1,j))
-        enddo
-      enddo
-    enddo
-  end subroutine compute_height_on_interfaces_hydrostatic
-
-  subroutine compute_height_on_interfaces_nonhydrostatic(is, ie, js, je, npz, delz, height)
-    integer, intent(in) :: is, ie, js, je, npz
-    real, intent(in) :: delz(is:ie,js:je,1:npz)
-    real, intent(out) :: height(is:ie,js:je,1:npz+1)
-
-    integer :: i, j, k
-
-    do j = js, je
-      do i = is, ie
-        height(i,j,npz+1) = 0.0
-        do k = npz, 1, -1
-          height(i,j,k) = height(i,j,k+1) - delz(i,j,k)
-        enddo
-      enddo
-    enddo
-  end subroutine compute_height_on_interfaces_nonhydrostatic
 
   subroutine height_given_pressure_level(is, ie, js, je, npz, height, phalf, pressure_level, result)
     integer, intent(in) :: is, ie, js, je, npz, pressure_level
@@ -1692,4 +1837,100 @@ contains
     factor = Atm(tile_count)%coarse_graining%factor
     grid_coarse = Atm(tile_count)%gridstruct%grid(is:ie+1:factor,js:je+1:factor,:)
   end subroutine compute_grid_coarse
+
+ subroutine get_height_field(is, ie, js, je, ng, km, hydrostatic, zsurf, delz, wz, pt, q, peln, zvir)
+  integer, intent(in):: is, ie, js, je, km, ng
+  real, intent(in):: peln(is:ie,km+1,js:je)
+  real, intent(in):: pt(is-ng:ie+ng,js-ng:je+ng,km)
+  real, intent(in)::  q(is-ng:ie+ng,js-ng:je+ng,km,*) ! water vapor
+  real, intent(in):: delz(is:,js:,1:)
+  real, intent(in):: zvir
+  logical, intent(in):: hydrostatic
+  real, intent(in) :: zsurf(is:ie,js:je)
+  real, intent(out):: wz(is:ie,js:je,km+1)
+!
+  integer i,j,k, sphum
+  real gg
+
+      sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
+      gg  = rdgas / grav
+
+      do j=js,je
+         do i=is,ie
+            wz(i,j,km+1) = zsurf(i,j)
+         enddo
+      if (hydrostatic ) then
+         do k=km,1,-1
+            do i=is,ie
+               wz(i,j,k) = wz(i,j,k+1) + gg*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))  &
+                          *(peln(i,k+1,j)-peln(i,k,j))
+            enddo
+         enddo
+      else
+         do k=km,1,-1
+            do i=is,ie
+               wz(i,j,k) = wz(i,j,k+1)  - delz(i,j,k)
+            enddo
+         enddo
+      endif
+      enddo
+
+ end subroutine get_height_field
+
+ subroutine total_water_path(is, ie, js, je, npz, nwat, q, delp, tq)
+   integer, intent(in) :: is, ie, js, je, npz, nwat
+   real, intent(in) :: q(is:ie,js:je,1:npz,1:nwat), delp(is:ie,js:je,1:npz)
+   real, intent(out) :: tq(is:ie,js:je)
+
+   real :: ginv
+   
+   ginv = 1. / GRAV
+   tq = ginv * sum(sum(q, 4) * delp, 3)
+ end subroutine total_water_path
+
+  subroutine liquid_water_path(is, ie, js, je, npz, nwat, q, delp, lw)
+   integer, intent(in) :: is, ie, js, je, npz, nwat
+   real, intent(in) :: q(is:ie,js:je,1:npz,1:nwat), delp(is:ie,js:je,1:npz)
+   real, intent(out) :: lw(is:ie,js:je)
+
+   integer :: liq_wat, rainwat
+   real :: ginv
+   
+   liq_wat = get_tracer_index (MODEL_ATMOS, 'liq_wat')
+   rainwat = get_tracer_index (MODEL_ATMOS, 'rainwat')
+   
+   ginv = 1. / GRAV
+   lw = 0.0
+   if (liq_wat .gt. 0) then
+      lw = lw + ginv * sum(q(is:ie,js:je,1:npz,liq_wat) * delp(is:ie,js:je,1:npz), 3)
+   endif
+   if (rainwat .gt. 0) then
+      lw = lw + ginv * sum(q(is:ie,js:je,1:npz,rainwat) * delp(is:ie,js:je,1:npz), 3)
+   endif
+ end subroutine liquid_water_path
+
+  subroutine ice_water_path(is, ie, js, je, npz, nwat, q, delp, iw)
+   integer, intent(in) :: is, ie, js, je, npz, nwat
+   real, intent(in) :: q(is:ie,js:je,1:npz,1:nwat), delp(is:ie,js:je,1:npz)
+   real, intent(out) :: iw(is:ie,js:je)
+
+   integer :: ice_wat, snowwat, graupel
+   real :: ginv
+   
+   ice_wat = get_tracer_index (MODEL_ATMOS, 'ice_wat')
+   snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat')
+   graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
+   
+   ginv = 1. / GRAV
+   iw = 0.0
+   if (ice_wat .gt. 0) then
+      iw = iw + ginv * sum(q(is:ie,js:je,1:npz,ice_wat) * delp(is:ie,js:je,1:npz), 3)
+   endif
+   if (snowwat .gt. 0) then
+      iw = iw + ginv * sum(q(is:ie,js:je,1:npz,snowwat) * delp(is:ie,js:je,1:npz), 3)
+   endif
+   if (graupel .gt. 0) then
+      iw = iw + ginv * sum(q(is:ie,js:je,1:npz,graupel) * delp(is:ie,js:je,1:npz), 3)
+   endif
+ end subroutine ice_water_path
 end module coarse_grained_diagnostics_mod
