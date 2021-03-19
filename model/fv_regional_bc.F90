@@ -62,6 +62,7 @@ module fv_regional_mod
    use fms_io_mod,        only: read_data,get_global_att_value
    use boundary_mod,      only: fv_nest_BC_type_3D
    use gfdl_mp_mod,       only: c_liq, c_ice
+   use sim_nc_mod,        only: open_ncfile, close_ncfile, get_ncdim1
 
    implicit none
 
@@ -1357,6 +1358,8 @@ contains
       integer :: nt_checker       = 0
       namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds     &
                                 ,checker_tr, nt_checker
+      ! variables for reading the dimension from the gfs_ctrl
+      integer ncid, levsp
 !-----------------------------------------------------------------------
 !***********************************************************************
 !-----------------------------------------------------------------------
@@ -1371,6 +1374,13 @@ contains
         write(0,11011)ierr
 11011   format(' start_regional_restart failed to read external_ic_nml ierr=',i3)
       endif
+
+!--- read in ak and bk from the HRRR control file using fms_io read_data ---
+      call open_ncfile( 'INPUT/gfs_ctrl.nc', ncid )        ! open the file
+      call get_ncdim1( ncid, 'levsp', levsp )
+      call close_ncfile( ncid )
+
+      levp = levsp-1
 !
 !-----------------------------------------------------------------------
 !***  Get the source of the input data.
