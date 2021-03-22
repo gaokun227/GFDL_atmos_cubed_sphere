@@ -366,9 +366,11 @@ contains
 #endif
 
    call set_domain(Atm(mygrid)%domain)
-
-   call data_override_init(Atm_domain_in = Atm(mygrid)%domain)
    
+   if ( .not. Atm(mygrid)%gridstruct%regional ) then
+     call data_override_init(Atm_domain_in = Atm(mygrid)%domain)
+   endif
+
  end subroutine atmosphere_init
 
 
