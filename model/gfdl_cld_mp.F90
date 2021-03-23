@@ -3662,7 +3662,7 @@ subroutine pwbf (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, i
         if (tc .gt. 0. .and. ql (k) .gt. qcmin .and. qi (k) .gt. qcmin .and. &
 			qv (k) .gt. qsi .and. qv (k) .lt. qsw) then
 
-            sink = fac_wbf * ql (k)
+            sink = min (fac_wbf * ql (k), tc / icpk (k))
             qim = qi0_crt / den (k)
             tmp = min (sink, dim (qim, qi (k)))
             
