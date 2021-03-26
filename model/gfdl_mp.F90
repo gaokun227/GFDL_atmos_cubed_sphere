@@ -143,29 +143,37 @@ module gfdl_mp_mod
     
     real, parameter :: sfcrho = 1.2 ! surface air density (kg/m^3)
     
-    real, parameter :: alinr = 842.0 ! "a" in Lin et al. (1983) for rain
-    real, parameter :: alins = 4.8 ! "a" in Lin et al. (1983) for snow
-    real, parameter :: aling = 1.0 ! "a" in Lin et al. (1983), similar to a, but for graupel
-    real, parameter :: alinh = 1.0 ! "a" in Lin et al. (1983), similar to a, but for hail
+    real, parameter :: alinw = 3.e7 ! "a" in Lin et al. (1983) for cloud water (Ikawa and Saito 1990)
+    real, parameter :: alini = 7.e2 ! "a" in Lin et al. (1983) for cloud ice (Ikawa and Saita 1990)
+    real, parameter :: alinr = 842.0 ! "a" in Lin et al. (1983) for rain (Liu and Orville 1969)
+    real, parameter :: alins = 4.8 ! "a" in Lin et al. (1983) for snow (straka 2009)
+    real, parameter :: aling = 1.0 ! "a" in Lin et al. (1983), similar to a, but for graupel (Pruppacher and Klett 2010)
+    real, parameter :: alinh = 1.0 ! "a" in Lin et al. (1983), similar to a, but for hail (Pruppacher and Klett 2010)
 
-    real, parameter :: blinr = 0.8 ! "b" in Lin et al. (1983) for rain
-    real, parameter :: blins = 0.25 ! "b" in Lin et al. (1983) for snow
-    real, parameter :: bling = 0.5 ! "b" in Lin et al. (1983), similar to b, but for graupel
-    real, parameter :: blinh = 0.5 ! "b" in Lin et al. (1983), similar to b, but for hail
+    real, parameter :: blinw = 2.0 ! "b" in Lin et al. (1983) for cloud water (Ikawa and Saito 1990)
+    real, parameter :: blini = 1.0 ! "b" in Lin et al. (1983) for cloud ice (Ikawa and Saita 1990)
+    real, parameter :: blinr = 0.8 ! "b" in Lin et al. (1983) for rain (Liu and Orville 1969)
+    real, parameter :: blins = 0.25 ! "b" in Lin et al. (1983) for snow (straka 2009)
+    real, parameter :: bling = 0.5 ! "b" in Lin et al. (1983), similar to b, but for graupel (Pruppacher and Klett 2010)
+    real, parameter :: blinh = 0.5 ! "b" in Lin et al. (1983), similar to b, but for hail (Pruppacher and Klett 2010)
     
-    real, parameter :: mur = 1.0 ! shape parameter of rain in Gamma distribution
-    real, parameter :: mus = 1.0 ! shape parameter of snow in Gamma distribution
-    real, parameter :: mug = 1.0 ! shape parameter of graupel in Gamma distribution
-    real, parameter :: muh = 1.0 ! shape parameter of hail in Gamma distribution
+    real, parameter :: muw = 1.0 ! shape parameter of cloud water in Gamma distribution (based on Khain and Pinsky 2018)
+    real, parameter :: mui = 1.0 ! shape parameter of cloud ice in Gamma distribution (based on Heymsfield et al. 2013)
+    real, parameter :: mur = 1.0 ! shape parameter of rain in Gamma distribution (Marshall and Palmer 1948)
+    real, parameter :: mus = 1.0 ! shape parameter of snow in Gamma distribution (Gunn and Marshall 1958)
+    real, parameter :: mug = 1.0 ! shape parameter of graupel in Gamma distribution (Houze et al. 1979)
+    real, parameter :: muh = 1.0 ! shape parameter of hail in Gamma distribution (Federer and Waldvogel 1975)
     
-    real, parameter :: n0r = 8.0e6 ! intercept parameter of rain (Lin et al. 1983) (1/m^4)
-    real, parameter :: n0s = 3.0e6 ! intercept parameter of snow (Lin et al. 1983) (1/m^4)
-    real, parameter :: n0g = 4.0e6 ! intercept parameter of graupel (Rutledge and Hobbs 1984) (1/m^4)
-    real, parameter :: n0h = 4.0e4 ! intercept parameter of hail (Lin et al. 1983) (1/m^4)
+    real, parameter :: n0w = 1.0e14 ! intercept parameter of cloud water (Lin et al. 1983) (1/m^4) (based on Khain and Pinsky 2018)
+    real, parameter :: n0i = 1.0e10 ! intercept parameter of cloud ice (Lin et al. 1983) (1/m^4) (based on Heymsfield et al. 2013)
+    real, parameter :: n0r = 8.0e6 ! intercept parameter of rain (Lin et al. 1983) (1/m^4) (Marshall and Palmer 1948)
+    real, parameter :: n0s = 3.0e6 ! intercept parameter of snow (Lin et al. 1983) (1/m^4) (Gunn and Marshall 1958)
+    real, parameter :: n0g = 4.0e6 ! intercept parameter of graupel (Rutledge and Hobbs 1984) (1/m^4) (Houze et al. 1979)
+    real, parameter :: n0h = 4.0e4 ! intercept parameter of hail (Lin et al. 1983) (1/m^4) (Federer and Waldvogel 1975)
     
     real, parameter :: rhow = 1.0e3 ! density of cloud water (kg/m^3)
-    real, parameter :: rhor = 1.0e3 ! density of rain (Lin et al. 1983) (kg/m^3)
     real, parameter :: rhoi = 9.17e2 ! density of cloud ice (kg/m^3)
+    real, parameter :: rhor = 1.0e3 ! density of rain (Lin et al. 1983) (kg/m^3)
     real, parameter :: rhos = 0.1e3 ! density of snow (Lin et al. 1983) (kg/m^3)
     real, parameter :: rhog = 0.4e3 ! density of graupel (Rutledge and Hobbs 1984) (kg/m^3)
     real, parameter :: rhoh = 9.17e2 ! density of hail (Lin et al. 1983) (kg/m^3)
