@@ -144,12 +144,13 @@ module gfdl_cld_mp_mod
     real, parameter :: sfcrho = 1.2 ! surface air density (kg/m^3)
     
     real, parameter :: alinr = 842.0 ! "a" in Lin et al. (1983) for rain
-    real, parameter :: blinr = 0.8 ! "b" in Lin et al. (1983) for rain
     real, parameter :: alins = 4.8 ! "c" in Lin et al. (1983) for snow
-    real, parameter :: blins = 0.25 ! "d" in Lin et al. (1983) for snow
     real, parameter :: aling = 1.0 ! "e" in Lin et al. (1983), similar to a, but for graupel
-    real, parameter :: bling = 0.5 ! "f" in Lin et al. (1983), similar to b, but for graupel
     real, parameter :: alinh = 1.0 ! "g" in Lin et al. (1983), similar to a, but for hail
+
+    real, parameter :: blinr = 0.8 ! "b" in Lin et al. (1983) for rain
+    real, parameter :: blins = 0.25 ! "d" in Lin et al. (1983) for snow
+    real, parameter :: bling = 0.5 ! "f" in Lin et al. (1983), similar to b, but for graupel
     real, parameter :: blinh = 0.5 ! "h" in Lin et al. (1983), similar to b, but for hail
     
     real, parameter :: mur = 1.0 ! shape parameter of rain in Gamma distribution
