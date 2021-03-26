@@ -395,8 +395,7 @@ contains
           j = (jsc + jec)/2
           k = npz_rst/2
           if( is_master() ) write(*,*) 'Calling read_da_inc',pt_r(i,j,k)
-          call read_da_inc(Atm(n), Atm(n)%domain, Atm(n)%bd, npz_rst, ntprog, &
-               u_r, v_r, q_r, delp_r, pt_r, isc, jsc, iec, jec )
+          call read_da_inc(Atm(n:n), Atm(n)%domain)
           if( is_master() ) write(*,*) 'Back from read_da_inc',pt_r(i,j,k)
        endif
 !      ====== end PJP added DA functionailty======

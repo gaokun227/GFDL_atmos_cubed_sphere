@@ -265,8 +265,7 @@ contains
                    j = (Atm(n)%bd%jsc + Atm(n)%bd%jec)/2
                    k = Atm(n)%npz/2
                    if( is_master() ) write(*,*) 'Calling read_da_inc',Atm(n)%pt(i,j,k)
-                   call read_da_inc(Atm(n), Atm(n)%domain, Atm(n)%bd, Atm(n)%npz, Atm(n)%ncnst, &
-                        Atm(n)%u, Atm(n)%v, Atm(n)%q, Atm(n)%delp, Atm(n)%pt, isd, jsd, ied, jed)
+                   call read_da_inc(Atm(n:n), Atm(n)%domain)
                    if( is_master() ) write(*,*) 'Back from read_da_inc',Atm(n)%pt(i,j,k)
                 endif
                 !====== end PJP added DA functionailty======
