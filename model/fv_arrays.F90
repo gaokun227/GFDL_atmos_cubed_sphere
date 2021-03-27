@@ -51,7 +51,7 @@ module fv_arrays_mod
      real, allocatable :: zxg(:,:)
 
      integer :: id_u_dt_sg, id_v_dt_sg, id_t_dt_sg, id_qv_dt_sg
-     integer :: id_ws, id_te, id_amdt, id_mdt, id_divg, id_aam
+     integer :: id_ws, id_te, id_amdt, id_mdt, id_divg, id_aam, id_diss
      logical :: initialized = .false.
 
      real :: efx(max_step), efx_sum, efx_nest(max_step), efx_sum_nest, mtq(max_step), mtq_sum
@@ -442,6 +442,10 @@ module fv_arrays_mod
    logical :: external_eta = .false.  ! allow the use of externally defined ak/bk values and not
                                       ! require coefficients to be defined vi set_eta
    logical :: read_increment = .false.   ! read in analysis increment and add to restart
+! following are namelist parameters for Stochastic Energy Baskscatter
+! dissipation estimate
+   logical :: do_skeb  = .false.         !< save dissipation estimate
+   integer :: skeb_npass  = 11           !< Filter dissipation estimate "skeb_npass" times
 ! Default restart files from the "Memphis" latlon FV core:
    character(len=128) :: res_latlon_dynamics = 'INPUT/fv_rst.res.nc'
    character(len=128) :: res_latlon_tracers  = 'INPUT/atmos_tracers.res.nc'
@@ -798,6 +802,8 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: oro(:,:)      _NULL  ! land fraction (1: all land; 0: all water)
     real, _ALLOCATABLE :: ts(:,:)       _NULL  ! skin temperature (sst) from NCEP/GFS (K) -- tile
     real, _ALLOCATABLE :: ci(:,:)       _NULL  ! sea-ice fraction from external file
+! For stochastic kinetic energy backscatter (SKEB)
+    real, _ALLOCATABLE :: diss_est(:,:,:) _NULL !< dissipation estimate taken from 'heat_source'
 
 !-----------------------------------------------------------------------
 ! Others:
@@ -1025,6 +1031,7 @@ contains
     endif
 
     ! Allocate others
+    allocate ( Atm%diss_est(isd:ied  ,jsd:jed  ,npz) )
     allocate ( Atm%ts(is:ie,js:je) )
     if (Atm%flagstruct%read_ec_sst) allocate ( Atm%ci(is:ie,js:je) )
     allocate ( Atm%phis(isd:ied  ,jsd:jed  ) )
@@ -1371,6 +1378,7 @@ contains
     deallocate (   Atm%pk )
     deallocate ( Atm%peln )
     deallocate (  Atm%pkz )
+    deallocate (   Atm%ts )
     deallocate ( Atm%phis )
     deallocate ( Atm%omga )
     if (allocated(Atm%lagrangian_tendency_of_hydrostatic_pressure)) deallocate ( Atm%lagrangian_tendency_of_hydrostatic_pressure )
@@ -1384,6 +1392,7 @@ contains
     deallocate (  Atm%cy )
     deallocate (  Atm%ak )
     deallocate (  Atm%bk )
+    deallocate ( Atm%diss_est )
 
     deallocate ( Atm%inline_mp%prer )
     deallocate ( Atm%inline_mp%prei )

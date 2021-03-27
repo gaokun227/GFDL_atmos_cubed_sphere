@@ -89,7 +89,7 @@ contains
                      uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, &
                      ks, gridstruct, flagstruct, neststruct, idiag, bd, domain, &
                      init_step, i_pack, end_step, &
-                     lagrangian_tendency_of_hydrostatic_pressure, time_total)
+                     lagrangian_tendency_of_hydrostatic_pressure, diss_est, time_total)
     integer, intent(IN) :: npx
     integer, intent(IN) :: npy
     integer, intent(IN) :: npz
@@ -113,6 +113,7 @@ contains
     real, intent(inout) :: pt(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! temperature (K)
     real, intent(inout) :: delp(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! pressure thickness (pascal)
     real, intent(inout) :: q(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, nq)  !
+    real, intent(inout) :: diss_est(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  !< skeb dissipation
     real, intent(in), optional:: time_total  ! total time (seconds) since start
 
 !-----------------------------------------------------------------------
@@ -172,6 +173,8 @@ contains
     real wk(bd%isd:bd%ied,bd%jsd:bd%jed)
     real fz(bd%is: bd%ie+1,bd%js: bd%je+1)
     real heat_s(bd%is:bd%ie,bd%js:bd%je)
+! new array for stochastic kinetic energy backscatter (SKEB)
+    real diss_e(bd%is:bd%ie,bd%js:bd%je)
     real damp_vt(npz+1)
     integer nord_v(npz+1)
 !-------------------------------------
@@ -270,6 +273,14 @@ contains
                allocate( dv(isd:ied+1,jsd:jed,  npz) )
                call init_ijk_mem(isd,ied+1, jsd,jed  , npz, dv, 0.)
           endif
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,diss_est)
+          do k=1,npz
+            do j=js,je
+              do i=is,ie
+                diss_est(i,j,k) = 0.
+              enddo
+            enddo
+          enddo
       endif    ! end init_step
 
 ! Empty the "flux capacitors"
@@ -652,9 +663,9 @@ contains
 !$OMP                                  is,ie,js,je,isd,ied,jsd,jed,omga,lagrangian_tendency_of_hydrostatic_pressure,delp,gridstruct,npx,npy,  &
 !$OMP                                  ng,zh,vt,ptc,pt,u,v,w,uc,vc,ua,va,divgd,mfx,mfy,cx,cy,     &
 !$OMP                                  crx,cry,xfx,yfx,q_con,zvir,sphum,nq,q,dt,bd,rdt,iep1,jep1, &
-!$OMP                                  heat_source)                                               &
+!$OMP                                  heat_source,diss_est)                                      &
 !$OMP                          private(nord_k, nord_w, nord_t, damp_w, damp_t, d2_divg,   &
-!$OMP                          d_con_k,kgb, hord_m, hord_v, hord_t, hord_p, wk, heat_s, z_rat)
+!$OMP                          d_con_k,kgb, hord_m, hord_v, hord_t, hord_p, wk, heat_s, diss_e, z_rat)
     do k=1,npz
        hord_m = flagstruct%hord_mt
        hord_t = flagstruct%hord_tm
@@ -759,7 +770,7 @@ contains
 #else
                   q_con(isd:,jsd:,1),  z_rat(isd,jsd),  &
 #endif
-                  kgb, heat_s, zvir, sphum, nq,  q,  k,  npz, flagstruct%inline_q,  dt,  &
+                  kgb, heat_s, diss_e, zvir, sphum, nq,  q,  k,  npz, flagstruct%inline_q,  dt,  &
                   flagstruct%hord_tr, hord_m, hord_v, hord_t, hord_p,    &
                   nord_k, nord_v(k), nord_w, nord_t, flagstruct%dddmp, d2_divg, flagstruct%d4_bg,  &
                   damp_vt(k), damp_w, damp_t, d_con_k, hydrostatic, gridstruct, flagstruct, bd)
@@ -788,11 +799,12 @@ contains
                enddo
             enddo
        endif
-       if ( flagstruct%d_con > 1.0E-5 ) then
+       if ( flagstruct%d_con > 1.0E-5 .OR. flagstruct%do_skeb ) then
 ! Average horizontal "convergence" to cell center
             do j=js,je
                do i=is,ie
                   heat_source(i,j,k) = heat_source(i,j,k) + heat_s(i,j)
+                  diss_est(i,j,k) = diss_est(i,j,k) + diss_e(i,j)
                enddo
             enddo
        endif
