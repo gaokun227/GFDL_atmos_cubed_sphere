@@ -273,14 +273,7 @@ contains
                allocate( dv(isd:ied+1,jsd:jed,  npz) )
                call init_ijk_mem(isd,ied+1, jsd,jed  , npz, dv, 0.)
           endif
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,diss_est)
-          do k=1,npz
-            do j=js,je
-              do i=is,ie
-                diss_est(i,j,k) = 0.
-              enddo
-            enddo
-          enddo
+          call init_ijk_mem(isd,ied, jsd,jed, npz, diss_est, 0.)
       endif    ! end init_step
 
 ! Empty the "flux capacitors"
