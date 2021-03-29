@@ -50,7 +50,7 @@ module fv_arrays_mod
 
      real, allocatable :: zxg(:,:)
 
-     integer :: id_u_dt_sg, id_v_dt_sg, id_t_dt_sg, id_qv_dt_sg
+     integer :: id_u_dt_sg, id_v_dt_sg, id_t_dt_sg, id_qv_dt_sg, id_diss
      integer :: id_ws, id_te, id_amdt, id_mdt, id_divg, id_aam
      logical :: initialized = .false.
 
