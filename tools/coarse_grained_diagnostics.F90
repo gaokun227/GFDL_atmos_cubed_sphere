@@ -222,7 +222,7 @@ contains
     coarse_diagnostics(index)%axes = 3
     coarse_diagnostics(index)%module_name = DYNAMICS
     coarse_diagnostics(index)%name = 'vertical_eddy_flux_of_rain_water_coarse'
-    coarse_diagnostics(index)%description = 'vertical eddy flux of liquid water'
+    coarse_diagnostics(index)%description = 'vertical eddy flux of rain water'
     coarse_diagnostics(index)%units = 'kg/kg Pa/s'
     coarse_diagnostics(index)%reduction_method = EDDY_COVARIANCE
     coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,rainwat)
@@ -231,7 +231,7 @@ contains
     coarse_diagnostics(index)%axes = 3
     coarse_diagnostics(index)%module_name = DYNAMICS
     coarse_diagnostics(index)%name = 'vertical_eddy_flux_of_snow_water_coarse'
-    coarse_diagnostics(index)%description = 'vertical eddy flux of liquid water'
+    coarse_diagnostics(index)%description = 'vertical eddy flux of snow water'
     coarse_diagnostics(index)%units = 'kg/kg Pa/s'
     coarse_diagnostics(index)%reduction_method = EDDY_COVARIANCE
     coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,snowwat)
@@ -240,7 +240,7 @@ contains
     coarse_diagnostics(index)%axes = 3
     coarse_diagnostics(index)%module_name = DYNAMICS
     coarse_diagnostics(index)%name = 'vertical_eddy_flux_of_graupel_water_coarse'
-    coarse_diagnostics(index)%description = 'vertical eddy flux of liquid water'
+    coarse_diagnostics(index)%description = 'vertical eddy flux of graupel water'
     coarse_diagnostics(index)%units = 'kg/kg Pa/s'
     coarse_diagnostics(index)%reduction_method = EDDY_COVARIANCE
     coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,graupel)
