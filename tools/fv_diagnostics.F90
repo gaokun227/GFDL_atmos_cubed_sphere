@@ -1067,6 +1067,10 @@ contains
                                         'Convective available potential energy (surface-based)', 'J/kg' , missing_value=missing_value )
        id_cin = register_diag_field( trim(field), 'cin', axes(1:2), Time,  &
                                         'Convective inhibition (surface-based)', 'J/kg' , missing_value=missing_value )
+       id_brn = register_diag_field( trim(field), 'BRN', axes(1:2), Time,  &
+                                        'Bulk Richardson Number', 'nondim' , missing_value=missing_value )
+       id_shear06 = register_diag_field( trim(field), 'shear06', axes(1:2), Time,  &
+                                        '0--6 km shear', 'm/s' , missing_value=missing_value )
 !--------------------------
 ! Vertically integrated tracers for GFDL MP
 !--------------------------
@@ -1911,36 +1915,6 @@ contains
           endif
 
        endif
-
-
-
-!!$       if ( id_srh > 0 ) then
-!!$          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
-!!$               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
-!!$               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 3.e3)
-!!$          used = send_data ( id_srh, a2, Time )
-!!$          if(prt_minmax) then
-!!$             do j=jsc,jec
-!!$                do i=isc,iec
-!!$                   tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
-!!$                   tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
-!!$                   if (  tmp2<25. .or. tmp2>50.    &
-!!$                        .or. tmp<235. .or. tmp>300. ) then
-!!$                      a2(i,j) = 0.
-!!$                   endif
-!!$                enddo
-!!$             enddo
-!!$             call prt_maxmin('SRH over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
-!!$          endif
-!!$       endif
-
-!!$       if ( id_srh25 > 0 ) then
-!!$          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
-!!$               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
-!!$               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 2.e3, 5.e3)
-!!$          used = send_data ( id_srh25, a2, Time )
-!!$       endif
-
 
        ! Relative Humidity
        if ( id_rh > 0 ) then
@@ -2930,7 +2904,9 @@ contains
 
 
 #ifdef GFS_PHYS
-       if(id_delp > 0 .or. id_cape > 0 .or. id_cin > 0 .or. ((.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0))) then
+       if(id_delp > 0 .or. id_cape > 0 .or. id_cin > 0 .or. &
+            ((.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0)) .or. &
+            id_brn > 0 .or. id_shear06 > 0) then
           do k=1,npz
             do j=jsc,jec
             do i=isc,iec
@@ -2942,7 +2918,8 @@ contains
 
        endif
 
-       if( ( (.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0)) .or. id_cape > 0 .or. id_cin > 0) then
+       if( ( (.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0)) .or. id_cape > 0 .or. id_cin > 0  .or. &
+            id_brn > 0 .or. id_shear06 > 0) then
 
 !!$          if (id_ppnh > 0) then
 !!$             if (allocated(a3)) deallocate(a3)
@@ -3006,7 +2983,7 @@ contains
 #else
        if(id_delp > 0) used=send_data(id_delp, Atm(n)%delp(isc:iec,jsc:jec,:), Time)
 
-       if( (.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or.  id_cape > 0 .or. id_cin > 0)) then
+       if( (.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or.  id_cape > 0 .or. id_cin > 0 .or. id_brn > 0 .or. id_shear06 > 0)) then
            do k=1,npz
              do j=jsc,jec
              do i=isc,iec
@@ -3019,7 +2996,7 @@ contains
        endif
 #endif
 
-      if( Atm(n)%flagstruct%hydrostatic .and. (id_pfhy > 0 .or. id_cape > 0 .or. id_cin > 0) ) then
+      if( Atm(n)%flagstruct%hydrostatic .and. (id_pfhy > 0 .or. id_cape > 0 .or. id_cin > 0 .or. id_brn > 0 .or. id_shear06 > 0) ) then
           do k=1,npz
             do j=jsc,jec
             do i=isc,iec
@@ -3030,7 +3007,7 @@ contains
           used=send_data(id_pfhy, wk, Time)
       endif
 
-       if (id_cape > 0 .or. id_cin > 0) then
+       if (id_cape > 0 .or. id_cin > 0 .or. id_brn > 0 .or. id_shear06 > 0) then
           !wk here contains layer-mean pressure
 
           allocate(var2(isc:iec,jsc:jec))
@@ -3062,6 +3039,10 @@ contains
              used=send_data(id_cin, var2, Time)
           endif
 
+          if (id_brn > 0 .or. id_shear06 > 0) then
+             call compute_brn(Atm(n)%ua,Atm(n)%va,Atm(n)%delp,Atm(n)%delz,a2,Atm(n)%bd,npz,Time)
+          endif
+          
           deallocate(var2)
           deallocate(a3)
 
@@ -5585,7 +5566,78 @@ end subroutine eqv_pot
 
   end subroutine nh_total_energy
 
+  subroutine compute_brn(ua, va, delp, delz, cape, bd, npz, Time)
 
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: npz
+    type(time_type), intent(in) :: Time
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed, npz), intent(IN) :: ua, va, delp
+    real, dimension(bd%isc:bd%iec,bd%jsc:bd%jec, npz), intent(IN) :: delz
+    real, dimension(bd%isc:bd%iec,bd%jsc:bd%jec), intent(IN) :: cape
+    real, dimension(bd%isc:bd%iec,bd%jsc:bd%jec) :: brn, shear06
+
+    real, dimension(bd%isc:bd%iec,bd%jsc:bd%jec) :: u06, u005, v06, v005, ht, m06, m005
+    real :: tmp1, tmp2
+    logical :: used
+    
+    integer :: i,j,k
+    
+    integer :: isc,  iec,  jsc,  jec
+    integer :: isd, ied, jsd, jed
+
+    isc  = bd%is
+    iec  = bd%ie
+    jsc  = bd%js
+    jec  = bd%je
+    isd = bd%isd
+    ied = bd%ied
+    jsd = bd%jsd
+    jed = bd%jed
+
+    
+    !Bulk-Richardson number: CAPE / 0.5* (U_{0--6km} - U_{0--500m})**2
+    do j=jsc,jec
+       do i=isc,iec
+          u06(i,j) = 0.
+          u005(i,j) = 0.
+          v06(i,j) = 0.
+          v005(i,j) = 0.
+          m06(i,j) = 0.
+          m005(i,j) = 0.
+          ht(i,j) = -delz(i,j,npz)*0.5
+       enddo
+    enddo
+    do k=npz,2,-1
+    do j=jsc,jec
+    do i=isc,iec
+       if (ht(i,j) <= 6000.) then
+          u06(i,j) = u06(i,j) + delp(i,j,k)*ua(i,j,k)
+          v06(i,j) = v06(i,j) + delp(i,j,k)*va(i,j,k)
+          m06(i,j) = m06(i,j) + delp(i,j,k)
+       endif
+       if (ht(i,j) <= 500.) then
+          u005(i,j) = u005(i,j) + delp(i,j,k)*ua(i,j,k)
+          v005(i,j) = v005(i,j) + delp(i,j,k)*va(i,j,k)
+          m005(i,j) = m005(i,j) + delp(i,j,k)
+       endif
+       ht(i,j) = ht(i,j) - 0.5*(delz(i,j,k) + delz(i,j,k-1))
+    enddo
+    enddo
+    enddo
+    do j=jsc,jec
+    do i=isc,iec
+       tmp1 = u005(i,j)/m005(i,j) - u06(i,j)/m06(i,j)
+       tmp2 = v005(i,j)/m005(i,j) - v06(i,j)/m06(i,j)
+       shear06(i,j) = sqrt(tmp1*tmp1 + tmp2*tmp2)
+       brn(i,j) = cape(i,j)/(0.5*max(0.1,shear06(i,j)*shear06(i,j)))
+    enddo
+    enddo
+
+    if (id_brn > 0) used=send_data(id_brn, brn, Time)
+    if (id_shear06 > 0) used=send_data(id_shear06, shear06, Time)
+
+    
+  end subroutine compute_brn
 
 !#######################################################################
 
