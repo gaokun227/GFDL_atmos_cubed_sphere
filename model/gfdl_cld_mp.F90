@@ -1703,7 +1703,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     ! -----------------------------------------------------------------------
     
     if (do_psd_ice_fall) then
-        call term_rsg (ks, ke, qs, den, denfac, vi_fac, vconi, blini, normi, mui, vi_max, const_vi, vti)
+        call term_rsg (ks, ke, qi, den, denfac, vi_fac, vconi, blini, normi, mui, vi_max, const_vi, vti)
     else
         call term_ice (ks, ke, tz, qi, den, vi_fac, vi_max, const_vi, vti)
     endif
