@@ -302,6 +302,8 @@ module gfdl_cld_mp_mod
     logical :: do_warm_rain_mp = .false. ! do warm rain cloud microphysics only
     
     logical :: do_wbf = .false. ! do Wegener Bergeron Findeisen process
+
+    logical :: do_psd_ice_fall = .false. ! calculate ice terminal velocity based on PSD
     
     real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
@@ -408,7 +410,7 @@ module gfdl_cld_mp_mod
     
     real (kind = r8) :: lv00, li00, li20, cpaut
     real (kind = r8) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
-    real (kind = r8) :: vconr, vcons, vcong, vconh, normr, norms, normg, normh
+    real (kind = r8) :: vconi, vconr, vcons, vcong, vconh, normi, normr, norms, normg, normh
     
     real, allocatable :: table0 (:), table1 (:), table2 (:), table3 (:), table4 (:)
     real, allocatable :: des0 (:), des1 (:), des2 (:), des3 (:), des4 (:)
@@ -433,7 +435,7 @@ module gfdl_cld_mp_mod
         rhc_revap, beta, liq_ice_combine, rewflag, reiflag, rerflag, resflag, &
         regflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, &
         resmax, regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt, &
-        radr_flag, rads_flag, radg_flag, do_wbf
+        radr_flag, rads_flag, radg_flag, do_wbf, do_psd_ice_fall
     
 contains
 
@@ -616,6 +618,7 @@ subroutine setup_mp
     gcon = 40.74 ! (4 * g * rhog / (3 * CD * rho0)) ** 0.5 in Lin et al. (1983)
     hcon = gcon * sqrt (rhoh / rhog)
     
+    vconi = alini * gamma (3 + mui + blini) / gamma (3 + mui)
     vconr = alinr * gamma (3 + mur + blinr) / gamma (3 + mur)
     vcons = alins * gamma (3 + mus + blins) / gamma (3 + mus)
     vcong = aling * gamma (3 + mug + bling) / gamma (3 + mug) * gcon
@@ -625,6 +628,7 @@ subroutine setup_mp
     ! slope parameters of rain, snow, and graupel or hail, Lin et al. (1983)
     ! -----------------------------------------------------------------------
     
+    normi = pi * rhoi * n0i * gamma (mui + 3)
     normr = pi * rhor * n0r * gamma (mur + 3)
     norms = pi * rhos * n0s * gamma (mus + 3)
     normg = pi * rhog * n0g * gamma (mug + 3)
@@ -1680,7 +1684,11 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     ! terminal fall and melting of falling cloud ice into rain
     ! -----------------------------------------------------------------------
     
-    call term_ice (ks, ke, tz, qi, den, vi_fac, vi_max, const_vi, vti)
+    if (do_psd_ice_fall) then
+        call term_rsg (ks, ke, qs, den, denfac, vi_fac, vconi, blini, normi, mui, vi_max, const_vi, vti)
+    else
+        call term_ice (ks, ke, tz, qi, den, vi_fac, vi_max, const_vi, vti)
+    endif
     
     if (do_sedi_melt) then
         call sedi_melt (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
