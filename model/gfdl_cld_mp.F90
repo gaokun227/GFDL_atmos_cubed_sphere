@@ -281,6 +281,7 @@ module gfdl_cld_mp_mod
     logical :: use_rhc_cevap = .false. ! cap of rh for cloud water evaporation
     logical :: use_rhc_revap = .false. ! cap of rh for rain evaporation
     
+    logical :: const_vw = .false. ! if .ture., the constants are specified by v * _fac
     logical :: const_vi = .false. ! if .ture., the constants are specified by v * _fac
     logical :: const_vs = .false. ! if .ture., the constants are specified by v * _fac
     logical :: const_vg = .false. ! if .ture., the constants are specified by v * _fac
@@ -303,7 +304,8 @@ module gfdl_cld_mp_mod
     
     logical :: do_wbf = .false. ! do Wegener Bergeron Findeisen process
 
-    logical :: do_psd_ice_fall = .false. ! calculate ice terminal velocity based on PSD
+    logical :: do_psd_water_fall = .false. ! calculate cloud water terminal velocity based on PSD
+    logical :: do_psd_ice_fall = .false. ! calculate cloud ice terminal velocity based on PSD
     
     real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
@@ -362,11 +364,13 @@ module gfdl_cld_mp_mod
     real :: c_pgacr = 1.0 ! rain to graupel accretion efficiency
     real :: c_pgacs = 0.01 ! snow to graupel accretion efficiency (was 0.1 in ZETAC)
     
+    real :: vw_fac = 1.0
     real :: vi_fac = 1.0 ! IFS: if const_vi: 1 / 3
     real :: vs_fac = 1.0 ! IFS: if const_vs: 1.
     real :: vg_fac = 1.0 ! IFS: if const_vg: 2.
     real :: vr_fac = 1.0 ! IFS: if const_vr: 4.
     
+    real :: vw_max = 0.01 ! maximum fall speed for cloud water (m/s)
     real :: vi_max = 0.5 ! maximum fall speed for cloud ice (m/s)
     real :: vs_max = 5.0 ! maximum fall speed for snow (m/s)
     real :: vg_max = 8.0 ! maximum fall speed for graupel (m/s)
@@ -410,7 +414,7 @@ module gfdl_cld_mp_mod
     
     real (kind = r8) :: lv00, li00, li20, cpaut
     real (kind = r8) :: d1_vap, d1_ice, c1_vap, c1_liq, c1_ice
-    real (kind = r8) :: vconi, vconr, vcons, vcong, vconh, normi, normr, norms, normg, normh
+    real (kind = r8) :: vconw, vconr, vconi, vcons, vcong, vconh, normw, normr, normi, norms, normg, normh
     
     real, allocatable :: table0 (:), table1 (:), table2 (:), table3 (:), table4 (:)
     real, allocatable :: des0 (:), des1 (:), des2 (:), des3 (:), des4 (:)
@@ -420,10 +424,10 @@ module gfdl_cld_mp_mod
     ! -----------------------------------------------------------------------
     
     namelist / gfdl_mp_nml / &
-        t_min, t_sub, tau_r2g, tau_smlt, tau_gmlt, dw_land, dw_ocean, vi_fac, &
-        vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, vs_max, &
+        t_min, t_sub, tau_r2g, tau_smlt, tau_gmlt, dw_land, dw_ocean, vw_fac, vi_fac, &
+        vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vw_max, vi_max, vs_max, &
         vg_max, vr_max, qs_mlt, qs0_crt, ql0_max, qi0_max, qi0_crt, ifflag, &
-        rh_inc, rh_ins, rh_inr, const_vi, const_vs, const_vg, const_vr, rthresh, &
+        rh_inc, rh_ins, rh_inr, const_vw, const_vi, const_vs, const_vg, const_vr, rthresh, &
         ccn_l, ccn_o, igflag, c_paut, tau_imlt, tau_v2l, tau_l2v, tau_i2s, &
         tau_l2r, qi_lim, ql_gen, do_hail, inflag, c_psacw, c_psaci, c_pracs, &
         c_psacr, c_pgacr, c_pgacs, c_pgacw, c_pgaci, z_slope_liq, z_slope_ice, &
@@ -435,7 +439,7 @@ module gfdl_cld_mp_mod
         rhc_revap, beta, liq_ice_combine, rewflag, reiflag, rerflag, resflag, &
         regflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, &
         resmax, regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt, &
-        radr_flag, rads_flag, radg_flag, do_wbf, do_psd_ice_fall
+        radr_flag, rads_flag, radg_flag, do_wbf, do_psd_water_fall, do_psd_ice_fall
     
 contains
 
@@ -507,7 +511,7 @@ end subroutine gfdl_cld_mp_init
 ! =======================================================================
 
 subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, wa, &
-        ua, va, delz, delp, gsize, dtm, hs, rain, snow, ice, graupel, &
+        ua, va, delz, delp, gsize, dtm, hs, water, rain, ice, snow, graupel, &
         hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, te, &
         condensation, deposition, evaporation, sublimation, last_step, &
         do_inline_mp)
@@ -533,7 +537,7 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, wa, &
     
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
     
-    real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
+    real, intent (inout), dimension (is:ie) :: water, rain, ice, snow, graupel
     real, intent (inout), dimension (is:ie) :: condensation, deposition
     real, intent (inout), dimension (is:ie) :: evaporation, sublimation
     
@@ -548,7 +552,7 @@ subroutine gfdl_cld_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, wa, &
     ! -----------------------------------------------------------------------
     
     call mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, qa, &
-        qnl, qni, delz, is, ie, ks, ke, dtm, rain, snow, graupel, ice, gsize, &
+        qnl, qni, delz, is, ie, ks, ke, dtm, water, rain, ice, snow, graupel, gsize, &
         hs, q_con, cappa, consv_te, te, condensation, deposition, evaporation, &
         sublimation, last_step, do_inline_mp, .false., .true.)
     
@@ -618,6 +622,7 @@ subroutine setup_mp
     gcon = 40.74 ! (4 * g * rhog / (3 * CD * rho0)) ** 0.5 in Lin et al. (1983)
     hcon = gcon * sqrt (rhoh / rhog)
     
+    vconw = alinw * gamma (3 + muw + blinw) / gamma (3 + muw)
     vconi = alini * gamma (3 + mui + blini) / gamma (3 + mui)
     vconr = alinr * gamma (3 + mur + blinr) / gamma (3 + mur)
     vcons = alins * gamma (3 + mus + blins) / gamma (3 + mus)
@@ -628,6 +633,7 @@ subroutine setup_mp
     ! slope parameters of rain, snow, and graupel or hail, Lin et al. (1983)
     ! -----------------------------------------------------------------------
     
+    normw = pi * rhow * n0w * gamma (muw + 3)
     normi = pi * rhoi * n0i * gamma (mui + 3)
     normr = pi * rhor * n0r * gamma (mur + 3)
     norms = pi * rhos * n0s * gamma (mus + 3)
@@ -859,8 +865,8 @@ end subroutine setup_mhc_lhc
 ! =======================================================================
 
 subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
-        qg, qa, qnl, qni, delz, is, ie, ks, ke, dtm, rain, snow, graupel, &
-        ice, gsize, hs, q_con, cappa, consv_te, te, condensation, &
+        qg, qa, qnl, qni, delz, is, ie, ks, ke, dtm, water, rain, ice, snow, &
+        graupel, gsize, hs, q_con, cappa, consv_te, te, condensation, &
         deposition, evaporation, sublimation, last_step, do_inline_mp, &
         do_mp_fast, do_mp_full)
     
@@ -886,7 +892,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
     
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
     
-    real, intent (inout), dimension (is:ie) :: rain, snow, ice, graupel
+    real, intent (inout), dimension (is:ie) :: water, rain, ice, snow, graupel
     real, intent (inout), dimension (is:ie) :: condensation, deposition
     real, intent (inout), dimension (is:ie) :: evaporation, sublimation
     
@@ -976,7 +982,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         if (consv_checker) then
             call mtetw (ks, ke, qv (i, :), ql (i, :), qr (i, :), qi (i, :), &
                 qs (i, :), qg (i, :), tz, ua (i, :), va (i, :), wa (i, :), &
-                delp (i, :), gsize (i), dte (i), rain (i), ice (i), snow (i), &
+                delp (i, :), gsize (i), dte (i), water (i), rain (i), ice (i), snow (i), &
                 graupel (i), dtm, te_beg_0 (i, :), tw_beg_0 (i, :), &
                 te_b_beg_0 (i), tw_b_beg_0 (i), .true., hydrostatic)
         endif
@@ -1037,7 +1043,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         
         if (consv_checker) then
             call mtetw (ks, ke, qvz, qlz, qrz, qiz, qsz, qgz, tz, u, v, w, &
-                dp, gsize (i), dte (i), rain (i), ice (i), snow (i), &
+                dp, gsize (i), dte (i), water (i), rain (i), ice (i), snow (i), &
                 graupel (i), dtm, te_beg (i, :), tw_beg (i, :), &
                 te_b_beg (i), tw_b_beg (i), .false., hydrostatic)
         endif
@@ -1109,8 +1115,8 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         if (do_mp_full) then
             
             call mp_full (ks, ke, ntimes, tz, qvz, qlz, qrz, qiz, qsz, qgz, dp, dz, &
-                u, v, w, den, denfac, ccn, cin, dts, rh_adj, rh_rain, h_var, &
-                dte (i), rain (i), snow (i), ice (i), graupel (i), condensation (i), &
+                u, v, w, den, denfac, ccn, cin, dts, rh_adj, rh_rain, h_var, dte (i), &
+                water (i), rain (i), ice (i), snow (i), graupel (i), condensation (i), &
                 deposition (i), evaporation (i), sublimation (i), convt)
             
         endif
@@ -1156,7 +1162,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         
         if (consv_checker) then
             call mtetw (ks, ke, qvz, qlz, qrz, qiz, qsz, qgz, tz, u, v, w, &
-                dp, gsize (i), dte (i), rain (i), ice (i), snow (i), &
+                dp, gsize (i), dte (i), water (i), rain (i), ice (i), snow (i), &
                 graupel (i), dtm, te_end (i, :), tw_end (i, :), &
                 te_b_end (i), tw_b_end (i), .false., hydrostatic, te_loss (i))
         endif
@@ -1210,7 +1216,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         if (consv_checker) then
             call mtetw (ks, ke, qv (i, :), ql (i, :), qr (i, :), qi (i, :), &
                 qs (i, :), qg (i, :), tz, ua (i, :), va (i, :), wa (i, :), &
-                delp (i, :), gsize (i), dte (i), rain (i), ice (i), snow (i), &
+                delp (i, :), gsize (i), dte (i), water (i), rain (i), ice (i), snow (i), &
                 graupel (i), dtm, te_end_0 (i, :), tw_end_0 (i, :), &
                 te_b_end_0 (i), tw_b_end_0 (i), .true., hydrostatic)
         endif
@@ -1401,8 +1407,8 @@ end subroutine neg_adj
 ! =======================================================================
 
 subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w, &
-        den, denfac, ccn, cin, dts, rh_adj, rh_rain, h_var, dte, rain, snow, ice, &
-        graupel, condensation, deposition, evaporation, sublimation, convt)
+        den, denfac, ccn, cin, dts, rh_adj, rh_rain, h_var, dte, water, rain, ice, &
+        snow, graupel, condensation, deposition, evaporation, sublimation, convt)
     
     implicit none
     
@@ -1420,7 +1426,7 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
     
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     
-    real, intent (inout) :: rain, snow, ice, graupel
+    real, intent (inout) :: water, rain, ice, snow, graupel
     real, intent (inout) :: condensation, deposition
     real, intent (inout) :: evaporation, sublimation
     
@@ -1432,9 +1438,9 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
     
     integer :: n
     
-    real :: r1, s1, i1, g1, cond, dep, reevap, sub
+    real :: w1, r1, i1, s1, g1, cond, dep, reevap, sub
     
-    real, dimension (ks:ke) :: vtr, vti, vts, vtg
+    real, dimension (ks:ke) :: vtw, vtr, vti, vts, vtg
     
     do n = 1, ntimes
         
@@ -1443,8 +1449,9 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
         ! -----------------------------------------------------------------------
         
         call sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, &
-            dz, dp, vtr, vti, vts, vtg, r1, i1, s1, g1, u, v, w, den, denfac, dte)
+            dz, dp, vtw, vtr, vti, vts, vtg, w1, r1, i1, s1, g1, u, v, w, den, denfac, dte)
         
+        water = water + w1 * convt
         rain = rain + r1 * convt
         ice = ice + i1 * convt
         snow = snow + s1 * convt
@@ -1634,7 +1641,7 @@ end subroutine mp_fast
 ! =======================================================================
 
 subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vtr, vti, vts, vtg, r1, i1, s1, g1, u, v, w, den, denfac, dte)
+        vtw, vtr, vti, vts, vtg, w1, r1, i1, s1, g1, u, v, w, den, denfac, dte)
     
     implicit none
     
@@ -1650,9 +1657,9 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, u, v, w
     
-    real, intent (out) :: r1, i1, s1, g1
+    real, intent (out) :: w1, r1, i1, s1, g1
     
-    real, intent (out), dimension (ks:ke) :: vtr, vti, vts, vtg
+    real, intent (out), dimension (ks:ke) :: vtw, vtr, vti, vts, vtg
     
     real (kind = r8), intent (inout) :: dte
     
@@ -1668,10 +1675,17 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     
     real (kind = r8), dimension (ks:ke) :: te8, cvm
     
+    w1 = 0.
     r1 = 0.
     i1 = 0.
     s1 = 0.
     g1 = 0.
+    
+    vtw = 0.
+    vtr = 0.
+    vti = 0.
+    vts = 0.
+    vtg = 0.
     
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
@@ -1729,6 +1743,19 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vtg, g1, u, v, w, dte, "qg")
+    
+    ! ----------------------------------------------
+    ! terminal fall of cloud water
+    ! ----------------------------------------------
+    
+    if (do_psd_water_fall) then
+
+        call term_rsg (ks, ke, ql, den, denfac, vw_fac, vconw, blinw, normw, muw, vw_max, const_vw, vtw)
+    
+        call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
+            vtw, w1, u, v, w, dte, "ql")
+
+    endif
     
     ! ----------------------------------------------
     ! terminal fall of rain
@@ -1993,6 +2020,8 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     call zezt (ks, ke, dts, zs, dz, vt, ze, zt)
     
     select case (qflag)
+        case ("ql")
+            q = ql
         case ("qr")
             q = qr
         case ("qi")
@@ -2034,6 +2063,8 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     ! -----------------------------------------------------------------------
     
     select case (qflag)
+        case ("ql")
+            q = ql
         case ("qr")
             q = qr
         case ("qi")
@@ -2053,6 +2084,8 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     endif
     
     select case (qflag)
+        case ("ql")
+            ql = q
         case ("qr")
             qr = q
         case ("qi")
@@ -4980,7 +5013,7 @@ subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
     
     real, dimension (is:ie, ks:ke) :: ua, va, wa
     
-    real, dimension (is:ie) :: rain, snow, ice, graupel
+    real, dimension (is:ie) :: water, rain, ice, snow, graupel
     
     ! -----------------------------------------------------------------------
     ! initialization
@@ -4990,8 +5023,9 @@ subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
     va = 0.0
     wa = 0.0
     
-    ice = 0.0
+    water = 0.0
     rain = 0.0
+    ice = 0.0
     snow = 0.0
     graupel = 0.0
     
@@ -5006,9 +5040,9 @@ subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
     ! -----------------------------------------------------------------------
     
     call mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, qa, &
-        qnl, qni, delz, is, ie, ks, ke, dtm, rain, snow, graupel, ice, gsize, &
-        hs, q_con, cappa, consv_te, te, condensation, deposition, evaporation, &
-        sublimation, last_step, .true., .true., .false.)
+        qnl, qni, delz, is, ie, ks, ke, dtm, water, rain, ice, snow, graupel, &
+        gsize, hs, q_con, cappa, consv_te, te, condensation, deposition, &
+        evaporation, sublimation, last_step, .true., .true., .false.)
     
 end subroutine fast_sat_adj
 
@@ -6032,7 +6066,7 @@ end function mte
 ! =======================================================================
 
 subroutine mtetw (ks, ke, qv, ql, qr, qi, qs, qg, tz, ua, va, wa, delp, &
-        gsize, dte, rain, ice, snow, graupel, dts, te, tw, te_b, tw_b, &
+        gsize, dte, water, rain, ice, snow, graupel, dts, te, tw, te_b, tw_b, &
         moist_q, hydrostatic, te_loss)
     
     implicit none
@@ -6045,7 +6079,7 @@ subroutine mtetw (ks, ke, qv, ql, qr, qi, qs, qg, tz, ua, va, wa, delp, &
     
     logical, intent (in) :: moist_q, hydrostatic
     
-    real, intent (in) :: gsize, rain, ice, snow, graupel, dts
+    real, intent (in) :: gsize, water, rain, ice, snow, graupel, dts
     
     real, intent (in), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, ua, va, wa, delp
     
@@ -6093,7 +6127,7 @@ subroutine mtetw (ks, ke, qv, ql, qr, qi, qs, qg, tz, ua, va, wa, delp, &
          tw (k) = rgrav * (qv (k) + q_cond) * delp (k) * gsize ** 2.0
      enddo
      te_b = (dte - li00 * c_air * (ice + snow + graupel) * dts / 86400) * gsize ** 2.0
-     tw_b = (rain + ice + snow + graupel) * dts / 86400 * gsize ** 2.0
+     tw_b = (water + rain + ice + snow + graupel) * dts / 86400 * gsize ** 2.0
 
      if (present (te_loss)) then
           ! total energy change due to sedimentation and its heating
