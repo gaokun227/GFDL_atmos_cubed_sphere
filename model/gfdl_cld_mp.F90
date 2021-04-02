@@ -225,6 +225,8 @@ module gfdl_cld_mp_mod
     ! 1: Martin et al. (1994)
     ! 2: Martin et al. (1994), GFDL revision
     ! 3: Kiehl et al. (1994)
+    ! 4: effective radius
+    ! 5: mass-weighted effective radius
     
     integer :: reiflag = 5 ! cloud ice effective radius scheme
     ! 1: Heymsfield and Mcfarquhar (1996)
@@ -233,6 +235,8 @@ module gfdl_cld_mp_mod
     ! 4: Kristjansson et al. (2000)
     ! 5: Wyser (1998)
     ! 6: Sun and Rikus (1999), Sun (2001)
+    ! 7: effective radius
+    ! 8: mass-weighted effective radius
     
     integer :: rerflag = 1 ! rain effective radius scheme
     ! 1: effective radius
@@ -5287,7 +5291,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
     real, dimension (is:ie, ks:ke) :: qmw, qmr, qmi, qms, qmg
     
     real :: dpg, rho, ccnw, mask, cor, tc, bw
-    real :: lambdar, lambdas, lambdag, rei_fac
+    real :: lambdaw, lambdar, lambdai, lambdas, lambdag, rei_fac
     
     real :: ccno = 90.
     real :: ccnl = 270.
@@ -5453,6 +5457,42 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 
             endif
             
+            if (rewflag .eq. 4) then
+                
+                ! -----------------------------------------------------------------------
+                ! cloud water (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qmw (i, k) .gt. qcmin) then
+                    qcw (i, k) = dpg * qmw (i, k) * 1.0e3
+                    lambdaw = exp (1. / (muw + 3) * log (normw / (6 * qmw (i, k) * rho)))
+                    rew (i, k) = 0.5 * 3 / lambdaw * 1.0e6
+                    rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
+                else
+                    qcw (i, k) = 0.0
+                    rew (i, k) = rewmin
+                endif
+                
+            endif
+            
+            if (rewflag .eq. 5) then
+                
+                ! -----------------------------------------------------------------------
+                ! cloud water (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qmw (i, k) .gt. qcmin) then
+                    qcw (i, k) = dpg * qmw (i, k) * 1.0e3
+                    lambdaw = exp (1. / (muw + 3) * log (normw / (6 * qmw (i, k) * rho)))
+                    rew (i, k) = 0.5 * exp (log (gamma (4 + blinw) / 6) / blinw) / lambdaw * 1.0e6
+                    rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
+                else
+                    qcw (i, k) = 0.0
+                    rew (i, k) = rewmin
+                endif
+                
+            endif
+            
             if (reiflag .eq. 1) then
                 
                 ! -----------------------------------------------------------------------
@@ -5579,6 +5619,42 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     rei (i, k) = 45.8966 * exp (0.2214 * rei_fac) + &
                         0.7957 * exp (0.2535 * rei_fac) * (tc + 190.0)
                     rei (i, k) = (1.2351 + 0.0105 * tc) * rei (i, k)
+                    rei (i, k) = max (reimin, min (reimax, rei (i, k)))
+                else
+                    qci (i, k) = 0.0
+                    rei (i, k) = reimin
+                endif
+                
+            endif
+            
+            if (reiflag .eq. 7) then
+                
+                ! -----------------------------------------------------------------------
+                ! cloud ice (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qmi (i, k) .gt. qcmin) then
+                    qci (i, k) = dpg * qmi (i, k) * 1.0e3
+                    lambdai = exp (1. / (mui + 3) * log (normi / (6 * qmi (i, k) * rho)))
+                    rei (i, k) = 0.5 * 3 / lambdai * 1.0e6
+                    rei (i, k) = max (reimin, min (reimax, rei (i, k)))
+                else
+                    qci (i, k) = 0.0
+                    rei (i, k) = reimin
+                endif
+                
+            endif
+            
+            if (reiflag .eq. 8) then
+                
+                ! -----------------------------------------------------------------------
+                ! cloud ice (Lin et al. 1983)
+                ! -----------------------------------------------------------------------
+                
+                if (qmi (i, k) .gt. qcmin) then
+                    qci (i, k) = dpg * qmi (i, k) * 1.0e3
+                    lambdai = exp (1. / (mui + 3) * log (normi / (6 * qmi (i, k) * rho)))
+                    rei (i, k) = 0.5 * exp (log (gamma (4 + blini) / 6) / blini) / lambdai * 1.0e6
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
                     qci (i, k) = 0.0
