@@ -333,6 +333,7 @@ contains
                                    call timing_off('COMM_TOTAL')
      endif
 
+#ifndef SW_DYNAMICS
      if ( .not. hydrostatic ) then
                              call timing_on('COMM_TOTAL')
          call start_group_halo_update(i_pack(7), w, domain)
@@ -376,8 +377,8 @@ contains
                              call timing_off('COMM_TOTAL')
       endif
 
-     endif
-
+   endif
+#endif
 
 #ifdef SW_DYNAMICS
      if (test_case>1) then
@@ -735,8 +736,8 @@ contains
              enddo
           enddo
        endif
-       
-!--- external mode divergence damping ---
+
+       !--- external mode divergence damping ---
        if ( flagstruct%d_ext > 0. )  &
             call a2b_ord2(delp(isd,jsd,k), wk, gridstruct, npx, npy, is,    &
                           ie, js, je, ng, .false.)
@@ -780,7 +781,7 @@ contains
                enddo
             enddo
        endif
-       
+
        if ( flagstruct%d_ext > 0. ) then
             do j=js,jep1
                do i=is,iep1

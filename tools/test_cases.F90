@@ -158,7 +158,7 @@
      integer, parameter :: interpOrder = 1
 
       public :: pz0, zz0
-      public :: read_namelist_test_case_nml, alpha
+      public :: read_namelist_test_case_nml, alpha, test_case
       public :: init_case
       public :: case9_forcing1, case9_forcing2, case51_forcing
       public :: init_double_periodic
@@ -758,7 +758,7 @@
                                    sin(agrid(i  ,j  ,2))*cos(alpha) ) ** 2.0
             enddo
          enddo
-         call init_winds(UBar, u,v,ua,va,uc,vc, 1, npx, npy, ng, ndims, nregions, gridstruct%bounded_domain, gridstruct, domain, tile)
+         call init_winds(UBar, u,v,ua,va,uc,vc, 1, npx, npy, ng, ndims, nregions, gridstruct%bounded_domain, gridstruct, domain, tile,bd)
 
 ! Test Divergence operator at cell centers
          do j=js,je
@@ -780,8 +780,8 @@
      ! call mpp_update_domains( vor0, domain )
      ! call mpp_update_domains( divg, domain )
      ! call mpp_update_domains( vort, domain )
-      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
-                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
+!!$      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
+!!$                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
  200  format(i4.4,'x',i4.4,'x',i4.4,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14)
  201  format('          ',A,e21.14,' ',e21.14)
  202  format('          ',A,i4.4,'x',i4.4,'x',i4.4)
@@ -813,8 +813,8 @@
         ua0 = ua
         va0 = va
         div0(:,:) = 1.e-20
-      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
-                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
+!!$      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
+!!$                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
       if ( is_master() ) then
           write(*,*) ' Error Norms of Analytical Divergence field A-Winds initialized'
           write(*,201) 'Divergence MAX error     : ', pmax
@@ -843,8 +843,8 @@
            enddo
         enddo
         div0(:,:) = 1.e-20
-      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
-                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
+!!$      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
+!!$                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
       if ( is_master() ) then
           write(*,*) ' Error Norms of Analytical Divergence field D-Winds initialized'
           write(*,201) 'Divergence MAX error     : ', pmax
