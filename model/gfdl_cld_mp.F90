@@ -157,24 +157,6 @@ module gfdl_cld_mp_mod
     real, parameter :: bling = 0.5 ! "b" in Lin et al. (1983), similar to b, but for graupel (Pruppacher and Klett 2010)
     real, parameter :: blinh = 0.5 ! "b" in Lin et al. (1983), similar to b, but for hail (Pruppacher and Klett 2010)
     
-    real, parameter :: muw = 6.0 ! shape parameter of cloud water in Gamma distribution (Martin et al. 1994)
-    !real, parameter :: muw = 16.0 ! shape parameter of cloud water in Gamma distribution (Martin et al. 1994)
-    real, parameter :: mui = 3.35 ! shape parameter of cloud ice in Gamma distribution (McFarquhar et al. 2015)
-    !real, parameter :: mui = 3.54 ! shape parameter of cloud ice in Gamma distribution (McFarquhar et al. 2015)
-    real, parameter :: mur = 1.0 ! shape parameter of rain in Gamma distribution (Marshall and Palmer 1948)
-    real, parameter :: mus = 1.0 ! shape parameter of snow in Gamma distribution (Gunn and Marshall 1958)
-    real, parameter :: mug = 1.0 ! shape parameter of graupel in Gamma distribution (Houze et al. 1979)
-    real, parameter :: muh = 1.0 ! shape parameter of hail in Gamma distribution (Federer and Waldvogel 1975)
-    
-    real, parameter :: n0w = 1.1e41 ! intercept parameter of cloud water (Lin et al. 1983) (1/m^4) (Martin et al. 1994)
-    !real, parameter :: n0w = 1.4e91 ! intercept parameter of cloud water (Lin et al. 1983) (1/m^4) (Martin et al. 1994)
-    real, parameter :: n0i = 1.3e18 ! intercept parameter of cloud ice (Lin et al. 1983) (1/m^4) (McFarquhar et al. 2015)
-    !real, parameter :: n0i = 9.4e17 ! intercept parameter of cloud ice (Lin et al. 1983) (1/m^4) (McFarquhar et al. 2015)
-    real, parameter :: n0r = 8.0e6 ! intercept parameter of rain (Lin et al. 1983) (1/m^4) (Marshall and Palmer 1948)
-    real, parameter :: n0s = 3.0e6 ! intercept parameter of snow (Lin et al. 1983) (1/m^4) (Gunn and Marshall 1958)
-    real, parameter :: n0g = 4.0e6 ! intercept parameter of graupel (Rutledge and Hobbs 1984) (1/m^4) (Houze et al. 1979)
-    real, parameter :: n0h = 4.0e4 ! intercept parameter of hail (Lin et al. 1983) (1/m^4) (Federer and Waldvogel 1975)
-    
     real, parameter :: rhow = 1.0e3 ! density of cloud water (kg/m^3)
     real, parameter :: rhoi = 9.17e2 ! density of cloud ice (kg/m^3)
     real, parameter :: rhor = 1.0e3 ! density of rain (Lin et al. 1983) (kg/m^3)
@@ -317,6 +299,24 @@ module gfdl_cld_mp_mod
     
     real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
+    real :: n0w = 1.1e41 ! intercept parameter of cloud water (Lin et al. 1983) (1/m^4) (Martin et al. 1994)
+    !real :: n0w = 1.4e91 ! intercept parameter of cloud water (Lin et al. 1983) (1/m^4) (Martin et al. 1994)
+    real :: n0i = 1.3e18 ! intercept parameter of cloud ice (Lin et al. 1983) (1/m^4) (McFarquhar et al. 2015)
+    !real :: n0i = 9.4e17 ! intercept parameter of cloud ice (Lin et al. 1983) (1/m^4) (McFarquhar et al. 2015)
+    real :: n0r = 8.0e6 ! intercept parameter of rain (Lin et al. 1983) (1/m^4) (Marshall and Palmer 1948)
+    real :: n0s = 3.0e6 ! intercept parameter of snow (Lin et al. 1983) (1/m^4) (Gunn and Marshall 1958)
+    real :: n0g = 4.0e6 ! intercept parameter of graupel (Rutledge and Hobbs 1984) (1/m^4) (Houze et al. 1979)
+    real :: n0h = 4.0e4 ! intercept parameter of hail (Lin et al. 1983) (1/m^4) (Federer and Waldvogel 1975)
+    
+    real :: muw = 6.0 ! shape parameter of cloud water in Gamma distribution (Martin et al. 1994)
+    !real :: muw = 16.0 ! shape parameter of cloud water in Gamma distribution (Martin et al. 1994)
+    real :: mui = 3.35 ! shape parameter of cloud ice in Gamma distribution (McFarquhar et al. 2015)
+    !real :: mui = 3.54 ! shape parameter of cloud ice in Gamma distribution (McFarquhar et al. 2015)
+    real :: mur = 1.0 ! shape parameter of rain in Gamma distribution (Marshall and Palmer 1948)
+    real :: mus = 1.0 ! shape parameter of snow in Gamma distribution (Gunn and Marshall 1958)
+    real :: mug = 1.0 ! shape parameter of graupel in Gamma distribution (Houze et al. 1979)
+    real :: muh = 1.0 ! shape parameter of hail in Gamma distribution (Federer and Waldvogel 1975)
+    
     real :: tice_mlt = 273.16 ! can set ice melting temperature to 268 based on observation (Kay et al. 2016) (K)
     
     real :: t_min = 178.0 ! minimum temperature to freeze - dry all water vapor (K)
@@ -447,7 +447,8 @@ module gfdl_cld_mp_mod
         rhc_revap, beta, liq_ice_combine, rewflag, reiflag, rerflag, resflag, &
         regflag, rewmin, rewmax, reimin, reimax, rermin, rermax, resmin, &
         resmax, regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt, &
-        radr_flag, rads_flag, radg_flag, do_wbf, do_psd_water_fall, do_psd_ice_fall
+        radr_flag, rads_flag, radg_flag, do_wbf, do_psd_water_fall, do_psd_ice_fall, &
+        n0w, n0i, n0r, n0s, n0g, n0h, muw, mui, mur, mus, mug, muh
     
 contains
 
