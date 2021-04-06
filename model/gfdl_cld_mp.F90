@@ -5517,7 +5517,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmw (i, k) .gt. qcmin) then
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     lambdaw = exp (1. / (muw + 3) * log (normw / (6 * qmw (i, k) * rho))) * expow
-                    rew (i, k) = 0.5 * 3 / lambdaw * 1.0e6
+                    rew (i, k) = 0.5 * (muw + 2) / lambdaw * 1.0e6
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
                     qcw (i, k) = 0.0
@@ -5687,7 +5687,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmi (i, k) .gt. qcmin) then
                     qci (i, k) = dpg * qmi (i, k) * 1.0e3
                     lambdai = exp (1. / (mui + 3) * log (normi / (6 * qmi (i, k) * rho))) * expoi
-                    rei (i, k) = 0.5 * 3 / lambdai * 1.0e6
+                    rei (i, k) = 0.5 * (mui + 2) / lambdai * 1.0e6
                     rei (i, k) = max (reimin, min (reimax, rei (i, k)))
                 else
                     qci (i, k) = 0.0
@@ -5723,7 +5723,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qmr (i, k) .gt. qcmin) then
                     qcr (i, k) = dpg * qmr (i, k) * 1.0e3
                     lambdar = exp (1. / (mur + 3) * log (normr / (6 * qmr (i, k) * rho))) * expor
-                    rer (i, k) = 0.5 * 3 / lambdar * 1.0e6
+                    rer (i, k) = 0.5 * (mur + 2) / lambdar * 1.0e6
                     rer (i, k) = max (rermin, min (rermax, rer (i, k)))
                 else
                     qcr (i, k) = 0.0
@@ -5759,7 +5759,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                 if (qms (i, k) .gt. qcmin) then
                     qcs (i, k) = dpg * qms (i, k) * 1.0e3
                     lambdas = exp (1. / (mus + 3) * log (norms / (6 * qms (i, k) * rho))) * expos
-                    res (i, k) = 0.5 * 3 / lambdas * 1.0e6
+                    res (i, k) = 0.5 * (mus + 2) / lambdas * 1.0e6
                     res (i, k) = max (resmin, min (resmax, res (i, k)))
                 else
                     qcs (i, k) = 0.0
@@ -5796,10 +5796,11 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
                     qcg (i, k) = dpg * qmg (i, k) * 1.0e3
                     if (do_hail) then
                         lambdag = exp (1. / (muh + 3) * log (normh / (6 * qmg (i, k) * rho))) * expoh
+                        reg (i, k) = 0.5 * (muh + 2) / lambdag * 1.0e6
                     else
                         lambdag = exp (1. / (mug + 3) * log (normg / (6 * qmg (i, k) * rho))) * expog
+                        reg (i, k) = 0.5 * (mug + 2) / lambdag * 1.0e6
                     endif
-                    reg (i, k) = 0.5 * 3 / lambdag * 1.0e6
                     reg (i, k) = max (regmin, min (regmax, reg (i, k)))
                 else
                     qcg (i, k) = 0.0
@@ -5904,39 +5905,35 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
     ! -----------------------------------------------------------------------
     
     if (radr_flag .eq. 1 .or. radr_flag .eq. 2) &
-        fac_r = 720 * exp (- 1. / (mur + 3) * 7 * log (normr)) * n0r_sig * &
-            exp ((mur - 4) * log (expor)) * 1.e18
+        fac_r = gamma (mur + 6) * exp (- 1. / (mur + 3) * (mur + 6) * log (normr)) * n0r_sig * &
+            exp (- 3.0 * log (expor)) * 1.e18
     
     if (rads_flag .eq. 1) &
-        fac_s = 720 * exp (- 1. / (mus + 3) * 7 * log (norms)) * n0s_sig * &
-            exp ((mus - 4) * log (expos)) * 1.e18 * &
-            alpha * (rhos / rhor) ** 2
+        fac_s = gamma (mus + 6) * exp (- 1. / (mus + 3) * (mus + 6) * log (norms)) * n0s_sig * &
+            exp (- 3.0 * log (expos)) * 1.e18 * alpha * (rhos / rhor) ** 2
     if (rads_flag .eq. 2) then
-        fac_sw = 720 * exp (- 1. / (mus + 3) * 7 * log (norms)) * n0s_sig * &
-            exp ((mus - 4) * log (expos)) * 1.e18
-        fac_sd = 720 * exp (- 1. / (mus + 3) * 7 * log (norms)) * n0s_sig * &
-            exp ((mus - 4) * log (expos)) * 1.e18 * &
-            alpha * (rhos / rhoi) ** 2
+        fac_sw = gamma (mus + 6) * exp (- 1. / (mus + 3) * (mus + 6) * log (norms)) * n0s_sig * &
+            exp (- 3.0 * log (expos)) * 1.e18
+        fac_sd = gamma (mus + 6) * exp (- 1. / (mus + 3) * (mus + 6) * log (norms)) * n0s_sig * &
+            exp (- 3.0 * log (expos)) * 1.e18 * alpha * (rhos / rhoi) ** 2
     endif
     
     if (radg_flag .eq. 1) then
         if (do_hail .and. .not. do_inline_mp) then
-            fac_g = 720 * exp (- 1. / (muh + 3) * 7 * log (normh)) * n0h_sig * &
-                exp ((muh - 4) * log (expoh)) * 1.e18 * &
-                alpha * (rhoh / rhor) ** 2
+            fac_g = gamma (muh + 6) * exp (- 1. / (muh + 3) * (muh + 6) * log (normh)) * n0h_sig * &
+                exp (- 3.0 * log (expoh)) * 1.e18 * alpha * (rhoh / rhor) ** 2
         else
-            fac_g = 720 * exp (- 1. / (mug + 3) * 7 * log (normg)) * n0g_sig * &
-                exp ((mug - 4) * log (expog)) * 1.e18 * &
-                alpha * (rhog / rhor) ** 2
+            fac_g = gamma (mug + 6) * exp (- 1. / (mug + 3) * (mug + 6) * log (normg)) * n0g_sig * &
+                exp (- 3.0 * log (expog)) * 1.e18 * alpha * (rhog / rhor) ** 2
         endif
     endif
     if (radg_flag .eq. 2) then
         if (do_hail .and. .not. do_inline_mp) then
-            fac_g = 720 * exp (- 1. / (muh + 3) * 7 * log (normh)) * n0h_sig * &
-                exp ((muh - 4) * log (expoh)) * 1.e18
+            fac_g = gamma (muh + 6) * exp (- 1. / (muh + 3) * (muh + 6) * log (normh)) * n0h_sig * &
+                exp (- 3.0 * log (expoh)) * 1.e18
         else
-            fac_g = 720 * exp (- 1. / (mug + 3) * 7 * log (normg)) * n0g_sig * &
-                exp ((mug - 4) * log (expog)) * 1.e18
+            fac_g = gamma (mug + 6) * exp (- 1. / (mug + 3) * (mug + 6) * log (normg)) * n0g_sig * &
+                exp (- 3.0 * log (expog)) * 1.e18
         endif
     endif
     
@@ -6005,7 +6002,7 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                 if (rainwat .gt. 0) then
                     qden = den (k) * qmr (k)
                     if (radr_flag .eq. 1 .or. radr_flag .eq. 2) then
-                        z_e = z_e + fac_r * exp (1. / (mur + 3) * 7 * log (6 * qden))
+                        z_e = z_e + fac_r * exp (1. / (mur + 3) * (mur + 6) * log (6 * qden))
                     endif
                     if (radr_flag .eq. 3) then
                         z_e = z_e + mp_const * exp (1.6 * log (qden * vtr (k)))
@@ -6016,16 +6013,16 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                     qden = den (k) * qms (k)
                     if (rads_flag .eq. 1) then
                         if (pt (i, j, k) .lt. tice) then
-                            z_e = z_e + fac_s * exp (1. / (mus + 3) * 7 * log (6 * qden))
+                            z_e = z_e + fac_s * exp (1. / (mus + 3) * (mus + 6) * log (6 * qden))
                         else
-                            z_e = z_e + fac_s * exp (1. / (mus + 3) * 7 * log (6 * qden)) / alpha
+                            z_e = z_e + fac_s * exp (1. / (mus + 3) * (mus + 6) * log (6 * qden)) / alpha
                         endif
                     endif
                     if (rads_flag .eq. 2) then
                         if (pt (i, j, k) .lt. tice) then
-                            z_e = z_e + fac_sd * exp (1. / (mus + 3) * 7 * log (6 * qden))
+                            z_e = z_e + fac_sd * exp (1. / (mus + 3) * (mus + 6) * log (6 * qden))
                         else
-                            z_e = z_e + fac_sw * exp (1. / (mus + 3) * 7 * log (6 * qden))
+                            z_e = z_e + fac_sw * exp (1. / (mus + 3) * (mus + 6) * log (6 * qden))
                         endif
                     endif
                     if (rads_flag .eq. 3) then
@@ -6038,24 +6035,24 @@ subroutine rad_ref (is, ie, js, je, isd, ied, jsd, jed, q, pt, delp, peln, &
                     if (do_hail .and. .not. do_inline_mp) then
                         if (radg_flag .eq. 1) then
                             if (pt (i, j, k) .lt. tice) then
-                                z_e = z_e + fac_g * exp (1. / (muh + 3) * 7 * log (6 * qden))
+                                z_e = z_e + fac_g * exp (1. / (muh + 3) * (muh + 6) * log (6 * qden))
                             else
-                                z_e = z_e + fac_g * exp (1. / (muh + 3) * 7 * log (6 * qden)) / alpha
+                                z_e = z_e + fac_g * exp (1. / (muh + 3) * (muh + 6) * log (6 * qden)) / alpha
                             endif
                         endif
                         if (radg_flag .eq. 2) then
-                            z_e = z_e + fac_g * exp (1. / (muh + 3) * 7 * log (6 * qden))
+                            z_e = z_e + fac_g * exp (1. / (muh + 3) * (muh + 6) * log (6 * qden))
                         endif
                     else
                         if (radg_flag .eq. 1) then
                             if (pt (i, j, k) .lt. tice) then
-                                z_e = z_e + fac_g * exp (1. / (mug + 3) * 7 * log (6 * qden))
+                                z_e = z_e + fac_g * exp (1. / (mug + 3) * (mug + 6) * log (6 * qden))
                             else
-                                z_e = z_e + fac_g * exp (1. / (mug + 3) * 7 * log (6 * qden)) / alpha
+                                z_e = z_e + fac_g * exp (1. / (mug + 3) * (mug + 6) * log (6 * qden)) / alpha
                             endif
                         endif
                         if (radg_flag .eq. 2) then
-                            z_e = z_e + fac_g * exp (1. / (mug + 3) * 7 * log (6 * qden))
+                            z_e = z_e + fac_g * exp (1. / (mug + 3) * (mug + 6) * log (6 * qden))
                         endif
                     endif
                     if (radg_flag .eq. 3) then
