@@ -143,20 +143,6 @@ module gfdl_mp_mod
     
     real, parameter :: sfcrho = 1.2 ! surface air density (kg/m^3)
     
-    real, parameter :: alinw = 3.e7 ! "a" in Lin et al. (1983) for cloud water (Ikawa and Saito 1990)
-    real, parameter :: alini = 7.e2 ! "a" in Lin et al. (1983) for cloud ice (Ikawa and Saita 1990)
-    real, parameter :: alinr = 842.0 ! "a" in Lin et al. (1983) for rain (Liu and Orville 1969)
-    real, parameter :: alins = 4.8 ! "a" in Lin et al. (1983) for snow (straka 2009)
-    real, parameter :: aling = 1.0 ! "a" in Lin et al. (1983), similar to a, but for graupel (Pruppacher and Klett 2010)
-    real, parameter :: alinh = 1.0 ! "a" in Lin et al. (1983), similar to a, but for hail (Pruppacher and Klett 2010)
-
-    real, parameter :: blinw = 2.0 ! "b" in Lin et al. (1983) for cloud water (Ikawa and Saito 1990)
-    real, parameter :: blini = 1.0 ! "b" in Lin et al. (1983) for cloud ice (Ikawa and Saita 1990)
-    real, parameter :: blinr = 0.8 ! "b" in Lin et al. (1983) for rain (Liu and Orville 1969)
-    real, parameter :: blins = 0.25 ! "b" in Lin et al. (1983) for snow (straka 2009)
-    real, parameter :: bling = 0.5 ! "b" in Lin et al. (1983), similar to b, but for graupel (Pruppacher and Klett 2010)
-    real, parameter :: blinh = 0.5 ! "b" in Lin et al. (1983), similar to b, but for hail (Pruppacher and Klett 2010)
-    
     real, parameter :: rhow = 1.0e3 ! density of cloud water (kg/m^3)
     real, parameter :: rhoi = 9.17e2 ! density of cloud ice (kg/m^3)
     real, parameter :: rhor = 1.0e3 ! density of rain (Lin et al. 1983) (kg/m^3)
@@ -326,6 +312,20 @@ module gfdl_mp_mod
     real :: mug = 1.0 ! shape parameter of graupel in Gamma distribution (Houze et al. 1979)
     real :: muh = 1.0 ! shape parameter of hail in Gamma distribution (Federer and Waldvogel 1975)
     
+    real :: alinw = 3.e7 ! "a" in Lin et al. (1983) for cloud water (Ikawa and Saito 1990)
+    real :: alini = 7.e2 ! "a" in Lin et al. (1983) for cloud ice (Ikawa and Saita 1990)
+    real :: alinr = 842.0 ! "a" in Lin et al. (1983) for rain (Liu and Orville 1969)
+    real :: alins = 4.8 ! "a" in Lin et al. (1983) for snow (straka 2009)
+    real :: aling = 1.0 ! "a" in Lin et al. (1983), similar to a, but for graupel (Pruppacher and Klett 2010)
+    real :: alinh = 1.0 ! "a" in Lin et al. (1983), similar to a, but for hail (Pruppacher and Klett 2010)
+
+    real :: blinw = 2.0 ! "b" in Lin et al. (1983) for cloud water (Ikawa and Saito 1990)
+    real :: blini = 1.0 ! "b" in Lin et al. (1983) for cloud ice (Ikawa and Saita 1990)
+    real :: blinr = 0.8 ! "b" in Lin et al. (1983) for rain (Liu and Orville 1969)
+    real :: blins = 0.25 ! "b" in Lin et al. (1983) for snow (straka 2009)
+    real :: bling = 0.5 ! "b" in Lin et al. (1983), similar to b, but for graupel (Pruppacher and Klett 2010)
+    real :: blinh = 0.5 ! "b" in Lin et al. (1983), similar to b, but for hail (Pruppacher and Klett 2010)
+    
     real :: tice_mlt = 273.16 ! can set ice melting temperature to 268 based on observation (Kay et al. 2016) (K)
     
     real :: t_min = 178.0 ! minimum temperature to freeze - dry all water vapor (K)
@@ -460,7 +460,8 @@ module gfdl_mp_mod
         resmax, regmin, regmax, fs2g_fac, fi2s_fac, fi2g_fac, do_sedi_melt, &
         radr_flag, rads_flag, radg_flag, do_wbf, do_psd_water_fall, do_psd_ice_fall, &
         n0w_sig, n0i_sig, n0r_sig, n0s_sig, n0g_sig, n0h_sig, n0w_exp, n0i_exp, &
-        n0r_exp, n0s_exp, n0g_exp, n0h_exp, muw, mui, mur, mus, mug, muh
+        n0r_exp, n0s_exp, n0g_exp, n0h_exp, muw, mui, mur, mus, mug, muh, &
+        alinw, alini, alinr, alins, aling, alinh, blinw, blini, blinr, blins, bling, blinh
     
 contains
 
