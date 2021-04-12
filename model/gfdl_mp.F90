@@ -282,6 +282,8 @@ module gfdl_mp_mod
 
     logical :: do_psd_water_fall = .false. ! calculate cloud water terminal velocity based on PSD
     logical :: do_psd_ice_fall = .false. ! calculate cloud ice terminal velocity based on PSD
+
+    logical :: do_new_accretion = .false. ! perform the new accretion for cloud water and cloud ice
     
     real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
@@ -423,7 +425,7 @@ module gfdl_mp_mod
     ! local shared variables
     ! -----------------------------------------------------------------------
     
-    real :: acco (3, 4), acc (8)
+    real :: acco (3, 10), acc (20)
     real :: cracs, csacr, cgacr, cgacs, csacw, craci, csaci, cgacw, cgaci, cracw
     real :: cssub (5), cgsub (5), crevp (5), cgfr (2), csmlt (4), cgmlt (4)
     
@@ -461,7 +463,8 @@ module gfdl_mp_mod
         radr_flag, rads_flag, radg_flag, do_wbf, do_psd_water_fall, do_psd_ice_fall, &
         n0w_sig, n0i_sig, n0r_sig, n0s_sig, n0g_sig, n0h_sig, n0w_exp, n0i_exp, &
         n0r_exp, n0s_exp, n0g_exp, n0h_exp, muw, mui, mur, mus, mug, muh, &
-        alinw, alini, alinr, alins, aling, alinh, blinw, blini, blinr, blins, bling, blinh
+        alinw, alini, alinr, alins, aling, alinh, blinw, blini, blinr, blins, bling, blinh, &
+        do_new_accretion
     
 contains
 
@@ -617,7 +620,7 @@ subroutine setup_mp
     
     integer :: i, k
     
-    real :: gcon, hcon, scm3, pisq, act (8), ace (8), occ (3)
+    real :: gcon, hcon, scm3, pisq, act (20), ace (20), occ (3)
     
     ! -----------------------------------------------------------------------
     ! complete freezing temperature
@@ -675,71 +678,95 @@ subroutine setup_mp
     
     scm3 = exp (1. / 3. * log (visk / vdifu))
     
+    pisq = pi * pi
+    
     ! -----------------------------------------------------------------------
     ! accretion between cloud water, cloud ice, rain, snow, and graupel or hail, Lin et al. (1983)
     ! -----------------------------------------------------------------------
+
+    if (do_new_accretion) then
     
-    cracw = pi * n0r_sig * alinr * gamma (2 + mur + blinr) / &
-         (4. * exp (1. / (mur + 3) * (2 + mur + blinr) * log (normr))) * &
-         exp ((1 - blinr) * log (expor))
-    craci = pi * n0r_sig * alinr * gamma (2 + mur + blinr) / &
-         (4. * exp (1. / (mur + 3) * (2 + mur + blinr) * log (normr))) * &
-         exp ((1 - blinr) * log (expor))
-    csacw = pi * n0s_sig * alins * gamma (2 + mus + blins) / &
-         (4. * exp (1. / (mus + 3) * (2 + mus + blins) * log (norms))) * &
-         exp ((1 - blins) * log (expos))
-    csaci = pi * n0s_sig * alins * gamma (2 + mus + blins) / &
-         (4. * exp (1. / (mus + 3) * (2 + mus + blins) * log (norms))) * &
-         exp ((1 - blins) * log (expos))
-    if (do_hail) then
-        cgacw = pi * n0h_sig * alinh * gamma (2 + muh + blinh) * hcon / &
-             (4. * exp (1. / (muh + 3) * (2 + muh + blinh) * log (normh))) * &
-             exp ((1 - blinh) * log (expoh))
-        cgaci = pi * n0h_sig * alinh * gamma (2 + muh + blinh) * hcon / &
-             (4. * exp (1. / (muh + 3) * (2 + muh + blinh) * log (normh))) * &
-             exp ((1 - blinh) * log (expoh))
+        cracw = pisq * n0r_sig * n0w_sig * rhow / 24.
+        craci = pisq * n0r_sig * n0i_sig * rhoi / 24.
+        csacw = pisq * n0s_sig * n0w_sig * rhow / 24.
+        csaci = pisq * n0s_sig * n0i_sig * rhoi / 24.
+        if (do_hail) then
+            cgacw = pisq * n0h_sig * n0w_sig * rhow / 24.
+            cgaci = pisq * n0h_sig * n0i_sig * rhoi / 24.
+        else
+            cgacw = pisq * n0g_sig * n0w_sig * rhow / 24.
+            cgaci = pisq * n0g_sig * n0i_sig * rhoi / 24.
+        endif
+
     else
-        cgacw = pi * n0g_sig * aling * gamma (2 + mug + bling) * gcon / &
-             (4. * exp (1. / (mug + 3) * (2 + mug + bling) * log (normg))) * &
-             exp ((1 - bling) * log (expog))
-        cgaci = pi * n0g_sig * aling * gamma (2 + mug + bling) * gcon / &
-             (4. * exp (1. / (mug + 3) * (2 + mug + bling) * log (normg))) * &
-             exp ((1 - bling) * log (expog))
-    endif
     
+        cracw = pi * n0r_sig * alinr * gamma (2 + mur + blinr) / &
+             (4. * exp (1. / (mur + 3) * (2 + mur + blinr) * log (normr))) * &
+             exp ((1 - blinr) * log (expor))
+        craci = pi * n0r_sig * alinr * gamma (2 + mur + blinr) / &
+             (4. * exp (1. / (mur + 3) * (2 + mur + blinr) * log (normr))) * &
+             exp ((1 - blinr) * log (expor))
+        csacw = pi * n0s_sig * alins * gamma (2 + mus + blins) / &
+             (4. * exp (1. / (mus + 3) * (2 + mus + blins) * log (norms))) * &
+             exp ((1 - blins) * log (expos))
+        csaci = pi * n0s_sig * alins * gamma (2 + mus + blins) / &
+             (4. * exp (1. / (mus + 3) * (2 + mus + blins) * log (norms))) * &
+             exp ((1 - blins) * log (expos))
+        if (do_hail) then
+            cgacw = pi * n0h_sig * alinh * gamma (2 + muh + blinh) * hcon / &
+                 (4. * exp (1. / (muh + 3) * (2 + muh + blinh) * log (normh))) * &
+                 exp ((1 - blinh) * log (expoh))
+            cgaci = pi * n0h_sig * alinh * gamma (2 + muh + blinh) * hcon / &
+                 (4. * exp (1. / (muh + 3) * (2 + muh + blinh) * log (normh))) * &
+                 exp ((1 - blinh) * log (expoh))
+        else
+            cgacw = pi * n0g_sig * aling * gamma (2 + mug + bling) * gcon / &
+                 (4. * exp (1. / (mug + 3) * (2 + mug + bling) * log (normg))) * &
+                 exp ((1 - bling) * log (expog))
+            cgaci = pi * n0g_sig * aling * gamma (2 + mug + bling) * gcon / &
+                 (4. * exp (1. / (mug + 3) * (2 + mug + bling) * log (normg))) * &
+                 exp ((1 - bling) * log (expog))
+        endif
+
+    endif
+
     cracw = cracw * c_pracw
     craci = craci * c_praci
     csacw = csacw * c_psacw
     csaci = csaci * c_psaci
     cgacw = cgacw * c_pgacw
     cgaci = cgaci * c_pgaci
-    
+
     ! -----------------------------------------------------------------------
     ! accretion between rain, snow, and graupel or hail, Lin et al. (1983)
     ! -----------------------------------------------------------------------
     
-    pisq = pi * pi
-    
-    cracs = pisq * n0r_sig * n0s_sig * rhos
-    csacr = pisq * n0s_sig * n0r_sig * rhor
+    cracs = pisq * n0r_sig * n0s_sig * rhos / 24.
+    csacr = pisq * n0s_sig * n0r_sig * rhor / 24.
     if (do_hail) then
-        cgacr = pisq * n0h_sig * n0r_sig * rhor
-        cgacs = pisq * n0h_sig * n0s_sig * rhos
+        cgacr = pisq * n0h_sig * n0r_sig * rhor / 24.
+        cgacs = pisq * n0h_sig * n0s_sig * rhos / 24.
     else
-        cgacr = pisq * n0g_sig * n0r_sig * rhor
-        cgacs = pisq * n0g_sig * n0s_sig * rhos
+        cgacr = pisq * n0g_sig * n0r_sig * rhor / 24.
+        cgacs = pisq * n0g_sig * n0s_sig * rhos / 24.
     endif
     
-    cracs = cracs * c_pracs / 24.
-    csacr = csacr * c_psacr / 24.
-    cgacr = cgacr * c_pgacr / 24.
-    cgacs = cgacs * c_pgacs / 24.
+    cracs = cracs * c_pracs
+    csacr = csacr * c_psacr
+    cgacr = cgacr * c_pgacr
+    cgacs = cgacs * c_pgacs
     
     ! act / ace / acc:
-    ! 1 - 2: racs (s - r)
-    ! 3 - 4: sacr (r - s)
-    ! 5 - 6: gacr (r - g)
-    ! 7 - 8: gacs (s - g)
+    !  1 -  2: racs (s - r)
+    !  3 -  4: sacr (r - s)
+    !  5 -  6: gacr (r - g)
+    !  7 -  8: gacs (s - g)
+    !  9 - 10: racw (w - r)
+    ! 11 - 12: raci (i - r)
+    ! 13 - 14: sacw (w - s)
+    ! 15 - 16: saci (i - s)
+    ! 17 - 18: sacw (w - g)
+    ! 19 - 20: saci (i - g)
     
     act (1) = norms
     act (2) = normr
@@ -753,6 +780,18 @@ subroutine setup_mp
     endif
     act (7) = act (1)
     act (8) = act (6)
+    act (9) = normw
+    act (10) = act (2)
+    act (11) = normi
+    act (12) = act (2)
+    act (13) = act (9)
+    act (14) = act (1)
+    act (15) = act (11)
+    act (16) = act (1)
+    act (17) = act (9)
+    act (18) = act (6)
+    act (19) = act (11)
+    act (20) = act (6)
     
     ace (1) = expos
     ace (2) = expor
@@ -766,6 +805,18 @@ subroutine setup_mp
     endif
     ace (7) = ace (1)
     ace (8) = ace (6)
+    ace (9) = expow
+    ace (10) = ace (2)
+    ace (11) = expoi
+    ace (12) = ace (2)
+    ace (13) = ace (9)
+    ace (14) = ace (1)
+    ace (15) = ace (11)
+    ace (16) = ace (1)
+    ace (17) = ace (9)
+    ace (18) = ace (6)
+    ace (19) = ace (11)
+    ace (20) = ace (6)
     
     acc (1) = mus
     acc (2) = mur
@@ -779,13 +830,25 @@ subroutine setup_mp
     endif
     acc (7) = acc (1)
     acc (8) = acc (6)
+    acc (9) = muw
+    acc (10) = acc (2)
+    acc (11) = mui
+    acc (12) = acc (2)
+    acc (13) = acc (9)
+    acc (14) = acc (1)
+    acc (15) = acc (11)
+    acc (16) = acc (1)
+    acc (17) = acc (9)
+    acc (18) = acc (6)
+    acc (19) = acc (11)
+    acc (20) = acc (6)
     
     occ (1) = 1.
     occ (2) = 2.
     occ (3) = 1.
     
     do i = 1, 3
-        do k = 1, 4
+        do k = 1, 10
             acco (i, k) = occ (i) * gamma (6 + acc (2 * k - 1) - i) * gamma (acc (2 * k) + i - 1) / &
                  (exp (1. / (acc (2 * k - 1) + 3) * (6 + acc (2 * k - 1) - i) * log (act (2 * k - 1))) * &
                 exp (1. / (acc (2 * k) + 3) * (acc (2 * k) + i - 1) * log (act (2 * k)))) * &
@@ -1517,7 +1580,7 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
         ! -----------------------------------------------------------------------
         
         call warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
-            den, denfac, ccn, rh_rain, h_var, reevap)
+            den, denfac, vtw, vtr, ccn, rh_rain, h_var, reevap)
         
         evaporation = evaporation + reevap * convt
         
@@ -1526,7 +1589,7 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
         ! -----------------------------------------------------------------------
         
         call ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
-            denfac, vtr, vts, vtg, dts, h_var)
+            denfac, vtw, vtr, vti, vts, vtg, dts, h_var)
         
         ! -----------------------------------------------------------------------
         ! temperature sentive high vertical resolution processes
@@ -2295,7 +2358,7 @@ end subroutine check_column
 ! =======================================================================
 
 subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
-        den, denfac, ccn, rh_rain, h_var, reevap)
+        den, denfac, vtw, vtr, ccn, rh_rain, h_var, reevap)
     
     implicit none
     
@@ -2307,7 +2370,7 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     
     real, intent (in) :: dts, rh_rain, h_var
     
-    real, intent (in), dimension (ks:ke) :: dp, dz, den, denfac, ccn
+    real, intent (in), dimension (ks:ke) :: dp, dz, den, denfac, ccn, vtw, vtr
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     
@@ -2331,7 +2394,7 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     ! rain accretion with cloud water
     ! -----------------------------------------------------------------------
     
-    call pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
+    call pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, vtw, vtr)
     
     ! -----------------------------------------------------------------------
     ! cloud water to rain autoconversion
@@ -2460,7 +2523,7 @@ end subroutine prevp
 ! rain accretion with cloud water, Lin et al. (1983)
 ! =======================================================================
 
-subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
+subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, vtw, vtr)
     
     implicit none
     
@@ -2472,7 +2535,7 @@ subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
     
     real, intent (in) :: dts
     
-    real, intent (in), dimension (ks:ke) :: den, denfac
+    real, intent (in), dimension (ks:ke) :: den, denfac, vtw, vtr
     
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     
@@ -2491,8 +2554,13 @@ subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac)
         if (tz (k) .gt. t_wfr .and. qr (k) .gt. qcmin .and. ql (k) .gt. qcmin) then
             
             qden = qr (k) * den (k)
-            sink = dts * acr2d (qden, cracw, denfac (k), blinr, mur)
-            sink = sink / (1. + sink) * ql (k)
+            if (do_new_accretion) then
+                sink = dts * acr3d (vtr (k), vtw (k), ql (k), qr (k), cracw, acco (:, 5), &
+                    acc (9), acc (10), den (k))
+            else
+                sink = dts * acr2d (qden, cracw, denfac (k), blinr, mur)
+                sink = sink / (1. + sink) * ql (k)
+            endif
             
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, sink, 0., 0., 0.)
@@ -2601,7 +2669,7 @@ end subroutine praut
 ! =======================================================================
 
 subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
-        denfac, vtr, vts, vtg, dts, h_var)
+        denfac, vtw, vtr, vti, vts, vtg, dts, h_var)
     
     implicit none
     
@@ -2613,7 +2681,7 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
     
     real, intent (in) :: dts, h_var
     
-    real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts, vtg
+    real, intent (in), dimension (ks:ke) :: den, denfac, vtw, vtr, vti, vts, vtg
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     
@@ -2659,20 +2727,20 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
         ! -----------------------------------------------------------------------
         
         call psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
-            vtr, vts, lcpk, icpk, tcpk, tcp3)
+            vtw, vtr, vts, lcpk, icpk, tcpk, tcp3)
         
         ! -----------------------------------------------------------------------
         ! graupel melting (includes graupel accretion with cloud water and rain) to form rain
         ! -----------------------------------------------------------------------
         
         call pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
-            vtr, vtg, lcpk, icpk, tcpk, tcp3)
+            vtw, vtr, vtg, lcpk, icpk, tcpk, tcp3)
         
         ! -----------------------------------------------------------------------
         ! snow accretion with cloud ice
         ! -----------------------------------------------------------------------
         
-        call psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
+        call psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac, vti, vts)
         
         ! -----------------------------------------------------------------------
         ! cloud ice to snow autoconversion
@@ -2684,7 +2752,7 @@ subroutine ice_cloud (ks, ke, tz, qv, ql, qr, qi, qs, qg, den, &
         ! graupel accretion with cloud ice
         ! -----------------------------------------------------------------------
         
-        call pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
+        call pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac, vti, vtg)
         
         ! -----------------------------------------------------------------------
         ! snow accretion with rain and rain freezing to form graupel
@@ -2827,7 +2895,7 @@ end subroutine pifr
 ! =======================================================================
 
 subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
-        vtr, vts, lcpk, icpk, tcpk, tcp3)
+        vtw, vtr, vts, lcpk, icpk, tcpk, tcp3)
     
     implicit none
     
@@ -2839,7 +2907,7 @@ subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
     
     real, intent (in) :: dts
     
-    real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vts
+    real, intent (in), dimension (ks:ke) :: den, denfac, vtw, vtr, vts
     
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
     
@@ -2866,8 +2934,13 @@ subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
             psacw = 0.
             qden = qs (k) * den (k)
             if (ql (k) .gt. qcmin) then
-                factor = acr2d (qden, csacw, denfac (k), blins, mus)
-                psacw = factor / (1. + dts * factor) * ql (k)
+                if (do_new_accretion) then
+                    psacw = acr3d (vts (k), vtw (k), ql (k), qs (k), csacw, acco (:, 7), &
+                        acc (13), acc (14), den (k))
+                else
+                    factor = acr2d (qden, csacw, denfac (k), blins, mus)
+                    psacw = factor / (1. + dts * factor) * ql (k)
+                endif
             endif
             
             psacr = 0.
@@ -2903,7 +2976,7 @@ end subroutine psmlt
 ! =======================================================================
 
 subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac, &
-        vtr, vtg, lcpk, icpk, tcpk, tcp3)
+        vtw, vtr, vtg, lcpk, icpk, tcpk, tcp3)
     
     implicit none
     
@@ -2915,7 +2988,7 @@ subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
     
     real, intent (in) :: dts
     
-    real, intent (in), dimension (ks:ke) :: den, denfac, vtr, vtg
+    real, intent (in), dimension (ks:ke) :: den, denfac, vtw, vtr, vtg
     
     real (kind = r8), intent (in), dimension (ks:ke) :: te8
     
@@ -2942,12 +3015,17 @@ subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
             pgacw = 0.
             qden = qg (k) * den (k)
             if (ql (k) .gt. qcmin) then
-                if (do_hail) then
-                    factor = acr2d (qden, cgacw, denfac (k), blinh, muh)
+                if (do_new_accretion) then
+                    pgacw = acr3d (vtg (k), vtw (k), ql (k), qg (k), cgacw, acco (:, 9), &
+                        acc (17), acc (18), den (k))
                 else
-                    factor = acr2d (qden, cgacw, denfac (k), bling, mug)
+                    if (do_hail) then
+                        factor = acr2d (qden, cgacw, denfac (k), blinh, muh)
+                    else
+                        factor = acr2d (qden, cgacw, denfac (k), bling, mug)
+                    endif
+                    pgacw = factor / (1. + dts * factor) * ql (k)
                 endif
-                pgacw = factor / (1. + dts * factor) * ql (k)
             endif
             
             pgacr = 0.
@@ -2982,7 +3060,7 @@ end subroutine pgmlt
 ! snow accretion with cloud ice, Lin et al. (1983)
 ! =======================================================================
 
-subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
+subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac, vti, vts)
     
     implicit none
     
@@ -2994,7 +3072,7 @@ subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
     
     real, intent (in) :: dts
     
-    real, intent (in), dimension (ks:ke) :: den, denfac
+    real, intent (in), dimension (ks:ke) :: den, denfac, vti, vts
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     
@@ -3017,8 +3095,13 @@ subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
             sink = 0.
             qden = qs (k) * den (k)
             if (qs (k) .gt. qcmin) then
-                factor = dts * acr2d (qden, csaci, denfac (k), blins, mus)
-                sink = factor / (1. + factor) * qi (k)
+                if (do_new_accretion) then
+                    sink = dts * acr3d (vts (k), vti (k), qi (k), qs (k), csaci, acco (:, 8), &
+                        acc (15), acc (16), den (k))
+                else
+                    factor = dts * acr2d (qden, csaci, denfac (k), blins, mus)
+                    sink = factor / (1. + factor) * qi (k)
+                endif
             endif
             
             sink = min (fi2s_fac * qi (k), sink)
@@ -3099,7 +3182,7 @@ end subroutine psaut
 ! graupel accretion with cloud ice, Lin et al. (1983)
 ! =======================================================================
 
-subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
+subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac, vti, vtg)
     
     implicit none
     
@@ -3111,7 +3194,7 @@ subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
     
     real, intent (in) :: dts
     
-    real, intent (in), dimension (ks:ke) :: den, denfac
+    real, intent (in), dimension (ks:ke) :: den, denfac, vti, vtg
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
     
@@ -3134,12 +3217,17 @@ subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac)
             sink = 0.
             qden = qg (k) * den (k)
             if (qg (k) .gt. qcmin) then
-                if (do_hail) then
-                    factor = dts * acr2d (qden, cgaci, denfac (k), blinh, muh)
+                if (do_new_accretion) then
+                    sink = dts * acr3d (vtg (k), vti (k), qi (k), qg (k), cgaci, acco (:, 10), &
+                        acc (19), acc (20), den (k))
                 else
-                    factor = dts * acr2d (qden, cgaci, denfac (k), bling, mug)
+                    if (do_hail) then
+                        factor = dts * acr2d (qden, cgaci, denfac (k), blinh, muh)
+                    else
+                        factor = dts * acr2d (qden, cgaci, denfac (k), bling, mug)
+                    endif
+                    sink = factor / (1. + factor) * qi (k)
                 endif
-                sink = factor / (1. + factor) * qi (k)
             endif
             
             sink = min (fi2g_fac * qi (k), sink)
