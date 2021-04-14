@@ -40,7 +40,6 @@ module coarse_grained_diagnostics_mod
     integer :: iv = 0  ! Controls type of pressure-level interpolation performed (-1, 0, or 1)
     character(len=64) :: special_case = ''  ! E.g. height is computed differently on pressure surfaces
     type(data_subtype) :: data
-    integer :: model_level = -1  ! If greater than 0, select a slice from this vertical level
   end type coarse_diag_type
 
   public :: fv_coarse_diag_init, fv_coarse_diag
@@ -754,9 +753,8 @@ contains
     coarse_diagnostics(index)%name = 'tb_coarse'
     coarse_diagnostics(index)%description = 'coarse temperature in lowest model level'
     coarse_diagnostics(index)%units = 'K'
-    coarse_diagnostics(index)%model_level = npz
     coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
-    coarse_diagnostics(index)%data%var3 => Atm(tile_count)%pt(is:ie,js:je,1:npz)
+    coarse_diagnostics(index)%data%var2 => Atm(tile_count)%pt(is:ie,js:je,npz)
 
     index = index + 1
     coarse_diagnostics(index)%axes = 2
@@ -764,9 +762,8 @@ contains
     coarse_diagnostics(index)%name = 'us_coarse'
     coarse_diagnostics(index)%description = 'coarse zonal wind in lowest model level'
     coarse_diagnostics(index)%units = 'm/s'
-    coarse_diagnostics(index)%model_level = npz
     coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
-    coarse_diagnostics(index)%data%var3 => Atm(tile_count)%ua(is:ie,js:je,1:npz)
+    coarse_diagnostics(index)%data%var2 => Atm(tile_count)%ua(is:ie,js:je,npz)
 
     index = index + 1
     coarse_diagnostics(index)%axes = 2
@@ -774,9 +771,8 @@ contains
     coarse_diagnostics(index)%name = 'vs_coarse'
     coarse_diagnostics(index)%description = 'coarse meridional wind in lowest model level'
     coarse_diagnostics(index)%units = 'm/s'
-    coarse_diagnostics(index)%model_level = npz
     coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
-    coarse_diagnostics(index)%data%var3 => Atm(tile_count)%va(is:ie,js:je,1:npz)
+    coarse_diagnostics(index)%data%var2 => Atm(tile_count)%va(is:ie,js:je,npz)
     
     ! iv =-1: winds
     ! iv = 0: positive definite scalars
@@ -1442,7 +1438,6 @@ contains
       if (coarse_diag%pressure_level < 0 &
          .and. .not. coarse_diag%vertically_integrated &
          .and. .not. coarse_diag%scaled_by_specific_heat_and_vertically_integrated &
-         .and. coarse_diag%model_level < 0 &
          .and. coarse_diag%special_case .eq. '') then
         call weighted_block_average( &
           Atm%gridstruct%area(is:ie,js:je), &
@@ -1545,12 +1540,6 @@ contains
         call weighted_block_average( &
           Atm%gridstruct%area(is:ie,js:je), &
           work_2d, &
-          result &
-          )
-      elseif (coarse_diag%model_level .gt. 0) then
-        call weighted_block_average( &
-          Atm%gridstruct%area(is:ie,js:je), &
-          coarse_diag%data%var3(is:ie,js:je,coarse_diag%model_level), &
           result &
           )
       else
