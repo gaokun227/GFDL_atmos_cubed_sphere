@@ -96,7 +96,7 @@ module fv_diagnostics_mod
  public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, range_check!, id_divg, id_te
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field, get_height_given_pressure
- public :: cs3_interpolator
+ public :: cs3_interpolator, get_vorticity
  
  integer, parameter :: MAX_PLEVS = 31
 #ifdef FEWER_PLEVS
@@ -1886,11 +1886,11 @@ contains
               allocate ( a3(isc:iec,jsc:jec,npz+1) )
             ! Modified pv_entropy to get potential temperature at layer interfaces (last variable)
             ! The values are needed for interpolate_z
-            ! Note: this is expensive computation.
+             ! Note: this is expensive computation.
               call pv_entropy(isc, iec, jsc, jec, ngc, npz, wk,    &
                               Atm(n)%gridstruct%f0, Atm(n)%pt, Atm(n)%pkz, Atm(n)%delp, grav, a3)
               if ( id_pv > 0) then
-                used = send_data ( id_pv, wk, Time )
+              used = send_data ( id_pv, wk, Time )
               endif
               if( id_pv350K > 0 .or. id_pv550K >0 ) then
                 !"pot temp" from pv_entropy is only semi-finished; needs p0^kappa (pk0)
@@ -5114,7 +5114,7 @@ contains
    real, intent(in):: f_d(is-ng:ie+ng,js-ng:je+ng)
 
 ! vort is relative vorticity as input. Becomes PV on output
-   real, intent(inout):: vort(is:ie,js:je,km)
+      real, intent(inout):: vort(is:ie,js:je,km)
 ! output potential temperature at the interface so it can be used for diagnostics
    real, intent(out):: te(is:ie,js:je,km+1)
 

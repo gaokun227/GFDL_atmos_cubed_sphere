@@ -6978,6 +6978,8 @@ end subroutine terminator_tracers
 
         character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
+        namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
+								no_wind, gaussian_dt, dt_amp, do_marine_sounding
 
 #include<file_version.h>
 
@@ -6987,8 +6989,6 @@ end subroutine terminator_tracers
         alpha = 0.
         bubble_do = .false.
         test_case = 11   ! (USGS terrain)
-        namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
-								no_wind, gaussian_dt, dt_amp, do_marine_sounding
 
 #ifdef INTERNAL_FILE_NML
         ! Read Test_Case namelist
