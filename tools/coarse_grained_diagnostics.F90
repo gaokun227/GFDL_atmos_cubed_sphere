@@ -4,7 +4,7 @@ module coarse_grained_diagnostics_mod
   use diag_manager_mod, only: diag_axis_init, register_diag_field, register_static_field, send_data
   use field_manager_mod,  only: MODEL_ATMOS
   use fv_arrays_mod, only: fv_atmos_type, fv_coarse_graining_type
-  use fv_diagnostics_mod, only: cs3_interpolator, get_height_given_pressure, get_vorticity
+  use fv_diagnostics_mod, only: cs3_interpolator, get_height_given_pressure, get_vorticity, interpolate_vertical
   use fv_mapz_mod, only: moist_cp, moist_cv
   use mpp_domains_mod, only: domain2d, EAST, NORTH
   use mpp_mod, only: FATAL, mpp_error
@@ -845,7 +845,6 @@ contains
       coarse_diagnostics(index)%units = '1/s'
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%special_case = 'vorticity'
-      coarse_diagnostics(index)%iv = -1
       
       do t = 1, n_tracers
         call get_tracer_names(MODEL_ATMOS, t, tracer_name, tracer_long_name, tracer_units)
@@ -1455,6 +1454,23 @@ contains
           height_on_interfaces(is:ie,js:je,1:npz+1), &
           Atm%peln(is:ie,1:npz+1,js:je), &
           coarse_diag%pressure_level, &
+          work_2d(is:ie,js:je) &
+        )
+        call weighted_block_average( &
+          Atm%gridstruct%area(is:ie,js:je), &
+          work_2d, &
+          result &
+          )
+      elseif (trim(coarse_diag%special_case) .eq. 'vorticity') then
+        call interpolate_vertical( &
+          is, &
+          ie, &
+          js, &
+          je, &
+          npz, &
+          100.0 * coarse_diag%pressure_level, &  ! Convert mb to Pa
+          Atm%peln(is:ie,1:npz+1,js:je), &
+          coarse_diag%data%var3, &
           work_2d(is:ie,js:je) &
         )
         call weighted_block_average( &
