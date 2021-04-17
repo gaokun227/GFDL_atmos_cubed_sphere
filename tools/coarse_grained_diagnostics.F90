@@ -845,6 +845,7 @@ contains
       coarse_diagnostics(index)%units = '1/s'
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%special_case = 'vorticity'
+      coarse_diagnostics(index)%iv = -1
       
       do t = 1, n_tracers
         call get_tracer_names(MODEL_ATMOS, t, tracer_name, tracer_long_name, tracer_units)
