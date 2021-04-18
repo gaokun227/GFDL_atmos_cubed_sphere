@@ -283,7 +283,8 @@ module gfdl_cld_mp_mod
     logical :: do_psd_water_fall = .false. ! calculate cloud water terminal velocity based on PSD
     logical :: do_psd_ice_fall = .false. ! calculate cloud ice terminal velocity based on PSD
 
-    logical :: do_new_accretion = .false. ! perform the new accretion for cloud water and cloud ice
+    logical :: do_new_acc_water = .false. ! perform the new accretion for cloud water
+    logical :: do_new_acc_ice = .false. ! perform the new accretion for cloud ice
     
     real :: mp_time = 150.0 ! maximum microphysics time step (s)
     
@@ -464,7 +465,7 @@ module gfdl_cld_mp_mod
         n0w_sig, n0i_sig, n0r_sig, n0s_sig, n0g_sig, n0h_sig, n0w_exp, n0i_exp, &
         n0r_exp, n0s_exp, n0g_exp, n0h_exp, muw, mui, mur, mus, mug, muh, &
         alinw, alini, alinr, alins, aling, alinh, blinw, blini, blinr, blins, bling, blinh, &
-        do_new_accretion
+        do_new_acc_water, do_new_acc_ice
     
 contains
 
@@ -684,48 +685,54 @@ subroutine setup_mp
     ! accretion between cloud water, cloud ice, rain, snow, and graupel or hail, Lin et al. (1983)
     ! -----------------------------------------------------------------------
 
-    if (do_new_accretion) then
+    cracw = pi * n0r_sig * alinr * gamma (2 + mur + blinr) / &
+         (4. * exp (1. / (mur + 3) * (2 + mur + blinr) * log (normr))) * &
+         exp ((1 - blinr) * log (expor))
+    craci = pi * n0r_sig * alinr * gamma (2 + mur + blinr) / &
+         (4. * exp (1. / (mur + 3) * (2 + mur + blinr) * log (normr))) * &
+         exp ((1 - blinr) * log (expor))
+    csacw = pi * n0s_sig * alins * gamma (2 + mus + blins) / &
+         (4. * exp (1. / (mus + 3) * (2 + mus + blins) * log (norms))) * &
+         exp ((1 - blins) * log (expos))
+    csaci = pi * n0s_sig * alins * gamma (2 + mus + blins) / &
+         (4. * exp (1. / (mus + 3) * (2 + mus + blins) * log (norms))) * &
+         exp ((1 - blins) * log (expos))
+    if (do_hail) then
+        cgacw = pi * n0h_sig * alinh * gamma (2 + muh + blinh) * hcon / &
+             (4. * exp (1. / (muh + 3) * (2 + muh + blinh) * log (normh))) * &
+             exp ((1 - blinh) * log (expoh))
+        cgaci = pi * n0h_sig * alinh * gamma (2 + muh + blinh) * hcon / &
+             (4. * exp (1. / (muh + 3) * (2 + muh + blinh) * log (normh))) * &
+             exp ((1 - blinh) * log (expoh))
+    else
+        cgacw = pi * n0g_sig * aling * gamma (2 + mug + bling) * gcon / &
+             (4. * exp (1. / (mug + 3) * (2 + mug + bling) * log (normg))) * &
+             exp ((1 - bling) * log (expog))
+        cgaci = pi * n0g_sig * aling * gamma (2 + mug + bling) * gcon / &
+             (4. * exp (1. / (mug + 3) * (2 + mug + bling) * log (normg))) * &
+             exp ((1 - bling) * log (expog))
+    endif
+
+    if (do_new_acc_water) then
     
         cracw = pisq * n0r_sig * n0w_sig * rhow / 24.
-        craci = pisq * n0r_sig * n0i_sig * rhoi / 24.
         csacw = pisq * n0s_sig * n0w_sig * rhow / 24.
-        csaci = pisq * n0s_sig * n0i_sig * rhoi / 24.
         if (do_hail) then
             cgacw = pisq * n0h_sig * n0w_sig * rhow / 24.
-            cgaci = pisq * n0h_sig * n0i_sig * rhoi / 24.
         else
             cgacw = pisq * n0g_sig * n0w_sig * rhow / 24.
-            cgaci = pisq * n0g_sig * n0i_sig * rhoi / 24.
         endif
 
-    else
+    endif
+
+    if (do_new_acc_ice) then
     
-        cracw = pi * n0r_sig * alinr * gamma (2 + mur + blinr) / &
-             (4. * exp (1. / (mur + 3) * (2 + mur + blinr) * log (normr))) * &
-             exp ((1 - blinr) * log (expor))
-        craci = pi * n0r_sig * alinr * gamma (2 + mur + blinr) / &
-             (4. * exp (1. / (mur + 3) * (2 + mur + blinr) * log (normr))) * &
-             exp ((1 - blinr) * log (expor))
-        csacw = pi * n0s_sig * alins * gamma (2 + mus + blins) / &
-             (4. * exp (1. / (mus + 3) * (2 + mus + blins) * log (norms))) * &
-             exp ((1 - blins) * log (expos))
-        csaci = pi * n0s_sig * alins * gamma (2 + mus + blins) / &
-             (4. * exp (1. / (mus + 3) * (2 + mus + blins) * log (norms))) * &
-             exp ((1 - blins) * log (expos))
+        craci = pisq * n0r_sig * n0i_sig * rhoi / 24.
+        csaci = pisq * n0s_sig * n0i_sig * rhoi / 24.
         if (do_hail) then
-            cgacw = pi * n0h_sig * alinh * gamma (2 + muh + blinh) * hcon / &
-                 (4. * exp (1. / (muh + 3) * (2 + muh + blinh) * log (normh))) * &
-                 exp ((1 - blinh) * log (expoh))
-            cgaci = pi * n0h_sig * alinh * gamma (2 + muh + blinh) * hcon / &
-                 (4. * exp (1. / (muh + 3) * (2 + muh + blinh) * log (normh))) * &
-                 exp ((1 - blinh) * log (expoh))
+            cgaci = pisq * n0h_sig * n0i_sig * rhoi / 24.
         else
-            cgacw = pi * n0g_sig * aling * gamma (2 + mug + bling) * gcon / &
-                 (4. * exp (1. / (mug + 3) * (2 + mug + bling) * log (normg))) * &
-                 exp ((1 - bling) * log (expog))
-            cgaci = pi * n0g_sig * aling * gamma (2 + mug + bling) * gcon / &
-                 (4. * exp (1. / (mug + 3) * (2 + mug + bling) * log (normg))) * &
-                 exp ((1 - bling) * log (expog))
+            cgaci = pisq * n0g_sig * n0i_sig * rhoi / 24.
         endif
 
     endif
@@ -2554,7 +2561,7 @@ subroutine pracw (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, denfac, vtw, vtr
         if (tz (k) .gt. t_wfr .and. qr (k) .gt. qcmin .and. ql (k) .gt. qcmin) then
             
             qden = qr (k) * den (k)
-            if (do_new_accretion) then
+            if (do_new_acc_water) then
                 sink = dts * acr3d (vtr (k), vtw (k), ql (k), qr (k), cracw, acco (:, 5), &
                     acc (9), acc (10), den (k))
             else
@@ -2934,7 +2941,7 @@ subroutine psmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
             psacw = 0.
             qden = qs (k) * den (k)
             if (ql (k) .gt. qcmin) then
-                if (do_new_accretion) then
+                if (do_new_acc_water) then
                     psacw = acr3d (vts (k), vtw (k), ql (k), qs (k), csacw, acco (:, 7), &
                         acc (13), acc (14), den (k))
                 else
@@ -3015,7 +3022,7 @@ subroutine pgmlt (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, denfac
             pgacw = 0.
             qden = qg (k) * den (k)
             if (ql (k) .gt. qcmin) then
-                if (do_new_accretion) then
+                if (do_new_acc_water) then
                     pgacw = acr3d (vtg (k), vtw (k), ql (k), qg (k), cgacw, acco (:, 9), &
                         acc (17), acc (18), den (k))
                 else
@@ -3095,7 +3102,7 @@ subroutine psaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac, vti, vts
             sink = 0.
             qden = qs (k) * den (k)
             if (qs (k) .gt. qcmin) then
-                if (do_new_accretion) then
+                if (do_new_acc_ice) then
                     sink = dts * acr3d (vts (k), vti (k), qi (k), qs (k), csaci, acco (:, 8), &
                         acc (15), acc (16), den (k))
                 else
@@ -3217,7 +3224,7 @@ subroutine pgaci (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, denfac, vti, vtg
             sink = 0.
             qden = qg (k) * den (k)
             if (qg (k) .gt. qcmin) then
-                if (do_new_accretion) then
+                if (do_new_acc_ice) then
                     sink = dts * acr3d (vtg (k), vti (k), qi (k), qg (k), cgaci, acco (:, 10), &
                         acc (19), acc (20), den (k))
                 else
