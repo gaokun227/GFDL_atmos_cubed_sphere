@@ -383,6 +383,12 @@ module gfdl_mp_mod
     real :: c_psacr = 1.0 ! rain to snow accretion efficiency
     real :: c_pgacr = 1.0 ! rain to graupel accretion efficiency
     real :: c_pgacs = 0.01 ! snow to graupel accretion efficiency (was 0.1 in ZETAC)
+
+    real :: is_fac = 0.2 ! cloud ice sublimation temperature factor
+    real :: ss_fac = 0.2 ! snow sublimation temperature factor
+    real :: gs_fac = 0.2 ! graupel sublimation temperature factor
+
+    real :: rh_fac = 10.0 ! cloud water condensation / evaporation relative humidity factor
     
     real :: vw_fac = 1.0
     real :: vi_fac = 1.0 ! IFS: if const_vi: 1 / 3
@@ -465,7 +471,7 @@ module gfdl_mp_mod
         n0w_sig, n0i_sig, n0r_sig, n0s_sig, n0g_sig, n0h_sig, n0w_exp, n0i_exp, &
         n0r_exp, n0s_exp, n0g_exp, n0h_exp, muw, mui, mur, mus, mug, muh, &
         alinw, alini, alinr, alins, aling, alinh, blinw, blini, blinr, blins, bling, blinh, &
-        do_new_acc_water, do_new_acc_ice
+        do_new_acc_water, do_new_acc_ice, is_fac, ss_fac, gs_fac, rh_fac
     
 contains
 
@@ -3734,14 +3740,14 @@ subroutine pcond_pevap (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
         rh_tem = qpz / qsw
         dq = qsw - qv (k)
         if (dq .gt. 0.) then
-            factor = min (1., fac_l2v * (10. * dq / qsw))
+            factor = min (1., fac_l2v * (rh_fac * dq / qsw))
             sink = min (ql (k), factor * dq / (1. + tcp3 (k) * dqdt))
             if (use_rhc_cevap .and. rh_tem .ge. rhc_cevap) then
                 sink = 0.
             endif
             reevap = reevap + sink * dp (k)
         elseif (do_cond_timescale) then
-            factor = min (1., fac_v2l * (10. * (- dq) / qsw))
+            factor = min (1., fac_v2l * (rh_fac * (- dq) / qsw))
             sink = - min (qv (k), factor * (- dq) / (1. + tcp3 (k) * dqdt))
             cond = cond - sink * dp (k)
         else
@@ -3997,7 +4003,7 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
                 sink = min (tmp, max (qi_crt - qi (k), pidep), tc / tcpk (k))
                 dep = dep + sink * dp (k)
             else
-                pidep = pidep * min (1., dim (tz (k), t_sub) * 0.2)
+                pidep = pidep * min (1., dim (tz (k), t_sub) * is_fac)
                 sink = max (pidep, tmp, - qi (k))
                 sub = sub - sink * dp (k)
             endif
@@ -4061,7 +4067,7 @@ subroutine psdep_pssub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
             pssub = dts * pssub
             dq = dq / (1. + tcpk (k) * dqdt)
             if (pssub .gt. 0.) then
-                sink = min (pssub * min (1., dim (tz (k), t_sub) * 0.2), qs (k))
+                sink = min (pssub * min (1., dim (tz (k), t_sub) * ss_fac), qs (k))
                 sub = sub + sink * dp (k)
             else
                 sink = 0.
@@ -4134,7 +4140,7 @@ subroutine pgdep_pgsub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
             pgsub = dts * pgsub
             dq = dq / (1. + tcpk (k) * dqdt)
             if (pgsub .gt. 0.) then
-                sink = min (pgsub * min (1., dim (tz (k), t_sub) * 0.2), qg (k))
+                sink = min (pgsub * min (1., dim (tz (k), t_sub) * gs_fac), qg (k))
                 sub = sub + sink * dp (k)
             else
                 sink = 0.
