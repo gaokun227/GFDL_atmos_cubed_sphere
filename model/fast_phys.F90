@@ -308,6 +308,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
             ! note: the unit of q2 or q3 is #/cm^3
             ! note: the unit of area is m^2
             ! note: the unit of prew, prer, prei, pres, preg is mm/day
+            ! note: the unit of prefluxw, prefluxr, prefluxi, prefluxs, prefluxg is mm/day
             ! note: the unit of cond, dep, reevap, sub is mm/day
 
             ! save ua, va for wind tendency calculation
@@ -367,9 +368,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 #else
                      cappa (isd:, jsd,1:), &
 #endif
-                     consv .gt. consv_min, te (is:ie, j, kmp:km), inline_mp%cond (is:ie, j), &
-                     inline_mp%dep (is:ie, j), inline_mp%reevap (is:ie, j), inline_mp%sub (is:ie, j), &
-                     last_step, do_inline_mp)
+                     consv .gt. consv_min, te (is:ie, j, kmp:km), inline_mp%prefluxw(is:ie, j, kmp:km), &
+                     inline_mp%prefluxr(is:ie, j, kmp:km), inline_mp%prefluxi(is:ie, j, kmp:km), &
+                     inline_mp%prefluxs(is:ie, j, kmp:km), inline_mp%prefluxg(is:ie, j, kmp:km), &
+                     inline_mp%cond (is:ie, j), inline_mp%dep (is:ie, j), inline_mp%reevap (is:ie, j), &
+                     inline_mp%sub (is:ie, j), last_step, do_inline_mp)
 
             if (.not. hydrostatic) then
                 w (is:ie, j, kmp:km) = wa (is:ie, kmp:km)

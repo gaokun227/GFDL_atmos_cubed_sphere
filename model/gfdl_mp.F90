@@ -545,8 +545,8 @@ end subroutine gfdl_mp_init
 subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, wa, &
         ua, va, delz, delp, gsize, dtm, hs, water, rain, ice, snow, graupel, &
         hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, te, &
-        condensation, deposition, evaporation, sublimation, last_step, &
-        do_inline_mp)
+        prefluxw, prefluxr, prefluxi, prefluxs, prefluxg, condensation, &
+        deposition, evaporation, sublimation, last_step, do_inline_mp)
     
     implicit none
     
@@ -566,6 +566,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, wa, &
     
     real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt, ua, va, wa, te
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
+    real, intent (inout), dimension (is:ie, ks:ke) :: prefluxw, prefluxr, prefluxi, prefluxs, prefluxg
     
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
     
@@ -584,9 +585,10 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, pt, wa, &
     ! -----------------------------------------------------------------------
     
     call mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, qa, &
-        qnl, qni, delz, is, ie, ks, ke, dtm, water, rain, ice, snow, graupel, gsize, &
-        hs, q_con, cappa, consv_te, te, condensation, deposition, evaporation, &
-        sublimation, last_step, do_inline_mp, .false., .true.)
+        qnl, qni, delz, is, ie, ks, ke, dtm, water, rain, ice, snow, graupel, &
+        gsize, hs, q_con, cappa, consv_te, te, prefluxw, prefluxr, prefluxi, &
+        prefluxs, prefluxg, condensation, deposition, evaporation, sublimation, &
+        last_step, do_inline_mp, .false., .true.)
     
 end subroutine gfdl_mp_driver
 
@@ -997,9 +999,9 @@ end subroutine setup_mhc_lhc
 
 subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
         qg, qa, qnl, qni, delz, is, ie, ks, ke, dtm, water, rain, ice, snow, &
-        graupel, gsize, hs, q_con, cappa, consv_te, te, condensation, &
-        deposition, evaporation, sublimation, last_step, do_inline_mp, &
-        do_mp_fast, do_mp_full)
+        graupel, gsize, hs, q_con, cappa, consv_te, te, prefluxw, prefluxr, &
+        prefluxi, prefluxs, prefluxg, condensation, deposition, evaporation, &
+        sublimation, last_step, do_inline_mp, do_mp_fast, do_mp_full)
     
     implicit none
     
@@ -1020,6 +1022,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
     
     real, intent (inout), dimension (is:ie, ks:ke) :: delp, pt, ua, va, wa
     real, intent (inout), dimension (is:ie, ks:ke) :: qv, ql, qr, qi, qs, qg, qa
+    real, intent (inout), dimension (is:ie, ks:ke) :: prefluxw, prefluxr, prefluxi, prefluxs, prefluxg
     
     real, intent (inout), dimension (is:, ks:) :: q_con, cappa
     
@@ -1247,8 +1250,9 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, &
             
             call mp_full (ks, ke, ntimes, tz, qvz, qlz, qrz, qiz, qsz, qgz, dp, dz, &
                 u, v, w, den, denfac, ccn, cin, dts, rh_adj, rh_rain, h_var, dte (i), &
-                water (i), rain (i), ice (i), snow (i), graupel (i), condensation (i), &
-                deposition (i), evaporation (i), sublimation (i), convt)
+                water (i), rain (i), ice (i), snow (i), graupel (i), prefluxw (i, :), &
+                prefluxr (i, :), prefluxi (i, :), prefluxs (i, :), prefluxg (i, :), &
+                condensation (i), deposition (i), evaporation (i), sublimation (i), convt)
             
         endif
         
@@ -1539,7 +1543,8 @@ end subroutine neg_adj
 
 subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w, &
         den, denfac, ccn, cin, dts, rh_adj, rh_rain, h_var, dte, water, rain, ice, &
-        snow, graupel, condensation, deposition, evaporation, sublimation, convt)
+        snow, graupel, prefluxw, prefluxr, prefluxi, prefluxs, prefluxg, &
+        condensation, deposition, evaporation, sublimation, convt)
     
     implicit none
     
@@ -1554,6 +1559,7 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
     real, intent (in), dimension (ks:ke) :: dp, dz, den, denfac, ccn
     
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, u, v, w, cin
+    real, intent (inout), dimension (ks:ke) :: prefluxw, prefluxr, prefluxi, prefluxs, prefluxg
     
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     
@@ -1571,7 +1577,7 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
     
     real :: w1, r1, i1, s1, g1, cond, dep, reevap, sub
     
-    real, dimension (ks:ke) :: vtw, vtr, vti, vts, vtg
+    real, dimension (ks:ke) :: vtw, vtr, vti, vts, vtg, pfw, pfr, pfi, pfs, pfg
     
     do n = 1, ntimes
         
@@ -1580,13 +1586,20 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
         ! -----------------------------------------------------------------------
         
         call sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, &
-            dz, dp, vtw, vtr, vti, vts, vtg, w1, r1, i1, s1, g1, u, v, w, den, denfac, dte)
+            dz, dp, vtw, vtr, vti, vts, vtg, w1, r1, i1, s1, g1, pfw, pfr, pfi, pfs, pfg, &
+            u, v, w, den, denfac, dte)
         
         water = water + w1 * convt
         rain = rain + r1 * convt
         ice = ice + i1 * convt
         snow = snow + s1 * convt
         graupel = graupel + g1 * convt
+        
+        prefluxw = prefluxw + pfw * convt
+        prefluxr = prefluxr + pfr * convt
+        prefluxi = prefluxi + pfi * convt
+        prefluxs = prefluxs + pfs * convt
+        prefluxg = prefluxg + pfg * convt
         
         ! -----------------------------------------------------------------------
         ! warm rain cloud microphysics
@@ -1772,7 +1785,8 @@ end subroutine mp_fast
 ! =======================================================================
 
 subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vtw, vtr, vti, vts, vtg, w1, r1, i1, s1, g1, u, v, w, den, denfac, dte)
+        vtw, vtr, vti, vts, vtg, w1, r1, i1, s1, g1, pfw, pfr, pfi, pfs, pfg, &
+        u, v, w, den, denfac, dte)
     
     implicit none
     
@@ -1790,7 +1804,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     
     real, intent (out) :: w1, r1, i1, s1, g1
     
-    real, intent (out), dimension (ks:ke) :: vtw, vtr, vti, vts, vtg
+    real, intent (out), dimension (ks:ke) :: vtw, vtr, vti, vts, vtg, pfw, pfr, pfi, pfs, pfg
     
     real (kind = r8), intent (inout) :: dte
     
@@ -1841,7 +1855,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     endif
     
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vti, i1, u, v, w, dte, "qi")
+        vti, i1, pfi, u, v, w, dte, "qi")
     
     ! -----------------------------------------------------------------------
     ! terminal fall and melting of falling snow into rain
@@ -1855,11 +1869,11 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     endif
     
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vts, s1, u, v, w, dte, "qs")
+        vts, s1, pfs, u, v, w, dte, "qs")
     
-    ! ----------------------------------------------
+    ! -----------------------------------------------------------------------
     ! terminal fall and melting of falling graupel into rain
-    ! ----------------------------------------------
+    ! -----------------------------------------------------------------------
     
     if (do_hail) then
         call term_rsg (ks, ke, qg, den, denfac, vg_fac, vconh, blinh, normh, expoh, muh, vg_max, const_vg, vtg)
@@ -1873,29 +1887,41 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     endif
     
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vtg, g1, u, v, w, dte, "qg")
+        vtg, g1, pfg, u, v, w, dte, "qg")
     
-    ! ----------------------------------------------
+    ! -----------------------------------------------------------------------
     ! terminal fall of cloud water
-    ! ----------------------------------------------
+    ! -----------------------------------------------------------------------
     
     if (do_psd_water_fall) then
 
         call term_rsg (ks, ke, ql, den, denfac, vw_fac, vconw, blinw, normw, expow, muw, vw_max, const_vw, vtw)
     
         call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-            vtw, w1, u, v, w, dte, "ql")
+            vtw, w1, pfw, u, v, w, dte, "ql")
 
     endif
     
-    ! ----------------------------------------------
+    ! -----------------------------------------------------------------------
     ! terminal fall of rain
-    ! ----------------------------------------------
+    ! -----------------------------------------------------------------------
     
     call term_rsg (ks, ke, qr, den, denfac, vr_fac, vconr, blinr, normr, expor, mur, vr_max, const_vr, vtr)
     
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vtr, r1, u, v, w, dte, "qr")
+        vtr, r1, pfr, u, v, w, dte, "qr")
+    
+    ! -----------------------------------------------------------------------
+    ! compute layer precipitation flux
+    ! -----------------------------------------------------------------------
+
+    do k = ke, ks + 1, -1
+        pfw (k) = max (0.0, pfw (k) - pfw (k - 1))
+        pfr (k) = max (0.0, pfr (k) - pfr (k - 1))
+        pfi (k) = max (0.0, pfi (k) - pfi (k - 1))
+        pfs (k) = max (0.0, pfs (k) - pfs (k - 1))
+        pfg (k) = max (0.0, pfg (k) - pfg (k - 1))
+    enddo
     
 end subroutine sedimentation
 
@@ -2109,7 +2135,7 @@ end subroutine sedi_melt
 ! =======================================================================
 
 subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
-        vt, x1, u, v, w, dte, qflag)
+        vt, x1, m1, u, v, w, dte, qflag)
     
     implicit none
     
@@ -2133,6 +2159,8 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
     
+    real, intent (out), dimension (ks:ke) :: m1
+    
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
@@ -2143,11 +2171,13 @@ subroutine terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     
     real :: zs
     
-    real, dimension (ks:ke) :: m1, dm, q
+    real, dimension (ks:ke) :: dm, q
     
     real, dimension (ks:ke + 1) :: ze, zt
     
     real (kind = r8), dimension (ks:ke) :: te1, te2
+
+    m1 = 0.0
     
     call zezt (ks, ke, dts, zs, dz, vt, ze, zt)
     
@@ -5168,7 +5198,7 @@ subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
     ! local variables
     ! -----------------------------------------------------------------------
     
-    real, dimension (is:ie, ks:ke) :: ua, va, wa
+    real, dimension (is:ie, ks:ke) :: ua, va, wa, prefluxw, prefluxr, prefluxi, prefluxs, prefluxg
     
     real, dimension (is:ie) :: water, rain, ice, snow, graupel
     
@@ -5186,6 +5216,12 @@ subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
     snow = 0.0
     graupel = 0.0
     
+    prefluxw = 0.0
+    prefluxr = 0.0
+    prefluxi = 0.0
+    prefluxs = 0.0
+    prefluxg = 0.0
+    
     ! -----------------------------------------------------------------------
     ! define various heat capacities and latent heat coefficients at 0 deg K
     ! -----------------------------------------------------------------------
@@ -5198,8 +5234,9 @@ subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
     
     call mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, qa, &
         qnl, qni, delz, is, ie, ks, ke, dtm, water, rain, ice, snow, graupel, &
-        gsize, hs, q_con, cappa, consv_te, te, condensation, deposition, &
-        evaporation, sublimation, last_step, .true., .true., .false.)
+        gsize, hs, q_con, cappa, consv_te, te, prefluxw, prefluxr, prefluxi, &
+        prefluxs, prefluxg, condensation, deposition, evaporation, sublimation, &
+        last_step, .true., .true., .false.)
     
 end subroutine fast_sat_adj
 
