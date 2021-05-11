@@ -93,10 +93,12 @@ module fv_diagnostics_mod
  real :: sphum_ll_fix = 0.
  real :: qcly0 ! initial value for terminator test
 
+ logical :: is_ideal_case = .false.
+     
  public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, range_check!, id_divg, id_te
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field, get_height_given_pressure
- public :: cs3_interpolator, get_vorticity
+ public :: cs3_interpolator, get_vorticity, is_ideal_case
  
  integer, parameter :: MAX_PLEVS = 31
 #ifdef FEWER_PLEVS
@@ -112,7 +114,7 @@ module fv_diagnostics_mod
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
  integer :: id_dx, id_dy
 
- real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
+ real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2), psrange(2)
 
  ! integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
  ! integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
@@ -204,6 +206,11 @@ contains
     trange = (/  100.,  350. /)  ! temperature
 #endif
     slprange = (/800.,  1200./)  ! sea-level-pressure
+#ifdef SW_DYNAMICS
+    psrange = (/.01, 1.e7 /)
+#else
+    psrange = (/40000.0, 110000.0/)
+#endif
 
     ginv = 1./GRAV
      if (Atm(1)%grid_number == 1) fv_time = Time
@@ -574,7 +581,7 @@ contains
 ! Surface pressure
 !-------------------
        id_ps = register_diag_field ( trim(field), 'ps', axes(1:2), Time,           &
-            'surface pressure', 'Pa', missing_value=missing_value, range=(/40000.0, 110000.0/))
+            'surface pressure', 'Pa', missing_value=missing_value, range=psrange)
 
 !-------------------
 ! Mountain torque
@@ -1317,14 +1324,8 @@ contains
 !    end do
 
 
-#ifdef TEST_TRACER
-    call prt_mass(npz, Atm(n)%ncnst, isc, iec, jsc, jec, Atm(n)%ng, max(1,Atm(n)%flagstruct%nwat),    &
-                      Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
-#else
     call prt_mass(npz, Atm(n)%ncnst, isc, iec, jsc, jec, Atm(n)%ng, Atm(n)%flagstruct%nwat,    &
                       Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
-#endif
-
 
     !Model initialization time (not necessarily the time this simulation is started,
     ! conceivably a restart could be done
@@ -1564,13 +1565,8 @@ contains
         deallocate(var2)
 #endif
 
-#ifdef TEST_TRACER
-        call prt_mass(npz, nq, isc, iec, jsc, jec, ngc, max(1,Atm(n)%flagstruct%nwat),    &
-                      Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
-#else
         call prt_mass(npz, nq, isc, iec, jsc, jec, ngc, Atm(n)%flagstruct%nwat,    &
                       Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
-#endif
 
 #ifndef SW_DYNAMICS
         if (Atm(n)%flagstruct%consv_te > 1.e-5) then
@@ -1630,15 +1626,16 @@ contains
          call range_check('VA', Atm(n)%va, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
                            -250., 250., bad_range, Time)
 #ifndef SW_DYNAMICS
-         call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-#ifdef HIWPP
+         if (is_ideal_case) then
+            call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
                            130., 350., bad_range, Time) !DCMIP ICs have very low temperatures
-#else
+         else
+            call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
                            150., 350., bad_range, Time)
-#endif
-#endif
+         endif
          call range_check('Qv', Atm(n)%q(:,:,:,sphum), isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
                           -1.e-8, 1.e20, bad_range, Time)
+#endif
 
       endif
 
@@ -3557,7 +3554,6 @@ contains
           deallocate ( pt1 )
        endif
        
-#ifndef SW_DYNAMICS
         do itrac=1, Atm(n)%ncnst
           call get_tracer_names (MODEL_ATMOS, itrac, tname)
           if (id_tracer(itrac) > 0 .and. itrac.gt.nq) then
@@ -3711,6 +3707,7 @@ contains
        endif
      endif
 
+#ifndef SW_DYNAMICS
 ! terms related with vertical wind ( Atm(n)%w ):
      if(.not.Atm(n)%flagstruct%hydrostatic) then
        ! vertical moisture flux
@@ -3791,6 +3788,7 @@ contains
      endif
 
      deallocate ( a4 )
+#endif
 
 ! Maximum overlap cloud fraction
       if ( .not. Atm(n)%gridstruct%bounded_domain )  then
@@ -3808,7 +3806,6 @@ contains
         endif
       endif
 
-#endif
 
       if (do_diag_debug) then
          call debug_column(Atm(n)%pt, Atm(n)%delp, Atm(n)%delz, Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%q, &
@@ -3983,9 +3980,16 @@ contains
       if( qmin<q_low .or. qmax>q_hi ) then
           if(master) write(*,*) 'Range_check Warning:', qname, ' max = ', qmax, ' min = ', qmin
           if (present(Time)) then
-             call get_date(Time, year, month, day, hour, minute, second)
-             if (master) write(*,999) year, month, day, hour, minute, second
-999          format(' Range violation on: ', I4, '/', I02, '/', I02, ' ', I02, ':', I02, ':', I02)
+             if (m_calendar) then
+                call get_date(Time, year, month, day, hour, minute, second)
+                if (master) write(*,999) year, month, day, hour, minute, second
+999             format(' Range violation on: ', I4, '/', I02, '/', I02, ' ', I02, ':', I02, ':', I02)
+             else
+                call get_time(Time, second, day)
+                year = 0 ; month = 0 ; hour = 0 ; minute = 0
+                if (master) write(*,996) day, second
+996             format(' Range violation on: ', I6, ' days ', I05, ' seconds')
+             endif
           endif
           if ( present(bad_range) ) then
                bad_range = .true.

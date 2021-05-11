@@ -398,8 +398,6 @@ module fv_arrays_mod
    logical :: non_ortho = .true.
    logical :: moist_phys = .true.     ! Run with moist physics
    logical :: do_Held_Suarez = .false.
-   logical :: do_reed_physics = .false.
-   logical :: reed_cond_only = .false.
    logical :: reproduce_sum = .true.  ! Make global sum for consv_te reproduce
    logical :: adjust_dry_mass = .false.
    logical :: fv_debug  = .false.
