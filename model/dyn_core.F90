@@ -382,9 +382,7 @@ contains
 
 #ifdef SW_DYNAMICS
      if (test_case>1) then
-#ifdef USE_OLD
-     if (test_case==9) call case9_forcing1(phis, time_total)
-#endif
+     if (test_case==9) call case9_forcing1(phis, time_total, isd, ied, jsd, jed)
 #endif
 
      if ( it==1 ) then
@@ -563,9 +561,7 @@ contains
       call start_group_halo_update(i_pack(9), uc, vc, domain, gridtype=CGRID_NE)
                                                      call timing_off('COMM_TOTAL')
 #ifdef SW_DYNAMICS
-#ifdef USE_OLD
-      if (test_case==9) call case9_forcing2(phis)
-#endif
+      if (test_case==9) call case9_forcing2(phis, isd, ied, jsd, jed)
       endif !test_case>1
 #endif
 

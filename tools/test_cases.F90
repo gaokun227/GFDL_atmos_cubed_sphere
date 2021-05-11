@@ -67,7 +67,7 @@
 !                    6 = Rossby Wave number 4
 !                    7 = Barotropic instability
 !                    8 = "Soliton" propagation twin-vortex along equator
-!                    9 = Polar vortex
+!                    9 = Bates and Li (1997, Atmos.-Ocn.) polar vortex
 !                  THREE-DIMENSIONAL TESTS
 !                   10 = hydrostatically balanced 3D test with idealized mountain
 !                   11 = Use this for cold starting the climate model with USGS terrain
