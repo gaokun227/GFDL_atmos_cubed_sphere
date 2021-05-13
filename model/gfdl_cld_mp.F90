@@ -1832,6 +1832,12 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     vts = 0.
     vtg = 0.
     
+    pfw = 0.
+    pfr = 0.
+    pfi = 0.
+    pfs = 0.
+    pfg = 0.
+
     ! -----------------------------------------------------------------------
     ! calculate heat capacities and latent heat coefficients
     ! -----------------------------------------------------------------------
@@ -1857,6 +1863,11 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vti, i1, pfi, u, v, w, dte, "qi")
     
+    pfi (ks) = max (0.0, pfi (k))
+    do k = ke, ks + 1, -1
+        pfi (k) = max (0.0, pfi (k) - pfi (k - 1))
+    enddo
+
     ! -----------------------------------------------------------------------
     ! terminal fall and melting of falling snow into rain
     ! -----------------------------------------------------------------------
@@ -1871,6 +1882,11 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vts, s1, pfs, u, v, w, dte, "qs")
     
+    pfs (ks) = max (0.0, pfs (k))
+    do k = ke, ks + 1, -1
+        pfs (k) = max (0.0, pfs (k) - pfs (k - 1))
+    enddo
+
     ! -----------------------------------------------------------------------
     ! terminal fall and melting of falling graupel into rain
     ! -----------------------------------------------------------------------
@@ -1889,6 +1905,11 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vtg, g1, pfg, u, v, w, dte, "qg")
     
+    pfg (ks) = max (0.0, pfg (k))
+    do k = ke, ks + 1, -1
+        pfg (k) = max (0.0, pfg (k) - pfg (k - 1))
+    enddo
+    
     ! -----------------------------------------------------------------------
     ! terminal fall of cloud water
     ! -----------------------------------------------------------------------
@@ -1899,6 +1920,11 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     
         call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
             vtw, w1, pfw, u, v, w, dte, "ql")
+
+        pfw (ks) = max (0.0, pfw (k))
+        do k = ke, ks + 1, -1
+            pfw (k) = max (0.0, pfw (k) - pfw (k - 1))
+        enddo
 
     endif
     
@@ -1911,18 +1937,11 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vtr, r1, pfr, u, v, w, dte, "qr")
     
-    ! -----------------------------------------------------------------------
-    ! compute layer precipitation flux
-    ! -----------------------------------------------------------------------
-
+    pfr (ks) = max (0.0, pfr (k))
     do k = ke, ks + 1, -1
-        pfw (k) = max (0.0, pfw (k) - pfw (k - 1))
         pfr (k) = max (0.0, pfr (k) - pfr (k - 1))
-        pfi (k) = max (0.0, pfi (k) - pfi (k - 1))
-        pfs (k) = max (0.0, pfs (k) - pfs (k - 1))
-        pfg (k) = max (0.0, pfg (k) - pfg (k - 1))
     enddo
-    
+
 end subroutine sedimentation
 
 ! =======================================================================
