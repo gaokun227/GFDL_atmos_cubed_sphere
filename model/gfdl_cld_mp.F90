@@ -425,7 +425,7 @@ module gfdl_cld_mp_mod
     real :: reimin = 10.0, reimax = 150.0 ! minimum and maximum effective radius for cloud ice (micron)
     real :: rermin = 15.0, rermax = 10000.0 ! minimum and maximum effective radius for rain (micron)
     real :: resmin = 150.0, resmax = 10000.0 ! minimum and maximum effective radius for snow (micron)
-    real :: regmin = 0.0, regmax = 10000.0 ! minimum and maximum effective radius for graupel
+    real :: regmin = 150.0, regmax = 10000.0 ! minimum and maximum effective radius for graupel
     !real :: rewmax = 15.0, rermin = 15.0 ! Kokhanovsky (2004)
     
     ! -----------------------------------------------------------------------
@@ -471,7 +471,8 @@ module gfdl_cld_mp_mod
         n0w_sig, n0i_sig, n0r_sig, n0s_sig, n0g_sig, n0h_sig, n0w_exp, n0i_exp, &
         n0r_exp, n0s_exp, n0g_exp, n0h_exp, muw, mui, mur, mus, mug, muh, &
         alinw, alini, alinr, alins, aling, alinh, blinw, blini, blinr, blins, bling, blinh, &
-        do_new_acc_water, do_new_acc_ice, is_fac, ss_fac, gs_fac, rh_fac
+        do_new_acc_water, do_new_acc_ice, is_fac, ss_fac, gs_fac, rh_fac, &
+        snow_grauple_combine
     
 contains
 
