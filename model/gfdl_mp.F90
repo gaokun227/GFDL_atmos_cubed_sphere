@@ -1863,7 +1863,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vti, i1, pfi, u, v, w, dte, "qi")
     
-    pfi (ks) = max (0.0, pfi (k))
+    pfi (ks) = max (0.0, pfi (ks))
     do k = ke, ks + 1, -1
         pfi (k) = max (0.0, pfi (k) - pfi (k - 1))
     enddo
@@ -1882,7 +1882,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vts, s1, pfs, u, v, w, dte, "qs")
     
-    pfs (ks) = max (0.0, pfs (k))
+    pfs (ks) = max (0.0, pfs (ks))
     do k = ke, ks + 1, -1
         pfs (k) = max (0.0, pfs (k) - pfs (k - 1))
     enddo
@@ -1905,7 +1905,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vtg, g1, pfg, u, v, w, dte, "qg")
     
-    pfg (ks) = max (0.0, pfg (k))
+    pfg (ks) = max (0.0, pfg (ks))
     do k = ke, ks + 1, -1
         pfg (k) = max (0.0, pfg (k) - pfg (k - 1))
     enddo
@@ -1921,7 +1921,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
             vtw, w1, pfw, u, v, w, dte, "ql")
 
-        pfw (ks) = max (0.0, pfw (k))
+        pfw (ks) = max (0.0, pfw (ks))
         do k = ke, ks + 1, -1
             pfw (k) = max (0.0, pfw (k) - pfw (k - 1))
         enddo
@@ -1937,7 +1937,7 @@ subroutine sedimentation (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
     call terminal_fall (dts, ks, ke, tz, qv, ql, qr, qi, qs, qg, dz, dp, &
         vtr, r1, pfr, u, v, w, dte, "qr")
     
-    pfr (ks) = max (0.0, pfr (k))
+    pfr (ks) = max (0.0, pfr (ks))
     do k = ke, ks + 1, -1
         pfr (k) = max (0.0, pfr (k) - pfr (k - 1))
     enddo
