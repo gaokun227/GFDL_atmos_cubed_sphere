@@ -333,6 +333,7 @@ contains
                                    call timing_off('COMM_TOTAL')
      endif
 
+#ifndef SW_DYNAMICS
      if ( .not. hydrostatic ) then
                              call timing_on('COMM_TOTAL')
          call start_group_halo_update(i_pack(7), w, domain)
@@ -376,14 +377,12 @@ contains
                              call timing_off('COMM_TOTAL')
       endif
 
-     endif
-
+   endif
+#endif
 
 #ifdef SW_DYNAMICS
      if (test_case>1) then
-#ifdef USE_OLD
-     if (test_case==9) call case9_forcing1(phis, time_total)
-#endif
+     if (test_case==9) call case9_forcing1(phis, time_total, isd, ied, jsd, jed)
 #endif
 
      if ( it==1 ) then
@@ -562,16 +561,14 @@ contains
       call start_group_halo_update(i_pack(9), uc, vc, domain, gridtype=CGRID_NE)
                                                      call timing_off('COMM_TOTAL')
 #ifdef SW_DYNAMICS
-#ifdef USE_OLD
-      if (test_case==9) call case9_forcing2(phis)
-#endif
+      if (test_case==9) call case9_forcing2(phis, isd, ied, jsd, jed)
       endif !test_case>1
 #endif
 
                                                                    call timing_on('COMM_TOTAL')
     if (flagstruct%inline_q .and. nq>0) call complete_group_halo_update(i_pack(10), domain)
-    if (flagstruct%nord > 0) call complete_group_halo_update(i_pack(3), domain)
-                             call complete_group_halo_update(i_pack(9), domain)
+    if (flagstruct%nord > 0 .and. test_case > 1) call complete_group_halo_update(i_pack(3), domain)
+                      if(test_case > 1) call complete_group_halo_update(i_pack(9), domain)
 
                                                                    call timing_off('COMM_TOTAL')
       if (gridstruct%nested) then
@@ -735,8 +732,8 @@ contains
              enddo
           enddo
        endif
-       
-!--- external mode divergence damping ---
+
+       !--- external mode divergence damping ---
        if ( flagstruct%d_ext > 0. )  &
             call a2b_ord2(delp(isd,jsd,k), wk, gridstruct, npx, npy, is,    &
                           ie, js, je, ng, .false.)
@@ -780,7 +777,7 @@ contains
                enddo
             enddo
        endif
-       
+
        if ( flagstruct%d_ext > 0. ) then
             do j=js,jep1
                do i=is,iep1

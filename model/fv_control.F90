@@ -240,8 +240,6 @@ module fv_control_mod
      logical , pointer :: adiabatic
      logical , pointer :: moist_phys
      logical , pointer :: do_Held_Suarez
-     logical , pointer :: do_reed_physics
-     logical , pointer :: reed_cond_only
      logical , pointer :: reproduce_sum
      logical , pointer :: adjust_dry_mass
      logical , pointer :: fv_debug
@@ -788,8 +786,6 @@ module fv_control_mod
        adiabatic                     => Atm%flagstruct%adiabatic
        moist_phys                    => Atm%flagstruct%moist_phys
        do_Held_Suarez                => Atm%flagstruct%do_Held_Suarez
-       do_reed_physics               => Atm%flagstruct%do_reed_physics
-       reed_cond_only                => Atm%flagstruct%reed_cond_only
        reproduce_sum                 => Atm%flagstruct%reproduce_sum
        adjust_dry_mass               => Atm%flagstruct%adjust_dry_mass
        fv_debug                      => Atm%flagstruct%fv_debug
@@ -958,7 +954,7 @@ module fv_control_mod
             external_eta, res_latlon_dynamics, res_latlon_tracers, scale_z, w_max, z_min, lim_fac, &
             dddmp, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
             warm_start, adjust_dry_mass, mountain, d_con, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
-            dry_mass, grid_type, do_Held_Suarez, do_reed_physics, reed_cond_only, &
+            dry_mass, grid_type, do_Held_Suarez, &
             consv_te, fill, filter_phys, fill_dp, fill_wz, fill_gfs, consv_am, RF_fast, &
             range_warn, dwind_2d, inline_q, z_tracer, reproduce_sum, adiabatic, do_vort_damp, no_dycore,   &
             tau, tau_h2o, rf_cutoff, nf_omega, hydrostatic, fv_sg_adj, sg_cutoff, breed_vortex_inline,  &
