@@ -605,11 +605,11 @@ module fv_eta_mod
          ptop = 1.
          stretch_fac = 1.03
          auto_routine = 1
-      case (75)   ! HS-SGO test configuration
-         pint = 100.E2
-         ptop = 10.E2
-         stretch_fac = 1.035
-         auto_routine = 6
+      !case (75)   ! HS-SGO test configuration
+      !   pint = 100.E2
+      !   ptop = 10.E2
+      !   stretch_fac = 1.035
+      !   auto_routine = 6
       case (79)               ! N = 10, M=5
          if (trim(npz_type) == 'gcrm') then
            pint = 100.E2
@@ -648,12 +648,20 @@ module fv_eta_mod
          enddo
          !<--cjg
 
-      ! kgao   
+      ! kgao L88 
       case (88)
-         ks = 19 
+         ks = 20 !19 bug fix 
          do k=1,km+1
             ak(k) = a88(k)
             bk(k) = b88(k)
+         enddo
+
+      ! kgao L75    
+      case (75) ! note the naming issue here
+         ks = 12
+         do k=1,km+1
+            ak(k) = a75(k)
+            bk(k) = b75(k)
          enddo
 
       case (100)
