@@ -567,8 +567,14 @@ contains
 
                                                                    call timing_on('COMM_TOTAL')
     if (flagstruct%inline_q .and. nq>0) call complete_group_halo_update(i_pack(10), domain)
-    if (flagstruct%nord > 0 .and. test_case > 1) call complete_group_halo_update(i_pack(3), domain)
-                      if(test_case > 1) call complete_group_halo_update(i_pack(9), domain)
+#ifdef SW_DYNAMICS
+    if (test_case > 1) then
+#endif
+                        if (flagstruct%nord > 0) call complete_group_halo_update(i_pack(3), domain)
+                                                 call complete_group_halo_update(i_pack(9), domain)
+#ifdef SW_DYNAMICS
+    endif
+#endif
 
                                                                    call timing_off('COMM_TOTAL')
       if (gridstruct%nested) then
