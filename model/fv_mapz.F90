@@ -126,7 +126,7 @@ contains
   logical, intent(in):: hydrostatic
   logical, intent(in):: hybrid_z
   logical, intent(in):: out_dt
-  logical, intent(in):: moist_phys
+  logical, intent(in):: moist_phys !not used --- lmh 13 may 21
 
   real, intent(inout)::   ua(isd:ied,jsd:jed,km)   ! u-wind (m/s) on physics grid
   real, intent(inout)::   va(isd:ied,jsd:jed,km)   ! v-wind (m/s) on physics grid
@@ -214,11 +214,11 @@ contains
 ! Note: pt at this stage is Theta_v
              if ( hydrostatic ) then
 ! Transform virtual pt to virtual Temp
-             do k=1,km
+                do k=1,km
                    do i=is,ie
                       pt(i,j,k) = pt(i,j,k)*(pk(i,j,k+1)-pk(i,j,k))/(akap*(peln(i,k+1,j)-peln(i,k,j)))
                    enddo
-             enddo
+                enddo
              else
 ! Transform "density pt" to "density temp"
                do k=1,km
@@ -473,7 +473,7 @@ contains
          enddo
       enddo
    else
-! Note: pt at this stage is T_v or T_m
+! Note: pt at this stage is T_v or T_m , unless kord_tm > 0
          do k=1,km
 #ifdef MOIST_CAPPA
             call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
@@ -498,7 +498,7 @@ contains
            enddo
            if ( last_step .and. (.not.adiabatic) ) then
               do i=is,ie
-                 pt(i,j,k) = pt(i,j,k)*pkz(i,j,k)
+                 pt(i,j,k) = pt(i,j,k)*pkz(i,j,k) !Need T for energy calculations
               enddo
            endif
          endif
@@ -990,7 +990,7 @@ endif        ! end last_step check
 
 
   if ( last_step ) then
-       ! Output temperature if last_step
+       ! Convert T_v/T_m to T if last_step
 !!!  if ( is_master() ) write(*,*) 'dtmp=', dtmp, nwat
 !$OMP parallel do default(none) shared(is,ie,js,je,km,isd,ied,jsd,jed,hydrostatic,pt,adiabatic,cp, &
 !$OMP                                  nwat,rainwat,liq_wat,ice_wat,snowwat,graupel,r_vir,&
@@ -1019,7 +1019,7 @@ endif        ! end last_step check
               endif
            enddo   ! j-loop
         enddo  ! k-loop
-  else  ! not last_step
+  else  ! not last_step: convert T_v/T_m back to theta_v/theta_m for dyn_core
     if ( kord_tm < 0 ) then
 !$OMP parallel do default(none) shared(is,ie,js,je,km,pkz,pt)
        do k=1,km
@@ -1193,6 +1193,7 @@ endif        ! end last_step check
      do i=is,ie
         te_2d(i,j) = 0.
      enddo
+     !TODO moist_phys doesn't seem to make a difference --- lmh 13may21
      if ( moist_phys ) then
      do k=1,km
 #ifdef MOIST_CAPPA
