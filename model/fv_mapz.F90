@@ -1301,92 +1301,6 @@ endif        ! end last_step check
 
  end subroutine pkez
 
-
-
- subroutine remap_z(km, pe1, q1, kn, pe2, q2, i1, i2, iv, kord)
-
-! !INPUT PARAMETERS:
-      integer, intent(in) :: i1                ! Starting longitude
-      integer, intent(in) :: i2                ! Finishing longitude
-      integer, intent(in) :: kord              ! Method order
-      integer, intent(in) :: km                ! Original vertical dimension
-      integer, intent(in) :: kn                ! Target vertical dimension
-      integer, intent(in) :: iv
-
-      real, intent(in) ::  pe1(i1:i2,km+1)     ! height at layer edges
-                                               ! (from model top to bottom surface)
-      real, intent(in) ::  pe2(i1:i2,kn+1)     ! hieght at layer edges
-                                               ! (from model top to bottom surface)
-      real, intent(in) ::  q1(i1:i2,km)        ! Field input
-
-! !INPUT/OUTPUT PARAMETERS:
-      real, intent(inout)::  q2(i1:i2,kn)      ! Field output
-
-! !LOCAL VARIABLES:
-      real   qs(i1:i2)
-      real  dp1(  i1:i2,km)
-      real   q4(4,i1:i2,km)
-      real   pl, pr, qsum, delp, esl
-      integer i, k, l, m, k0
-
-      do k=1,km
-         do i=i1,i2
-             dp1(i,k) = pe1(i,k+1) - pe1(i,k)      ! negative
-            q4(1,i,k) = q1(i,k)
-         enddo
-      enddo
-
-! Compute vertical subgrid distribution
-   if ( kord >7 ) then
-        call  cs_profile( qs, q4, dp1, km, i1, i2, iv, kord )
-   else
-        call ppm_profile( q4, dp1, km, i1, i2, iv, kord )
-   endif
-
-! Mapping
-      do 1000 i=i1,i2
-         k0 = 1
-      do 555 k=1,kn
-      do 100 l=k0,km
-! locate the top edge: pe2(i,k)
-      if(pe2(i,k) <= pe1(i,l) .and. pe2(i,k) >= pe1(i,l+1)) then
-         pl = (pe2(i,k)-pe1(i,l)) / dp1(i,l)
-         if(pe2(i,k+1) >= pe1(i,l+1)) then
-! entire new grid is within the original grid
-            pr = (pe2(i,k+1)-pe1(i,l)) / dp1(i,l)
-            q2(i,k) = q4(2,i,l) + 0.5*(q4(4,i,l)+q4(3,i,l)-q4(2,i,l))  &
-                       *(pr+pl)-q4(4,i,l)*r3*(pr*(pr+pl)+pl**2)
-               k0 = l
-               goto 555
-          else
-! Fractional area...
-            qsum = (pe1(i,l+1)-pe2(i,k))*(q4(2,i,l)+0.5*(q4(4,i,l)+   &
-                    q4(3,i,l)-q4(2,i,l))*(1.+pl)-q4(4,i,l)*           &
-                     (r3*(1.+pl*(1.+pl))))
-              do m=l+1,km
-! locate the bottom edge: pe2(i,k+1)
-                 if(pe2(i,k+1) < pe1(i,m+1) ) then
-! Whole layer..
-                    qsum = qsum + dp1(i,m)*q4(1,i,m)
-                 else
-                    delp = pe2(i,k+1)-pe1(i,m)
-                    esl = delp / dp1(i,m)
-                    qsum = qsum + delp*(q4(2,i,m)+0.5*esl*               &
-                         (q4(3,i,m)-q4(2,i,m)+q4(4,i,m)*(1.-r23*esl)))
-                    k0 = m
-                 goto 123
-                 endif
-              enddo
-              goto 123
-           endif
-      endif
-100   continue
-123   q2(i,k) = qsum / ( pe2(i,k+1) - pe2(i,k) )
-555   continue
-1000  continue
-
- end subroutine remap_z
-
  subroutine map_scalar( km,   pe1,    q1,   qs,           &
                         kn,   pe2,    q2,   i1, i2,       &
                          j,  ibeg, iend, jbeg, jend, iv,  kord, q_min)
@@ -1395,6 +1309,7 @@ endif        ! end last_step check
  integer, intent(in) :: i2                ! Finishing longitude
  integer, intent(in) :: iv                ! Mode: 0 == constituents  1 == temp
                                           !       2 == remap temp with cs scheme
+                                          !      -2 or -3 == w with lower bc
  integer, intent(in) :: kord              ! Method order
  integer, intent(in) :: j                 ! Current latitude
  integer, intent(in) :: ibeg, iend, jbeg, jend
@@ -1413,7 +1328,7 @@ endif        ! end last_step check
  real, intent(in):: q_min
 
 ! !DESCRIPTION:
-! IV = 0: constituents
+! IV = 0: constituents: enforce positivity in interface values and reconstruction
 ! pe1: pressure at layer edges (from model top to bottom surface)
 !      in the original vertical coordinate
 ! pe2: pressure at layer edges (from model top to bottom surface)
@@ -1576,6 +1491,8 @@ endif        ! end last_step check
  end subroutine map1_ppm
 
 
+!Multi-tracer remapping (much faster)
+!ONLY supports cubic-spline remapping
  subroutine mapn_tracer(nq, km, pe1, pe2, q1, dp2, kord, j,     &
                         i1, i2, isd, ied, jsd, jed, q_min, fill)
 ! !INPUT PARAMETERS:
@@ -1692,6 +1609,7 @@ endif        ! end last_step check
  end subroutine mapn_tracer
 
 
+ !This routine remaps a single tracer
  subroutine map1_q2(km,   pe1,   q1,            &
                     kn,   pe2,   q2,   dp2,     &
                     i1,   i2,    iv,   kord, j, &
@@ -1903,6 +1821,10 @@ endif        ! end last_step check
  real   pmp_1, lac_1, pmp_2, lac_2, x0, x1
  integer i, k, im
 
+ !Compute interface values (\hat{q})
+ ! iv=-2 and -3 introduce the lower BC
+ ! iv=-2 also uses a simpler calculation
+ !       dropping a lot of metric terms
  if ( iv .eq. -2 ) then
       do i=i1,i2
          gam(i,2) = 0.5
@@ -1957,7 +1879,7 @@ endif        ! end last_step check
   enddo
  endif
 
-!----- Perfectly linear scheme --------------------------------
+!Perfectly linear scheme
  if ( abs(kord) > 16 ) then
   do k=1,km
      do i=i1,i2
@@ -1968,13 +1890,12 @@ endif        ! end last_step check
   enddo
   return
  endif
-!----- Perfectly linear scheme --------------------------------
-!------------------
-! Apply constraints
-!------------------
+
   im = i2 - i1 + 1
 
-! Apply *large-scale* constraints
+  ! Apply *large-scale* constraints to \hat{q}
+
+  !Upper BC for all schemes
   do i=i1,i2
      q(i,2) = min( q(i,2), max(a4(1,i,1), a4(1,i,2)) )
      q(i,2) = max( q(i,2), min(a4(1,i,1), a4(1,i,2)) )
@@ -1982,7 +1903,7 @@ endif        ! end last_step check
 
   do k=2,km
      do i=i1,i2
-        gam(i,k) = a4(1,i,k) - a4(1,i,k-1)
+        gam(i,k) = a4(1,i,k) - a4(1,i,k-1) !\delta \bar{q}
      enddo
   enddo
 
@@ -1991,6 +1912,8 @@ endif        ! end last_step check
      do i=i1,i2
         if ( gam(i,k-1)*gam(i,k+1)>0. ) then
 ! Apply large-scale constraint to ALL fields if not local max/min
+!  first guess interface values cannot exceeed values
+!  of adjacent cells
              q(i,k) = min( q(i,k), max(a4(1,i,k-1),a4(1,i,k)) )
              q(i,k) = max( q(i,k), min(a4(1,i,k-1),a4(1,i,k)) )
         else
@@ -2006,12 +1929,14 @@ endif        ! end last_step check
      enddo
   enddo
 
-! Bottom:
+! Bottom BC for all schemes:
   do i=i1,i2
      q(i,km) = min( q(i,km), max(a4(1,i,km-1), a4(1,i,km)) )
      q(i,km) = max( q(i,km), min(a4(1,i,km-1), a4(1,i,km)) )
   enddo
 
+  !Set up in-cell reconstruction
+  !initially continuous (AL(k) = AR(k-1))
   do k=1,km
      do i=i1,i2
         a4(2,i,k) = q(i,k  )
@@ -2019,6 +1944,8 @@ endif        ! end last_step check
      enddo
   enddo
 
+  !Flags for different extremum/2dz conditions
+  ! estimated from first-guess edge values
   do k=1,km
      if ( k==1 .or. k==km ) then
        do i=i1,i2
@@ -2040,9 +1967,7 @@ endif        ! end last_step check
      endif
   enddo
 
-!---------------------------
 ! Apply subgrid constraints:
-!---------------------------
 ! f(s) = AL + s*[(AR-AL) + A6*(1-s)]         ( 0 <= s  <= 1 )
 ! Top 2 and bottom 2 layers always use monotonic mapping
 
@@ -3197,7 +3122,7 @@ else ! all others
  end subroutine steepz
 
 
-
+!This routine should be moved to fv_io.F90.
  subroutine rst_remap(km, kn, is,ie,js,je, isd,ied,jsd,jed, nq, ntp, &
                       delp_r, u_r, v_r, w_r, delz_r, pt_r, q_r, qdiag_r, &
                       delp,   u,   v,   w,   delz,   pt,   q,   qdiag,   &
@@ -3475,12 +3400,14 @@ else ! all others
  end subroutine rst_remap
 
 
-
- subroutine mappm(km, pe1, q1, kn, pe2, q2, i1, i2, iv, kord, ptop)
+ !This routine is indended to remap between different #
+ !     of vertical levels
+ subroutine mappm(km, pe1, q1, kn, pe2, q2, i1, i2, iv, kord)
 
 ! IV = 0: constituents
 ! IV = 1: potential temp
 ! IV =-1: winds
+! IV =-2: vertical velocity
 
 ! Mass flux preserving mapping: q1(im,km) -> q2(im,kn)
 
@@ -3491,9 +3418,8 @@ else ! all others
 
  integer, intent(in):: i1, i2, km, kn, kord, iv
  real, intent(in ):: pe1(i1:i2,km+1), pe2(i1:i2,kn+1)
- real, intent(in )::  q1(i1:i2,km)
- real, intent(out)::  q2(i1:i2,kn)
- real, intent(IN) :: ptop
+ real, intent(in )::  q1(i1:i2,km) ! input field
+ real, intent(out)::  q2(i1:i2,kn) ! output field
 ! local
       real  qs(i1:i2)
       real dp1(i1:i2,km)
@@ -3515,17 +3441,6 @@ else ! all others
            call ppm_profile( a4, dp1, km, i1, i2, iv, kord )
       endif
 
-!------------------------------------
-! Lowest layer: constant distribution
-!------------------------------------
-#ifdef NGGPS_SUBMITTED
-      do i=i1,i2
-         a4(2,i,km) = q1(i,km)
-         a4(3,i,km) = q1(i,km)
-         a4(4,i,km) = 0.
-      enddo
-#endif
-
       do 5555 i=i1,i2
          k0 = 1
       do 555 k=1,kn
@@ -3535,11 +3450,7 @@ else ! all others
             q2(i,k) = q1(i,1)
          elseif(pe2(i,k) .ge. pe1(i,km+1)) then
 ! Entire grid below old ps
-#ifdef NGGPS_SUBMITTED
-            q2(i,k) = a4(3,i,km)   ! this is not good.
-#else
             q2(i,k) = q1(i,km)
-#endif
          else
 
          do 45 L=k0,km
@@ -3590,11 +3501,7 @@ else ! all others
         delp = pe2(i,k+1) - pe1(i,km+1)
         if(delp > 0.) then
 ! Extended below old ps
-#ifdef NGGPS_SUBMITTED
-           qsum = qsum + delp * a4(3,i,km)    ! not good.
-#else
            qsum = qsum + delp * q1(i,km)
-#endif
           dpsum = dpsum + delp
         endif
 123     q2(i,k) = qsum / dpsum
