@@ -5188,7 +5188,7 @@ end subroutine sedi_heat
 subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
         te, qv, ql, qr, qi, qs, qg, qa, qnl, qni, hs, delz, pt, delp, &
         q_con, cappa, gsize, last_step, condensation, evaporation, &
-        deposition, sublimation)
+        deposition, sublimation, do_sat_adj)
     
     implicit none
     
@@ -5198,7 +5198,7 @@ subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
     
     integer, intent (in) :: is, ie, ks, ke
     
-    logical, intent (in) :: hydrostatic, last_step, consv_te
+    logical, intent (in) :: hydrostatic, last_step, consv_te, do_sat_adj
     
     real, intent (in) :: dtm
     
@@ -5256,7 +5256,7 @@ subroutine fast_sat_adj (dtm, is, ie, ks, ke, hydrostatic, consv_te, &
         qnl, qni, delz, is, ie, ks, ke, dtm, water, rain, ice, snow, graupel, &
         gsize, hs, q_con, cappa, consv_te, te, prefluxw, prefluxr, prefluxi, &
         prefluxs, prefluxg, condensation, deposition, evaporation, sublimation, &
-        last_step, .true., .true., .false.)
+        last_step, .true., do_sat_adj, .false.)
     
 end subroutine fast_sat_adj
 

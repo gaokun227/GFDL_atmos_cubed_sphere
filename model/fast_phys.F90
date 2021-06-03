@@ -148,7 +148,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
     !-----------------------------------------------------------------------
 
     ! Note: pt at this stage is T_v
-    if (do_adiabatic_init .or. do_sat_adj) then
+    if (do_adiabatic_init .or. (.not. do_inline_mp)) then
 
         call timing_on ('fast_sat_adj')
 
@@ -159,7 +159,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 !$OMP                                    liq_wat, ice_wat, snowwat, graupel, q_con, &
 !$OMP                                    sphum, pkz, last_step, consv, te0_2d, gridstruct, &
 !$OMP                                    q, mdt, cld_amt, cappa, rrg, akap, ccn_cm3, &
-!$OMP                                    cin_cm3, inline_mp) &
+!$OMP                                    cin_cm3, inline_mp, do_sat_adj) &
 !$OMP                           private (q2, q3, gsize, dz)
 
         do j = js, je
@@ -202,7 +202,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
                      cappa (isd:, jsd,1:), &
 #endif
                      gsize, last_step, inline_mp%cond (is:ie, j), inline_mp%reevap (is:ie, j), &
-                     inline_mp%dep (is:ie, j), inline_mp%sub (is:ie, j))
+                     inline_mp%dep (is:ie, j), inline_mp%sub (is:ie, j), do_sat_adj)
 
             ! update pkz
             if (.not. hydrostatic) then
@@ -361,12 +361,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 #ifdef USE_COND
                      q_con (is:ie, j, kmp:km), &
 #else
-                     q_con (isd:, jsd,1:), &
+                     q_con (isd:, jsd, 1:), &
 #endif
 #ifdef MOIST_CAPPA
                      cappa (is:ie, j, kmp:km), &
 #else
-                     cappa (isd:, jsd,1:), &
+                     cappa (isd:, jsd, 1:), &
 #endif
                      consv .gt. consv_min, te (is:ie, j, kmp:km), inline_mp%prefluxw(is:ie, j, kmp:km), &
                      inline_mp%prefluxr(is:ie, j, kmp:km), inline_mp%prefluxi(is:ie, j, kmp:km), &
