@@ -76,8 +76,7 @@ contains
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
-                        parent_grid, domain, inline_mp, &
-                        lagrangian_tendency_of_hydrostatic_pressure, time_total)
+                        parent_grid, domain, inline_mp, time_total)
 
     real, intent(IN) :: bdt  ! Large time-step
     real, intent(IN) :: consv_te
@@ -127,7 +126,6 @@ contains
 !-----------------------------------------------------------------------
     real, intent(inout) :: phis(bd%isd:bd%ied,bd%jsd:bd%jed)       ! Surface geopotential (g*Z_surf)
     real, intent(inout) :: omga(bd%isd:bd%ied,bd%jsd:bd%jed,npz)   ! Vertical pressure velocity (pa/s)
-    real, allocatable, intent(inout) :: lagrangian_tendency_of_hydrostatic_pressure(:,:,:) ! More accurate calculation of vertical pressure velocity (pa/s) in non-hydrostatic model
     real, intent(inout) :: uc(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) ! (uc,vc) mostly used as the C grid winds
     real, intent(inout) :: vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
 
@@ -506,8 +504,7 @@ contains
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
-                    domain, n_map==1, i_pack, last_step, &
-                    lagrangian_tendency_of_hydrostatic_pressure, time_total)
+                    domain, n_map==1, i_pack, last_step, time_total)
                                            call timing_off('DYN_CORE')
 
 
@@ -623,7 +620,7 @@ contains
                      hybrid_z, do_omega,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      inline_mp, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
-                     flagstruct%moist_phys, flagstruct%w_limiter, lagrangian_tendency_of_hydrostatic_pressure)
+                     flagstruct%moist_phys, flagstruct%w_limiter)
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split
@@ -655,26 +652,12 @@ contains
                                           reg_bc_update_time )
          endif
 #endif
-
-         if( last_step )  then
-            if( .not. hydrostatic ) then
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,omga,delp,delz,w)
-               do k=1,npz
-                  do j=js,je
-                     do i=is,ie
-                        omga(i,j,k) = delp(i,j,k)/delz(i,j,k)*w(i,j,k)
-                     enddo
-                  enddo
-               enddo
-            endif
 !--------------------------
 ! Filter omega for physics:
 !--------------------------
+         if (last_step) then
             if(flagstruct%nf_omega>0)   then
             call del2_cubed(omga, 0.18*gridstruct%da_min, gridstruct, domain, npx, npy, npz, flagstruct%nf_omega, bd)
-            if (allocated(lagrangian_tendency_of_hydrostatic_pressure)) then
-                call del2_cubed(lagrangian_tendency_of_hydrostatic_pressure, 0.18*gridstruct%da_min, gridstruct, domain, npx, npy, npz, flagstruct%nf_omega, bd)
-             endif
           endif
          endif
       end if

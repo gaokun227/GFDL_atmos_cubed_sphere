@@ -802,7 +802,7 @@ module fv_arrays_mod
 !-----------------------------------------------------------------------
     real, _ALLOCATABLE :: phis(:,:)     _NULL  ! Surface geopotential (g*Z_surf)
     real, _ALLOCATABLE :: omga(:,:,:)   _NULL  ! Vertical pressure velocity (pa/s)
-    real, _ALLOCATABLE :: lagrangian_tendency_of_hydrostatic_pressure(:,:,:) _NULL !< More accurate calculation of vertical pressure velocity in non-hydrostatic model (pa/s)
+    real, _ALLOCATABLE :: local_omga(:,:,:)   _NULL  ! Vertical pressure velocity (pa/s)
     real, _ALLOCATABLE :: ua(:,:,:)     _NULL  ! (ua, va) are mostly used as the A grid winds
     real, _ALLOCATABLE :: va(:,:,:)     _NULL
     real, _ALLOCATABLE :: uc(:,:,:)     _NULL  ! (uc, vc) are mostly used as the C grid winds
@@ -1027,6 +1027,9 @@ contains
     if (Atm%flagstruct%read_ec_sst) allocate ( Atm%ci(is:ie,js:je) )
     allocate ( Atm%phis(isd:ied  ,jsd:jed  ) )
     allocate ( Atm%omga(isd:ied  ,jsd:jed  ,npz) ); Atm%omga=0.
+    if (.not. Atm%flagstruct%hydrostatic) then
+       allocate (Atm%local_omga(isd:ied,jsd:jed,npz)); Atm%local_omga = 0.
+    endif
     allocate (   Atm%ua(isd:ied  ,jsd:jed  ,npz) )
     allocate (   Atm%va(isd:ied  ,jsd:jed  ,npz) )
     allocate (   Atm%uc(isd:ied+1,jsd:jed  ,npz) )
@@ -1371,7 +1374,6 @@ contains
     deallocate (  Atm%pkz )
     deallocate ( Atm%phis )
     deallocate ( Atm%omga )
-    if (allocated(Atm%lagrangian_tendency_of_hydrostatic_pressure)) deallocate ( Atm%lagrangian_tendency_of_hydrostatic_pressure )
     deallocate (   Atm%ua )
     deallocate (   Atm%va )
     deallocate (   Atm%uc )

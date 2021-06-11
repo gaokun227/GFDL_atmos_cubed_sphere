@@ -899,13 +899,6 @@ contains
                'theta_e', 'K', missing_value=missing_value )
           id_omga = register_diag_field ( trim(field), 'omega', axes(1:3), Time,      &
                'omega', 'Pa/s', missing_value=missing_value )
-          id_lagrangian_tendency_of_hydrostatic_pressure = &
-               register_diag_field(trim(field), 'lagrangian_tendency_of_hydrostatic_pressure',&
-               axes(1:3), Time, 'lagrangian_tendency_of_hydrostatic_pressure',&
-               'Pa/s', missing_value=missing_value)
-          if (.not. allocated(Atm(n)%lagrangian_tendency_of_hydrostatic_pressure)) then
-             allocate(Atm(n)%lagrangian_tendency_of_hydrostatic_pressure(isd:ied,jsd:jed,1:npz))
-          endif
           idiag%id_divg  = register_diag_field ( trim(field), 'divg', axes(1:3), Time,      &
                'mean divergence', '1/s', missing_value=missing_value )
 
@@ -3469,7 +3462,6 @@ contains
 
        if(id_pt   > 0) used=send_data(id_pt  , Atm(n)%pt  (isc:iec,jsc:jec,:), Time)
        if(id_omga > 0) used=send_data(id_omga, Atm(n)%omga(isc:iec,jsc:jec,:), Time)
-       if(id_lagrangian_tendency_of_hydrostatic_pressure > 0) used=send_data(id_lagrangian_tendency_of_hydrostatic_pressure, Atm(n)%lagrangian_tendency_of_hydrostatic_pressure(isc:iec,jsc:jec,:), Time)
        
        allocate( a3(isc:iec,jsc:jec,npz) )
        if(id_theta_e > 0 ) then
