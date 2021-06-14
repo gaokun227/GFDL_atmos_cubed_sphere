@@ -1028,7 +1028,7 @@ contains
     if (Atm%flagstruct%read_ec_sst) allocate ( Atm%ci(is:ie,js:je) )
     allocate ( Atm%phis(isd:ied  ,jsd:jed  ) )
     allocate ( Atm%omga(isd:ied  ,jsd:jed  ,npz) ); Atm%omga=0.
-    if (.not. Atm%flagstruct%hydrostatic) then
+    if (.not. Atm%flagstruct%hydrostatic .and. .not. Atm%flagstruct%pass_full_omega_to_physics_in_non_hydrostatic_mode) then
        allocate (Atm%local_omga(isd:ied,jsd:jed,npz)); Atm%local_omga = 0.
     endif
     allocate (   Atm%ua(isd:ied  ,jsd:jed  ,npz) )

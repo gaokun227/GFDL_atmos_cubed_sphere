@@ -485,7 +485,7 @@ contains
 
     end do !p_split
 
-     if (.not. Atm(n)%flagstruct%hydrostatic) then
+    if (.not. Atm(n)%flagstruct%hydrostatic .and. .not. Atm(n)%flagstruct%pass_full_omega_to_physics_in_non_hydrostatic_mode) then
         Atm(n)%local_omga(isc:iec,jsc:jec,1:npz) = Atm(n)%delp(isc:iec,jsc:jec,1:npz) / Atm(n)%delz(isc:iec,jsc:jec,1:npz) * Atm(n)%w(isc:iec,jsc:jec,1:npz)
         if(Atm(n)%flagstruct%nf_omega>0)   then
            call del2_cubed(&
@@ -1629,7 +1629,7 @@ contains
    if (.not. Atm(mygrid)%flagstruct%hydrostatic .and. .not. Atm(mygrid)%flagstruct%pass_full_omega_to_physics_in_non_hydrostatic_mode) then
       omega_for_physics => Atm(mygrid)%local_omga
    else
-      omega_for_physcs => Atm(mygrid)%omga
+      omega_for_physics => Atm(mygrid)%omga
    endif
    
 !---------------------------------------------------------------------

@@ -164,7 +164,7 @@ contains
       integer :: sphum, liq_wat = -999, ice_wat = -999      ! GFDL physics
       integer :: rainwat = -999, snowwat = -999, graupel = -999, cld_amt = -999
       integer :: theta_d = -999
-      logical used, last_step, do_omega
+      logical used, last_step
       integer, parameter :: max_packs=13
       type(group_halo_update_type), save :: i_pack(max_packs)
       integer :: is,  ie,  js,  je
@@ -576,7 +576,6 @@ contains
             if ( iq==cld_amt )  kord_tracer(iq) = 9      ! monotonic
          enddo
 
-         do_omega = hydrostatic .and. last_step
                                                   call timing_on('Remapping')
 #ifdef AVEC_TIMERS
                                                   call avec_timer_start(6)
@@ -617,7 +616,7 @@ contains
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
                      idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, &
-                     hybrid_z, do_omega,     &
+                     hybrid_z,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      inline_mp, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
                      flagstruct%moist_phys, flagstruct%w_limiter)
