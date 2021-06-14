@@ -484,6 +484,7 @@ module fv_arrays_mod
   integer :: nrows_blend = 0          !< # of blending rows in the outer integration domain.
   logical :: write_restart_with_bcs = .false.   !< Default setting for using DA-updated BC files
   logical :: regional_bcs_from_gsi = .false.    !< Default setting for writing restart files with boundary rows.
+  logical :: pass_full_omega_to_physics_in_non_hydrostatic_mode = .false.  !< Default to passing local omega to physics in non-hydrostatic mode
 
   end type fv_flags_type
 

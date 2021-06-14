@@ -1613,7 +1613,7 @@ contains
    real(kind=kind_phys) :: rTv, dm, qgrs_rad
    integer :: nb, blen, npz, i, j, k, ix, k1, dnats, nq_adv, isd, ied, jsd, jed
 
-   real, pointer :: physics_omega(:,:,:)
+   real, pointer :: omega_for_physics(:,:,:)
 !!! NOTES: lmh 6nov15
 !!! - "Layer" means "layer mean", ie. the average value in a layer
 !!! - "Level" means "level interface", ie the point values at the top or bottom of a layer
@@ -1626,10 +1626,10 @@ contains
    dnats = Atm(mygrid)%flagstruct%dnats
    nq_adv = nq - dnats
    
-   if (.not. Atm(mygrid)%flagstruct%hydrostatic) then
-      physics_omega => Atm(mygrid)%local_omga
+   if (.not. Atm(mygrid)%flagstruct%hydrostatic .and. .not. Atm(mygrid)%flagstruct%pass_full_omega_to_physics_in_non_hydrostatic_mode) then
+      omega_for_physics => Atm(mygrid)%local_omga
    else
-      physics_omega => Atm(mygrid)%omga
+      omega_for_physcs => Atm(mygrid)%omga
    endif
    
 !---------------------------------------------------------------------
@@ -1638,7 +1638,7 @@ contains
 !$OMP parallel do default (none) &
 !$OMP             shared  (Atm_block, Atm, IPD_Data, npz, nq, ncnst, sphum, liq_wat, &
 !$OMP                      ice_wat, rainwat, snowwat, graupel, pk0inv, ptop,   &
-!$OMP                      pktop, zvir, mygrid, dnats, nq_adv, physics_omega) &
+!$OMP                      pktop, zvir, mygrid, dnats, nq_adv, omega_for_physics) &
 !$OMP             private (dm, nb, blen, i, j, ix, k1, rTv, qgrs_rad)
 
    do nb = 1,Atm_block%nblks
@@ -1680,7 +1680,7 @@ contains
          IPD_Data(nb)%Statein%tgrs(ix,k) = _DBL_(_RL_(Atm(mygrid)%pt(i,j,k1)))
          IPD_Data(nb)%Statein%ugrs(ix,k) = _DBL_(_RL_(Atm(mygrid)%ua(i,j,k1)))
          IPD_Data(nb)%Statein%vgrs(ix,k) = _DBL_(_RL_(Atm(mygrid)%va(i,j,k1)))
-          IPD_Data(nb)%Statein%vvl(ix,k) = _DBL_(_RL_(physics_omega(i,j,k1)))
+          IPD_Data(nb)%Statein%vvl(ix,k) = _DBL_(_RL_(omega_for_physics(i,j,k1)))
          IPD_Data(nb)%Statein%prsl(ix,k) = _DBL_(_RL_(Atm(mygrid)%delp(i,j,k1)))   ! Total mass
 
          if (.not.Atm(mygrid)%flagstruct%hydrostatic .and. (.not.Atm(mygrid)%flagstruct%use_hydro_pressure))  &
