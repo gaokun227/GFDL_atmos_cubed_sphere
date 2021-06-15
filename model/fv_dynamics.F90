@@ -299,7 +299,7 @@ contains
 !$OMP                          private(cvm)
        do k=1,npz
           if ( flagstruct%moist_phys ) then
-          do j=js,je
+             do j=js,je
 #ifdef MOIST_CAPPA
              call moist_cv(is,ie,isd,ied,jsd,jed, npz, j, k, nwat, sphum, liq_wat, rainwat,    &
                            ice_wat, snowwat, graupel, q, q_con(is:ie,j,k), cvm)
@@ -318,12 +318,15 @@ contains
 !                                      (1.-q(i,j,k,sphum))/delz(i,j,k)) )
 #endif
              enddo
-          enddo
+             enddo
           else
             do j=js,je
                do i=is,ie
                   dp1(i,j,k) = 0.
                   pkz(i,j,k) = exp(kappa*log(rdg*delp(i,j,k)*pt(i,j,k)/delz(i,j,k)))
+#ifdef MOIST_CAPPA
+                  cappa(i,j,k) = kappa
+#endif
                enddo
             enddo
           endif
@@ -611,7 +614,6 @@ contains
 #endif
 
      endif
-
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
                      pkz, pk, mdt, bdt, npx, npy, npz, is,ie,js,je, isd,ied,jsd,jed,       &
                      nr, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
@@ -623,7 +625,8 @@ contains
                      hybrid_z, do_omega,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      inline_mp, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
-                     flagstruct%moist_phys, flagstruct%w_limiter, lagrangian_tendency_of_hydrostatic_pressure)
+                     flagstruct%moist_phys, flagstruct%w_limiter, flagstruct%do_am4_remap, &
+                     lagrangian_tendency_of_hydrostatic_pressure)
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split

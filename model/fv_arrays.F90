@@ -420,6 +420,7 @@ module fv_arrays_mod
                                       !    damp_k_k1 = 0.2         damp_k_k2 = 0.12
 
    logical :: fv_land = .false.       ! To cold starting the model with USGS terrain
+   logical :: do_am4_remap = .false.   ! Use AM4 vertical remapping operators
 !--------------------------------------------------------------------------------------
 ! The following options are useful for NWP experiments using datasets on the lat-lon grid
 !--------------------------------------------------------------------------------------
