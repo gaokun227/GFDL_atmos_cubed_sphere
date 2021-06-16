@@ -197,12 +197,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 #ifdef USE_COND
                      q_con (is:ie, j, kmp:km), &
 #else
-                     q_con (isd:, jsd,1:), &
+                     q_con (isd:, jsd, 1:), &
 #endif
 #ifdef MOIST_CAPPA
                      cappa (is:ie, j, kmp:km), &
 #else
-                     cappa (isd:, jsd,1:), &
+                     cappa (isd:, jsd, 1:), &
 #endif
                      gsize, last_step, inline_mp%cond (is:ie, j), inline_mp%reevap (is:ie, j), &
                      inline_mp%dep (is:ie, j), inline_mp%sub (is:ie, j), do_sat_adj)
