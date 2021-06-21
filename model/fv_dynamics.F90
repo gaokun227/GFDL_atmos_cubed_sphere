@@ -383,6 +383,11 @@ contains
 #endif
 
 #ifndef SW_DYNAMICS
+      ! BUG: If MOIST_CAPPA+USE_COND are set and adiabatic = true then
+      ! if k_split = 1, then pt is not correctly converted back to T
+      ! after L2E. If any of these conditions are relaxed this doesn't
+      ! happen. The problem appears to be that pkz isn't correctly
+      ! re-computed in this case --- lmh 13 May 21
 ! Convert pt to virtual potential temperature on the first timestep
   if ( flagstruct%adiabatic .and. flagstruct%kord_tm>0 ) then
      if ( .not.pt_initialized )then
@@ -623,6 +628,7 @@ contains
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split
        call prt_mxm('T_dyn_a4',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
+       call prt_mxm('pkz',         pkz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
        call prt_mxm('SPHUM_dyn',   q(isd,jsd,1,sphum  ), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
        call prt_mxm('liq_wat_dyn', q(isd,jsd,1,liq_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
        call prt_mxm('rainwat_dyn', q(isd,jsd,1,rainwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
