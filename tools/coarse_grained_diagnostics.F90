@@ -177,14 +177,6 @@ contains
     index = index + 1
     coarse_diagnostics(index)%axes = 3
     coarse_diagnostics(index)%module_name = DYNAMICS
-    coarse_diagnostics(index)%name = 'lagrangian_tendency_of_hydrostatic_pressure_coarse'
-    coarse_diagnostics(index)%description = 'coarse-grained lagrangian tendency of hydrostatic pressure'
-    coarse_diagnostics(index)%units = 'Pa/s'
-    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
-
-    index = index + 1
-    coarse_diagnostics(index)%axes = 3
-    coarse_diagnostics(index)%module_name = DYNAMICS
     coarse_diagnostics(index)%name = 'vertical_eddy_flux_of_temperature_coarse'
     coarse_diagnostics(index)%description = 'vertical eddy flux of temperature'
     coarse_diagnostics(index)%units = 'K Pa/s'
@@ -1021,17 +1013,6 @@ contains
              Atm(tile_count)%nudge_diag%nudge_v_dt(is:ie,js:je,1:npz) = 0.0
           endif
           coarse_diagnostic%data%var3 => Atm(tile_count)%nudge_diag%nudge_v_dt(is:ie,js:je,1:npz)
-       elseif (trim(coarse_diagnostic%name) .eq. 'lagrangian_tendency_of_hydrostatic_pressure_coarse') then
-          if (.not. allocated(Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure)) then
-             allocate(Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure(isd:ied,jsd:jed,1:npz))
-             Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure = 0.0
-          endif
-          coarse_diagnostic%data%var3 => Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure(is:ie,js:je,1:npz)
-       elseif (trim(coarse_diagnostic%reduction_method) .eq. EDDY_COVARIANCE) then
-          if (.not. allocated(Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure)) then
-             allocate(Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure(isd:ied,jsd:jed,1:npz))
-             Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure = 0.0
-          endif
        elseif (ends_with(coarse_diagnostic%name, 'qv_dt_gfdlmp_coarse')) then
           if (.not. allocated(Atm(tile_count)%inline_mp%qv_dt)) then
              allocate(Atm(tile_count)%inline_mp%qv_dt(is:ie,js:je,1:npz))
@@ -1300,13 +1281,13 @@ contains
             call coarse_grain_3D_field_on_model_levels(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz, &
                  coarse_diagnostics(index), Atm(tile_count)%gridstruct%area(is:ie,js:je),&
                  mass, &
-                 Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure(is:ie,js:je,1:npz), &
+                 Atm(tile_count)%omga(is:ie,js:je,1:npz), &
                  work_3d_coarse)
           else if (trim(Atm(tile_count)%coarse_graining%strategy) .eq. PRESSURE_LEVEL) then
              call coarse_grain_3D_field_on_pressure_levels(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz, &
                  coarse_diagnostics(index), masked_area, mass, phalf, &
                  upsampled_coarse_phalf, Atm(tile_count)%ptop, &
-                 Atm(tile_count)%lagrangian_tendency_of_hydrostatic_pressure(is:ie,js:je,1:npz),&
+                 Atm(tile_count)%omga(is:ie,js:je,1:npz),&
                  work_3d_coarse)
           else
             write(error_message, *) 'fv_coarse_diag: invalid coarse-graining strategy provided for 3D variables, ' // &
