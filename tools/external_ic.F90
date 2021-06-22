@@ -2892,7 +2892,7 @@ contains
 !----------------------------------------------------
 ! Compute true temperature using hydrostatic balance
 !----------------------------------------------------
-      if (source_fv3gfs .or. .not. present(t_in)) then
+      if ( .not. source_fv3gfs .or. .not. present(t_in)) then
          do k=1,npz
 !        qc = 1.-(Atm%q(i,j,k,liq_wat)+Atm%q(i,j,k,rainwat)+Atm%q(i,j,k,ice_wat)+Atm%q(i,j,k,snowwat))
 !        Atm%pt(i,j,k) = (gz_fv(k)-gz_fv(k+1))*qc/( rdgas*(pn1(i,k+1)-pn1(i,k))*(1.+zvir*Atm%q(i,j,k,sphum)) )
@@ -2924,7 +2924,7 @@ contains
 ! seperate cloud water and cloud ice from Jan-Huey Chen's HiRAM code
 ! only use for NCEP IC and GFDL microphy
 !-----------------------------------------------------------------------
-   if (source_fv3gfs) then
+   if ( .not. source_fv3gfs) then
       if ((Atm%flagstruct%nwat .eq. 3 .or. Atm%flagstruct%nwat .eq. 6) .and. &
            (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%nggps_ic)) then
          do k=1,npz
