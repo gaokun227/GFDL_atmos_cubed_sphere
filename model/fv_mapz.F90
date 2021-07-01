@@ -65,9 +65,9 @@ contains
                       akap, cappa, kord_mt, kord_wz, kord_tr, kord_tm,  peln, te0_2d,        &
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, out_dt, dtdt,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
-                      hydrostatic, hybrid_z, do_omega, adiabatic, do_adiabatic_init, &
+                      hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
-                      moist_phys, w_limiter, do_am4_remap, lagrangian_tendency_of_hydrostatic_pressure)
+                      moist_phys, w_limiter, do_am4_remap)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
   logical, intent(in):: w_limiter
@@ -100,7 +100,7 @@ contains
   logical, intent(in):: do_inline_mp
   logical, intent(in):: fill                  ! fill negative tracers
   logical, intent(in):: reproduce_sum
-  logical, intent(in):: do_omega, adiabatic, do_adiabatic_init
+  logical, intent(in):: adiabatic, do_adiabatic_init
   real, intent(in) :: ptop
   real, intent(in) :: ak(km+1)
   real, intent(in) :: bk(km+1)
@@ -132,7 +132,6 @@ contains
   real, intent(inout)::   ua(isd:ied,jsd:jed,km)   ! u-wind (m/s) on physics grid
   real, intent(inout)::   va(isd:ied,jsd:jed,km)   ! v-wind (m/s) on physics grid
   real, intent(inout):: omga(isd:ied,jsd:jed,km)   ! vertical press. velocity (pascal/sec)
-  real, allocatable, intent(inout):: lagrangian_tendency_of_hydrostatic_pressure(:,:,:)   !< More accurate calculation of vertical pressure velocity in non-hydrostatic model
   real, intent(inout)::   peln(is:ie,km+1,js:je)     ! log(pe)
   real, intent(inout)::   dtdt(is:ie,js:je,km)
   real, intent(out)::    pkz(is:ie,js:je,km)       ! layer-mean pk for converting t to pt
@@ -158,7 +157,6 @@ contains
   real, dimension(isd:ied,jsd:jed,km):: qnl, qni
 
   real rcp, rg, rrg, bkh, dtmp, k1k
-  real, allocatable, dimension(:,:) :: vulcan_pe3
   logical:: fast_mp_consv
   integer:: i,j,k
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
@@ -178,8 +176,6 @@ contains
        ccn_cm3 = get_tracer_index (MODEL_ATMOS, 'ccn_cm3')
        cin_cm3 = get_tracer_index (MODEL_ATMOS, 'cin_cm3')
 
-       if (allocated(lagrangian_tendency_of_hydrostatic_pressure)) allocate(vulcan_pe3(is:ie+1,km+1))
-
        if ( do_adiabatic_init .or. do_sat_adj ) then
             fast_mp_consv = (.not.do_adiabatic_init) .and. consv>consv_min
             do k=1,km
@@ -194,9 +190,9 @@ contains
 !$OMP                                  graupel,q_con,sphum,cappa,r_vir,rcp,k1k,delp, &
 !$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
-!$OMP hs,w,ws,kord_wz,do_omega,omga,lagrangian_tendency_of_hydrostatic_pressure,rrg,kord_mt,pe4,w_limiter,do_am4_remap)    &
+!$OMP hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,pe4,w_limiter,do_am4_remap)    &
 !$OMP                          private(gz,cvm,kp,k_next,bkh,dp2,   &
-!$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2,w2,vulcan_pe3)
+!$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2,w2)
   do 1000 j=js,je+1
 
      do k=1,km+1
@@ -439,8 +435,8 @@ contains
    enddo
 
 !----------------
-   if ( do_omega ) then
-! Start do_omega
+   if ( last_step ) then
+! Start do_last_step
 ! Copy omega field to pe3
       do i=is,ie
          pe3(i,1) = 0.
@@ -451,17 +447,6 @@ contains
          enddo
       enddo
    endif
-
-   if (last_step .and. allocated(lagrangian_tendency_of_hydrostatic_pressure)) then
-       do i=is,ie
-          vulcan_pe3(i,1) = 0.
-       enddo
-       do k=2,km+1
-          do i=is,ie
-             vulcan_pe3(i,k) = lagrangian_tendency_of_hydrostatic_pressure(i,j,k-1)
-          enddo
-       enddo
-    endif
    
    do k=1,km+1
       do i=is,ie
@@ -514,7 +499,7 @@ contains
    endif
 
 ! Interpolate omega/pe3 (defined at pe0) to remapped cell center (dp2)
-   if ( do_omega ) then
+   if ( last_step ) then
    do k=1,km
       do i=is,ie
          dp2(i,k) = 0.5*(peln(i,k,j) + peln(i,k+1,j))
@@ -534,30 +519,8 @@ contains
           enddo
        enddo
    enddo
-   endif     ! end do_omega
+   endif     ! end last_step
 
-   if ( last_step .and. allocated(lagrangian_tendency_of_hydrostatic_pressure)) then
-       do k=1,km
-          do i=is,ie
-             dp2(i,k) = 0.5*(peln(i,k,j) + peln(i,k+1,j))
-          enddo
-       enddo
-       do i=is,ie
-           k_next = 1
-           do n=1,km
-              kp = k_next
-              do k=kp,km
-                 if( dp2(i,n) <= pe0(i,k+1) .and. dp2(i,n) >= pe0(i,k) ) then
-                     lagrangian_tendency_of_hydrostatic_pressure(i,j,n) = vulcan_pe3(i,k)  +  (vulcan_pe3(i,k+1) - vulcan_pe3(i,k)) *    &
-                           (dp2(i,n)-pe0(i,k)) / (pe0(i,k+1)-pe0(i,k) )
-                     k_next = k
-                     exit
-                 endif
-              enddo
-           enddo      
-       enddo
-    endif     ! end last_step
-   
   endif !(j < je+1)
 
       do i=is,ie+1
