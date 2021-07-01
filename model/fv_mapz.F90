@@ -190,7 +190,7 @@ contains
 !$OMP                                  graupel,q_con,sphum,cappa,r_vir,rcp,k1k,delp, &
 !$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
-!$OMP hs,w,ws,kord_wz,do_omega,omga,rrg,kord_mt,pe4,w_limiter,do_am4_remap)    &
+!$OMP                                  hs,w,ws,kord_wz,omga,rrg,kord_mt,pe4,w_limiter,do_am4_remap)    &
 !$OMP                          private(gz,cvm,kp,k_next,bkh,dp2,   &
 !$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2,w2)
   do 1000 j=js,je+1

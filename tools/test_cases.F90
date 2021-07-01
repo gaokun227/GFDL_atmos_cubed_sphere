@@ -3287,35 +3287,32 @@
 
         if (nsolitons > 0) then
            p0(1) = p0(1) + pi
-           do k=1,npz
-              do j=js,je
-                 do i=is,ie+1
-                    p1(:) = grid(i  ,j ,1:2)
-                    p2(:) = grid(i,j+1 ,1:2)
-                    call mid_pt_sphere(p1, p2, p3)
-                    r = great_circle_dist( p0, p3, radius )
-                    utmp = ubar*exp(-(r/r0)**2)
-                    call get_unit_vect2(p1, p2, e2)
-                    call get_latlon_vector(p3, ex, ey)
-                    v(i,j,k) = v(i,j,k) - utmp*inner_prod(e2,ex)
-                 enddo
+           do j=js,je
+              do i=is,ie+1
+                 p1(:) = grid(i  ,j ,1:2)
+                 p2(:) = grid(i,j+1 ,1:2)
+                 call mid_pt_sphere(p1, p2, p3)
+                 r = great_circle_dist( p0, p3, radius )
+                 utmp = ubar*exp(-(r/r0)**2)
+                 call get_unit_vect2(p1, p2, e2)
+                 call get_latlon_vector(p3, ex, ey)
+                 v(i,j,k) = v(i,j,k) - utmp*inner_prod(e2,ex)
               enddo
-              do j=js,je+1
-                 do i=is,ie
-                    p1(:) = grid(i,  j,1:2)
-                    p2(:) = grid(i+1,j,1:2)
-                    call mid_pt_sphere(p1, p2, p3)
-                    r = great_circle_dist( p0, p3, radius )
-                    utmp = ubar*exp(-(r/r0)**2)
-                    call get_unit_vect2(p1, p2, e1)
-                    call get_latlon_vector(p3, ex, ey)
-                    u(i,j,k) = u(i,j,k) - utmp*inner_prod(e1,ex)
-                 enddo
+           enddo
+           do j=js,je+1
+              do i=is,ie
+                 p1(:) = grid(i,  j,1:2)
+                 p2(:) = grid(i+1,j,1:2)
+                 call mid_pt_sphere(p1, p2, p3)
+                 r = great_circle_dist( p0, p3, radius )
+                 utmp = ubar*exp(-(r/r0)**2)
+                 call get_unit_vect2(p1, p2, e1)
+                 call get_latlon_vector(p3, ex, ey)
+                 u(i,j,k) = u(i,j,k) - utmp*inner_prod(e1,ex)
               enddo
            enddo
         endif
 
-        do k=1,npz
            do j=js,je
               do i=is,ie
                  pkz(i,j,k) = (pk(i,j,k+1)-pk(i,j,k))/(kappa*(peln(i,k+1,j)-peln(i,k,j)))
