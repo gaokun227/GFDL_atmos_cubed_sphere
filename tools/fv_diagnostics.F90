@@ -1351,7 +1351,7 @@ contains
     if(id_theta_e >0 ) call qsmith_init
 #endif
 
-    call fv_diag_column_init(Atm(n), yr_init, mo_init, dy_init, hr_init, do_diag_debug, do_diag_sonde, sound_freq)
+    call fv_diag_column_init(Atm(n), yr_init, mo_init, dy_init, hr_init, do_diag_debug, do_diag_sonde, sound_freq, m_calendar)
 
  end subroutine fv_diag_init
 
@@ -1666,6 +1666,14 @@ contains
     ! if (id_c_grid_vcomp > 0) used = send_data(id_c_grid_vcomp, Atm(n)%vc(isc:iec,jsc:jec+1,1:npz), Time)
 
 #ifdef DYNAMICS_ZS
+    !This is here for idealized test cases that modify the topography in time
+       do j=jsc,jec
+       do i=isc,iec
+          zsurf(i,j) = ginv * Atm(n)%phis(i,j)
+       enddo
+       enddo
+
+
        if(id_zsurf > 0)  used=send_data(id_zsurf, zsurf, Time)
 #endif
        if(id_ps > 0) used=send_data(id_ps, Atm(n)%ps(isc:iec,jsc:jec), Time)

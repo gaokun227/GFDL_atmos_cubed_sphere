@@ -3285,9 +3285,40 @@
            enddo
         enddo
 
-        do j=js,je
-           do i=is,ie
-              pkz(i,j,k) = (pk(i,j,k+1)-pk(i,j,k))/(kappa*(peln(i,k+1,j)-peln(i,k,j)))
+        if (nsolitons > 0) then
+           p0(1) = p0(1) + pi
+           do k=1,npz
+              do j=js,je
+                 do i=is,ie+1
+                    p1(:) = grid(i  ,j ,1:2)
+                    p2(:) = grid(i,j+1 ,1:2)
+                    call mid_pt_sphere(p1, p2, p3)
+                    r = great_circle_dist( p0, p3, radius )
+                    utmp = ubar*exp(-(r/r0)**2)
+                    call get_unit_vect2(p1, p2, e2)
+                    call get_latlon_vector(p3, ex, ey)
+                    v(i,j,k) = v(i,j,k) - utmp*inner_prod(e2,ex)
+                 enddo
+              enddo
+              do j=js,je+1
+                 do i=is,ie
+                    p1(:) = grid(i,  j,1:2)
+                    p2(:) = grid(i+1,j,1:2)
+                    call mid_pt_sphere(p1, p2, p3)
+                    r = great_circle_dist( p0, p3, radius )
+                    utmp = ubar*exp(-(r/r0)**2)
+                    call get_unit_vect2(p1, p2, e1)
+                    call get_latlon_vector(p3, ex, ey)
+                    u(i,j,k) = u(i,j,k) - utmp*inner_prod(e1,ex)
+                 enddo
+              enddo
+           enddo
+        endif
+
+        do k=1,npz
+           do j=js,je
+              do i=is,ie
+                 pkz(i,j,k) = (pk(i,j,k+1)-pk(i,j,k))/(kappa*(peln(i,k+1,j)-peln(i,k,j)))
 #ifdef USE_PT
               pt(i,j,k) = pt0/p00**kappa
 ! Convert back to temperature:
@@ -5749,19 +5780,9 @@ end subroutine terminator_tracers
 !      if ( (is_master()) ) write(*,*) k, temp1, rh(k)
        if ( pk(k) > 0. ) then
             pp(k) = exp(log(pk(k))/kappa)
-#ifdef SUPER_K
-            qs(k) = 380./pp(k)*exp(17.27*(temp1-273.)/(temp1-36.))
-            qs(k) = min( qv0, rh(k)*qs(k) )
-            if ( (is_master()) ) write(*,*) 0.01*pp(k), qs(k)
-#else
-
-#ifdef USE_MIXED_TABLE
-            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
-#else
             qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
-#endif
-
-#endif
+            !qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+            if ( (is_master()) ) write(*,*) 0.001*pp(k), qs(k)
        else
             if ( (is_master()) ) write(*,*) n, k, pk(k)
             call mpp_error(FATAL, 'Super-Cell case: pk < 0')
