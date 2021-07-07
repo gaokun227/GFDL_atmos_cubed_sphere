@@ -392,32 +392,7 @@ contains
 #endif
 
 #ifndef SW_DYNAMICS
-      ! BUG: If MOIST_CAPPA+USE_COND are set and adiabatic = true then
-      ! if k_split = 1, then pt is not correctly converted back to T
-      ! after L2E. If any of these conditions are relaxed this doesn't
-      ! happen. The problem appears to be that pkz isn't correctly
-      ! re-computed in this case --- lmh 13 May 21
 ! Convert pt to virtual potential temperature on the first timestep
-!  if ( flagstruct%adiabatic .and. flagstruct%kord_tm>0 ) then
-!     if ( .not.pt_initialized )then
-!!$OMP parallel do default(none) shared(theta_d,is,ie,js,je,npz,pt,pkz,q)
-!       do k=1,npz
-!          do j=js,je
-!             do i=is,ie
-!                pt(i,j,k) = pt(i,j,k)/pkz(i,j,k)
-!             enddo
-!          enddo
-!          if ( theta_d>0 ) then
-!             do j=js,je
-!                do i=is,ie
-!                   q(i,j,k,theta_d) = pt(i,j,k)
-!                enddo
-!             enddo
-!          endif
-!       enddo
-!       pt_initialized = .true.
-!     endif
-!  else
 !$OMP parallel do default(none) shared(is,ie,js,je,npz,pt,dp1,pkz,q_con)
   do k=1,npz
      do j=js,je
@@ -430,7 +405,6 @@ contains
         enddo
      enddo
   enddo
-!  endif
 #endif
 
   last_step = .false.
