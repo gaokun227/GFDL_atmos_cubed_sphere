@@ -980,8 +980,8 @@ module sw_core_mod
 !    endif
         call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
                       xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
-                      mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v)
-!                     mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t)
+                      mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v) !SHiELD
+!                     mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t) !AM4
 #endif
 
      if ( inline_q ) then
