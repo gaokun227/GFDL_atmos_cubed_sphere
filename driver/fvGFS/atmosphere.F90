@@ -65,6 +65,7 @@ use fv_arrays_mod,      only: fv_atmos_type, R_GRID, fv_grid_bounds_type, phys_d
 use fv_control_mod,     only: fv_control_init, fv_end, ngrids
 use fv_eta_mod,         only: get_eta_level
 use fv_fill_mod,        only: fill_gfs
+use dyn_core_mod,       only: del2_cubed
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
 use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time, prt_maxmin, prt_height
@@ -467,9 +468,8 @@ contains
                       Atm(n)%flagstruct%hybrid_z,                          &
                       Atm(n)%gridstruct, Atm(n)%flagstruct,                &
                       Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
-                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp, &
-                      Atm(n)%lagrangian_tendency_of_hydrostatic_pressure)
-
+                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp)
+     
      call timing_off('fv_dynamics')
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
@@ -480,6 +480,24 @@ contains
     endif
 
     end do !p_split
+
+    if (.not. Atm(n)%flagstruct%hydrostatic .and. .not. Atm(n)%flagstruct%pass_full_omega_to_physics_in_non_hydrostatic_mode) then
+        Atm(n)%local_omga(isc:iec,jsc:jec,1:npz) = Atm(n)%delp(isc:iec,jsc:jec,1:npz) / Atm(n)%delz(isc:iec,jsc:jec,1:npz) * Atm(n)%w(isc:iec,jsc:jec,1:npz)
+        if(Atm(n)%flagstruct%nf_omega>0)   then
+           call del2_cubed(&
+                Atm(n)%local_omga, &
+                0.18*Atm(n)%gridstruct%da_min, &
+                Atm(n)%gridstruct, &
+                Atm(n)%domain, &
+                Atm(n)%npx, &
+                Atm(n)%npy, &
+                Atm(n)%npz, &
+                Atm(n)%flagstruct%nf_omega, &
+                Atm(n)%bd)
+        endif
+     endif
+
+ 
     call mpp_clock_end (id_dynam)
 
 !-----------------------------------------------------
@@ -631,7 +649,13 @@ contains
 
    if (present(p_hydro)) p_hydro = Atm(mygrid)%flagstruct%phys_hydrostatic
    if (present(  hydro))   hydro = Atm(mygrid)%flagstruct%hydrostatic
-   if (present(tile_num)) tile_num = Atm(mygrid)%tile_of_mosaic
+   if (present(tile_num)) then
+     if (Atm(mygrid)%gridstruct%nested) then
+       tile_num = Atm(mygrid)%tile_of_mosaic + 6
+     else
+       tile_num = Atm(mygrid)%tile_of_mosaic
+     endif
+   endif
  end subroutine atmosphere_control_data
 
 
@@ -778,14 +802,22 @@ contains
    !--- if needed, flip the indexing during this step
    if (flip) then
      if (.not. relative) then
-       z(:,:,1) = Atm(mygrid)%phis(:,:)/grav
+       do j = jsc, jec
+       do i = isc, iec
+         z(i-isc+1,j-jsc+1,1) = Atm(mygrid)%phis(i,j)/grav
+       enddo
+       enddo
      endif
      do k = 2,npz+1
        z(:,:,k) = z(:,:,k-1) - dz(:,:,npz+2-k)
      enddo
    else
      if (.not. relative) then
-       z(:,:,npz+1) = Atm(mygrid)%phis(:,:)/grav
+       do j = jsc, jec
+       do i = isc, iec
+         z(i-isc+1,j-jsc+1,npz+1) = Atm(mygrid)%phis(i,j)/grav
+       enddo
+       enddo
      endif
      do k = npz,1,-1
        z(:,:,k) = z(:,:,k+1) - dz(:,:,k)
@@ -895,7 +927,7 @@ contains
    logical, optional, intent(in) :: init
 
    if (PRESENT(init)) then
-     if (init == .true.) then
+     if (init .eqv. .true.) then
        call fv_nggps_diag_init(Atm(mygrid:mygrid), Atm(mygrid)%atmos_axes, Time)
        return
      else
@@ -1407,7 +1439,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
 ! Backward
     call fv_dynamics(Atm(mygrid)%npx, Atm(mygrid)%npy, npz,  nq, Atm(mygrid)%ng, -dt_atmos, 0.,      &
                      Atm(mygrid)%flagstruct%fill, Atm(mygrid)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1421,7 +1453,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mygrid, nudge_dz, dz0) &
@@ -1493,7 +1525,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
 ! Forward call
     call fv_dynamics(Atm(mygrid)%npx, Atm(mygrid)%npy, npz,  nq, Atm(mygrid)%ng, dt_atmos, 0.,      &
                      Atm(mygrid)%flagstruct%fill, Atm(mygrid)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1507,7 +1539,7 @@ contains
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
-                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%lagrangian_tendency_of_hydrostatic_pressure)
+                     Atm(mygrid)%domain, Atm(mygrid)%inline_mp)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mygrid) &
@@ -1572,8 +1604,9 @@ contains
    real(kind=kind_phys), parameter:: qmin = 1.0e-10
    real(kind=kind_phys):: pk0inv, ptop, pktop
    real(kind=kind_phys) :: rTv, dm, qgrs_rad
-   integer :: nb, blen, npz, i, j, k, ix, k1, dnats, nq_adv
+   integer :: nb, blen, npz, i, j, k, ix, k1, dnats, nq_adv, isd, ied, jsd, jed
 
+   real, pointer :: omega_for_physics(:,:,:)
 !!! NOTES: lmh 6nov15
 !!! - "Layer" means "layer mean", ie. the average value in a layer
 !!! - "Level" means "level interface", ie the point values at the top or bottom of a layer
@@ -1585,14 +1618,20 @@ contains
    npz = Atm_block%npz
    dnats = Atm(mygrid)%flagstruct%dnats
    nq_adv = nq - dnats
-
+   
+   if (.not. Atm(mygrid)%flagstruct%hydrostatic .and. .not. Atm(mygrid)%flagstruct%pass_full_omega_to_physics_in_non_hydrostatic_mode) then
+      omega_for_physics => Atm(mygrid)%local_omga
+   else
+      omega_for_physics => Atm(mygrid)%omga
+   endif
+   
 !---------------------------------------------------------------------
 ! use most up to date atmospheric properties when running serially
 !---------------------------------------------------------------------
 !$OMP parallel do default (none) &
 !$OMP             shared  (Atm_block, Atm, IPD_Data, npz, nq, ncnst, sphum, liq_wat, &
 !$OMP                      ice_wat, rainwat, snowwat, graupel, pk0inv, ptop,   &
-!$OMP                      pktop, zvir, mygrid, dnats, nq_adv) &
+!$OMP                      pktop, zvir, mygrid, dnats, nq_adv, omega_for_physics) &
 !$OMP             private (dm, nb, blen, i, j, ix, k1, rTv, qgrs_rad)
 
    do nb = 1,Atm_block%nblks
@@ -1631,7 +1670,7 @@ contains
        IPD_Data(nb)%Statein%sst(ix) = _DBL_(_RL_(Atm(mygrid)%ts(i,j)))
        if (Atm(mygrid)%flagstruct%read_ec_sst) IPD_Data(nb)%Statein%ci(ix) = _DBL_(_RL_(Atm(mygrid)%ci(i,j)))
      enddo
-
+     
      do k = 1, npz
        do ix = 1, blen
          i = Atm_block%index(nb)%ii(ix)
@@ -1643,7 +1682,7 @@ contains
          IPD_Data(nb)%Statein%tgrs(ix,k) = _DBL_(_RL_(Atm(mygrid)%pt(i,j,k1)))
          IPD_Data(nb)%Statein%ugrs(ix,k) = _DBL_(_RL_(Atm(mygrid)%ua(i,j,k1)))
          IPD_Data(nb)%Statein%vgrs(ix,k) = _DBL_(_RL_(Atm(mygrid)%va(i,j,k1)))
-          IPD_Data(nb)%Statein%vvl(ix,k) = _DBL_(_RL_(Atm(mygrid)%omga(i,j,k1)))
+          IPD_Data(nb)%Statein%vvl(ix,k) = _DBL_(_RL_(omega_for_physics(i,j,k1)))
          IPD_Data(nb)%Statein%prsl(ix,k) = _DBL_(_RL_(Atm(mygrid)%delp(i,j,k1)))   ! Total mass
 
          if (.not.Atm(mygrid)%flagstruct%hydrostatic .and. (.not.Atm(mygrid)%flagstruct%use_hydro_pressure))  &
