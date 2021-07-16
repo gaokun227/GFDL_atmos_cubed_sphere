@@ -546,12 +546,16 @@ module fv_arrays_mod
      integer :: upoff = 1 ! currently the same for all variables
      integer :: isu = -999, ieu = -1000, jsu = -999, jeu = -1000 ! limits of update regions on coarse grid
      real    :: update_blend = 1. ! option for controlling how much "blending" is done during two-way update
+     integer :: jeu_stag = -1000, iev_stag = -1000 !< limits of update regions on coarse grid for staggered variables in j,i
+     integer :: jeu_stag_boundary = -1000, iev_stag_boundary = -1000 ! BC location
+
      logical, allocatable :: do_remap_BC(:)
+     logical, allocatable :: do_remap_BC_level(:)
 
      !nest_domain now a global structure defined in fv_mp_mod
      !type(nest_domain_type) :: nest_domain !Structure holding link from this grid to its parent
      !type(nest_domain_type), allocatable :: nest_domain_all(:)
-     integer                :: num_nest_level ! number of nest levels.
+     integer                :: num_nest_level = -1 ! number of nest levels.
      type(nest_level_type), allocatable :: nest(:) ! store data for each level.
 
      !Interpolation arrays for grid nesting
@@ -883,7 +887,7 @@ module fv_arrays_mod
   end type fv_atmos_type
 contains
   subroutine allocate_fv_atmos_type(Atm, isd_in, ied_in, jsd_in, jed_in, is_in, ie_in, js_in, je_in, &
-       npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in, dummy, alloc_2d, ngrids_in)
+       npx_in, npy_in, npz_in, ndims_in, ntiles_in, ncnst_in, nq_in, dummy, alloc_2d, ngrids_in)
 
     !WARNING: Before calling this routine, be sure to have set up the
     ! proper domain parameters from the namelists (as is done in
@@ -892,7 +896,7 @@ contains
     implicit none
     type(fv_atmos_type), intent(INOUT), target :: Atm
     integer, intent(IN) :: isd_in, ied_in, jsd_in, jed_in, is_in, ie_in, js_in, je_in
-    integer, intent(IN) :: npx_in, npy_in, npz_in, ndims_in, ncnst_in, nq_in
+    integer, intent(IN) :: npx_in, npy_in, npz_in, ndims_in, ntiles_in, ncnst_in, nq_in
     logical, intent(IN) :: dummy, alloc_2d
     integer, intent(IN) :: ngrids_in
     integer:: isd, ied, jsd, jed, is, ie, js, je
@@ -1333,11 +1337,14 @@ contains
     if( ngrids_in > 1 ) then
        if (Atm%flagstruct%grid_type < 4) then
           if (Atm%neststruct%nested) then
-             allocate(Atm%grid_global(1-Atm%ng:npx_2d  +Atm%ng,1-Atm%ng:npy_2d  +Atm%ng,2,1))
+             allocate(Atm%grid_global(1-Atm%ng:npx_2d  +Atm%ng,1-Atm%ng:npy_2d  +Atm%ng,2,ntiles_in))
           else
-             allocate(Atm%grid_global(1-Atm%ng:npx_2d  +Atm%ng,1-Atm%ng:npy_2d  +Atm%ng,2,1:6))
+             allocate(Atm%grid_global(1-Atm%ng:npx_2d  +Atm%ng,1-Atm%ng:npy_2d  +Atm%ng,2,1:ntiles_in))
           endif
        end if
+       if (Atm%flagstruct%grid_type == 4) then
+          allocate(Atm%grid_global(1-Atm%ng:npx_2d  +Atm%ng,1-Atm%ng:npy_2d  +Atm%ng,2,ntiles_in))
+       endif
     endif
 
 
