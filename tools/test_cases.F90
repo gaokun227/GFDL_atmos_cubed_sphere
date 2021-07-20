@@ -4933,7 +4933,7 @@ end subroutine terminator_tracers
 
         do k=1,npz
              zm = 0.5*(ze1(k)+ze1(k+1))
-           utmp = us0*tanh(zm/3.E3)
+           utmp = us0*tanh(zm/3.E3) - us0*0.5 ! subtract off mean wind
            do j=js,je+1
               do i=is,ie
                  u(i,j,k) = utmp

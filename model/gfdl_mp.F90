@@ -30,6 +30,7 @@
 module gfdl_mp_mod
     
     use fv_arrays_mod, only: r_grid
+    use fv_mp_mod, only : is_master
     
     implicit none
     
@@ -3791,6 +3792,8 @@ subroutine qsmith_init
         desw (length) = desw (length - 1)
         
         tables_are_initialized = .true.
+
+        if (is_master()) print*, ' QS lookup tables initialized'
         
     endif
     
