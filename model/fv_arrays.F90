@@ -475,8 +475,6 @@ module fv_arrays_mod
   logical  :: adj_mass_vmr = .false. !TER: This is to reproduce answers for verona patch.  This default can be changed
                                      !     to .true. in the next city release if desired
 
-  logical :: read_ec_sst = .false.
-
   logical :: w_limiter = .true. ! Fix excessive w - momentum conserving --- sjl
   ! options related to regional mode
   logical :: regional = .false.       !< Default setting for the regional domain.
@@ -1029,7 +1027,6 @@ contains
 
     ! Allocate others
     allocate ( Atm%ts(is:ie,js:je) )
-    if (Atm%flagstruct%read_ec_sst) allocate ( Atm%ci(is:ie,js:je) )
     allocate ( Atm%phis(isd:ied  ,jsd:jed  ) )
     allocate ( Atm%omga(isd:ied  ,jsd:jed  ,npz) ); Atm%omga=0.
     if (.not. Atm%flagstruct%hydrostatic .and. .not. Atm%flagstruct%pass_full_omega_to_physics_in_non_hydrostatic_mode) then
@@ -1146,7 +1143,6 @@ contains
            Atm%inline_mp%sub(i,j) = real_big
 
            Atm%ts(i,j) = 300.
-           if (Atm%flagstruct%read_ec_sst) Atm%ci(i,j) = -999.
 
            Atm%phis(i,j) = real_big
         enddo
