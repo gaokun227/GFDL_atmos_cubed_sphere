@@ -93,6 +93,7 @@
 !                   44 = Lock-exchange on the sphere; atm at rest with no mountain
 !                   45 = 3D Soliton
 !                   51 = 3D tracer advection (deformational nondivergent flow)
+!                   52 = Resting atmosphere over topography
 !                   55 = TC
 !                  -55 = DCMIP 2016 TC test
 !                  101 = 3D non-hydrostatic Large-Eddy-Simulation (LES) with hybrid_z IC
@@ -2514,6 +2515,7 @@
          u = 0.
          v = 0.
 
+         q = 0.
          p00 = 1.e5
 
          wind_field = tracer_test
