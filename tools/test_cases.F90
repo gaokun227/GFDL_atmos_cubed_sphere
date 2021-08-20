@@ -35,7 +35,7 @@
       use fv_eta_mod,        only: compute_dz_L32, compute_dz_L101, set_hybrid_z, gw_1d,   &
                                    hybrid_z_dz
 
-      use mpp_mod,           only: mpp_error, FATAL, mpp_root_pe, mpp_broadcast, mpp_sum
+      use mpp_mod,           only: mpp_error, FATAL, mpp_root_pe, mpp_broadcast, mpp_sum, mpp_sync
       use mpp_mod,           only: stdlog, input_nml_file
       use fms_mod,           only: check_nml_error
       use mpp_domains_mod,   only: mpp_update_domains, domain2d
@@ -97,6 +97,22 @@
 !                   55 = TC
 !                  -55 = DCMIP 2016 TC test
 !                  101 = 3D non-hydrostatic Large-Eddy-Simulation (LES) with hybrid_z IC
+!! Doubly-periodic tests (THREE-DIMENSIONAL)
+!                    1 = Pure advection (not implemented)
+!                    2 = Resting flow over a 1.5 km mountain
+!                   14 = Aqua-plane with hydro_eq sounding and optional warm bubble
+!                        (sfc = 300 K, 200 K 250 mb tropopause)
+!                   15 = Warm bubble in isothermal atmosphere
+!                   16 = Cold bubble in isothermal atmosphere
+!                   17 = Symmetric Supercell 
+!                   18 = Asymmetric supercell with M. Toy quarter-circle hodograph
+!                   19 = LJZ update to 17 with Cetrone-Houze marine sounding
+!                        and several bubble and sounding options      
+!                  101 = LES with isothermal atmosphere (not implemented)
+
+
+
+
 
       integer :: sphum, theta_d
       real(kind=R_GRID), parameter :: radius = cnst_radius
@@ -4517,9 +4533,12 @@ end subroutine terminator_tracers
         real :: ptmp, ze, zc, zm, utmp, vtmp, xr, yr
         real :: t00, p00, xmax, xc, xx, yy, pk0, pturb, ztop
         real :: ze1(npz+1)
-         real:: dz1(npz)
+        real:: dz1(npz)
+        real :: gz(bd%isd:bd%ied,bd%jsd:bd%jed,npz+1)
         real:: zvir
         real :: sigma, mu, amp, zint, zmid, qsum, pint, pmid
+        real :: N2, N2b, th0, ths, pks, rkap, ampb, thl
+        real :: dz, thp, pp, zt, p_t, pkp
         integer :: o3mr
         integer :: i, j, k, m, icenter, jcenter
 
@@ -5208,7 +5227,356 @@ end subroutine terminator_tracers
 
         endif
 
-        case ( 101 )
+        case ( 21 )
+!---------------------------------------------------------
+! Mountain wave
+!---------------------------------------------------------
+           t00 = 300.
+           N2 = 0.01**2
+           N2b = 0.02**2
+           p00 = 1.e5
+           pk0 = exp(kappa*log(p00))
+           th0 = t00/pk0
+           amp = grav*grav/(cp_air*N2)
+           ampb = grav*grav/(cp_air*N2b)
+           rkap = 1./kappa
+
+           !0. Set up uniform ~500-m grid spacing
+           dz = 500.
+           ze = 0.0
+           zt = 10000.
+           thp = th0
+           pkp = pk0
+           ak(npz+1) = 0.0
+           bk(npz+1) = 1.0
+
+           ths = th0*exp(zt*N2/grav)
+           pks = pk0 + amp*(1./ths - 1./th0)
+           p_t  = exp(1./kappa*log(pks))
+
+           if (is_master()) write(*,'(I, 2F)') npz+1, ak(npz+1), bk(npz+1)
+           if (is_master()) write(*,'(2F)') ths*pk0, p_t
+
+           do k=npz,1,-1
+              ze = ze+dz
+              if (ze >= 10000.) then
+                 ths = thp*exp(dz*N2b/grav)
+                 pks = pkp + ampb*(1./ths - 1./thp)
+              else
+                 ths = thp*exp(dz*N2/grav)
+                 pks = pkp + amp*(1./ths - 1./thp)
+              endif
+              pp = exp(1./kappa*log(pks))
+              if (pp <= p_t) then
+                 ak(k) = pp
+                 bk(k) = 0.0
+              else
+                 ak(k) = p_t*(pp-p00)/(p_t-p00)
+                 bk(k) = (pp-p_t)/(p00-p_t)
+              endif
+              thp = ths
+              pkp = pks
+              if (is_master()) write(*,'(I, 5F)') k, ak(k), bk(k), ak(k+1)-ak(k) + p00*(bk(k+1)-bk(k)), ths*pk0, pp
+
+           enddo
+
+           call mpp_sync()
+
+           !1. set up topography (uniform-in-y)
+           icenter = npx/2
+           jcenter = npy/2
+           do j=jsd,jed
+              do i=isd,ied
+                 dist=(i-icenter)*dx_const
+                 phis(i,j)=3000.*exp(-(dist/25000.)**2)*cos(pi*dist/8000.)*cos(pi*dist/8000.) 
+                 gz(i,j,npz+1) = phis(i,j)
+              enddo
+           enddo
+
+           !2. Compute surface pressure 
+           !    then form pressure surfaces
+           do j=jsd,jed
+              do i=isd,ied
+                 ths = th0*exp(phis(i,j)*N2/grav)
+                 pk(i,j,npz+1) = pk0 + amp*(1./ths - 1./th0)
+                 ps(i,j) = exp(rkap*log(pk(i,j,npz+1)))
+!!$                 if (j==1) then
+!!$                    write(*,'(A, I, 3F)') ' test_cases: ', i, phis(i,j), ths*pk0, ps(i,j)
+!!$                 endif
+              enddo
+           enddo
+
+           do k=1,npz+1
+              do j=js,je
+                 do i=is,ie
+                    pe(i,k,j) = ak(k) + ps(i,j)*bk(k)
+                    peln(i,k,j) = log(pe(i,k,j))
+                    pk(i,j,k) = exp(kappa*log(pe(i,k,j)))
+                 enddo
+              enddo
+           enddo
+           do k=1,npz
+              do j=js,je
+                 do i=is,ie
+                    delp(i,j,k) = pe(i,k+1,j) - pe(i,k,j)
+                    !delp(i,j,k) = ak(k+1) - ak(k) + ps(i,j)*(bk(k+1) - bk(k))
+                    pkz(i,j,k) = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
+                    pkz(i,j,k) = exp(kappa*log(pkz(i,j,k)))
+                 enddo
+              enddo
+           enddo
+           ptop = ak(1)
+
+           if (js==1 .and. is <= icenter .and. ie >= icenter) then
+              i=icenter
+              j=1
+              do k=1,npz
+                 write(*,'(I, 6(2x, F))') k, pe(i,k+1,j), pk(i,j,k+1), delp(i,j,k), pkz(i,j,k), ak(k+1), bk(k+1)
+              enddo
+           endif
+
+           !3. Set up thermal profile: N = 0.02
+           do j=js,je
+              do i=is,ie
+                 ths = exp(-phis(i,j)*N2/grav)/th0
+                 ths = ths - (pk(i,j,npz+1)-pkz(i,j,npz))/amp
+                 pt(i,j,npz) = pkz(i,j,npz)/ths
+                 delz(i,j,npz) = rdgas/grav*pt(i,j,npz)*(peln(i,npz,j)-peln(i,npz+1,j))
+                 gz(i,j,npz) = gz(i,j,npz+1) - delz(i,j,npz)
+              enddo
+           enddo
+
+           do k=npz-1,1,-1
+              do j=js,je
+                 do i=is,ie
+                    if (gz(i,j,k+1) < 10000.) then
+                       ths = pkz(i,j,k+1)/pt(i,j,k+1) - (pkz(i,j,k+1)-pkz(i,j,k))/amp
+                    else
+                       ths = pkz(i,j,k+1)/pt(i,j,k+1) - (pkz(i,j,k+1)-pkz(i,j,k))/ampb
+                    endif
+                    pt(i,j,k) = pkz(i,j,k)/ths
+                    delz(i,j,k) = rdgas/grav*pt(i,j,k)*(peln(i,k,j)-peln(i,k+1,j))
+                    gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)
+                 enddo
+              enddo
+           enddo
+
+           if (js==1 .and. is <= icenter .and. ie >= icenter) then
+              i=icenter
+              j=1
+              do k=1,npz
+                 write(*,'(I, 4(2x, F))') k, gz(i,j,k+1), pt(i,j,k), delp(i,j,k), delz(i,j,k)
+              enddo
+           endif
+
+
+           !4. Set up wind profile:
+           u = 20.0
+           v = 0.0
+           w = 0.0
+           q = 0.0
+
+           !5. Re-adjust phis and gz ; set up other variables
+           do j=jsd,jed
+              do i=isd,ied
+                 phis(i,j) = phis(i,j)*grav
+              enddo
+           enddo
+           do k=1,npz+1
+              do j=jsd,jed
+                 do i=isd,ied
+                    gz(i,j,k) = gz(i,j,k)*grav
+                 enddo
+              enddo
+           enddo
+
+          call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                     pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                     moist_phys, hydrostatic, nwat, domain, flagstruct%adiabatic, .not. hydrostatic )
+
+       case ( 22 )
+!---------------------------------------------------------
+! Uniform-in-y resting + shear flow over Schar topography
+!---------------------------------------------------------
+           t00 = 300.
+           N2 = 0.01**2
+           N2b = 0.02**2
+           p00 = 1.e5
+           pk0 = exp(kappa*log(p00))
+           th0 = t00/pk0
+           amp = grav*grav/(cp_air*N2)
+           ampb = grav*grav/(cp_air*N2b)
+           rkap = 1./kappa
+
+           !0. Set up uniform ~500-m grid spacing
+           dz = 500.
+           ze = 0.0
+           zt = 10000.
+           thp = th0
+           pkp = pk0
+           ak(npz+1) = 0.0
+           bk(npz+1) = 1.0
+
+           ths = th0*exp(zt*N2/grav)
+           pks = pk0 + amp*(1./ths - 1./th0)
+           p_t  = exp(1./kappa*log(pks))
+
+           if (is_master()) write(*,'(I, 2F)') npz+1, ak(npz+1), bk(npz+1)
+           if (is_master()) write(*,'(2F)') ths*pk0, p_t
+
+           do k=npz,1,-1
+              ze = ze+dz
+              if (ze >= 10000.) then
+                 ths = thp*exp(dz*N2b/grav)
+                 pks = pkp + ampb*(1./ths - 1./thp)
+              else
+                 ths = thp*exp(dz*N2/grav)
+                 pks = pkp + amp*(1./ths - 1./thp)
+              endif
+              pp = exp(1./kappa*log(pks))
+              if (pp <= p_t) then
+                 ak(k) = pp
+                 bk(k) = 0.0
+              else
+                 ak(k) = p_t*(pp-p00)/(p_t-p00)
+                 bk(k) = (pp-p_t)/(p00-p_t)
+              endif
+              thp = ths
+              pkp = pks
+              if (is_master()) write(*,'(I, 5F)') k, ak(k), bk(k), ak(k+1)-ak(k) + p00*(bk(k+1)-bk(k)), ths*pk0, pp
+
+           enddo
+
+           call mpp_sync()
+
+           !1. set up topography (uniform-in-y)
+           icenter = npx/2
+           jcenter = npy/2
+           do j=jsd,jed
+              do i=isd,ied
+                 dist=(i-icenter)*dx_const
+                 phis(i,j)=2000.*exp(-(dist/10000.)**2)*cos(pi*dist/8000.)*cos(pi*dist/8000.) 
+                 gz(i,j,npz+1) = phis(i,j)
+              enddo
+           enddo
+
+           !2. Compute surface pressure assuming constant N = 0.01
+           !    then form pressure surfaces
+           do j=jsd,jed
+              do i=isd,ied
+                 ths = th0*exp(phis(i,j)*N2/grav)
+                 pk(i,j,npz+1) = pk0 + amp*(1./ths - 1./th0)
+                 ps(i,j) = exp(rkap*log(pk(i,j,npz+1)))
+                 if (j==1) then
+                    write(*,'(A, I, 3F)') ' test_cases: ', i, phis(i,j), ths*pk0, ps(i,j)
+                 endif
+              enddo
+           enddo
+
+           do k=1,npz+1
+              do j=js,je
+                 do i=is,ie
+                    pe(i,k,j) = ak(k) + ps(i,j)*bk(k)
+                    peln(i,k,j) = log(pe(i,k,j))
+                    pk(i,j,k) = exp(kappa*log(pe(i,k,j)))
+                 enddo
+              enddo
+           enddo
+           do k=1,npz
+              do j=js,je
+                 do i=is,ie
+                    delp(i,j,k) = pe(i,k+1,j) - pe(i,k,j)
+                    !delp(i,j,k) = ak(k+1) - ak(k) + ps(i,j)*(bk(k+1) - bk(k))
+                    pkz(i,j,k) = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
+                    pkz(i,j,k) = exp(kappa*log(pkz(i,j,k)))
+                 enddo
+              enddo
+           enddo
+           ptop = ak(1)
+
+           if (js==1 .and. is <= icenter .and. ie >= icenter) then
+              i=icenter
+              j=1
+              do k=1,npz
+                 write(*,'(I, 6(2x, F))') k, pe(i,k+1,j), pk(i,j,k+1), delp(i,j,k), pkz(i,j,k), ak(k+1), bk(k+1)
+              enddo
+           endif
+
+           !2. Set up thermal profile: N = 0.01 below 10 km and 0.02 above 10 km.
+           do j=js,je
+              do i=is,ie
+                 ths = exp(-phis(i,j)*N2/grav)/th0
+                 ths = ths - (pk(i,j,npz+1)-pkz(i,j,npz))/amp
+                 pt(i,j,npz) = pkz(i,j,npz)/ths
+                 delz(i,j,npz) = rdgas/grav*pt(i,j,npz)*(peln(i,npz,j)-peln(i,npz+1,j))
+                 gz(i,j,npz) = gz(i,j,npz+1) - delz(i,j,npz)
+              enddo
+           enddo
+
+           do k=npz-1,1,-1
+              do j=js,je
+                 do i=is,ie
+                    if (gz(i,j,k+1) < 10000.) then
+                       ths = pkz(i,j,k+1)/pt(i,j,k+1) - (pkz(i,j,k+1)-pkz(i,j,k))/amp
+                    else
+                       ths = pkz(i,j,k+1)/pt(i,j,k+1) - (pkz(i,j,k+1)-pkz(i,j,k))/ampb
+                    endif
+                    pt(i,j,k) = pkz(i,j,k)/ths
+                    delz(i,j,k) = rdgas/grav*pt(i,j,k)*(peln(i,k,j)-peln(i,k+1,j))
+                    gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)
+                 enddo
+              enddo
+           enddo
+
+           if (js==1 .and. is <= icenter .and. ie >= icenter) then
+              i=icenter
+              j=1
+              do k=1,npz
+                 write(*,'(I, 4(2x, F))') k, gz(i,j,k+1), pt(i,j,k), delp(i,j,k), delz(i,j,k)
+              enddo
+           endif
+
+
+           !3. Set up wind profile: 0 below 6 km, 20 above 10 km, linear between
+           ! (recall this is uniform-in-y; a 3D problem would require
+           !  computing staggered height from cell-centroid gz)
+           do k=npz,1,-1
+              do j=js,je+1
+                 do i=is,ie
+                    if (gz(i,js,k+1) < 6000.) then
+                       u(i,j,k) = 0.0
+                    elseif (gz(i,js,k+1) < 10000.) then
+                       u(i,j,k) = 0.005*(0.5*(gz(i,js,k)+gz(i,js,k+1))-6000.)
+                    else
+                       u(i,j,k) = 20.0
+                    endif
+                 enddo
+              enddo
+           enddo
+           v = 0.0
+           w = 0.0
+           q = 0.0
+
+           !4. Re-adjust phis and gz ; set up other variables
+           do j=jsd,jed
+              do i=isd,ied
+                 phis(i,j) = phis(i,j)*grav
+              enddo
+           enddo
+           do k=1,npz+1
+              do j=jsd,jed
+                 do i=isd,ied
+                    gz(i,j,k) = gz(i,j,k)*grav
+                 enddo
+              enddo
+           enddo
+
+          call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                     pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                     moist_phys, hydrostatic, nwat, domain, flagstruct%adiabatic, .not. hydrostatic )
+
+
+      case ( 101 )
 
 ! IC for LES
          t00 = 250.      ! constant temp
