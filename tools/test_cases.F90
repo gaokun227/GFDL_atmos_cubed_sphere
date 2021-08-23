@@ -5241,47 +5241,6 @@ end subroutine terminator_tracers
            ampb = grav*grav/(cp_air*N2b)
            rkap = 1./kappa
 
-           !0. Set up uniform ~500-m grid spacing
-           dz = 500.
-           ze = 0.0
-           zt = 10000.
-           thp = th0
-           pkp = pk0
-           ak(npz+1) = 0.0
-           bk(npz+1) = 1.0
-
-           ths = th0*exp(zt*N2/grav)
-           pks = pk0 + amp*(1./ths - 1./th0)
-           p_t  = exp(1./kappa*log(pks))
-
-           if (is_master()) write(*,'(I, 2F)') npz+1, ak(npz+1), bk(npz+1)
-           if (is_master()) write(*,'(2F)') ths*pk0, p_t
-
-           do k=npz,1,-1
-              ze = ze+dz
-              if (ze >= 10000.) then
-                 ths = thp*exp(dz*N2b/grav)
-                 pks = pkp + ampb*(1./ths - 1./thp)
-              else
-                 ths = thp*exp(dz*N2/grav)
-                 pks = pkp + amp*(1./ths - 1./thp)
-              endif
-              pp = exp(1./kappa*log(pks))
-              if (pp <= p_t) then
-                 ak(k) = pp
-                 bk(k) = 0.0
-              else
-                 ak(k) = p_t*(pp-p00)/(p_t-p00)
-                 bk(k) = (pp-p_t)/(p00-p_t)
-              endif
-              thp = ths
-              pkp = pks
-              if (is_master()) write(*,'(I, 5F)') k, ak(k), bk(k), ak(k+1)-ak(k) + p00*(bk(k+1)-bk(k)), ths*pk0, pp
-
-           enddo
-
-           call mpp_sync()
-
            !1. set up topography (uniform-in-y)
            icenter = npx/2
            jcenter = npy/2
@@ -5327,13 +5286,13 @@ end subroutine terminator_tracers
            enddo
            ptop = ak(1)
 
-           if (js==1 .and. is <= icenter .and. ie >= icenter) then
-              i=icenter
-              j=1
-              do k=1,npz
-                 write(*,'(I, 6(2x, F))') k, pe(i,k+1,j), pk(i,j,k+1), delp(i,j,k), pkz(i,j,k), ak(k+1), bk(k+1)
-              enddo
-           endif
+!!$           if (js==1 .and. is <= icenter .and. ie >= icenter) then
+!!$              i=icenter
+!!$              j=1
+!!$              do k=1,npz
+!!$                 write(*,'(I, 2(2x, F))') k, pe(i,k+1,j)/100., delp(i,j,k)/100.
+!!$              enddo
+!!$           endif
 
            !3. Set up thermal profile: N = 0.02
            do j=js,je
@@ -5361,13 +5320,13 @@ end subroutine terminator_tracers
               enddo
            enddo
 
-           if (js==1 .and. is <= icenter .and. ie >= icenter) then
-              i=icenter
-              j=1
-              do k=1,npz
-                 write(*,'(I, 4(2x, F))') k, gz(i,j,k+1), pt(i,j,k), delp(i,j,k), delz(i,j,k)
-              enddo
-           endif
+!!$           if (js==1 .and. is <= icenter .and. ie >= icenter) then
+!!$              i=icenter
+!!$              j=1
+!!$              do k=1,npz
+!!$                 write(*,'(I, 4(2x, F))') k, gz(i,j,k+1), pt(i,j,k), delp(i,j,k), delz(i,j,k)
+!!$              enddo
+!!$           endif
 
 
            !4. Set up wind profile:
@@ -5408,10 +5367,14 @@ end subroutine terminator_tracers
            ampb = grav*grav/(cp_air*N2b)
            rkap = 1./kappa
 
+#ifdef UNIFORM_DZ
            !0. Set up uniform ~500-m grid spacing
+           !(This is a primitive method for creating a hybrid coordinate
+           ! and produces discontinuities.)
            dz = 500.
            ze = 0.0
-           zt = 10000.
+           zt = 8000.
+           !zt = 5000.
            thp = th0
            pkp = pk0
            ak(npz+1) = 0.0
@@ -5448,7 +5411,8 @@ end subroutine terminator_tracers
            enddo
 
            call mpp_sync()
-
+#endif
+           
            !1. set up topography (uniform-in-y)
            icenter = npx/2
            jcenter = npy/2
@@ -5467,9 +5431,9 @@ end subroutine terminator_tracers
                  ths = th0*exp(phis(i,j)*N2/grav)
                  pk(i,j,npz+1) = pk0 + amp*(1./ths - 1./th0)
                  ps(i,j) = exp(rkap*log(pk(i,j,npz+1)))
-                 if (j==1) then
-                    write(*,'(A, I, 3F)') ' test_cases: ', i, phis(i,j), ths*pk0, ps(i,j)
-                 endif
+!!$                 if (j==1) then
+!!$                    write(*,'(A, I, 3F)') ' test_cases: ', i, phis(i,j), ths*pk0, ps(i,j)
+!!$                 endif
               enddo
            enddo
 
@@ -5497,12 +5461,12 @@ end subroutine terminator_tracers
            if (js==1 .and. is <= icenter .and. ie >= icenter) then
               i=icenter
               j=1
-              do k=1,npz
-                 write(*,'(I, 6(2x, F))') k, pe(i,k+1,j), pk(i,j,k+1), delp(i,j,k), pkz(i,j,k), ak(k+1), bk(k+1)
-              enddo
+!!$              do k=1,npz
+!!$                 write(*,'(I, 6(2x, F))') k, pe(i,k+1,j), pk(i,j,k+1), delp(i,j,k), pkz(i,j,k), ak(k+1), bk(k+1)
+!!$              enddo
            endif
 
-           !2. Set up thermal profile: N = 0.01 below 10 km and 0.02 above 10 km.
+           !2. Set up thermal profile: N = 0.01 below 14 km and 0.02 above 14 km.
            do j=js,je
               do i=is,ie
                  ths = exp(-phis(i,j)*N2/grav)/th0
@@ -5516,7 +5480,7 @@ end subroutine terminator_tracers
            do k=npz-1,1,-1
               do j=js,je
                  do i=is,ie
-                    if (gz(i,j,k+1) < 10000.) then
+                    if (gz(i,j,k+1) < 14000.) then
                        ths = pkz(i,j,k+1)/pt(i,j,k+1) - (pkz(i,j,k+1)-pkz(i,j,k))/amp
                     else
                        ths = pkz(i,j,k+1)/pt(i,j,k+1) - (pkz(i,j,k+1)-pkz(i,j,k))/ampb
@@ -5531,22 +5495,22 @@ end subroutine terminator_tracers
            if (js==1 .and. is <= icenter .and. ie >= icenter) then
               i=icenter
               j=1
-              do k=1,npz
-                 write(*,'(I, 4(2x, F))') k, gz(i,j,k+1), pt(i,j,k), delp(i,j,k), delz(i,j,k)
-              enddo
+!!$              do k=1,npz
+!!$                 write(*,'(I, 4(2x, F))') k, gz(i,j,k+1), pt(i,j,k), delp(i,j,k), delz(i,j,k)
+!!$              enddo
            endif
 
 
-           !3. Set up wind profile: 0 below 6 km, 20 above 10 km, linear between
+           !3. Set up wind profile: 0 below 10 km, 20 above 14 km, linear between
            ! (recall this is uniform-in-y; a 3D problem would require
            !  computing staggered height from cell-centroid gz)
            do k=npz,1,-1
               do j=js,je+1
                  do i=is,ie
-                    if (gz(i,js,k+1) < 6000.) then
+                    if (gz(i,js,k+1) < 10000.) then
                        u(i,j,k) = 0.0
-                    elseif (gz(i,js,k+1) < 10000.) then
-                       u(i,j,k) = 0.005*(0.5*(gz(i,js,k)+gz(i,js,k+1))-6000.)
+                    elseif (gz(i,js,k+1) < 14000.) then
+                       u(i,j,k) = 0.005*(0.5*(gz(i,js,k)+gz(i,js,k+1))-10000.)
                     else
                        u(i,j,k) = 20.0
                     endif
