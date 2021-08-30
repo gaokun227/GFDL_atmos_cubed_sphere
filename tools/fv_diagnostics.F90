@@ -799,8 +799,13 @@ contains
            'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
       id_v_plev = register_diag_field ( trim(field), 'v_plev', axe2(1:3), Time,        &
            'meridional wind', 'm/sec', missing_value=missing_value, range=vrange )
-      id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
-           'temperature', 'K', missing_value=missing_value, range=trange )
+      if (is_ideal_case) then
+         id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
+              'temperature', 'K', missing_value=missing_value )
+      else
+         id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
+              'temperature', 'K', missing_value=missing_value, range=trange )
+      endif
       id_h_plev = register_diag_field ( trim(field), 'h_plev', axe2(1:3), Time,        &
            'height', 'm', missing_value=missing_value )
       id_q_plev = register_diag_field ( trim(field), 'q_plev', axe2(1:3), Time,        &
@@ -895,9 +900,13 @@ contains
           if ( .not. Atm(n)%flagstruct%hydrostatic )                                        &
                id_w = register_diag_field ( trim(field), 'w', axes(1:3), Time,        &
                'vertical wind', 'm/sec', missing_value=missing_value, range=wrange )
-
-          id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
-               'temperature', 'K', missing_value=missing_value, range=trange )
+          if (is_ideal_case) then
+             id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
+                  'temperature', 'K', missing_value=missing_value )
+          else
+             id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
+                  'temperature', 'K', missing_value=missing_value, range=trange )
+          endif
           id_ppt  = register_diag_field ( trim(field), 'ppt', axes(1:3), Time,       &
                'potential temperature perturbation', 'K', missing_value=missing_value )
           id_theta_e = register_diag_field ( trim(field), 'theta_e', axes(1:3), Time,       &
@@ -1628,7 +1637,7 @@ contains
 #ifndef SW_DYNAMICS
          if (is_ideal_case) then
             call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           130., 350., bad_range, Time) !DCMIP ICs have very low temperatures
+                           100., 500., bad_range, Time) !DCMIP ICs have very wide range of temperatures
          else
             call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
                            150., 350., bad_range, Time)
