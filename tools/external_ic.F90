@@ -181,9 +181,6 @@ contains
       call prt_maxmin('T', Atm%pt, is, ie, js, je, ng, Atm%npz, 1.)
       if (.not.Atm%flagstruct%hydrostatic) call prt_maxmin('W', Atm%w, is, ie, js, je, ng, Atm%npz, 1.)
       call prt_maxmin('SPHUM', Atm%q(:,:,:,1), is, ie, js, je, ng, Atm%npz, 1.)
-      if ( Atm%flagstruct%nggps_ic .or. Atm%flagstruct%hrrrv3_ic ) then
-        call prt_maxmin('TS', Atm%ts, is, ie, js, je, 0, 1, 1.)
-      endif
       if ( Atm%flagstruct%nggps_ic .or. Atm%flagstruct%ecmwf_ic .or. Atm%flagstruct%hrrrv3_ic ) then
         sphum   = get_tracer_index(MODEL_ATMOS, 'sphum')
         liq_wat   = get_tracer_index(MODEL_ATMOS, 'liq_wat')
@@ -298,11 +295,6 @@ contains
 !--- variables read in from 'gfs_ctrl.nc'
 !       VCOORD  -  level information
 !                   maps to 'ak & bk'
-!--- variables read in from 'sfc_data.nc'
-!       land_frac  -  land-sea-ice mask (L:0 / S:1)
-!                     maps to 'oro'
-!       TSEA       -  surface skin temperature (k)
-!                     maps to 'ts'
 !--- variables read in from 'gfs_data.nc'
 !       ZH  -  GFS grid height at edges (m)
 !       PS  -  surface pressure (Pa)
@@ -332,12 +324,11 @@ contains
     integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed
     integer :: ios, ierr, unit, id_res
-    type (restart_file_type) :: ORO_restart, SFC_restart, GFS_restart
+    type (restart_file_type) :: ORO_restart, GFS_restart
     character(len=6)  :: gn, stile_name
     character(len=64) :: tracer_name
     character(len=64) :: fn_gfs_ctl = 'gfs_ctrl.nc'
     character(len=64) :: fn_gfs_ics = 'gfs_data.nc'
-    character(len=64) :: fn_sfc_ics = 'sfc_data.nc'
     character(len=64) :: fn_oro_ics = 'oro_data.nc'
     logical :: remap
     logical :: filtered_terrain = .true.
@@ -454,16 +445,7 @@ contains
     endif
       call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using tiled data file '//trim(fn_oro_ics)//' for NGGPS IC')
 
-    if (.not. file_exist('INPUT/'//trim(fn_sfc_ics), domain=Atm%domain)) then
-      call mpp_error(FATAL,'==> Error in External_ic::get_nggps_ic: tiled file '//trim(fn_sfc_ics)//' for NGGPS IC does not exist')
-    endif
-      call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using tiled data file '//trim(fn_sfc_ics)//' for NGGPS IC')
-
-
     !--- read in surface temperature (k) and land-frac
-    ! surface skin temperature
-    id_res = register_restart_field (SFC_restart, fn_sfc_ics, 'tsea', Atm%ts, domain=Atm%domain)
-
     ! terrain surface height -- (needs to be transformed into phis = zs*grav)
     if (filtered_terrain) then
       id_res = register_restart_field (ORO_restart, fn_oro_ics, 'orog_filt', Atm%phis, domain=Atm%domain)
@@ -492,10 +474,8 @@ contains
 
     ! read in the restart
     call restore_state (ORO_restart)
-    call restore_state (SFC_restart)
     ! free the restart type to be re-used by the nest
     call free_restart_type(ORO_restart)
-    call free_restart_type(SFC_restart)
 
 
     ! initialize all tracers to default values prior to being input
@@ -818,11 +798,6 @@ contains
 !--- variables read in from 'hrrr_ctrl.nc'
 !       VCOORD  -  level information
 !                   maps to 'ak & bk'
-!--- variables read in from 'sfc_data.nc'
-!       land_frac  -  land-sea-ice mask (L:0 / S:1)
-!                     maps to 'oro'
-!       TSEA       -  surface skin temperature (k)
-!                     maps to 'ts'
 !--- variables read in from 'gfs_data.nc'
 !       ZH  -  GFS grid height at edges (m)
 !       PS  -  surface pressure (Pa)
@@ -850,12 +825,11 @@ contains
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
       integer :: ios, ierr, unit, id_res
-      type (restart_file_type) :: ORO_restart, SFC_restart, HRRR_restart
+      type (restart_file_type) :: ORO_restart, HRRR_restart
       character(len=6)  :: gn, stile_name
       character(len=64) :: tracer_name
       character(len=64) :: fn_hrr_ctl = 'hrrr_ctrl.nc'
       character(len=64) :: fn_hrr_ics = 'hrrr_data.nc'
-      character(len=64) :: fn_sfc_ics = 'sfc_data.nc'
       character(len=64) :: fn_oro_ics = 'oro_data.nc'
       logical :: remap
       logical :: filtered_terrain = .true.
@@ -950,11 +924,6 @@ contains
       endif
       call mpp_error(NOTE,'==> External_ic::get_hrrr_ic: using tiled data file '//trim(fn_oro_ics)//' for HRRR IC')
 
-      if (.not. file_exist('INPUT/'//trim(fn_sfc_ics), domain=Atm%domain)) then
-        call mpp_error(FATAL,'==> Error in External_ic::get_hrrr_ic: tiled file '//trim(fn_sfc_ics)//' for HRRR IC does not exist')
-      endif
-      call mpp_error(NOTE,'==> External_ic::get_hrrr_ic: using tiled data file '//trim(fn_sfc_ics)//' for HRRR IC')
-
       if (.not. file_exist('INPUT/'//trim(fn_hrr_ics), domain=Atm%domain)) then
         call mpp_error(FATAL,'==> Error in External_ic::get_hrrr_ic: tiled file '//trim(fn_hrr_ics)//' for HRRR IC does not exist')
       endif
@@ -973,9 +942,6 @@ contains
 
 
 !--- read in surface temperature (k) and land-frac
-        ! surface skin temperature
-        id_res = register_restart_field (SFC_restart, fn_sfc_ics, 'tsea', Atm%ts, domain=Atm%domain)
-
         ! terrain surface height -- (needs to be transformed into phis = zs*grav)
         if (filtered_terrain) then
           id_res = register_restart_field (ORO_restart, fn_oro_ics, 'orog_filt', Atm%phis, domain=Atm%domain)
@@ -1041,11 +1007,9 @@ contains
 
         ! read in the restart
         call restore_state (ORO_restart)
-        call restore_state (SFC_restart)
         call restore_state (HRRR_restart)
         ! free the restart type to be re-used by the nest
         call free_restart_type(ORO_restart)
-        call free_restart_type(SFC_restart)
         call free_restart_type(HRRR_restart)
 
 
