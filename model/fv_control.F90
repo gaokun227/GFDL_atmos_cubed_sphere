@@ -34,7 +34,7 @@ module fv_control_mod
    use mpp_mod,             only: FATAL, mpp_error, mpp_pe, stdlog, &
                                   mpp_npes, mpp_get_current_pelist, &
                                   input_nml_file, get_unit, WARNING, &
-                                  read_ascii_file, INPUT_STR_LENGTH
+                                  read_ascii_file
    use mpp_domains_mod,     only: mpp_get_data_domain, mpp_get_compute_domain, mpp_get_tile_id
    use tracer_manager_mod,  only: tm_get_number_tracers => get_number_tracers, &
                                   tm_get_tracer_index   => get_tracer_index,   &
@@ -101,7 +101,7 @@ module fv_control_mod
 
      integer, intent(INOUT) :: p_split
      character(100) :: pe_list_name, errstring
-     integer :: n, npes, pecounter, i, num_family, ntiles_nest_all
+     integer :: n, npes, pecounter, i, num_family, ntiles_nest_all, num_tile_top
      integer, allocatable :: global_pelist(:)
      integer, dimension(MAX_NNEST) :: grid_pes = 0
      integer, dimension(MAX_NNEST) :: grid_coarse = -1
@@ -244,8 +244,6 @@ module fv_control_mod
      logical , pointer :: adiabatic
      logical , pointer :: moist_phys
      logical , pointer :: do_Held_Suarez
-     logical , pointer :: do_reed_physics
-     logical , pointer :: reed_cond_only
      logical , pointer :: reproduce_sum
      logical , pointer :: adjust_dry_mass
      logical , pointer :: fv_debug
@@ -280,7 +278,6 @@ module fv_control_mod
      logical , pointer :: Make_NH
      logical , pointer :: make_hybrid_z
      logical , pointer :: nudge_qv
-     logical , pointer :: read_ec_sst
      real,     pointer :: add_noise
 
      integer , pointer :: a2b_ord
@@ -307,6 +304,7 @@ module fv_control_mod
      logical, pointer :: write_only_coarse_intermediate_restarts
      logical, pointer :: write_coarse_agrid_vel_rst
      logical, pointer :: write_coarse_dgrid_vel_rst
+     logical, pointer :: pass_full_omega_to_physics_in_non_hydrostatic_mode
      !!!!!!!!!! END POINTERS !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
      this_grid = -1 ! default
@@ -318,6 +316,15 @@ module fv_control_mod
      call read_namelist_fv_nest_nml
 
      ! 2. Set up Atm and PElists
+     do n=2,MAX_NNEST
+        if (tile_coarse(n) > 0) then
+           if (tile_coarse(n)<=num_tile_top) then
+              grid_coarse(n)=1
+           else
+              grid_coarse(n)=tile_coarse(n) - num_tile_top + 1
+           endif
+        endif
+     enddo
 
      ngrids = 1
      do n=2,MAX_NNEST
@@ -520,6 +527,8 @@ module fv_control_mod
            icount_coarse(n) = all_npx(n)/nest_refine(n)
            jcount_coarse(n) = all_npy(n)/nest_refine(n)
            nest_level(n) = nest_level(grid_coarse(n)) + 1
+           Atm(n)%neststruct%nlevel=nest_level(n)
+           if (n==ngrids) Atm(:)%neststruct%num_nest_level=nest_level(ngrids)
         else
            tile_fine(n) = all_ntiles(n)
            nest_level(n) = 0
@@ -537,7 +546,7 @@ module fv_control_mod
      endif
 
      ! 5. domain_decomp()
-     call domain_decomp(Atm(this_grid)%flagstruct%npx,Atm(this_grid)%flagstruct%npy,Atm(this_grid)%flagstruct%ntiles,&
+     call domain_decomp(this_grid,Atm(this_grid)%flagstruct%npx,Atm(this_grid)%flagstruct%npy,Atm(this_grid)%flagstruct%ntiles,&
           Atm(this_grid)%flagstruct%grid_type,Atm(this_grid)%neststruct%nested, &
           Atm(this_grid)%layout,Atm(this_grid)%io_layout,Atm(this_grid)%bd,Atm(this_grid)%tile_of_mosaic, &
           Atm(this_grid)%gridstruct%square_domain,Atm(this_grid)%npes_per_tile,Atm(this_grid)%domain, &
@@ -569,7 +578,7 @@ module fv_control_mod
              Atm(n)%bd%isc, Atm(n)%bd%iec, &
              Atm(n)%bd%jsc, Atm(n)%bd%jec, &
              Atm(n)%flagstruct%npx,    Atm(n)%flagstruct%npy,   Atm(n)%flagstruct%npz, &
-             Atm(n)%flagstruct%ndims,  Atm(n)%flagstruct%ncnst, Atm(n)%flagstruct%ncnst-Atm(n)%flagstruct%pnats, &
+             Atm(n)%flagstruct%ndims, Atm(n)%flagstruct%ntiles,  Atm(n)%flagstruct%ncnst, Atm(n)%flagstruct%ncnst-Atm(n)%flagstruct%pnats, &
              n/=this_grid, n==this_grid, ngrids) !TODO don't need both of the last arguments
      enddo
      if ( (Atm(this_grid)%bd%iec-Atm(this_grid)%bd%isc+1).lt.4 .or. (Atm(this_grid)%bd%jec-Atm(this_grid)%bd%jsc+1).lt.4 ) then
@@ -600,7 +609,9 @@ module fv_control_mod
      do n=1,ngrids
         Atm(this_grid)%neststruct%child_grids(n) = (grid_coarse(n) == this_grid)
         allocate(Atm(n)%neststruct%do_remap_bc(ngrids))
+        allocate(Atm(n)%neststruct%do_remap_bc_level(Atm(n)%neststruct%num_nest_level))
         Atm(n)%neststruct%do_remap_bc(:) = .false.
+        Atm(n)%neststruct%do_remap_bc_level(:) = .false.
      enddo
      Atm(this_grid)%neststruct%parent_proc = ANY(Atm(this_grid)%neststruct%child_grids) !ANY(tile_coarse == Atm(this_grid)%global_tile)
      Atm(this_grid)%neststruct%child_proc = ASSOCIATED(Atm(this_grid)%parent_grid) !this means a nested grid
@@ -795,8 +806,6 @@ module fv_control_mod
        adiabatic                     => Atm%flagstruct%adiabatic
        moist_phys                    => Atm%flagstruct%moist_phys
        do_Held_Suarez                => Atm%flagstruct%do_Held_Suarez
-       do_reed_physics               => Atm%flagstruct%do_reed_physics
-       reed_cond_only                => Atm%flagstruct%reed_cond_only
        reproduce_sum                 => Atm%flagstruct%reproduce_sum
        adjust_dry_mass               => Atm%flagstruct%adjust_dry_mass
        fv_debug                      => Atm%flagstruct%fv_debug
@@ -821,7 +830,6 @@ module fv_control_mod
        external_ic                   => Atm%flagstruct%external_ic
        external_eta                  => Atm%flagstruct%external_eta
        read_increment                => Atm%flagstruct%read_increment
-       read_ec_sst                   => Atm%flagstruct%read_ec_sst
 
        hydrostatic                   => Atm%flagstruct%hydrostatic
        phys_hydrostatic              => Atm%flagstruct%phys_hydrostatic
@@ -866,6 +874,7 @@ module fv_control_mod
        write_only_coarse_intermediate_restarts => Atm%coarse_graining%write_only_coarse_intermediate_restarts
        write_coarse_agrid_vel_rst    => Atm%coarse_graining%write_coarse_agrid_vel_rst
        write_coarse_dgrid_vel_rst    => Atm%coarse_graining%write_coarse_dgrid_vel_rst
+       pass_full_omega_to_physics_in_non_hydrostatic_mode => Atm%flagstruct%pass_full_omega_to_physics_in_non_hydrostatic_mode
      end subroutine set_namelist_pointers
 
 
@@ -893,7 +902,7 @@ module fv_control_mod
      subroutine read_namelist_fv_nest_nml
 
        integer :: f_unit, ios, ierr
-       namelist /fv_nest_nml/ grid_pes, grid_coarse, tile_coarse, nest_refine, &
+       namelist /fv_nest_nml/ grid_pes, num_tile_top, tile_coarse, nest_refine, &
             nest_ioffsets, nest_joffsets, p_split
 
 #ifdef INTERNAL_FILE_NML
@@ -965,7 +974,7 @@ module fv_control_mod
             external_eta, res_latlon_dynamics, res_latlon_tracers, scale_z, w_max, z_min, lim_fac, &
             dddmp, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
             warm_start, adjust_dry_mass, mountain, d_con, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
-            dry_mass, grid_type, do_Held_Suarez, do_reed_physics, reed_cond_only, &
+            dry_mass, grid_type, do_Held_Suarez, &
             consv_te, fill, filter_phys, fill_dp, fill_wz, fill_gfs, consv_am, RF_fast, &
             range_warn, dwind_2d, inline_q, z_tracer, reproduce_sum, adiabatic, do_vort_damp, no_dycore,   &
             tau, tau_h2o, rf_cutoff, nf_omega, hydrostatic, fv_sg_adj, sg_cutoff, breed_vortex_inline,  &
@@ -976,12 +985,13 @@ module fv_control_mod
             phys_hydrostatic, use_hydro_pressure, make_hybrid_z, old_divg_damp, add_noise, &
             nested, twowaynest, nudge_qv, &
             nestbctype, nestupdate, nsponge, s_weight, &
-            check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst, read_ec_sst,    &
+            check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst, &
             do_uni_zfull, adj_mass_vmr, update_blend, regional,&
             bc_update_interval,  nrows_blend, write_restart_with_bcs, regional_bcs_from_gsi, &
             w_limiter, write_coarse_restart_files, write_coarse_diagnostics,&
             write_only_coarse_intermediate_restarts, &
             write_coarse_agrid_vel_rst, write_coarse_dgrid_vel_rst, &
+            pass_full_omega_to_physics_in_non_hydrostatic_mode, &
             replay, nrestartbg, write_replay_ic
 
 #ifdef INTERNAL_FILE_NML
@@ -1107,9 +1117,11 @@ module fv_control_mod
 
      subroutine setup_update_regions
 
-       integer :: isu, ieu, jsu, jeu ! update regions
+       integer :: isu, ieu, jsu, jeu ! update regions for centered variables
        integer :: isc, jsc, iec, jec
        integer :: upoff
+       integer :: isu_stag, jsu_stag, ieu_stag, jeu_stag ! update regions for u
+       integer :: isv_stag, jsv_stag, iev_stag, jev_stag ! update regions for v
 
        isc = Atm(this_grid)%bd%isc
        jsc = Atm(this_grid)%bd%jsc
@@ -1127,19 +1139,39 @@ module fv_control_mod
              jsu = nest_joffsets(n)
              jeu = jsu + jcount_coarse(n) - 1
 
+             isu_stag = isu
+             jsu_stag = jsu
+             ieu_stag = ieu
+             jeu_stag = jeu+1
+
+             isv_stag = isu
+             jsv_stag = jsu
+             iev_stag = ieu+1
+             jev_stag = jeu
+
              !update offset adjustment
              isu = isu + upoff
              ieu = ieu - upoff
              jsu = jsu + upoff
              jeu = jeu - upoff
 
-             !restriction to current domain
-!!$             !!! DEBUG CODE
-!!$             if (Atm(this_grid)%flagstruct%fv_debug) then
-!!$                write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS  : ', isu, jsu, ieu, jeu
-!!$                write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS 2: ', isc, jsc, iec, jsc
-!!$             endif
-!!$             !!! END DEBUG CODE
+             isu_stag = isu_stag + upoff
+             ieu_stag = ieu_stag - upoff
+             jsu_stag = jsu_stag + upoff
+             jeu_stag = jeu_stag - upoff
+
+             isv_stag = isv_stag + upoff
+             iev_stag = iev_stag - upoff
+             jsv_stag = jsv_stag + upoff
+             jev_stag = jev_stag - upoff
+
+! Absolute boundary for the staggered point update region on the parent.
+! This is used in remap_uv to control the update of the last staggered point
+! when the the update region coincides with a pe domain to avoid cross-restart repro issues
+
+             Atm(n)%neststruct%jeu_stag_boundary = jeu_stag
+             Atm(n)%neststruct%iev_stag_boundary = iev_stag
+
              if (isu > iec .or. ieu < isc .or. &
                  jsu > jec .or. jeu < jsc ) then
                 isu = -999 ; jsu = -999 ; ieu = -1000 ; jeu = -1000
@@ -1147,15 +1179,49 @@ module fv_control_mod
                 isu = max(isu,isc) ; jsu = max(jsu,jsc)
                 ieu = min(ieu,iec) ; jeu = min(jeu,jec)
              endif
-!!$             !!! DEBUG CODE
-!!$             if (Atm(this_grid)%flagstruct%fv_debug) &
-!!$                  write(*,'(I, A, 4I)') mpp_pe(), 'SETUP_UPDATE_REGIONS 3: ', isu, jsu, ieu, jeu
-!!$             !!! END DEBUG CODE
+
+! Update region for staggered quantity to avoid cross repro issues when the pe domain boundary
+! coincide with the nest. Basically write the staggered update on compute domains
+
+             if (isu_stag > iec .or. ieu_stag < isc .or. &
+                 jsu_stag > jec .or. jeu_stag < jsc ) then
+                isu_stag = -999 ; jsu_stag = -999 ; ieu_stag = -1000 ; jeu_stag = -1000
+             else
+                isu_stag = max(isu_stag,isc) ; jsu_stag = max(jsu_stag,jsc)
+                ieu_stag = min(ieu_stag,iec) ; jeu_stag = min(jeu_stag,jec)
+             endif
+
+             if (isv_stag > iec .or. iev_stag < isc .or. &
+                 jsv_stag > jec .or. jev_stag < jsc ) then
+                isv_stag = -999 ; jsv_stag = -999 ; iev_stag = -1000 ; jev_stag = -1000
+             else
+                isv_stag = max(isv_stag,isc) ; jsv_stag = max(jsv_stag,jsc)
+                iev_stag = min(iev_stag,iec) ; jev_stag = min(jev_stag,jec)
+             endif
+             if (isu > iec .or. ieu < isc .or. &
+                 jsu > jec .or. jeu < jsc ) then
+                isu = -999 ; jsu = -999 ; ieu = -1000 ; jeu = -1000
+             else
+                isu = max(isu,isc) ; jsu = max(jsu,jsc)
+                ieu = min(ieu,iec) ; jeu = min(jeu,jec)
+             endif
+
+             ! lump indices
+             isu=max(isu, isu_stag, isv_stag)
+             jsu=max(jsu, jsu_stag, jsv_stag)
+             jeu_stag=max(jeu, jeu_stag)
+             jev_stag=max(jeu, jev_stag)
+             ieu_stag=max(ieu ,ieu_stag)
+             iev_stag=max(ieu ,iev_stag)
 
              Atm(n)%neststruct%isu = isu
-             Atm(n)%neststruct%ieu = ieu
+             Atm(n)%neststruct%ieu = ieu_stag
              Atm(n)%neststruct%jsu = jsu
-             Atm(n)%neststruct%jeu = jeu
+             Atm(n)%neststruct%jeu = jev_stag
+
+             Atm(n)%neststruct%jeu_stag = jeu_stag
+             Atm(n)%neststruct%iev_stag = iev_stag
+
           endif
        enddo
 

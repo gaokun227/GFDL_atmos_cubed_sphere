@@ -76,8 +76,7 @@ contains
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
-                        parent_grid, domain, inline_mp, &
-                        lagrangian_tendency_of_hydrostatic_pressure, diss_est, time_total)
+                        parent_grid, domain, inline_mp, diss_est, time_total)
 
     real, intent(IN) :: bdt  ! Large time-step
     real, intent(IN) :: consv_te
@@ -128,7 +127,6 @@ contains
 !-----------------------------------------------------------------------
     real, intent(inout) :: phis(bd%isd:bd%ied,bd%jsd:bd%jed)       ! Surface geopotential (g*Z_surf)
     real, intent(inout) :: omga(bd%isd:bd%ied,bd%jsd:bd%jed,npz)   ! Vertical pressure velocity (pa/s)
-    real, allocatable, intent(inout) :: lagrangian_tendency_of_hydrostatic_pressure(:,:,:) ! More accurate calculation of vertical pressure velocity (pa/s) in non-hydrostatic model
     real, intent(inout) :: uc(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) ! (uc,vc) mostly used as the C grid winds
     real, intent(inout) :: vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
 
@@ -167,7 +165,7 @@ contains
       integer :: sphum, liq_wat = -999, ice_wat = -999      ! GFDL physics
       integer :: rainwat = -999, snowwat = -999, graupel = -999, cld_amt = -999
       integer :: theta_d = -999
-      logical used, last_step, do_omega
+      logical used, last_step
       integer, parameter :: max_packs=13
       type(group_halo_update_type), save :: i_pack(max_packs)
       integer :: is,  ie,  js,  je
@@ -322,9 +320,20 @@ contains
           enddo
           else
             do j=js,je
-               do i=is,ie
+#ifdef MOIST_CAPPA
+             call moist_cv(is,ie,isd,ied,jsd,jed, npz, j, k, nwat, sphum, liq_wat, rainwat,    &
+                           ice_wat, snowwat, graupel, q, q_con(is:ie,j,k), cvm)
+#endif
+             do i=is,ie
+                dp1(i,j,k) = zvir*q(i,j,k,sphum)
+#ifdef MOIST_CAPPA
+               cappa(i,j,k) = rdgas/(rdgas + cvm(i)/(1.+dp1(i,j,k)))
+               pkz(i,j,k) = exp(cappa(i,j,k)*log(rdg*delp(i,j,k)*pt(i,j,k)*    &
+                            (1.+dp1(i,j,k))*(1.-q_con(i,j,k))/delz(i,j,k)) )
+#else
                   dp1(i,j,k) = 0.
                   pkz(i,j,k) = exp(kappa*log(rdg*delp(i,j,k)*pt(i,j,k)/delz(i,j,k)))
+#endif                  
                enddo
             enddo
           endif
@@ -385,26 +394,6 @@ contains
 
 #ifndef SW_DYNAMICS
 ! Convert pt to virtual potential temperature on the first timestep
-  if ( flagstruct%adiabatic .and. flagstruct%kord_tm>0 ) then
-     if ( .not.pt_initialized )then
-!$OMP parallel do default(none) shared(theta_d,is,ie,js,je,npz,pt,pkz,q)
-       do k=1,npz
-          do j=js,je
-             do i=is,ie
-                pt(i,j,k) = pt(i,j,k)/pkz(i,j,k)
-             enddo
-          enddo
-          if ( theta_d>0 ) then
-             do j=js,je
-                do i=is,ie
-                   q(i,j,k,theta_d) = pt(i,j,k)
-                enddo
-             enddo
-          endif
-       enddo
-       pt_initialized = .true.
-     endif
-  else
 !$OMP parallel do default(none) shared(is,ie,js,je,npz,pt,dp1,pkz,q_con)
   do k=1,npz
      do j=js,je
@@ -417,7 +406,6 @@ contains
         enddo
      enddo
   enddo
-  endif
 #endif
 
   last_step = .false.
@@ -502,8 +490,7 @@ contains
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
-                    domain, n_map==1, i_pack, last_step, &
-                    lagrangian_tendency_of_hydrostatic_pressure, diss_est, time_total)
+                    domain, n_map==1, i_pack, last_step, diss_est, time_total)
                                            call timing_off('DYN_CORE')
 
 
@@ -575,7 +562,6 @@ contains
             if ( iq==cld_amt )  kord_tracer(iq) = 9      ! monotonic
          enddo
 
-         do_omega = hydrostatic .and. last_step
                                                   call timing_on('Remapping')
 #ifdef AVEC_TIMERS
                                                   call avec_timer_start(6)
@@ -585,10 +571,15 @@ contains
         if (is_master()) write(*,'(A, I3, A1, I3)') 'before remap k_split ', n_map, '/', k_split
        call prt_mxm('T_ldyn',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
        call prt_mxm('SPHUM_ldyn',   q(isd,jsd,1,sphum  ), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( liq_wat > 0 )  &
        call prt_mxm('liq_wat_ldyn', q(isd,jsd,1,liq_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( rainwat > 0 )  &
        call prt_mxm('rainwat_ldyn', q(isd,jsd,1,rainwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( ice_wat > 0 )  &
        call prt_mxm('ice_wat_ldyn', q(isd,jsd,1,ice_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( snowwat > 0 )  &
        call prt_mxm('snowwat_ldyn', q(isd,jsd,1,snowwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( graupel > 0 )  &
        call prt_mxm('graupel_ldyn', q(isd,jsd,1,graupel), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
 
 #ifdef TEST_LMH
@@ -616,20 +607,26 @@ contains
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
                      idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, &
-                     hybrid_z, do_omega,     &
+                     hybrid_z,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      inline_mp, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
-                     flagstruct%moist_phys, flagstruct%w_limiter, lagrangian_tendency_of_hydrostatic_pressure)
+                     flagstruct%moist_phys, flagstruct%w_limiter)
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split
        call prt_mxm('T_dyn_a4',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
+       call prt_mxm('pkz',         pkz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
        call prt_mxm('SPHUM_dyn',   q(isd,jsd,1,sphum  ), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( liq_wat > 0 )  &
        call prt_mxm('liq_wat_dyn', q(isd,jsd,1,liq_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
-       call prt_mxm('rainwat_dyn', q(isd,jsd,1,rainwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
-       call prt_mxm('ice_wat_dyn', q(isd,jsd,1,ice_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
-       call prt_mxm('snowwat_dyn', q(isd,jsd,1,snowwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
-       call prt_mxm('graupel_dyn', q(isd,jsd,1,graupel), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( rainwat > 0 )  &
+      call prt_mxm('rainwat_dyn', q(isd,jsd,1,rainwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( ice_wat > 0 )  &
+      call prt_mxm('ice_wat_dyn', q(isd,jsd,1,ice_wat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( snowwat > 0 )  &
+      call prt_mxm('snowwat_dyn', q(isd,jsd,1,snowwat), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
+       if ( graupel > 0 )  &
+      call prt_mxm('graupel_dyn', q(isd,jsd,1,graupel), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
      endif
 #ifdef AVEC_TIMERS
                                                   call avec_timer_stop(6)
@@ -650,26 +647,12 @@ contains
                                           reg_bc_update_time )
          endif
 #endif
-
-         if( last_step )  then
-            if( .not. hydrostatic ) then
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,omga,delp,delz,w)
-               do k=1,npz
-                  do j=js,je
-                     do i=is,ie
-                        omga(i,j,k) = delp(i,j,k)/delz(i,j,k)*w(i,j,k)
-                     enddo
-                  enddo
-               enddo
-            endif
 !--------------------------
 ! Filter omega for physics:
 !--------------------------
+         if (last_step) then
             if(flagstruct%nf_omega>0)   then
             call del2_cubed(omga, 0.18*gridstruct%da_min, gridstruct, domain, npx, npy, npz, flagstruct%nf_omega, bd)
-            if (allocated(lagrangian_tendency_of_hydrostatic_pressure)) then
-                call del2_cubed(lagrangian_tendency_of_hydrostatic_pressure, 0.18*gridstruct%da_min, gridstruct, domain, npx, npy, npz, flagstruct%nf_omega, bd)
-             endif
           endif
          endif
       end if
