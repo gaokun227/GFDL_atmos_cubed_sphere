@@ -5231,14 +5231,12 @@ end subroutine terminator_tracers
 !---------------------------------------------------------
 ! Mountain wave
 !---------------------------------------------------------
-           t00 = 300.
+           t00 = 288.
            N2 = 0.01**2
-           N2b = 0.02**2
            p00 = 1.e5
            pk0 = exp(kappa*log(p00))
            th0 = t00/pk0
            amp = grav*grav/(cp_air*N2)
-           ampb = grav*grav/(cp_air*N2b)
            rkap = 1./kappa
 
            !1. set up topography (uniform-in-y)
@@ -5247,7 +5245,7 @@ end subroutine terminator_tracers
            do j=jsd,jed
               do i=isd,ied
                  dist=(i-icenter)*dx_const
-                 phis(i,j)=3000.*exp(-(dist/25000.)**2)*cos(pi*dist/8000.)*cos(pi*dist/8000.) 
+                 phis(i,j)=250.*exp(-(dist/5000.)**2)*cos(pi*dist/4000.)*cos(pi*dist/4000.) 
                  gz(i,j,npz+1) = phis(i,j)
               enddo
            enddo
@@ -5308,11 +5306,7 @@ end subroutine terminator_tracers
            do k=npz-1,1,-1
               do j=js,je
                  do i=is,ie
-                    if (gz(i,j,k+1) < 10000.) then
-                       ths = pkz(i,j,k+1)/pt(i,j,k+1) - (pkz(i,j,k+1)-pkz(i,j,k))/amp
-                    else
-                       ths = pkz(i,j,k+1)/pt(i,j,k+1) - (pkz(i,j,k+1)-pkz(i,j,k))/ampb
-                    endif
+                    ths = pkz(i,j,k+1)/pt(i,j,k+1) - (pkz(i,j,k+1)-pkz(i,j,k))/amp
                     pt(i,j,k) = pkz(i,j,k)/ths
                     delz(i,j,k) = rdgas/grav*pt(i,j,k)*(peln(i,k,j)-peln(i,k+1,j))
                     gz(i,j,k) = gz(i,j,k+1) - delz(i,j,k)
@@ -5330,7 +5324,7 @@ end subroutine terminator_tracers
 
 
            !4. Set up wind profile:
-           u = 20.0
+           u = 10.0
            v = 0.0
            w = 0.0
            q = 0.0
@@ -5638,6 +5632,9 @@ end subroutine terminator_tracers
 
         end select
 
+        is_ideal_case = .true.
+
+        
         nullify(grid)
         nullify(agrid)
 
