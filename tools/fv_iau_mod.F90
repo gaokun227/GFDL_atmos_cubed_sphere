@@ -30,7 +30,7 @@
 !-------------------------------------------------------------------------------
 
 #ifdef OVERLOAD_R4
-#define _GET_VAR1 get_var1_real 
+#define _GET_VAR1 get_var1_real
 #else
 #define _GET_VAR1 get_var1_double
 #endif
@@ -41,9 +41,9 @@ module fv_iau_mod
   use mpp_mod,             only: mpp_error, FATAL, NOTE, mpp_pe
   use mpp_domains_mod,     only: domain2d
 
-  use constants_mod,       only: pi=>pi_8 
+  use constants_mod,       only: pi=>pi_8
   use fv_arrays_mod,       only: fv_atmos_type,       &
-                                 fv_grid_type,        & 
+                                 fv_grid_type,        &
                                  fv_grid_bounds_type, &
                                  R_GRID
   use fv_mp_mod,           only: is_master
@@ -59,6 +59,7 @@ module fv_iau_mod
   use fv_treat_da_inc_mod, only: remap_coef
   use tracer_manager_mod,  only: get_tracer_names,get_tracer_index, get_number_tracers
   use field_manager_mod,   only: MODEL_ATMOS
+  use fv_diagnostics_mod,  only: prt_maxmin2
   implicit none
 
   private
@@ -105,6 +106,7 @@ module fv_iau_mod
   end type iau_state_type
   type(iau_state_type) :: IAU_state
   public iau_external_data_type,IAU_initialize,getiauforcing
+  public replay_initialize
 
 contains
 subroutine IAU_initialize (IPD_Control, IAU_Data,Init_parm)
@@ -202,7 +204,7 @@ subroutine IAU_initialize (IPD_Control, IAU_Data,Init_parm)
 
       ! Convert to radians
       do i=1,im
-        lon(i) = lon(i) * deg2rad 
+        lon(i) = lon(i) * deg2rad
       enddo
       do j=1,jm
         lat(j) = lat(j) * deg2rad
@@ -225,12 +227,11 @@ subroutine IAU_initialize (IPD_Control, IAU_Data,Init_parm)
          agrid(is-1+i,js-1+j,2)=Init_parm%xlat(i,j)
       enddo
     enddo
-    call remap_coef( is, ie, js, je, &
+    call remap_coef( is, ie, js, je, is, ie, js, je, &
         im, jm, lon, lat, id1, id2, jdc, s2c, &
         agrid)
     deallocate ( lon, lat,agrid )
 
-   
     allocate(IAU_Data%ua_inc(is:ie, js:je, km))
     allocate(IAU_Data%va_inc(is:ie, js:je, km))
     allocate(IAU_Data%temp_inc(is:ie, js:je, km))
@@ -244,12 +245,13 @@ subroutine IAU_initialize (IPD_Control, IAU_Data,Init_parm)
     allocate (iau_state%inc1%delp_inc (is:ie, js:je, km))
     allocate (iau_state%inc1%delz_inc (is:ie, js:je, km))
     allocate (iau_state%inc1%tracer_inc(is:ie, js:je, km,ntracers))
+
     iau_state%hr1=IPD_Control%iaufhrs(1)
     iau_state%wt = 1.0 ! IAU increment filter weights (default 1.0)
     if (IPD_Control%iau_filter_increments) then
        ! compute increment filter weights, sum to obtain normalization factor
        dtp=IPD_control%dtp
-       nstep = 0.5*IPD_Control%iau_delthrs*3600/dtp 
+       nstep = 0.5*IPD_Control%iau_delthrs*3600/dtp
        ! compute normalization factor for filter weights
        normfact = 0.
        do k=1,2*nstep+1
@@ -270,6 +272,7 @@ subroutine IAU_initialize (IPD_Control, IAU_Data,Init_parm)
     if (nfiles.EQ.1) then  ! only need to get incrments once since constant forcing over window
        call setiauforcing(IPD_Control,IAU_Data,iau_state%wt)
     endif
+
     if (nfiles.GT.1) then  !have multiple files, but only read in 2 at a time and interpoalte between them
        allocate (iau_state%inc2%ua_inc(is:ie, js:je, km))
        allocate (iau_state%inc2%va_inc(is:ie, js:je, km))
@@ -285,14 +288,135 @@ subroutine IAU_initialize (IPD_Control, IAU_Data,Init_parm)
 
 end subroutine IAU_initialize
 
+subroutine replay_initialize (IPD_Control,IAU_Data)
+    type (IPD_control_type), intent(in) :: IPD_Control
+    type (IAU_external_data_type), intent(inout) :: IAU_Data
+    integer :: i, j, k, l, nstep, kstep
+    real(kind=kind_phys) sx,wx,wt,normfact,dtp
+    
+    is  = IPD_Control%isc
+    ie  = is + IPD_Control%nx-1
+    js  = IPD_Control%jsc
+    je  = js + IPD_Control%ny-1
+    npz = IPD_Control%levs
+
+    call get_number_tracers(MODEL_ATMOS, num_tracers=ntracers)
+    allocate (tracer_names(ntracers))
+    allocate (tracer_indicies(ntracers))
+    do i = 1, ntracers
+       call get_tracer_names(MODEL_ATMOS, i, tracer_names(i))
+       tracer_indicies(i)  = get_tracer_index(MODEL_ATMOS,tracer_names(i))
+    enddo
+
+! only one increment level for replay=1 for now
+    nfiles=1
+    if (is_master()) print *,'nfiles = ',nfiles
+    if (is_master()) print *,'iau interval = ',IPD_Control%iau_delthrs,' hours'
+    dt = (IPD_Control%iau_delthrs*3600.)
+    rdt = 1.0/dt
+
+! allocate arrays that will hold iau state
+    allocate (iau_state%inc1%ua_inc(is:ie, js:je, npz))
+    allocate (iau_state%inc1%va_inc(is:ie, js:je, npz))
+    allocate (iau_state%inc1%temp_inc (is:ie, js:je, npz))
+    allocate (iau_state%inc1%delp_inc (is:ie, js:je, npz))
+    allocate (iau_state%inc1%delz_inc (is:ie, js:je, npz))
+    allocate (iau_state%inc1%tracer_inc(is:ie, js:je, npz, ntracers))
+    iau_state%hr1=IPD_Control%iaufhrs(1)
+    iau_state%wt = 1.0 ! IAU increment filter weights (default 1.0)
+    if (IPD_Control%iau_filter_increments) then
+       ! compute increment filter weights, sum to obtain normalization factor
+       dtp=IPD_control%dtp
+       nstep = 0.5*IPD_Control%iau_delthrs*3600/dtp
+       ! compute normalization factor for filter weights
+       normfact = 0.
+       do k=1,2*nstep+1
+          kstep = k-1-nstep
+          sx     = acos(-1.)*kstep/nstep
+          wx     = acos(-1.)*kstep/(nstep+1)
+          if (kstep .ne. 0) then
+             wt = sin(wx)/wx*sin(sx)/sx
+          else
+             wt = 1.0
+          endif
+          normfact = normfact + wt
+       enddo
+       iau_state%wt_normfact = (2*nstep+1)/normfact
+    endif
+
+! zero increments for selected variables
+    
+    if( is_master() ) print *,'iau_forcing_var ', size(IPD_Control%iau_forcing_var)
+    if(zero_increment('ua',IPD_Control)) IAU_Data%ua_inc(:,:,:) = 0.0
+    if(zero_increment('va',IPD_Control)) IAU_Data%va_inc(:,:,:) = 0.0
+    if(zero_increment('temp',IPD_Control)) IAU_Data%temp_inc(:,:,:) = 0.0
+    if(zero_increment('delp',IPD_Control)) IAU_Data%delp_inc(:,:,:) = 0.0
+    if(zero_increment('delz',IPD_Control)) IAU_Data%delz_inc(:,:,:) = 0.0
+    do l=1,ntracers
+       if(zero_increment(tracer_names(l),IPD_Control)) IAU_Data%tracer_inc(:,:,:,l) = 0.0
+    enddo
+
+    call prt_maxmin2('ua_inc', IAU_Data%ua_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('va_inc', IAU_Data%va_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('t_inc', IAU_Data%temp_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('delp_inc', IAU_Data%delp_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('delz_inc', IAU_Data%delz_inc, is, ie, js, je, npz, 1.)
+    do i=1,ntracers
+       if( is_master() ) write(*,*) 'IAU_Data input', tracer_names(i)
+       call prt_maxmin2('q_inc', IAU_Data%tracer_inc(:,:,:,i), is, ie, js, je, npz, 1.)
+    enddo
+
+! store increments in iau_state%inc1
+    do k = 1,npz
+       do j = js,je
+          do i = is,ie
+             iau_state%inc1%ua_inc(i,j,k)=IAU_Data%ua_inc(i,j,k)
+             iau_state%inc1%va_inc(i,j,k)=IAU_Data%va_inc(i,j,k)
+             iau_state%inc1%temp_inc(i,j,k)=IAU_Data%temp_inc(i,j,k)
+             iau_state%inc1%delp_inc(i,j,k)=IAU_Data%delp_inc(i,j,k)
+             iau_state%inc1%delz_inc(i,j,k)=IAU_Data%delz_inc(i,j,k)
+             do l=1,ntracers
+                iau_state%inc1%tracer_inc(i,j,k,l)=IAU_Data%tracer_inc(i,j,k,l)
+             enddo
+          enddo
+       enddo
+    enddo
+
+    call prt_maxmin2('ua_inc', iau_state%inc1%ua_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('va_inc', iau_state%inc1%va_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('t_inc', iau_state%inc1%temp_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('delp_inc', iau_state%inc1%delp_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('delz_inc', iau_state%inc1%delz_inc, is, ie, js, je, npz, 1.)
+    do i=1,ntracers
+       if( is_master() ) write(*,*) 'iau_state%inc1 ', tracer_names(i)
+       call prt_maxmin2('q_inc', iau_state%inc1%tracer_inc(:,:,:,i), is, ie, js, je, npz, 1.)
+    enddo
+
+    call setiauforcing(IPD_Control,IAU_Data,iau_state%wt)
+
+    call prt_maxmin2('ua_inc', IAU_Data%ua_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('va_inc', IAU_Data%va_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('t_inc', IAU_Data%temp_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('delp_inc', IAU_Data%delp_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin2('delz_inc', IAU_Data%delz_inc, is, ie, js, je, npz, 1.)
+    do i=1,ntracers
+       if( is_master() ) write(*,*) 'IAU_Data output', tracer_names(i)
+       call prt_maxmin2('q_inc', IAU_Data%tracer_inc(:,:,:,i), is, ie, js, je, npz, 1.)
+    enddo
+
+!   print*,'in IAU init',dt,rdt
+    IAU_data%drymassfixer = IPD_control%iau_drymassfixer
+
+end subroutine replay_initialize
+
 subroutine getiauforcing(IPD_Control,IAU_Data)
-        
-   implicit none 
+
+   implicit none
    type (IPD_control_type), intent(in) :: IPD_Control
    type(IAU_external_data_type),  intent(inout) :: IAU_Data
    real(kind=kind_phys) t1,t2,sx,wx,wt,dtp
    integer n,i,j,k,sphum,kstep,nstep
-  
+
    IAU_Data%in_interval=.false.
    if (nfiles.LE.0) then
        return
@@ -307,7 +431,7 @@ subroutine getiauforcing(IPD_Control,IAU_Data)
       ! in window kstep=-nstep,nstep (2*nstep+1 total)
       ! time step IPD_control%dtp
       dtp=IPD_control%dtp
-      nstep = 0.5*IPD_Control%iau_delthrs*3600/dtp 
+      nstep = 0.5*IPD_Control%iau_delthrs*3600/dtp
       ! compute normalized filter weight
       kstep = (IPD_Control%fhour-(t1+IPD_Control%iau_delthrs*0.5))*3600./dtp
       if (kstep .ge. -nstep .and. kstep .le. nstep) then
@@ -331,7 +455,7 @@ subroutine getiauforcing(IPD_Control,IAU_Data)
       if ( IPD_Control%fhour < t1 .or. IPD_Control%fhour >= t2 ) then
 !         if (is_master()) print *,'no iau forcing',t1,IPD_Control%fhour,t2
          IAU_Data%in_interval=.false.
-      else 
+      else
          if (IPD_Control%iau_filter_increments) call setiauforcing(IPD_Control,IAU_Data,iau_state%wt)
          if (is_master()) print *,'apply iau forcing',t1,IPD_Control%fhour,t2
          IAU_Data%in_interval=.true.
@@ -344,7 +468,7 @@ subroutine getiauforcing(IPD_Control,IAU_Data)
       if (IPD_Control%fhour < IPD_Control%iaufhrs(1) .or. IPD_Control%fhour >= IPD_Control%iaufhrs(nfiles)) then
 !         if (is_master()) print *,'no iau forcing',IPD_Control%iaufhrs(1),IPD_Control%fhour,IPD_Control%iaufhrs(nfiles)
          IAU_Data%in_interval=.false.
-      else 
+      else
          IAU_Data%in_interval=.true.
          do k=nfiles,1,-1
             if (IPD_Control%iaufhrs(k) > IPD_Control%fhour) then
@@ -366,13 +490,13 @@ subroutine getiauforcing(IPD_Control,IAU_Data)
  end subroutine getiauforcing
 
 subroutine updateiauforcing(IPD_Control,IAU_Data,wt)
-      
-   implicit none 
+
+   implicit none
    type (IPD_control_type),        intent(in) :: IPD_Control
    type(IAU_external_data_type),  intent(inout) :: IAU_Data
    real(kind_phys) delt,wt
    integer i,j,k,l
-  
+
 !   if (is_master()) print *,'in updateiauforcing',nfiles,IPD_Control%iaufhrs(1:nfiles)
    delt = (iau_state%hr2-(IPD_Control%fhour))/(IAU_state%hr2-IAU_state%hr1)
    do j = js,je
@@ -393,8 +517,8 @@ subroutine updateiauforcing(IPD_Control,IAU_Data,wt)
 
 
  subroutine setiauforcing(IPD_Control,IAU_Data,wt)
-      
- implicit none 
+
+ implicit none
  type (IPD_control_type),        intent(in) :: IPD_Control
  type(IAU_external_data_type),  intent(inout) :: IAU_Data
  real(kind_phys) delt, dt,wt
@@ -420,7 +544,7 @@ subroutine updateiauforcing(IPD_Control,IAU_Data,wt)
 
 subroutine read_iau_forcing(IPD_Control,increments,fname)
     type (IPD_control_type), intent(in) :: IPD_Control
-    type(iau_internal_data_type), intent(inout):: increments  
+    type(iau_internal_data_type), intent(inout):: increments
     character(len=*),  intent(in) :: fname
 !locals
     real, dimension(:,:,:), allocatable:: u_inc, v_inc
@@ -455,7 +579,7 @@ subroutine read_iau_forcing(IPD_Control,increments,fname)
     do j=js,je
       do i=is,ie
           j1 = jdc(i,j)
-        jbeg = min(jbeg, j1) 
+        jbeg = min(jbeg, j1)
         jend = max(jend, j1+1)
       enddo
     enddo
@@ -502,6 +626,22 @@ subroutine interp_inc(field_name,var,jbeg,jend)
     enddo
  enddo
 end subroutine interp_inc
+
+logical function zero_increment(check_var,IPD_Control)
+
+   type (IPD_control_type), intent(in) :: IPD_Control
+   character(len=*), intent(in) :: check_var
+   integer :: i
+
+   zero_increment = .true.
+   do i=1,size(IPD_Control%iau_forcing_var)
+      if (trim(check_var) == trim(IPD_Control%iau_forcing_var(i))) then
+         zero_increment = .false.
+         return
+      endif
+   enddo
+
+end function zero_increment
 
 end module fv_iau_mod
 

@@ -6695,20 +6695,27 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 !---------------------------------------------------------------------
 
-  subroutine get_data_source(source,regional)
+  subroutine get_data_source(source,regional,directory)
 !
 ! This routine extracts the data source information if it is present in the datafile.
 !
       character (len = 80) :: source
       integer              :: ncids,sourceLength
       logical :: lstatus,regional
+      character(len=*), intent(in), optional :: directory
+
+      character(len=128) :: dir
+
+      dir = 'INPUT'
+      if(present(directory)) dir = directory
+
 !
 ! Use the fms call here so we can actually get the return code value.
 !
       if (regional) then
        lstatus = get_global_att_value('INPUT/gfs_data.nc',"source", source)
       else
-       lstatus = get_global_att_value('INPUT/gfs_data.tile1.nc',"source", source)
+       lstatus = get_global_att_value(trim(dir)//'/gfs_data.tile1.nc',"source", source)
       endif
       if (.not. lstatus) then
        if (mpp_pe() == 0) write(0,*) 'INPUT source not found ',lstatus,' set source=No Source Attribute'

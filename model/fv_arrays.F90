@@ -293,6 +293,9 @@ module fv_arrays_mod
    logical :: inline_q = .false.
    logical :: adiabatic = .false.     ! Run without physics (full or idealized).
 #endif
+   integer :: replay = 0
+   integer :: nrestartbg = 1
+   logical :: write_replay_ic = .false.
 !-----------------------------------------------------------
 ! Grid shifting, rotation, and cube transformations:
 !-----------------------------------------------------------
@@ -484,6 +487,7 @@ module fv_arrays_mod
   logical :: read_ec_sst = .false.
 
   logical :: w_limiter = .true. ! Fix excessive w - momentum conserving --- sjl
+
   ! options related to regional mode
   logical :: regional = .false.       !< Default setting for the regional domain.
   integer :: bc_update_interval = 3   !< Default setting for interval (hours) between external regional BC data files.

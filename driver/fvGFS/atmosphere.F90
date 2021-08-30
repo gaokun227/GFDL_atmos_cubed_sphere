@@ -159,9 +159,10 @@ contains
 
 
 
- subroutine atmosphere_init (Time_init, Time, Time_step, Grid_box, area)
+ subroutine atmosphere_init (Time_init, Time, Time_step, Grid_box, area, IAU_Data)
    type (time_type),    intent(in)    :: Time_init, Time, Time_step
    type(grid_box_type), intent(inout) :: Grid_box
+   type(iau_external_data_type), intent(out) :: IAU_Data
    real(kind=kind_phys), pointer, dimension(:,:), intent(inout) :: area
 !--- local variables ---
    integer :: i, n
@@ -282,6 +283,16 @@ contains
              qv_dt(isc:iec,jsc:jec,npz), &
              ps_dt(isd:ied,jsd:jed) )
 
+!----- allocate IAU increments, used to hold ICs
+   if (Atm(mygrid)%flagstruct%replay == 1) then
+     allocate(IAU_Data%ua_inc(isc:iec, jsc:jec, npz))
+     allocate(IAU_Data%va_inc(isc:iec, jsc:jec, npz))
+     allocate(IAU_Data%temp_inc(isc:iec, jsc:jec, npz))
+     allocate(IAU_Data%delp_inc(isc:iec, jsc:jec, npz))
+     allocate(IAU_Data%delz_inc(isc:iec, jsc:jec, npz))
+     allocate(IAU_Data%tracer_inc(isc:iec, jsc:jec, npz, nq))
+   endif 
+
 !--- allocate pref
    allocate(pref(npz+1,2), dum1d(npz+1))
 
@@ -289,8 +300,8 @@ contains
      call gfdl_mp_init(mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
    endif
    call cld_eff_rad_init(nlunit, input_nml_file, stdlog(), fn_nml)
-
-   call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mygrid)%gridstruct%grid_type, mygrid)
+   call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, &
+                   Atm(mygrid)%gridstruct%grid_type, mygrid, IAU_Data)
 
    fv_time = Time
 
@@ -1151,7 +1162,7 @@ contains
    integer :: nb, blen, nwat, dnats, nq_adv
    real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
    real :: psum, qsum, psumb, qsumb, betad, psdt_mean
-   real :: tracer_clock, lat_thresh
+   real :: tracer_clock, lat_thresh, fhr
    character(len=32) :: tracer_name
 
    Time_prev = Time
@@ -1383,7 +1394,12 @@ contains
       enddo
    enddo
 
-   !if (is_master()) write(555,*) time_type_to_real( Time_next - Atm(n)%Time_init )/3600., psdt_mean
+   if (is_master()) then
+     fhr=time_type_to_real( Time_next - Atm(n)%Time_init )/3600.
+     if (fhr <= 12.0 .or. (fhr - int(fhr)) == 0.0) then 
+        write(555,*) fhr, psdt_mean
+     endif
+   endif
 
 !LMH 7jan2020: Update PBL and other clock tracers, if present
    tracer_clock = time_type_to_real(Time_next - Atm(n)%Time_init)*1.e-6

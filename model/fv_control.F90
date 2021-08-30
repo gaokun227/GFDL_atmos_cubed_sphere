@@ -178,6 +178,10 @@ module fv_control_mod
      real    , pointer :: d_ext
      integer , pointer :: nwat
      logical , pointer :: warm_start
+     integer , pointer :: replay
+     integer , pointer :: nrestartbg
+     logical , pointer :: write_replay_ic
+     
      logical , pointer :: inline_q
      real , pointer :: shift_fac
      logical , pointer :: do_schmidt, do_cube_transform
@@ -727,6 +731,9 @@ module fv_control_mod
        nwat                          => Atm%flagstruct%nwat
        use_logp                      => Atm%flagstruct%use_logp
        warm_start                    => Atm%flagstruct%warm_start
+       replay                        => Atm%flagstruct%replay 
+       nrestartbg                    => Atm%flagstruct%nrestartbg
+       write_replay_ic               => Atm%flagstruct%write_replay_ic
        inline_q                      => Atm%flagstruct%inline_q
        shift_fac                     => Atm%flagstruct%shift_fac
        do_schmidt                    => Atm%flagstruct%do_schmidt
@@ -974,7 +981,8 @@ module fv_control_mod
             bc_update_interval,  nrows_blend, write_restart_with_bcs, regional_bcs_from_gsi, &
             w_limiter, write_coarse_restart_files, write_coarse_diagnostics,&
             write_only_coarse_intermediate_restarts, &
-            write_coarse_agrid_vel_rst, write_coarse_dgrid_vel_rst
+            write_coarse_agrid_vel_rst, write_coarse_dgrid_vel_rst, &
+            replay, nrestartbg, write_replay_ic
 
 #ifdef INTERNAL_FILE_NML
        ! Read FVCORE namelist
