@@ -32,7 +32,7 @@ module fv_mapz_mod
   use fv_grid_utils_mod, only: g_sum, ptop_min, cubed_to_latlon, update_dwinds_phys
   use fv_fill_mod,       only: fillz
   use mpp_domains_mod,   only: mpp_update_domains, domain2d
-  use mpp_mod,           only: NOTE, mpp_error, get_unit, mpp_root_pe, mpp_pe
+  use mpp_mod,           only: FATAL, NOTE, mpp_error, get_unit, mpp_root_pe, mpp_pe
   use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID, inline_mp_type
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
@@ -758,6 +758,10 @@ endif        ! end last_step check
   if (do_adiabatic_init .or. do_sat_adj) then
                                            call timing_on('sat_adj2')
 
+           if (cld_amt <= 0) then
+              call mpp_error(FATAL, " fv_mapz_mod: cld_amt must be defined in field_table to use do_adiabatic_init or do_sat_adj")
+           endif
+
            allocate(dz(is:ie,js:je))
 
 !$OMP parallel do default(none) shared(is,ie,js,je,km,kmp,isd,jsd,te,delp,hydrostatic,hs,pt,peln, &
@@ -843,6 +847,10 @@ endif        ! end last_step check
 !$OMP                                  do_inline_mp,ps) &
 !$OMP                          private(u_dt,v_dt,q2,q3,gsize,dp2,t0,dz,wa)
     do j = js, je
+
+       if (cld_amt <= 0) then
+          call mpp_error(FATAL, " fv_mapz_mod: cld_amt must be defined in field_table to use do_inline_mp")
+       endif
 
         gsize(is:ie) = sqrt(gridstruct%area_64(is:ie,j))
 
