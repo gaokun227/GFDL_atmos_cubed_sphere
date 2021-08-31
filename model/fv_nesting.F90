@@ -3231,7 +3231,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time, this_grid)
 !------
 ! map v
 !------
-!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak_dst,bk_dst,ps_dst,u_dst,v_dst,ak_src,bk_src,ps_src,npz,u_src,v_src,ptop,istart,iend_v,jstart,jend,blend_wt) &
+!$OMP parallel do default(none) shared(js,je,kmd,is,ie,ak_dst,bk_dst,ps_dst,u_dst,v_dst,ak_src,bk_src,ps_src,npz,u_src,v_src,ptop,istart,iend_v,jstart,jend,blend_wt,kord_mt) &
 !$OMP          private(pe0,pe1,qt,qn1,wt1,wt2)
    do j=jstart,jend
 !------
