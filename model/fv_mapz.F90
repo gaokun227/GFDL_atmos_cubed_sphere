@@ -362,10 +362,19 @@ contains
    enddo
 
    if ( remap_te ) then
-! Map Total Energy using logp
-      call map_scalar(km,  peln(is,1,j),  te, gz,   &
+      if ( kord_tm==0 ) then
+!----------------------------------
+! map Total Energy using GMAO cubic
+!----------------------------------
+         call map1_cubic (km,   pe1,  te,       &
+                       km,   pe2,  te,       &
+                       is, ie, j, isd, ied, jsd, jed, akap, T_VAR=1, conserv=.true.)
+      else
+         call map_scalar(km,  peln(is,1,j),  te, gz,   &
                          km,  pn2,           te,              &
                          is, ie, j, isd, ied, jsd, jed, 1, abs(kord_tm), cp_air*t_min)
+      endif
+                 
    else
       if ( kord_tm<0 ) then
 !----------------------------------
@@ -643,7 +652,7 @@ contains
                        (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j) )
                   dlnp = rg*(peln(i,k+1,j) - peln(i,k,j))
                   pt(i,j,k)= tpe / (cp - pe2(i,k)*dlnp/delp(i,j,k))
-
+                  pkz(i,j,k) = (pk2(i,k+1)-pk2(i,k))/(akap*(peln(i,k+1,j)-peln(i,k,j)))
                   phis(i,k) = phis(i,k+1) + dlnp*pt(i,j,k)
                enddo
             enddo           ! end k-loop
@@ -3849,4 +3858,209 @@ else ! all others
   end select
 
  end subroutine moist_cp
+!----------------------------------------------------------------------- 
+!BOP
+! !ROUTINE:  map1_cubic --- Cubic Interpolation for vertical re-mapping
+!
+! !INTERFACE:
+  subroutine map1_cubic( km,   pe1,    q1,                 &
+                         kn,   pe2,    q2,   i1, i2,       &
+                         j,    ibeg, iend, jbeg, jend, akap, T_VAR, conserv)
+      implicit none
+
+! !INPUT PARAMETERS:
+      integer, intent(in) :: i1                ! Starting longitude
+      integer, intent(in) :: i2                ! Finishing longitude
+      real, intent(in) :: akap
+      integer, intent(in) :: T_VAR             ! Thermodynamic variable to remap
+                                               !     1:TE  2:T  3:PT 
+      logical, intent(in) :: conserv
+      integer, intent(in) :: j                 ! Current latitude
+      integer, intent(in) :: ibeg, iend, jbeg, jend
+      integer, intent(in) :: km                ! Original vertical dimension
+      integer, intent(in) :: kn                ! Target vertical dimension
+
+      real, intent(in) ::  pe1(i1:i2,km+1)  ! pressure at layer edges 
+                                               ! (from model top to bottom surface)
+                                               ! in the original vertical coordinate
+      real, intent(in) ::  pe2(i1:i2,kn+1)  ! pressure at layer edges 
+                                               ! (from model top to bottom surface)
+                                               ! in the new vertical coordinate
+
+      real, intent(in) ::    q1(ibeg:iend,jbeg:jend,km) ! Field input
+! !INPUT/OUTPUT PARAMETERS:
+      real, intent(inout)::  q2(ibeg:iend,jbeg:jend,kn) ! Field output
+
+! !DESCRIPTION:
+!
+!     Perform Cubic Interpolation a given latitude
+! pe1: pressure at layer edges (from model top to bottom surface)
+!      in the original vertical coordinate
+! pe2: pressure at layer edges (from model top to bottom surface)
+!      in the new vertical coordinate
+!
+! !REVISION HISTORY:
+!    2005.11.14   Takacs    Initial Code
+!    2016.07.20   Putman    Modified to make genaric for any thermodynamic variable
+!
+!EOP
+!-----------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+      real       qx(i1:i2,km)
+      real   logpl1(i1:i2,km)
+      real   logpl2(i1:i2,kn)
+      real   dlogp1(i1:i2,km)
+      real    vsum1(i1:i2)
+      real    vsum2(i1:i2)
+      real   am2,am1,ap0,ap1,P,PLP1,PLP0,PLM1,PLM2,DLP0,DLM1,DLM2
+
+      integer i, k, LM2,LM1,LP0,LP1
+
+! Initialization
+! --------------
+
+      select case (T_VAR)
+      case(1)
+       ! Total Energy Remapping in Log(P)
+        do k=1,km
+            qx(:,k) = q1(i1:i2,j,k)
+        logpl1(:,k) = log( 0.5*(pe1(:,k)+pe1(:,k+1)) )
+        enddo
+        do k=1,kn
+        logpl2(:,k) = log( 0.5*(pe2(:,k)+pe2(:,k+1)) )
+        enddo
+
+        do k=1,km-1
+        dlogp1(:,k) = logpl1(:,k+1)-logpl1(:,k)
+        enddo
+
+      case(2)
+       ! Temperature Remapping in Log(P)
+        do k=1,km
+            qx(:,k) = q1(i1:i2,j,k)
+        logpl1(:,k) = log( 0.5*(pe1(:,k)+pe1(:,k+1)) )
+        enddo
+        do k=1,kn
+        logpl2(:,k) = log( 0.5*(pe2(:,k)+pe2(:,k+1)) )
+        enddo
+
+        do k=1,km-1
+        dlogp1(:,k) = logpl1(:,k+1)-logpl1(:,k)
+        enddo
+
+      case(3)
+       ! Potential Temperature Remapping in P^KAPPA
+        do k=1,km
+            qx(:,k) = q1(i1:i2,j,k)
+        logpl1(:,k) = exp( akap*log( 0.5*(pe1(:,k)+pe1(:,k+1))) )
+        enddo
+        do k=1,kn
+        logpl2(:,k) = exp( akap*log( 0.5*(pe2(:,k)+pe2(:,k+1))) )
+        enddo
+
+        do k=1,km-1
+        dlogp1(:,k) = logpl1(:,k+1)-logpl1(:,k)
+        enddo
+
+      end select
+
+      if (conserv) then
+! Compute vertical integral of Input TE
+! -------------------------------------
+        vsum1(:) = 0.0
+        do i=i1,i2
+        do k=1,km
+        vsum1(i) = vsum1(i) + qx(i,k)*( pe1(i,k+1)-pe1(i,k) )
+        enddo
+        vsum1(i) = vsum1(i) / ( pe1(i,km+1)-pe1(i,1) )
+        enddo
+
+      endif
+
+! Interpolate TE onto target Pressures
+! ------------------------------------
+      do i=i1,i2
+      do k=1,kn
+         LM1 = 1
+         LP0 = 1
+         do while( LP0.le.km )
+            if (logpl1(i,LP0).lt.logpl2(i,k)) then
+               LP0 = LP0+1
+            else
+               exit
+            endif
+         enddo
+         LM1 = max(LP0-1,1)
+         LP0 = min(LP0, km)
+
+! Extrapolate Linearly in LogP above first model level
+! ----------------------------------------------------
+         if( LM1.eq.1 .and. LP0.eq.1 ) then
+             q2(i,j,k) = qx(i,1) + ( qx(i,2)-qx(i,1) )*( logpl2(i,k)-logpl1(i,1) ) &
+                                                      /( logpl1(i,2)-logpl1(i,1) )
+
+! Extrapolate Linearly in LogP below last model level
+! ---------------------------------------------------
+         else if( LM1.eq.km .and. LP0.eq.km ) then
+             q2(i,j,k) = qx(i,km) + ( qx(i,km)-qx(i,km-1) )*( logpl2(i,k )-logpl1(i,km  ) ) &
+                                                           /( logpl1(i,km)-logpl1(i,km-1) )
+
+! Interpolate Linearly in LogP between levels 1 => 2 and km-1 => km
+! -----------------------------------------------------------------
+         else if( LM1.eq.1 .or. LP0.eq.km ) then
+             q2(i,j,k) = qx(i,LP0) + ( qx(i,LM1)-qx(i,LP0) )*( logpl2(i,k  )-logpl1(i,LP0) ) &
+                                                            /( logpl1(i,LM1)-logpl1(i,LP0) )
+! Interpolate Cubicly in LogP between other model levels
+! ------------------------------------------------------
+         else
+              LP1 = LP0+1
+              LM2 = LM1-1
+             P    = logpl2(i,k)
+             PLP1 = logpl1(i,LP1)
+             PLP0 = logpl1(i,LP0)
+             PLM1 = logpl1(i,LM1)
+             PLM2 = logpl1(i,LM2)
+             DLP0 = dlogp1(i,LP0)
+             DLM1 = dlogp1(i,LM1)
+             DLM2 = dlogp1(i,LM2)
+
+              ap1 = (P-PLP0)*(P-PLM1)*(P-PLM2)/( DLP0*(DLP0+DLM1)*(DLP0+DLM1+DLM2) )
+              ap0 = (PLP1-P)*(P-PLM1)*(P-PLM2)/( DLP0*      DLM1 *(     DLM1+DLM2) )
+              am1 = (PLP1-P)*(PLP0-P)*(P-PLM2)/( DLM1*      DLM2 *(DLP0+DLM1     ) )
+              am2 = (PLP1-P)*(PLP0-P)*(PLM1-P)/( DLM2*(DLM1+DLM2)*(DLP0+DLM1+DLM2) )
+
+             q2(i,j,k) = ap1*qx(i,LP1) + ap0*qx(i,LP0) + am1*qx(i,LM1) + am2*qx(i,LM2)
+
+         endif
+
+      enddo
+      enddo
+      if (conserv) then
+
+! Compute vertical integral of Output TE
+! --------------------------------------
+        vsum2(:) = 0.0
+        do i=i1,i2
+        do k=1,kn
+        vsum2(i) = vsum2(i) + q2(i,j,k)*( pe2(i,k+1)-pe2(i,k) )
+        enddo
+        vsum2(i) = vsum2(i) / ( pe2(i,kn+1)-pe2(i,1) )
+        enddo
+
+! Adjust Final TE to conserve
+! ---------------------------
+        do i=i1,i2
+        do k=1,kn
+           q2(i,j,k) = q2(i,j,k) + vsum1(i)-vsum2(i)
+!          q2(i,j,k) = q2(i,j,k) * vsum1(i)/vsum2(i)
+        enddo
+        enddo
+
+      endif
+
+      return
+!EOC
+ end subroutine map1_cubic
 end module fv_mapz_mod
