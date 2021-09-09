@@ -275,7 +275,8 @@ module fv_arrays_mod
    logical :: convert_ke = .false.
    logical :: do_vort_damp = .false.
    logical :: use_old_omega = .true.
-   logical :: remap_te = .false.
+   logical :: remap_te = .false.    ! A developmental option, remap total energy based on abs(kord_tm)
+                                    ! if kord_tm=0 use GMAO Cubic, otherwise as Tv remapping 
 ! PG off centering:
    real    :: beta  = 0.0    ! 0.5 is "neutral" but it may not be stable
 #ifdef SW_DYNAMICS
