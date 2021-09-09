@@ -23,7 +23,7 @@
 
 #include <fms_platform.h>
  use constants_mod,   only: omega, pi=>pi_8, cnst_radius=>radius
- use mpp_mod,         only: FATAL, mpp_error, WARNING
+ use mpp_mod,         only: FATAL, mpp_error, WARNING, mpp_pe
  use external_sst_mod, only: i_sst, j_sst, sst_ncep, sst_anom
  use mpp_domains_mod, only: mpp_update_domains, DGRID_NE, mpp_global_sum
  use mpp_domains_mod, only: BITWISE_EXACT_SUM, domain2d, BITWISE_EFP_SUM
@@ -368,10 +368,10 @@
 !xxx  if (.not. Atm%neststruct%nested) then
       if (.not. Atm%gridstruct%bounded_domain) then
       if ( sw_corner ) then
-           do i=-2,0
-              sin_sg(0,i,3) = sin_sg(i,1,2)
-              sin_sg(i,0,4) = sin_sg(1,i,1)
-           enddo
+         do i=-2,0
+            sin_sg(0,i,3) = sin_sg(i,1,2)
+            sin_sg(i,0,4) = sin_sg(1,i,1)
+         enddo
       endif
       if ( nw_corner ) then
            do i=npy,npy+2
@@ -578,6 +578,9 @@
 ! For transport operation
 ! -------------------------------
       if ( sw_corner ) then
+!!! DEBUG CODE
+         print*, 'fv_grid_utils::grid_utils_init() : sw_corner called ', mpp_pe()
+!!! END DEBUG CODE
            do i=0,-2,-1
               sin_sg(0,i,3) = sin_sg(i,1,2)
               sin_sg(i,0,4) = sin_sg(1,i,1)
@@ -589,8 +592,13 @@
 !!!           cos_sg(i,0,9) = cos_sg(1,i,6)
            enddo
 !!!        cos_sg(0,0,8) = 0.5*(cos_sg(0,1,7)+cos_sg(1,0,9))
-
       endif
+!!! DEBUG CODE
+      if (is==1 .and. js == 1) then
+         print*, mpp_pe(), ' sin_sg: ', sin_sg(0,0,3), sin_sg(0,0,4)
+         print*, mpp_pe(), ' cos_sg: ', cos_sg(0,0,3), cos_sg(0,0,4)
+      endif
+!!! END DEBUG CODE
       if ( nw_corner ) then
            do i=npy,npy+2
               sin_sg(0,i,3) = sin_sg(npy-i,npy-1,4)
@@ -2786,7 +2794,7 @@
        else
             get_area = ang1 + ang2 + ang3 + ang4 - 2.*pi
        endif
-
+       
  end function get_area
 
 
