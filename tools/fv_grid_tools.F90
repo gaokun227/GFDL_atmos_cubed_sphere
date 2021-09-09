@@ -587,99 +587,84 @@ contains
        endif
     else
 
-       !!! DEBUG CODE
-      if (Atm%flagstruct%grid_type < 3 .and. .not. Atm%gridstruct%bounded_domain) then
-         if (       is==1 .and.  js==1 )      sw_corner = .true.
-         if ( (ie+1)==npx .and.  js==1 )      se_corner = .true.
-         if ( (ie+1)==npx .and. (je+1)==npy ) ne_corner = .true.
-         if (       is==1 .and. (je+1)==npy ) nw_corner = .true.
-      endif
-       !!! END DEBUG CODE
-
-
+       !Moved from fv_grid_utils along with corrections to area_c/dxc/dyc calculation
+       ! --- lmh 9 sep 21
+       if (Atm%flagstruct%grid_type < 3 .and. .not. Atm%gridstruct%bounded_domain) then
+          if (       is==1 .and.  js==1 )      sw_corner = .true.
+          if ( (ie+1)==npx .and.  js==1 )      se_corner = .true.
+          if ( (ie+1)==npx .and. (je+1)==npy ) ne_corner = .true.
+          if (       is==1 .and. (je+1)==npy ) nw_corner = .true.
+       endif
        
-          cubed_sphere = .true.
+       cubed_sphere = .true.
 
-          if (Atm%neststruct%nested) then
-             !Read grid if it exists
+       if (Atm%neststruct%nested) then
+          !Read grid if it exists
 
-             if (Atm%flagstruct%grid_type < 0) then
-                !Note that read_grid only reads in grid corners. Will still need to compute all other grid metrics.
-                !NOTE: cannot currently read in mosaic for both coarse and nested grids simultaneously
-                call read_grid(Atm, grid_file, ndims, 1, ng)
-             endif
-             ! still need to set up weights
-             call setup_aligned_nest(Atm)
+          if (Atm%flagstruct%grid_type < 0) then
+             !Note that read_grid only reads in grid corners. Will still need to compute all other grid metrics.
+             !NOTE: cannot currently read in mosaic for both coarse and nested grids simultaneously
+             call read_grid(Atm, grid_file, ndims, 1, ng)
+          endif
+          ! still need to set up weights
+          call setup_aligned_nest(Atm)
 
-          else
-             if( trim(grid_file) == 'INPUT/grid_spec.nc' .or. Atm%flagstruct%grid_type < 0 ) then
-                call read_grid(Atm, grid_file, ndims, nregions, ng)
+       else
+          if( trim(grid_file) == 'INPUT/grid_spec.nc' .or. Atm%flagstruct%grid_type < 0 ) then
+             call read_grid(Atm, grid_file, ndims, nregions, ng)
 
              ! Here if we are reading from grid_spec and the grid has a nest we need to assemble
              ! the global grid array 'grid_global' to be sent at the end of this routine to the nest
-                if (ANY(Atm%neststruct%child_grids)) then
-                   grid_global(:,:,:,1)=-99999
-                   isection_s = is
-                   isection_e = ie
-                   jsection_s = js
-                   jsection_e = je
+             if (ANY(Atm%neststruct%child_grids)) then
+                grid_global(:,:,:,1)=-99999
+                isection_s = is
+                isection_e = ie
+                jsection_s = js
+                jsection_e = je
 
-                   if ( isd < 0 )     isection_s = isd
-                   if ( ied > npx-1 ) isection_e = ied
-                   if ( jsd < 0 )     jsection_s = jsd
-                   if ( jed > npy-1 ) jsection_e = jed
-                   ! if there is a nest, we need to setup grid_global on pe master
-                   ! to send it to the nest at the end of init_grid
-                   call mpp_gather(isection_s,isection_e,jsection_s,jsection_e,atm%pelist, &
-                                   grid(isection_s:isection_e,jsection_s:jsection_e,1),grid_global(1-ng:npx+ng,1-ng:npy+ng,1,1),is_master(),ng,ng)
-                   call mpp_gather(isection_s,isection_e,jsection_s,jsection_e,atm%pelist, &
-                                   grid(isection_s:isection_e,jsection_s:jsection_e,2),grid_global(1-ng:npx+ng,1-ng:npy+ng,2,1),is_master(),ng,ng)
-                   !do we need the haloes?!
-                   !do j=jsd,jed
-                   !do i=isd,ied
-                     !grid_global(i,j,1,1)=grid(i,j,1)
-                     !grid_global(i,j,2,1)=grid(i,j,2)
-                   !enddo
-                   !enddo
-                   !do j=1,npy
-                   !do i=1,npx
-                     !call mpp_max(grid_global(i,j,1,1),atm%pelist)
-                     !call mpp_max(grid_global(i,j,2,1),atm%pelist)
-                   !enddo
-                   !enddo
-                endif
+                if ( isd < 0 )     isection_s = isd
+                if ( ied > npx-1 ) isection_e = ied
+                if ( jsd < 0 )     jsection_s = jsd
+                if ( jed > npy-1 ) jsection_e = jed
+                ! if there is a nest, we need to setup grid_global on pe master
+                ! to send it to the nest at the end of init_grid
+                call mpp_gather(isection_s,isection_e,jsection_s,jsection_e,atm%pelist, &
+                     grid(isection_s:isection_e,jsection_s:jsection_e,1),grid_global(1-ng:npx+ng,1-ng:npy+ng,1,1),is_master(),ng,ng)
+                call mpp_gather(isection_s,isection_e,jsection_s,jsection_e,atm%pelist, &
+                     grid(isection_s:isection_e,jsection_s:jsection_e,2),grid_global(1-ng:npx+ng,1-ng:npy+ng,2,1),is_master(),ng,ng)
+             endif
 
-             else
+          else
 
-                if (Atm%flagstruct%grid_type>=0) call gnomonic_grids(Atm%flagstruct%grid_type, npx-1, xs, ys)
+             if (Atm%flagstruct%grid_type>=0) call gnomonic_grids(Atm%flagstruct%grid_type, npx-1, xs, ys)
 
-                if (is_master()) then
+             if (is_master()) then
 
                 if (Atm%flagstruct%grid_type>=0) then
                    do j=1,npy
-                   do i=1,npx
-                      grid_global(i,j,1,1) = xs(i,j)
-                      grid_global(i,j,2,1) = ys(i,j)
+                      do i=1,npx
+                         grid_global(i,j,1,1) = xs(i,j)
+                         grid_global(i,j,2,1) = ys(i,j)
+                      enddo
                    enddo
-                   enddo
-! mirror_grid assumes that the tile=1 is centered on equator and greenwich meridian Lon[-pi,pi]
+                   ! mirror_grid assumes that the tile=1 is centered on equator and greenwich meridian Lon[-pi,pi]
                    call mirror_grid(grid_global, ng, npx, npy, 2, 6)
                    do n=1,nregions
-                   do j=1,npy
-                   do i=1,npx
-!---------------------------------
-! Shift the corner away from Japan
-!---------------------------------
-!--------------------- This will result in the corner close to east coast of China ------------------
-                      if ( .not. ( Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) .and. (Atm%flagstruct%shift_fac)>1.E-4 )   &
-                           grid_global(i,j,1,n) = grid_global(i,j,1,n) - pi/Atm%flagstruct%shift_fac
-!----------------------------------------------------------------------------------------------------
-                      if ( grid_global(i,j,1,n) < 0. )              &
-                           grid_global(i,j,1,n) = grid_global(i,j,1,n) + 2.*pi
-                      if (ABS(grid_global(i,j,1,1)) < 1.d-10) grid_global(i,j,1,1) = 0.0
-                      if (ABS(grid_global(i,j,2,1)) < 1.d-10) grid_global(i,j,2,1) = 0.0
-                   enddo
-                   enddo
+                      do j=1,npy
+                         do i=1,npx
+                            !---------------------------------
+                            ! Shift the corner away from Japan
+                            !---------------------------------
+                            !--------------------- This will result in the corner close to east coast of China ------------------
+                            if ( .not. ( Atm%flagstruct%do_schmidt .or. Atm%flagstruct%do_cube_transform) .and. (Atm%flagstruct%shift_fac)>1.E-4 )   &
+                                 grid_global(i,j,1,n) = grid_global(i,j,1,n) - pi/Atm%flagstruct%shift_fac
+                            !----------------------------------------------------------------------------------------------------
+                            if ( grid_global(i,j,1,n) < 0. )              &
+                                 grid_global(i,j,1,n) = grid_global(i,j,1,n) + 2.*pi
+                            if (ABS(grid_global(i,j,1,1)) < 1.d-10) grid_global(i,j,1,1) = 0.0
+                            if (ABS(grid_global(i,j,2,1)) < 1.d-10) grid_global(i,j,2,1) = 0.0
+                         enddo
+                      enddo
                    enddo
                 else
                    call mpp_error(FATAL, "fv_grid_tools: reading of ASCII grid files no longer supported")
@@ -703,9 +688,9 @@ contains
 
                 grid_global(  1,1:npy,:,6)=grid_global(npx,1:npy,:,5)
 
-!------------------------
-! Schmidt transformation:
-!------------------------
+                !------------------------
+                ! Schmidt transformation:
+                !------------------------
                 if ( Atm%flagstruct%do_schmidt ) then
                    do n=1,nregions
                       call direct_transform(Atm%flagstruct%stretch_fac, 1, npx, 1, npy, &
@@ -719,40 +704,40 @@ contains
                            n, grid_global(1:npx,1:npy,1,n), grid_global(1:npx,1:npy,2,n))
                    enddo
                 endif
-                endif !is master
-                call mpp_broadcast(grid_global, size(grid_global), mpp_root_pe())
-                !--- copy grid to compute domain
-                do n=1,ndims
+             endif !is master
+             call mpp_broadcast(grid_global, size(grid_global), mpp_root_pe())
+             !--- copy grid to compute domain
+             do n=1,ndims
                 do j=js,je+1
-                do i=is,ie+1
-                   grid(i,j,n) = grid_global(i,j,n,tile)
+                   do i=is,ie+1
+                      grid(i,j,n) = grid_global(i,j,n,tile)
+                   enddo
                 enddo
-                enddo
-                enddo
-             endif !(trim(grid_file) == 'INPUT/grid_spec.nc')
-!
-! SJL: For phys/exchange grid, etc
-!
-             call mpp_update_domains( grid, Atm%domain, position=CORNER)
-             if (.not. (Atm%gridstruct%bounded_domain)) then
-                call fill_corners(grid(:,:,1), npx, npy, FILL=XDir, BGRID=.true.)
-                call fill_corners(grid(:,:,2), npx, npy, FILL=XDir, BGRID=.true.)
-             endif
+             enddo
+          endif !(trim(grid_file) == 'INPUT/grid_spec.nc')
+          !
+          ! SJL: For phys/exchange grid, etc
+          !
+          call mpp_update_domains( grid, Atm%domain, position=CORNER)
+          if (.not. (Atm%gridstruct%bounded_domain)) then
+             call fill_corners(grid(:,:,1), npx, npy, FILL=XDir, BGRID=.true.)
+             call fill_corners(grid(:,:,2), npx, npy, FILL=XDir, BGRID=.true.)
+          endif
 
-             !--- dx and dy
-             if( .not. Atm%gridstruct%bounded_domain) then
-                istart=is
-                iend=ie
-                jstart=js
-                jend=je
-             else
-                istart=isd
-                iend=ied
-                jstart=jsd
-                jend=jed
-             endif
+          !--- dx and dy
+          if( .not. Atm%gridstruct%bounded_domain) then
+             istart=is
+             iend=ie
+             jstart=js
+             jend=je
+          else
+             istart=isd
+             iend=ied
+             jstart=jsd
+             jend=jed
+          endif
 
-             do j = jstart, jend+1
+          do j = jstart, jend+1
              do i = istart, iend
                 p1(1) = grid(i  ,j,1)
                 p1(2) = grid(i  ,j,2)
@@ -760,9 +745,9 @@ contains
                 p2(2) = grid(i+1,j,2)
                 dx(i,j) = great_circle_dist( p2, p1, radius )
              enddo
-             enddo
-             if( stretched_grid .or. Atm%gridstruct%bounded_domain ) then
-                do j = jstart, jend
+          enddo
+          if( stretched_grid .or. Atm%gridstruct%bounded_domain ) then
+             do j = jstart, jend
                 do i = istart, iend+1
                    p1(1) = grid(i,j,  1)
                    p1(2) = grid(i,j,  2)
@@ -770,59 +755,59 @@ contains
                    p2(2) = grid(i,j+1,2)
                    dy(i,j) = great_circle_dist( p2, p1, radius )
                 enddo
-                enddo
-             else
-                call get_symmetry(dx(is:ie,js:je+1), dy(is:ie+1,js:je), 0, 1, Atm%layout(1), Atm%layout(2), &
-                     Atm%domain, Atm%tile_of_mosaic, Atm%gridstruct%npx_g, Atm%bd)
+             enddo
+          else
+             call get_symmetry(dx(is:ie,js:je+1), dy(is:ie+1,js:je), 0, 1, Atm%layout(1), Atm%layout(2), &
+                  Atm%domain, Atm%tile_of_mosaic, Atm%gridstruct%npx_g, Atm%bd)
+          endif
+
+          call mpp_get_boundary( dy, dx, Atm%domain, ebufferx=ebuffer, wbufferx=wbuffer, sbuffery=sbuffer, nbuffery=nbuffer,&
+               flags=SCALAR_PAIR+XUPDATE, gridtype=CGRID_NE_PARAM)
+          if( .not. Atm%gridstruct%bounded_domain ) then
+             if(is == 1 .AND. mod(tile,2) .NE. 0) then ! on the west boundary
+                dy(is, js:je) = wbuffer(js:je)
              endif
-
-             call mpp_get_boundary( dy, dx, Atm%domain, ebufferx=ebuffer, wbufferx=wbuffer, sbuffery=sbuffer, nbuffery=nbuffer,&
-                  flags=SCALAR_PAIR+XUPDATE, gridtype=CGRID_NE_PARAM)
-             if( .not. Atm%gridstruct%bounded_domain ) then
-                if(is == 1 .AND. mod(tile,2) .NE. 0) then ! on the west boundary
-                   dy(is, js:je) = wbuffer(js:je)
-                endif
-                if(ie == npx-1) then  ! on the east boundary
-                   dy(ie+1, js:je) = ebuffer(js:je)
-                endif
+             if(ie == npx-1) then  ! on the east boundary
+                dy(ie+1, js:je) = ebuffer(js:je)
              endif
+          endif
 
-             call mpp_update_domains( dy, dx, Atm%domain, flags=SCALAR_PAIR,      &
-                  gridtype=CGRID_NE_PARAM, complete=.true.)
-             if (cubed_sphere .and. (.not. (Atm%gridstruct%bounded_domain))) then
-                call fill_corners(dx, dy, npx, npy, DGRID=.true.)
-             endif
+          call mpp_update_domains( dy, dx, Atm%domain, flags=SCALAR_PAIR,      &
+               gridtype=CGRID_NE_PARAM, complete=.true.)
+          if (cubed_sphere .and. (.not. (Atm%gridstruct%bounded_domain))) then
+             call fill_corners(dx, dy, npx, npy, DGRID=.true.)
+          endif
 
-             if( .not. stretched_grid )         &
-                  call sorted_inta(isd, ied, jsd, jed, cubed_sphere, grid, iinta, jinta)
+          if( .not. stretched_grid )         &
+               call sorted_inta(isd, ied, jsd, jed, cubed_sphere, grid, iinta, jinta)
 
-             agrid(:,:,:) = -1.e25
+          agrid(:,:,:) = -1.e25
 
           !--- compute agrid (use same indices as for dx/dy above)
 
-             do j=jstart,jend
+          do j=jstart,jend
              do i=istart,iend
                 if ( stretched_grid ) then
-                  call cell_center2(grid(i,j,  1:2), grid(i+1,j,  1:2),   &
-                                    grid(i,j+1,1:2), grid(i+1,j+1,1:2),   &
-                                    agrid(i,j,1:2) )
-               else
-                  call cell_center2(grid(iinta(1,i,j),jinta(1,i,j),1:2),  &
-                                    grid(iinta(2,i,j),jinta(2,i,j),1:2),  &
-                                    grid(iinta(3,i,j),jinta(3,i,j),1:2),  &
-                                    grid(iinta(4,i,j),jinta(4,i,j),1:2),  &
-                                    agrid(i,j,1:2) )
-               endif
+                   call cell_center2(grid(i,j,  1:2), grid(i+1,j,  1:2),   &
+                        grid(i,j+1,1:2), grid(i+1,j+1,1:2),   &
+                        agrid(i,j,1:2) )
+                else
+                   call cell_center2(grid(iinta(1,i,j),jinta(1,i,j),1:2),  &
+                        grid(iinta(2,i,j),jinta(2,i,j),1:2),  &
+                        grid(iinta(3,i,j),jinta(3,i,j),1:2),  &
+                        grid(iinta(4,i,j),jinta(4,i,j),1:2),  &
+                        agrid(i,j,1:2) )
+                endif
              enddo
-             enddo
+          enddo
 
-             call mpp_update_domains( agrid, Atm%domain, position=CENTER, complete=.true. )
-             if (.not. (Atm%gridstruct%bounded_domain)) then
-                call fill_corners(agrid(:,:,1), npx, npy, XDir, AGRID=.true.)
-                call fill_corners(agrid(:,:,2), npx, npy, YDir, AGRID=.true.)
-             endif
+          call mpp_update_domains( agrid, Atm%domain, position=CENTER, complete=.true. )
+          if (.not. (Atm%gridstruct%bounded_domain)) then
+             call fill_corners(agrid(:,:,1), npx, npy, XDir, AGRID=.true.)
+             call fill_corners(agrid(:,:,2), npx, npy, YDir, AGRID=.true.)
+          endif
 
-             do j=jsd,jed
+          do j=jsd,jed
              do i=isd,ied
                 call mid_pt_sphere(grid(i,  j,1:2), grid(i,  j+1,1:2), p1)
                 call mid_pt_sphere(grid(i+1,j,1:2), grid(i+1,j+1,1:2), p2)
@@ -832,14 +817,14 @@ contains
                 call mid_pt_sphere(grid(i,j+1,1:2), grid(i+1,j+1,1:2), p2)
                 dya(i,j) = great_circle_dist( p2, p1, radius )
              enddo
-             enddo
-!      call mpp_update_domains( dxa, dya, Atm%domain, flags=SCALAR_PAIR, gridtype=AGRID_PARAM)
-             if (cubed_sphere  .and. (.not. (Atm%gridstruct%bounded_domain))) then
-                call fill_corners(dxa, dya, npx, npy, AGRID=.true.)
-             endif
+          enddo
+          !      call mpp_update_domains( dxa, dya, Atm%domain, flags=SCALAR_PAIR, gridtype=AGRID_PARAM)
+          if (cubed_sphere  .and. (.not. (Atm%gridstruct%bounded_domain))) then
+             call fill_corners(dxa, dya, npx, npy, AGRID=.true.)
+          endif
 
 
-          end if !if nested
+       end if !if nested
 
 
 !       do j=js,je
@@ -881,315 +866,232 @@ contains
 !----------------------------------
 ! Compute area_c, rarea_c, dxc, dyc
 !----------------------------------
-  if ( .not. stretched_grid .and. (.not. (Atm%gridstruct%bounded_domain))) then
-     ! For symmetrical grids:
+       if ( .not. stretched_grid .and. (.not. (Atm%gridstruct%bounded_domain))) then
+          ! For symmetrical grids:
 
-     t1=-1.e30
-     t2=-1.e30
-       if ( is==1 ) then
-          i = 1
-          do j=js,je+1
-             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,  1:2), p1)
-             call mid_pt_sphere(grid(i,j  ,1:2), grid(i,j+1,1:2), p4)
-             p2(1:2) = agrid(i,j-1,1:2)
-             p3(1:2) = agrid(i,j,  1:2)
-             t1=get_area(p1, p4, p2, p3, radius)
+          t1=-1.e30
+          t2=-1.e30
+          if ( is==1 ) then
+             i = 1
+             do j=js,je+1
+                call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,  1:2), p1)
+                call mid_pt_sphere(grid(i,j  ,1:2), grid(i,j+1,1:2), p4)
+                p2(1:2) = agrid(i,j-1,1:2)
+                p3(1:2) = agrid(i,j,  1:2)
+                t1=get_area(p1, p4, p2, p3, radius)
 
-             p1(1:2) = agrid(i-1,j-1,1:2)
-             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,  1:2), p2)
-             call mid_pt_sphere(grid(i,j  ,1:2), grid(i,j+1,1:2), p3)
-             p4(1:2) = agrid(i-1,j,  1:2)
-             t2=get_area(p1, p4, p2, p3, radius)
-             
-             area_c(i,j) = t1+t2
-          enddo
-          do j=js,je
-             !Fix this later
-             call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p1)
-             p2(1:2) = agrid(i,j,1:2)
-             t1=great_circle_dist( p1, p2, radius )
+                p1(1:2) = agrid(i-1,j-1,1:2)
+                call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,  1:2), p2)
+                call mid_pt_sphere(grid(i,j  ,1:2), grid(i,j+1,1:2), p3)
+                p4(1:2) = agrid(i-1,j,  1:2)
+                t2=get_area(p1, p4, p2, p3, radius)
 
-             p2(1:2) = agrid(i-1,j,1:2)
-             t2=great_circle_dist( p1, p2, radius )
-             
-             dxc(i,j) = t1+t2
-          enddo
-       endif
-       if ( (ie+1)==npx ) then
-          i = npx
-          do j=js,je+1
-             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,  1:2), p1)
-             call mid_pt_sphere(grid(i,j  ,1:2), grid(i,j+1,1:2), p4)
-             p2(1:2) = agrid(i,j-1,1:2)
-             p3(1:2) = agrid(i,j,  1:2)
-             t1=get_area(p1, p4, p2, p3, radius)
+                area_c(i,j) = t1+t2
+             enddo
+             do j=js,je
+                !Fix this later
+                call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p1)
+                p2(1:2) = agrid(i,j,1:2)
+                t1=great_circle_dist( p1, p2, radius )
 
-             p1(1:2) = agrid(i-1,j-1,1:2)
-             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,  1:2), p2)
-             call mid_pt_sphere(grid(i,j  ,1:2), grid(i,j+1,1:2), p3)
-             p4(1:2) = agrid(i-1,j,1:2)
-             t2=get_area(p1, p4, p2, p3, radius)
-             
-             area_c(i,j) = t1+t2
-          enddo
-          do j=js,je
-             p1(1:2) = agrid(i-1,j,1:2)
-             call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p2)
-             t1 = great_circle_dist( p1, p2, radius )
-             
-             p1(1:2) = agrid(i,j,1:2)
-             t2=great_circle_dist( p1, p2, radius )
-             dxc(i,j) = t1+t2
-          enddo
-       endif
-       if ( js==1 ) then
-          j = 1
-          do i=is,ie+1
-             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,  j,1:2), p1)
-             call mid_pt_sphere(grid(i,  j,1:2), grid(i+1,j,1:2), p2)
-             p3(1:2) = agrid(i,  j,1:2)
-             p4(1:2) = agrid(i-1,j,1:2)
-             t1 = get_area(p1, p4, p2, p3, radius)
-             
-             p1(1:2) = agrid(i-1,j-1,1:2)
-             p2(1:2) = agrid(i  ,j-1,1:2)
-             call mid_pt_sphere(grid(i,  j,1:2), grid(i+1,j,1:2), p3)
-             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,  j,1:2), p4)
-             t2 = get_area(p1, p4, p2, p3, radius)
-             
-             area_c(i,j) = t1+t2
-          enddo
-          do i=is,ie
-             call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p1)
-             p2(1:2) = agrid(i,j,1:2)
-             t1 = great_circle_dist( p1, p2, radius )
+                p2(1:2) = agrid(i-1,j,1:2)
+                t2=great_circle_dist( p1, p2, radius )
 
-             p2(1:2) = agrid(i,j-1,1:2)
-             t2 = great_circle_dist( p1, p2, radius )
-             dyc(i,j) = t1+t2
-          enddo
-       endif
-       if ( (je+1)==npy ) then
-          j = npy
-          do i=is,ie+1
-             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,  j,1:2), p1)
-             call mid_pt_sphere(grid(i,  j,1:2), grid(i+1,j,1:2), p2)
-             p3(1:2) = agrid(i,  j,1:2)
-             p4(1:2) = agrid(i-1,j,1:2)
-             t1 = get_area(p1, p4, p2, p3, radius)
+                dxc(i,j) = t1+t2
+             enddo
+          endif
+          if ( (ie+1)==npx ) then
+             i = npx
+             do j=js,je+1
+                call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,  1:2), p1)
+                call mid_pt_sphere(grid(i,j  ,1:2), grid(i,j+1,1:2), p4)
+                p2(1:2) = agrid(i,j-1,1:2)
+                p3(1:2) = agrid(i,j,  1:2)
+                t1=get_area(p1, p4, p2, p3, radius)
 
-             p1(1:2) = agrid(i-1,j-1,1:2)
-             p2(1:2) = agrid(i  ,j-1,1:2)
-             call mid_pt_sphere(grid(i,  j,1:2), grid(i+1,j,1:2), p3)
-             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,  j,1:2), p4)
-             t2 = get_area(p1, p4, p2, p3, radius)
-             
-             area_c(i,j) = t1+t2
-          enddo
-          do i=is,ie
-             p1(1:2) = agrid(i,j-1,1:2)
+                p1(1:2) = agrid(i-1,j-1,1:2)
+                call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,  1:2), p2)
+                call mid_pt_sphere(grid(i,j  ,1:2), grid(i,j+1,1:2), p3)
+                p4(1:2) = agrid(i-1,j,1:2)
+                t2=get_area(p1, p4, p2, p3, radius)
+
+                area_c(i,j) = t1+t2
+             enddo
+             do j=js,je
+                p1(1:2) = agrid(i-1,j,1:2)
+                call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p2)
+                t1 = great_circle_dist( p1, p2, radius )
+
+                p1(1:2) = agrid(i,j,1:2)
+                t2=great_circle_dist( p1, p2, radius )
+                dxc(i,j) = t1+t2
+             enddo
+          endif
+          if ( js==1 ) then
+             j = 1
+             do i=is,ie+1
+                call mid_pt_sphere(grid(i-1,j,1:2), grid(i,  j,1:2), p1)
+                call mid_pt_sphere(grid(i,  j,1:2), grid(i+1,j,1:2), p2)
+                p3(1:2) = agrid(i,  j,1:2)
+                p4(1:2) = agrid(i-1,j,1:2)
+                t1 = get_area(p1, p4, p2, p3, radius)
+
+                p1(1:2) = agrid(i-1,j-1,1:2)
+                p2(1:2) = agrid(i  ,j-1,1:2)
+                call mid_pt_sphere(grid(i,  j,1:2), grid(i+1,j,1:2), p3)
+                call mid_pt_sphere(grid(i-1,j,1:2), grid(i,  j,1:2), p4)
+                t2 = get_area(p1, p4, p2, p3, radius)
+
+                area_c(i,j) = t1+t2
+             enddo
+             do i=is,ie
+                call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p1)
+                p2(1:2) = agrid(i,j,1:2)
+                t1 = great_circle_dist( p1, p2, radius )
+
+                p2(1:2) = agrid(i,j-1,1:2)
+                t2 = great_circle_dist( p1, p2, radius )
+                dyc(i,j) = t1+t2
+             enddo
+          endif
+          if ( (je+1)==npy ) then
+             j = npy
+             do i=is,ie+1
+                call mid_pt_sphere(grid(i-1,j,1:2), grid(i,  j,1:2), p1)
+                call mid_pt_sphere(grid(i,  j,1:2), grid(i+1,j,1:2), p2)
+                p3(1:2) = agrid(i,  j,1:2)
+                p4(1:2) = agrid(i-1,j,1:2)
+                t1 = get_area(p1, p4, p2, p3, radius)
+
+                p1(1:2) = agrid(i-1,j-1,1:2)
+                p2(1:2) = agrid(i  ,j-1,1:2)
+                call mid_pt_sphere(grid(i,  j,1:2), grid(i+1,j,1:2), p3)
+                call mid_pt_sphere(grid(i-1,j,1:2), grid(i,  j,1:2), p4)
+                t2 = get_area(p1, p4, p2, p3, radius)
+
+                area_c(i,j) = t1+t2
+             enddo
+             do i=is,ie
+                p1(1:2) = agrid(i,j-1,1:2)
+                call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p2)
+                t1 = great_circle_dist( p1, p2, radius )
+
+                p1(1:2) = agrid(i,j,1:2)
+                t2 = great_circle_dist( p1, p2, radius )
+                dyc(i,j) = t1+t2
+             enddo
+          endif
+
+          t1=-1.e30
+          t2=-1.e30
+          t3=-1.e30
+          if ( sw_corner ) then
+             i=1; j=1
+
+             !interior
+             p1(1:2) = grid(i,j,1:2)
              call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p2)
-             t1 = great_circle_dist( p1, p2, radius )
-             
-             p1(1:2) = agrid(i,j,1:2)
-             t2 = great_circle_dist( p1, p2, radius )
-             dyc(i,j) = t1+t2
-          enddo
+             p3(1:2) = agrid(i,j,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p4)
+             t1=get_area(p1, p4, p2, p3, radius)
+
+             !left face
+             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p1)
+             p2(1:2) = grid(i,j,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p3)
+             p4(1:2) = agrid(i-1,j,1:2)
+             t2=get_area(p1, p4, p2, p3, radius)
+
+             !lower face
+             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p1)
+             p2(1:2) = agrid(i,j-1,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p3)
+             p4(1:2) = grid(i,j,1:2)
+             t3=get_area(p1, p4, p2, p3, radius)
+
+
+             area_c(i,j) = t1+t2+t3
+          endif
+          if ( se_corner ) then 
+             i=npx; j=1
+
+             !interior
+             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p1)
+             p2(1:2) = grid(i,j,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p3)
+             p4(1:2) = agrid(i-1,j,1:2)
+             t1=get_area(p1, p4, p2, p3, radius)
+
+             !right face
+             p1(1:2) = grid(i,j,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p2)
+             p3(1:2) = agrid(i,j,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p4)
+             t2=get_area(p1, p4, p2, p3, radius)
+
+             !lower face
+             p1(1:2) = agrid(i-1,j-1,1:2)
+             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p2)
+             p3(1:2) = grid(i,j,1:2)
+             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p4)
+             t3=get_area(p1, p4, p2, p3, radius)
+
+             area_c(i,j) = t1+t2+t3
+          endif
+          if ( ne_corner ) then
+             i=npx; j=npy
+
+             !interior
+             p1(1:2) = agrid(i-1,j-1,1:2)
+             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p2)
+             p3(1:2) = grid(i,j,1:2)
+             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p4)
+             t1=get_area(p1, p4, p2, p3, radius)
+
+             !Right face
+             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p1)
+             p2(1:2) = agrid(i,j-1,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p3)
+             p4(1:2) = grid(i,j,1:2)
+             t2=get_area(p1, p4, p2, p3, radius)
+
+             !Upper face
+             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p1)
+             p2(1:2) = grid(i,j,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p3)
+             p4(1:2) = agrid(i-1,j,1:2)
+             t3=get_area(p1, p4, p2, p3, radius)
+
+             area_c(i,j) = t1+t2+t3
+          endif
+          if ( nw_corner ) then
+             i=1; j=npy
+
+             !Interior
+             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p1)
+             p2(1:2) = agrid(i,j-1,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p3)
+             p4(1:2) = grid(i,j,1:2)
+             t1=get_area(p1, p4, p2, p3, radius)
+
+             !left face
+             p1(1:2) = agrid(i-1,j-1,1:2)
+             call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p2)
+             p3(1:2) = grid(i,j,1:2)
+             call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p4)
+             t2=get_area(p1, p4, p2, p3, radius)
+
+             !upper face
+             p1(1:2) = grid(i,j,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p2)
+             p3(1:2) = agrid(i,j,1:2)
+             call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p4)
+             t3=get_area(p1, p4, p2, p3, radius)
+
+             area_c(i,j) = t1+t2+t3
+          endif
        endif
-
-       t1=-1.e30
-       t2=-1.e30
-       t3=-1.e30
-       if ( sw_corner ) then
-          i=1; j=1
-
-          !interior
-          p1(1:2) = grid(i,j,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p2)
-          p3(1:2) = agrid(i,j,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p4)
-          t1=get_area(p1, p4, p2, p3, radius)
-          
-          !left face
-          call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p1)
-          p2(1:2) = grid(i,j,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p3)
-          p4(1:2) = agrid(i-1,j,1:2)
-          t2=get_area(p1, p4, p2, p3, radius)
-          
-          !lower face
-          call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p1)
-          p2(1:2) = agrid(i,j-1,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p3)
-          p4(1:2) = grid(i,j,1:2)
-          t3=get_area(p1, p4, p2, p3, radius)
-          
-          
-          area_c(i,j) = t1+t2+t3
-          if (t1 < 0.0) print*, ' Negative area (sw1) '
-          if (t2 < 0.0) print*, ' Negative area (sw2) '
-          if (t3 < 0.0) print*, ' Negative area (sw3) '
-          print*, ' sw: ', tile, t1, t2, t3
-!!$          write(100+mpp_pe(),*) 'sw_corner: ', tile
-!!$          write(100+mpp_pe(),*) p1
-!!$          write(100+mpp_pe(),*) p4
-!!$          write(100+mpp_pe(),*) p2
-!!$          write(100+mpp_pe(),*) p3
-!!$          write(100+mpp_pe(),*) area_c(i,j)
-       endif
-       if ( se_corner ) then 
-          i=npx; j=1
-          
-          !interior
-          call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p1)
-          p2(1:2) = grid(i,j,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p3)
-          p4(1:2) = agrid(i-1,j,1:2)
-          t1=get_area(p1, p4, p2, p3, radius)
-
-          !right face
-          p1(1:2) = grid(i,j,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p2)
-          p3(1:2) = agrid(i,j,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p4)
-          t2=get_area(p1, p4, p2, p3, radius)
-          write(100+mpp_pe(),*) 'se_corner, right face', tile
-          write(100+mpp_pe(),*) p1
-          write(100+mpp_pe(),*) p2
-          write(100+mpp_pe(),*) p3
-          write(100+mpp_pe(),*) p4
-          write(100+mpp_pe(),*) t2
-
-          !lower face
-          p1(1:2) = agrid(i-1,j-1,1:2)
-          call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p2)
-          p3(1:2) = grid(i,j,1:2)
-          call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p4)
-          t3=get_area(p1, p4, p2, p3, radius)
-          
-          area_c(i,j) = t1+t2+t3
-          if (t1 < 0.0) print*, ' Negative area (se1) '
-          if (t2 < 0.0) print*, ' Negative area (se2) '
-          if (t3 < 0.0) print*, ' Negative area (se3) '
-          print*, ' se: ', tile, t1, t2, t3
-!!$          write(100+mpp_pe(),*) 'se_corner: ', tile
-!!$          write(100+mpp_pe(),*) p1
-!!$          write(100+mpp_pe(),*) p4
-!!$          write(100+mpp_pe(),*) p2
-!!$          write(100+mpp_pe(),*) p3
-!!$          write(100+mpp_pe(),*) area_c(i,j)
-       endif
-       if ( ne_corner ) then
-          i=npx; j=npy
-
-          !interior
-          p1(1:2) = agrid(i-1,j-1,1:2)
-          call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p2)
-          p3(1:2) = grid(i,j,1:2)
-          call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p4)
-          t1=get_area(p1, p4, p2, p3, radius)
-
-          !Right face
-          call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p1)
-          p2(1:2) = agrid(i,j-1,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p3)
-          p4(1:2) = grid(i,j,1:2)
-          t2=get_area(p1, p4, p2, p3, radius)
-          write(100+mpp_pe(),*) 'ne_corner, right face', tile
-          write(100+mpp_pe(),*) p1
-          write(100+mpp_pe(),*) p2
-          write(100+mpp_pe(),*) p3
-          write(100+mpp_pe(),*) p4
-          write(100+mpp_pe(),*) t2
-          
-          !Upper face
-          call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p1)
-          p2(1:2) = grid(i,j,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p3)
-          p4(1:2) = agrid(i-1,j,1:2)
-          t3=get_area(p1, p4, p2, p3, radius)
-
-          area_c(i,j) = t1+t2+t3
-          if (t1 < 0.0) print*, ' Negative area (ne1) '
-          if (t2 < 0.0) print*, ' Negative area (ne2) '
-          if (t3 < 0.0) print*, ' Negative area (ne3) '
-          print*, ' ne: ', tile, t1, t2, t3
-!!$          write(100+mpp_pe(),*) 'ne_corner: ', tile
-!!$          write(100+mpp_pe(),*) p1
-!!$          write(100+mpp_pe(),*) p4
-!!$          write(100+mpp_pe(),*) p2
-!!$          write(100+mpp_pe(),*) p3
-!!$          write(100+mpp_pe(),*) area_c(i,j)
-       endif
-       if ( nw_corner ) then
-          i=1; j=npy
-
-          !Interior
-          call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p1)
-          p2(1:2) = agrid(i,j-1,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p3)
-          p4(1:2) = grid(i,j,1:2)
-          t1=get_area(p1, p4, p2, p3, radius)
-
-          !left face
-          p1(1:2) = agrid(i-1,j-1,1:2)
-          call mid_pt_sphere(grid(i,j-1,1:2), grid(i,j,1:2), p2)
-          p3(1:2) = grid(i,j,1:2)
-          call mid_pt_sphere(grid(i-1,j,1:2), grid(i,j,1:2), p4)
-          t2=get_area(p1, p4, p2, p3, radius)
-          write(100+mpp_pe(),*) 'nw_corner, left face', tile
-          write(100+mpp_pe(),*) p1
-          write(100+mpp_pe(),*) p2
-          write(100+mpp_pe(),*) p3
-          write(100+mpp_pe(),*) p4
-          write(100+mpp_pe(),*) t2
-
-          !upper face
-          p1(1:2) = grid(i,j,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i+1,j,1:2), p2)
-          p3(1:2) = agrid(i,j,1:2)
-          call mid_pt_sphere(grid(i,j,1:2), grid(i,j+1,1:2), p4)
-          t3=get_area(p1, p4, p2, p3, radius)
-          
-          area_c(i,j) = t1+t2+t3
-          if (t1 < 0.0) print*, ' Negative area (nw1) '
-          if (t2 < 0.0) print*, ' Negative area (nw2) '
-          if (t3 < 0.0) print*, ' Negative area (nw3) '
-          print*, ' nw: ', tile, t1, t2, t3
-!!$          write(100+mpp_pe(),*) 'nw_corner: ', tile
-!!$          write(100+mpp_pe(),*) p1
-!!$          write(100+mpp_pe(),*) p4
-!!$          write(100+mpp_pe(),*) p2
-!!$          write(100+mpp_pe(),*) p3
-!!$          write(100+mpp_pe(),*) area_c(i,j)
-       endif
-!!! DEBUG CODE
-       if (is == 1 .and. js == 1) then
-          print*, mpp_pe(), ' area_c(1,1) = ', area_c(1,1)
-       endif
-       if (is == 1 .and. je == npy-1) then
-          print*, mpp_pe(), ' area_c(1,npy) = ', area_c(1,npy)
-       endif
-       if (ie == npx-1 .and. js == 1) then
-          print*, mpp_pe(), ' area_c(npx,1) = ', area_c(npx,1)
-       endif
-       if (ie == npx-1 .and. je == npy-1) then
-          print*, mpp_pe(), ' area_c(npx,npy) = ', area_c(npx,npy)
-       endif
-!!! END DEBUG CODE
-   endif
-!-----------------
-!!! DEBUG CODE
-       do j=js,je+1
-          do i=is,ie+1
-             if (area_c(i,j) < 1.e-3) then
-                print*, 'Negative area: ', area_c(i,j), i, j, tile
-             endif
-          enddo
-       enddo
-
-   !!! END DEBUG CODE
-
+       !-----------------
    
        call mpp_update_domains( dxc, dyc, Atm%domain, flags=SCALAR_PAIR,   &
                                 gridtype=CGRID_NE_PARAM, complete=.true.)
