@@ -1554,6 +1554,7 @@ contains
         call prt_maxmin('PS', Atm(n)%ps, isc, iec, jsc, jec, ngc, 1, 0.01)
 
 #ifdef HIWPP
+        if (.not. Atm(n)%gridstruct%bounded_domain ) then
         allocate(var2(isc:iec,jsc:jec))
         !hemispheric max/min pressure
         do j=jsc,jec
@@ -1572,6 +1573,7 @@ contains
         call prt_maxmin('SH PS', var2, isc, iec, jsc, jec, 0, 1, 0.01)
 
         deallocate(var2)
+        endif
 #endif
 
         call prt_mass(npz, nq, isc, iec, jsc, jec, ngc, Atm(n)%flagstruct%nwat,    &
