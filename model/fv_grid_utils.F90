@@ -23,7 +23,7 @@
 
 #include <fms_platform.h>
  use constants_mod,   only: omega, pi=>pi_8, cnst_radius=>radius
- use mpp_mod,         only: FATAL, mpp_error, WARNING, mpp_pe
+ use mpp_mod,         only: FATAL, mpp_error, WARNING
  use external_sst_mod, only: i_sst, j_sst, sst_ncep, sst_anom
  use mpp_domains_mod, only: mpp_update_domains, DGRID_NE, mpp_global_sum
  use mpp_domains_mod, only: BITWISE_EXACT_SUM, domain2d, BITWISE_EFP_SUM
@@ -216,6 +216,18 @@
       cos_sg(:,:,:) =  big_number
       sin_sg(:,:,:) = tiny_number
 
+      sw_corner = .false.
+      se_corner = .false.
+      ne_corner = .false.
+      nw_corner = .false.
+
+      if (grid_type < 3 .and. .not. Atm%gridstruct%bounded_domain) then
+         if (       is==1 .and.  js==1 )      sw_corner = .true.
+         if ( (ie+1)==npx .and.  js==1 )      se_corner = .true.
+         if ( (ie+1)==npx .and. (je+1)==npy ) ne_corner = .true.
+         if (       is==1 .and. (je+1)==npy ) nw_corner = .true.
+      endif
+
   if ( sw_corner ) then
        tmp1 = great_circle_dist(grid(1,1,1:2), agrid(1,1,1:2))
        tmp2 = great_circle_dist(grid(1,1,1:2), agrid(2,2,1:2))
@@ -356,10 +368,10 @@
 !xxx  if (.not. Atm%neststruct%nested) then
       if (.not. Atm%gridstruct%bounded_domain) then
       if ( sw_corner ) then
-         do i=-2,0
-            sin_sg(0,i,3) = sin_sg(i,1,2)
-            sin_sg(i,0,4) = sin_sg(1,i,1)
-         enddo
+           do i=-2,0
+              sin_sg(0,i,3) = sin_sg(i,1,2)
+              sin_sg(i,0,4) = sin_sg(1,i,1)
+           enddo
       endif
       if ( nw_corner ) then
            do i=npy,npy+2
@@ -2702,7 +2714,7 @@
        else
             get_area = ang1 + ang2 + ang3 + ang4 - 2.*pi
        endif
-       
+
  end function get_area
 
 
