@@ -152,6 +152,8 @@ public :: fv_phys, fv_nudge
   real, allocatable:: prec_total(:,:)
   real    :: missing_value = -1.e10
 
+  logical :: first_call = .true.
+  
 namelist /sim_phys_nml/do_strat_HS_forcing, &
                        print_freq, tau_winds, &
                        tau_temp, tau_press, sst_restore_timescale,  &
@@ -298,6 +300,7 @@ contains
      enddo
 
      if ( fv_sg_adj > 0 ) then
+        if (is_master() .and. first_call) print*, " Calling fv_subgrid_z ", fv_sg_adj, flagstruct%n_sponge
          call fv_subgrid_z(isd, ied, jsd, jed, is, ie, js, je, npz, min(6,nq), pdt,  &
                            fv_sg_adj, nwat, delp, pe, peln, pkz, pt, q, ua, va,  &
                            hydrostatic, w, delz, u_dt, v_dt, t_dt, q_dt, flagstruct%n_sponge )
@@ -604,7 +607,9 @@ contains
     deallocate ( t_dt )
     deallocate ( q_dt )
 
- end subroutine fv_phys
+    first_call = .false.
+
+  end subroutine fv_phys
 
 
  subroutine GFDL_sim_phys(npx, npy, npz, is, ie, js, je, ng, nq, nwat, pk, pkz,  &

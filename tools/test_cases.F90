@@ -6122,9 +6122,9 @@ end subroutine terminator_tracers
             pp(k) = exp(log(pk(k))/kappa)
             qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
             !qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
-            if ( (is_master()) ) write(*,*) 0.001*pp(k), qs(k)
+            !if ( (is_master()) ) write(*,*) 0.001*pp(k), qs(k)
        else
-            if ( (is_master()) ) write(*,*) n, k, pk(k)
+            !if ( (is_master()) ) write(*,*) n, k, pk(k)
             call mpp_error(FATAL, 'Super-Cell case: pk < 0')
        endif
     enddo
