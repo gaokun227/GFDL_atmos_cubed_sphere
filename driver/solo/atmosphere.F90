@@ -28,7 +28,7 @@ module atmosphere_mod
 !-----------------------------------------------------------------------
 
 
-use constants_mod, only: grav, kappa, cp_air, pi, rdgas, rvgas, SECONDS_PER_DAY, radius
+use constants_mod, only: grav, kappa, cp_air, pi, rdgas, rvgas, SECONDS_PER_DAY
 use fms_mod,       only: file_exist, open_namelist_file,   &
                          error_mesg, FATAL,                &
                          check_nml_error, stdlog, stdout,  &

@@ -21,7 +21,8 @@
 
 module dyn_core_mod
 
-  use constants_mod,      only: rdgas, radius, cp_air, pi
+  use constants_mod,      only: rdgas, cp_air, pi
+  use fv_arrays_mod,      only: radius ! scaled for small earth
   use mpp_mod,            only: mpp_pe
   use mpp_domains_mod,    only: CGRID_NE, DGRID_NE, mpp_get_boundary, mpp_update_domains,  &
                                 domain2d
@@ -653,7 +654,7 @@ contains
 !$OMP                                  is,ie,js,je,isd,ied,jsd,jed,omga,delp,gridstruct,npx,npy,  &
 !$OMP                                  ng,zh,vt,ptc,pt,u,v,w,uc,vc,ua,va,divgd,mfx,mfy,cx,cy,     &
 !$OMP                                  crx,cry,xfx,yfx,q_con,zvir,sphum,nq,q,dt,bd,rdt,iep1,jep1, &
-!$OMP                                  heat_source,is_ideal_case)                                 &
+!$OMP                                  heat_source,is_ideal_case,radius)                          &
 !$OMP                          private(nord_k, nord_w, nord_t, damp_w, damp_t, d2_divg,   &
 !$OMP                          d_con_k,kgb, hord_m, hord_v, hord_t, hord_p, wk, heat_s, z_rat)
     do k=1,npz

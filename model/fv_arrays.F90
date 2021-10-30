@@ -27,9 +27,12 @@ module fv_arrays_mod
   use horiz_interp_type_mod, only: horiz_interp_type
   use mpp_mod,               only: mpp_broadcast
   use platform_mod,          only: r8_kind
+  use constants_mod,         only: cnst_radius => radius, cnst_omega => omega
   public
 
   integer, public, parameter :: R_GRID = r8_kind
+  real(kind=r8_kind), public :: radius = cnst_radius
+  real(kind=r8_kind), public :: omega = cnst_omega
 
   !Several 'auxiliary' structures are introduced here. These are for
   ! the internal use by certain modules, and although fv_atmos_type

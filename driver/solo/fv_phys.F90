@@ -21,7 +21,9 @@
 
 module fv_phys_mod
 
-use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, radius, kappa, OMEGA
+use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, kappa
+use fv_arrays_mod,         only: radius, omega ! scaled for small earth
+  
 use time_manager_mod,      only: time_type, get_time
 use gfdl_cld_mp_mod,       only: gfdl_cld_mp_driver, qsmith, wet_bulb
 use hswf_mod,              only: Held_Suarez_Tend
@@ -693,7 +695,7 @@ contains
 ! Factor for Small-Earth Approx.
    fac_sm = radius / 6371.0e3
    rrg  = rdgas / grav
-   sday  = 24.*3600.*fac_sm
+   sday  = 24.*3600.*fac_sm !not sure this works right
 
    qflux = 0.
    rflux = 0.
