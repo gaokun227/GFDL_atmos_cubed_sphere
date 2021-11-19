@@ -380,7 +380,9 @@ contains
 
    call set_domain(Atm(mygrid)%domain)
 
-   call data_override_init(Atm_domain_in = Atm(mygrid)%domain)
+   if ( trim(Atm(mygrid)%flagstruct%grid_file) .NE. "Inline" .and. trim(Atm(mygrid)%flagstruct%grid_file) .NE. "" ) then
+      call data_override_init(Atm_domain_in = Atm(mygrid)%domain)
+   endif
    
  end subroutine atmosphere_init
 

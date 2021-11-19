@@ -162,6 +162,11 @@ contains
     integer :: axe_ave(3)
 
     character(len=64) :: errmsg
+#ifdef GFS_PHYS
+    character(len=*), parameter :: massdef_str = " (GFS moist-mass)"
+#else
+    character(len=*), parameter :: massdef_str = ""
+#endif
     logical :: exists
     integer :: nlunit, ios
 
@@ -795,8 +800,13 @@ contains
            'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
       id_v_plev = register_diag_field ( trim(field), 'v_plev', axe2(1:3), Time,        &
            'meridional wind', 'm/sec', missing_value=missing_value, range=vrange )
-      id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
-           'temperature', 'K', missing_value=missing_value, range=trange )
+      if (is_ideal_case) then
+         id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
+              'temperature', 'K', missing_value=missing_value )
+      else
+         id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
+              'temperature', 'K', missing_value=missing_value, range=trange )
+      endif
       id_h_plev = register_diag_field ( trim(field), 'h_plev', axe2(1:3), Time,        &
            'height', 'm', missing_value=missing_value )
       id_q_plev = register_diag_field ( trim(field), 'q_plev', axe2(1:3), Time,        &
@@ -891,9 +901,13 @@ contains
           if ( .not. Atm(n)%flagstruct%hydrostatic )                                        &
                id_w = register_diag_field ( trim(field), 'w', axes(1:3), Time,        &
                'vertical wind', 'm/sec', missing_value=missing_value, range=wrange )
-
-          id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
-               'temperature', 'K', missing_value=missing_value, range=trange )
+          if (is_ideal_case) then
+             id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
+                  'temperature', 'K', missing_value=missing_value )
+          else
+             id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
+                  'temperature', 'K', missing_value=missing_value, range=trange )
+          endif
           id_ppt  = register_diag_field ( trim(field), 'ppt', axes(1:3), Time,       &
                'potential temperature perturbation', 'K', missing_value=missing_value )
           id_theta_e = register_diag_field ( trim(field), 'theta_e', axes(1:3), Time,       &
@@ -913,16 +927,16 @@ contains
                'Relative Humidity', '%', missing_value=missing_value )
           !            'Relative Humidity', '%', missing_value=missing_value, range=rhrange )
           id_delp = register_diag_field ( trim(field), 'delp', axes(1:3), Time,        &
-               'pressure thickness', 'pa', missing_value=missing_value )
+               'pressure thickness'//massdef_str, 'pa', missing_value=missing_value )
           if ( .not. Atm(n)%flagstruct%hydrostatic )                                        &
                id_delz = register_diag_field ( trim(field), 'delz', axes(1:3), Time,        &
                'height thickness', 'm', missing_value=missing_value )
           if( Atm(n)%flagstruct%hydrostatic ) then
              id_pfhy = register_diag_field ( trim(field), 'pfhy', axes(1:3), Time,        &
-                  'hydrostatic pressure', 'pa', missing_value=missing_value )
+                  'hydrostatic pressure'//massdef_str, 'pa', missing_value=missing_value )
           else
              id_pfnh = register_diag_field ( trim(field), 'pfnh', axes(1:3), Time,        &
-                  'non-hydrostatic pressure', 'pa', missing_value=missing_value )
+                  'non-hydrostatic pressure'//massdef_str, 'pa', missing_value=missing_value )
              id_ppnh = register_diag_field ( trim(field), 'ppnh', axes(1:3), Time,        &
                   'non-hydrostatic pressure perturbation', 'pa', missing_value=missing_value )
           endif
@@ -1343,7 +1357,7 @@ contains
     if(id_theta_e >0 ) call qsmith_init
 #endif
 
-    call fv_diag_column_init(Atm(n), yr_init, mo_init, dy_init, hr_init, do_diag_debug, do_diag_sonde, sound_freq)
+    call fv_diag_column_init(Atm(n), yr_init, mo_init, dy_init, hr_init, do_diag_debug, do_diag_sonde, sound_freq, m_calendar)
 
  end subroutine fv_diag_init
 
@@ -1544,6 +1558,7 @@ contains
         call prt_maxmin('PS', Atm(n)%ps, isc, iec, jsc, jec, ngc, 1, 0.01)
 
 #ifdef HIWPP
+        if (.not. Atm(n)%gridstruct%bounded_domain ) then
         allocate(var2(isc:iec,jsc:jec))
         !hemispheric max/min pressure
         do j=jsc,jec
@@ -1562,6 +1577,7 @@ contains
         call prt_maxmin('SH PS', var2, isc, iec, jsc, jec, 0, 1, 0.01)
 
         deallocate(var2)
+        endif
 #endif
 
         call prt_mass(npz, nq, isc, iec, jsc, jec, ngc, Atm(n)%flagstruct%nwat,    &
@@ -1627,7 +1643,7 @@ contains
 #ifndef SW_DYNAMICS
          if (is_ideal_case) then
             call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           130., 350., bad_range, Time) !DCMIP ICs have very low temperatures
+                           100., 500., bad_range, Time) !DCMIP ICs have very wide range of temperatures
          else
             call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
                            150., 350., bad_range, Time)
@@ -1658,6 +1674,14 @@ contains
     ! if (id_c_grid_vcomp > 0) used = send_data(id_c_grid_vcomp, Atm(n)%vc(isc:iec,jsc:jec+1,1:npz), Time)
 
 #ifdef DYNAMICS_ZS
+    !This is here for idealized test cases that modify the topography in time
+       do j=jsc,jec
+       do i=isc,iec
+          zsurf(i,j) = ginv * Atm(n)%phis(i,j)
+       enddo
+       enddo
+
+
        if(id_zsurf > 0)  used=send_data(id_zsurf, zsurf, Time)
 #endif
        if(id_ps > 0) used=send_data(id_ps, Atm(n)%ps(isc:iec,jsc:jec), Time)
@@ -2916,47 +2940,23 @@ contains
           if (id_delp > 0) used=send_data(id_delp, wk, Time)
 
        endif
-
+#else
+       if(id_delp > 0) used=send_data(id_delp, Atm(n)%delp(isc:iec,jsc:jec,:), Time)
+#endif
        if( ( (.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0)) .or. id_cape > 0 .or. id_cin > 0  .or. &
             id_brn > 0 .or. id_shear06 > 0) then
-
-!!$          if (id_ppnh > 0) then
-!!$             if (allocated(a3)) deallocate(a3)
-!!$             allocate(a3(isc:iec,jsc:jec,1:npz+1))
-!!$                do j=jsc,jec
-!!$                do i=isc,iec
-!!$                    a3(i,j,1) = ptop
-!!$                enddo
-!!$                enddo
-!!$              do k=2,npz+1
-!!$                do j=jsc,jec
-!!$                do i=isc,iec
-!!$                   a3(i,j,k) = a3(i,j,k-1) + wk(i,j,k) !interface pressure
-!!$                enddo
-!!$                enddo
-!!$              enddo
-!!$              do k=1,npz+1
-!!$                do j=jsc,jec
-!!$                do i=isc,iec
-!!$                   a3(i,j,k) = log(a3(i,j,k)) !log pressure
-!!$                enddo
-!!$                enddo
-!!$             enddo
-!!$             do k=1,npz
-!!$                do j=jsc,jec
-!!$                do i=isc,iec
-!!$                   a3(i,j,k) = wk(i,j,k)/(a3(i,j,k+1)-a3(i,j,k)) !hydro layer-mean pressure
-!!$                enddo
-!!$                enddo
-!!$             enddo
-!!$             
-!!$          endif
 
           do k=1,npz
              do j=jsc,jec
              do i=isc,iec
-                 wk(i,j,k) = -wk(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
-                             Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum))
+#ifdef GFS_PHYS
+                wk(i,j,k) = -wk(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
+                     Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum))
+#else
+                 wk(i,j,k) = -Atm(n)%delp(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
+                              Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum))
+                
+#endif                
              enddo
              enddo
            enddo
@@ -2969,7 +2969,11 @@ contains
                do j=jsc,jec
                do i=isc,iec
                   !wk(i,j,k) = wk(i,j,k) - a3(i,j,k)
-                  wk(i,j,k) = wk(i,j,k) - 0.5 *(Atm(n)%pe(i,k,j)+Atm(n)%pe(i,k+1,j)) !STUPID: testing only!!
+#ifdef GFS_PHYS
+                  wk(i,j,k) = wk(i,j,k)/(1.-sum(Atm(n)%q(i,j,k,2:Atm(n)%flagstruct%nwat))) !Need to correct
+#endif                  
+                  tmp = Atm(n)%delp(i,j,k)/(Atm(n)%peln(i,k+1,j)-Atm(n)%peln(i,k,j))
+                  wk(i,j,k) = wk(i,j,k) - tmp
                enddo
                enddo
              enddo
@@ -2979,27 +2983,16 @@ contains
 !           if (allocated(a3)) deallocate(a3)
 
         endif
-#else
-       if(id_delp > 0) used=send_data(id_delp, Atm(n)%delp(isc:iec,jsc:jec,:), Time)
 
-       if( (.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or.  id_cape > 0 .or. id_cin > 0 .or. id_brn > 0 .or. id_shear06 > 0)) then
-           do k=1,npz
-             do j=jsc,jec
-             do i=isc,iec
-                 wk(i,j,k) = -Atm(n)%delp(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
-                              Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum))
-             enddo
-             enddo
-           enddo
-           used=send_data(id_pfnh, wk, Time)
-       endif
-#endif
-
-      if( Atm(n)%flagstruct%hydrostatic .and. (id_pfhy > 0 .or. id_cape > 0 .or. id_cin > 0 .or. id_brn > 0 .or. id_shear06 > 0) ) then
+        if( Atm(n)%flagstruct%hydrostatic .and. (id_pfhy > 0 .or. id_cape > 0 .or. id_cin > 0 .or. id_brn > 0 .or. id_shear06 > 0) ) then
           do k=1,npz
             do j=jsc,jec
             do i=isc,iec
-                wk(i,j,k) = 0.5 *(Atm(n)%pe(i,k,j)+Atm(n)%pe(i,k+1,j))
+#ifdef GFS_PHYS
+               wk(i,j,k) = 0.5 *(Atm(n)%pe(i,k,j)+Atm(n)%pe(i,k+1,j))
+#else
+               wk(i,j,k) = Atm(n)%delp(i,j,k)/(Atm(n)%peln(i,k+1,j)-Atm(n)%peln(i,k,j))
+#endif               
             enddo
             enddo
           enddo
@@ -3345,19 +3338,19 @@ contains
        enddo
        if ( id_t_plev_ave > 0) then
           do j=jsc,jec
-             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%pt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
+             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%pt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4)
           enddo
           if (id_t_plev_ave > 0) used=send_data(id_t_plev_ave, a3, Time)
        endif
        if ( id_t_dt_gfdlmp_plev_ave > 0 ) then
           do j=jsc,jec
-             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%inline_mp%t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
+             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%inline_mp%t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4)
           enddo
           if (id_t_dt_gfdlmp_plev_ave > 0) used=send_data(id_t_dt_gfdlmp_plev_ave, a3, Time)
        endif
        if ( id_t_dt_phys_plev_ave > 0 ) then
           do j=jsc,jec
-             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4, ptop)
+             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4)
           enddo
           if (id_t_dt_phys_plev_ave > 0) used=send_data(id_t_dt_phys_plev_ave, a3, Time)
        endif
@@ -3368,19 +3361,19 @@ contains
        enddo
        if ( id_q_plev_ave > 0 ) then
           do j=jsc,jec
-             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%q(isc:iec,j,:,sphum), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8, ptop)
+             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%q(isc:iec,j,:,sphum), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8)
           enddo
           if (id_q_plev_ave > 0) used=send_data(id_q_plev_ave, a3, Time)
        endif
        if ( id_qv_dt_gfdlmp_plev_ave > 0 ) then
           do j=jsc,jec
-             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%inline_mp%qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8, ptop)
+             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%inline_mp%qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8)
           enddo
           if (id_qv_dt_gfdlmp_plev_ave > 0) used=send_data(id_qv_dt_gfdlmp_plev_ave, a3, Time)
        endif
        if ( id_qv_dt_phys_plev_ave > 0 ) then
           do j=jsc,jec
-             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8, ptop)
+             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8)
           enddo
           if (id_qv_dt_phys_plev_ave > 0) used=send_data(id_qv_dt_phys_plev_ave, a3, Time)
        endif

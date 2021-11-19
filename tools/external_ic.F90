@@ -75,10 +75,8 @@ module external_ic_mod
    real, parameter:: zvir = rvgas/rdgas - 1.
    real(kind=R_GRID), parameter :: cnst_0p20=0.20d0
    real :: deg2rad
-   character (len = 80) :: source
-   character(len=27), parameter :: source_fv3gfs_nemsio = 'FV3GFS GAUSSIAN NEMSIO FILE'
-   character(len=27), parameter :: source_fv3gfs_netcdf = 'FV3GFS GAUSSIAN NETCDF FILE'
    character(len=128) :: inputdir
+   logical :: source_fv3gfs
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -422,7 +420,7 @@ contains
 
 
 !
-    call get_data_source(source,Atm%flagstruct%regional,inputdir)
+    call get_data_source(source_fv3gfs,Atm%flagstruct%regional,inputdir)
 
 
 !--- read in the number of levp
@@ -649,7 +647,7 @@ contains
     snowwat = get_tracer_index(MODEL_ATMOS, 'snowwat')
     graupel = get_tracer_index(MODEL_ATMOS, 'graupel')
     ntclamt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
-    if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) then
+    if (source_fv3gfs) then
     do k=1,npz
       do j=js,je
         do i=is,ie
@@ -724,7 +722,7 @@ contains
     deallocate (bk)
     deallocate (ps)
     deallocate (q )
-    if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) deallocate (temp)
+    if (source_fv3gfs) deallocate (temp)
     deallocate (omga)
 
 
@@ -757,7 +755,7 @@ contains
         allocate ( v_w(is:ie+1, js:je, 1:levp) )
         allocate ( u_s(is:ie, js:je+1, 1:levp) )
         allocate ( v_s(is:ie, js:je+1, 1:levp) )
-        if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) allocate (temp(is:ie,js:je,1:levp))
+        if (source_fv3gfs) allocate (temp(is:ie,js:je,1:levp))
 
 
         ! surface pressure (Pa)
@@ -778,7 +776,7 @@ contains
         id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'ZH', zh, domain=Atm%domain)
 
         ! real temperature (K)
-        if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) id_res = register_restart_field (GFS_restart, fn_gfs_ics, 't', temp, mandatory=.false., &
+        if (source_fv3gfs) id_res = register_restart_field (GFS_restart, fn_gfs_ics, 't', temp, mandatory=.false., &
                                                                             domain=Atm%domain)
         ! prognostic tracers
         do nt = 1, ntracers
@@ -1030,7 +1028,7 @@ contains
 
 
         ! this is necessary to remap temperature and w correctly
-        source = source_fv3gfs_nemsio
+        source_fv3gfs = .True.
 
 !***  For regional runs read in each of the BC variables from the NetCDF boundary file
 !***  and remap in the vertical from the input levels to the model integration levels.
@@ -2719,7 +2717,7 @@ contains
 #endif
 
 !$OMP parallel do default(none) &
-!$OMP             shared(sphum,liq_wat,rainwat,ice_wat,snowwat,graupel,source,&
+!$OMP             shared(sphum,liq_wat,rainwat,ice_wat,snowwat,graupel,source_fv3gfs,&
 !$OMP                    cld_amt,ncnst,npz,is,ie,js,je,km,k2,ak0,bk0,psc,zh,omga,qa,Atm,z500,t_in) &
 !$OMP             private(l,m,pst,pn,gz,pe0,pn0,pe1,pn1,dp2,qp,qn1,gz_fv)
 
@@ -2793,7 +2791,7 @@ contains
                qp(i,k) = qa(i,j,k,iq)
             enddo
          enddo
-         call mappm(km, pe0, qp, npz, pe1,  qn1, is,ie, 0, 8, Atm%ptop)
+         call mappm(km, pe0, qp, npz, pe1,  qn1, is,ie, 0, 8)
          if ( iq==sphum ) then
             call fillq(ie-is+1, npz, 1, qn1, dp2)
          else
@@ -2864,7 +2862,7 @@ contains
 !----------------------------------------------------
 ! Compute true temperature using hydrostatic balance
 !----------------------------------------------------
-      if ((trim(source) /= source_fv3gfs_nemsio .and. trim(source) /= source_fv3gfs_netcdf) .or. .not. present(t_in)) then
+      if ( .not. source_fv3gfs .or. .not. present(t_in)) then
          do k=1,npz
 !        qc = 1.-(Atm%q(i,j,k,liq_wat)+Atm%q(i,j,k,rainwat)+Atm%q(i,j,k,ice_wat)+Atm%q(i,j,k,snowwat))
 !        Atm%pt(i,j,k) = (gz_fv(k)-gz_fv(k+1))*qc/( rdgas*(pn1(i,k+1)-pn1(i,k))*(1.+zvir*Atm%q(i,j,k,sphum)) )
@@ -2878,8 +2876,8 @@ contains
             qp(i,k) = t_in(i,j,k)
         enddo
 
-        call mappm(km, log(pe0), qp, npz, log(pe1), qn1, is,ie, 2, 4, Atm%ptop) ! pn0 and pn1 are higher-precision
-                                                                                ! and cannot be passed to mappm
+        call mappm(km, log(pe0), qp, npz, log(pe1), qn1, is,ie, 2, 4) ! pn0 and pn1 are higher-precision
+                                                                      ! and cannot be passed to mappm
         do k=1,npz
             Atm%pt(i,j,k) = qn1(i,k)
         enddo
@@ -2896,7 +2894,7 @@ contains
 ! seperate cloud water and cloud ice from Jan-Huey Chen's HiRAM code
 ! only use for NCEP IC and GFDL microphy
 !-----------------------------------------------------------------------
-   if (trim(source) /= source_fv3gfs_nemsio .and. trim(source) /= source_fv3gfs_netcdf) then
+   if ( .not. source_fv3gfs) then
       if ((Atm%flagstruct%nwat .eq. 3 .or. Atm%flagstruct%nwat .eq. 6) .and. &
            (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%nggps_ic)) then
          do k=1,npz
@@ -2958,8 +2956,8 @@ contains
             qp(i,k) = omga(i,j,k)
          enddo
       enddo
-      call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, -1, 4, Atm%ptop)
-    if (trim(source) == source_fv3gfs_nemsio .or. trim(source) == source_fv3gfs_netcdf) then
+      call mappm(km, pe0, qp, npz, pe1, qn1, is,ie, -1, 4)
+    if (source_fv3gfs) then
       do k=1,npz
          do i=is,ie
             atm%w(i,j,k) = qn1(i,k)
@@ -3102,7 +3100,7 @@ contains
            qp(i,k) = qa(i,j,k)
         enddo
      enddo
-     call mappm(km, pe0, qp, npz, pe1,  qn1, is,ie, 0, 8, Atm%ptop)
+     call mappm(km, pe0, qp, npz, pe1,  qn1, is,ie, 0, 8)
      if ( iq==1 ) then
         call fillq(ie-is+1, npz, 1, qn1, dp2)
      else
@@ -3201,7 +3199,7 @@ contains
         enddo
      enddo
      call mappm(km, pe0(is:ie,1:km+1), ud(is:ie,j,1:km), npz, pe1(is:ie,1:npz+1),   &
-                qn1(is:ie,1:npz), is,ie, -1, 8, Atm%ptop)
+                qn1(is:ie,1:npz), is,ie, -1, 8)
      do k=1,npz
         do i=is,ie
            Atm%u(i,j,k) = qn1(i,k)
@@ -3223,7 +3221,7 @@ contains
         enddo
      enddo
      call mappm(km, pe0(is:ie+1,1:km+1), vd(is:ie+1,j,1:km), npz, pe1(is:ie+1,1:npz+1),  &
-                qn1(is:ie+1,1:npz), is,ie+1, -1, 8, Atm%ptop)
+                qn1(is:ie+1,1:npz), is,ie+1, -1, 8)
      do k=1,npz
         do i=is,ie+1
            Atm%v(i,j,k) = qn1(i,k)
@@ -3283,7 +3281,7 @@ contains
 !------
 ! map u
 !------
-      call mappm(km, pe0, ua(is:ie,j,1:km), npz, pe1, qn1, is,ie, -1, 8, Atm%ptop)
+      call mappm(km, pe0, ua(is:ie,j,1:km), npz, pe1, qn1, is,ie, -1, 8)
       do k=1,npz
          do i=is,ie
             ut(i,j,k) = qn1(i,k)
@@ -3292,7 +3290,7 @@ contains
 !------
 ! map v
 !------
-      call mappm(km, pe0, va(is:ie,j,1:km), npz, pe1, qn1, is,ie, -1, 8, Atm%ptop)
+      call mappm(km, pe0, va(is:ie,j,1:km), npz, pe1, qn1, is,ie, -1, 8)
       do k=1,npz
          do i=is,ie
             vt(i,j,k) = qn1(i,k)
@@ -3519,7 +3517,7 @@ contains
 !------
 ! map u
 !------
-      call mappm(km, pe0, up, npz, pe1, qn1, is,ie, -1, 9, Atm%ptop)
+      call mappm(km, pe0, up, npz, pe1, qn1, is,ie, -1, 9)
       do k=1,npz
          do i=is,ie
             ut(i,j,k) = qn1(i,k)
@@ -3528,7 +3526,7 @@ contains
 !------
 ! map v
 !------
-      call mappm(km, pe0, vp, npz, pe1, qn1, is,ie, -1, 9, Atm%ptop)
+      call mappm(km, pe0, vp, npz, pe1, qn1, is,ie, -1, 9)
       do k=1,npz
          do i=is,ie
             vt(i,j,k) = qn1(i,k)
@@ -3541,7 +3539,7 @@ contains
       do iq=1,ncnst
 ! Note: AM2 physics tracers only
 !         if ( iq==sphum .or. iq==liq_wat .or. iq==ice_wat .or. iq==cld_amt ) then
-         call mappm(km, pe0, qp(is,1,iq), npz, pe1,  qn1, is,ie, 0, 11, Atm%ptop)
+         call mappm(km, pe0, qp(is,1,iq), npz, pe1,  qn1, is,ie, 0, 11)
          do k=1,npz
             do i=is,ie
                Atm%q(i,j,k,iq) = qn1(i,k)
@@ -3553,7 +3551,7 @@ contains
 !-------------------------------------------------------------
 ! map virtual temperature using geopotential conserving scheme.
 !-------------------------------------------------------------
-      call mappm(km, pn0, tp, npz, pn1, qn1, is,ie, 1, 9, Atm%ptop)
+      call mappm(km, pn0, tp, npz, pn1, qn1, is,ie, 1, 9)
       do k=1,npz
          do i=is,ie
             Atm%pt(i,j,k) = qn1(i,k)/(1.+zvir*Atm%q(i,j,k,sphum))

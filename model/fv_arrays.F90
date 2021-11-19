@@ -161,7 +161,10 @@ module fv_arrays_mod
 
      real(kind=R_GRID) :: global_area
      logical :: g_sum_initialized = .false. !Not currently used but can be useful
-     logical:: sw_corner, se_corner, ne_corner, nw_corner
+     logical:: sw_corner = .false.
+     logical:: se_corner = .false.
+     logical:: ne_corner = .false.
+     logical:: nw_corner = .false.
 
      real(kind=R_GRID) :: da_min, da_max, da_min_c, da_max_c
 
@@ -231,8 +234,8 @@ module fv_arrays_mod
 ! Heat & air mass (delp) transport options:
    integer :: hord_tm = 9    ! virtual potential temperature
    integer :: hord_dp = 9    ! delp (positive definite)
-   integer :: kord_tm =-8    !
-
+   integer :: kord_tm =-8    ! <0: remap Tv from logp*
+                             ! >0: remap Theta_v from pe 
 ! Tracer transport options:
    integer :: hord_tr = 12   !11: PPM mono constraint (Lin 2004); fast
                              !12: Huynh 2nd constraint (Lin 2004) +
@@ -275,6 +278,8 @@ module fv_arrays_mod
    logical :: convert_ke = .false.
    logical :: do_vort_damp = .false.
    logical :: use_old_omega = .true.
+   logical :: remap_te = .false.    ! A developmental option, remap total energy based on abs(kord_tm)
+                                    ! if kord_tm=0 use GMAO Cubic, otherwise as Tv remapping 
 ! PG off centering:
    real    :: beta  = 0.0    ! 0.5 is "neutral" but it may not be stable
 #ifdef SW_DYNAMICS
@@ -423,6 +428,7 @@ module fv_arrays_mod
                                       !    damp_k_k1 = 0.2         damp_k_k2 = 0.12
 
    logical :: fv_land = .false.       ! To cold starting the model with USGS terrain
+   logical :: do_am4_remap = .false.   ! Use AM4 vertical remapping operators
 !--------------------------------------------------------------------------------------
 ! The following options are useful for NWP experiments using datasets on the lat-lon grid
 !--------------------------------------------------------------------------------------
