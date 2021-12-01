@@ -782,7 +782,7 @@ contains
                enddo
             enddo
        endif
-       if ( flagstruct%d_con > 1.0E-5 .OR. flagstruct%do_skeb ) then
+       if ( flagstruct%d_con > 1.0E-5 .OR. flagstruct%do_diss_est ) then
 ! Average horizontal "convergence" to cell center
             do j=js,je
                do i=is,ie

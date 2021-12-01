@@ -6742,12 +6742,13 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 ! The term 'source' is specified by 'chgres_cube'
 !
       if (regional) then
-       lstatus = get_global_att_value('INPUT/gfs_data.nc',"source", source)
+       lstatus = get_global_att_value(trim(dir)//'/gfs_data.nc',"source", source)
       else
        lstatus = get_global_att_value(trim(dir)//'/gfs_data.tile1.nc',"source", source)
       endif
       if (.not. lstatus) then
-       if (mpp_pe() == 0) write(0,*) 'INPUT source not found ',lstatus,' set source=No Source Attribute'
+       if (mpp_pe() == 0) write(0,*) 'INPUT source not found in ', trim(dir), &
+                          ' status=', lstatus,' set source=No Source Attribute'
        source='No Source Attribute'
       endif
       if (mpp_pe()==0) write(*,*) 'INPUT gfs_data source string=',source

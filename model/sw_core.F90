@@ -951,7 +951,9 @@ module sw_core_mod
 ! 0.5 * [ (w+dw)**2 - w**2 ] = w*dw + 0.5*dw*dw
 !                   heat_source(i,j) = -d_con*dw(i,j)*(w(i,j)+0.5*dw(i,j))
                     heat_source(i,j) = dd8 - dw(i,j)*(w(i,j)+0.5*dw(i,j))
-                    diss_est(i,j) = heat_source(i,j)
+                    if ( flagstruct%do_diss_est ) then
+                       diss_est(i,j) = heat_source(i,j)
+                    endif
                    enddo
                 enddo
             endif
@@ -1490,7 +1492,7 @@ module sw_core_mod
         call del6_vt_flux(nord_v, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd)
    endif
 
-   if ( d_con > 1.e-5 .or. flagstruct%do_skeb ) then
+   if ( d_con > 1.e-5 .or. flagstruct%do_diss_est ) then
       do j=js,je+1
          do i=is,ie
             ub(i,j) = (ub(i,j) + vt(i,j))*rdx(i,j)
@@ -1521,7 +1523,7 @@ module sw_core_mod
                   (ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
                               + 2.*(gy(i,j)+gy(i,j+1)+gx(i,j)+gx(i+1,j))   &
                               - cosa_s(i,j)*(u2*dv2 + v2*du2 + du2*dv2)) )
-           if (flagstruct%do_skeb) then
+           if (flagstruct%do_diss_est) then
              diss_est(i,j) = diss_est(i,j)-rsin2(i,j)*( &
                   (ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
                               + 2.*(gy(i,j)+gy(i,j+1)+gx(i,j)+gx(i+1,j))   &

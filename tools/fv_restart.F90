@@ -257,11 +257,12 @@ contains
           !4. Restart
           elseif (do_read_restart) then
 
-             if( is_master() ) write(*,*) 'replay ', Atm(n)%flagstruct%replay
              if ( Atm(n)%flagstruct%replay > 0 ) then
                 call fv_io_register_restart_inc(Atm(n)%domain,Atm(n:n),IAU_Data)
              endif 
              if ( Atm(n)%flagstruct%replay == 1) then
+                
+                if( is_master() ) write(*,*) 'Read background and external IC to compute replay increment'
 
                 ! Initialize IAU increment variables
                 IAU_Data%ua_inc=0.0

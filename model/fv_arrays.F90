@@ -298,9 +298,12 @@ module fv_arrays_mod
    logical :: inline_q = .false.
    logical :: adiabatic = .false.     ! Run without physics (full or idealized).
 #endif
-   integer :: replay = 0
-   integer :: nrestartbg = 1
-   logical :: write_replay_ic = .false.
+! Replay options
+   integer :: replay = 0     ! replay=0: replay turned off
+                             ! replay=1: compute replay increments inside the model
+                             ! replay=2: use preprocessed increments  
+   integer :: nrestartbg = 1 ! number of backgrounds for background averaging
+   logical :: write_replay_ic = .false. ! write out replay increments on cubed-sphere grid
 !-----------------------------------------------------------
 ! Grid shifting, rotation, and cube transformations:
 !-----------------------------------------------------------
@@ -451,8 +454,7 @@ module fv_arrays_mod
    logical :: read_increment = .false.   ! read in analysis increment and add to restart
 ! following are namelist parameters for Stochastic Energy Baskscatter
 ! dissipation estimate
-   logical :: do_skeb  = .false.         !< save dissipation estimate
-   integer :: skeb_npass  = 11           !< Filter dissipation estimate "skeb_npass" times
+   logical :: do_diss_est  = .false.     !< compute and save dissipation estimate
 ! Default restart files from the "Memphis" latlon FV core:
    character(len=128) :: res_latlon_dynamics = 'INPUT/fv_rst.res.nc'
    character(len=128) :: res_latlon_tracers  = 'INPUT/atmos_tracers.res.nc'
