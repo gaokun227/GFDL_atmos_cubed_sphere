@@ -95,7 +95,7 @@ module fv_diagnostics_mod
 
  logical :: is_ideal_case = .false.
      
- public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, range_check!, id_divg, id_te
+ public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, prt_maxmin2, range_check!, id_divg, id_te
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field, get_height_given_pressure
  public :: cs3_interpolator, get_vorticity, is_ideal_case
@@ -114,7 +114,7 @@ module fv_diagnostics_mod
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
  integer :: id_dx, id_dy
 
- real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2), psrange(2)
+ real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2), psrange(2), skrange(2)
 
  ! integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
  ! integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
@@ -211,6 +211,7 @@ contains
     trange = (/  100.,  350. /)  ! temperature
 #endif
     slprange = (/800.,  1200./)  ! sea-level-pressure
+    skrange  = (/ -10000000.0,  10000000.0 /)  ! dissipation estimate for SKEB
 #ifdef SW_DYNAMICS
     psrange = (/.01, 1.e7 /)
 #else
@@ -915,6 +916,9 @@ contains
                'omega', 'Pa/s', missing_value=missing_value )
           idiag%id_divg  = register_diag_field ( trim(field), 'divg', axes(1:3), Time,      &
                'mean divergence', '1/s', missing_value=missing_value )
+! diagnotic output for skeb testing
+          idiag%id_diss = register_diag_field ( trim(field), 'diss_est', axes(1:3), Time,    &
+               'random', 'none', missing_value=missing_value, range=skrange )
 
           id_hght3d  = register_diag_field( trim(field), 'hght', axes(1:3), Time, &
                'height', 'm', missing_value=missing_value )
@@ -3455,6 +3459,7 @@ contains
 
        if(id_pt   > 0) used=send_data(id_pt  , Atm(n)%pt  (isc:iec,jsc:jec,:), Time)
        if(id_omga > 0) used=send_data(id_omga, Atm(n)%omga(isc:iec,jsc:jec,:), Time)
+       if(idiag%id_diss > 0) used=send_data(idiag%id_diss, Atm(n)%diss_est(isc:iec,jsc:jec,:), Time)
        
        allocate( a3(isc:iec,jsc:jec,npz) )
        if(id_theta_e > 0 ) then
@@ -4103,6 +4108,44 @@ contains
       endif
 
  end subroutine prt_maxmin
+
+ subroutine prt_maxmin2(qname, q, is, ie, js, je, km, fac)
+      character(len=*), intent(in)::  qname
+      integer, intent(in):: is, ie, js, je
+      integer, intent(in):: km
+      real, intent(in)::    q(is:ie, js:je, km)
+      real, intent(in)::    fac
+
+      real qmin, qmax
+      integer i,j,k
+      !mpp_root_pe doesn't appear to recognize nested grid
+      master = (mpp_pe()==mpp_root_pe()) .or. is_master()
+
+      qmin = q(is,js,1)
+      qmax = qmin
+
+      do k=1,km
+      do j=js,je
+         do i=is,ie
+!           qmin = min(qmin, q(i,j,k))
+!           qmax = max(qmax, q(i,j,k))
+            if( q(i,j,k) < qmin  ) then
+                qmin = q(i,j,k)
+            elseif( q(i,j,k) > qmax ) then
+                qmax = q(i,j,k)
+            endif
+          enddo
+      enddo
+      enddo
+
+      call mp_reduce_min(qmin)
+      call mp_reduce_max(qmax)
+
+      if(master) then
+            write(*,*) qname//trim(gn), ' max = ', qmax*fac, ' min = ', qmin*fac
+      endif
+
+ end subroutine prt_maxmin2
 
  subroutine prt_mxm(qname, q, is, ie, js, je, n_g, km, fac, area, domain)
       character(len=*), intent(in)::  qname

@@ -50,7 +50,7 @@ module fv_arrays_mod
 
      real, allocatable :: zxg(:,:)
 
-     integer :: id_u_dt_sg, id_v_dt_sg, id_t_dt_sg, id_qv_dt_sg
+     integer :: id_u_dt_sg, id_v_dt_sg, id_t_dt_sg, id_qv_dt_sg, id_diss
      integer :: id_ws, id_te, id_amdt, id_mdt, id_divg, id_aam
      logical :: initialized = .false.
 
@@ -298,6 +298,12 @@ module fv_arrays_mod
    logical :: inline_q = .false.
    logical :: adiabatic = .false.     ! Run without physics (full or idealized).
 #endif
+! Replay options
+   integer :: replay = 0     ! replay=0: replay turned off
+                             ! replay=1: compute replay increments inside the model
+                             ! replay=2: use preprocessed increments  
+   integer :: nrestartbg = 1 ! number of backgrounds for background averaging
+   logical :: write_replay_ic = .false. ! write out replay increments on cubed-sphere grid
 !-----------------------------------------------------------
 ! Grid shifting, rotation, and cube transformations:
 !-----------------------------------------------------------
@@ -446,6 +452,9 @@ module fv_arrays_mod
    logical :: external_eta = .false.  ! allow the use of externally defined ak/bk values and not
                                       ! require coefficients to be defined vi set_eta
    logical :: read_increment = .false.   ! read in analysis increment and add to restart
+! following are namelist parameters for Stochastic Energy Baskscatter
+! dissipation estimate
+   logical :: do_diss_est  = .false.     !< compute and save dissipation estimate
 ! Default restart files from the "Memphis" latlon FV core:
    character(len=128) :: res_latlon_dynamics = 'INPUT/fv_rst.res.nc'
    character(len=128) :: res_latlon_tracers  = 'INPUT/atmos_tracers.res.nc'
@@ -482,6 +491,7 @@ module fv_arrays_mod
                                      !     to .true. in the next city release if desired
 
   logical :: w_limiter = .true. ! Fix excessive w - momentum conserving --- sjl
+
   ! options related to regional mode
   logical :: regional = .false.       !< Default setting for the regional domain.
   integer :: bc_update_interval = 3   !< Default setting for interval (hours) between external regional BC data files.
@@ -805,6 +815,8 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: oro(:,:)      _NULL  ! land fraction (1: all land; 0: all water)
     real, _ALLOCATABLE :: ts(:,:)       _NULL  ! skin temperature (sst) from NCEP/GFS (K) -- tile
     real, _ALLOCATABLE :: ci(:,:)       _NULL  ! sea-ice fraction from external file
+! For stochastic kinetic energy backscatter (SKEB)
+    real, _ALLOCATABLE :: diss_est(:,:,:) _NULL !< dissipation estimate taken from 'heat_source'
 
 !-----------------------------------------------------------------------
 ! Others:
@@ -1032,6 +1044,7 @@ contains
     endif
 
     ! Allocate others
+    allocate ( Atm%diss_est(isd:ied  ,jsd:jed  ,npz) )
     allocate ( Atm%ts(is:ie,js:je) )
     allocate ( Atm%phis(isd:ied  ,jsd:jed  ) )
     allocate ( Atm%omga(isd:ied  ,jsd:jed  ,npz) ); Atm%omga=0.
@@ -1382,6 +1395,7 @@ contains
     deallocate (   Atm%pk )
     deallocate ( Atm%peln )
     deallocate (  Atm%pkz )
+    deallocate (   Atm%ts )
     deallocate ( Atm%phis )
     deallocate ( Atm%omga )
     deallocate (   Atm%ua )
@@ -1394,6 +1408,7 @@ contains
     deallocate (  Atm%cy )
     deallocate (  Atm%ak )
     deallocate (  Atm%bk )
+    deallocate ( Atm%diss_est )
 
     deallocate ( Atm%inline_mp%prer )
     deallocate ( Atm%inline_mp%prei )
