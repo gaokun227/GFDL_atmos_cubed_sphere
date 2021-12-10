@@ -1757,7 +1757,7 @@ contains
       real(kind=R_GRID), dimension(3):: e1, e2, ex, ey
       real, allocatable:: ps_gfs(:,:), zh_gfs(:,:,:), o3mr_gfs(:,:,:)
       real, allocatable:: ak_gfs(:), bk_gfs(:)
-      integer :: id_res, ntprog, ntracers, ks, iq, nt
+      integer :: id_res, ntprog, ntracers, ks, iq, nt, levsp
       character(len=64) :: tracer_name
       integer :: levp_gfs = 64
       type (restart_file_type) :: ORO_restart, GFS_restart
@@ -1775,6 +1775,11 @@ contains
       ied = Atm%bd%ied
       jsd = Atm%bd%jsd
       jed = Atm%bd%jed
+
+      call open_ncfile( trim(inputdir)//'/'//trim(fn_gfs_ctl), ncid )
+      call get_ncdim1( ncid, 'levsp', levsp )
+      call close_ncfile( ncid )
+      levp_gfs = levsp-1
 
       deg2rad = pi/180.
 
