@@ -4981,25 +4981,23 @@ end subroutine terminator_tracers
                    .true., hydrostatic, nwat, domain, flagstruct%adiabatic)
 
 ! *** Add Initial perturbation ***
-        pturb = 2.
-        r0 = 10.e3
-        zc = 1.4e3         ! center of bubble  from surface
-        icenter = (npx-1)/3 + 1
-        jcenter = (npy-1)/2 + 1
-        do k=1, npz
-           zm = 0.5*(ze1(k)+ze1(k+1))
-           ptmp = ( (zm-zc)/zc ) **2
-           if ( ptmp < 1. ) then
+        if (bubble_do) then
+           pturb = 2.
+           r0 = 10.e3
+           zc = 1.4e3         ! center of bubble  from surface
+           icenter = (npx-1)/3 + 1
+           jcenter = (npy-1)/2 + 1
+           do k=1, npz
+              zm = 0.5*(ze1(k)+ze1(k+1))
+              ptmp = ( (zm-zc)/zc ) **2
               do j=js,je
                  do i=is,ie
-                   dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
-                   if ( dist < 1. ) then
-                        pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
-                   endif
+                    dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                    pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
                  enddo
               enddo
-           endif
-        enddo
+           enddo
+        endif
 
       case ( 18 )
 !---------------------------
@@ -5090,25 +5088,22 @@ end subroutine terminator_tracers
 
 ! *** Add Initial perturbation ***
         if (bubble_do) then
-            r0 = 10.e3
-            zc = 1.4e3         ! center of bubble  from surface
-            icenter = (npx-1)/2 + 1
-            jcenter = (npy-1)/2 + 1
-            do k=1, npz
-               zm = 0.5*(ze1(k)+ze1(k+1))
-               ptmp = ( (zm-zc)/zc ) **2
-               if ( ptmp < 1. ) then
-                  do j=js,je
-                     do i=is,ie
-                       dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
-                       if ( dist < 1. ) then
-                            pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
-                       endif
-                     enddo
-                  enddo
-               endif
-            enddo
-         endif
+           pturb = 2.
+           r0 = 10.e3
+           zc = 1.4e3         ! center of bubble  from surface
+           icenter = (npx-1)/3 + 1
+           jcenter = (npy-1)/2 + 1
+           do k=1, npz
+              zm = 0.5*(ze1(k)+ze1(k+1))
+              ptmp = ( (zm-zc)/zc ) **2
+              do j=js,je
+                 do i=is,ie
+                    dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                    pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
+                 enddo
+              enddo
+           enddo
+        endif
 
       case ( 19 )
 !---------------------------
@@ -5198,22 +5193,15 @@ end subroutine terminator_tracers
         jcenter = (npy-1)/2 + 1
         do k=1, npz
            zm = 0.5*(ze1(k)+ze1(k+1))
-           ptmp = (zm-zc)/zc
-           if ( abs(ptmp) < 1. ) then
-              do j=js,je
-                 do i=is,ie
-                   xr = (i-icenter)*dx_const/r0
-                   yr = (j-jcenter)*dy_const/r0
-                   dist = 1
-                   if ( abs(xr) < 1. .and. abs(yr) < 1. ) then
-                        dist = cos(pi/2*ptmp)**2*cos(pi/2*xr)**2*cos(pi/2*yr)**2
-                   endif
-                   if ( dist < 1. ) then
-                        pt(i,j,k) = pt(i,j,k) + pturb*dist
-                   endif
-                 enddo
+           ptmp = min(abs((zm-zc)/zc),1.0)
+           do j=js,je
+              do i=is,ie
+                 xr = min(abs((i-icenter)*dx_const/r0),1.0)
+                 yr = min(abs((j-jcenter)*dy_const/r0),1.0)
+                 dist = cos(pi/2*ptmp)**2*cos(pi/2*xr)**2*cos(pi/2*yr)**2
+                 pt(i,j,k) = pt(i,j,k) + pturb*dist
               enddo
-           endif
+           enddo
         enddo
 
         else
@@ -5227,16 +5215,12 @@ end subroutine terminator_tracers
         do k=1, npz
            zm = 0.5*(ze1(k)+ze1(k+1))
            ptmp = ( (zm-zc)/zc ) **2
-           if ( ptmp < 1. ) then
-              do j=js,je
-                 do i=is,ie
-                   dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
-                   if ( dist < 1. ) then
-                        pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
-                   endif
-                 enddo
+           do j=js,je
+              do i=is,ie
+                 dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                 pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
               enddo
-           endif
+           enddo
         enddo
 
         endif
@@ -5637,9 +5621,7 @@ end subroutine terminator_tracers
                     zm = 0.5*(ze0(i,j,k)+ze0(i,j,k+1))
                     dist = ((i-icenter)*dx_const)**2 + ((j-jcenter)*dy_const)**2 + (zm-zc)**2
                     dist = sqrt(dist)
-                    if ( dist <= r0 ) then
-                         pt(i,j,k) = pt(i,j,k) + 2.0*(1.-dist/r0)
-                    endif
+                    pt(i,j,k) = pt(i,j,k) + 2.0*max((1.-dist/r0),0.)
                  enddo
               enddo
            enddo
@@ -5647,7 +5629,6 @@ end subroutine terminator_tracers
         end select
 
         is_ideal_case = .true.
-
         
         nullify(grid)
         nullify(agrid)
