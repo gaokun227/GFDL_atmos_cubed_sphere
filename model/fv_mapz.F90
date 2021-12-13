@@ -684,7 +684,7 @@ contains
    enddo
 
 
-1000  continue
+  enddo !j-loop
 
   !6) Energy fixer
 !$OMP parallel do default(none) shared(is,ie,js,je,km,pe4,pe)
