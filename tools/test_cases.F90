@@ -128,6 +128,7 @@
       real    :: soliton_size = 750.e3, soliton_Umax = 50.
       logical :: checker_tr
       real    :: small_earth_scale = 1.0
+      real    :: umean = 0.0
       
 ! Case 0 parameters
       real :: p0_c0 = 3.0
@@ -5167,9 +5168,9 @@ end subroutine terminator_tracers
         do k=1,npz
              zm = 0.5*(ze1(k)+ze1(k+1))
            if (no_wind) then
-              us0 = 0.0
+              us0 = 0.0 + umean
            else
-              us0 = 14.
+              us0 = 14. + umean
            endif
            utmp = us0*tanh(zm/1.2E4)
            do j=js,je+1
@@ -5675,7 +5676,7 @@ end subroutine terminator_tracers
         character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
-             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale
+             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, Umean
 
 #include<file_version.h>
 
