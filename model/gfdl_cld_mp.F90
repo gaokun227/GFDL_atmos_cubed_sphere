@@ -96,39 +96,49 @@ module gfdl_cld_mp_mod
     real, parameter :: rgrav = 1.0 / grav ! inversion of gravity acceleration (s^2/m)
     
     real, parameter :: pi = 4.0 * atan (1.0) ! ratio of circle circumference to diameter
+
+    real, parameter :: boltzmann = 1.38064852e-23 ! boltzmann constant (J/K)
+    real, parameter :: avogadro = 6.02214076e23 ! avogadro number (1/mol)
+    real, parameter :: runiver = avogadro * boltzmann ! 8.314459727525675, universal gas constant (J/K/mol)
+    real, parameter :: mmd = 2.89647e-2 ! dry air molar mass (kg/mol)
+    real, parameter :: mmv = 1.801528e-2 ! water vapor molar mass (kg/mol)
     
-    real, parameter :: rdgas = 287.05 ! gas constant for dry air (J/kg/K)
-    real, parameter :: rvgas = 461.50 ! gas constant for water vapor (J/kg/K)
+    real, parameter :: rdgas = runiver / mmd ! 287.0549229760942 gas constant for dry air (J/kg/K)
+    real, parameter :: rvgas = runiver / mmv ! 461.5226478592436 gas constant for water vapor (J/kg/K)
     
-    real, parameter :: eps = rdgas / rvgas ! 0.6219934995
-    real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077338443
+    real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6078035185507751
     
     real, parameter :: tice = 273.16 ! freezing temperature (K)
     
-    real, parameter :: cp_air = 1.0046e3 ! heat capacity of dry air at constant pressure (J/kg/K)
-    real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0, heat capacity of water vapore at constnat pressure (J/kg/K)
-    real, parameter :: cv_air = cp_air - rdgas ! 717.55, heat capacity of dry air at constant volume (J/kg/K)
-    real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5, heat capacity of water vapor at constant volume (J/kg/K)
+    real, parameter :: cp_air = 7. / 2. * rdgas ! 1004.6922304163297 ! heat capacity of dry air at constant pressure (J/kg/K)
+    real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0905914369744, heat capacity of water vapor at constnat pressure (J/kg/K)
+    real, parameter :: cv_air = 5. / 2. * rdgas ! 717.6373074402354, heat capacity of dry air at constant volume (J/kg/K)
+    real, parameter :: cv_vap = 3.0 * rvgas ! 1384.5679435777308, heat capacity of water vapor at constant volume (J/kg/K)
     
-    real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg C (J/kg/K)
-    real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg C (J/kg/K)
+    real, parameter :: c_ice = 2.106e3 ! heat capacity of ice at 0 deg C (J/kg/K), ref: IFS
+    real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg C (J/kg/K), ref: IFS
     
-    real, parameter :: dc_vap = cp_vap - c_liq ! - 2.372e3, isobaric heating / cooling (J/kg/K)
-    real, parameter :: dc_ice = c_liq - c_ice ! 2.112e3, isobaric heating / colling (J/kg/K)
-    real, parameter :: d2_ice = cp_vap - c_ice ! - 260.0, isobaric heating / cooling (J/kg/K)
+    real, parameter :: dc_vap = cp_vap - c_liq ! - 2371.909408563026, isobaric heating / cooling (J/kg/K)
+    real, parameter :: dc_ice = c_liq - c_ice ! 2112.0, isobaric heating / colling (J/kg/K)
+    real, parameter :: d2_ice = cp_vap - c_ice ! - 259.90940856302564, isobaric heating / cooling (J/kg/K)
     
-    real, parameter :: hlv = 2.5e6 ! latent heat of evaporation (J/kg)
-    real, parameter :: hlf = 3.3358e5 ! latent heat of fusion (J/kg)
+    real, parameter :: hlv = 2.5008e6 ! latent heat of evaporation (J/kg), ref: IFS
+    real, parameter :: hlf = 3.345e5 ! latent heat of fusion (J/kg), ref: IFS
     
-    real, parameter :: visk = 1.259e-5 ! kinematic viscosity of air (m^2/s)
-    real, parameter :: vdifu = 2.11e-5 ! diffusivity of water vapor in air (m^2/s)
-    real, parameter :: tcond = 2.36e-2 ! thermal conductivity of air (J/m/s/K)
+    real, parameter :: visd = 1.729e-5 ! dynamics viscosity of air at 0 deg C (kg/m/s)
+    real, parameter :: visk = 1.338e-5 ! kinematic viscosity of air at 0 deg C (m^2/s)
+    real, parameter :: vdifu = 2.19e-5 ! diffusivity of water vapor in air at 0 deg C (m^2/s)
+    real, parameter :: tcond = 2.364e-2 ! thermal conductivity of air at 0 deg C (J/m/s/K)
+
+    real, parameter :: rho0 = 1.2 ! simple assumption of surface air density (kg/m^3)
+    real, parameter :: cdg = 2.626 ! drag coefficient of graupel (Locatelli and Hobbs, 1974)
+    real, parameter :: cdh = 0.5 ! drag coefficient of hail (Heymsfield and Wright, 2014)
     
     real (kind = r8), parameter :: lv0 = hlv - dc_vap * tice ! 3.14893552e6, evaporation latent heat coeff. at 0 deg K (J/kg)
     real (kind = r8), parameter :: li0 = hlf - dc_ice * tice ! - 2.2691392e5, fussion latent heat coeff. at 0 deg K (J/kg)
     real (kind = r8), parameter :: li2 = lv0 + li0 ! 2.9220216e6, sublimation latent heat coeff. at 0 deg K (J/kg)
     
-    real (kind = r8), parameter :: e00 = 611.21 ! saturation vapor pressure at 0 deg C (Pa)
+    real (kind = r8), parameter :: e00 = 611.65 ! saturation vapor pressure at 0 deg C (Pa)
     
     ! -----------------------------------------------------------------------
     ! predefined parameters
@@ -141,13 +151,11 @@ module gfdl_cld_mp_mod
     
     real, parameter :: dz_min = 1.0e-2 ! used for correcting flipped height (m)
     
-    real, parameter :: sfcrho = 1.2 ! surface air density (kg/m^3)
-    
-    real, parameter :: rhow = 1.0e3 ! density of cloud water (kg/m^3)
-    real, parameter :: rhoi = 9.17e2 ! density of cloud ice (kg/m^3)
+    real, parameter :: rhow = 9.9985e2 ! density of cloud water (kg/m^3)
+    real, parameter :: rhoi = 9.162e2 ! density of cloud ice (kg/m^3)
     real, parameter :: rhor = 1.0e3 ! density of rain (Lin et al. 1983) (kg/m^3)
-    real, parameter :: rhos = 0.1e3 ! density of snow (Lin et al. 1983) (kg/m^3)
-    real, parameter :: rhog = 0.4e3 ! density of graupel (Rutledge and Hobbs 1984) (kg/m^3)
+    real, parameter :: rhos = 1.0e2 ! density of snow (Lin et al. 1983) (kg/m^3)
+    real, parameter :: rhog = 4.0e2 ! density of graupel (Rutledge and Hobbs 1984) (kg/m^3)
     real, parameter :: rhoh = 9.17e2 ! density of hail (Lin et al. 1983) (kg/m^3)
     
     real, parameter :: dt_fr = 8.0 ! t_wfr - dt_fr: minimum temperature water can exist (Moore and Molinero 2011)
@@ -630,7 +638,7 @@ subroutine setup_mp
     
     integer :: i, k
     
-    real :: gcon, hcon, scm3, pisq, act (20), ace (20), occ (3)
+    real :: gcon, hcon, scm3, pisq, act (20), ace (20), occ (3), aone
     
     ! -----------------------------------------------------------------------
     ! complete freezing temperature
@@ -646,16 +654,17 @@ subroutine setup_mp
     ! cloud water autoconversion, Hong et al. (2004)
     ! -----------------------------------------------------------------------
     
-    fac_rc = (4. / 3.) * pi * rhor * rthresh ** 3
+    fac_rc = (4. / 3.) * pi * rhow * rthresh ** 3
     
-    cpaut = c_paut * 0.104 * grav / 1.717e-5
+    aone = 2. / 9. * (3. / 4.) ** (4. / 3.) / pi ** (1. / 3.)
+    cpaut = c_paut * aone * grav / visd
     
     ! -----------------------------------------------------------------------
     ! terminal velocities parameters of rain, snow, and graupel or hail, Lin et al. (1983)
     ! -----------------------------------------------------------------------
     
-    gcon = 40.74 ! (4 * g * rhog / (3 * CD * rho0)) ** 0.5 in Lin et al. (1983)
-    hcon = gcon * sqrt (rhoh / rhog)
+    gcon = (4. * grav * rhog / (3. * cdg * rho0)) ** 0.5
+    hcon = (4. * grav * rhoh / (3. * cdh * rho0)) ** 0.5
     
     vconw = alinw * gamma (3 + muw + blinw) / gamma (3 + muw)
     vconi = alini * gamma (3 + mui + blini) / gamma (3 + mui)
@@ -2693,7 +2702,7 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
                 
                 if (dq .gt. 0.) then
                     
-                    c_praut (k) = cpaut * exp (so1 * log (ccn (k) * rhor))
+                    c_praut (k) = cpaut * exp (so1 * log (ccn (k) * rhow))
                     sink = min (1., dq / dl (k)) * dts * c_praut (k) * den (k) * &
                         exp (so3 * log (ql (k)))
                     sink = min (ql (k), sink)
@@ -2720,7 +2729,7 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
                 
                 if (dq .gt. 0.) then
                     
-                    c_praut (k) = cpaut * exp (so1 * log (ccn (k) * rhor))
+                    c_praut (k) = cpaut * exp (so1 * log (ccn (k) * rhow))
                     sink = min (dq, dts * c_praut (k) * den (k) * exp (so3 * log (ql (k))))
                     sink = min (ql (k), sink)
                     
@@ -3917,7 +3926,7 @@ subroutine pwbf (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, lcpk, i
         qsi = iqs (tin, den (k), dqdt)
 
         if (tc .gt. 0. .and. ql (k) .gt. qcmin .and. qi (k) .gt. qcmin .and. &
-			qv (k) .gt. qsi .and. qv (k) .lt. qsw) then
+            qv (k) .gt. qsi .and. qv (k) .lt. qsw) then
 
             sink = min (fac_wbf * ql (k), tc / icpk (k))
             qim = qi0_crt / den (k)
