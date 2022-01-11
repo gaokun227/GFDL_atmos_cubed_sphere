@@ -21,7 +21,9 @@
 
 module hswf_mod
 
- use constants_mod,      only: grav, rdgas, cp_air, RADIAN, kappa, radius, pi
+ use constants_mod,      only: grav, rdgas, cp_air, RADIAN, kappa, pi
+ use fv_arrays_mod,      only: radius ! scaled for small earth
+
  use fv_grid_utils_mod,  only: g_sum
  use mpp_domains_mod,    only: mpp_update_domains, domain2d
  use time_manager_mod,   only: time_type, get_date, get_time

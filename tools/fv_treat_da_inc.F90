@@ -48,8 +48,9 @@ module fv_treat_da_inc_mod
                                get_tracer_index
   use field_manager_mod, only: MODEL_ATMOS
 
-  use constants_mod,     only: pi=>pi_8, omega, grav, kappa, &
+  use constants_mod,     only: pi=>pi_8, grav, kappa, &
                                rdgas, rvgas, cp_air
+  use fv_arrays_mod,     only: omega ! scaled for small earth
   use fv_arrays_mod,     only: fv_atmos_type, &
                                fv_grid_type, &
                                fv_grid_bounds_type, &

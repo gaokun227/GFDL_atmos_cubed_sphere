@@ -30,7 +30,8 @@ module fv_restart_mod
   ! for the model.
   !</DESCRIPTION>
 
-  use constants_mod,       only: kappa, pi=>pi_8, omega, rdgas, grav, rvgas, cp_air, radius
+  use constants_mod,       only: kappa, pi=>pi_8, rdgas, grav, rvgas, cp_air
+  use fv_arrays_mod,       only: radius, omega ! scaled for small earth
   use fv_arrays_mod,       only: fv_atmos_type, fv_nest_type, fv_grid_bounds_type, R_GRID
   use fv_io_mod,           only: fv_io_init, fv_io_read_restart, fv_io_write_restart, &
                                  remap_restart, fv_io_register_restart, fv_io_register_nudge_restart, &

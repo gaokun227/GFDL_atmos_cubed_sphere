@@ -21,7 +21,9 @@
 
 module fv_grid_tools_mod
 
-  use constants_mod, only: grav, omega, pi=>pi_8, cnst_radius=>radius, small_fac
+  use constants_mod,  only: grav, pi=>pi_8
+  use fv_arrays_mod,  only: radius, omega ! scaled for small earth
+!  use test_cases_mod, only: small_earth_scale 
   use fv_arrays_mod, only: fv_atmos_type, fv_grid_type, fv_grid_bounds_type, R_GRID
   use fv_grid_utils_mod, only: gnomonic_grids, great_circle_dist,  &
                            mid_pt_sphere, spherical_angle,     &
@@ -60,8 +62,6 @@ module fv_grid_tools_mod
   implicit none
   private
 #include <netcdf.inc>
-
-  real(kind=R_GRID), parameter:: radius = cnst_radius
 
   real(kind=R_GRID) , parameter:: todeg = 180.0d0/pi          ! convert to degrees
   real(kind=R_GRID) , parameter:: torad = pi/180.0d0          ! convert to radians
@@ -1061,7 +1061,7 @@ contains
           dxAV  = dxAV  / ( (ceiling(npy/2.0))*(ceiling(npx/2.0)) )
           aspAV = aspAV / ( (ceiling(npy/2.0))*(ceiling(npx/2.0)) )
           write(*,*  ) ''
-          write(*,*) ' Radius is ', radius, ', omega is ', omega, ' small_fac = ', small_fac
+          write(*,*) ' Radius is ', radius, ', omega is ', omega!, ' small_earth_scale = ', small_earth_scale
           write(*,*  ) ' Cubed-Sphere Grid Stats : ', npx,'x',npy,'x',nregions
           print*, dxN, dxM, dxAV, dxN, dxM
           write(*,201) '      Grid Length               : min: ', dxN,' max: ', dxM,' avg: ', dxAV, ' min/max: ',dxN/dxM

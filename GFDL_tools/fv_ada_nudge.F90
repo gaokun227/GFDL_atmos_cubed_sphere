@@ -37,7 +37,8 @@ module fv_ada_nudge_mod
 
  use external_sst_mod,  only: i_sst, j_sst, sst_ncep, sst_anom, forecast_mode
  use diag_manager_mod,  only: register_diag_field, send_data
- use constants_mod,     only: pi, grav, rdgas, cp_air, kappa, cnst_radius=>radius, seconds_per_day
+ use constants_mod,     only: pi, grav, rdgas, cp_air, kappa, seconds_per_day
+ use fv_arrays_mod,     only: radius ! scaled for small earth
  use fms_mod,           only: write_version_number, open_namelist_file, &
                               check_nml_error, file_exist, close_file
 !use fms_io_mod,        only: field_size
@@ -74,8 +75,6 @@ module fv_ada_nudge_mod
 
  implicit none
  private
-
- real(kind=R_GRID), parameter :: radius = cnst_radius
 
 ! version number of this module
 ! Include variable "version" to be written to log file.

@@ -21,7 +21,8 @@
 
  module test_cases_mod
 
-      use constants_mod,     only: cnst_radius=>radius, pi=>pi_8, omega, grav, kappa, rdgas, cp_air, rvgas
+      use constants_mod,     only: cnst_radius=>radius, pi=>pi_8, cnst_omega=>omega, grav, kappa, rdgas, cp_air, rvgas
+      use fv_arrays_mod,     only: radius, omega ! scaled for small earth
       use init_hydro_mod,    only: p_var, hydro_eq, hydro_eq_ext
       use fv_mp_mod,         only: is_master,        &
                                    domain_decomp, fill_corners, XDir, YDir, &
@@ -43,7 +44,7 @@
                                    SCALAR_PAIR
       use fv_sg_mod,         only: qsmith
       use fv_diagnostics_mod, only: prt_maxmin, ppme, eqv_pot, qcly0, is_ideal_case
-      use mpp_mod, only: mpp_pe, mpp_chksum, stdout
+      use mpp_mod,            only: mpp_pe, mpp_chksum, stdout
       use fv_arrays_mod,         only: fv_grid_type, fv_flags_type, fv_grid_bounds_type, R_GRID
       use tracer_manager_mod,    only: get_tracer_index
       use field_manager_mod,     only: MODEL_ATMOS
@@ -115,7 +116,6 @@
 
 
       integer :: sphum, theta_d
-      real(kind=R_GRID), parameter :: radius = cnst_radius
       real(kind=R_GRID), parameter :: one = 1.d0
       integer :: test_case = 11
       logical :: bubble_do = .false.
@@ -127,7 +127,9 @@
       integer :: Nsolitons = 2
       real    :: soliton_size = 750.e3, soliton_Umax = 50.
       logical :: checker_tr
-
+      real    :: small_earth_scale = 1.0
+      real    :: umean = 0.0
+      
 ! Case 0 parameters
       real :: p0_c0 = 3.0
       real :: rgamma = 5.0
@@ -180,6 +182,7 @@
       public :: case9_forcing1, case9_forcing2, case51_forcing
       public :: init_double_periodic
       public :: checker_tracers
+      public :: radius, omega, small_earth_scale
       
   INTERFACE mp_update_dwinds
      MODULE PROCEDURE mp_update_dwinds_2d
@@ -1664,7 +1667,7 @@
              r0 = radius/10.0
          endif
 
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,eta_v,grid,Ubar,pcen,r0,ee2,v,ee1,es,u,u1,ew) &
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,eta_v,grid,Ubar,pcen,r0,ee2,v,ee1,es,u,u1,ew,radius) &
 !$OMP                          private(utmp,r,vv1,vv3,p1,p2,vv2,uu1,uu2,uu3,pa)
          do z=1,npz
             do j=js,je
@@ -1728,7 +1731,7 @@
          delta_T = 480000.0
          lapse_rate = 0.005
 !$OMP parallel do default(none) shared(is,ie,js,je,npz,eta,ak,bk,T_0,lapse_rate,eta_t, &
-!$OMP                                  delta_T,ptop,delp,Ubar,eta_v,agrid,grid,pcen,pt,r0) &
+!$OMP                                  delta_T,ptop,delp,Ubar,eta_v,agrid,grid,pcen,pt,r0,radius,omega) &
 !$OMP                          private(T_mean,press,pt1,pt2,pt3,pt4,pt5,pt6,pt7,pt8,pt9,p1,r)
          do z=1,npz
             eta(z) = 0.5*( (ak(z)+ak(z+1))/1.e5 + bk(z)+bk(z+1) )
@@ -1806,7 +1809,7 @@
          if (is_master()) print*,' '
       ! Surface Geopotential
          phis(:,:)=1.e25
-!$OMP parallel do default(none) shared(is2,ie2,js2,je2,Ubar,eta_s,eta_0,agrid,grid,phis) &
+!$OMP parallel do default(none) shared(is2,ie2,js2,je2,Ubar,eta_s,eta_0,agrid,grid,phis,radius,omega) &
 !$OMP                         private(pt1,pt2,pt3,pt4,pt5,pt6,pt7,pt8,pt9,p1)
          do j=js2,je2
             do i=is2,ie2
@@ -4979,25 +4982,23 @@ end subroutine terminator_tracers
                    .true., hydrostatic, nwat, domain, flagstruct%adiabatic)
 
 ! *** Add Initial perturbation ***
-        pturb = 2.
-        r0 = 10.e3
-        zc = 1.4e3         ! center of bubble  from surface
-        icenter = (npx-1)/3 + 1
-        jcenter = (npy-1)/2 + 1
-        do k=1, npz
-           zm = 0.5*(ze1(k)+ze1(k+1))
-           ptmp = ( (zm-zc)/zc ) **2
-           if ( ptmp < 1. ) then
+        if (bubble_do) then
+           pturb = 2.
+           r0 = 10.e3
+           zc = 1.4e3         ! center of bubble  from surface
+           icenter = (npx-1)/3 + 1
+           jcenter = (npy-1)/2 + 1
+           do k=1, npz
+              zm = 0.5*(ze1(k)+ze1(k+1))
+              ptmp = ( (zm-zc)/zc ) **2
               do j=js,je
                  do i=is,ie
-                   dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
-                   if ( dist < 1. ) then
-                        pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
-                   endif
+                    dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                    pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
                  enddo
               enddo
-           endif
-        enddo
+           enddo
+        endif
 
       case ( 18 )
 !---------------------------
@@ -5088,25 +5089,22 @@ end subroutine terminator_tracers
 
 ! *** Add Initial perturbation ***
         if (bubble_do) then
-            r0 = 10.e3
-            zc = 1.4e3         ! center of bubble  from surface
-            icenter = (npx-1)/2 + 1
-            jcenter = (npy-1)/2 + 1
-            do k=1, npz
-               zm = 0.5*(ze1(k)+ze1(k+1))
-               ptmp = ( (zm-zc)/zc ) **2
-               if ( ptmp < 1. ) then
-                  do j=js,je
-                     do i=is,ie
-                       dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
-                       if ( dist < 1. ) then
-                            pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
-                       endif
-                     enddo
-                  enddo
-               endif
-            enddo
-         endif
+           pturb = 2.
+           r0 = 10.e3
+           zc = 1.4e3         ! center of bubble  from surface
+           icenter = (npx-1)/3 + 1
+           jcenter = (npy-1)/2 + 1
+           do k=1, npz
+              zm = 0.5*(ze1(k)+ze1(k+1))
+              ptmp = ( (zm-zc)/zc ) **2
+              do j=js,je
+                 do i=is,ie
+                    dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                    pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
+                 enddo
+              enddo
+           enddo
+        endif
 
       case ( 19 )
 !---------------------------
@@ -5170,9 +5168,9 @@ end subroutine terminator_tracers
         do k=1,npz
              zm = 0.5*(ze1(k)+ze1(k+1))
            if (no_wind) then
-              us0 = 0.0
+              us0 = 0.0 + umean
            else
-              us0 = 14.
+              us0 = 14. + umean
            endif
            utmp = us0*tanh(zm/1.2E4)
            do j=js,je+1
@@ -5196,22 +5194,15 @@ end subroutine terminator_tracers
         jcenter = (npy-1)/2 + 1
         do k=1, npz
            zm = 0.5*(ze1(k)+ze1(k+1))
-           ptmp = (zm-zc)/zc
-           if ( abs(ptmp) < 1. ) then
-              do j=js,je
-                 do i=is,ie
-                   xr = (i-icenter)*dx_const/r0
-                   yr = (j-jcenter)*dy_const/r0
-                   dist = 1
-                   if ( abs(xr) < 1. .and. abs(yr) < 1. ) then
-                        dist = cos(pi/2*ptmp)**2*cos(pi/2*xr)**2*cos(pi/2*yr)**2
-                   endif
-                   if ( dist < 1. ) then
-                        pt(i,j,k) = pt(i,j,k) + pturb*dist
-                   endif
-                 enddo
+           ptmp = min(abs((zm-zc)/zc),1.0)
+           do j=js,je
+              do i=is,ie
+                 xr = min(abs((i-icenter)*dx_const/r0),1.0)
+                 yr = min(abs((j-jcenter)*dy_const/r0),1.0)
+                 dist = cos(pi/2*ptmp)**2*cos(pi/2*xr)**2*cos(pi/2*yr)**2
+                 pt(i,j,k) = pt(i,j,k) + pturb*dist
               enddo
-           endif
+           enddo
         enddo
 
         else
@@ -5225,16 +5216,12 @@ end subroutine terminator_tracers
         do k=1, npz
            zm = 0.5*(ze1(k)+ze1(k+1))
            ptmp = ( (zm-zc)/zc ) **2
-           if ( ptmp < 1. ) then
-              do j=js,je
-                 do i=is,ie
-                   dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
-                   if ( dist < 1. ) then
-                        pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
-                   endif
-                 enddo
+           do j=js,je
+              do i=is,ie
+                 dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                 pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
               enddo
-           endif
+           enddo
         enddo
 
         endif
@@ -5635,9 +5622,7 @@ end subroutine terminator_tracers
                     zm = 0.5*(ze0(i,j,k)+ze0(i,j,k+1))
                     dist = ((i-icenter)*dx_const)**2 + ((j-jcenter)*dy_const)**2 + (zm-zc)**2
                     dist = sqrt(dist)
-                    if ( dist <= r0 ) then
-                         pt(i,j,k) = pt(i,j,k) + 2.0*(1.-dist/r0)
-                    endif
+                    pt(i,j,k) = pt(i,j,k) + 2.0*max((1.-dist/r0),0.)
                  enddo
               enddo
            enddo
@@ -5645,7 +5630,6 @@ end subroutine terminator_tracers
         end select
 
         is_ideal_case = .true.
-
         
         nullify(grid)
         nullify(agrid)
@@ -5692,7 +5676,7 @@ end subroutine terminator_tracers
         character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
-             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr
+             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, Umean
 
 #include<file_version.h>
 
@@ -5718,6 +5702,10 @@ end subroutine terminator_tracers
 #endif
         write(unit, nml=test_case_nml)
 
+        if (.not. (small_earth_scale == 1.0)) then
+           radius = cnst_radius / small_earth_scale
+           omega = cnst_omega * small_earth_scale
+        endif
 
       end subroutine read_namelist_test_case_nml
 
@@ -6446,7 +6434,7 @@ end subroutine terminator_tracers
    real(kind=R_GRID), parameter :: lamp = pi/9.
    real(kind=R_GRID), parameter :: phip = 2.*lamp
    real(kind=R_GRID), parameter :: ppcenter(2) = (/ lamp, phip /)
-   real, parameter :: Rp = radius/10.
+   real :: Rp
    real, parameter :: lapse = 5.e-3
    real, parameter :: dT = 4.8e5
    real, parameter :: phiW = 2.*pi/9.
@@ -6476,7 +6464,8 @@ end subroutine terminator_tracers
    !Compute p, z, T on both the staggered and unstaggered grids. Then compute the zonal
    !  and meridional winds on both grids, and rotate as needed
    zvir = rvgas/rdgas - 1.
-
+   Rp  = radius/10.
+   
    !PS
    do j=js,je
    do i=is,ie
@@ -6837,7 +6826,7 @@ end subroutine terminator_tracers
    real, parameter :: dp = 1115. ! Pa
    real, parameter :: rp = 282000. ! m
    real, parameter :: zp = 7000. ! m
-   real, parameter :: fc = 2.*OMEGA*sin(phip)
+   real :: fc
 
    real, parameter :: zconv = 1.e-6
    real, parameter :: rdgrav = rdgas/grav
@@ -6854,6 +6843,8 @@ end subroutine terminator_tracers
    real, dimension(is:ie+1,js:je) :: gz_v,p_v,peln_v,ps_v,v1,v2, rc_v
    real(kind=R_GRID), dimension(is:ie+1,js:je) :: lat_v,lon_v
 
+   fc  = 2.*OMEGA*sin(phip)
+   
    !Compute ps, phis, delp, aux pressure variables, Temperature, winds
    ! (with or without perturbation), moisture, w, delz
 

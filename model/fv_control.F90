@@ -26,7 +26,8 @@
 
 module fv_control_mod
 
-   use constants_mod,       only: pi=>pi_8, kappa, radius, grav, rdgas
+   use constants_mod,       only: pi=>pi_8, kappa, grav, rdgas
+   use fv_arrays_mod,       only: radius ! scaled for small earth
    use field_manager_mod,   only: MODEL_ATMOS
    use fms_mod,             only: write_version_number, open_namelist_file, &
                                   check_nml_error, close_file, file_exist

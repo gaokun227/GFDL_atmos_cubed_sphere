@@ -20,7 +20,8 @@
 !***********************************************************************
 
 module fv_dynamics_mod
-   use constants_mod,       only: grav, pi=>pi_8, radius, hlv, rdgas, omega, rvgas, cp_vapor
+   use constants_mod,       only: grav, pi=>pi_8, hlv, rdgas, rvgas, cp_vapor
+   use fv_arrays_mod,       only: radius, omega ! scaled for small earth
    use dyn_core_mod,        only: dyn_core, del2_cubed, init_ijk_mem
    use fv_mapz_mod,         only: compute_total_energy, Lagrangian_to_Eulerian, moist_cv, moist_cp
    use fv_tracer2d_mod,     only: tracer_2d, tracer_2d_1L, tracer_2d_nested
@@ -1252,7 +1253,7 @@ contains
 
     call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%bounded_domain)
 
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,gridstruct,aam,m_fac,ps,ptop,delp,agrav,ua) &
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,gridstruct,aam,m_fac,ps,ptop,delp,agrav,ua,radius,omega) &
 !$OMP                          private(r1, r2, dm)
   do j=js,je
      do i=is,ie
