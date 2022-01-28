@@ -2714,12 +2714,6 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
     
     real, dimension (ks:ke) :: dl, c_praut
 
-    if (do_psd_water_num) then
-        do k = ks, ke
-            ccn (k) = coeaw / coebw * exp (muw / (muw + 3) * log (den (k) * ql (k))) / den (k)
-        enddo
-    endif
-    
     if (irain_f .eq. 0) then
         
         call linear_prof (ke - ks + 1, ql (ks), dl (ks), z_slope_liq, h_var)
@@ -2728,6 +2722,10 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
             
             if (tz (k) .gt. t_wfr .and. ql (k) .gt. qcmin) then
                 
+                if (do_psd_water_num) then
+                    ccn (k) = coeaw / coebw * exp (muw / (muw + 3) * log (den (k) * ql (k))) / den (k)
+                endif
+
                 qc = fac_rc * ccn (k)
                 dl (k) = min (max (qcmin, dl (k)), 0.5 * ql (k))
                 dq = 0.5 * (ql (k) + dl (k) - qc)
@@ -2756,6 +2754,10 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
             
             if (tz (k) .gt. t_wfr .and. ql (k) .gt. qcmin) then
                 
+                if (do_psd_water_num) then
+                    ccn (k) = coeaw / coebw * exp (muw / (muw + 3) * log (den (k) * ql (k))) / den (k)
+                endif
+
                 qc = fac_rc * ccn (k)
                 dq = ql (k) - qc
                 
@@ -4009,14 +4011,14 @@ subroutine pbigg (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, cvm, te8, den, ccn, l
     
     do k = ks, ke
         
-        if (do_psd_water_num) then
-            ccn (k) = coeaw / coebw * exp (muw / (muw + 3) * log (den (k) * ql (k))) / den (k)
-        endif
-
         tc = tice - tz (k)
         
         if (tc .gt. 0 .and. ql (k) .gt. qcmin) then
             
+            if (do_psd_water_num) then
+                ccn (k) = coeaw / coebw * exp (muw / (muw + 3) * log (den (k) * ql (k))) / den (k)
+            endif
+
             sink = 100. / (rhow * ccn (k)) * dts * (exp (0.66 * tc) - 1.) * ql (k) ** 2
             sink = min (ql (k), sink, tc / icpk (k))
             
@@ -4068,10 +4070,6 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
     
     do k = ks, ke
         
-        if (do_psd_ice_num) then
-            cin (k) = coeai / coebi * exp (mui / (mui + 3) * log (den (k) * qi (k))) / den (k)
-        endif
-
         if (tz (k) .lt. tice) then
             
             pidep = 0.
@@ -4081,6 +4079,9 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
             tmp = dq / (1. + tcpk (k) * dqdt)
             
             if (qi (k) .gt. qcmin) then
+                 if (do_psd_ice_num) then
+                     cin (k) = coeai / coebi * exp (mui / (mui + 3) * log (den (k) * qi (k))) / den (k)
+                 endif
                 if (.not. prog_ccn) then
                     if (inflag .eq. 1) &
                         cin (k) = 5.38e7 * exp (0.75 * log (qi (k) * den (k)))
