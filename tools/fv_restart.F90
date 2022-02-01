@@ -39,7 +39,7 @@ module fv_restart_mod
                                  fv_io_register_restart_inc, fv_io_write_atminput
   use fv_grid_utils_mod,   only: ptop_min, fill_ghost, g_sum, &
                                  make_eta_level, cubed_to_latlon, great_circle_dist
-  use fv_diagnostics_mod,  only: prt_maxmin, prt_maxmin2
+  use fv_diagnostics_mod,  only: prt_maxmin
   use init_hydro_mod,      only: p_var
   use mpp_domains_mod,     only: mpp_update_domains, domain2d, DGRID_NE
   use mpp_mod,             only: mpp_chksum, stdout, mpp_error, FATAL, NOTE
@@ -357,15 +357,15 @@ contains
                 ! Output IC and increments on model grid
                 if (Atm(n)%flagstruct%write_replay_ic) call fv_io_write_atminc()
 
-                call prt_maxmin2('ua_inc', IAU_Data%ua_inc, isc, iec, jsc, jec, npz, 1.)
-                call prt_maxmin2('va_inc', IAU_Data%va_inc, isc, iec, jsc, jec, npz, 1.)
-                call prt_maxmin2('t_inc', IAU_Data%temp_inc, isc, iec, jsc, jec, npz, 1.)
-                call prt_maxmin2('delp_inc', IAU_Data%delp_inc, isc, iec, jsc, jec, npz, 1.)
-                call prt_maxmin2('delz_inc', IAU_Data%delz_inc, isc, iec, jsc, jec, npz, 1.)
+                call prt_maxmin('ua_inc', IAU_Data%ua_inc, isc, iec, jsc, jec, 0, npz, 1.)
+                call prt_maxmin('va_inc', IAU_Data%va_inc, isc, iec, jsc, jec, 0, npz, 1.)
+                call prt_maxmin('t_inc', IAU_Data%temp_inc, isc, iec, jsc, jec, 0, npz, 1.)
+                call prt_maxmin('delp_inc', IAU_Data%delp_inc, isc, iec, jsc, jec, 0, npz, 1.)
+                call prt_maxmin('delz_inc', IAU_Data%delz_inc, isc, iec, jsc, jec, 0, npz, 1.)
                 do l=1,size(Atm(n)%q,4)
                    call get_tracer_names(MODEL_ATMOS, l, tracer_name)
                    if( is_master() ) write(*,*) 'IAU_Data input', tracer_name
-                   call prt_maxmin2('q_inc', IAU_Data%tracer_inc(:,:,:,l), isc, iec, jsc, jec, npz, 1.)
+                   call prt_maxmin('q_inc', IAU_Data%tracer_inc(:,:,:,l), isc, iec, jsc, jec, 0, npz, 1.)
                 enddo
              endif
 

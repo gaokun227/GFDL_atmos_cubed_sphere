@@ -94,7 +94,7 @@ module fv_diagnostics_mod
  real :: qcly0 ! initial value for terminator test
 
  logical :: is_ideal_case = .false.
- public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, prt_maxmin2, range_check
+ public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, range_check
 
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field, get_height_given_pressure
@@ -4095,44 +4095,6 @@ contains
       endif
 
  end subroutine prt_maxmin
-
- subroutine prt_maxmin2(qname, q, is, ie, js, je, km, fac)
-      character(len=*), intent(in)::  qname
-      integer, intent(in):: is, ie, js, je
-      integer, intent(in):: km
-      real, intent(in)::    q(is:ie, js:je, km)
-      real, intent(in)::    fac
-
-      real qmin, qmax
-      integer i,j,k
-      !mpp_root_pe doesn't appear to recognize nested grid
-      master = (mpp_pe()==mpp_root_pe()) .or. is_master()
-
-      qmin = q(is,js,1)
-      qmax = qmin
-
-      do k=1,km
-      do j=js,je
-         do i=is,ie
-!           qmin = min(qmin, q(i,j,k))
-!           qmax = max(qmax, q(i,j,k))
-            if( q(i,j,k) < qmin  ) then
-                qmin = q(i,j,k)
-            elseif( q(i,j,k) > qmax ) then
-                qmax = q(i,j,k)
-            endif
-          enddo
-      enddo
-      enddo
-
-      call mp_reduce_min(qmin)
-      call mp_reduce_max(qmax)
-
-      if(master) then
-            write(*,*) qname//trim(gn), ' max = ', qmax*fac, ' min = ', qmin*fac
-      endif
-
- end subroutine prt_maxmin2
 
  subroutine prt_mxm(qname, q, is, ie, js, je, n_g, km, fac, area, domain)
       character(len=*), intent(in)::  qname

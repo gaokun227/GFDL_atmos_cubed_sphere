@@ -59,7 +59,7 @@ module fv_iau_mod
   use fv_treat_da_inc_mod, only: remap_coef
   use tracer_manager_mod,  only: get_tracer_names,get_tracer_index, get_number_tracers
   use field_manager_mod,   only: MODEL_ATMOS
-  use fv_diagnostics_mod,  only: prt_maxmin2
+  use fv_diagnostics_mod,  only: prt_maxmin
   implicit none
 
   private
@@ -293,7 +293,7 @@ subroutine replay_initialize (IPD_Control,IAU_Data)
     type (IAU_external_data_type), intent(inout) :: IAU_Data
     integer :: i, j, k, l, nstep, kstep
     real(kind=kind_phys) sx,wx,wt,normfact,dtp
-    
+
     is  = IPD_Control%isc
     ie  = is + IPD_Control%nx-1
     js  = IPD_Control%jsc
@@ -345,7 +345,7 @@ subroutine replay_initialize (IPD_Control,IAU_Data)
     endif
 
 ! zero increments for selected variables
-    
+
     if( is_master() ) print *,'iau_forcing_var ', size(IPD_Control%iau_forcing_var)
     if(zero_increment('ua',IPD_Control)) IAU_Data%ua_inc(:,:,:) = 0.0
     if(zero_increment('va',IPD_Control)) IAU_Data%va_inc(:,:,:) = 0.0
@@ -356,14 +356,14 @@ subroutine replay_initialize (IPD_Control,IAU_Data)
        if(zero_increment(tracer_names(l),IPD_Control)) IAU_Data%tracer_inc(:,:,:,l) = 0.0
     enddo
 
-    call prt_maxmin2('ua_inc', IAU_Data%ua_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('va_inc', IAU_Data%va_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('t_inc', IAU_Data%temp_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('delp_inc', IAU_Data%delp_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('delz_inc', IAU_Data%delz_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin('ua_inc', IAU_Data%ua_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('va_inc', IAU_Data%va_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('t_inc', IAU_Data%temp_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('delp_inc', IAU_Data%delp_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('delz_inc', IAU_Data%delz_inc, is, ie, js, je, 0, npz, 1.)
     do i=1,ntracers
        if( is_master() ) write(*,*) 'IAU_Data input', tracer_names(i)
-       call prt_maxmin2('q_inc', IAU_Data%tracer_inc(:,:,:,i), is, ie, js, je, npz, 1.)
+       call prt_maxmin('q_inc', IAU_Data%tracer_inc(:,:,:,i), is, ie, js, je, 0, npz, 1.)
     enddo
 
 ! store increments in iau_state%inc1
@@ -382,26 +382,26 @@ subroutine replay_initialize (IPD_Control,IAU_Data)
        enddo
     enddo
 
-    call prt_maxmin2('ua_inc', iau_state%inc1%ua_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('va_inc', iau_state%inc1%va_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('t_inc', iau_state%inc1%temp_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('delp_inc', iau_state%inc1%delp_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('delz_inc', iau_state%inc1%delz_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin('ua_inc', iau_state%inc1%ua_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('va_inc', iau_state%inc1%va_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('t_inc', iau_state%inc1%temp_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('delp_inc', iau_state%inc1%delp_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('delz_inc', iau_state%inc1%delz_inc, is, ie, js, je, 0, npz, 1.)
     do i=1,ntracers
        if( is_master() ) write(*,*) 'iau_state%inc1 ', tracer_names(i)
-       call prt_maxmin2('q_inc', iau_state%inc1%tracer_inc(:,:,:,i), is, ie, js, je, npz, 1.)
+       call prt_maxmin('q_inc', iau_state%inc1%tracer_inc(:,:,:,i), is, ie, js, je, 0, npz, 1.)
     enddo
 
     call setiauforcing(IPD_Control,IAU_Data,iau_state%wt)
 
-    call prt_maxmin2('ua_inc', IAU_Data%ua_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('va_inc', IAU_Data%va_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('t_inc', IAU_Data%temp_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('delp_inc', IAU_Data%delp_inc, is, ie, js, je, npz, 1.)
-    call prt_maxmin2('delz_inc', IAU_Data%delz_inc, is, ie, js, je, npz, 1.)
+    call prt_maxmin('ua_inc', IAU_Data%ua_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('va_inc', IAU_Data%va_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('t_inc', IAU_Data%temp_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('delp_inc', IAU_Data%delp_inc, is, ie, js, je, 0, npz, 1.)
+    call prt_maxmin('delz_inc', IAU_Data%delz_inc, is, ie, js, je, 0, npz, 1.)
     do i=1,ntracers
        if( is_master() ) write(*,*) 'IAU_Data output', tracer_names(i)
-       call prt_maxmin2('q_inc', IAU_Data%tracer_inc(:,:,:,i), is, ie, js, je, npz, 1.)
+       call prt_maxmin('q_inc', IAU_Data%tracer_inc(:,:,:,i), is, ie, js, je, 0, npz, 1.)
     enddo
 
 !   print*,'in IAU init',dt,rdt
