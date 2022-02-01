@@ -164,11 +164,11 @@ contains
                 call fv_phys_init(isc,iec,jsc,jec,Atm(n)%npz,Atm(n)%flagstruct%nwat, Atm(n)%ts, Atm(n)%pt(isc:iec,jsc:jec,:),   &
                              Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
 !                if ( Atm(n)%flagstruct%nwat==6) call gfdl_cld_mp_init(mpp_pe(),  &
-!                                                mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml) 
-!                if ( Atm(n)%flagstruct%nwat==6) call cld_eff_rad_init(nlunit, input_nml_file, stdlog(), fn_nml)
+!                                                mpp_root_pe(), input_nml_file, stdlog())
+!                if ( Atm(n)%flagstruct%nwat==6) call cld_eff_rad_init(input_nml_file)
            endif
         endif
-        if (.not. Atm(n)%flagstruct%adiabatic) call gfdl_mp_init (mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
+        if (.not. Atm(n)%flagstruct%adiabatic) call gfdl_mp_init (mpp_pe(), mpp_root_pe(), input_nml_file, stdlog())
 
 
 

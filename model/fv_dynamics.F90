@@ -992,7 +992,7 @@ contains
 #endif
        allocate( rf(npz) )
        rf(:) = 0.
-       
+
        do k=1, ks+1
           if( is_master() ) write(6,*) k, 0.01*pm(k)
        enddo
