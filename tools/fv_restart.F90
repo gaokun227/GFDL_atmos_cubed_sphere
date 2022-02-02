@@ -36,7 +36,7 @@ module fv_restart_mod
   use fv_io_mod,           only: fv_io_init, fv_io_read_restart, fv_io_write_restart, &
                                  remap_restart, fv_io_write_BCs, fv_io_read_BCs, &
                                  fv_io_read_restart_background4replay, fv_io_write_atminc, &
-                                 fv_io_register_restart_inc, fv_io_write_atminput
+                                 fv_io_write_atminput
   use fv_grid_utils_mod,   only: ptop_min, fill_ghost, g_sum, &
                                  make_eta_level, cubed_to_latlon, great_circle_dist
   use fv_diagnostics_mod,  only: prt_maxmin
@@ -260,9 +260,6 @@ contains
           !4. Restart
           elseif (do_read_restart) then
 
-             if ( Atm(n)%flagstruct%replay > 0 ) then
-                call fv_io_register_restart_inc(Atm(n)%domain,Atm(n:n),IAU_Data)
-             endif
              if ( Atm(n)%flagstruct%replay == 1) then
 
                 if( is_master() ) write(*,*) 'Read background and external IC to compute replay increment'
@@ -355,7 +352,7 @@ contains
                 enddo
 
                 ! Output IC and increments on model grid
-                if (Atm(n)%flagstruct%write_replay_ic) call fv_io_write_atminc()
+                if (Atm(n)%flagstruct%write_replay_ic) call fv_io_write_atminc(Atm,IAU_Data)
 
                 call prt_maxmin('ua_inc', IAU_Data%ua_inc, isc, iec, jsc, jec, 0, npz, 1.)
                 call prt_maxmin('va_inc', IAU_Data%va_inc, isc, iec, jsc, jec, 0, npz, 1.)

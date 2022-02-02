@@ -68,7 +68,7 @@ module fv_io_mod
   public :: fv_io_register_restart_BCs, fv_io_register_restart_inc
   public :: fv_io_write_BCs, fv_io_read_BCs
   public :: fv_io_read_restart_background4replay
-  public :: fv_io_write_atminc
+  public :: fv_io_write_atminc, fv_io_write_atminput
   public :: fv_io_register_axis
 
   logical                       :: module_is_initialized = .FALSE.
@@ -77,7 +77,11 @@ module fv_io_mod
   integer ::grid_xtdimid, grid_ytdimid, haloid, pfullid !For writing BCs
   integer ::grid_xtstagdimid, grid_ytstagdimid, oneid
 
-  type(restart_file_type) :: Fv_restart_inc, Fv_tile_restart_inc, Tra_restart_inc
+  type(FmsNetcdfFile_t) :: Fv_restart_inc
+  type(FmsNetcdfDomainFile_t) :: Fv_tile_restart_inc, Tra_restart_inc
+  logical :: Fv_restart_inc_is_open = .false.
+  logical :: Fv_tile_restart_inc_is_open = .false.
+  logical :: Tra_restart_inc_is_open = .false.
 
 contains
 
@@ -711,9 +715,90 @@ contains
     call mpp_error(NOTE, 'READING FROM SST_restart DISABLED')
 
   end subroutine  fv_io_register_nudge_restart
+
   ! </SUBROUTINE> NAME="fv_io_register_nudge_restart"
 
+  !#####################################################################
+  ! <SUBROUTINE NAME="fv_io_register_restart_inc">
+  !
+  ! <DESCRIPTION>
+  !   register restart field to be written out to restart file.
+  ! </DESCRIPTION>
+  subroutine  fv_io_register_restart_inc(Atm,IAU_Data)
+    type(fv_atmos_type), intent(inout) :: Atm(:)
+    type(iau_external_data_type), intent(inout) :: IAU_Data
 
+    character(len=64) :: fname, tracer_name
+    integer           :: j
+    integer, dimension(:), allocatable :: buffer
+    integer, dimension(1) :: zsize
+    character(len=8), dimension(2)  :: dim_names_2d
+    character(len=8), dimension(4)  :: dim_names_4d, dim_names_4d2
+    integer           :: nt, ntracers, ntiles
+
+    dim_names_2d(1) = "xaxis_1"
+    dim_names_2d(2) = "Time"
+    dim_names_4d(1) = "xaxis_1"
+    dim_names_4d(2) = "yaxis_1"
+    dim_names_4d(3) = "zaxis_1"
+    dim_names_4d(4) = "Time"
+    dim_names_4d2 = dim_names_4d
+    dim_names_4d2(2) = "yaxis_2"
+
+    ntileMe = size(Atm(:))
+    call get_number_tracers(MODEL_ATMOS, num_tracers=ntracers)
+
+    !fname = 'fv_core.res.nc'
+    if (Fv_restart_inc_is_open) then
+      call register_axis(Fv_restart_inc, "xaxis_1", size(Atm%ak(:), 1))
+      call register_axis(Fv_restart_inc, "Time", unlimited)
+      if (.not. Fv_restart_inc%is_readonly) then !if writing file
+        call register_field(Fv_restart_inc, "xaxis_1", "double", (/"xaxis_1"/))
+        call register_variable_attribute(Fv_restart_inc, "xaxis_1", "axis", "X", str_len=1)
+        if (allocated(buffer)) deallocate(buffer)
+        allocate(buffer(size(Atm%ak(:), 1)))
+        do j = 1, size(Atm%ak(:), 1)
+          buffer(j) = j
+        end do
+        call write_data(Fv_restart_inc, "xaxis_1", buffer)
+        deallocate(buffer)
+        call register_field(Fv_restart_inc, "Time", "double", (/"Time"/))
+        call register_variable_attribute(Fv_restart_inc, dim_names_2d(2), "cartesian_axis", "T", str_len=1)
+        call register_variable_attribute(Fv_restart_inc, dim_names_2d(2), "units", "time level", str_len=len("time level"))
+        call register_variable_attribute(Fv_restart_inc, dim_names_2d(2), "long_name", dim_names_2d(2), str_len=len(dim_names_2d(2)))
+      endif
+      call register_restart_field (Fv_restart_inc, 'ak', Atm%ak(:), dim_names_2d)
+      call register_restart_field (Fv_restart_inc, 'bk', Atm%bk(:), dim_names_2d)
+
+    !fname = 'fv_core.res'//trim(stile_name)//'.nc'
+    elseif (Fv_tile_restart_inc_is_open) then
+      zsize = (/size(IAU_Data%ua_inc,3)/)
+      call fv_io_register_axis(Fv_tile_restart_inc, numx=2, numy=2, xpos=(/CENTER, EAST/), ypos=(/NORTH, CENTER/), numz=1, zsize=zsize)
+      call register_restart_field(Fv_tile_restart_inc, 'ua', IAU_Data%ua_inc, dim_names_4d2, is_optional=.true.)
+      call register_restart_field(Fv_tile_restart_inc, 'va', IAU_Data%va_inc, dim_names_4d2, is_optional=.true.)
+      call register_restart_field(Fv_tile_restart_inc, 'T', IAU_Data%temp_inc, dim_names_4d2)
+      call register_restart_field(Fv_tile_restart_inc, 'delp', IAU_Data%delp_inc, dim_names_4d2)
+      if (.not.Atm(n)%flagstruct%hydrostatic) then
+        call register_restart_field(Fv_tile_restart_inc, 'DZ', IAU_Data%delz_inc, dim_names_4d2, is_optional=.true.)
+      endif
+
+    !fname = 'fv_tracer.res'//trim(stile_name)//'.nc'
+    elseif (Tra_restart_inc_is_open) then
+       zsize = (/size(IAU_Data%tracer_inc,3)/)
+       call fv_io_register_axis(Tra_restart_inc, numx=1, numy=1, xpos=(/CENTER/), ypos=(/CENTER/), numz=1, zsize=zsize)
+       do nt = 1, ntracers
+          call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
+          if (Tra_restart_inc%is_readonly) then !if reading file (don't do this if writing)
+            ! set all tracers to an initial profile value
+            call set_tracer_profile (MODEL_ATMOS, nt, IAU_Data%tracer_inc(:,:,:,nt)  )
+          endif
+          call register_restart_field(Tra_restart_inc, tracer_name, IAU_Data%tracer_inc(:,:,:,nt), &
+                       dim_names_4d, is_optional=.true.)
+       enddo
+    endif
+
+  end subroutine  fv_io_register_restart_inc
+  ! </SUBROUTINE> NAME="fv_io_register_restart_inc"
 
   !#####################################################################
   ! <SUBROUTINE NAME="fv_io_write_restart">
@@ -829,70 +914,7 @@ contains
        Atm%Tra_restart_is_open = .false.
     endif
 
-  end subroutine  fv_io_write_restart
-
-  !#####################################################################
-  ! <SUBROUTINE NAME="fv_io_register_restart_inc">
-  !
-  ! <DESCRIPTION>
-  !   register restart field to be written out to restart file.
-  ! </DESCRIPTION>
-  subroutine  fv_io_register_restart_inc(fv_domain,Atm,IAU_Data)
-    type(domain2d),      intent(inout) :: fv_domain
-    type(fv_atmos_type), intent(inout) :: Atm(:)
-    type(iau_external_data_type), intent(inout) :: IAU_Data
-
-    character(len=64) :: fname, tracer_name
-    character(len=6)  :: stile_name
-    integer           :: id_restart
-    integer           :: n, nt, ntracers, ntprog, ntdiag, ntileMe, ntiles
-
-    ntileMe = size(Atm(:))
-    call get_number_tracers(MODEL_ATMOS, num_tracers=ntracers)
-
-    if (Atm(1)%grid_number > 1) then
-       call mpp_error(NOTE, 'NO REPLAY INCREMENT FOR NEST YET')
-    end if
-
-!--- fix for single tile runs where you need fv_core.res.nc and fv_core.res.tile1.nc
-    ntiles = mpp_get_ntile_count(fv_domain)
-    if(ntiles == 1 .and. .not. Atm(1)%neststruct%nested) then
-       call mpp_error(NOTE, 'REPLAY INCREMENT NOT FOR SINGLE TILE RUNS')
-    else
-       stile_name = ''
-    endif
-
-    fname = 'fv_core.res.nc'
-    id_restart = register_restart_field(Fv_restart_inc, fname, 'ak', Atm(1)%ak(:), no_domain=.true.)
-    id_restart = register_restart_field(Fv_restart_inc, fname, 'bk', Atm(1)%bk(:), no_domain=.true.)
-
-    do n = 1, ntileMe
-       fname = 'fv_core.res'//trim(stile_name)//'.nc'
-       id_restart =  register_restart_field(Fv_tile_restart_inc, fname, 'ua', IAU_Data%ua_inc, &
-                     domain=fv_domain, tile_count=n, mandatory=.false.)
-       id_restart =  register_restart_field(Fv_tile_restart_inc, fname, 'va', IAU_Data%va_inc, &
-                     domain=fv_domain, tile_count=n, mandatory=.false.)
-       id_restart =  register_restart_field(Fv_tile_restart_inc, fname, 'T', IAU_Data%temp_inc, &
-                     domain=fv_domain, tile_count=n)
-       id_restart =  register_restart_field(Fv_tile_restart_inc, fname, 'delp', IAU_Data%delp_inc, &
-                     domain=fv_domain, tile_count=n)
-       if (.not.Atm(n)%flagstruct%hydrostatic) then
-          id_restart =  register_restart_field(Fv_tile_restart_inc, fname, 'DZ', IAU_Data%delz_inc, &
-                        domain=fv_domain, mandatory=.false., tile_count=n)
-       endif
-
-       fname = 'fv_tracer.res'//trim(stile_name)//'.nc'
-       do nt = 1, ntracers
-          call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
-          ! set all tracers to an initial profile value
-          call set_tracer_profile (MODEL_ATMOS, nt, IAU_Data%tracer_inc(:,:,:,nt)  )
-          id_restart = register_restart_field(Tra_restart_inc, fname, tracer_name, IAU_Data%tracer_inc(:,:,:,nt), &
-                       domain=fv_domain, mandatory=.false., tile_count=n)
-       enddo
-    enddo
-
-  end subroutine  fv_io_register_restart_inc
-  ! </SUBROUTINE> NAME="fv_io_register_restart_inc"
+  end subroutine fv_io_write_restart
 
   !#####################################################################
   ! <SUBROUTINE NAME="fv_io_write_atminc">
@@ -900,23 +922,131 @@ contains
   ! <DESCRIPTION>
   ! Write atmosphere increments quantities on cubed-sphere grid
   ! </DESCRIPTION>
-  subroutine  fv_io_write_atminc(prefix, directory)
+  subroutine  fv_io_write_atminc(Atm, IAU_Data, prefix, directory)
 
+    type(fv_atmos_type),        intent(inout) :: Atm
+    type(iau_external_data_type), intent(inout) :: IAU_Data
     character(len=*), optional, intent(in) :: prefix
     character(len=*), optional, intent(in) :: directory
 
-    character(len=30) :: name, dir
+    character(len=30) :: name, dir, fname
+    type(domain2d) :: fv_domain
+    integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
+    integer :: ntiles
+
     name='atminc'
     if (present(prefix)) name=trim(prefix)
     dir='ATMINC'
     if (present(directory)) dir=trim(directory)
 
-    call save_restart(Fv_restart_inc, trim(name), trim(dir))
-    call save_restart(Fv_tile_restart_inc, trim(name), trim(dir))
-    call save_restart(Tra_restart_inc, trim(name), trim(dir))
+    allocate(pes(mpp_npes()))
+    call mpp_get_current_pelist(pes)
+
+    fname = ''//dir//'/'//prefix//'.fv_core.res.nc'
+    Fv_restart_inc_is_open = open_file(Fv_restart_inc, fname, "overwrite", is_restart=.true., pelist=pes)
+    if (Fv_restart_inc_is_open) then
+      call fv_io_register_restart_inc(Atm, IAU_Data)
+      call write_restart(Fv_restart_inc)
+      call close_file(Fv_restart_inc)
+      Fv_restart_inc_is_open = .false.
+    endif
+    deallocate(pes)
+
+    fv_domain = Atm%domain
+
+    if (Atm(1)%grid_number > 1) then
+       call mpp_error(NOTE, 'NO REPLAY INCREMENT FOR NEST YET')
+    endif
+
+!--- fix for single tile runs where you need fv_core.res.nc and fv_core.res.tile1.nc
+    ntiles = mpp_get_ntile_count(fv_domain)
+    if (ntiles == 1 .and. .not. Atm(1)%neststruct%nested) then
+       call mpp_error(NOTE, 'REPLAY INCREMENT NOT FOR SINGLE TILE RUNS')
+    endif
+
+    fname = ''//dir//'/'//prefix//'.fv_core.res.nc'
+    Fv_tile_restart_inc_is_open = open_file(Fv_tile_restart_inc, fname, "overwrite", fv_domain, is_restart=.true.)
+    if (Fv_tile_restart_inc_is_open) then
+      call fv_io_register_restart_inc(Atm, IAU_Data)
+      call write_restart(Fv_tile_restart_inc)
+      call close_file(Fv_tile_restart_inc)
+      Fv_tile_restart_inc_is_open = .false.
+    endif
+
+    fname = ''//dir//'/'//prefix//'.fv_tracer.res.nc'
+    Tra_restart_inc_is_open = open_file(Tra_restart_inc, fname, "overwrite", fv_domain, is_restart=.true.)
+    if (Tra_restart_inc_is_open) then
+      call fv_io_register_restart_inc(Atm, IAU_Data)
+      call write_restart(Tra_restart_inc)
+      call close_file(Tra_restart_inc)
+      Tra_restart_inc_is_open= .false.
+    endif
 
   end subroutine  fv_io_write_atminc
-  ! </SUBROUTINE NAME="fv_io_write_atminc">
+
+  !#####################################################################
+  ! <SUBROUTINE NAME="fv_io_write_atminput">
+  !
+  ! <DESCRIPTION>
+  ! Write atmosphere increments quantities on cubed-sphere grid
+  ! </DESCRIPTION>
+  subroutine  fv_io_write_atminput(Atm, prefix, directory)
+
+    type(fv_atmos_type),        intent(inout) :: Atm
+    character(len=*), optional, intent(in) :: prefix
+    character(len=*), optional, intent(in) :: directory
+
+    character(len=30) :: name, dir, fname
+    type(domain2d) :: fv_domain
+    integer :: ntiles
+    character(len=20) :: suffix
+    integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
+
+    name='atmanl'
+    if (present(prefix)) name=trim(prefix)
+    dir='ATMANL'
+    if (present(directory)) dir=trim(directory)
+
+    allocate(pes(mpp_npes()))
+    call mpp_get_current_pelist(pes)
+
+    fname = ''//dir//'/'//prefix//'.fv_core.res.nc'
+    Atm%Fv_restart_is_open = open_file(Atm%Fv_restart, fname, "overwrite", is_restart=.true., pelist=pes)
+    if (Atm%Fv_restart_is_open) then
+      call fv_io_register_restart(Atm)
+      call write_restart(Atm%Fv_restart)
+      call close_file(Atm%Fv_restart)
+      Atm%Fv_restart_is_open = .false.
+    endif
+    deallocate(pes)
+
+    fv_domain = Atm%domain
+    ntiles = mpp_get_ntile_count(fv_domain)
+    suffix = ''
+    !If the number of tiles is equal to 1, and it is not a nested case add the ".tile1" suffix to the filename
+    if (ntiles == 1 .and. .not. Atm%neststruct%nested) then
+       suffix = '.tile1'
+    endif
+
+    fname = ''//dir//'/'//prefix//'.fv_core.res'//trim(suffix)//'.nc'
+    Atm%Fv_restart_tile_is_open = open_file(Atm%Fv_restart_tile, fname, "overwrite", fv_domain, is_restart=.true.)
+    if (Atm%Fv_restart_tile_is_open) then
+      call fv_io_register_restart(Atm)
+      call write_restart (Atm%Fv_restart_tile)
+      call close_file (Atm%Fv_restart_tile)
+      Atm%Fv_restart_tile_is_open = .false.
+    endif
+
+    fname = ''//dir//'/'//prefix//'.fv_tracer.res'//trim(suffix)//'.nc'
+    Atm%Tra_restart_is_open = open_file(Atm%Tra_restart, fname, "overwrite", fv_domain, is_restart=.true.)
+    if (Atm%Tra_restart_is_open) then
+       call fv_io_register_restart(Atm)
+       call write_restart(Atm%Tra_restart)
+       call close_file(Atm%Tra_restart)
+       Atm%Tra_restart_is_open = .false.
+    endif
+
+  end subroutine  fv_io_write_atminput
 
   subroutine register_bcs_2d(Atm, BCfile_ne, BCfile_sw, fname_ne, fname_sw, &
                              var_name, var, var_bc, istag, jstag)
@@ -1379,42 +1509,55 @@ contains
     type(fv_atmos_type), intent(inout) :: Atm(:)
     character(len=*), intent(in) :: inputdir
 
-    character(len=64)    :: fname, tracer_name
-    character(len=6)  :: stile_name
-    integer              :: isc, iec, jsc, jec, n, nt, nk, ntracers
-    integer              :: ntileMe
-    integer              :: ks, ntiles
-    real                 :: ptop
+    character(len=64)    :: fname
+    character(len=20) :: suffix
+    integer              :: ntiles
+    integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
 
-    character(len=128)           :: tracer_longname, tracer_units
+    allocate(pes(mpp_npes()))
+    call mpp_get_current_pelist(pes)
 
-    ntileMe = size(Atm(:))  ! This will need mods for more than 1 tile per pe
+    fname = ''//trim(inputdir)//'/fv_core.res.nc'
+    Atm(1)%Fv_restart_is_open = open_file(Atm(1)%Fv_restart,fname,"read", is_restart=.true., pelist=pes)
+    if (Atm(1)%Fv_restart_is_open) then
+      call fv_io_register_restart(Atm(1))
+      call read_restart(Atm(1)%Fv_restart)
+      call close_file(Atm(1)%Fv_restart)
+      Atm(1)%Fv_restart_is_open = .false.
+    endif
+    deallocate(pes)
 
-    call restore_state(Atm(1)%Fv_restart,inputdir)
     if (Atm(1)%flagstruct%external_eta) then
        call set_external_eta(Atm(1)%ak, Atm(1)%bk, Atm(1)%ptop, Atm(1)%ks)
     endif
 
-! fix for single tile runs where you need fv_core.res.nc and
-! fv_core.res.tile1.nc
+    suffix = ''
     ntiles = mpp_get_ntile_count(fv_domain)
-    if(ntiles == 1 .and. .not. Atm(1)%neststruct%nested) then
-       stile_name = '.tile1'
-    else
-       stile_name = ''
+    !If the number of tiles is equal to 1, and it is not a nested case add the ".tile1" suffix to the filename
+    if (ntiles == 1 .and. .not. Atm(1)%neststruct%nested) then
+       suffix = '.tile1'
     endif
 
-    do n = 1, ntileMe
-       call restore_state(Atm(n)%Fv_tile_restart,inputdir)
+    fname = ''//trim(inputdir)//'/fv_core.res'//trim(suffix)//'.nc'
+    Atm(1)%Fv_restart_tile_is_open = open_file(Atm(1)%Fv_restart_tile, fname, "read", fv_domain, is_restart=.true.)
+    if (Atm(1)%Fv_restart_tile_is_open) then
+      call fv_io_register_restart(Atm(1))
+      call read_restart(Atm(1)%Fv_restart_tile)
+      call close_file(Atm(1)%Fv_restart_tile)
+      Atm(1)%Fv_restart_tile_is_open = .false.
+    endif
 
 !--- restore data for fv_tracer - if it exists
-       fname = trim(inputdir)//'/fv_tracer.res'//trim(stile_name)//'.nc'
-       if (file_exist(fname)) then
-         call restore_state(Atm(n)%Tra_restart,inputdir)
-       else
-         call mpp_error(NOTE,'==> Warning from fv_read_restart: Expected file '//trim(fname)//' does not exist')
-       endif
-    end do
+    fname = ''//trim(inputdir)//'/fv_tracer.res'//trim(suffix)//'.nc'
+    Atm(1)%Tra_restart_is_open = open_file(Atm(1)%Tra_restart, fname, "read", fv_domain, is_restart=.true.)
+    if (Atm(1)%Tra_restart_is_open) then
+      call fv_io_register_restart(Atm(1))
+      call read_restart(Atm(1)%Tra_restart)
+      call close_file(Atm(1)%Tra_restart)
+      Atm(1)%Tra_restart_is_open = .false.
+    else
+      call mpp_error(NOTE,'==> Warning from fv_read_restart_background4replay: Expected file '//trim(fname)//' does not exist')
+    endif
 
     return
 
