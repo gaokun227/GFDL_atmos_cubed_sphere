@@ -276,10 +276,6 @@ contains
           nlevs = nlevs + npzo
        endif
 
-       !--- diagnostic output for skeb: dissipation estimate
-       id_diss = register_diag_field ( trim(field), 'diss_est', axes(1:3), Time,    &
-            'dissipation estimate', 'none', missing_value=missing_value, range=skrange )
-
 !--------------------
 ! Tracer diagnostics:
 !--------------------
@@ -667,7 +663,6 @@ contains
                    sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, mp_top) !  GFDL MP has constant N_0 intercept
       call store_data(id_dbz, wk, Time, kstt_dbz, kend_dbz)
     endif
->>>>>>> test
 
     deallocate ( wk )
     !---u and v comp of storm motion, 0-1, 0-3km SRH

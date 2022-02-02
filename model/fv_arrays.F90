@@ -1245,8 +1245,6 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: oro(:,:)      _NULL  ! land fraction (1: all land; 0: all water)
     real, _ALLOCATABLE :: ts(:,:)       _NULL  ! skin temperature (sst) from NCEP/GFS (K) -- tile
     real, _ALLOCATABLE :: ci(:,:)       _NULL  ! sea-ice fraction from external file
-! For stochastic kinetic energy backscatter (SKEB)
-    real, _ALLOCATABLE :: diss_est(:,:,:) _NULL !< dissipation estimate taken from 'heat_source'
 
 ! For stochastic kinetic energy backscatter (SKEB)
     real, _ALLOCATABLE :: diss_est(:,:,:) _NULL !< dissipation estimate taken from 'heat_source'

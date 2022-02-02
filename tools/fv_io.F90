@@ -68,7 +68,7 @@ module fv_io_mod
   public :: fv_io_register_restart_BCs, fv_io_register_restart_inc
   public :: fv_io_write_BCs, fv_io_read_BCs
   public :: fv_io_read_restart_background4replay
-  public :: fv_io_write_atminc, fv_io_write_atminput
+  public :: fv_io_write_atminc
   public :: fv_io_register_axis
 
   logical                       :: module_is_initialized = .FALSE.
@@ -814,11 +814,22 @@ contains
           call close_file(Atm%Lnd_restart)
           Atm%Lnd_restart_is_open = .false.
        endif
+    endif
 
-    enddo
+    if (present(timestamp)) then
+      fname = 'RESTART/'//trim(timestamp)//'.fv_tracer.res'//trim(suffix)//'.nc'
+    else
+      fname = 'RESTART/fv_tracer.res'//trim(suffix)//'.nc'
+    endif
+    Atm%Tra_restart_is_open = open_file(Atm%Tra_restart, fname, "overwrite", fv_domain, is_restart=.true.)
+    if (Atm%Tra_restart_is_open) then
+       call fv_io_register_restart(Atm)
+       call write_restart(Atm%Tra_restart)
+       call close_file(Atm%Tra_restart)
+       Atm%Tra_restart_is_open = .false.
+    endif
 
-  end subroutine  fv_io_register_restart
-  ! </SUBROUTINE> NAME="fv_io_register_restart"
+  end subroutine  fv_io_write_restart
 
   !#####################################################################
   ! <SUBROUTINE NAME="fv_io_register_restart_inc">
@@ -884,43 +895,6 @@ contains
   ! </SUBROUTINE> NAME="fv_io_register_restart_inc"
 
   !#####################################################################
-  ! <SUBROUTINE NAME="fv_io_write_restart">
-  !
-  ! <DESCRIPTION>
-  ! Write the fv core restart quantities
-  ! </DESCRIPTION>
-  subroutine  fv_io_write_restart(Atm, timestamp)
-
-    type(fv_atmos_type),        intent(inout) :: Atm
-    character(len=*), optional, intent(in) :: timestamp
-
-!!$    if ( use_ncep_sst .or. Atm%flagstruct%nudge .or. Atm%flagstruct%ncep_ic ) then
-!!$       call mpp_error(NOTE, 'READING FROM SST_RESTART DISABLED')
-!!$       !call save_restart(Atm%SST_restart, timestamp)
-!!$    endif
-
-    if ( (use_ncep_sst .or. Atm%flagstruct%nudge) .and. .not. Atm%gridstruct%nested ) then
-       call save_restart(Atm%SST_restart, timestamp)
-=======
->>>>>>> test
-    endif
-
-    if (present(timestamp)) then
-      fname = 'RESTART/'//trim(timestamp)//'.fv_tracer.res'//trim(suffix)//'.nc'
-    else
-      fname = 'RESTART/fv_tracer.res'//trim(suffix)//'.nc'
-    endif
-    Atm%Tra_restart_is_open = open_file(Atm%Tra_restart, fname, "overwrite", fv_domain, is_restart=.true.)
-    if (Atm%Tra_restart_is_open) then
-       call fv_io_register_restart(Atm)
-       call write_restart(Atm%Tra_restart)
-       call close_file(Atm%Tra_restart)
-       Atm%Tra_restart_is_open = .false.
-    endif
-
-  end subroutine  fv_io_write_restart
-
-  !#####################################################################
   ! <SUBROUTINE NAME="fv_io_write_atminc">
   !
   ! <DESCRIPTION>
@@ -942,30 +916,7 @@ contains
     call save_restart(Tra_restart_inc, trim(name), trim(dir))
 
   end subroutine  fv_io_write_atminc
-
-  !#####################################################################
-  ! <SUBROUTINE NAME="fv_io_write_atminput">
-  !
-  ! <DESCRIPTION>
-  ! Write atmosphere increments quantities on cubed-sphere grid
-  ! </DESCRIPTION>
-  subroutine  fv_io_write_atminput(Atm, prefix, directory)
-
-    type(fv_atmos_type),        intent(inout) :: Atm
-    character(len=*), optional, intent(in) :: prefix
-    character(len=*), optional, intent(in) :: directory
-
-    character(len=30) :: name, dir
-    name='atmanl'
-    if (present(prefix)) name=trim(prefix)
-    dir='ATMANL'
-    if (present(directory)) dir=trim(directory)
-
-    call save_restart(Atm%Fv_restart, trim(name), trim(dir))
-    call save_restart(Atm%Fv_tile_restart, trim(name), trim(dir))
-    call save_restart(Atm%Tra_restart, trim(name), trim(dir))
-
-  end subroutine  fv_io_write_atminput
+  ! </SUBROUTINE NAME="fv_io_write_atminc">
 
   subroutine register_bcs_2d(Atm, BCfile_ne, BCfile_sw, fname_ne, fname_sw, &
                              var_name, var, var_bc, istag, jstag)
