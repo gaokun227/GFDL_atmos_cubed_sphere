@@ -351,7 +351,7 @@ contains
                 enddo
 
                 ! Output IC and increments on model grid
-                if (Atm(n)%flagstruct%write_replay_ic) call fv_io_write_atminc(Atm,IAU_Data)
+                if (Atm(n)%flagstruct%write_replay_ic) call fv_io_write_atminc(Atm(n),IAU_Data)
 
                 call prt_maxmin('ua_inc', IAU_Data%ua_inc, isc, iec, jsc, jec, 0, npz, 1.)
                 call prt_maxmin('va_inc', IAU_Data%va_inc, isc, iec, jsc, jec, 0, npz, 1.)
@@ -1370,7 +1370,7 @@ contains
     character(len=*),    intent(in)    :: timestamp
 
     if (Atm%coarse_graining%write_coarse_restart_files) then
-       call fv_io_write_restart_coarse(Atm, prefix=timestamp)
+       call fv_io_write_restart_coarse(Atm, timestamp)
        if (.not. Atm%coarse_graining%write_only_coarse_intermediate_restarts) then
           call fv_io_write_restart(Atm, prefix=timestamp)
        endif

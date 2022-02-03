@@ -730,7 +730,7 @@ contains
   !   register restart field to be written out to restart file.
   ! </DESCRIPTION>
   subroutine  fv_io_register_restart_inc(Atm,IAU_Data)
-    type(fv_atmos_type), intent(inout) :: Atm(:)
+    type(fv_atmos_type), intent(inout) :: Atm
     type(iau_external_data_type), intent(inout) :: IAU_Data
 
     character(len=64) :: fname, tracer_name
@@ -739,7 +739,7 @@ contains
     integer, dimension(1) :: zsize
     character(len=8), dimension(2)  :: dim_names_2d
     character(len=8), dimension(4)  :: dim_names_4d, dim_names_4d2
-    integer           :: nt, ntracers, ntiles
+    integer           :: nt, ntracers
 
     dim_names_2d(1) = "xaxis_1"
     dim_names_2d(2) = "Time"
@@ -750,7 +750,6 @@ contains
     dim_names_4d2 = dim_names_4d
     dim_names_4d2(2) = "yaxis_2"
 
-    ntileMe = size(Atm(:))
     call get_number_tracers(MODEL_ATMOS, num_tracers=ntracers)
 
     !fname = 'fv_core.res.nc'
@@ -783,7 +782,7 @@ contains
       call register_restart_field(Fv_tile_restart_inc, 'va', IAU_Data%va_inc, dim_names_4d2, is_optional=.true.)
       call register_restart_field(Fv_tile_restart_inc, 'T', IAU_Data%temp_inc, dim_names_4d2)
       call register_restart_field(Fv_tile_restart_inc, 'delp', IAU_Data%delp_inc, dim_names_4d2)
-      if (.not.Atm(n)%flagstruct%hydrostatic) then
+      if (.not.Atm%flagstruct%hydrostatic) then
         call register_restart_field(Fv_tile_restart_inc, 'DZ', IAU_Data%delz_inc, dim_names_4d2, is_optional=.true.)
       endif
 
@@ -830,7 +829,7 @@ contains
        !call save_restart(Atm%SST_restart, timestamp)
     endif
 
-    if present(atmos) then
+    if (present(atmos)) then
       pre = 'atmanl'
       dir = 'ATMANL'
     else
@@ -948,13 +947,13 @@ contains
 
     fv_domain = Atm%domain
 
-    if (Atm(1)%grid_number > 1) then
+    if (Atm%grid_number > 1) then
        call mpp_error(NOTE, 'NO REPLAY INCREMENT FOR NEST YET')
     endif
 
 !--- fix for single tile runs where you need fv_core.res.nc and fv_core.res.tile1.nc
     ntiles = mpp_get_ntile_count(fv_domain)
-    if (ntiles == 1 .and. .not. Atm(1)%neststruct%nested) then
+    if (ntiles == 1 .and. .not. Atm%neststruct%nested) then
        call mpp_error(NOTE, 'REPLAY INCREMENT NOT FOR SINGLE TILE RUNS')
     endif
 
