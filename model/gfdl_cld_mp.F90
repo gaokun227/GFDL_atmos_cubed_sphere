@@ -3598,42 +3598,21 @@ end subroutine setupm
 ! initialization of gfdl cloud microphysics
 ! =======================================================================
 
-subroutine gfdl_cld_mp_init (me, master, nlunit, input_nml_file, logunit, fn_nml)
+subroutine gfdl_cld_mp_init (input_nml_file, logunit)
 
     implicit none
 
-    integer, intent (in) :: me
-    integer, intent (in) :: master
-    integer, intent (in) :: nlunit
-    integer, intent (in) :: logunit
-
-    character (len = 64), intent (in) :: fn_nml
     character (len = *), intent (in) :: input_nml_file (:)
+    integer, intent (in) :: logunit
 
     logical :: exists
 
-#ifdef INTERNAL_FILE_NML
     read (input_nml_file, nml = gfdl_mp_nml)
-#else
-    inquire (file = trim (fn_nml), exist = exists)
-    if (.not. exists) then
-        write (6, *) 'gfdl - mp :: namelist file: ', trim (fn_nml), ' does not exist'
-        stop
-    else
-        open (unit = nlunit, file = fn_nml, readonly, status = 'old')
-    endif
-    rewind (nlunit)
-    read (nlunit, nml = gfdl_mp_nml)
-    close (nlunit)
-#endif
 
     ! write version number and namelist to log file
-
-    if (me .eq. master) then
-        write (logunit, *) " ================================================================== "
-        write (logunit, *) "gfdl_mp_mod"
-        write (logunit, nml = gfdl_mp_nml)
-    endif
+    write (logunit, *) " ================================================================== "
+    write (logunit, *) "gfdl_mp_mod"
+    write (logunit, nml = gfdl_mp_nml)
 
     if (do_setup) then
         call setup_con

@@ -508,15 +508,21 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qw, qi, qr, qs, qg, &
 
 end subroutine cld_eff_rad
 
-subroutine cld_eff_rad_init (input_nml_file)
+subroutine cld_eff_rad_init (input_nml_file, logunit)
 
     implicit none
 
     character (len = *), intent (in) :: input_nml_file (:)
+    integer, intent (in) :: logunit
 
     logical :: exists
 
     read (input_nml_file, nml = cld_eff_rad_nml)
+
+    ! write version number and namelist to log file
+    write (logunit, *) " ================================================================== "
+    write (logunit, *) "cld_eff_rad_mod"
+    write (logunit, nml = cld_eff_rad_nml)
 
 end subroutine cld_eff_rad_init
 

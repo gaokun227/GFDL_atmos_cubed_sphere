@@ -3593,27 +3593,21 @@ end subroutine setupm
 ! initialization of gfdl cloud microphysics
 ! =======================================================================
 
-subroutine gfdl_mp_init (me, master, input_nml_file, logunit)
+subroutine gfdl_mp_init (input_nml_file, logunit)
 
     implicit none
 
-    integer, intent (in) :: me
-    integer, intent (in) :: master
-    integer, intent (in) :: logunit
-
     character (len = *), intent (in) :: input_nml_file (:)
+    integer, intent (in) :: logunit
 
     logical :: exists
 
     read (input_nml_file, nml = gfdl_mp_nml)
 
     ! write version number and namelist to log file
-
-    if (me .eq. master) then
-        write (logunit, *) " ================================================================== "
-        write (logunit, *) "gfdl_mp_mod"
-        write (logunit, nml = gfdl_mp_nml)
-    endif
+    write (logunit, *) " ================================================================== "
+    write (logunit, *) "gfdl_mp_mod"
+    write (logunit, nml = gfdl_mp_nml)
 
     if (do_setup) then
         call setup_con
