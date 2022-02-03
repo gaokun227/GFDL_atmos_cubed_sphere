@@ -53,8 +53,10 @@ module fv_iau_mod
                                  get_var1_double,     &
                                  get_var3_r4,         &
                                  get_var1_real, check_var_exists
+#ifdef GFS_PHYS
   use IPD_typedefs,        only: IPD_init_type, IPD_control_type, &
                                  kind_phys
+#endif
   use block_control_mod,   only: block_control_type
   use fv_treat_da_inc_mod, only: remap_coef
   use tracer_manager_mod,  only: get_tracer_names,get_tracer_index, get_number_tracers
@@ -63,6 +65,10 @@ module fv_iau_mod
   implicit none
 
   private
+
+#ifndef GFS_PHYS
+    integer, parameter :: kind_phys = 8
+#endif
 
   real,allocatable::s2c(:,:,:)
 !  real:: s2c(Atm(1)%bd%is:Atm(1)%bd%ie,Atm(1)%bd%js:Atm(1)%bd%je,4)
@@ -105,8 +111,11 @@ module fv_iau_mod
       real(kind=kind_phys)        :: wt_normfact
   end type iau_state_type
   type(iau_state_type) :: IAU_state
-  public iau_external_data_type,IAU_initialize,getiauforcing
-  public replay_initialize
+
+  public iau_external_data_type
+
+#ifdef GFS_PHYS
+  public IAU_initialize, getiauforcing, replay_initialize
 
 contains
 subroutine IAU_initialize (IPD_Control, IAU_Data,Init_parm)
@@ -642,6 +651,8 @@ logical function zero_increment(check_var,IPD_Control)
    enddo
 
 end function zero_increment
+
+#endif
 
 end module fv_iau_mod
 

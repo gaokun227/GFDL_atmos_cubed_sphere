@@ -105,12 +105,12 @@ contains
                         this_grid, IAU_Data)
     type(domain2d),      intent(inout) :: fv_domain
     type(fv_atmos_type), intent(inout) :: Atm(:)
-    type(iau_external_data_type), intent(inout) :: IAU_Data
     real,                intent(in)    :: dt_atmos
     integer,             intent(out)   :: seconds
     integer,             intent(out)   :: days
     logical,             intent(inout)    :: cold_start
     integer,             intent(in)    :: grid_type, this_grid
+    type(iau_external_data_type), intent(inout), optional :: IAU_Data
 
     integer :: i, j, k, l, m, n, ntileMe, nt, iq
     integer :: isc, iec, jsc, jec, ncnst, ntprog, ntdiag
