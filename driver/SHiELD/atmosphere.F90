@@ -293,10 +293,10 @@ contains
 !--- allocate pref
    allocate(pref(npz+1,2), dum1d(npz+1))
 
-   call gfdl_mp_init(mpp_pe(), mpp_root_pe(), input_nml_file, stdlog())
-   call cld_eff_rad_init(input_nml_file)
-
-   call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mygrid)%gridstruct%grid_type, mygrid)
+   call gfdl_mp_init(input_nml_file, stdlog())
+   call cld_eff_rad_init(input_nml_file, stdlog())
+   call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, &
+                   Atm(mygrid)%gridstruct%grid_type, mygrid, IAU_Data)
 
    fv_time = Time
 
@@ -1226,8 +1226,6 @@ contains
          enddo
       enddo
    endif
-
-   call set_domain ( Atm(mygrid)%domain )
 
    call timing_on('GFS_TENDENCIES')
 
