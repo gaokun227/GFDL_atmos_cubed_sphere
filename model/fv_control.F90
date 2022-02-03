@@ -182,7 +182,7 @@ module fv_control_mod
      integer , pointer :: replay
      integer , pointer :: nrestartbg
      logical , pointer :: write_replay_ic
-     
+
      logical , pointer :: inline_q
      real , pointer :: shift_fac
      logical , pointer :: do_schmidt, do_cube_transform
@@ -718,7 +718,7 @@ module fv_control_mod
        nwat                          => Atm%flagstruct%nwat
        use_logp                      => Atm%flagstruct%use_logp
        warm_start                    => Atm%flagstruct%warm_start
-       replay                        => Atm%flagstruct%replay 
+       replay                        => Atm%flagstruct%replay
        nrestartbg                    => Atm%flagstruct%nrestartbg
        write_replay_ic               => Atm%flagstruct%write_replay_ic
        inline_q                      => Atm%flagstruct%inline_q

@@ -1739,9 +1739,9 @@ end subroutine switch_current_Atm
 !-------------------------------------------------------------------------------
 
 !-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv ! 
+! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
 !
-!     mp_bcst_1d_r4 :: Call SPMD broadcast 
+!     mp_bcst_1d_r4 :: Call SPMD broadcast
 !
       subroutine mp_bcst_1d_r4(q, idim)
          integer, intent(IN)  :: idim
@@ -1751,13 +1751,13 @@ end subroutine switch_current_Atm
 
       end subroutine mp_bcst_1d_r4
 !
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ! 
+! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
 !-------------------------------------------------------------------------------
 
 !-------------------------------------------------------------------------------
 ! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
 !
-!     mp_bcst_1d_r8 :: Call SPMD broadcast 
+!     mp_bcst_1d_r8 :: Call SPMD broadcast
 !
       subroutine mp_bcst_1d_r8(q, idim)
          integer, intent(IN)  :: idim
@@ -1773,7 +1773,7 @@ end subroutine switch_current_Atm
 !-------------------------------------------------------------------------------
 ! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
 !
-!     mp_bcst_2d_r4 :: Call SPMD broadcast 
+!     mp_bcst_2d_r4 :: Call SPMD broadcast
 !
       subroutine mp_bcst_2d_r4(q, idim, jdim)
          integer, intent(IN)  :: idim, jdim
@@ -1789,7 +1789,7 @@ end subroutine switch_current_Atm
 !-------------------------------------------------------------------------------
 ! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
 !
-!     mp_bcst_2d_r8 :: Call SPMD broadcast 
+!     mp_bcst_2d_r8 :: Call SPMD broadcast
 !
       subroutine mp_bcst_2d_r8(q, idim, jdim)
          integer, intent(IN)  :: idim, jdim
