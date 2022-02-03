@@ -23,7 +23,7 @@ module fv_phys_mod
 
 use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, kappa
 use fv_arrays_mod,         only: radius, omega ! scaled for small earth
-  
+
 use time_manager_mod,      only: time_type, get_time
 use gfdl_cld_mp_mod,       only: gfdl_cld_mp_driver, qsmith, wet_bulb
 use hswf_mod,              only: Held_Suarez_Tend
@@ -1083,8 +1083,8 @@ endif
 
   endif
 
-  if (id_qflux) used=send_data(id_qflux, qflux, time)
-  if (id_hflux) used=send_data(id_hflux, flux_t, time)
+  if (id_qflux > 0) used=send_data(id_qflux, qflux, time)
+  if (id_hflux > 0) used=send_data(id_hflux, flux_t, time)
 
 
  end subroutine GFDL_sim_phys
@@ -1634,7 +1634,7 @@ endif
        prec_total(:,:) = 0.
     endif
 
-    if (do_GFDL_sim_phys > 0) then
+    if (do_GFDL_sim_phys) then
        id_qflux = register_diag_field(mod_name, 'qflux', axes(1:3), time, &
             'Physics latent heat flux', 'J/m**2/s', missing_value=missing_value)
        id_hflux = register_diag_field(mod_name, 'hflux', axes(1:3), time, &
