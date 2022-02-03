@@ -168,7 +168,7 @@ contains
 !                if ( Atm(n)%flagstruct%nwat==6) call cld_eff_rad_init(input_nml_file)
            endif
         endif
-        if (.not. Atm(n)%flagstruct%adiabatic) call gfdl_mp_init (mpp_pe(), mpp_root_pe(), input_nml_file, stdlog())
+        if (.not. Atm(n)%flagstruct%adiabatic) call gfdl_mp_init (input_nml_file, stdlog())
 
 
 
@@ -280,7 +280,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%diss_est)
 ! Backward
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, -dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -294,7 +294,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%diss_est)
 ! Nudging back to IC
 !$omp parallel do default(shared)
        do k=1,npz
