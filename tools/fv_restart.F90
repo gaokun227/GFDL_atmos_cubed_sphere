@@ -35,8 +35,7 @@ module fv_restart_mod
   use fv_arrays_mod,       only: fv_atmos_type, fv_nest_type, fv_grid_bounds_type, R_GRID
   use fv_io_mod,           only: fv_io_init, fv_io_read_restart, fv_io_write_restart, &
                                  remap_restart, fv_io_write_BCs, fv_io_read_BCs, &
-                                 fv_io_read_restart_background4replay, fv_io_write_atminc, &
-                                 fv_io_write_atminput
+                                 fv_io_write_atminc
   use fv_grid_utils_mod,   only: ptop_min, fill_ghost, g_sum, &
                                  make_eta_level, cubed_to_latlon, great_circle_dist
   use fv_diagnostics_mod,  only: prt_maxmin
@@ -278,7 +277,7 @@ contains
                 do m=1,Atm(n)%flagstruct%nrestartbg
                    write(inputdir,'(A5, I1)') "INPUT", m
                    if( is_master() ) write(*,*) 'inputdir ', inputdir
-                   call fv_io_read_restart_background4replay(Atm(n)%domain,Atm(n:n),inputdir)
+                   call fv_io_read_restart(Atm(n)%domain,Atm(n:n),directory=inputdir)
                    call prt_maxmin('UA_b', Atm(n)%ua, isc, iec, jsc, jec, Atm(n)%ng, npz, 1.)
                    call prt_maxmin('VA_b', Atm(n)%va, isc, iec, jsc, jec, Atm(n)%ng, npz, 1.)
                    ! test read in
@@ -334,7 +333,7 @@ contains
                      Atm(n)%gridstruct%grid_type, Atm(n)%domain, &
                      Atm(n)%gridstruct%bounded_domain, Atm(n)%flagstruct%c2l_ord, Atm(n)%bd)
                 if( is_master() ) write(*,*) 'external ic compute ua, va'
-                call fv_io_write_atminput(Atm(n),'atmanl','ATMANL')
+                call fv_io_write_restart(Atm(n),prefix='atmanl',directory='ATMANL',atmos=.true.)
                 ! compute increments
                 do k=1,npz
                    do j=jsc,jec
@@ -1371,12 +1370,12 @@ contains
     character(len=*),    intent(in)    :: timestamp
 
     if (Atm%coarse_graining%write_coarse_restart_files) then
-       call fv_io_write_restart_coarse(Atm, timestamp)
+       call fv_io_write_restart_coarse(Atm, prefix=timestamp)
        if (.not. Atm%coarse_graining%write_only_coarse_intermediate_restarts) then
-          call fv_io_write_restart(Atm, timestamp)
+          call fv_io_write_restart(Atm, prefix=timestamp)
        endif
     else
-       call fv_io_write_restart(Atm, timestamp)
+       call fv_io_write_restart(Atm, prefix=timestamp)
     endif
 
     if (Atm%neststruct%nested) then

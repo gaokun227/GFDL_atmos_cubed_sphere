@@ -67,8 +67,7 @@ module fv_io_mod
   public :: fv_io_read_tracers, fv_io_register_restart, fv_io_register_nudge_restart
   public :: fv_io_register_restart_BCs, fv_io_register_restart_inc
   public :: fv_io_write_BCs, fv_io_read_BCs
-  public :: fv_io_read_restart_background4replay
-  public :: fv_io_write_atminc, fv_io_write_atminput
+  public :: fv_io_write_atminc
   public :: fv_io_register_axis
 
   logical                       :: module_is_initialized = .FALSE.
@@ -346,9 +345,11 @@ contains
   ! <DESCRIPTION>
   ! Write the fv core restart quantities
   ! </DESCRIPTION>
-  subroutine  fv_io_read_restart(fv_domain,Atm)
+  subroutine  fv_io_read_restart(fv_domain,Atm,prefix,directory)
     type(domain2d),      intent(inout) :: fv_domain
     type(fv_atmos_type), intent(inout) :: Atm(:)
+    character(len=*), optional, intent(in) :: prefix
+    character(len=*), optional, intent(in) :: directory
 
     character(len=64)    :: tracer_name
     integer              :: isc, iec, jsc, jec, n, nt, nk, ntracers
@@ -356,17 +357,21 @@ contains
     integer              :: ks, ntiles
     real                 :: ptop
 
+    character (len=:), allocatable :: dir, pre, suffix, fname
     character(len=128) :: tracer_longname, tracer_units
-    character(len=120) :: fname
-    character(len=20) :: suffix
     character(len=1) :: tile_num
     integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
+
+    pre = ''
+    if (present(prefix)) pre = trim(prefix)
+    dir = 'INPUT'
+    if (present(directory)) dir = trim(directory)
 
     allocate(pes(mpp_npes()))
     call mpp_get_current_pelist(pes)
 
     suffix = ''
-    fname = 'INPUT/fv_core.res.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_core.res.nc'
     Atm(1)%Fv_restart_is_open = open_file(Atm(1)%Fv_restart,fname,"read", is_restart=.true., pelist=pes)
     if (Atm(1)%Fv_restart_is_open) then
       call fv_io_register_restart(Atm(1))
@@ -391,7 +396,7 @@ contains
        suffix = ''//trim(suffix)//'.tile1'
     endif
 
-    fname = 'INPUT/fv_core.res'//trim(suffix)//'.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_core.res'//trim(suffix)//'.nc'
     Atm(1)%Fv_restart_tile_is_open = open_file(Atm(1)%Fv_restart_tile, fname, "read", fv_domain, is_restart=.true.)
     if (Atm(1)%Fv_restart_tile_is_open) then
       call fv_io_register_restart(Atm(1))
@@ -401,7 +406,7 @@ contains
     endif
 
 !--- restore data for fv_tracer - if it exists
-    fname = 'INPUT/fv_tracer.res'//trim(suffix)//'.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_tracer.res'//trim(suffix)//'.nc'
     Atm(1)%Tra_restart_is_open = open_file(Atm(1)%Tra_restart, fname, "read", fv_domain, is_restart=.true.)
     if (Atm(1)%Tra_restart_is_open) then
       call fv_io_register_restart(Atm(1))
@@ -413,7 +418,7 @@ contains
     endif
 
 !--- restore data for surface winds - if it exists
-    fname = 'INPUT/fv_srf_wnd.res'//trim(suffix)//'.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_srf_wnd.res'//trim(suffix)//'.nc'
     Atm(1)%Rsf_restart_is_open = open_file(Atm(1)%Rsf_restart, fname, "read", fv_domain, is_restart=.true.)
     if (Atm(1)%Rsf_restart_is_open) then
       Atm(1)%flagstruct%srf_init = .true.
@@ -428,7 +433,7 @@ contains
 
     if ( Atm(1)%flagstruct%fv_land ) then
 !--- restore data for mg_drag - if it exists
-         fname = 'INPUT/mg_drag.res'//trim(suffix)//'.nc'
+         fname = ''//trim(dir)//'/'//trim(pre)//'.mg_drag.res'//trim(suffix)//'.nc'
          Atm(1)%Mg_restart_is_open = open_file(Atm(1)%Mg_restart, fname, "read", fv_domain, is_restart=.true.)
          if (Atm(1)%Mg_restart_is_open) then
            call fv_io_register_restart(Atm(1))
@@ -439,7 +444,7 @@ contains
            call mpp_error(NOTE,'==> Warning from fv_read_restart: Expected file '//trim(fname)//' does not exist')
          endif
 !--- restore data for fv_land - if it exists
-         fname = 'INPUT/fv_land.res'//trim(suffix)//'.nc'
+         fname = ''//trim(dir)//'/'//trim(pre)//'./fv_land.res'//trim(suffix)//'.nc'
          Atm(1)%Lnd_restart_is_open = open_file(Atm(1)%Lnd_restart, fname, "read", fv_domain, is_restart=.true.)
          if (Atm(1)%Lnd_restart_is_open) then
            call fv_io_register_restart(Atm(1))
@@ -806,15 +811,17 @@ contains
   ! <DESCRIPTION>
   ! Write the fv core restart quantities
   ! </DESCRIPTION>
-  subroutine  fv_io_write_restart(Atm, timestamp)
+  subroutine  fv_io_write_restart(Atm, prefix, directory, atmos)
 
     type(fv_atmos_type),        intent(inout) :: Atm
-    character(len=*), optional, intent(in) :: timestamp
+    character(len=*), optional, intent(in) :: prefix
+    character(len=*), optional, intent(in) :: directory
+    logical,          optional, intent(in) :: atmos
+
+    character (len=:), allocatable :: dir, pre, fname, suffix
     integer :: ntiles
     logical :: tile_file_exists
     type(domain2d)     :: fv_domain
-    character(len=120) :: fname
-    character(len=20) :: suffix
     character(len=1) :: tile_num
     integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
     fv_domain = Atm%domain
@@ -823,12 +830,19 @@ contains
        !call save_restart(Atm%SST_restart, timestamp)
     endif
 
-    suffix = ''
-    if (present(timestamp)) then
-      fname = 'RESTART/'//trim(timestamp)//'.fv_core.res'//trim(suffix)//'.nc'
+    if present(atmos) then
+      pre = 'atmanl'
+      dir = 'ATMANL'
     else
-      fname = 'RESTART/fv_core.res'//trim(suffix)//'.nc'
+      pre = ''
+      dir = 'RESTART'
     endif
+    if (present(prefix)) pre = trim(prefix)
+    if (present(directory)) dir = trim(directory)
+
+    suffix = ''
+
+    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_core.res.nc'
     allocate(pes(mpp_npes()))
     call mpp_get_current_pelist(pes)
     Atm%Fv_restart_is_open = open_file(Atm%Fv_restart, fname, "overwrite", is_restart=.true., pelist=pes)
@@ -846,11 +860,7 @@ contains
        suffix = ''//trim(suffix)//'.tile1'
     endif
 
-    if (present(timestamp)) then
-      fname = 'RESTART/'//trim(timestamp)//'.fv_core.res'//trim(suffix)//'.nc'
-    else
-      fname = 'RESTART/fv_core.res'//trim(suffix)//'.nc'
-    endif
+    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_core.res'//trim(suffix)//'.nc'
 
     Atm%Fv_restart_tile_is_open = open_file(Atm%Fv_restart_tile, fname, "overwrite", fv_domain, is_restart=.true.)
     if (Atm%Fv_restart_tile_is_open) then
@@ -860,11 +870,7 @@ contains
        Atm%Fv_restart_tile_is_open = .false.
     endif
 
-    if (present(timestamp)) then
-      fname = 'RESTART/'//trim(timestamp)//'.fv_srf_wnd.res'//trim(suffix)//'.nc'
-    else
-      fname = 'RESTART/fv_srf_wnd.res'//trim(suffix)//'.nc'
-    endif
+    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_srf_wnd.res'//trim(suffix)//'.nc'
     Atm%Rsf_restart_is_open = open_file(Atm%Rsf_restart, fname, "overwrite", fv_domain, is_restart=.true.)
     if (Atm%Rsf_restart_is_open) then
        call fv_io_register_restart(Atm)
@@ -874,11 +880,7 @@ contains
     endif
 
     if ( Atm%flagstruct%fv_land ) then
-       if (present(timestamp)) then
-          fname = 'RESTART/'//trim(timestamp)//'.mg_drag.res'//trim(suffix)//'.nc'
-       else
-         fname = 'RESTART/mg_drag.res'//trim(suffix)//'.nc'
-       endif
+       fname = ''//trim(dir)//'/'//trim(pre)//'.mg_drag.res'//trim(suffix)//'.nc'
        Atm%Mg_restart_is_open = open_file(Atm%Mg_restart, fname, "overwrite", fv_domain, is_restart=.true.)
        if (Atm%Mg_restart_is_open) then
           call fv_io_register_restart(Atm)
@@ -887,11 +889,7 @@ contains
           Atm%Mg_restart_is_open = .false.
        endif
 
-       if (present(timestamp)) then
-         fname = 'RESTART'//trim(timestamp)//'./fv_land.res'//trim(suffix)//'.nc'
-       else
-         fname = 'RESTART/fv_land.res'//trim(suffix)//'.nc'
-       endif
+       fname = ''//trim(dir)//'/'//trim(pre)//'./fv_land.res'//trim(suffix)//'.nc'
        Atm%Lnd_restart_is_open = open_file(Atm%Lnd_restart, fname, "overwrite", fv_domain, is_restart=.true.)
        if (Atm%Lnd_restart_is_open) then
           call fv_io_register_restart(Atm)
@@ -901,11 +899,7 @@ contains
        endif
     endif
 
-    if (present(timestamp)) then
-      fname = 'RESTART/'//trim(timestamp)//'.fv_tracer.res'//trim(suffix)//'.nc'
-    else
-      fname = 'RESTART/fv_tracer.res'//trim(suffix)//'.nc'
-    endif
+    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_tracer.res'//trim(suffix)//'.nc'
     Atm%Tra_restart_is_open = open_file(Atm%Tra_restart, fname, "overwrite", fv_domain, is_restart=.true.)
     if (Atm%Tra_restart_is_open) then
        call fv_io_register_restart(Atm)
@@ -983,70 +977,6 @@ contains
     endif
 
   end subroutine  fv_io_write_atminc
-
-  !#####################################################################
-  ! <SUBROUTINE NAME="fv_io_write_atminput">
-  !
-  ! <DESCRIPTION>
-  ! Write atmosphere increments quantities on cubed-sphere grid
-  ! </DESCRIPTION>
-  subroutine  fv_io_write_atminput(Atm, prefix, directory)
-
-    type(fv_atmos_type),        intent(inout) :: Atm
-    character(len=*), optional, intent(in) :: prefix
-    character(len=*), optional, intent(in) :: directory
-
-    character(len=30) :: name, dir, fname
-    type(domain2d) :: fv_domain
-    integer :: ntiles
-    character(len=20) :: suffix
-    integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
-
-    name='atmanl'
-    if (present(prefix)) name=trim(prefix)
-    dir='ATMANL'
-    if (present(directory)) dir=trim(directory)
-
-    allocate(pes(mpp_npes()))
-    call mpp_get_current_pelist(pes)
-
-    fname = ''//dir//'/'//prefix//'.fv_core.res.nc'
-    Atm%Fv_restart_is_open = open_file(Atm%Fv_restart, fname, "overwrite", is_restart=.true., pelist=pes)
-    if (Atm%Fv_restart_is_open) then
-      call fv_io_register_restart(Atm)
-      call write_restart(Atm%Fv_restart)
-      call close_file(Atm%Fv_restart)
-      Atm%Fv_restart_is_open = .false.
-    endif
-    deallocate(pes)
-
-    fv_domain = Atm%domain
-    ntiles = mpp_get_ntile_count(fv_domain)
-    suffix = ''
-    !If the number of tiles is equal to 1, and it is not a nested case add the ".tile1" suffix to the filename
-    if (ntiles == 1 .and. .not. Atm%neststruct%nested) then
-       suffix = '.tile1'
-    endif
-
-    fname = ''//dir//'/'//prefix//'.fv_core.res'//trim(suffix)//'.nc'
-    Atm%Fv_restart_tile_is_open = open_file(Atm%Fv_restart_tile, fname, "overwrite", fv_domain, is_restart=.true.)
-    if (Atm%Fv_restart_tile_is_open) then
-      call fv_io_register_restart(Atm)
-      call write_restart (Atm%Fv_restart_tile)
-      call close_file (Atm%Fv_restart_tile)
-      Atm%Fv_restart_tile_is_open = .false.
-    endif
-
-    fname = ''//dir//'/'//prefix//'.fv_tracer.res'//trim(suffix)//'.nc'
-    Atm%Tra_restart_is_open = open_file(Atm%Tra_restart, fname, "overwrite", fv_domain, is_restart=.true.)
-    if (Atm%Tra_restart_is_open) then
-       call fv_io_register_restart(Atm)
-       call write_restart(Atm%Tra_restart)
-       call close_file(Atm%Tra_restart)
-       Atm%Tra_restart_is_open = .false.
-    endif
-
-  end subroutine  fv_io_write_atminput
 
   subroutine register_bcs_2d(Atm, BCfile_ne, BCfile_sw, fname_ne, fname_sw, &
                              var_name, var, var_bc, istag, jstag)
@@ -1497,72 +1427,5 @@ contains
 
     return
   end subroutine fv_io_read_BCs
-
-  !#####################################################################
-  ! <SUBROUTINE NAME="fv_io_read_restart_background4replay">
-  !
-  ! <DESCRIPTION>
-  ! Read the fv atmosphere restart quantities
-  ! </DESCRIPTION>
-  subroutine  fv_io_read_restart_background4replay(fv_domain,Atm,inputdir)
-    type(domain2d),      intent(inout) :: fv_domain
-    type(fv_atmos_type), intent(inout) :: Atm(:)
-    character(len=*), intent(in) :: inputdir
-
-    character(len=64)    :: fname
-    character(len=20) :: suffix
-    integer              :: ntiles
-    integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
-
-    allocate(pes(mpp_npes()))
-    call mpp_get_current_pelist(pes)
-
-    fname = ''//trim(inputdir)//'/fv_core.res.nc'
-    Atm(1)%Fv_restart_is_open = open_file(Atm(1)%Fv_restart,fname,"read", is_restart=.true., pelist=pes)
-    if (Atm(1)%Fv_restart_is_open) then
-      call fv_io_register_restart(Atm(1))
-      call read_restart(Atm(1)%Fv_restart)
-      call close_file(Atm(1)%Fv_restart)
-      Atm(1)%Fv_restart_is_open = .false.
-    endif
-    deallocate(pes)
-
-    if (Atm(1)%flagstruct%external_eta) then
-       call set_external_eta(Atm(1)%ak, Atm(1)%bk, Atm(1)%ptop, Atm(1)%ks)
-    endif
-
-    suffix = ''
-    ntiles = mpp_get_ntile_count(fv_domain)
-    !If the number of tiles is equal to 1, and it is not a nested case add the ".tile1" suffix to the filename
-    if (ntiles == 1 .and. .not. Atm(1)%neststruct%nested) then
-       suffix = '.tile1'
-    endif
-
-    fname = ''//trim(inputdir)//'/fv_core.res'//trim(suffix)//'.nc'
-    Atm(1)%Fv_restart_tile_is_open = open_file(Atm(1)%Fv_restart_tile, fname, "read", fv_domain, is_restart=.true.)
-    if (Atm(1)%Fv_restart_tile_is_open) then
-      call fv_io_register_restart(Atm(1))
-      call read_restart(Atm(1)%Fv_restart_tile)
-      call close_file(Atm(1)%Fv_restart_tile)
-      Atm(1)%Fv_restart_tile_is_open = .false.
-    endif
-
-!--- restore data for fv_tracer - if it exists
-    fname = ''//trim(inputdir)//'/fv_tracer.res'//trim(suffix)//'.nc'
-    Atm(1)%Tra_restart_is_open = open_file(Atm(1)%Tra_restart, fname, "read", fv_domain, is_restart=.true.)
-    if (Atm(1)%Tra_restart_is_open) then
-      call fv_io_register_restart(Atm(1))
-      call read_restart(Atm(1)%Tra_restart)
-      call close_file(Atm(1)%Tra_restart)
-      Atm(1)%Tra_restart_is_open = .false.
-    else
-      call mpp_error(NOTE,'==> Warning from fv_read_restart_background4replay: Expected file '//trim(fname)//' does not exist')
-    endif
-
-    return
-
-  end subroutine  fv_io_read_restart_background4replay
-  ! </SUBROUTINE> NAME="fv_io_read_restart_background4replay"
-  !#####################################################################
 
 end module fv_io_mod
