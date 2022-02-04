@@ -560,10 +560,6 @@ contains
          enddo
 
                                                   call timing_on('Remapping')
-#ifdef AVEC_TIMERS
-                                                  call avec_timer_start(6)
-#endif
-
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'before remap k_split ', n_map, '/', k_split
        call prt_mxm('T_ldyn',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
@@ -624,9 +620,6 @@ contains
        if ( graupel > 0 )  &
       call prt_mxm('graupel_dyn', q(isd,jsd,1,graupel), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
      endif
-#ifdef AVEC_TIMERS
-                                                  call avec_timer_stop(6)
-#endif
                                                   call timing_off('Remapping')
 #ifdef MOIST_CAPPA
          if ( neststruct%nested .and. .not. last_step) then
