@@ -402,7 +402,7 @@ module fv_arrays_mod
                            !< the values of 'a_imp' and 'beta' should add to 1, so that the time-centering is
                            !< consistent between the PGF and the nonhydrostatic solver.
                            !< The proper range is 0 to 0.45.
-#ifdef SW_DYNAMIC
+#ifdef SW_DYNAMICS
    integer :: n_sponge = 0 !< Controls the number of layers at the upper boundary on
                            !< which the 2Dx filter is applied. This does not control the sponge layer.
                            !< The default value is 0.
