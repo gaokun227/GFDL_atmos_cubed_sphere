@@ -363,7 +363,7 @@ contains
     integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
 
     pre = ''
-    if (present(prefix)) pre = trim(prefix)
+    if (present(prefix)) pre = ''//trim(prefix)//'.'
     dir = 'INPUT'
     if (present(directory)) dir = trim(directory)
 
@@ -371,7 +371,7 @@ contains
     call mpp_get_current_pelist(pes)
 
     suffix = ''
-    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_core.res.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'fv_core.res.nc'
     Atm(1)%Fv_restart_is_open = open_file(Atm(1)%Fv_restart,fname,"read", is_restart=.true., pelist=pes)
     if (Atm(1)%Fv_restart_is_open) then
       call fv_io_register_restart(Atm(1))
@@ -396,7 +396,7 @@ contains
        suffix = ''//trim(suffix)//'.tile1'
     endif
 
-    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_core.res'//trim(suffix)//'.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'fv_core.res'//trim(suffix)//'.nc'
     Atm(1)%Fv_restart_tile_is_open = open_file(Atm(1)%Fv_restart_tile, fname, "read", fv_domain, is_restart=.true.)
     if (Atm(1)%Fv_restart_tile_is_open) then
       call fv_io_register_restart(Atm(1))
@@ -406,7 +406,7 @@ contains
     endif
 
 !--- restore data for fv_tracer - if it exists
-    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_tracer.res'//trim(suffix)//'.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'fv_tracer.res'//trim(suffix)//'.nc'
     Atm(1)%Tra_restart_is_open = open_file(Atm(1)%Tra_restart, fname, "read", fv_domain, is_restart=.true.)
     if (Atm(1)%Tra_restart_is_open) then
       call fv_io_register_restart(Atm(1))
@@ -418,7 +418,7 @@ contains
     endif
 
 !--- restore data for surface winds - if it exists
-    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_srf_wnd.res'//trim(suffix)//'.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'fv_srf_wnd.res'//trim(suffix)//'.nc'
     Atm(1)%Rsf_restart_is_open = open_file(Atm(1)%Rsf_restart, fname, "read", fv_domain, is_restart=.true.)
     if (Atm(1)%Rsf_restart_is_open) then
       Atm(1)%flagstruct%srf_init = .true.
@@ -433,7 +433,7 @@ contains
 
     if ( Atm(1)%flagstruct%fv_land ) then
 !--- restore data for mg_drag - if it exists
-         fname = ''//trim(dir)//'/'//trim(pre)//'.mg_drag.res'//trim(suffix)//'.nc'
+         fname = ''//trim(dir)//'/'//trim(pre)//'mg_drag.res'//trim(suffix)//'.nc'
          Atm(1)%Mg_restart_is_open = open_file(Atm(1)%Mg_restart, fname, "read", fv_domain, is_restart=.true.)
          if (Atm(1)%Mg_restart_is_open) then
            call fv_io_register_restart(Atm(1))
@@ -444,7 +444,7 @@ contains
            call mpp_error(NOTE,'==> Warning from fv_read_restart: Expected file '//trim(fname)//' does not exist')
          endif
 !--- restore data for fv_land - if it exists
-         fname = ''//trim(dir)//'/'//trim(pre)//'./fv_land.res'//trim(suffix)//'.nc'
+         fname = ''//trim(dir)//'/'//trim(pre)//'/fv_land.res'//trim(suffix)//'.nc'
          Atm(1)%Lnd_restart_is_open = open_file(Atm(1)%Lnd_restart, fname, "read", fv_domain, is_restart=.true.)
          if (Atm(1)%Lnd_restart_is_open) then
            call fv_io_register_restart(Atm(1))
@@ -830,18 +830,18 @@ contains
     endif
 
     if (present(atmos)) then
-      pre = 'atmanl'
+      pre = 'atmanl.'
       dir = 'ATMANL'
     else
       pre = ''
       dir = 'RESTART'
     endif
-    if (present(prefix)) pre = trim(prefix)
+    if (present(prefix)) pre = ''//trim(prefix)//'.'
     if (present(directory)) dir = trim(directory)
 
     suffix = ''
 
-    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_core.res.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'fv_core.res.nc'
     allocate(pes(mpp_npes()))
     call mpp_get_current_pelist(pes)
     Atm%Fv_restart_is_open = open_file(Atm%Fv_restart, fname, "overwrite", is_restart=.true., pelist=pes)
@@ -859,7 +859,7 @@ contains
        suffix = ''//trim(suffix)//'.tile1'
     endif
 
-    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_core.res'//trim(suffix)//'.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'fv_core.res'//trim(suffix)//'.nc'
 
     Atm%Fv_restart_tile_is_open = open_file(Atm%Fv_restart_tile, fname, "overwrite", fv_domain, is_restart=.true.)
     if (Atm%Fv_restart_tile_is_open) then
@@ -869,7 +869,7 @@ contains
        Atm%Fv_restart_tile_is_open = .false.
     endif
 
-    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_srf_wnd.res'//trim(suffix)//'.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'fv_srf_wnd.res'//trim(suffix)//'.nc'
     Atm%Rsf_restart_is_open = open_file(Atm%Rsf_restart, fname, "overwrite", fv_domain, is_restart=.true.)
     if (Atm%Rsf_restart_is_open) then
        call fv_io_register_restart(Atm)
@@ -879,7 +879,7 @@ contains
     endif
 
     if ( Atm%flagstruct%fv_land ) then
-       fname = ''//trim(dir)//'/'//trim(pre)//'.mg_drag.res'//trim(suffix)//'.nc'
+       fname = ''//trim(dir)//'/'//trim(pre)//'mg_drag.res'//trim(suffix)//'.nc'
        Atm%Mg_restart_is_open = open_file(Atm%Mg_restart, fname, "overwrite", fv_domain, is_restart=.true.)
        if (Atm%Mg_restart_is_open) then
           call fv_io_register_restart(Atm)
@@ -888,7 +888,7 @@ contains
           Atm%Mg_restart_is_open = .false.
        endif
 
-       fname = ''//trim(dir)//'/'//trim(pre)//'./fv_land.res'//trim(suffix)//'.nc'
+       fname = ''//trim(dir)//'/'//trim(pre)//'/fv_land.res'//trim(suffix)//'.nc'
        Atm%Lnd_restart_is_open = open_file(Atm%Lnd_restart, fname, "overwrite", fv_domain, is_restart=.true.)
        if (Atm%Lnd_restart_is_open) then
           call fv_io_register_restart(Atm)
@@ -898,7 +898,7 @@ contains
        endif
     endif
 
-    fname = ''//trim(dir)//'/'//trim(pre)//'.fv_tracer.res'//trim(suffix)//'.nc'
+    fname = ''//trim(dir)//'/'//trim(pre)//'fv_tracer.res'//trim(suffix)//'.nc'
     Atm%Tra_restart_is_open = open_file(Atm%Tra_restart, fname, "overwrite", fv_domain, is_restart=.true.)
     if (Atm%Tra_restart_is_open) then
        call fv_io_register_restart(Atm)
