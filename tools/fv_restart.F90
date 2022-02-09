@@ -41,30 +41,28 @@ module fv_restart_mod
   use fv_diagnostics_mod,  only: prt_maxmin
   use init_hydro_mod,      only: p_var
   use mpp_domains_mod,     only: mpp_update_domains, domain2d, DGRID_NE
+  use mpp_domains_mod,     only: mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
+  use mpp_domains_mod,     only: CENTER, CORNER, NORTH, EAST,  mpp_get_C2F_index, WEST, SOUTH
+  use mpp_domains_mod,     only: mpp_global_field
   use mpp_mod,             only: mpp_chksum, stdout, mpp_error, FATAL, NOTE
-  use mpp_mod,             only: get_unit, mpp_sum, mpp_broadcast, mpp_max, mpp_npes
+  use mpp_mod,             only: get_unit, mpp_sum, mpp_broadcast, mpp_max
   use mpp_mod,             only: mpp_get_current_pelist, mpp_npes, mpp_set_current_pelist
+  use mpp_mod,             only: mpp_send, mpp_recv, mpp_sync_self, mpp_pe, mpp_sync
+  use fms2_io_mod,         only: file_exists, set_filename_appendix, FmsNetcdfFile_t, open_file, close_file
+  use fms_io_mod,          only: fmsset_filename_appendix=> set_filename_appendix
   use test_cases_mod,      only: alpha, init_case, init_double_periodic!, init_latlon
   use fv_mp_mod,           only: is_master, mp_reduce_min, mp_reduce_max, corners_YDir => YDir, fill_corners, tile_fine, global_nest_domain
   use fv_surf_map_mod,     only: sgh_g, oro_g
-  use tracer_manager_mod,  only: get_tracer_names
+  use tracer_manager_mod,  only: get_tracer_index, get_tracer_names, set_tracer_profile
   use field_manager_mod,   only: MODEL_ATMOS
   use external_ic_mod,     only: get_external_ic
   use fv_eta_mod,          only: compute_dz_var, compute_dz_L32, set_hybrid_z
   use fv_surf_map_mod,     only: del2_cubed_sphere, del4_cubed_sphere
   use boundary_mod,        only: fill_nested_grid, nested_grid_BC, update_coarse_grid
-  use tracer_manager_mod,  only: get_tracer_index
-  use field_manager_mod,   only: MODEL_ATMOS
   use fv_timing_mod,       only: timing_on, timing_off
-  use mpp_domains_mod,     only: mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
-  use mpp_mod,             only: mpp_send, mpp_recv, mpp_sync_self, mpp_set_current_pelist, mpp_get_current_pelist, mpp_npes, mpp_pe, mpp_sync
-  use mpp_domains_mod,     only: CENTER, CORNER, NORTH, EAST,  mpp_get_C2F_index, WEST, SOUTH
-  use mpp_domains_mod,     only: mpp_global_field
   use fv_treat_da_inc_mod, only: read_da_inc
   use fv_regional_mod,     only: write_full_fields
   use fv_iau_mod,          only: iau_external_data_type
-  use fms2_io_mod,         only: file_exists, set_filename_appendix, FmsNetcdfFile_t, open_file, close_file
-  use fms_io_mod,          only: fmsset_filename_appendix=> set_filename_appendix
   use coarse_grained_restart_files_mod, only: fv_io_write_restart_coarse
 
   implicit none
@@ -168,7 +166,7 @@ contains
        ntprog = size(Atm(n)%q,4)
        ntdiag = size(Atm(n)%qdiag,4)
 
-       !1. sort out restart, external_ic, and cold-start (idealized)
+       !1. sort out restart, external_ic, and cold-start (idealized) plus initialize tracers
        if (Atm(n)%neststruct%nested) then
           write(fname,   '(A, I2.2, A)') 'INPUT/fv_core.res.nest', Atm(n)%grid_number, '.nc'
           write(fname_ne,'(A, I2.2, A)') 'INPUT/fv_BC_ne.res.nest', Atm(n)%grid_number, '.nc'
@@ -187,6 +185,18 @@ contains
           if (do_read_restart) call close_file(fileobj)
           if (is_master()) print*, 'FV_RESTART: ', n, do_read_restart, do_read_restart_bc
        endif
+
+       !initialize tracers
+       do nt = 1, ntprog
+          call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
+          ! set all tracers to an initial profile value
+          call set_tracer_profile (MODEL_ATMOS, nt, Atm(n)%q(:,:,:,nt))
+       enddo
+       do nt = ntprog+1, ntprog+ntdiag
+          call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
+          ! set all tracers to an initial profile value
+          call set_tracer_profile (MODEL_ATMOS, nt, Atm(n)%qdiag(:,:,:,nt))
+       enddo
 
        !2. Register restarts
        !No longer need to register restarts in fv_restart_mod with fms2_io implementation
