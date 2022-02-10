@@ -5630,19 +5630,6 @@ end subroutine eqv_pot
 
   end subroutine compute_brn
 
- subroutine max_vorticity_hy1(is, ie, js, je, km, vort, maxvorthy1)
-   integer, intent(in):: is, ie, js, je, km
-   real, intent(in), dimension(is:ie,js:je,km):: vort
-   real, intent(inout), dimension(is:ie,js:je):: maxvorthy1
-   integer i, j, k
-
-   do j=js,je
-      do i=is,ie
-         maxvorthy1(i,j)=max(maxvorthy1(i,j),vort(i,j,km))
-      enddo  ! i-loop
-   enddo   ! j-loop
- end subroutine max_vorticity_hy1
-
  subroutine max_vorticity(is, ie, js, je, ng, km, zvir, sphum, delz, q, hydrostatic, &
                           pt, peln, phis, grav, vort, maxvort, z_bot, z_top)
    integer, intent(in):: is, ie, js, je, ng, km, sphum
