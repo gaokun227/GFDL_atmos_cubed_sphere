@@ -4,7 +4,7 @@ module coarse_graining_mod
   use mpp_domains_mod, only: domain2d, mpp_define_io_domain, mpp_define_mosaic, mpp_get_compute_domain
   use mpp_mod, only: FATAL, input_nml_file, mpp_error, mpp_npes
   use statistics_mod, only: mode
-  
+
   implicit none
   private
 
@@ -15,7 +15,7 @@ module coarse_graining_mod
        vertically_remap_field, mask_mass_weights, remap_edges_along_x, remap_edges_along_y, &
        block_edge_sum_x, block_edge_sum_y, block_mode, block_min, block_max, &
        eddy_covariance, eddy_covariance_2d_weights, eddy_covariance_3d_weights
-  
+
   interface block_sum
      module procedure block_sum_2d_real4
      module procedure block_sum_2d_real8
@@ -30,7 +30,7 @@ module coarse_graining_mod
   interface block_edge_sum_y
      module procedure block_edge_sum_y_2d_full_input
   end interface block_edge_sum_y
-  
+
   interface weighted_block_average
      module procedure weighted_block_average_2d_real4
      module procedure weighted_block_average_2d_real8
@@ -53,7 +53,7 @@ module coarse_graining_mod
      module procedure weighted_block_edge_average_y_2d
      module procedure weighted_block_edge_average_y_3d_field_2d_weights
   end interface weighted_block_edge_average_y
-  
+
   interface block_upsample
      module procedure block_upsample_2d_real4
      module procedure block_upsample_3d_real4
@@ -82,7 +82,7 @@ module coarse_graining_mod
      module procedure block_mode_2d_real8
      module procedure masked_block_mode_2d_real8
   end interface block_mode
- 
+
   interface block_min
      module procedure masked_block_min_2d_real4
      module procedure masked_block_min_2d_real8
@@ -137,7 +137,7 @@ module coarse_graining_mod
      module procedure ppm_limiters_real4
      module procedure ppm_limiters_real8
   end interface ppm_limiters
-  
+
   ! Global variables for the module, initialized in coarse_graining_init
   integer :: is, ie, js, je, npz
   integer :: is_coarse, ie_coarse, js_coarse, je_coarse
@@ -152,7 +152,7 @@ module coarse_graining_mod
   integer :: coarsening_factor = 8  !< factor the coarse grid is downsampled by (e.g. 8 if coarsening from C384 to C48 resolution)
   integer :: coarse_io_layout(2) = (/1, 1/)  !< I/O layout for coarse-grid fields
   character(len=64) :: strategy = 'model_level'  !< Valid values are 'model_level' and 'pressure_level'
-  
+
   namelist /coarse_graining_nml/ coarsening_factor, coarse_io_layout, strategy
 
 contains
@@ -194,7 +194,7 @@ contains
 
     character(len=256) :: error_message
     integer :: nx
-    
+
     nx = npx - 1
     if (mod(nx, coarsening_factor) > 0) then
        write(error_message, *) 'coarse_graining_init: coarsening_factor does not evenly divide the native resolution.'
@@ -212,7 +212,7 @@ contains
     layout_x = layout(1)
     layout_y = layout(2)
 
-    if (mod(nx_coarse, layout_x) > 0 .or. mod(nx_coarse, layout_y) > 0) then 
+    if (mod(nx_coarse, layout_x) > 0 .or. mod(nx_coarse, layout_y) > 0) then
        write(error_message, *) 'coarse_graining_init: domain decomposition layout does not evenly divide the coarse grid.'
        call mpp_error(FATAL, error_message)
     endif
@@ -267,7 +267,7 @@ contains
        mass(:,:,k) = area * delp(:,:,k)
     enddo
   end subroutine compute_mass_weights
-  
+
   subroutine block_sum_2d_real4(fine, coarse)
     real(kind=4), intent(in) :: fine(is:ie,js:je)
     real(kind=4), intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse)
@@ -299,7 +299,7 @@ contains
        enddo
     enddo
   end subroutine block_sum_2d_real8
-  
+
   subroutine masked_block_sum_2d_real4(fine, mask, coarse)
     real(kind=4), intent(in) :: fine(is:ie,js:je)
     logical, intent(in) :: mask(is:ie,js:je)
@@ -333,7 +333,7 @@ contains
        enddo
     enddo
   end subroutine masked_block_sum_2d_real8
-  
+
   subroutine weighted_block_average_2d_real4(weights, fine, coarse)
     real(kind=4), intent(in) :: weights(is:ie,js:je), fine(is:ie,js:je)
     real(kind=4), intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse)
@@ -365,7 +365,7 @@ contains
     call block_sum_2d_real8(weights, block_sum_weights)
     coarse = weighted_block_sum / block_sum_weights
   end subroutine weighted_block_average_2d_real8
-  
+
   subroutine masked_weighted_block_average_2d_real4(weights, fine, mask, coarse)
     real(kind=4), intent(in) :: weights(is:ie,js:je), fine(is:ie,js:je)
     logical, intent(in) :: mask(is:ie,js:je)
@@ -399,7 +399,7 @@ contains
     call masked_block_sum_2d_real8(weights, mask, block_sum_weights)
     coarse = weighted_block_sum / block_sum_weights
   end subroutine masked_weighted_block_average_2d_real8
-  
+
   subroutine masked_weighted_block_average_3d_field_2d_weights_real4(weights, fine, mask, nz, coarse)
     real(kind=4), intent(in) :: weights(is:ie,js:je), fine(is:ie,js:je,1:nz)
     logical, intent(in) :: mask(is:ie,js:je)
@@ -425,7 +425,7 @@ contains
        call masked_weighted_block_average_2d_real8(weights, fine(is:ie,js:je,k), mask, coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k))
     enddo
   end subroutine masked_weighted_block_average_3d_field_2d_weights_real8
-  
+
   subroutine weighted_block_average_3d_field_2d_weights_real4(weights, fine, coarse)
     real(kind=4), intent(in) :: weights(is:ie,js:je), fine(is:ie,js:je,1:npz)
     real(kind=4), intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz)
@@ -447,7 +447,7 @@ contains
        call weighted_block_average_2d_real8(weights, fine(is:ie,js:je,k), coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k))
     enddo
   end subroutine weighted_block_average_3d_field_2d_weights_real8
-  
+
   subroutine weighted_block_average_3d_field_3d_weights_real4(weights, fine, coarse)
     real(kind=4), intent(in) :: weights(is:ie,js:je,1:npz), fine(is:ie,js:je,1:npz)
     real(kind=4), intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz)
@@ -470,7 +470,7 @@ contains
     enddo
   end subroutine weighted_block_average_3d_field_3d_weights_real8
 
-  
+
   subroutine block_edge_sum_x_2d(fine, coarse)
     real, intent(in) :: fine(is:ie,js_coarse:je_coarse+1)
     real, intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse+1)
@@ -485,7 +485,7 @@ contains
        enddo
     enddo
   end subroutine block_edge_sum_x_2d
-  
+
   subroutine weighted_block_edge_average_x_2d(weights, fine, coarse)
     real, intent(in) :: weights(is:ie,js:je+1)
     real, intent(in) :: fine(is:ie,js:je+1)
@@ -626,7 +626,7 @@ contains
        enddo
     enddo
   end subroutine masked_block_mode_2d_real4
-  
+
   subroutine masked_block_min_2d_real8(fine, mask, coarse)
     real(kind=8), intent(in) :: fine(is:ie,js:je)
     logical, intent(in) :: mask(is:ie,js:je)
@@ -694,7 +694,7 @@ contains
        enddo
     enddo
   end subroutine masked_block_max_2d_real4
-  
+
   subroutine vertically_remap_field_real4(phalf_in, field, phalf_out, ptop, field_out)
     real(kind=4), intent(in) :: phalf_in(is:ie,js:je,1:npz+1), phalf_out(is:ie,js:je,1:npz+1)
     real(kind=4), intent(in) :: field(is:ie,js:je,1:npz)
@@ -738,7 +738,7 @@ contains
             phalf_out(is:ie,j,:), field_out(is:ie,j,:), is, ie, iv, kord, ptop)
     enddo
   end subroutine vertically_remap_field_real8
-  
+
   subroutine block_upsample_2d_real4(coarse, fine)
     real(kind=4), intent(in) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse)
     real(kind=4), intent(out) :: fine(is:ie,js:je)
@@ -754,7 +754,7 @@ contains
       enddo
     enddo
   end subroutine block_upsample_2d_real4
-  
+
   subroutine block_upsample_3d_real4(coarse, fine, nz)
     integer, intent(in) :: nz
     real(kind=4), intent(in) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:nz)
@@ -782,7 +782,7 @@ contains
       enddo
     enddo
   end subroutine block_upsample_2d_real8
-  
+
   subroutine block_upsample_3d_real8(coarse, fine, nz)
     integer, intent(in) :: nz
     real(kind=8), intent(in) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:nz)
@@ -794,7 +794,7 @@ contains
       call block_upsample_2d_real8(coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k), fine(is:ie,js:je,k))
     enddo
   end subroutine block_upsample_3d_real8
-  
+
   ! This subroutine is copied from FMS/test_fms/horiz_interp/test2_horiz_interp.F90.
   ! domain_decomp in fv_mp_mod.F90 does something similar, but it does a
   ! few other unnecessary things (and requires more arguments).
@@ -929,7 +929,7 @@ contains
        enddo
     enddo
   end subroutine compute_phalf_from_delp_real8
-  
+
  ! Routine for computing the common requirements for pressure-level coarse-graining.
   subroutine vertical_remapping_requirements_real4(delp, area, ptop, phalf, upsampled_coarse_phalf)
     real(kind=4), intent(in) :: delp(is:ie,js:je,1:npz)
@@ -972,7 +972,7 @@ contains
     deallocate(coarse_delp)
     deallocate(coarse_phalf)
    end subroutine vertical_remapping_requirements_real8
-   
+
    subroutine mask_area_weights_real4(area, phalf, upsampled_coarse_phalf, masked_area_weights)
     real(kind=4), intent(in) :: area(is:ie,js:je)
     real(kind=4), intent(in) :: phalf(is:ie,js:je,1:npz+1)
@@ -1006,7 +1006,7 @@ contains
       endwhere
     enddo
    end subroutine mask_area_weights_real8
-   
+
    subroutine mask_mass_weights(area, delp, phalf, upsampled_coarse_phalf, &
     masked_mass_weights)
     real, intent(in) :: area(is:ie,js:je)
@@ -1314,7 +1314,7 @@ contains
     ! 6. Coarsen the remapped field
     call weighted_block_edge_average_y_pre_downsampled(remapped, dy, result, mask, npz)
   end subroutine remap_edges_along_y
-  
+
   subroutine block_edge_sum_x_2d_full_input(fine, coarse)
     real, intent(in) :: fine(is:ie,js:je+1)
     real, intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse+1)
@@ -1408,7 +1408,7 @@ contains
     call anomaly_2d_weights_3d_array(weights, field_b, anom_b)
     call weighted_block_average(weights, anom_a * anom_b, coarse)
   end subroutine eddy_covariance_2d_weights
-  
+
   subroutine eddy_covariance_3d_weights(weights, field_a, field_b, coarse)
     real, intent(in) :: weights(is:ie,js:je,1:npz)
     real, intent(in) :: field_a(is:ie,js:je,1:npz)
@@ -1682,7 +1682,7 @@ contains
 5555  continue
 
  end subroutine mappm_real8
-  
+
  subroutine cs_profile_real4(qs, a4, delp, km, i1, i2, iv, kord)
 ! Optimized vertical profile reconstruction:
 ! Latest: Apr 2008 S.-J. Lin, NOAA/GFDL
@@ -1735,7 +1735,7 @@ else ! all others
          grat = delp(i,2) / delp(i,1)   ! grid ratio
           bet = grat*(grat+0.5)
        q(i,1) = ( (grat+grat)*(grat+1.)*a4(1,i,1) + a4(1,i,2) ) / bet
-     gam(i,1) = ( 1. + grat*(grat+1.5) ) / bet                        
+     gam(i,1) = ( 1. + grat*(grat+1.5) ) / bet
   enddo
 
   if (iv.eq.-3) then !LBC for vertical velocities
@@ -1747,7 +1747,7 @@ else ! all others
           gam(i,k) = d4(i) / bet
        enddo
     enddo
-    
+
     do i=i1,i2
        !    a_bot = 1. + d4(i)*(d4(i)+1.5)
        !q(i,km+1) = (2.*d4(i)*(d4(i)+1.)*a4(1,i,km)+a4(1,i,km-1)-a_bot*q(i,km))  &
@@ -1768,7 +1768,7 @@ else ! all others
           gam(i,k) = d4(i) / bet
        enddo
     enddo
-    
+
     do i=i1,i2
            a_bot = 1. + d4(i)*(d4(i)+1.5)
        q(i,km+1) = (2.*d4(i)*(d4(i)+1.)*a4(1,i,km)+a4(1,i,km-1)-a_bot*q(i,km))  &
@@ -1808,7 +1808,7 @@ else ! all others
 
   do k=2,km
      do i=i1,i2
-        gam(i,k) = a4(1,i,k) - a4(1,i,k-1) ! now dq 
+        gam(i,k) = a4(1,i,k) - a4(1,i,k-1) ! now dq
      enddo
   enddo
 
@@ -2239,7 +2239,7 @@ else ! all others
          grat = delp(i,2) / delp(i,1)   ! grid ratio
           bet = grat*(grat+0.5)
        q(i,1) = ( (grat+grat)*(grat+1.)*a4(1,i,1) + a4(1,i,2) ) / bet
-     gam(i,1) = ( 1. + grat*(grat+1.5) ) / bet                        
+     gam(i,1) = ( 1. + grat*(grat+1.5) ) / bet
   enddo
 
   if (iv.eq.-3) then !LBC for vertical velocities
@@ -2251,7 +2251,7 @@ else ! all others
           gam(i,k) = d4(i) / bet
        enddo
     enddo
-    
+
     do i=i1,i2
        !    a_bot = 1. + d4(i)*(d4(i)+1.5)
        !q(i,km+1) = (2.*d4(i)*(d4(i)+1.)*a4(1,i,km)+a4(1,i,km-1)-a_bot*q(i,km))  &
@@ -2272,7 +2272,7 @@ else ! all others
           gam(i,k) = d4(i) / bet
        enddo
     enddo
-    
+
     do i=i1,i2
            a_bot = 1. + d4(i)*(d4(i)+1.5)
        q(i,km+1) = (2.*d4(i)*(d4(i)+1.)*a4(1,i,km)+a4(1,i,km-1)-a_bot*q(i,km))  &
@@ -2312,7 +2312,7 @@ else ! all others
 
   do k=2,km
      do i=i1,i2
-        gam(i,k) = a4(1,i,k) - a4(1,i,k-1) ! now dq 
+        gam(i,k) = a4(1,i,k) - a4(1,i,k-1) ! now dq
      enddo
   enddo
 
@@ -3374,5 +3374,5 @@ else ! all others
 
       endif
 
- end subroutine ppm_limiters_real8  
+ end subroutine ppm_limiters_real8
 end module coarse_graining_mod
