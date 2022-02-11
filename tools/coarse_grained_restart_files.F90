@@ -7,7 +7,7 @@ module coarse_grained_restart_files_mod
        remap_edges_along_y, vertically_remap_field
   use constants_mod, only: GRAV, RDGAS, RVGAS
   use field_manager_mod, only: MODEL_ATMOS
-  use fms2_io_mod,      only: register_restart_field, write_restart, open_file, close_file, register_variable_attribute
+  use fms2_io_mod,      only: register_restart_field, write_restart, open_file, close_file, register_variable_attribute, variable_exists
   use fv_arrays_mod, only: coarse_restart_type, fv_atmos_type
   use mpp_domains_mod, only: domain2d, EAST, NORTH, CENTER, mpp_update_domains
   use mpp_mod, only: FATAL, mpp_error
