@@ -1076,7 +1076,7 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     real, intent (in), dimension (ks:ke) :: denfac, ccn, c_praut
 
     real (kind = r_grid), intent (inout), dimension (ks:ke) :: tz
-    real, intent (inout), dimension (ks:ke) :: vtr, qv, ql, qr, qi, qs, qg, m1_rain, w1
+    real, intent (inout), dimension (ks:ke) :: vtr, qv, ql, qr, qi, qs, qg, m1_rain, w1, pfr
     real (kind = r_grid), intent (inout) :: dte
     real, intent (out) :: r1
     real, intent (out) :: reevap
