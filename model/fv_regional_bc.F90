@@ -6774,7 +6774,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
       type(FmsNetcdfFile_t) :: Gfs_data
       integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
 
-      dir = 'INPUT'
+      dir = 'INPUT/'
       if(present(directory)) dir = directory
 !
 ! Use the fms call here so we can actually get the return code value.
@@ -6784,8 +6784,8 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
       allocate(pes(mpp_npes()))
       call mpp_get_current_pelist(pes)
 
-        if (open_file(Gfs_data , trim(dir)//'gfs_data.nc', "read", pelist=pes) .or. &
-            open_file(Gfs_data , trim(dir)//'gfs_data.tile1.nc', "read", pelist=pes)) then
+        if (open_file(Gfs_data , trim(dir)//'/gfs_data.nc', "read", pelist=pes) .or. &
+            open_file(Gfs_data , trim(dir)//'/gfs_data.tile1.nc', "read", pelist=pes)) then
           lstatus = global_att_exists(Gfs_data, "source")
           if(lstatus) call get_global_attribute(Gfs_data, "source", source)
           call close_file(Gfs_data)
