@@ -104,7 +104,7 @@ contains
       integer :: isd, ied, jsd, jed, ng
       integer :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, o3mr, sgs_tke, cld_amt
 
-      inputdir = 'INPUT'
+      inputdir = 'INPUT/'
       if(present(icdir)) inputdir = icdir
 
       is  = Atm%bd%is
