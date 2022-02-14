@@ -371,7 +371,8 @@ contains
    endif
 #endif
 
-   if ( trim(Atm(mygrid)%flagstruct%grid_file) .NE. "Inline" .and. trim(Atm(mygrid)%flagstruct%grid_file) .NE. "" ) then
+   if ( trim(Atm(mygrid)%flagstruct%grid_file) .NE. "Inline" .and. trim(Atm(mygrid)%flagstruct%grid_file) .NE. "" &
+      & .and. .NOT.Atm(mygrid)%gridstruct%bounded_domain ) then
       call data_override_init(Atm_domain_in = Atm(mygrid)%domain)
    endif
 
