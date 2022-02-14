@@ -26,7 +26,8 @@
 ! Revise the OpenMP code to avoid crash
 module fv_mapz_mod
 
-  use constants_mod,     only: radius, pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
+  use constants_mod,     only: pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
+  use fv_arrays_mod,     only: radius ! scaled for small earth
   use tracer_manager_mod,only: get_tracer_index
   use field_manager_mod, only: MODEL_ATMOS
   use fv_grid_utils_mod, only: g_sum, ptop_min, cubed_to_latlon, update_dwinds_phys
@@ -199,7 +200,7 @@ contains
   do j=js,je+1
 
      !0) Prepare pressure (pe, pk, ps, delp), temperature, density, and energy
-     
+
      do k=1,km+1
         do i=is,ie
            pe1(i,k) = pe(i,k,j)
@@ -378,7 +379,7 @@ contains
                  km,  pn2,           te,              &
                  is, ie, j, isd, ied, jsd, jed, 1, abs(kord_tm), cp_air*t_min, do_am4_remap)
          endif
-                 
+
       else
          if ( kord_tm<0 ) then
             ! Map t using logp
@@ -543,7 +544,7 @@ contains
                      cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
                      pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
                   enddo
-               else 
+               else
                   do i=is,ie
                      q_con(i,j,k) = gz(i)
                      cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
@@ -557,7 +558,7 @@ contains
                      ! Using dry pressure for the definition of the virtual potential temperature
                      !             pkz(i,j,k) = exp(akap*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
                   enddo
-               else 
+               else
                   do i=is,ie
                      pkz(i,j,k) = exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
                      ! Using dry pressure for the definition of the virtual potential temperature
@@ -606,14 +607,14 @@ contains
    enddo
 
    !4) Remap winds
-   
+
    ! 4.1) map u (on STAGGERED grid)
    do k=2,km+1
       do i=is,ie
          pe0(i,k) = 0.5*(pe(i,k,j-1)+pe1(i,k))
       enddo
    enddo
-   
+
    do k=1,km+1
       bkh = 0.5*bk(k)
       do i=is,ie
@@ -675,12 +676,12 @@ contains
                enddo
 #endif
                do i=is,ie
-                  phis(i,k) = phis(i,k+1) - delz(i,j,k)*grav 
+                  phis(i,k) = phis(i,k+1) - delz(i,j,k)*grav
                   tpe = te(i,j,k) - 0.5*(phis(i,k)+phis(i,k+1)) - 0.5*w(i,j,k)**2 - 0.25*gridstruct%rsin2(i,j)*(    &
                        u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
                        (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j) )
 #ifdef MOIST_CAPPA
-                  pt(i,j,k)= tpe / cvm(i)*(1.+r_vir*q(i,j,k,sphum))*(1.-gz(i)) 
+                  pt(i,j,k)= tpe / cvm(i)*(1.+r_vir*q(i,j,k,sphum))*(1.-gz(i))
                   pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
 #else
                   pt(i,j,k)= tpe / cv_air *(1.+r_vir*q(i,j,k,sphum))
@@ -999,7 +1000,7 @@ contains
         else
           q3(is:ie,:) = 0.0
         endif
- 
+
         ! note: ua and va are A-grid variables
         ! note: pt is virtual temperature at this point
         ! note: w is vertical velocity (m/s)
@@ -1098,7 +1099,7 @@ contains
             pkz(is:ie,j,:) = exp(akap*log(rrg*delp(is:ie,j,:)/delz(is:ie,j,:)*pt(is:ie,j,:)))
 #endif
         endif
- 
+
         if (consv .gt. consv_min) then
             do i = is, ie
                 do k = 1, km
@@ -2420,7 +2421,7 @@ else ! all others
          grat = delp(i,2) / delp(i,1)   ! grid ratio
           bet = grat*(grat+0.5)
        q(i,1) = ( (grat+grat)*(grat+1.)*a4(1,i,1) + a4(1,i,2) ) / bet
-     gam(i,1) = ( 1. + grat*(grat+1.5) ) / bet                        
+     gam(i,1) = ( 1. + grat*(grat+1.5) ) / bet
   enddo
 
   if (iv.eq.-3) then !LBC for vertical velocities
@@ -2432,7 +2433,7 @@ else ! all others
           gam(i,k) = d4(i) / bet
        enddo
     enddo
-    
+
     do i=i1,i2
        !    a_bot = 1. + d4(i)*(d4(i)+1.5)
        !q(i,km+1) = (2.*d4(i)*(d4(i)+1.)*a4(1,i,km)+a4(1,i,km-1)-a_bot*q(i,km))  &
@@ -2453,7 +2454,7 @@ else ! all others
           gam(i,k) = d4(i) / bet
        enddo
     enddo
-    
+
     do i=i1,i2
            a_bot = 1. + d4(i)*(d4(i)+1.5)
        q(i,km+1) = (2.*d4(i)*(d4(i)+1.)*a4(1,i,km)+a4(1,i,km-1)-a_bot*q(i,km))  &
@@ -2493,7 +2494,7 @@ else ! all others
 
   do k=2,km
      do i=i1,i2
-        gam(i,k) = a4(1,i,k) - a4(1,i,k-1) ! now dq 
+        gam(i,k) = a4(1,i,k) - a4(1,i,k-1) ! now dq
      enddo
   enddo
 
@@ -4558,7 +4559,7 @@ else ! all others
   end select
 
  end subroutine moist_cp
-!----------------------------------------------------------------------- 
+!-----------------------------------------------------------------------
 !BOP
 ! !ROUTINE:  map1_cubic --- Cubic Interpolation for vertical re-mapping
 !
@@ -4573,17 +4574,17 @@ else ! all others
       integer, intent(in) :: i2                ! Finishing longitude
       real, intent(in) :: akap
       integer, intent(in) :: T_VAR             ! Thermodynamic variable to remap
-                                               !     1:TE  2:T  3:PT 
+                                               !     1:TE  2:T  3:PT
       logical, intent(in) :: conserv
       integer, intent(in) :: j                 ! Current latitude
       integer, intent(in) :: ibeg, iend, jbeg, jend
       integer, intent(in) :: km                ! Original vertical dimension
       integer, intent(in) :: kn                ! Target vertical dimension
 
-      real, intent(in) ::  pe1(i1:i2,km+1)  ! pressure at layer edges 
+      real, intent(in) ::  pe1(i1:i2,km+1)  ! pressure at layer edges
                                                ! (from model top to bottom surface)
                                                ! in the original vertical coordinate
-      real, intent(in) ::  pe2(i1:i2,kn+1)  ! pressure at layer edges 
+      real, intent(in) ::  pe2(i1:i2,kn+1)  ! pressure at layer edges
                                                ! (from model top to bottom surface)
                                                ! in the new vertical coordinate
 

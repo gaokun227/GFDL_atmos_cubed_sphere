@@ -26,11 +26,11 @@
 
 module fv_control_mod
 
-   use constants_mod,       only: pi=>pi_8, kappa, radius, grav, rdgas
+   use constants_mod,       only: pi=>pi_8, kappa, grav, rdgas
+   use fv_arrays_mod,       only: radius ! scaled for small earth
    use field_manager_mod,   only: MODEL_ATMOS
-   use fms_mod,             only: write_version_number, open_namelist_file, &
-                                  check_nml_error, close_file, file_exist
-   use fms_io_mod,          only: set_domain
+   use fms_mod,             only: write_version_number, check_nml_error
+   use fms2_io_mod,         only: file_exists
    use mpp_mod,             only: FATAL, mpp_error, mpp_pe, stdlog, &
                                   mpp_npes, mpp_get_current_pelist, &
                                   input_nml_file, get_unit, WARNING, &
@@ -183,7 +183,7 @@ module fv_control_mod
      integer , pointer :: replay
      integer , pointer :: nrestartbg
      logical , pointer :: write_replay_ic
-     
+
      logical , pointer :: inline_q
      real , pointer :: shift_fac
      logical , pointer :: do_schmidt, do_cube_transform
@@ -208,6 +208,7 @@ module fv_control_mod
      integer , pointer :: npy
      integer , pointer :: npz
      character(len=24), pointer :: npz_type
+     character(len=120), pointer :: fv_eta_file
      integer , pointer :: npz_rst
 
      integer , pointer :: ncnst
@@ -390,7 +391,7 @@ module fv_control_mod
         else
            Atm(n)%nml_filename = 'input.nml'
         endif
-        if (.not. file_exist(Atm(n)%nml_filename)) then
+        if (.not. file_exists(Atm(n)%nml_filename)) then
            call mpp_error(FATAL, "Could not find nested grid namelist "//Atm(n)%nml_filename)
         endif
      enddo
@@ -450,7 +451,7 @@ module fv_control_mod
 #ifdef INTERNAL_FILE_NML
      if (this_grid .gt. 1) then
         write(Atm(this_grid)%nml_filename,'(A4, I2.2)') 'nest', this_grid
-        if (.not. file_exist('input_'//trim(Atm(this_grid)%nml_filename)//'.nml')) then
+        if (.not. file_exists('input_'//trim(Atm(this_grid)%nml_filename)//'.nml')) then
            call mpp_error(FATAL, "Could not find nested grid namelist "//'input_'//trim(Atm(this_grid)%nml_filename)//'.nml')
         endif
      else
@@ -554,7 +555,6 @@ module fv_control_mod
           Atm(this_grid)%layout,Atm(this_grid)%io_layout,Atm(this_grid)%bd,Atm(this_grid)%tile_of_mosaic, &
           Atm(this_grid)%gridstruct%square_domain,Atm(this_grid)%npes_per_tile,Atm(this_grid)%domain, &
           Atm(this_grid)%domain_for_coupler,Atm(this_grid)%num_contact,Atm(this_grid)%pelist)
-     call set_domain(Atm(this_grid)%domain)
      call broadcast_domains(Atm,Atm(this_grid)%pelist,size(Atm(this_grid)%pelist))
      do n=1,ngrids
         tile_id = mpp_get_tile_id(Atm(n)%domain)
@@ -661,39 +661,8 @@ module fv_control_mod
         write(*,*) ' '
      endif
 
-
-!!$     Atm(this_grid)%ts   = 300.
-!!$     Atm(this_grid)%phis = too_big
-!!$     ! The following statements are to prevent the phantom corner regions from
-!!$     ! growing instability
-!!$     Atm(this_grid)%u  = 0.
-!!$     Atm(this_grid)%v  = 0.
-!!$     Atm(this_grid)%ua = too_big
-!!$     Atm(this_grid)%va = too_big
-!!$
-!!$     Atm(this_grid)%inline_mp%prer = too_big
-!!$     Atm(this_grid)%inline_mp%prei = too_big
-!!$     Atm(this_grid)%inline_mp%pres = too_big
-!!$     Atm(this_grid)%inline_mp%preg = too_big
-!!$     Atm(this_grid)%inline_mp%prefluxr = too_big
-!!$     Atm(this_grid)%inline_mp%prefluxi = too_big
-!!$     Atm(this_grid)%inline_mp%prefluxs = too_big
-!!$     Atm(this_grid)%inline_mp%prefluxg = too_big
-!!$     Atm(this_grid)%inline_mp%cond = too_big
-!!$     Atm(this_grid)%inline_mp%dep = too_big
-!!$     Atm(this_grid)%inline_mp%reevap = too_big
-!!$     Atm(this_grid)%inline_mp%sub = too_big
-
      !Initialize restart
      call fv_restart_init()
-!     if ( reset_eta ) then
-!         do n=1, ntilesMe
-!            call set_eta(npz, Atm(this_grid)%ks, ptop, Atm(this_grid)%ak, Atm(this_grid)%bk, Atm(this_grid)%flagstruct%npz_type)
-!         enddo
-!         if(is_master()) write(*,*) "Hybrid sigma-p coordinate has been reset"
-!     endif
-
-
 
    contains
 
@@ -751,7 +720,7 @@ module fv_control_mod
        nwat                          => Atm%flagstruct%nwat
        use_logp                      => Atm%flagstruct%use_logp
        warm_start                    => Atm%flagstruct%warm_start
-       replay                        => Atm%flagstruct%replay 
+       replay                        => Atm%flagstruct%replay
        nrestartbg                    => Atm%flagstruct%nrestartbg
        write_replay_ic               => Atm%flagstruct%write_replay_ic
        inline_q                      => Atm%flagstruct%inline_q
@@ -780,6 +749,7 @@ module fv_control_mod
        npy                           => Atm%flagstruct%npy
        npz                           => Atm%flagstruct%npz
        npz_type                      => Atm%flagstruct%npz_type
+       fv_eta_file                   => Atm%flagstruct%fv_eta_file
        npz_rst                       => Atm%flagstruct%npz_rst
        ncnst                         => Atm%flagstruct%ncnst
        pnats                         => Atm%flagstruct%pnats
@@ -893,16 +863,8 @@ module fv_control_mod
        integer :: f_unit, ios, ierr, dum
        namelist /nest_nml/ dum ! ngrids, ntiles, nest_pes, p_split !emptied lmh 7may2019
 
-#ifdef INTERNAL_FILE_NML
        read (input_nml_file,nest_nml,iostat=ios)
        ierr = check_nml_error(ios,'nest_nml')
-#else
-       f_unit=open_namelist_file()
-       rewind (f_unit)
-       read (f_unit,nest_nml,iostat=ios)
-       ierr = check_nml_error(ios,'nest_nml')
-       call close_file(f_unit)
-#endif
        if (ierr > 0) then
           call mpp_error(FATAL, " &nest_nml is depreciated. Please use &fv_nest_nml instead.")
        endif
@@ -915,16 +877,8 @@ module fv_control_mod
        namelist /fv_nest_nml/ grid_pes, num_tile_top, tile_coarse, nest_refine, &
             nest_ioffsets, nest_joffsets, p_split
 
-#ifdef INTERNAL_FILE_NML
        read (input_nml_file,fv_nest_nml,iostat=ios)
        ierr = check_nml_error(ios,'fv_nest_nml')
-#else
-       f_unit=open_namelist_file()
-       rewind (f_unit)
-       read (f_unit,fv_nest_nml,iostat=ios)
-       ierr = check_nml_error(ios,'fv_nest_nml')
-       call close_file(f_unit)
-#endif
 
      end subroutine read_namelist_fv_nest_nml
 
@@ -936,18 +890,10 @@ module fv_control_mod
        character(len=120) :: grid_file = ''
        namelist /fv_grid_nml/ grid_name, grid_file
 
-#ifdef INTERNAL_FILE_NML
        ! Read Main namelist
        read (input_nml_file,fv_grid_nml,iostat=ios)
        ierr = check_nml_error(ios,'fv_grid_nml')
-#else
-       f_unit=open_namelist_file()
-       rewind (f_unit)
-       ! Read Main namelist
-       read (f_unit,fv_grid_nml,iostat=ios)
-       ierr = check_nml_error(ios,'fv_grid_nml')
-       rewind (f_unit)
-#endif
+
        call write_version_number ( 'FV_CONTROL_MOD', version )
        unit = stdlog()
        write(unit, nml=fv_grid_nml)
@@ -975,7 +921,7 @@ module fv_control_mod
        character(len=128) :: res_latlon_dynamics = ''
        character(len=128) :: res_latlon_tracers  = ''
 
-       namelist /fv_core_nml/npx, npy, ntiles, npz, npz_type, npz_rst, layout, io_layout, ncnst, nwat,  &
+       namelist /fv_core_nml/npx, npy, ntiles, npz, npz_type, fv_eta_file, npz_rst, layout, io_layout, ncnst, nwat,  &
             use_logp, p_fac, a_imp, k_split, n_split, m_split, q_split, print_freq, write_3d_diags, &
             do_schmidt, do_cube_transform, &
             hord_mt, hord_vt, hord_tm, hord_dp, hord_tr, shift_fac, stretch_fac, target_lat, target_lon, &
@@ -1005,19 +951,13 @@ module fv_control_mod
             pass_full_omega_to_physics_in_non_hydrostatic_mode, &
             replay, nrestartbg, write_replay_ic
 
-#ifdef INTERNAL_FILE_NML
+
        ! Read FVCORE namelist
        read (input_nml_file,fv_core_nml,iostat=ios)
        ierr = check_nml_error(ios,'fv_core_nml')
        ! Reset input_file_nml to default behavior (CHECK do we still need this???)
        !call read_input_nml
-#else
-       f_unit = open_namelist_file(Atm%nml_filename)
-       ! Read FVCORE namelist
-       read (f_unit,fv_core_nml,iostat=ios)
-       ierr = check_nml_error(ios,'fv_core_nml')
-       call close_file(f_unit)
-#endif
+
        call write_version_number ( 'FV_CONTROL_MOD', version )
        unit = stdlog()
        write(unit, nml=fv_core_nml)

@@ -37,7 +37,8 @@ module fv_nesting_mod
    use fv_arrays_mod,       only: allocate_fv_nest_BC_type, fv_atmos_type, fv_grid_bounds_type, deallocate_fv_nest_BC_type
    use fv_grid_utils_mod,   only: ptop_min, g_sum, cubed_to_latlon, f_p
    use init_hydro_mod,      only: p_var
-   use constants_mod,       only: grav, pi=>pi_8, radius, hlv, rdgas, cp_air, rvgas, cp_vapor, kappa
+   use constants_mod,       only: grav, pi=>pi_8, hlv, rdgas, cp_air, rvgas, cp_vapor, kappa
+   use fv_arrays_mod,       only: radius ! scaled for small earth
    use fv_mapz_mod,         only: mappm
    use fv_timing_mod,       only: timing_on, timing_off
    use fv_mp_mod,           only: is_master
@@ -360,13 +361,6 @@ contains
                neststruct%delp_BC, delp_buf, pd_in=do_pd)
        endif
 
-!!$       do n=1,ncnst
-!!$          call nested_grid_BC_save_proc(global_nest_domain, &
-!!$               neststruct%ind_h, neststruct%wt_h, 0, 0, npx,  npy,  npz_coarse, bd, &
-!!$               lag_BC, q_buf(n), pd_in=do_pd)
-!!$          !This remapping appears to have some trouble with rounding error random noise
-!!$          call remap_BC(pe_lag_BC, pe_eul_BC, lag_BC, neststruct%q_BC(n), npx, npy, npz, npz_coarse, bd, 0, 0, 0, flagstruct%kord_tr, 'q')
-!!$       enddo
 #ifndef SW_DYNAMICS
        if (neststruct%do_remap_BC(flagstruct%grid_number)) then
 
@@ -537,10 +531,6 @@ contains
           call nested_grid_BC_apply_intT(w, &
                0, 0, npx, npy, npz, bd, 1., 1., &
                neststruct%w_BC, bctype=neststruct%nestbctype  )
-          !Removed halo from delz --- BCs now directly applied in nh_BC --- lmh june 2018
-!!$          call nested_grid_BC_apply_intT(delz, &
-!!$               0, 0, npx, npy, npz, bd, 1., 1., &
-!!$               neststruct%delz_BC, bctype=neststruct%nestbctype  )
        endif
 #ifdef USE_COND
        call nested_grid_BC_apply_intT(q_con, &
@@ -565,11 +555,6 @@ contains
        call nested_grid_BC_apply_intT(uc, &
             1, 0, npx, npy, npz, bd, 1., 1., &
             neststruct%uc_BC, bctype=neststruct%nestbctype  )
-       !!!NOTE: Divg not available here but not needed
-       !!! until dyn_core anyway.
-!!$       call nested_grid_BC_apply_intT(divg, &
-!!$            1, 1, npx, npy, npz, bd, 1., 1., &
-!!$            neststruct%divg_BC, bctype=neststruct%nestbctype  )
 
        !Update domains needed for Rayleigh damping
        if (.not. flagstruct%hydrostatic) call mpp_update_domains(w, domain)
@@ -585,16 +570,6 @@ contains
        if (neststruct%nested) call set_NH_BCs_t0(neststruct)
        flagstruct%make_nh= .false.
     endif
-
-    !Unnecessary?
-!!$    if ( neststruct%nested .and. .not. neststruct%divg_BC%initialized) then
-!!$       neststruct%divg_BC%east_t0  = neststruct%divg_BC%east_t1
-!!$       neststruct%divg_BC%west_t0  = neststruct%divg_BC%west_t1
-!!$       neststruct%divg_BC%north_t0 = neststruct%divg_BC%north_t1
-!!$       neststruct%divg_BC%south_t0 = neststruct%divg_BC%south_t1
-!!$       neststruct%divg_BC%initialized = .true.
-!!$    endif
-
 
     call mpp_sync_self
 
@@ -895,23 +870,6 @@ contains
    enddo
    enddo
    enddo
-
-!!$!!! DEBUG CODE
-!!$   !If more than a few percent difference then log the error
-!!$   do k=1,npz
-!!$   do j=jstart,jend
-!!$   do i=istart,iend
-!!$      if (delpeulBC(i,j,k) <= 0.) then
-!!$         write(errstring,'(3I5, 3(2x, G))'), i, j, k, pelagBC(i,j,k), peeulBC(i,j,k)
-!!$         call mpp_error(WARNING, ' Invalid pressure BC at '//errstring)
-!!$      else if (abs( peeulBC(i,j,k) - pelagBC(i,j,k)) > 100.0 ) then
-!!$         write(errstring,'(3I5, 3(2x, G))'), i, j, k, pelagBC(i,j,k), peeulBC(i,j,k)
-!!$         call mpp_error(WARNING, ' Remap BC: pressure deviation at '//errstring)
-!!$      endif
-!!$   enddo
-!!$   enddo
-!!$   enddo
-!!$!!! END DEBUG CODE
 
  end subroutine setup_eul_delp_BC_k
 
@@ -1217,24 +1175,12 @@ contains
 
          do k=1,npz_coarse+1
          do i=istart,iend
-!!$!!! DEBUG CODE
-!!$            if (pe_lagBC(i,j,k) <= 0.) then
-!!$               write(errstring,'(3I5, 2x, G)'), i, j, k, pe_lagBC(i,j,k)
-!!$               call mpp_error(WARNING, ' Remap BC: invalid pressure at at '//errstring)
-!!$            endif
-!!$!!! END DEBUG CODE
             peln_lag(i,k) = log(pe_lagBC(i,j,k))
          enddo
          enddo
 
          do k=1,npz+1
          do i=istart,iend
-!!$!!! DEBUG CODE
-!!$            if (pe_lagBC(i,j,k) <= 0.) then
-!!$               write(errstring,'(3I5, 2x, G)'), i, j, k, pe_lagBC(i,j,k)
-!!$               call mpp_error(WARNING, ' Remap BC: invalid pressure at at '//errstring)
-!!$            endif
-!!$!!! END DEBUG CODE
             peln_eul(i,k) = log(pe_eulBC(i,j,k))
          enddo
          enddo
@@ -1336,12 +1282,6 @@ contains
    do j=jstart,jend
    do i=istart,iend
       delzBC(i,j,k) = -delzBC(i,j,k)/delpBC(i,j,k)
-!!$!!! DEBUG CODE
-!!$      if (delzBC(i,j,k) <= 0. ) then
-!!$         write(errstring,'(3I5, 2(2x, G))'), i, j, k, delzBC(i,j,k), delpBC(i,j,k)
-!!$         call mpp_error(WARNING, ' Remap BC (sfc volume): invalid delz at '//errstring)
-!!$      endif
-!!$!!! END DEBUG CODE
    end do
    end do
    end do
@@ -1362,12 +1302,6 @@ contains
    do j=jstart,jend
    do i=istart,iend
       delzBC(i,j,k) = -delzBC(i,j,k)*delpBC(i,j,k)
-!!$!!! DEBUG CODE
-!!$      if (delzBC(i,j,k) >=0. ) then
-!!$         write(errstring,'(3I5, 2(2x, G))'), i, j, k, delzBC(i,j,k), delpBC(i,j,k)
-!!$         call mpp_error(WARNING, ' Remap BC (compute delz): invalid delz at '//errstring)
-!!$      endif
-!!$!!! END DEBUG CODE
    end do
    end do
    end do
@@ -1650,10 +1584,6 @@ contains
 
    rdg = -rdgas / grav
    cv_air =  cp_air - rdgas
-
-!!$!!! DEBUG CODE
-!!$   write(*, '(A, 7I5)') 'setup_pt_NH_BC_k', mpp_pe(), isd, ied, istart, iend, lbound(ptBC,1), ubound(ptBC,1)
-!!$!!! END DEBUG CODE
 
 !$OMP parallel do default(none) shared(istart,iend,jstart,jend,npz,zvir,ptBC,sphumBC,delpBC,delzBC,liq_watBC,rainwatBC,ice_watBC,snowwatBC,graupelBC, &
 #ifdef USE_COND
@@ -2406,130 +2336,6 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time, this_grid)
        first_timestep = .false.
     endif
 
-
-   !!! RENORMALIZATION UPDATE OPTION
-   if (neststruct%nestupdate /= 3 .and. neststruct%nestupdate /= 7 .and. neststruct%nestupdate /= 8) then
-
-!!$      allocate(qdp_coarse(isd_p:ied_p,jsd_p:jed_p,npz))
-!!$      if (parent_grid%flagstruct%nwat > 0) then
-!!$         allocate(q_diff(isd_p:ied_p,jsd_p:jed_p,npz))
-!!$         q_diff = 0.
-!!$      endif
-!!$
-!!$      do n=1,parent_grid%flagstruct%nwat
-!!$
-!!$         qdp_coarse = 0.
-!!$         if (neststruct%child_proc) then
-!!$            do k=1,npz
-!!$            do j=jsd,jed
-!!$            do i=isd,ied
-!!$               qdp(i,j,k) = q(i,j,k,n)*delp(i,j,k)
-!!$            enddo
-!!$            enddo
-!!$            enddo
-!!$         else
-!!$            qdp = 0.
-!!$         endif
-!!$
-!!$         if (parent_grid%neststruct%parent_proc) then
-!!$            !Add up ONLY region being replaced by nested grid
-!!$            do k=1,npz
-!!$            do j=jsu,jeu
-!!$            do i=isu,ieu
-!!$               qdp_coarse(i,j,k) = parent_grid%q(i,j,k,n)*parent_grid%delp(i,j,k)
-!!$            enddo
-!!$            enddo
-!!$            enddo
-!!$            call level_sum(qdp_coarse, parent_grid%gridstruct%area, parent_grid%domain, &
-!!$                 parent_grid%bd, npz, L_sum_b)
-!!$         else
-!!$            qdp_coarse = 0.
-!!$         endif
-!!$         if (parent_grid%neststruct%parent_proc) then
-!!$            if (n <= parent_grid%flagstruct%nwat) then
-!!$            do k=1,npz
-!!$            do j=jsu,jeu
-!!$            do i=isu,ieu
-!!$               q_diff(i,j,k) = q_diff(i,j,k) - qdp_coarse(i,j,k)
-!!$            enddo
-!!$            enddo
-!!$            enddo
-!!$            endif
-!!$         endif
-!!$
-!!$            call mpp_update_domains(qdp, domain)
-!!$            call update_coarse_grid(var_src, qdp, global_nest_domain, &
-!!$                 gridstruct%dx, gridstruct%dy, gridstruct%area, &
-!!$                 bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, &
-!!$                 neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-!!$                 npx, npy, npz, 0, 0, &
-!!$                 neststruct%refinement, neststruct%nestupdate, upoff, 0, &
-!!$                 parent_grid%neststruct%parent_proc, neststruct%child_proc, parent_grid)
-!!$            if (parent_grid%neststruct%parent_proc) call remap_up_k(ps0, parent_grid%ps, &
-!!$                 ak, bk, parent_grid%ak, parent_grid%bk, var_src, qdp_coarse, &
-!!$                 parent_grid%bd, neststruct%isu, neststruct%ieu, neststruct%jsu, neststruct%jeu, &
-!!$                 0, 0, npz, parent_grid%npz, 0, parent_grid%flagstruct%kord_tr, blend_wt, log_pe=.false.)
-!!$
-!!$               call mpp_sync!self
-!!$
-!!$         if (parent_grid%neststruct%parent_proc) then
-!!$            call level_sum(qdp_coarse, parent_grid%gridstruct%area, parent_grid%domain, &
-!!$                 parent_grid%bd, npz, L_sum_a)
-!!$            do k=1,npz
-!!$               if (L_sum_a(k) > 0.) then
-!!$                  fix = L_sum_b(k)/L_sum_a(k)
-!!$               do j=jsu,jeu
-!!$               do i=isu,ieu
-!!$                  !Normalization mass fixer
-!!$                  parent_grid%q(i,j,k,n) = qdp_coarse(i,j,k)*fix
-!!$            enddo
-!!$            enddo
-!!$               endif
-!!$            enddo
-!!$               if (n == 1) sphum_ll_fix = 1. - fix
-!!$         endif
-!!$         if (parent_grid%neststruct%parent_proc) then
-!!$            if (n <= parent_grid%flagstruct%nwat) then
-!!$            do k=1,npz
-!!$            do j=jsu,jeu
-!!$            do i=isu,ieu
-!!$               q_diff(i,j,k) = q_diff(i,j,k) + parent_grid%q(i,j,k,n)
-!!$            enddo
-!!$            enddo
-!!$            enddo
-!!$            endif
-!!$         endif
-!!$
-!!$      end do
-!!$
-!!$         if (parent_grid%neststruct%parent_proc) then
-!!$            if (parent_grid%flagstruct%nwat > 0) then
-!!$               do k=1,npz
-!!$            do j=jsu,jeu
-!!$            do i=isu,ieu
-!!$               parent_grid%delp(i,j,k) = parent_grid%delp(i,j,k) + q_diff(i,j,k)
-!!$            enddo
-!!$            enddo
-!!$            enddo
-!!$         endif
-!!$
-!!$         do n=1,parent_grid%flagstruct%nwat
-!!$            do k=1,npz
-!!$         do j=jsu,jeu
-!!$         do i=isu,ieu
-!!$            parent_grid%q(i,j,k,n) = parent_grid%q(i,j,k,n)/parent_grid%delp(i,j,k)
-!!$         enddo
-!!$         enddo
-!!$         enddo
-!!$         enddo
-!!$         endif
-!!$
-!!$      deallocate(qdp_coarse)
-!!$      if  (allocated(q_diff)) deallocate(q_diff)
-
-   endif
-   !!! END RENORMALIZATION UPDATE
-
 #ifndef SW_DYNAMICS
    if (neststruct%nestupdate /= 3 .and. neststruct%nestupdate /= 8) then
 
@@ -2606,9 +2412,6 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time, this_grid)
             !Updating for delz not yet implemented;
             ! may need to think very carefully how one would do this!!!
             ! consider updating specific volume instead?
-!!$            call update_coarse_grid(parent_grid%delz, delz, global_nest_domain, &
-!!$                 bd, isd_p, ied_p, jsd_p, jed_p, isd, ied, jsd, jed, npz, 0, 0, &
-!!$                 neststruct%refinement, neststruct%nestupdate, upoff, 0, parent_grid%neststruct%parent_proc, neststruct%child_proc)
 
       end if
 
@@ -2711,15 +2514,6 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time, this_grid)
                end do
             end do
          end if
-!!$!!!! DEBUG CODE
-!!$         do k=1,parent_grid%npz
-!!$            write(mpp_pe()+3000,*) 'k = ', k, parent_grid%ak(k), parent_grid%bk(k)
-!!$         enddo
-!!$         write(mpp_pe()+3000,*)
-!!$         do k=1,npz
-!!$            write(mpp_pe()+3000,*) 'k = ', k, ak(k), bk(k)
-!!$         enddo
-!!$!!!! END DEBUG CODE
 
          call update_remap_tqw(parent_grid%npz, parent_grid%ak, parent_grid%bk, &
               parent_grid%ps, &
@@ -2825,13 +2619,6 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time, this_grid)
 
    if (iend < istart) return
    if (jend < jstart) return
-
-!!$!!!! DEBUG CODE
-!!$      write(debug_unit,*) bd%isd,bd%ied,bd%jsd,bd%jed
-!!$      write(debug_unit,*) istart,iend,jstart,jend,istag,jstag
-!!$      write(debug_unit,*)
-!!$!!! END DEBUG CODE
-
 
    !Compute Eulerian pressures
    !NOTE: assumes that istag + jstag <= 1

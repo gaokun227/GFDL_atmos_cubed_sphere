@@ -21,7 +21,8 @@
 
  module test_cases_mod
 
-      use constants_mod,     only: cnst_radius=>radius, pi=>pi_8, omega, grav, kappa, rdgas, cp_air, rvgas
+      use constants_mod,     only: cnst_radius=>radius, pi=>pi_8, cnst_omega=>omega, grav, kappa, rdgas, cp_air, rvgas
+      use fv_arrays_mod,     only: radius, omega ! scaled for small earth
       use init_hydro_mod,    only: p_var, hydro_eq, hydro_eq_ext
       use fv_mp_mod,         only: is_master,        &
                                    domain_decomp, fill_corners, XDir, YDir, &
@@ -43,7 +44,7 @@
                                    SCALAR_PAIR
       use fv_sg_mod,         only: qsmith
       use fv_diagnostics_mod, only: prt_maxmin, ppme, eqv_pot, qcly0, is_ideal_case
-      use mpp_mod, only: mpp_pe, mpp_chksum, stdout
+      use mpp_mod,            only: mpp_pe, mpp_chksum, stdout
       use fv_arrays_mod,         only: fv_grid_type, fv_flags_type, fv_grid_bounds_type, R_GRID
       use tracer_manager_mod,    only: get_tracer_index
       use field_manager_mod,     only: MODEL_ATMOS
@@ -53,7 +54,7 @@
 !!! A NOTE ON TEST CASES
 !!! If you have a DRY test case with no physics, be sure to set adiabatic = .TRUE. in your runscript.
 !!!! This is especially important for nonhydrostatic cases in which delz will be initialized with the
-!!!!  virtual temperature effect. 
+!!!!  virtual temperature effect.
 
 ! Test Case Number (cubed-sphere domain)
 !                  SHALLOW WATER TESTS:
@@ -104,10 +105,10 @@
 !                        (sfc = 300 K, 200 K 250 mb tropopause)
 !                   15 = Warm bubble in isothermal atmosphere
 !                   16 = Cold bubble in isothermal atmosphere
-!                   17 = Symmetric Supercell 
+!                   17 = Symmetric Supercell
 !                   18 = Asymmetric supercell with M. Toy quarter-circle hodograph
 !                   19 = LJZ update to 17 with Cetrone-Houze marine sounding
-!                        and several bubble and sounding options      
+!                        and several bubble and sounding options
 !                  101 = LES with isothermal atmosphere (not implemented)
 
 
@@ -115,7 +116,6 @@
 
 
       integer :: sphum, theta_d
-      real(kind=R_GRID), parameter :: radius = cnst_radius
       real(kind=R_GRID), parameter :: one = 1.d0
       integer :: test_case = 11
       logical :: bubble_do = .false.
@@ -127,6 +127,8 @@
       integer :: Nsolitons = 2
       real    :: soliton_size = 750.e3, soliton_Umax = 50.
       logical :: checker_tr
+      real    :: small_earth_scale = 1.0
+      real    :: umean = 0.0
 
 ! Case 0 parameters
       real :: p0_c0 = 3.0
@@ -180,7 +182,8 @@
       public :: case9_forcing1, case9_forcing2, case51_forcing
       public :: init_double_periodic
       public :: checker_tracers
-      
+      public :: radius, omega, small_earth_scale
+
   INTERFACE mp_update_dwinds
      MODULE PROCEDURE mp_update_dwinds_2d
      MODULE PROCEDURE mp_update_dwinds_3d
@@ -1051,7 +1054,7 @@
             enddo
 
          endif !no_wind
-         
+
          initWindsCase= -1
 
       case(4)
@@ -1144,8 +1147,8 @@
 
             initWindsCase=initWindsCase5
          endif
-         
-         
+
+
       case(6)
          gh0  = 8.E3*Grav
          R    = 4.
@@ -1312,11 +1315,8 @@
 ! Initiate the westerly-wind-burst:
         ubar = soliton_Umax
         r0   = soliton_size
-!!$        ubar = 200.       ! maxmium wind speed (m/s)
-!!$        r0 = 250.e3
-!!$        ubar = 50.       ! maxmium wind speed (m/s)
-!!$        r0 = 750.e3
-        ! #1: westerly
+
+! #1 1: westerly
         p0(1) = pi*0.5
         p0(2) = 0.
 
@@ -1465,7 +1465,7 @@
               q, delp,ncnst,agrid(isd:ied,jsd:jed,1),agrid(isd:ied,jsd:jed,2),bd)
          call mpp_update_domains(q,domain)
       endif
-      
+
 !--------------- end s-w cases --------------------------
 
 ! Copy 3D data for Shallow Water Tests
@@ -1590,7 +1590,7 @@
 !!$         enddo
 !!$         enddo
 !!$         enddo
-         
+
     ! Initialize surface Pressure
          ps(:,:) = 1.e5
     ! Initialize delta-P
@@ -1664,7 +1664,7 @@
              r0 = radius/10.0
          endif
 
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,eta_v,grid,Ubar,pcen,r0,ee2,v,ee1,es,u,u1,ew) &
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,eta_v,grid,Ubar,pcen,r0,ee2,v,ee1,es,u,u1,ew,radius) &
 !$OMP                          private(utmp,r,vv1,vv3,p1,p2,vv2,uu1,uu2,uu3,pa)
          do z=1,npz
             do j=js,je
@@ -1728,7 +1728,7 @@
          delta_T = 480000.0
          lapse_rate = 0.005
 !$OMP parallel do default(none) shared(is,ie,js,je,npz,eta,ak,bk,T_0,lapse_rate,eta_t, &
-!$OMP                                  delta_T,ptop,delp,Ubar,eta_v,agrid,grid,pcen,pt,r0) &
+!$OMP                                  delta_T,ptop,delp,Ubar,eta_v,agrid,grid,pcen,pt,r0,radius,omega) &
 !$OMP                          private(T_mean,press,pt1,pt2,pt3,pt4,pt5,pt6,pt7,pt8,pt9,p1,r)
          do z=1,npz
             eta(z) = 0.5*( (ak(z)+ak(z+1))/1.e5 + bk(z)+bk(z+1) )
@@ -1806,7 +1806,7 @@
          if (is_master()) print*,' '
       ! Surface Geopotential
          phis(:,:)=1.e25
-!$OMP parallel do default(none) shared(is2,ie2,js2,je2,Ubar,eta_s,eta_0,agrid,grid,phis) &
+!$OMP parallel do default(none) shared(is2,ie2,js2,je2,Ubar,eta_s,eta_0,agrid,grid,phis,radius,omega) &
 !$OMP                         private(pt1,pt2,pt3,pt4,pt5,pt6,pt7,pt8,pt9,p1)
          do j=js2,je2
             do i=is2,ie2
@@ -2388,9 +2388,6 @@
          case (1) !DCMIP 11
 
          !Need to set up pressure arrays
-!!$         p00 = 1.e5
-!!$         ps = p00
-!!$         phis = 0.
 
          !NOTE: since we have an isothermal atmosphere and specify constant height-thickness layers we will disregard ak and bk and specify the initial pressures in a different way
 
@@ -2604,10 +2601,7 @@
             !     0.5*(ak(k)+ak(k+1)), 0.5*(bk(k)+bk(k+1)), dum3, dum4, dum5, &
             !     pt(i,j,k), phis(i,j), ps(i,j), dum6, q(i,j,k,1))
             delp(i,j,k) = pe(i,k+1,j) - pe(i,k,j)
-            !Analytic point-value
-!!$            ptmp = 0.5*(pe(i,k,j)+pe(i,k+1,j))
-!!$            pt(i,j,k) = t00*(ptmp/p00)**exponent
-            !ANalytic layer-mean
+            !Analytic layer-mean
             pt(i,j,k) = -grav*t00*p00/(rdgas*gamma + grav)/delp(i,j,k) * &
                  ( (pe(i,k,j)/p00)**(exponent+1.) - (pe(i,k+1,j)/p00)**(exponent+1.)  )
 
@@ -2710,16 +2704,6 @@
               vtmp = 8.5*tanh(zm/1000.)
               ubar = utmp - 8.5
               vbar = vtmp - 4.25
-!!$              ! SRH = 45
-!!$              utmp = 16.0*(1.+tanh(zm/2000. - 1.4))
-!!$              vtmp = 8.5*tanh(zm/1000.)
-!!$              ubar = utmp - 10.
-!!$              vbar = vtmp - 4.25
-!!$              ! SRH = 27 (really)
-!!$              utmp = 0.5*us0*(1.+tanh((zm-3500.)/2000.))
-!!$              vtmp = 8.*tanh(zm/1000.)
-!!$              ubar = utmp - 10.
-!!$              vbar = vtmp - 4.
            endif
 
            if( is_master() ) then
@@ -3270,19 +3254,10 @@
 ! Initiate the westerly-wind-burst:
          ubar = soliton_Umax
          r0 = soliton_size
-!!$        if (test_case == 46) then
-!!$           ubar = 200.
-!!$           r0 = 250.e3
-!!$        else
-!!$           ubar = 50.       ! Initial maxmium wind speed (m/s)
-!!$           r0 = 500.e3
-!!$        endif
-!        p0(1) = pi*0.5
-!        p0(2) = 0.
-        p0w(1) = pi*0.5
-        p0w(2) = 0.
-        p0e(1) = p0w(1) + pi
-        p0e(2) = 0.
+         p0w(1) = pi*0.5
+         p0w(2) = 0.
+         p0e(1) = p0w(1) + pi
+         p0e(2) = 0.
 
 
      do k=1,npz
@@ -3670,7 +3645,7 @@
       endif
 
 #endif SW_DYNAMICS
-         
+
     call mp_update_dwinds(u, v, npx, npy, npz, domain, bd)
 
     is_ideal_case = .true.
@@ -4957,8 +4932,8 @@ end subroutine terminator_tracers
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
                      moist_phys, .false., nwat, domain, flagstruct%adiabatic, .true.)
 
-        
-          
+
+
         ze1(npz+1) = 0.
         do k=npz,1,-1
            ze1(k) = ze1(k+1) - delz(is,js,k)
@@ -4979,25 +4954,23 @@ end subroutine terminator_tracers
                    .true., hydrostatic, nwat, domain, flagstruct%adiabatic)
 
 ! *** Add Initial perturbation ***
-        pturb = 2.
-        r0 = 10.e3
-        zc = 1.4e3         ! center of bubble  from surface
-        icenter = (npx-1)/3 + 1
-        jcenter = (npy-1)/2 + 1
-        do k=1, npz
-           zm = 0.5*(ze1(k)+ze1(k+1))
-           ptmp = ( (zm-zc)/zc ) **2
-           if ( ptmp < 1. ) then
+        if (bubble_do) then
+           pturb = 2.
+           r0 = 10.e3
+           zc = 1.4e3         ! center of bubble  from surface
+           icenter = (npx-1)/3 + 1
+           jcenter = (npy-1)/2 + 1
+           do k=1, npz
+              zm = 0.5*(ze1(k)+ze1(k+1))
+              ptmp = ( (zm-zc)/zc ) **2
               do j=js,je
                  do i=is,ie
-                   dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
-                   if ( dist < 1. ) then
-                        pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
-                   endif
+                    dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                    pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
                  enddo
               enddo
-           endif
-        enddo
+           enddo
+        endif
 
       case ( 18 )
 !---------------------------
@@ -5088,25 +5061,22 @@ end subroutine terminator_tracers
 
 ! *** Add Initial perturbation ***
         if (bubble_do) then
-            r0 = 10.e3
-            zc = 1.4e3         ! center of bubble  from surface
-            icenter = (npx-1)/2 + 1
-            jcenter = (npy-1)/2 + 1
-            do k=1, npz
-               zm = 0.5*(ze1(k)+ze1(k+1))
-               ptmp = ( (zm-zc)/zc ) **2
-               if ( ptmp < 1. ) then
-                  do j=js,je
-                     do i=is,ie
-                       dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
-                       if ( dist < 1. ) then
-                            pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
-                       endif
-                     enddo
-                  enddo
-               endif
-            enddo
-         endif
+           pturb = 2.
+           r0 = 10.e3
+           zc = 1.4e3         ! center of bubble  from surface
+           icenter = (npx-1)/3 + 1
+           jcenter = (npy-1)/2 + 1
+           do k=1, npz
+              zm = 0.5*(ze1(k)+ze1(k+1))
+              ptmp = ( (zm-zc)/zc ) **2
+              do j=js,je
+                 do i=is,ie
+                    dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                    pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
+                 enddo
+              enddo
+           enddo
+        endif
 
       case ( 19 )
 !---------------------------
@@ -5170,9 +5140,9 @@ end subroutine terminator_tracers
         do k=1,npz
              zm = 0.5*(ze1(k)+ze1(k+1))
            if (no_wind) then
-              us0 = 0.0
+              us0 = 0.0 + umean
            else
-              us0 = 14.
+              us0 = 14. + umean
            endif
            utmp = us0*tanh(zm/1.2E4)
            do j=js,je+1
@@ -5196,22 +5166,15 @@ end subroutine terminator_tracers
         jcenter = (npy-1)/2 + 1
         do k=1, npz
            zm = 0.5*(ze1(k)+ze1(k+1))
-           ptmp = (zm-zc)/zc
-           if ( abs(ptmp) < 1. ) then
-              do j=js,je
-                 do i=is,ie
-                   xr = (i-icenter)*dx_const/r0
-                   yr = (j-jcenter)*dy_const/r0
-                   dist = 1
-                   if ( abs(xr) < 1. .and. abs(yr) < 1. ) then
-                        dist = cos(pi/2*ptmp)**2*cos(pi/2*xr)**2*cos(pi/2*yr)**2
-                   endif
-                   if ( dist < 1. ) then
-                        pt(i,j,k) = pt(i,j,k) + pturb*dist
-                   endif
-                 enddo
+           ptmp = min(abs((zm-zc)/zc),1.0)
+           do j=js,je
+              do i=is,ie
+                 xr = min(abs((i-icenter)*dx_const/r0),1.0)
+                 yr = min(abs((j-jcenter)*dy_const/r0),1.0)
+                 dist = cos(pi/2*ptmp)**2*cos(pi/2*xr)**2*cos(pi/2*yr)**2
+                 pt(i,j,k) = pt(i,j,k) + pturb*dist
               enddo
-           endif
+           enddo
         enddo
 
         else
@@ -5225,16 +5188,12 @@ end subroutine terminator_tracers
         do k=1, npz
            zm = 0.5*(ze1(k)+ze1(k+1))
            ptmp = ( (zm-zc)/zc ) **2
-           if ( ptmp < 1. ) then
-              do j=js,je
-                 do i=is,ie
-                   dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
-                   if ( dist < 1. ) then
-                        pt(i,j,k) = pt(i,j,k) + pturb*(1.-sqrt(dist))
-                   endif
-                 enddo
+           do j=js,je
+              do i=is,ie
+                 dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                 pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
               enddo
-           endif
+           enddo
         enddo
 
         endif
@@ -5257,12 +5216,12 @@ end subroutine terminator_tracers
            do j=jsd,jed
               do i=isd,ied
                  dist=(i-icenter)*dx_const
-                 phis(i,j)=250.*exp(-(dist/5000.)**2)*cos(pi*dist/4000.)*cos(pi*dist/4000.) 
+                 phis(i,j)=250.*exp(-(dist/5000.)**2)*cos(pi*dist/4000.)*cos(pi*dist/4000.)
                  gz(i,j,npz+1) = phis(i,j)
               enddo
            enddo
 
-           !2. Compute surface pressure 
+           !2. Compute surface pressure
            !    then form pressure surfaces
            do j=jsd,jed
               do i=isd,ied
@@ -5418,14 +5377,14 @@ end subroutine terminator_tracers
 
            call mpp_sync()
 #endif
-           
+
            !1. set up topography (uniform-in-y)
            icenter = npx/2
            jcenter = npy/2
            do j=jsd,jed
               do i=isd,ied
                  dist=(i-icenter)*dx_const
-                 phis(i,j)=2000.*exp(-(dist/10000.)**2)*cos(pi*dist/8000.)*cos(pi*dist/8000.) 
+                 phis(i,j)=2000.*exp(-(dist/10000.)**2)*cos(pi*dist/8000.)*cos(pi*dist/8000.)
                  gz(i,j,npz+1) = phis(i,j)
               enddo
            enddo
@@ -5635,9 +5594,7 @@ end subroutine terminator_tracers
                     zm = 0.5*(ze0(i,j,k)+ze0(i,j,k+1))
                     dist = ((i-icenter)*dx_const)**2 + ((j-jcenter)*dy_const)**2 + (zm-zc)**2
                     dist = sqrt(dist)
-                    if ( dist <= r0 ) then
-                         pt(i,j,k) = pt(i,j,k) + 2.0*(1.-dist/r0)
-                    endif
+                    pt(i,j,k) = pt(i,j,k) + 2.0*max((1.-dist/r0),0.)
                  enddo
               enddo
            enddo
@@ -5646,7 +5603,6 @@ end subroutine terminator_tracers
 
         is_ideal_case = .true.
 
-        
         nullify(grid)
         nullify(agrid)
 
@@ -5692,7 +5648,7 @@ end subroutine terminator_tracers
         character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
-             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr
+             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, Umean
 
 #include<file_version.h>
 
@@ -5703,21 +5659,15 @@ end subroutine terminator_tracers
         bubble_do = .false.
         test_case = 11   ! (USGS terrain)
 
-#ifdef INTERNAL_FILE_NML
         ! Read Test_Case namelist
         read (input_nml_file,test_case_nml,iostat=ios)
         ierr = check_nml_error(ios,'test_case_nml')
-#else
-        f_unit = open_namelist_file(nml_filename)
-
-        ! Read Test_Case namelist
-        rewind (f_unit)
-        read (f_unit,test_case_nml,iostat=ios)
-        ierr = check_nml_error(ios,'test_case_nml')
-        call close_file(f_unit)
-#endif
         write(unit, nml=test_case_nml)
 
+        if (.not. (small_earth_scale == 1.0)) then
+           radius = cnst_radius / small_earth_scale
+           omega = cnst_omega * small_earth_scale
+        endif
 
       end subroutine read_namelist_test_case_nml
 
@@ -6446,7 +6396,7 @@ end subroutine terminator_tracers
    real(kind=R_GRID), parameter :: lamp = pi/9.
    real(kind=R_GRID), parameter :: phip = 2.*lamp
    real(kind=R_GRID), parameter :: ppcenter(2) = (/ lamp, phip /)
-   real, parameter :: Rp = radius/10.
+   real :: Rp
    real, parameter :: lapse = 5.e-3
    real, parameter :: dT = 4.8e5
    real, parameter :: phiW = 2.*pi/9.
@@ -6476,6 +6426,7 @@ end subroutine terminator_tracers
    !Compute p, z, T on both the staggered and unstaggered grids. Then compute the zonal
    !  and meridional winds on both grids, and rotate as needed
    zvir = rvgas/rdgas - 1.
+   Rp  = radius/10.
 
    !PS
    do j=js,je
@@ -6539,11 +6490,6 @@ end subroutine terminator_tracers
          piter = DCMIP16_BC_pressure(ziter,agrid(i,j,2))
          titer = DCMIP16_BC_temperature(ziter,agrid(i,j,2))
          z = ziter + (piter - p)*rdgrav*titer/piter
-!!$         !!! DEBUG CODE
-!!$         if (is_master() .and. i == is .and. j == js) then
-!!$            write(*,'(A,I,2x,I, 4(2x,F10.3), 2x, F7.3)') ' NEWTON: ' , k, iter, piter, p, ziter, z, titer
-!!$         endif
-!!$         !!! END DEBUG CODE
          if (abs(z - ziter) < zconv) exit
       enddo
       gz(i,j,k) = z
@@ -6837,7 +6783,7 @@ end subroutine terminator_tracers
    real, parameter :: dp = 1115. ! Pa
    real, parameter :: rp = 282000. ! m
    real, parameter :: zp = 7000. ! m
-   real, parameter :: fc = 2.*OMEGA*sin(phip)
+   real :: fc
 
    real, parameter :: zconv = 1.e-6
    real, parameter :: rdgrav = rdgas/grav
@@ -6853,6 +6799,8 @@ end subroutine terminator_tracers
    real(kind=R_GRID), dimension(is:ie,js:je+1) :: lat_u,lon_u
    real, dimension(is:ie+1,js:je) :: gz_v,p_v,peln_v,ps_v,v1,v2, rc_v
    real(kind=R_GRID), dimension(is:ie+1,js:je) :: lat_v,lon_v
+
+   fc  = 2.*OMEGA*sin(phip)
 
    !Compute ps, phis, delp, aux pressure variables, Temperature, winds
    ! (with or without perturbation), moisture, w, delz
@@ -6929,11 +6877,6 @@ end subroutine terminator_tracers
          piter = DCMIP16_TC_pressure(ziter,rc(i,j))
          titer = DCMIP16_TC_temperature(ziter,rc(i,j))
          z = ziter + (piter - p)*rdgrav*titer/piter
-!!$         !!! DEBUG CODE
-!!$         if (is_master() .and. i == is .and. j == js) then
-!!$            write(*,'(A,I,2x,I, 4(2x,F10.3), 2x, F7.3)') ' NEWTON: ' , k, iter, piter, p, ziter, z, titer
-!!$         endif
-!!$         !!! END DEBUG CODE
          if (abs(z - ziter) < zconv) exit
       enddo
       gz(i,j,k) = z
@@ -7151,622 +7094,6 @@ end subroutine terminator_tracers
 
  end subroutine DCMIP16_TC
 
-!!$      subroutine init_latlon(u,v,pt,delp,q,phis, ps,pe,peln,pk,pkz,  uc,vc, ua,va, ak, bk,  &
-!!$                             gridstruct, npx, npy, npz, ng, ncnst, ndims, nregions, dry_mass,    &
-!!$                             mountain, moist_phys, hybrid_z, delz, ze0, domain_in, tile_in, bd)
-!!$
-!!$        real ,      intent(INOUT) ::    u(isd:ied  ,jsd:jed+1,npz)
-!!$        real ,      intent(INOUT) ::    v(isd:ied+1,jsd:jed  ,npz)
-!!$        real ,      intent(INOUT) ::   pt(isd:ied  ,jsd:jed  ,npz)
-!!$        real ,      intent(INOUT) :: delp(isd:ied  ,jsd:jed  ,npz)
-!!$        real ,      intent(INOUT) ::    q(isd:ied  ,jsd:jed  ,npz, ncnst)
-!!$
-!!$        real ,      intent(INOUT) :: phis(isd:ied  ,jsd:jed  )
-!!$
-!!$        real ,      intent(INOUT) ::   ps(isd:ied  ,jsd:jed  )
-!!$        real ,      intent(INOUT) ::   pe(is-1:ie+1,npz+1,js-1:je+1)
-!!$        real ,      intent(INOUT) ::   pk(is:ie    ,js:je    ,npz+1)
-!!$        real ,      intent(INOUT) :: peln(is :ie   ,npz+1    ,js:je)
-!!$        real ,      intent(INOUT) ::  pkz(is:ie    ,js:je    ,npz  )
-!!$        real ,      intent(INOUT) ::   uc(isd:ied+1,jsd:jed  ,npz)
-!!$        real ,      intent(INOUT) ::   vc(isd:ied  ,jsd:jed+1,npz)
-!!$        real ,      intent(INOUT) ::   ua(isd:ied  ,jsd:jed  ,npz)
-!!$        real ,      intent(INOUT) ::   va(isd:ied  ,jsd:jed  ,npz)
-!!$        real ,      intent(inout) :: delz(is:,js:,1:)
-!!$        real ,      intent(inout)   ::  ze0(is:,js:,1:)
-!!$
-!!$        real ,      intent(IN)    ::   ak(npz+1)
-!!$        real ,      intent(IN)    ::   bk(npz+1)
-!!$
-!!$        integer,      intent(IN) :: npx, npy, npz
-!!$        integer,      intent(IN) :: ng, ncnst
-!!$        integer,      intent(IN) :: ndims
-!!$        integer,      intent(IN) :: nregions
-!!$        integer,target,intent(IN):: tile_in
-!!$
-!!$        real,         intent(IN) :: dry_mass
-!!$        logical,      intent(IN) :: mountain
-!!$        logical,      intent(IN) :: moist_phys
-!!$        logical,      intent(IN) :: hybrid_z
-!!$
-!!$        type(fv_grid_type), intent(IN), target :: gridstruct
-!!$        type(domain2d), intent(IN), target :: domain_in
-!!$
-!!$        real, pointer, dimension(:,:,:)   :: agrid, grid
-!!$        real, pointer, dimension(:,:)     :: area, rarea, fC, f0
-!!$        real, pointer, dimension(:,:,:)   :: ee1, ee2, en1, en2
-!!$        real, pointer, dimension(:,:,:,:) :: ew, es
-!!$        real, pointer, dimension(:,:)     :: dx,dy, dxa,dya, rdxa, rdya, dxc,dyc
-!!$
-!!$        logical, pointer :: cubed_sphere, latlon
-!!$
-!!$        type(domain2d), pointer :: domain
-!!$        integer, pointer :: tile
-!!$
-!!$        logical, pointer :: have_south_pole, have_north_pole
-!!$
-!!$        integer, pointer :: ntiles_g
-!!$        real,    pointer :: acapN, acapS, globalarea
-!!$
-!!$        real(kind=R_GRID) :: p1(2), p2(2)
-!!$        real :: r, r0
-!!$        integer :: i,j
-!!$
-!!$        agrid => gridstruct%agrid
-!!$        grid  => gridstruct%grid
-!!$
-!!$        area => gridstruct%area
-!!$
-!!$        dx      => gridstruct%dx
-!!$        dy      => gridstruct%dy
-!!$        dxa     => gridstruct%dxa
-!!$        dya     => gridstruct%dya
-!!$        rdxa    => gridstruct%rdxa
-!!$        rdya    => gridstruct%rdya
-!!$        dxc     => gridstruct%dxc
-!!$        dyc     => gridstruct%dyc
-!!$
-!!$        fC    => gridstruct%fC
-!!$        f0    => gridstruct%f0
-!!$
-!!$        ntiles_g                      => gridstruct%ntiles_g
-!!$        acapN                         => gridstruct%acapN
-!!$        acapS                         => gridstruct%acapS
-!!$        globalarea                    => gridstruct%globalarea
-!!$
-!!$        domain => domain_in
-!!$        tile => tile_in
-!!$
-!!$        have_south_pole               => gridstruct%have_south_pole
-!!$        have_north_pole               => gridstruct%have_north_pole
-!!$
-!!$        do j=jsd,jed+1
-!!$           do i=isd,ied+1
-!!$              fc(i,j) = 2.*omega*( -cos(grid(i,j,1))*cos(grid(i,j,2))*sin(alpha)  &
-!!$                                   +sin(grid(i,j,2))*cos(alpha) )
-!!$           enddo
-!!$        enddo
-!!$        do j=jsd,jed
-!!$           do i=isd,ied
-!!$              f0(i,j) = 2.*omega*( -cos(agrid(i,j,1))*cos(agrid(i,j,2))*sin(alpha)  &
-!!$                                   +sin(agrid(i,j,2))*cos(alpha) )
-!!$           enddo
-!!$        enddo
-!!$
-!!$        select case (test_case)
-!!$        case ( 1 )
-!!$
-!!$         Ubar = (2.0*pi*radius)/(12.0*86400.0)
-!!$         phis = 0.0
-!!$         r0 = radius/3. !RADIUS radius/3.
-!!$         p1(1) = 0.
-!!$         p1(1) = pi/2. + pi_shift
-!!$         p1(2) = 0.
-!!$         do j=jsd,jed
-!!$            do i=isd,ied
-!!$               p2(1) = agrid(i,j,1)
-!!$               p2(2) = agrid(i,j,2)
-!!$               r = great_circle_dist( p1, p2, radius )
-!!$               if (r < r0) then
-!!$                  delp(i,j,1) = phis(i,j) + 0.5*(1.0+cos(PI*r/r0))
-!!$               else
-!!$                  delp(i,j,1) = phis(i,j)
-!!$               endif
-!!$            enddo
-!!$         enddo
-!!$         call init_latlon_winds(UBar, u, v, ua, va, uc, vc, 1, gridstruct)
-!!$
-!!$
-!!$
-!!$        end select
-!!$
-!!$        nullify(grid)
-!!$        nullify(agrid)
-!!$
-!!$        nullify(area)
-!!$
-!!$        nullify(fC)
-!!$        nullify(f0)
-!!$
-!!$      nullify(dx)
-!!$      nullify(dy)
-!!$      nullify(dxa)
-!!$      nullify(dya)
-!!$      nullify(rdxa)
-!!$      nullify(rdya)
-!!$      nullify(dxc)
-!!$      nullify(dyc)
-!!$
-!!$      nullify(domain)
-!!$      nullify(tile)
-!!$
-!!$      nullify(have_south_pole)
-!!$      nullify(have_north_pole)
-!!$
-!!$      nullify(ntiles_g)
-!!$      nullify(acapN)
-!!$      nullify(acapS)
-!!$      nullify(globalarea)
-!!$
-!!$      end subroutine init_latlon
-!!$
-!!$      subroutine init_latlon_winds(UBar, u, v, ua, va, uc, vc, defOnGrid, gridstruct)
-!!$
-!!$        ! defOnGrid = -1:null_op, 0:All-Grids, 1:C-Grid, 2:D-Grid, 3:A-Grid, 4:A-Grid then Rotate, 5:D-Grid with unit vectors then Rotate
-!!$
-!!$        real,    intent(INOUT) :: UBar
-!!$        real,    intent(INOUT) ::  u(isd:ied  ,jsd:jed+1)
-!!$        real,    intent(INOUT) ::  v(isd:ied+1,jsd:jed  )
-!!$        real,    intent(INOUT) :: uc(isd:ied+1,jsd:jed  )
-!!$        real,    intent(INOUT) :: vc(isd:ied  ,jsd:jed+1)
-!!$        real,    intent(INOUT) :: ua(isd:ied  ,jsd:jed  )
-!!$        real,    intent(INOUT) :: va(isd:ied  ,jsd:jed  )
-!!$        integer, intent(IN)    :: defOnGrid
-!!$        type(fv_grid_type), intent(IN), target :: gridstruct
-!!$
-!!$        real   :: p1(2),p2(2),p3(2),p4(2), pt(2)
-!!$        real :: e1(3), e2(3), ex(3), ey(3)
-!!$
-!!$        real   :: dist, r, r0
-!!$        integer :: i,j,k,n
-!!$        real :: utmp, vtmp
-!!$
-!!$        real :: psi_b(isd:ied+1,jsd:jed+1), psi(isd:ied,jsd:jed), psi1, psi2
-!!$
-!!$        real, dimension(:,:,:), pointer :: grid, agrid
-!!$        real, dimension(:,:),   pointer :: area, dx, dy, dxc, dyc
-!!$
-!!$        grid => gridstruct%grid
-!!$        agrid=> gridstruct%agrid
-!!$
-!!$        area  => gridstruct%area
-!!$        dx    => gridstruct%dx
-!!$        dy    => gridstruct%dy
-!!$        dxc   => gridstruct%dxc
-!!$        dyc   => gridstruct%dyc
-!!$
-!!$        psi(:,:) = 1.e25
-!!$        psi_b(:,:) = 1.e25
-!!$        do j=jsd,jed
-!!$           do i=isd,ied
-!!$              psi(i,j) = (-1.0 * Ubar * radius *( sin(agrid(i,j,2))                  *cos(alpha) - &
-!!$                                                  cos(agrid(i,j,1))*cos(agrid(i,j,2))*sin(alpha) ) )
-!!$           enddo
-!!$        enddo
-!!$        do j=jsd,jed+1
-!!$           do i=isd,ied+1
-!!$              psi_b(i,j) = (-1.0 * Ubar * radius *( sin(grid(i,j,2))                 *cos(alpha) - &
-!!$                                                    cos(grid(i,j,1))*cos(grid(i,j,2))*sin(alpha) ) )
-!!$           enddo
-!!$        enddo
-!!$
-!!$        if ( defOnGrid == 1 ) then
-!!$           do j=jsd,jed+1
-!!$              do i=isd,ied
-!!$                 dist = dx(i,j)
-!!$                 vc(i,j) = (psi_b(i+1,j)-psi_b(i,j))/dist
-!!$                 if (dist==0) vc(i,j) = 0.
-!!$              enddo
-!!$           enddo
-!!$           do j=jsd,jed
-!!$              do i=isd,ied+1
-!!$                 dist = dy(i,j)
-!!$                 uc(i,j) = -1.0*(psi_b(i,j+1)-psi_b(i,j))/dist
-!!$                 if (dist==0) uc(i,j) = 0.
-!!$              enddo
-!!$           enddo
-!!$
-!!$
-!!$           do j=js,je
-!!$              do i=is,ie+1
-!!$                 dist = dxc(i,j)
-!!$                 v(i,j) = (psi(i,j)-psi(i-1,j))/dist
-!!$                 if (dist==0) v(i,j) = 0.
-!!$              enddo
-!!$           enddo
-!!$           do j=js,je+1
-!!$              do i=is,ie
-!!$                 dist = dyc(i,j)
-!!$                 u(i,j) = -1.0*(psi(i,j)-psi(i,j-1))/dist
-!!$                 if (dist==0) u(i,j) = 0.
-!!$              enddo
-!!$           enddo
-!!$        endif
-!!$
-!!$      end subroutine init_latlon_winds
-
-!!$ subroutine d2a2c(im,jm,km, ifirst,ilast, jfirst,jlast, ng, bounded_domain, &
-!!$                  u,v, ua,va, uc,vc, gridstruct, domain, bd)
-!!$
-!!$! Input
-!!$  integer, intent(IN) :: im,jm,km
-!!$  integer, intent(IN) :: ifirst,ilast
-!!$  integer, intent(IN) :: jfirst,jlast
-!!$  integer, intent(IN) :: ng
-!!$  logical, intent(IN) :: bounded_domain
-!!$  type(fv_grid_type), intent(IN), target :: gridstruct
-!!$  type(domain2d), intent(INOUT) :: domain
-!!$
-!!$  !real   , intent(in) :: sinlon(im,jm)
-!!$  !real   , intent(in) :: coslon(im,jm)
-!!$  !real   , intent(in) :: sinl5(im,jm)
-!!$  !real   , intent(in) :: cosl5(im,jm)
-!!$
-!!$! Output
-!!$ ! real   , intent(inout) ::  u(ifirst-ng:ilast+ng,jfirst-ng:jlast+1+ng)
-!!$ ! real   , intent(inout) ::  v(ifirst-ng:ilast+1+ng,jfirst-ng:jlast+ng)
-!!$ ! real   , intent(inout) :: ua(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng)
-!!$ ! real   , intent(inout) :: va(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng)
-!!$ ! real   , intent(inout) :: uc(ifirst-ng:ilast+1+ng,jfirst-ng:jlast+ng)
-!!$ ! real   , intent(inout) :: vc(ifirst-ng:ilast+ng,jfirst-ng:jlast+1+ng)
-!!$
-!!$  real   , intent(inout) ::  u(isd:ied,jsd:jed+1) !ifirst-ng:ilast+ng,jfirst-ng:jlast+1+ng)
-!!$  real   , intent(inout) ::  v(isd:ied+1,jsd:jed) !ifirst-ng:ilast+1+ng,jfirst-ng:jlast+ng)
-!!$  real   , intent(inout) :: ua(isd:ied,jsd:jed)   !ifirst-ng:ilast+ng,jfirst-ng:jlast+ng)
-!!$  real   , intent(inout) :: va(isd:ied,jsd:jed)   !(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng)
-!!$  real   , intent(inout) :: uc(isd:ied+1,jsd:jed) !(ifirst-ng:ilast+1+ng,jfirst-ng:jlast+ng)
-!!$  real   , intent(inout) :: vc(isd:ied,jsd:jed+1) !(ifirst-ng:ilast+ng,jfirst-ng:jlast+1+ng)
-!!$
-!!$!--------------------------------------------------------------
-!!$! Local
-!!$
-!!$  real   :: sinlon(im,jm)
-!!$  real   :: coslon(im,jm)
-!!$  real   :: sinl5(im,jm)
-!!$  real   :: cosl5(im,jm)
-!!$
-!!$    real :: tmp1(jsd:jed+1)
-!!$    real :: tmp2(jsd:jed)
-!!$    real :: tmp3(jsd:jed)
-!!$
-!!$    real  mag,mag1,mag2, ang,ang1,ang2
-!!$    real  us, vs, un, vn
-!!$    integer i, j, k, im2
-!!$    integer js1g1
-!!$    integer js2g1
-!!$    integer js2g2
-!!$    integer js2gc
-!!$    integer js2gc1
-!!$    integer js2gcp1
-!!$    integer js2gd
-!!$    integer jn2gc
-!!$    integer jn1g1
-!!$    integer jn1g2
-!!$    integer jn2gd
-!!$    integer jn2gsp1
-!!$
-!!$      real, pointer, dimension(:,:,:)   :: agrid, grid
-!!$      real, pointer, dimension(:,:)     :: area, rarea, fC, f0
-!!$      real(kind=R_GRID), pointer, dimension(:,:,:)   :: ee1, ee2, en1, en2
-!!$      real(kind=R_GRID), pointer, dimension(:,:,:,:) :: ew, es
-!!$      real, pointer, dimension(:,:)     :: dx,dy, dxa,dya, rdxa, rdya, dxc,dyc
-!!$
-!!$      logical, pointer :: cubed_sphere, latlon
-!!$
-!!$      logical, pointer :: have_south_pole, have_north_pole
-!!$
-!!$      integer, pointer :: ntiles_g
-!!$      real,    pointer :: acapN, acapS, globalarea
-!!$
-!!$      grid => gridstruct%grid
-!!$      agrid=> gridstruct%agrid
-!!$
-!!$      area  => gridstruct%area
-!!$      rarea => gridstruct%rarea
-!!$
-!!$      fC    => gridstruct%fC
-!!$      f0    => gridstruct%f0
-!!$
-!!$      ee1   => gridstruct%ee1
-!!$      ee2   => gridstruct%ee2
-!!$      ew    => gridstruct%ew
-!!$      es    => gridstruct%es
-!!$      en1   => gridstruct%en1
-!!$      en2   => gridstruct%en2
-!!$
-!!$      dx      => gridstruct%dx
-!!$      dy      => gridstruct%dy
-!!$      dxa     => gridstruct%dxa
-!!$      dya     => gridstruct%dya
-!!$      rdxa    => gridstruct%rdxa
-!!$      rdya    => gridstruct%rdya
-!!$      dxc     => gridstruct%dxc
-!!$      dyc     => gridstruct%dyc
-!!$
-!!$      cubed_sphere => gridstruct%cubed_sphere
-!!$      latlon       => gridstruct%latlon
-!!$
-!!$      have_south_pole               => gridstruct%have_south_pole
-!!$      have_north_pole               => gridstruct%have_north_pole
-!!$
-!!$      ntiles_g                      => gridstruct%ntiles_g
-!!$      acapN                         => gridstruct%acapN
-!!$      acapS                         => gridstruct%acapS
-!!$      globalarea                    => gridstruct%globalarea
-!!$
-!!$ if (cubed_sphere) then
-!!$
-!!$    call dtoa( u, v,ua,va,dx,dy,dxa,dya,dxc,dyc,im,jm,ng)
-!!$    if (.not. bounded_domain) call fill_corners(ua, va, im, jm, VECTOR=.true., AGRID=.true.)
-!!$    call atoc(ua,va,uc,vc,dx,dy,dxa,dya,im,jm,ng, bounded_domain, domain, noComm=.true.)
-!!$    if (.not. bounded_domain) call fill_corners(uc, vc, im, jm, VECTOR=.true., CGRID=.true.)
-!!$
-!!$ else  ! Lat-Lon
-!!$
-!!$    im2 = im/2
-!!$
-!!$! Set loop limits
-!!$
-!!$    js1g1   = jfirst-1
-!!$    js2g1   = jfirst-1
-!!$    js2g2   = jfirst-2
-!!$    js2gc   = jfirst-ng
-!!$    js2gcp1 = jfirst-ng-1
-!!$    js2gd   = jfirst-ng
-!!$    jn1g1   = jlast+1
-!!$    jn1g2   = jlast+2
-!!$    jn2gc   = jlast+ng
-!!$    jn2gd   = jlast+ng-1
-!!$    jn2gsp1 = jlast+ng-1
-!!$
-!!$    if (have_south_pole) then
-!!$       js1g1   = 1
-!!$       js2g1   = 2
-!!$       js2g2   = 2
-!!$       js2gc   = 2
-!!$       js2gcp1 = 2   ! NG-1 latitudes on S (starting at 2)
-!!$       js2gd   = 2
-!!$    endif
-!!$    if (have_north_pole) then
-!!$       jn1g1   = jm
-!!$       jn1g2   = jm
-!!$       jn2gc   = jm-1  ! NG latitudes on N (ending at jm-1)
-!!$       jn2gd   = jm-1
-!!$       jn2gsp1 = jm-1
-!!$    endif
-!!$!
-!!$! Treat the special case of ng = 1
-!!$!
-!!$    if ( ng == 1 .AND. ng > 1 ) THEN
-!!$        js2gc1 = js2gc
-!!$    else
-!!$        js2gc1 = jfirst-ng+1
-!!$        if (have_south_pole) js2gc1 = 2  ! NG-1 latitudes on S (starting at 2)
-!!$    endif
-!!$
-!!$  do k=1,km
-!!$
-!!$       if ((have_south_pole) .or. (have_north_pole)) then
-!!$! Get D-grid V-wind at the poles.
-!!$          call vpol5(u(1:im,:), v(1:im,:), im, jm,            &
-!!$                     coslon, sinlon, cosl5, sinl5, ng, ng, jfirst, jlast )
-!!$          call mp_ghost_ew(im,jm,1,1, ifirst,ilast, jfirst,jlast, 1,1, ng,ng, ng,ng, v(:,:))
-!!$       endif
-!!$
-!!$       call dtoa(u, v, ua, va, dx,dy,dxa,dya,dxc,dyc,im, jm, ng)
-!!$       if (.not. bounded_domain) call fill_corners(ua, va, im, jm, VECTOR=.true., AGRID=.true.)
-!!$
-!!$       if ( have_south_pole ) then
-!!$! Projection at SP
-!!$          us = 0.
-!!$          vs = 0.
-!!$          do i=1,im2
-!!$            us = us + (ua(i+im2,2)-ua(i,2))*sinlon(i,2)         &
-!!$                    + (va(i,2)-va(i+im2,2))*coslon(i,2)
-!!$            vs = vs + (ua(i+im2,2)-ua(i,2))*coslon(i,2)         &
-!!$                    + (va(i+im2,2)-va(i,2))*sinlon(i,2)
-!!$          enddo
-!!$          us = us/im
-!!$          vs = vs/im
-!!$! SP
-!!$          do i=1,im2
-!!$            ua(i,1)  = -us*sinlon(i,1) - vs*coslon(i,1)
-!!$            va(i,1)  =  us*coslon(i,1) - vs*sinlon(i,1)
-!!$            ua(i+im2,1)  = -ua(i,1)
-!!$            va(i+im2,1)  = -va(i,1)
-!!$          enddo
-!!$          ua(0   ,1) = ua(im,1)
-!!$          ua(im+1,1) = ua(1 ,1)
-!!$          va(im+1,1) = va(1 ,1)
-!!$        endif
-!!$
-!!$        if ( have_north_pole ) then
-!!$! Projection at NP
-!!$          un = 0.
-!!$          vn = 0.
-!!$          j = jm-1
-!!$          do i=1,im2
-!!$            un = un + (ua(i+im2,j)-ua(i,j))*sinlon(i,j)        &
-!!$                    + (va(i+im2,j)-va(i,j))*coslon(i,j)
-!!$            vn = vn + (ua(i,j)-ua(i+im2,j))*coslon(i,j)        &
-!!$                    + (va(i+im2,j)-va(i,j))*sinlon(i,j)
-!!$          enddo
-!!$          un = un/im
-!!$          vn = vn/im
-!!$! NP
-!!$          do i=1,im2
-!!$            ua(i,jm) = -un*sinlon(i,jm) + vn*coslon(i,jm)
-!!$            va(i,jm) = -un*coslon(i,jm) - vn*sinlon(i,jm)
-!!$            ua(i+im2,jm) = -ua(i,jm)
-!!$            va(i+im2,jm) = -va(i,jm)
-!!$          enddo
-!!$          ua(0   ,jm) = ua(im,jm)
-!!$          ua(im+1,jm) = ua(1 ,jm)
-!!$          va(im+1,jm) = va(1 ,jm)
-!!$        endif
-!!$
-!!$        if (latlon) call mp_ghost_ew(im,jm,1,1, ifirst,ilast, jfirst,jlast, 1,1, ng,ng, ng,ng, ua(:,:))
-!!$        if (latlon) call mp_ghost_ew(im,jm,1,1, ifirst,ilast, jfirst,jlast, 1,1, ng,ng, ng,ng, va(:,:))
-!!$
-!!$! A -> C
-!!$        call atoc(ua, va, uc, vc, dx,dy,dxa,dya,im, jm, ng, bounded_domain, domain, noComm=.true.)
-!!$
-!!$     enddo ! km loop
-!!$
-!!$     if (.not. bounded_domain) call fill_corners(uc, vc, im, jm, VECTOR=.true., CGRID=.true.)
-!!$   endif
-!!$
-!!$
-!!$ end subroutine d2a2c
-!!$
-
-!!$      subroutine atob_s(qin, qout, npx, npy, dxa, dya, bounded_domain, cubed_sphere, altInterp)
-!!$
-!!$!     atob_s :: interpolate scalar from the A-Grid to the B-grid
-!!$!
-!!$         integer,      intent(IN) :: npx, npy
-!!$         real  , intent(IN)    ::  qin(isd:ied  ,jsd:jed  )    ! A-grid field
-!!$         real  , intent(OUT)   :: qout(isd:ied+1,jsd:jed+1)    ! Output  B-grid field
-!!$         integer, OPTIONAL, intent(IN) :: altInterp
-!!$         logical, intent(IN) :: bounded_domain, cubed_sphere
-!!$         real, intent(IN), dimension(isd:ied,jsd:jed)    :: dxa, dya
-!!$
-!!$         integer :: i,j,n
-!!$
-!!$         real :: tmp1j(jsd:jed+1)
-!!$         real :: tmp2j(jsd:jed+1)
-!!$         real :: tmp3j(jsd:jed+1)
-!!$         real :: tmp1i(isd:ied+1)
-!!$         real :: tmp2i(isd:ied+1)
-!!$         real :: tmp3i(isd:ied+1)
-!!$         real :: tmpq(isd:ied  ,jsd:jed  )
-!!$         real :: tmpq1(isd:ied+1,jsd:jed+1)
-!!$         real :: tmpq2(isd:ied+1,jsd:jed+1)
-!!$
-!!$         if (present(altInterp)) then
-!!$
-!!$         tmpq(:,:) = qin(:,:)
-!!$
-!!$         if (.not. bounded_domain) call fill_corners(tmpq  , npx, npy, FILL=XDir, AGRID=.true.)
-!!$! ATOC
-!!$         do j=jsd,jed
-!!$            call interp_left_edge_1d(tmpq1(:,j), tmpq(:,j), dxa(:,j), isd, ied, altInterp)
-!!$         enddo
-!!$
-!!$         if (.not. bounded_domain) call fill_corners(tmpq  , npx, npy, FILL=YDir, AGRID=.true.)
-!!$! ATOD
-!!$         do i=isd,ied
-!!$            tmp1j(jsd:jed) = 0.0
-!!$            tmp2j(jsd:jed) = tmpq(i,jsd:jed)
-!!$            tmp3j(jsd:jed) = dya(i,jsd:jed)
-!!$            call interp_left_edge_1d(tmp1j, tmp2j, tmp3j, jsd, jed, altInterp)
-!!$            tmpq2(i,jsd:jed) = tmp1j(jsd:jed)
-!!$         enddo
-!!$
-!!$! CTOB
-!!$         do i=isd,ied
-!!$            tmp1j(:) = tmpq1(i,:)
-!!$            tmp2j(:) = tmpq1(i,:)
-!!$            tmp3j(:) = 1.0  ! Uniform Weighting missing first value so will not reproduce
-!!$            call interp_left_edge_1d(tmp1j, tmp2j, tmp3j, jsd, jed+1, altInterp)
-!!$            tmpq1(i,:) = tmp1j(:)
-!!$         enddo
-!!$
-!!$! DTOB
-!!$         do j=jsd,jed
-!!$            tmp1i(:) = tmpq2(:,j)
-!!$            tmp2i(:) = tmpq2(:,j)
-!!$            tmp3i(:) = 1.0  ! Uniform Weighting missing first value so will not reproduce
-!!$            call interp_left_edge_1d(tmp1i, tmp2i, tmp3i, isd, ied+1, altInterp)
-!!$            tmpq2(:,j) = tmp1i(:)
-!!$         enddo
-!!$
-!!$! Average
-!!$         do j=jsd,jed+1
-!!$            do i=isd,ied+1
-!!$               qout(i,j) = 0.5 * (tmpq1(i,j) + tmpq2(i,j))
-!!$            enddo
-!!$         enddo
-!!$
-!!$! Fix Corners
-!!$         if (cubed_sphere  .and. .not. bounded_domain) then
-!!$            i=1
-!!$            j=1
-!!$            if ( (is==i) .and. (js==j) ) then
-!!$               qout(i,j) = (1./3.) * (qin(i,j) + qin(i-1,j) + qin(i,j-1))
-!!$            endif
-!!$
-!!$            i=npx
-!!$            j=1
-!!$            if ( (ie+1==i) .and. (js==j) ) then
-!!$               qout(i,j) = (1./3.) * (qin(i-1,j) + qin(i-1,j-1) + qin(i,j))
-!!$            endif
-!!$
-!!$            i=1
-!!$            j=npy
-!!$            if ( (is==i) .and. (je+1==j) ) then
-!!$               qout(i,j) = (1./3.) * (qin(i,j-1) + qin(i-1,j-1) + qin(i,j))
-!!$            endif
-!!$
-!!$            i=npx
-!!$            j=npy
-!!$            if ( (ie+1==i) .and. (je+1==j) ) then
-!!$               qout(i,j) = (1./3.) * (qin(i-1,j-1) + qin(i,j-1) + qin(i-1,j))
-!!$            endif
-!!$        endif
-!!$
-!!$        else ! altInterp
-!!$
-!!$            do j=js,je+1
-!!$               do i=is,ie+1
-!!$                  qout(i,j) = 0.25 * (qin(i-1,j) + qin(i-1,j-1) + &
-!!$                                      qin(i  ,j) + qin(i  ,j-1))
-!!$               enddo
-!!$            enddo
-!!$
-!!$            if (.not. bounded_domain) then
-!!$            i=1
-!!$            j=1
-!!$            if ( (is==i) .and. (js==j) ) then
-!!$               qout(i,j) = (1./3.) * (qin(i,j) + qin(i-1,j) + qin(i,j-1))
-!!$            endif
-!!$
-!!$            i=npx
-!!$            j=1
-!!$            if ( (ie+1==i) .and. (js==j) ) then
-!!$               qout(i,j) = (1./3.) * (qin(i-1,j) + qin(i-1,j-1) + qin(i,j))
-!!$            endif
-!!$
-!!$            i=1
-!!$            j=npy
-!!$            if ( (is==i) .and. (je+1==j) ) then
-!!$               qout(i,j) = (1./3.) * (qin(i,j-1) + qin(i-1,j-1) + qin(i,j))
-!!$            endif
-!!$
-!!$            i=npx
-!!$            j=npy
-!!$            if ( (ie+1==i) .and. (je+1==j) ) then
-!!$               qout(i,j) = (1./3.) * (qin(i-1,j-1) + qin(i,j-1) + qin(i-1,j))
-!!$            endif
-!!$            endif !not bounded_domain
-!!$
-!!$        endif ! altInterp
-!!$
-!!$      end subroutine atob_s
-!!$!
-!!$! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!!$!-------------------------------------------------------------------------------
-
 !-------------------------------------------------------------------------------
 ! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
 !
@@ -7954,7 +7281,6 @@ end subroutine terminator_tracers
             call interp_left_edge_1d(uout(:,j), uin(:,j), dxa(:,j), isd, ied, interpOrder)
          enddo
          do i=isd,ied
-!!$            tmp1j(:) = vout(i,:)
             tmp2j(:) = vin(i,:)
             tmp3j(:) = dya(i,:)
             call interp_left_edge_1d(tmp1j, tmp2j, tmp3j, jsd, jed, interpOrder)
@@ -7964,14 +7290,12 @@ end subroutine terminator_tracers
 #else
 
          do j=jsd,jed
-!!$            tmp1i(:) = uout(:,j)
             tmp2i(:) = uin(:,j)*dya(:,j)
             tmp3i(:) = dxa(:,j)
             call interp_left_edge_1d(tmp1i, tmp2i, tmp3i, isd, ied, interpOrder)
             uout(:,j) = tmp1i(:)/dy(:,j)
          enddo
          do i=isd,ied
-!!$            tmp1j(:) = vout(i,:)
             tmp2j(:) = vin(i,:)*dxa(i,:)
             tmp3j(:) = dya(i,:)
             call interp_left_edge_1d(tmp1j, tmp2j, tmp3j, jsd, jed, interpOrder)
@@ -8484,12 +7808,6 @@ end subroutine terminator_tracers
       ! if (tile==1) print*, ifirst+NINT(x+1), ifirst+NINT(x), (x - NINT(x))
       ! if (tile==1) print*, 0.5*(qin(i-1)+qin(i)), qout(i)
     enddo
-
-!!$   if (tile==1) print*,'x=fltarr(28)'
-!!$    do i=ifirst,ilast
-!!$       if (tile==1) print*, 'x(',i-ifirst,')=',qin(i)
-!!$    enddo
-
 
     call mp_stop
     stop

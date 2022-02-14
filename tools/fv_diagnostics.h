@@ -68,6 +68,10 @@
      integer ic_ps, ic_ua, ic_va, ic_ppt
      integer ic_sphum
      integer, allocatable :: id_tracer(:)
+
+! dissipation estimates
+ integer :: id_diss
+
 ! ESM requested diagnostics  -  dry mass/volume mixing ratios
  integer, allocatable :: id_tracer_dmmr(:)
  integer, allocatable :: id_tracer_dvmr(:)
