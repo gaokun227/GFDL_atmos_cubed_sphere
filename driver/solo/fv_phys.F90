@@ -102,6 +102,8 @@ public :: fv_phys, fv_nudge
   integer:: seconds, days
   logical :: print_diag
   integer :: istep = 0
+  logical :: do_zurita_HS = .false. !use form from Zurita-Gotor and Held 2022
+  real :: rd_zur = 1./25. !close to traditional H-S
 
   !GFDL Simplified Physics (mostly Frierson)
   logical:: diurnal_cycle    = .false.
@@ -161,7 +163,7 @@ namelist /sim_phys_nml/do_strat_HS_forcing, &
                        tau_temp, tau_press, sst_restore_timescale,  &
                        do_K_warm_rain, do_GFDL_sim_phys,&
                        do_reed_sim_phys, do_LS_cond, do_surf_drag,    &
-                       tau_surf_drag, do_terminator
+                       tau_surf_drag, do_terminator, do_zurita_HS, rd_zur
 
 namelist /GFDL_sim_phys_nml/ diurnal_cycle, mixed_layer, gray_rad, strat_rad, do_abl, do_mon_obkv, &
      heating_rate, cooling_rate, uniform_sst, sst0, sst_type, shift_n, do_t_strat, p_strat, t_strat, tau_strat, &
@@ -542,7 +544,7 @@ contains
                               u, v, pt, q, pe, delp, peln, pkz, pdt,  &
                               ua, va, u_dt, v_dt, t_dt, q_dt, grid,   &
                               delz, phis, hydrostatic, ak, bk, ks,    &
-                              do_strat_HS_forcing, .false., master, Time, time_total)
+                              do_strat_HS_forcing, do_zurita_HS, rd_zur, master, Time, time_total)
        no_tendency = .false.
     elseif ( do_surf_drag ) then
 ! Bottom friction:
