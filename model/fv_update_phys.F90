@@ -21,7 +21,7 @@
 
 module fv_update_phys_mod
 
-  use constants_mod,      only: kappa, rdgas, rvgas, grav, cp_air, cp_vapor, pi=>pi_8, radius, TFREEZE
+  use constants_mod,      only: kappa, rdgas, rvgas, grav, cp_air, cp_vapor, pi=>pi_8, TFREEZE
   use field_manager_mod,  only: MODEL_ATMOS
   use mpp_domains_mod,    only: mpp_update_domains, domain2d
   use mpp_parameter_mod,  only: AGRID_PARAM=>AGRID

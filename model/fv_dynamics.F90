@@ -20,7 +20,8 @@
 !***********************************************************************
 
 module fv_dynamics_mod
-   use constants_mod,       only: grav, pi=>pi_8, radius, hlv, rdgas, omega, rvgas, cp_vapor
+   use constants_mod,       only: grav, pi=>pi_8, hlv, rdgas, rvgas, cp_vapor
+   use fv_arrays_mod,       only: radius, omega ! scaled for small earth
    use dyn_core_mod,        only: dyn_core, del2_cubed, init_ijk_mem
    use fv_mapz_mod,         only: compute_total_energy, Lagrangian_to_Eulerian, moist_cv, moist_cp
    use fv_tracer2d_mod,     only: tracer_2d, tracer_2d_1L, tracer_2d_nested
@@ -553,10 +554,6 @@ contains
          enddo
 
                                                   call timing_on('Remapping')
-#ifdef AVEC_TIMERS
-                                                  call avec_timer_start(6)
-#endif
-
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'before remap k_split ', n_map, '/', k_split
        call prt_mxm('T_ldyn',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
@@ -617,9 +614,6 @@ contains
        if ( graupel > 0 )  &
       call prt_mxm('graupel_dyn', q(isd,jsd,1,graupel), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
      endif
-#ifdef AVEC_TIMERS
-                                                  call avec_timer_stop(6)
-#endif
                                                   call timing_off('Remapping')
 #ifdef MOIST_CAPPA
          if ( neststruct%nested .and. .not. last_step) then
@@ -977,7 +971,7 @@ contains
 #endif
        allocate( rf(npz) )
        rf(:) = 0.
-       
+
        do k=1, ks+1
           if( is_master() ) write(6,*) k, 0.01*pm(k)
        enddo
@@ -1238,7 +1232,7 @@ contains
 
     call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%bounded_domain)
 
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,gridstruct,aam,m_fac,ps,ptop,delp,agrav,ua) &
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,gridstruct,aam,m_fac,ps,ptop,delp,agrav,ua,radius,omega) &
 !$OMP                          private(r1, r2, dm)
   do j=js,je
      do i=is,ie

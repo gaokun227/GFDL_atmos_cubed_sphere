@@ -22,7 +22,8 @@
  module fv_grid_utils_mod
 
 #include <fms_platform.h>
- use constants_mod,   only: omega, pi=>pi_8, cnst_radius=>radius
+ use constants_mod,   only: pi=>pi_8
+ use fv_arrays_mod,   only: radius, omega ! scaled for small earth
  use mpp_mod,         only: FATAL, mpp_error, WARNING
  use external_sst_mod, only: i_sst, j_sst, sst_ncep, sst_anom
  use mpp_domains_mod, only: mpp_update_domains, DGRID_NE, mpp_global_sum
@@ -50,8 +51,6 @@
 #endif
  real, parameter::  big_number=1.d8
  real, parameter:: tiny_number=1.d-8
-
- real(kind=R_GRID) :: radius=cnst_radius
 
  real, parameter:: ptop_min=1.d-8
 
@@ -193,7 +192,7 @@
       elseif ( .not. Atm%flagstruct%hybrid_z ) then
 ! Initialize (ak,bk) for cold start; overwritten with restart file
            if (.not. Atm%flagstruct%external_eta) then
-              call set_eta(npz, Atm%ks, Atm%ptop, Atm%ak, Atm%bk, Atm%flagstruct%npz_type)
+              call set_eta(npz, Atm%ks, Atm%ptop, Atm%ak, Atm%bk, Atm%flagstruct%npz_type, Atm%flagstruct%fv_eta_file)
               if ( is_master() ) then
                  write(*,*) 'Grid_init', npz, Atm%ks, Atm%ptop
                  tmp1 = Atm%ak(Atm%ks+1)

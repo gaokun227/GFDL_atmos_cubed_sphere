@@ -28,7 +28,7 @@ module atmosphere_mod
 !-----------------------------------------------------------------------
 
 
-use constants_mod, only: grav, kappa, cp_air, pi, rdgas, rvgas, SECONDS_PER_DAY, radius
+use constants_mod, only: grav, kappa, cp_air, pi, rdgas, rvgas, SECONDS_PER_DAY
 use fms_mod,       only: file_exist, open_namelist_file,   &
                          error_mesg, FATAL,                &
                          check_nml_error, stdlog, stdout,  &
@@ -161,11 +161,10 @@ contains
            if ( grids_on_this_pe(n) ) then
                 call fv_phys_init(isc,iec,jsc,jec,Atm(n)%npz,Atm(n)%flagstruct%nwat, Atm(n)%ts, Atm(n)%pt(isc:iec,jsc:jec,:),   &
                              Time, axes, Atm(n)%gridstruct%agrid(isc:iec,jsc:jec,2))
-                if ( Atm(n)%flagstruct%nwat==6) call gfdl_cld_mp_init(mpp_pe(),  &
-                                                mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
+                !if ( Atm(n)%flagstruct%nwat==6) call gfdl_cld_mp_init(input_nml_file, stdlog())
            endif
         endif
-        if (.not. Atm(n)%flagstruct%adiabatic) call gfdl_mp_init (mpp_pe(), mpp_root_pe(), nlunit, input_nml_file, stdlog(), fn_nml)
+        if (.not. Atm(n)%flagstruct%adiabatic) call gfdl_mp_init (input_nml_file, stdlog())
 
 
 
@@ -277,7 +276,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%diss_est)
 ! Backward
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, -dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -291,7 +290,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%diss_est)
 ! Nudging back to IC
 !$omp parallel do default(shared)
        do k=1,npz

@@ -21,7 +21,9 @@
 
 module fv_phys_mod
 
-use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, radius, kappa, OMEGA
+use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, kappa
+use fv_arrays_mod,         only: radius, omega ! scaled for small earth
+
 use time_manager_mod,      only: time_type, get_time
 use gfdl_cld_mp_mod,       only: gfdl_cld_mp_driver, mqs3d, wet_bulb, c_liq
 use hswf_mod,              only: Held_Suarez_Tend
@@ -92,7 +94,7 @@ public :: fv_phys, fv_nudge
   logical:: do_surf_drag     = .false. ! a simple surface drag (bottom friction) scheme
   real   :: tau_surf_drag  = 1.   ! time-scale for the surface drag
   logical:: do_reed_sim_phys     = .false.
-  logical:: do_terminator    = .false. 
+  logical:: do_terminator    = .false.
   logical:: term_fill_negative = .false.
   integer:: print_freq = 6  ! hours
   integer:: seconds, days
@@ -130,7 +132,7 @@ public :: fv_phys, fv_nudge
   real:: ml_c0 = 6.285E7           ! Ocean heat capabicity 4190*depth*e3, depth = 15.
   real:: sw_abs = 0.            ! fraction of the solar absorbed/reflected by the atm
 
-  
+
   !Kessler parameters
   logical:: K_sedi_transport = .false.
   logical:: do_K_sedi_w = .false.
@@ -151,7 +153,7 @@ public :: fv_phys, fv_nudge
   real    :: missing_value = -1.e10
 
   logical :: first_call = .true.
-  
+
 namelist /sim_phys_nml/do_strat_HS_forcing, &
                        print_freq, tau_winds, &
                        tau_temp, tau_press, sst_restore_timescale,  &
@@ -691,7 +693,7 @@ contains
 ! Factor for Small-Earth Approx.
    fac_sm = radius / 6371.0e3
    rrg  = rdgas / grav
-   sday  = 24.*3600.*fac_sm
+   sday  = 24.*3600.*fac_sm !not sure this works right
 
    qflux = 0.
    rflux = 0.
@@ -763,7 +765,7 @@ contains
 !!$            !ts0(i,j) = pt(i,j,km)
 !!$            sst(i,j) = ts0(i,j)
 !!$         enddo
-!!$         enddo         
+!!$         enddo
 !!$      else
 !!$         do j=js,je
 !!$         do i=is,ie
@@ -958,7 +960,7 @@ if ( zero_winds ) then
    if (grid_type /= 4) then
       call mpp_error(FATAL, "fv_phys::GFDL_SIM_PHYS: zero_winds only works with doubly-periodic domain (grid_type = 4).")
    endif
-   
+
 ! Zero out (doubly periodic) domain averaged winds with time-scale tau_zero:
 ! This loop can not be openMP-ed
  do k=1, km
@@ -995,7 +997,7 @@ endif
           enddo
        enddo
     endif
-    
+
   call pbl_diff(hydrostatic, pdt, is, ie, js, je, ng, km, nq, u3, v3, t3,      &
                 w, q3, delp, p3, pe, sst, mu, dz, u_dt, v_dt, t_dt, q_dt, &
                 gridstruct%area, print_diag, Time )
@@ -1005,7 +1007,7 @@ endif
   if ( mixed_layer ) then
      do j=js, je
         do i=is, ie
-#ifdef RAIN_FLUX           
+#ifdef RAIN_FLUX
            !rain, etc. never defined
            precip = (rain(i,j)+snow(i,j)+ice(i,j)+graup(i,j)) / 86400.
 #ifdef NO_WET_T
@@ -1079,8 +1081,8 @@ endif
 
   endif
 
-  if (id_qflux) used=send_data(id_qflux, qflux, time)
-  if (id_hflux) used=send_data(id_hflux, flux_t, time)
+  if (id_qflux > 0) used=send_data(id_qflux, qflux, time)
+  if (id_hflux > 0) used=send_data(id_hflux, flux_t, time)
 
 
  end subroutine GFDL_sim_phys
@@ -1587,7 +1589,7 @@ endif
             read  (unit, nml=Kessler_sim_phys_nml, iostat=io, end=10)
             ierr = check_nml_error(io,'Kessler_sim_phys_nml')
          endif
-         
+
          if (do_GFDL_sim_phys) then
             read  (unit, nml=GFDL_sim_phys_nml, iostat=io, end=10)
             ierr = check_nml_error(io,'GFDL_sim_phys_nml')
@@ -1630,7 +1632,7 @@ endif
        prec_total(:,:) = 0.
     endif
 
-    if (do_GFDL_sim_phys > 0) then
+    if (do_GFDL_sim_phys) then
        id_qflux = register_diag_field(mod_name, 'qflux', axes(1:3), time, &
             'Physics latent heat flux', 'J/m**2/s', missing_value=missing_value)
        id_hflux = register_diag_field(mod_name, 'hflux', axes(1:3), time, &
@@ -1655,9 +1657,9 @@ endif
       if (sst_type == 1) then !SST in equib with lower atmosphere
          do j=js,je
          do i=is,ie
-            ts0(i,j) = pt(i,j,km)            
+            ts0(i,j) = pt(i,j,km)
          enddo
-         enddo         
+         enddo
       else
          do j=js,je
          do i=is,ie
@@ -1673,7 +1675,7 @@ endif
    enddo
 
 
-    
+
     call prt_maxmin('TS initialized:', ts, is, ie, js, je, 0,  1, 1.0)
     call qs_wat_init
 
@@ -1919,7 +1921,7 @@ endif
      q(i,j,k,rainwat) = q3(k) / dp(i,j,k)
   enddo
   enddo   ! i-loop
-  
+
   ! Adjust pressure fields:
   do k=2,km+1
      do i=is,ie

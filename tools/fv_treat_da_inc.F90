@@ -35,8 +35,7 @@
 
 module fv_treat_da_inc_mod
 
-  use fms_mod,           only: file_exist, read_data, &
-                               field_exist, write_version_number
+  use fms2_io_mod,       only: file_exists
   use mpp_mod,           only: mpp_error, FATAL, NOTE, mpp_pe
   use mpp_domains_mod,   only: mpp_get_tile_id, &
                                domain2d, &
@@ -48,8 +47,9 @@ module fv_treat_da_inc_mod
                                get_tracer_index
   use field_manager_mod, only: MODEL_ATMOS
 
-  use constants_mod,     only: pi=>pi_8, omega, grav, kappa, &
+  use constants_mod,     only: pi=>pi_8, grav, kappa, &
                                rdgas, rvgas, cp_air
+  use fv_arrays_mod,     only: omega ! scaled for small earth
   use fv_arrays_mod,     only: fv_atmos_type, &
                                fv_grid_type, &
                                fv_grid_bounds_type, &
@@ -142,7 +142,7 @@ contains
 
     fname = 'INPUT/'//Atm%flagstruct%res_latlon_dynamics
 
-    if( file_exist(fname) ) then
+    if( file_exists(fname) ) then
       call open_ncfile( fname, ncid )        ! open the file
       call get_ncdim1( ncid, 'lon',   tsize(1) )
       call get_ncdim1( ncid, 'lat',   tsize(2) )

@@ -35,7 +35,13 @@ module fv_regional_mod
                                 mpp_error ,mpp_pe, mpp_sync,            &
                                 mpp_npes, mpp_root_pe, mpp_gather,      &
                                 mpp_get_current_pelist, NOTE, NULL_PE
-   use mpp_io_mod
+   use fms2_io_mod,       only: open_file, close_file, register_axis,   &
+                                register_variable_attribute,            &
+                                register_global_attribute, read_data,   &
+                                register_field, FmsNetcdfFile_t,        &
+                                FmsNetcdfDomainFile_t, write_data,      &
+                                get_global_attribute, global_att_exists,&
+                                get_dimension_size
    use tracer_manager_mod,only: get_tracer_index,get_tracer_names
    use field_manager_mod, only: MODEL_ATMOS
    use time_manager_mod,  only: get_time                                &
@@ -58,11 +64,9 @@ module fv_regional_mod
    use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
    use fv_fill_mod,       only: fillz
    use fv_eta_mod,        only: get_eta_level
-   use fms_mod,           only: check_nml_error,file_exist
-   use fms_io_mod,        only: read_data,get_global_att_value
+   use fms_mod,           only: check_nml_error
    use boundary_mod,      only: fv_nest_BC_type_3D
    use gfdl_mp_mod,       only: c_liq, c_ice
-   use sim_nc_mod,        only: open_ncfile, close_ncfile, get_ncdim1
 
    implicit none
 
@@ -230,11 +234,11 @@ module fv_regional_mod
                            ,oro_data ='oro_data.tile7.halo4.nc'
 
 #ifdef OVERLOAD_R4
-      real, parameter:: real_snan=x'FFBFFFFF'
+      real, parameter:: real_snan=real(Z'FFBFFFFF')
 #else
-      real, parameter:: real_snan=x'FFF7FFFFFFFFFFFF'
+      real, parameter:: real_snan=real(Z'FFF7FFFFFFFFFFFF')
 #endif
-      real(kind=R_GRID), parameter:: dbl_snan=x'FFF7FFFFFFFFFFFF'
+      real(kind=R_GRID), parameter:: dbl_snan=real(Z'FFF7FFFFFFFFFFFF',kind=R_GRID)
 
       interface dump_field
         module procedure dump_field_3d
@@ -1348,18 +1352,14 @@ contains
 !***  Local variables
 !---------------------
 !
+      type(FmsNetcdfFile_t) :: Gfs_ctl
+      type(FmsNetcdfFile_t) :: Grid_input
+      integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
       integer :: ierr, ios
       real, allocatable :: wk2(:,:)
 !
-      logical :: filtered_terrain = .true.
-      logical :: gfs_dwinds       = .true.
-      integer :: levp             = 64
-      logical :: checker_tr       = .false.
-      integer :: nt_checker       = 0
-      namelist /external_ic_nml/ filtered_terrain, levp, gfs_dwinds     &
-                                ,checker_tr, nt_checker
       ! variables for reading the dimension from the gfs_ctrl
-      integer ncid, levsp
+      integer :: levp, levsp
 !-----------------------------------------------------------------------
 !***********************************************************************
 !-----------------------------------------------------------------------
@@ -1367,18 +1367,15 @@ contains
 !-----------------------------------------------------------------------
 !*** Read the number of model layers in the external forecast (=levp).
 !-----------------------------------------------------------------------
-!
-      read (input_nml_file,external_ic_nml,iostat=ios)
-      ierr = check_nml_error(ios,'external_ic_nml')
-      if(ierr/=0)then
-        write(0,11011)ierr
-11011   format(' start_regional_restart failed to read external_ic_nml ierr=',i3)
+      allocate(pes(mpp_npes()))
+      call mpp_get_current_pelist(pes)
+      if( open_file(Gfs_ctl, 'INPUT/gfs_ctrl.nc', "read", pelist=pes) ) then
+!--- read in the number of levsp
+        call get_dimension_size(Gfs_ctl, 'levsp', levsp)
+        call close_file(Gfs_ctl)
+      else
+        call mpp_error(FATAL,'==> Error in fv_regional::start_regional_restart file INPUT/gfs_ctl.nc does not exist')
       endif
-
-!--- read in ak and bk from the control file using fms_io read_data ---
-      call open_ncfile( 'INPUT/gfs_ctrl.nc', ncid )        ! open the file
-      call get_ncdim1( ncid, 'levsp', levsp )
-      call close_ncfile( ncid )
 
       levp = levsp-1
 !
@@ -1401,13 +1398,20 @@ contains
                             ,Atm%npx, Atm%npy )
 !
       allocate (wk2(levp+1,2))
-      allocate (ak_in(levp+1))                                             !<-- Save the input vertical structure for
-      allocate (bk_in(levp+1))                                             !    remapping BC updates during the forecast.
+      allocate (ak_in(levp+1))                                               !<-- Save the input vertical structure for
+      allocate (bk_in(levp+1))                                               !    remapping BC updates during the forecast.
       if (Atm%flagstruct%hrrrv3_ic) then
-        call read_data('INPUT/hrrr_ctrl.nc','vcoord',wk2, no_domain=.TRUE.)
+        if (open_file(Grid_input, 'INPUT/hrrr_ctrl.nc', "read", pelist=pes)) then
+          call read_data(Grid_input,'vcoord',wk2)
+          call close_file(Grid_input)
+        endif
       else
-      call read_data('INPUT/gfs_ctrl.nc','vcoord',wk2, no_domain=.TRUE.)
-      end if
+        if (open_file(Grid_input, 'INPUT/gfs_ctrl.nc', "read", pelist=pes)) then
+          call read_data(Grid_input,'vcoord',wk2)
+          call close_file(Grid_input)
+        endif
+      endif
+      deallocate(pes)
       ak_in(1:levp+1) = wk2(1:levp+1,1)
       ak_in(1) = max(1.e-9, ak_in(1))
       bk_in(1:levp+1) = wk2(1:levp+1,2)
@@ -3758,6 +3762,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
             BC_side%delz_BC(i,j,k) = (gz_fv(k+1) - gz_fv(k)) / grav
           enddo
         endif
+
 #endif
       enddo i_loop
 
@@ -3780,7 +3785,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
             BC_side%q_BC(i,j,k,rainwat) = 0.
             BC_side%q_BC(i,j,k,snowwat) = 0.
             BC_side%q_BC(i,j,k,graupel) = 0.
-            BC_side%q_BC(i,j,k,cld_amt) = 0.
+            if (cld_amt > 0) BC_side%q_BC(i,j,k,cld_amt) = 0.
             if ( BC_side%pt_BC(i,j,k) > 273.16 ) then       ! > 0C all liq_wat
                BC_side%q_BC(i,j,k,liq_wat) = qn1(i,k)
                BC_side%q_BC(i,j,k,ice_wat) = 0.
@@ -3815,7 +3820,7 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
                                     BC_side%q_BC(i,j,k,ice_wat), BC_side%q_BC(i,j,k,snowwat) )
          enddo
       enddo
-    endif
+   endif
   endif ! data source /= FV3GFS GAUSSIAN NEMSIO/NETCDF and GRIB2 FILE
 #endif
 !
@@ -5659,11 +5664,8 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
     integer,                intent(IN)    :: isd, ied, jsd, jed, nlev
     integer,                intent(IN)    :: stag
 
-    integer                             :: unit
     character(len=128)                  :: fname
-    type(axistype)                      :: x, y, z
-    type(fieldtype)                     :: f
-    type(domain1D)                      :: xdom, ydom
+    type(FmsNetcdfDomainFile_t)         :: fileobj
     integer                             :: nz
     integer                             :: is, ie, js, je
     integer                             :: isg, ieg, jsg, jeg, nxg, nyg, npx, npy
@@ -5673,11 +5675,15 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
     integer, allocatable, dimension(:)  :: pelist
     character(len=1)                    :: stagname
     integer                             :: isection_s, isection_e, jsection_s, jsection_e
+    character(len=8), dimension(3)  :: dim_names_3d
+
+    dim_names_3d(1) = "grid_xt"
+    dim_names_3d(2) = "grid_yt"
+    dim_names_3d(3) = "lev"
 
     write(fname,"(A,A,A,I1.1,A)") "regional_",name,".tile", 7 , ".nc"
     write(0,*)'dump_field_3d: file name = |', trim(fname) , '|'
 
-    call mpp_get_domain_components( domain, xdom, ydom )
     call mpp_get_compute_domain( domain, is,  ie,  js,  je )
     call mpp_get_global_domain ( domain, isg, ieg, jsg, jeg, xsize=npx, ysize=npy, position=CENTER )
 
@@ -5722,32 +5728,51 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
     call mpp_gather(isection_s,isection_e,jsection_s,jsection_e, nz, &
                     pelist, field(isection_s:isection_e,jsection_s:jsection_e,:), glob_field, is_root_pe, halo, halo)
 
-    call mpp_open( unit, trim(fname), action=MPP_OVERWR, form=MPP_NETCDF, threading=MPP_SINGLE)
+    if (open_file(fileobj, fname, "overwrite", domain)) then
+        call register_axis(fileobj, "grid_xt", nxg)
+        call register_field(fileobj, "grid_xt", "double", (/"grid_xt"/))
+        call register_variable_attribute(fileobj, "grid_xt", "axis", "X", str_len=1)
+        call register_variable_attribute(fileobj, "grid_xt", "units", "km", str_len=len("km"))
+        call register_variable_attribute(fileobj, "grid_xt", "long_name", "X distance", str_len=len("X distance"))
+        call register_variable_attribute(fileobj, "grid_xt", "cartesian", "X", str_len=1)
+        call write_data(fileobj, "grid_xt", (/(i*1.0,i=1,nxg)/))
 
-    call mpp_write_meta( unit, x, 'grid_xt', 'km', 'X distance', 'X', domain=xdom, data=(/(i*1.0,i=1,nxg)/) )
-    call mpp_write_meta( unit, y, 'grid_yt', 'km', 'Y distance', 'Y', domain=ydom, data=(/(j*1.0,j=1,nyg)/) )
-    call mpp_write_meta( unit, z, 'lev',     'km', 'Z distance',                   data=(/(i*1.0,i=1,nz)/) )
+        call register_axis(fileobj, "grid_yt", nyg)
+        call register_field(fileobj, "grid_yt", "double", (/"grid_yt"/))
+        call register_variable_attribute(fileobj, "grid_yt", "axis", "Y", str_len=1)
+        call register_variable_attribute(fileobj, "grid_yt", "units", "km", str_len=len("km"))
+        call register_variable_attribute(fileobj, "grid_yt", "long_name", "Y distance", str_len=len("Y distance"))
+        call register_variable_attribute(fileobj, "grid_yt", "cartesian", "Y", str_len=1)
+        call write_data(fileobj, "grid_yt", (/(j*1.0,j=1,nyg)/))
 
-    call mpp_write_meta( unit, f, (/x,y,z/), name, 'unit', name)
-    call mpp_write_meta( unit, "stretch_factor", rval=stretch_factor )
-    call mpp_write_meta( unit, "target_lon", rval=target_lon )
-    call mpp_write_meta( unit, "target_lat", rval=target_lat )
-    call mpp_write_meta( unit, "cube_res", ival= cube_res)
-    call mpp_write_meta( unit, "parent_tile", ival=parent_tile )
-    call mpp_write_meta( unit, "refine_ratio", ival=refine_ratio )
-    call mpp_write_meta( unit, "istart_nest", ival=istart_nest )
-    call mpp_write_meta( unit, "jstart_nest", ival=jstart_nest )
-    call mpp_write_meta( unit, "iend_nest", ival=iend_nest )
-    call mpp_write_meta( unit, "jend_nest", ival=jend_nest )
-    call mpp_write_meta( unit, "ihalo_shift", ival=halo )
-    call mpp_write_meta( unit, "jhalo_shift", ival=halo )
-    call mpp_write_meta( unit, mpp_get_id(f), "hstagger", cval=stagname )
-    call mpp_write( unit, x )
-    call mpp_write( unit, y )
-    call mpp_write( unit, z )
-    call mpp_write( unit, f, glob_field )
+        call register_axis(fileobj, "lev", nz)
+        call register_field(fileobj, "lev", "double", (/"lev"/))
+        call register_variable_attribute(fileobj, "lev", "axis", "Z", str_len=1)
+        call register_variable_attribute(fileobj, "lev", "units", "km", str_len=len("km"))
+        call register_variable_attribute(fileobj, "lev", "long_name", "Z distance", str_len=len("Z distance"))
+        call write_data(fileobj, "lev", (/(i*1.0,i=1,nz)/))
 
-    call mpp_close( unit )
+        call register_global_attribute(fileobj, "stretch_factor", stretch_factor )
+        call register_global_attribute(fileobj, "target_lon", target_lon )
+        call register_global_attribute(fileobj, "target_lat", target_lat )
+        call register_global_attribute(fileobj, "cube_res", cube_res)
+        call register_global_attribute(fileobj, "parent_tile", parent_tile )
+        call register_global_attribute(fileobj, "refine_ratio", refine_ratio )
+        call register_global_attribute(fileobj, "istart_nest", istart_nest )
+        call register_global_attribute(fileobj, "jstart_nest", jstart_nest )
+        call register_global_attribute(fileobj, "iend_nest", iend_nest )
+        call register_global_attribute(fileobj, "jend_nest", jend_nest )
+        call register_global_attribute(fileobj, "ihalo_shift", halo )
+        call register_global_attribute(fileobj, "jhalo_shift", halo )
+        call register_global_attribute(fileobj,  "hstagger", stagname )
+
+        call register_field(fileobj, name, "double", dim_names_3d)
+
+        call write_data(fileobj, name, glob_field)
+
+        call close_file(fileobj)
+    endif
+
 
   end subroutine dump_field_3d
 
@@ -5759,11 +5784,8 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
     integer,                intent(IN)    :: isd, ied, jsd, jed
     integer,                intent(IN)    :: stag
 
-    integer                             :: unit
     character(len=128)                  :: fname
-    type(axistype)                      :: x, y
-    type(fieldtype)                     :: f
-    type(domain1D)                      :: xdom, ydom
+    type(FmsNetcdfDomainFile_t)         :: fileobj
     integer                             :: is, ie, js, je
     integer                             :: isg, ieg, jsg, jeg, nxg, nyg, npx, npy
     integer                             :: i, j, halo, iext, jext
@@ -5773,10 +5795,15 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
     character(len=1)                    :: stagname
     integer                             :: isection_s, isection_e, jsection_s, jsection_e
 
+    character(len=8), dimension(3)  :: dim_names_3d
+
+    dim_names_3d(1) = "grid_xt"
+    dim_names_3d(2) = "grid_yt"
+    dim_names_3d(3) = "lev"
+
     write(fname,"(A,A,A,I1.1,A)") "regional_",name,".tile", 7 , ".nc"
     write(0,*)'dump_field_3d: file name = |', trim(fname) , '|'
 
-    call mpp_get_domain_components( domain, xdom, ydom )
     call mpp_get_compute_domain( domain, is,  ie,  js,  je )
     call mpp_get_global_domain ( domain, isg, ieg, jsg, jeg, xsize=npx, ysize=npy, position=CENTER )
 
@@ -5820,30 +5847,43 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
     call mpp_gather(isection_s,isection_e,jsection_s,jsection_e, &
                     pelist, field(isection_s:isection_e,jsection_s:jsection_e), glob_field, is_root_pe, halo, halo)
 
-    call mpp_open( unit, trim(fname), action=MPP_OVERWR, form=MPP_NETCDF, threading=MPP_SINGLE)
+    if (open_file(fileobj, fname, "overwrite", domain)) then
+        call register_axis(fileobj, "grid_xt", nxg)
+        call register_field(fileobj, "grid_xt", "double", (/"grid_xt"/))
+        call register_variable_attribute(fileobj, "grid_xt", "axis", "X", str_len=1)
+        call register_variable_attribute(fileobj, "grid_xt", "units", "km", str_len=len("km"))
+        call register_variable_attribute(fileobj, "grid_xt", "long_name", "X distance", str_len=len("X distance"))
+        call register_variable_attribute(fileobj, "grid_xt", "cartesian", "X", str_len=1)
+        call write_data(fileobj, "grid_xt", (/(i*1.0,i=1,nxg)/))
 
-    call mpp_write_meta( unit, x, 'grid_xt', 'km', 'X distance', 'X', domain=xdom, data=(/(i*1.0,i=1,nxg)/) )
-    call mpp_write_meta( unit, y, 'grid_yt', 'km', 'Y distance', 'Y', domain=ydom, data=(/(j*1.0,j=1,nyg)/) )
+        call register_axis(fileobj, "grid_yt", nyg)
+        call register_field(fileobj, "grid_yt", "double", (/"grid_yt"/))
+        call register_variable_attribute(fileobj, "grid_yt", "axis", "Y", str_len=1)
+        call register_variable_attribute(fileobj, "grid_yt", "units", "km", str_len=len("km"))
+        call register_variable_attribute(fileobj, "grid_yt", "long_name", "Y distance", str_len=len("Y distance"))
+        call register_variable_attribute(fileobj, "grid_yt", "cartesian", "Y", str_len=1)
+        call write_data(fileobj, "grid_yt", (/(j*1.0,j=1,nyg)/))
 
-    call mpp_write_meta( unit, f, (/x,y/), name, 'unit', name)
-    call mpp_write_meta( unit, "stretch_factor", rval=stretch_factor )
-    call mpp_write_meta( unit, "target_lon", rval=target_lon )
-    call mpp_write_meta( unit, "target_lat", rval=target_lat )
-    call mpp_write_meta( unit, "cube_res", ival= cube_res)
-    call mpp_write_meta( unit, "parent_tile", ival=parent_tile )
-    call mpp_write_meta( unit, "refine_ratio", ival=refine_ratio )
-    call mpp_write_meta( unit, "istart_nest", ival=istart_nest )
-    call mpp_write_meta( unit, "jstart_nest", ival=jstart_nest )
-    call mpp_write_meta( unit, "iend_nest", ival=iend_nest )
-    call mpp_write_meta( unit, "jend_nest", ival=jend_nest )
-    call mpp_write_meta( unit, "ihalo_shift", ival=halo )
-    call mpp_write_meta( unit, "jhalo_shift", ival=halo )
-    call mpp_write_meta( unit, mpp_get_id(f), "hstagger", cval=stagname )
-    call mpp_write( unit, x )
-    call mpp_write( unit, y )
-    call mpp_write( unit, f, glob_field )
+        call register_global_attribute(fileobj, "stretch_factor", stretch_factor )
+        call register_global_attribute(fileobj, "target_lon", target_lon )
+        call register_global_attribute(fileobj, "target_lat", target_lat )
+        call register_global_attribute(fileobj, "cube_res", cube_res)
+        call register_global_attribute(fileobj, "parent_tile", parent_tile )
+        call register_global_attribute(fileobj, "refine_ratio", refine_ratio )
+        call register_global_attribute(fileobj, "istart_nest", istart_nest )
+        call register_global_attribute(fileobj, "jstart_nest", jstart_nest )
+        call register_global_attribute(fileobj, "iend_nest", iend_nest )
+        call register_global_attribute(fileobj, "jend_nest", jend_nest )
+        call register_global_attribute(fileobj, "ihalo_shift", halo )
+        call register_global_attribute(fileobj, "jhalo_shift", halo )
+        call register_global_attribute(fileobj,  "hstagger", stagname )
 
-    call mpp_close( unit )
+        call register_field(fileobj, name, "double", dim_names_3d)
+
+        call write_data(fileobj, name, glob_field)
+
+        call close_file(fileobj)
+    endif
 
   end subroutine dump_field_2d
 
@@ -6729,23 +6769,29 @@ subroutine remap_scalar_nggps_regional_bc(Atm                         &
 
       character (len=80) :: source
       logical :: lstatus
-
       character(len=*), intent(in), optional :: directory
-
       character(len=128) :: dir
+      type(FmsNetcdfFile_t) :: Gfs_data
+      integer, allocatable, dimension(:) :: pes !< Array of the pes in the current pelist
 
-      dir = 'INPUT'
+      dir = 'INPUT/'
       if(present(directory)) dir = directory
-
 !
 ! Use the fms call here so we can actually get the return code value.
 ! The term 'source' is specified by 'chgres_cube'
 !
-      if (regional) then
-       lstatus = get_global_att_value(trim(dir)//'/gfs_data.nc',"source", source)
-      else
-       lstatus = get_global_att_value(trim(dir)//'/gfs_data.tile1.nc',"source", source)
-      endif
+      lstatus=.false.
+      allocate(pes(mpp_npes()))
+      call mpp_get_current_pelist(pes)
+
+        if (open_file(Gfs_data , trim(dir)//'/gfs_data.nc', "read", pelist=pes) .or. &
+            open_file(Gfs_data , trim(dir)//'/gfs_data.tile1.nc', "read", pelist=pes)) then
+          lstatus = global_att_exists(Gfs_data, "source")
+          if(lstatus) call get_global_attribute(Gfs_data, "source", source)
+          call close_file(Gfs_data)
+        endif
+
+      deallocate(pes)
       if (.not. lstatus) then
        if (mpp_pe() == 0) write(0,*) 'INPUT source not found in ', trim(dir), &
                           ' status=', lstatus,' set source=No Source Attribute'
