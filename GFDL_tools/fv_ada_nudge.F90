@@ -2515,14 +2515,34 @@ endif
        call fv_io_register_axis(ada_driver_restart, numx=1, numy=1, numz=1, zsize=(/size(Atm_var%u_adj,3)/))
        call register_restart_field(ada_driver_restart, &
             & "u_adj", Atm_var%u_adj(:,:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "u_adj", "long_name", "u_adj", str_len=len("u_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "u_adj", "units", "none", str_len=len("none"))
        call register_restart_field(ada_driver_restart, &
             & "v_adj", Atm_var%v_adj(:,:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "v_adj", "long_name", "v_adj", str_len=len("v_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "v_adj", "units", "none", str_len=len("none"))
        call register_restart_field(ada_driver_restart, &
             & "t_adj", Atm_var%t_adj(:,:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "t_adj", "long_name", "t_adj", str_len=len("t_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "t_adj", "units", "none", str_len=len("none"))
        call register_restart_field(ada_driver_restart, &
             & "q_adj", Atm_var%q_adj(:,:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "q_adj", "long_name", "q_adj", str_len=len("q_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "q_adj", "units", "none", str_len=len("none"))
        call register_restart_field(ada_driver_restart, &
             & "ps_adj", Atm_var%ps_adj(:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "ps_adj", "long_name", "ps_adj", str_len=len("ps_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "ps_adj", "units", "none", str_len=len("none"))
        call write_restart(ada_driver_restart)
        call close_file(ada_driver_restart)
     endif
