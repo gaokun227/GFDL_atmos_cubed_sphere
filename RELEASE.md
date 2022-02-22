@@ -10,7 +10,7 @@ This release includes the following:
 - Updated GFDL Microphysics, used for real-time 2021 C-SHiELD and T-SHiELD.  (L Zhou)
 - Merges numerous updates from dev/emc
 - Leverage DA functionality from UFS with additional changes (M Tong).
-- Updates to use the latest FMS release, including FMSIO2
+- Updates to use the latest FMS release, including fms2_io
 
 
 # RELEASE NOTES for FV3 202107: Summary
