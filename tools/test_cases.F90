@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -5226,11 +5226,8 @@ end subroutine terminator_tracers
            do j=jsd,jed
               do i=isd,ied
                  ths = th0*exp(phis(i,j)*N2/grav)
-                 pk(i,j,npz+1) = pk0 + amp*(1./ths - 1./th0)
-                 ps(i,j) = exp(rkap*log(pk(i,j,npz+1)))
-!!$                 if (j==1) then
-!!$                    write(*,'(A, I, 3F)') ' test_cases: ', i, phis(i,j), ths*pk0, ps(i,j)
-!!$                 endif
+                 pks = pk0 + amp*(1./ths - 1./th0)
+                 ps(i,j) = exp(rkap*log(pks))
               enddo
            enddo
 
@@ -5255,14 +5252,6 @@ end subroutine terminator_tracers
            enddo
            ptop = ak(1)
 
-!!$           if (js==1 .and. is <= icenter .and. ie >= icenter) then
-!!$              i=icenter
-!!$              j=1
-!!$              do k=1,npz
-!!$                 write(*,'(I, 2(2x, F))') k, pe(i,k+1,j)/100., delp(i,j,k)/100.
-!!$              enddo
-!!$           endif
-
            !3. Set up thermal profile: N = 0.02
            do j=js,je
               do i=is,ie
@@ -5284,15 +5273,6 @@ end subroutine terminator_tracers
                  enddo
               enddo
            enddo
-
-!!$           if (js==1 .and. is <= icenter .and. ie >= icenter) then
-!!$              i=icenter
-!!$              j=1
-!!$              do k=1,npz
-!!$                 write(*,'(I, 4(2x, F))') k, gz(i,j,k+1), pt(i,j,k), delp(i,j,k), delz(i,j,k)
-!!$              enddo
-!!$           endif
-
 
            !4. Set up wind profile:
            u = 10.0
@@ -5394,11 +5374,8 @@ end subroutine terminator_tracers
            do j=jsd,jed
               do i=isd,ied
                  ths = th0*exp(phis(i,j)*N2/grav)
-                 pk(i,j,npz+1) = pk0 + amp*(1./ths - 1./th0)
-                 ps(i,j) = exp(rkap*log(pk(i,j,npz+1)))
-!!$                 if (j==1) then
-!!$                    write(*,'(A, I, 3F)') ' test_cases: ', i, phis(i,j), ths*pk0, ps(i,j)
-!!$                 endif
+                 pks = pk0 + amp*(1./ths - 1./th0)
+                 ps(i,j) = exp(rkap*log(pks))
               enddo
            enddo
 
@@ -5422,14 +5399,6 @@ end subroutine terminator_tracers
               enddo
            enddo
            ptop = ak(1)
-
-           if (js==1 .and. is <= icenter .and. ie >= icenter) then
-              i=icenter
-              j=1
-!!$              do k=1,npz
-!!$                 write(*,'(I, 6(2x, F))') k, pe(i,k+1,j), pk(i,j,k+1), delp(i,j,k), pkz(i,j,k), ak(k+1), bk(k+1)
-!!$              enddo
-           endif
 
            !2. Set up thermal profile: N = 0.01 below 14 km and 0.02 above 14 km.
            do j=js,je
@@ -5456,15 +5425,6 @@ end subroutine terminator_tracers
                  enddo
               enddo
            enddo
-
-           if (js==1 .and. is <= icenter .and. ie >= icenter) then
-              i=icenter
-              j=1
-!!$              do k=1,npz
-!!$                 write(*,'(I, 4(2x, F))') k, gz(i,j,k+1), pt(i,j,k), delp(i,j,k), delz(i,j,k)
-!!$              enddo
-           endif
-
 
            !3. Set up wind profile: 0 below 10 km, 20 above 14 km, linear between
            ! (recall this is uniform-in-y; a 3D problem would require
