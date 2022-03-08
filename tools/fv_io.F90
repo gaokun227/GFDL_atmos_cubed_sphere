@@ -267,104 +267,114 @@ contains
           call write_data(Atm%Fv_restart, dim_names_2d(2), 1)
        endif
        call register_restart_field (Atm%Fv_restart, 'ak', Atm%ak(:), dim_names_2d)
-       call register_variable_attribute(Atm%Fv_restart, 'ak', "long_name", "ak", str_len=len("ak"))
-       call register_variable_attribute(Atm%Fv_restart, 'ak', "units", "none", str_len=len("none"))
        call register_restart_field (Atm%Fv_restart, 'bk', Atm%bk(:), dim_names_2d)
-       call register_variable_attribute(Atm%Fv_restart, 'bk', "long_name", "bk", str_len=len("bk"))
-       call register_variable_attribute(Atm%Fv_restart, 'bk', "units", "none", str_len=len("none"))
+       if (.not. Atm%Fv_restart%is_readonly) then !if writing file
+         call register_variable_attribute(Atm%Fv_restart, 'ak', "long_name", "ak", str_len=len("ak"))
+         call register_variable_attribute(Atm%Fv_restart, 'ak', "units", "none", str_len=len("none"))
+         call register_variable_attribute(Atm%Fv_restart, 'bk', "long_name", "bk", str_len=len("bk"))
+         call register_variable_attribute(Atm%Fv_restart, 'bk', "units", "none", str_len=len("none"))
+       endif
 
     ! fname= 'fv_core.res'//trim(stile_name)//'.nc'
     elseif (Atm%Fv_restart_tile_is_open) then
        zsize = (/size(Atm%u,3)/)
        call fv_io_register_axis(Atm%Fv_restart_tile, numx=numx_2d, numy=numy_2d, xpos=xpos_2d, ypos=ypos_2d, numz=numz, zsize=zsize)
        call register_restart_field(Atm%Fv_restart_tile, 'u', Atm%u, dim_names_4d)
-       call register_variable_attribute(Atm%Fv_restart_tile, 'u', "long_name", "u", str_len=len("u"))
-       call register_variable_attribute(Atm%Fv_restart_tile, 'u', "units", "none", str_len=len("none"))
        call register_restart_field(Atm%Fv_restart_tile, 'v', Atm%v, dim_names_4d2)
-       call register_variable_attribute(Atm%Fv_restart_tile, 'v', "long_name", "v", str_len=len("v"))
-       call register_variable_attribute(Atm%Fv_restart_tile, 'v', "units", "none", str_len=len("none"))
 
        if (.not.Atm%flagstruct%hydrostatic) then
           if (Atm%flagstruct%make_nh) then ! Hydrostatic restarts dont have these variables
                call register_restart_field(Atm%Fv_restart_tile,  'W', Atm%w, dim_names_4d3, is_optional=.true.)
-               if (variable_exists(Atm%Fv_restart_tile, 'W')) then
-                  call register_variable_attribute(Atm%Fv_restart_tile, 'W', "long_name", "W", str_len=len("W"))
-                  call register_variable_attribute(Atm%Fv_restart_tile, 'W', "units", "none", str_len=len("none"))
-               endif
                call register_restart_field(Atm%Fv_restart_tile,  'DZ', Atm%delz, dim_names_4d3, is_optional=.true.)
-               if (variable_exists(Atm%Fv_restart_tile, 'DZ')) then
-                  call register_variable_attribute(Atm%Fv_restart_tile, 'DZ', "long_name", "DZ", str_len=len("DZ"))
-                  call register_variable_attribute(Atm%Fv_restart_tile, 'DZ', "units", "none", str_len=len("none"))
-               endif
                if ( Atm%flagstruct%hybrid_z ) then
                    call register_restart_field(Atm%Fv_restart_tile,  'ZE0', Atm%ze0, dim_names_4d3, is_optional=.true.)
-                   if (variable_exists(Atm%Fv_restart_tile, 'ZEO')) then
-                     call register_variable_attribute(Atm%Fv_restart_tile, 'ZE0', "long_name", "ZE0", str_len=len("ZEO"))
-                     call register_variable_attribute(Atm%Fv_restart_tile, 'ZEO', "units", "none", str_len=len("none"))
-                   endif
                endif
           else !The restart file has the non-hydrostatic variables
                call register_restart_field(Atm%Fv_restart_tile,  'W', Atm%w, dim_names_4d3)
-               call register_variable_attribute(Atm%Fv_restart_tile, 'W', "long_name", "W", str_len=len("W"))
-               call register_variable_attribute(Atm%Fv_restart_tile, 'W', "units", "none", str_len=len("none"))
                call register_restart_field(Atm%Fv_restart_tile,  'DZ', Atm%delz, dim_names_4d3)
-               call register_variable_attribute(Atm%Fv_restart_tile, 'DZ', "long_name", "DZ", str_len=len("DZ"))
-               call register_variable_attribute(Atm%Fv_restart_tile, 'DZ', "units", "none", str_len=len("none"))
                if ( Atm%flagstruct%hybrid_z ) then
                    call register_restart_field(Atm%Fv_restart_tile,  'ZE0', Atm%ze0, dim_names_4d3)
-                   call register_variable_attribute(Atm%Fv_restart_tile, 'ZE0', "long_name", "ZE0", str_len=len("ZEO"))
-                   call register_variable_attribute(Atm%Fv_restart_tile, 'ZEO', "units", "none", str_len=len("none"))
                endif
           endif
        endif
        call register_restart_field(Atm%Fv_restart_tile,  'T', Atm%pt, dim_names_4d3)
-       call register_variable_attribute(Atm%Fv_restart_tile, 'T', "long_name", "T", str_len=len("T"))
-       call register_variable_attribute(Atm%Fv_restart_tile, 'T', "units", "none", str_len=len("none"))
        call register_restart_field(Atm%Fv_restart_tile,  'delp', Atm%delp, dim_names_4d3)
-       call register_variable_attribute(Atm%Fv_restart_tile, 'delp', "long_name", "delp", str_len=len("delp"))
-       call register_variable_attribute(Atm%Fv_restart_tile, 'delp', "units", "none", str_len=len("none"))
        call register_restart_field(Atm%Fv_restart_tile,  'phis', Atm%phis, dim_names_3d)
-       call register_variable_attribute(Atm%Fv_restart_tile, 'phis', "long_name", "phis", str_len=len("phis"))
-       call register_variable_attribute(Atm%Fv_restart_tile, 'phis', "units", "none", str_len=len("none"))
 
        !--- include agrid winds in restarts for use in data assimilation
-        if (Atm%flagstruct%agrid_vel_rst) then
+       if (Atm%flagstruct%agrid_vel_rst) then
           call register_restart_field(Atm%Fv_restart_tile,  'ua', Atm%ua, dim_names_4d3)
-          call register_variable_attribute(Atm%Fv_restart_tile, 'ua', "long_name", "ua", str_len=len("ua"))
-          call register_variable_attribute(Atm%Fv_restart_tile, 'ua', "units", "none", str_len=len("none"))
           call register_restart_field(Atm%Fv_restart_tile,  'va', Atm%va, dim_names_4d3)
-          call register_variable_attribute(Atm%Fv_restart_tile, 'va', "long_name", "va", str_len=len("va"))
-          call register_variable_attribute(Atm%Fv_restart_tile, 'va', "units", "none", str_len=len("none"))
+       endif
+
+       if (.not. Atm%Fv_restart_tile%is_readonly) then !if writing file
+         call register_variable_attribute(Atm%Fv_restart_tile, 'u', "long_name", "u", str_len=len("u"))
+         call register_variable_attribute(Atm%Fv_restart_tile, 'u', "units", "none", str_len=len("none"))
+         call register_variable_attribute(Atm%Fv_restart_tile, 'v', "long_name", "v", str_len=len("v"))
+         call register_variable_attribute(Atm%Fv_restart_tile, 'v', "units", "none", str_len=len("none"))
+         if (variable_exists(Atm%Fv_restart_tile, 'W')) then
+           call register_variable_attribute(Atm%Fv_restart_tile, 'W', "long_name", "W", str_len=len("W"))
+           call register_variable_attribute(Atm%Fv_restart_tile, 'W', "units", "none", str_len=len("none"))
+         endif
+         if (variable_exists(Atm%Fv_restart_tile, 'DZ')) then
+           call register_variable_attribute(Atm%Fv_restart_tile, 'DZ', "long_name", "DZ", str_len=len("DZ"))
+           call register_variable_attribute(Atm%Fv_restart_tile, 'DZ', "units", "none", str_len=len("none"))
+         endif
+         if ( Atm%flagstruct%hybrid_z .and. variable_exists(Atm%Fv_restart_tile, 'ZEO')) then
+           call register_variable_attribute(Atm%Fv_restart_tile, 'ZE0', "long_name", "ZE0", str_len=len("ZEO"))
+           call register_variable_attribute(Atm%Fv_restart_tile, 'ZEO', "units", "none", str_len=len("none"))
+         endif
+         call register_variable_attribute(Atm%Fv_restart_tile, 'T', "long_name", "T", str_len=len("T"))
+         call register_variable_attribute(Atm%Fv_restart_tile, 'T', "units", "none", str_len=len("none"))
+         call register_variable_attribute(Atm%Fv_restart_tile, 'delp', "long_name", "delp", str_len=len("delp"))
+         call register_variable_attribute(Atm%Fv_restart_tile, 'delp', "units", "none", str_len=len("none"))
+         call register_variable_attribute(Atm%Fv_restart_tile, 'phis', "long_name", "phis", str_len=len("phis"))
+         call register_variable_attribute(Atm%Fv_restart_tile, 'phis', "units", "none", str_len=len("none"))
+         if (Atm%flagstruct%agrid_vel_rst) then
+           call register_variable_attribute(Atm%Fv_restart_tile, 'ua', "long_name", "ua", str_len=len("ua"))
+           call register_variable_attribute(Atm%Fv_restart_tile, 'ua', "units", "none", str_len=len("none"))
+           call register_variable_attribute(Atm%Fv_restart_tile, 'va', "long_name", "va", str_len=len("va"))
+           call register_variable_attribute(Atm%Fv_restart_tile, 'va', "units", "none", str_len=len("none"))
+         endif
        endif
 
     ! fname = 'fv_srf_wnd.res'//trim(stile_name)//'.nc
     elseif (Atm%Rsf_restart_is_open) then
        call fv_io_register_axis(Atm%Rsf_restart, numx=numx, numy=numy, xpos=xpos, ypos=ypos)
        call register_restart_field(Atm%Rsf_restart, 'u_srf', Atm%u_srf, dim_names_3d2)
-       call register_variable_attribute(Atm%Rsf_restart, 'u_srf', "long_name", "u_srf", str_len=len("u_srf"))
-       call register_variable_attribute(Atm%Rsf_restart, 'u_srf', "units", "none", str_len=len("none"))
        call register_restart_field(Atm%Rsf_restart, 'v_srf', Atm%v_srf, dim_names_3d2)
-       call register_variable_attribute(Atm%Rsf_restart, 'v_srf', "long_name", "v_srf", str_len=len("v_srf"))
-       call register_variable_attribute(Atm%Rsf_restart, 'v_srf', "units", "none", str_len=len("none"))
 #ifdef SIM_PHYS
        call register_restart_field(Atm%Rsf_restart, 'ts', Atm%ts, dim_names_3d2)
-       call register_variable_attribute(Atm%Rsf_restart, 'ts', "long_name", "ts", str_len=len("ts"))
-       call register_variable_attribute(Atm%Rsf_restart, 'ts', "units", "none", str_len=len("none"))
 #endif
+       if (.not. Atm%Rsf_restart%is_readonly) then !if writing file
+         call register_variable_attribute(Atm%Rsf_restart, 'u_srf', "long_name", "u_srf", str_len=len("u_srf"))
+         call register_variable_attribute(Atm%Rsf_restart, 'u_srf', "units", "none", str_len=len("none"))
+         call register_variable_attribute(Atm%Rsf_restart, 'v_srf', "long_name", "v_srf", str_len=len("v_srf"))
+         call register_variable_attribute(Atm%Rsf_restart, 'v_srf', "units", "none", str_len=len("none"))
+#ifdef SIM_PHYS
+         call register_variable_attribute(Atm%Rsf_restart, 'ts', "long_name", "ts", str_len=len("ts"))
+         call register_variable_attribute(Atm%Rsf_restart, 'ts', "units", "none", str_len=len("none"))
+#endif
+       endif
+
 
     ! fname = 'mg_drag.res'//trim(stile_name)//'.nc'
     elseif (Atm%Mg_restart_is_open) then
        call fv_io_register_axis(Atm%Mg_restart, numx=numx, numy=numy, xpos=xpos, ypos=ypos)
        call register_restart_field (Atm%Mg_restart, 'ghprime', Atm%sgh, dim_names_3d2)
-       call register_variable_attribute(Atm%Mg_restart, 'ghprime', "long_name", "ghprime", str_len=len("ghprime"))
-       call register_variable_attribute(Atm%Mg_restart, 'ghprime', "units", "none", str_len=len("none"))
+       if (.not. Atm%Mg_restart%is_readonly) then !if writing file
+         call register_variable_attribute(Atm%Mg_restart, 'ghprime', "long_name", "ghprime", str_len=len("ghprime"))
+         call register_variable_attribute(Atm%Mg_restart, 'ghprime', "units", "none", str_len=len("none"))
+       endif
 
     ! fname = 'fv_land.res'//trim(stile_name)//'.nc'
     elseif (Atm%Lnd_restart_is_open) then
        call fv_io_register_axis(Atm%Lnd_restart, numx=numx, numy=numy, xpos=xpos, ypos=ypos)
        call register_restart_field (Atm%Lnd_restart, 'oro', Atm%oro, dim_names_3d2)
-       call register_variable_attribute(Atm%Lnd_restart, 'oro', "long_name", "oro", str_len=len("oro"))
-       call register_variable_attribute(Atm%Lnd_restart, 'oro', "units", "none", str_len=len("none"))
+       if (.not. Atm%Lnd_restart%is_readonly) then !if writing file
+         call register_variable_attribute(Atm%Lnd_restart, 'oro', "long_name", "oro", str_len=len("oro"))
+         call register_variable_attribute(Atm%Lnd_restart, 'oro', "units", "none", str_len=len("none"))
+       endif
 
     ! fname = 'fv_tracer.res'//trim(stile_name)//'.nc'
     elseif (Atm%Tra_restart_is_open) then
@@ -374,7 +384,7 @@ contains
           call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
           call register_restart_field(Atm%Tra_restart, tracer_name, Atm%q(:,:,:,nt), &
                        dim_names_4d, is_optional=.true.)
-          if (variable_exists(Atm%Tra_restart, tracer_name)) then
+          if (variable_exists(Atm%Tra_restart, tracer_name) .and. .not. Atm%Tra_restart%is_readonly) then
              call register_variable_attribute(Atm%Tra_restart, tracer_name, "long_name", tracer_name, str_len=len(tracer_name))
              call register_variable_attribute(Atm%Tra_restart, tracer_name, "units", "none", str_len=len("none"))
           endif
@@ -383,7 +393,7 @@ contains
           call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
           call register_restart_field(Atm%Tra_restart, tracer_name, Atm%qdiag(:,:,:,nt), &
                        dim_names_4d, is_optional=.true.)
-          if (variable_exists(Atm%Tra_restart, tracer_name)) then
+          if (variable_exists(Atm%Tra_restart, tracer_name) .and. .not. Atm%Tra_restart%is_readonly) then
              call register_variable_attribute(Atm%Tra_restart, tracer_name, "long_name", tracer_name, str_len=len(tracer_name))
              call register_variable_attribute(Atm%Tra_restart, tracer_name, "units", "none", str_len=len("none"))
           endif
@@ -1120,22 +1130,26 @@ contains
        call register_restart_field(BCfile_sw, trim(var_name)//'_west_t1', &
                                    var_bc%west_t1, indices, global_size, &
                                    y2_pelist, is_root_pe, jshift=y_halo)
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_west_t1', &
-                                        "long_name", trim(var_name)//'_west_t1', &
-                                        str_len=len(trim(var_name)//'_west_t1'))
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_west_t1', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_sw%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_west_t1', &
+                                          "long_name", trim(var_name)//'_west_t1', &
+                                          str_len=len(trim(var_name)//'_west_t1'))
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_west_t1', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 !register west prognostic halo data
     if (present(var) .and. Atm%neststruct%BCfile_sw_is_open) then
        call register_restart_field(BCfile_sw, trim(var_name)//'_west', &
                                    var, indices, global_size, &
                                    y2_pelist, is_root_pe, jshift=y_halo)
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_west', &
-                                        "long_name", trim(var_name)//'_west', &
-                                        str_len=len(trim(var_name)//'_west'))
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_west', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_sw%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_west', &
+                                          "long_name", trim(var_name)//'_west', &
+                                          str_len=len(trim(var_name)//'_west'))
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_west', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !define east root_pe
@@ -1146,11 +1160,13 @@ contains
        call register_restart_field(BCfile_ne, trim(var_name)//'_east_t1', &
                                    var_bc%east_t1, indices, global_size, &
                                    y1_pelist, is_root_pe, jshift=y_halo)
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_east_t1', &
-                                        "long_name", trim(var_name)//'_east_t1', &
-                                        str_len=len(trim(var_name)//'_east_t1'))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_east_t1', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_ne%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_east_t1', &
+                                          "long_name", trim(var_name)//'_east_t1', &
+                                          str_len=len(trim(var_name)//'_east_t1'))
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_east_t1', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !reset indices for prognostic variables in the east halo
@@ -1162,11 +1178,13 @@ contains
                                    var, indices, global_size, &
                                    y1_pelist, is_root_pe, jshift=y_halo, &
                                    x_halo=(size(var,1)-x_halo), ishift=-(ie+i_stag))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_east', &
-                                        "long_name", trim(var_name)//'_east', &
-                                        str_len=len(trim(var_name)//'_east'))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_east', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_ne%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_east', &
+                                          "long_name", trim(var_name)//'_east', &
+                                          str_len=len(trim(var_name)//'_east'))
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_east', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !NORTH & SOUTH
@@ -1191,22 +1209,26 @@ contains
        call register_restart_field(BCfile_sw, trim(var_name)//'_south_t1', &
                                    var_bc%south_t1, indices, global_size, &
                                    x2_pelist, is_root_pe, x_halo=x_halo_ns)
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_south_t1', &
-                                        "long_name", trim(var_name)//'_south_t1', &
-                                        str_len=len(trim(var_name)//'_south_t1'))
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_south_t1', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_sw%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_south_t1', &
+                                          "long_name", trim(var_name)//'_south_t1', &
+                                          str_len=len(trim(var_name)//'_south_t1'))
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_south_t1', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 !register south prognostic halo data
     if (present(var) .and. Atm%neststruct%BCfile_sw_is_open) then
        call register_restart_field(BCfile_sw, trim(var_name)//'_south', &
                                    var, indices, global_size, &
                                    x2_pelist, is_root_pe, x_halo=x_halo_ns)
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_south', &
-                                        "long_name", trim(var_name)//'_south', &
-                                        str_len=len(trim(var_name)//'_south'))
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_south', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_sw%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_south', &
+                                          "long_name", trim(var_name)//'_south', &
+                                          str_len=len(trim(var_name)//'_south'))
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_south', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !define north root_pe
@@ -1217,11 +1239,13 @@ contains
        call register_restart_field(BCfile_ne, trim(var_name)//'_north_t1', &
                                    var_bc%north_t1, indices, global_size, &
                                    x1_pelist, is_root_pe, x_halo=x_halo_ns)
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_north_t1', &
-                                        "long_name", trim(var_name)//'_north_t1', &
-                                        str_len=len(trim(var_name)//'_north_t1'))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_north_t1', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_ne%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_north_t1', &
+                                          "long_name", trim(var_name)//'_north_t1', &
+                                          str_len=len(trim(var_name)//'_north_t1'))
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_north_t1', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !reset indices for prognostic variables in the north halo
@@ -1233,11 +1257,13 @@ contains
                                    var, indices, global_size, &
                                    x1_pelist, is_root_pe, x_halo=x_halo_ns, &
                                    y_halo=(size(var,2)-y_halo), jshift=-(je+j_stag))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_north', &
-                                        "long_name", trim(var_name)//'_north', &
-                                        str_len=len(trim(var_name)//'_north'))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_north', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_ne%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_north', &
+                                          "long_name", trim(var_name)//'_north', &
+                                          str_len=len(trim(var_name)//'_north'))
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_north', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
     deallocate (x1_pelist)
@@ -1320,11 +1346,13 @@ contains
                                    var_bc%west_t1, indices, global_size, &
                                    y2_pelist, is_root_pe, jshift=y_halo, &
                                    is_optional=.not.mandatory_flag)
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_west_t1', &
-                                        "long_name", trim(var_name)//'_west_t1', &
-                                        str_len=len(trim(var_name)//'_west_t1'))
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_west_t1', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_sw%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_west_t1', &
+                                          "long_name", trim(var_name)//'_west_t1', &
+                                          str_len=len(trim(var_name)//'_west_t1'))
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_west_t1', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !register west prognostic halo data
@@ -1333,11 +1361,13 @@ contains
                                    var, indices, global_size, &
                                    y2_pelist, is_root_pe, jshift=y_halo, &
                                    is_optional=.not.mandatory_flag)
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_west', &
-                                        "long_name", trim(var_name)//'_west', &
-                                        str_len=len(trim(var_name)//'_west'))
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_west', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_sw%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_west', &
+                                          "long_name", trim(var_name)//'_west', &
+                                          str_len=len(trim(var_name)//'_west'))
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_west', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !define east root_pe
@@ -1349,11 +1379,13 @@ contains
                                    var_bc%east_t1, indices, global_size, &
                                    y1_pelist, is_root_pe, jshift=y_halo, &
                                    is_optional=.not.mandatory_flag)
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_east_t1', &
-                                        "long_name", trim(var_name)//'_east_t1', &
-                                        str_len=len(trim(var_name)//'_east_t1'))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_east_t1', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_ne%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_east_t1', &
+                                          "long_name", trim(var_name)//'_east_t1', &
+                                          str_len=len(trim(var_name)//'_east_t1'))
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_east_t1', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !reset indices for prognostic variables in the east halo
@@ -1366,11 +1398,13 @@ contains
                                    y1_pelist, is_root_pe, jshift=y_halo, &
                                    x_halo=(size(var,1)-x_halo), ishift=-(ie+i_stag), &
                                    is_optional=.not.mandatory_flag)
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_east', &
-                                        "long_name", trim(var_name)//'_east', &
-                                        str_len=len(trim(var_name)//'_east'))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_east', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_ne%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_east', &
+                                          "long_name", trim(var_name)//'_east', &
+                                          str_len=len(trim(var_name)//'_east'))
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_east', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !NORTH & SOUTH
@@ -1397,11 +1431,13 @@ contains
                                    var_bc%south_t1, indices, global_size, &
                                    x2_pelist, is_root_pe, x_halo=x_halo_ns, &
                                    is_optional=.not.mandatory_flag)
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_south_t1', &
-                                        "long_name", trim(var_name)//'_south_t1', &
-                                        str_len=len(trim(var_name)//'_south_t1'))
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_south_t1', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_sw%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_south_t1', &
+                                          "long_name", trim(var_name)//'_south_t1', &
+                                          str_len=len(trim(var_name)//'_south_t1'))
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_south_t1', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 !register south prognostic halo data
     if (present(var) .and. Atm%neststruct%BCfile_sw_is_open) then
@@ -1409,11 +1445,13 @@ contains
                                    var, indices, global_size, &
                                    x2_pelist, is_root_pe, x_halo=x_halo_ns, &
                                    is_optional=.not.mandatory_flag)
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_south', &
-                                        "long_name", trim(var_name)//'_south', &
-                                        str_len=len(trim(var_name)//'_south'))
-       call register_variable_attribute(BCfile_sw, trim(var_name)//'_south', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_sw%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_south', &
+                                          "long_name", trim(var_name)//'_south', &
+                                          str_len=len(trim(var_name)//'_south'))
+         call register_variable_attribute(BCfile_sw, trim(var_name)//'_south', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !define north root_pe
@@ -1425,11 +1463,13 @@ contains
                                    var_bc%north_t1, indices, global_size, &
                                    x1_pelist, is_root_pe, x_halo=x_halo_ns, &
                                    is_optional=.not.mandatory_flag)
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_north_t1', &
-                                        "long_name", trim(var_name)//'_north_t1', &
-                                        str_len=len(trim(var_name)//'_north_t1'))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_north_t1', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_ne%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_north_t1', &
+                                          "long_name", trim(var_name)//'_north_t1', &
+                                          str_len=len(trim(var_name)//'_north_t1'))
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_north_t1', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
 
 !reset indices for prognostic variables in the north halo
@@ -1442,11 +1482,13 @@ contains
                                    x1_pelist, is_root_pe, x_halo=x_halo_ns, &
                                    y_halo=(size(var,2)-y_halo), jshift=-(je+j_stag), &
                                    is_optional=.not.mandatory_flag)
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_north', &
-                                        "long_name", trim(var_name)//'_north', &
-                                        str_len=len(trim(var_name)//'_north'))
-       call register_variable_attribute(BCfile_ne, trim(var_name)//'_north', &
-                                        "units", "none", str_len=len("none"))
+       if (.not. BCfile_ne%is_readonly) then !if writing file
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_north', &
+                                          "long_name", trim(var_name)//'_north', &
+                                          str_len=len(trim(var_name)//'_north'))
+         call register_variable_attribute(BCfile_ne, trim(var_name)//'_north', &
+                                          "units", "none", str_len=len("none"))
+       endif
     endif
     deallocate (x1_pelist)
     deallocate (y1_pelist)
