@@ -1747,7 +1747,9 @@ contains
 
        if ( id_vort200>0 .or. id_vort500>0 .or. id_vort850>0 .or. id_vorts>0   &
             .or. id_vort>0 .or. id_pv>0 .or. id_pv350k>0 .or. id_pv550k>0 &
-            .or. id_rh>0 .or. id_x850>0 .or. id_uh03>0 .or. id_uh25>0) then
+            .or. id_rh>0 .or. id_x850>0 .or. id_uh03>0 .or. id_uh25>0 &
+            .or. id_srh1 > 0 .or. id_srh3 > 0 .or. id_srh25 > 0 &
+            .or. id_ustm > 0 .or. id_vstm > 0) then
           call get_vorticity(isc, iec, jsc, jec, isd, ied, jsd, jed, npz, Atm(n)%u, Atm(n)%v, wk, &
                Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy, Atm(n)%gridstruct%rarea)
 
@@ -4043,9 +4045,16 @@ contains
       if( qmin<q_low .or. qmax>q_hi ) then
           if(master) write(*,*) 'Range_check Warning:', qname, ' max = ', qmax, ' min = ', qmin
           if (present(Time)) then
-             call get_date(Time, year, month, day, hour, minute, second)
-             if (master) write(*,999) year, month, day, hour, minute, second
-999          format(' Range violation on: ', I4, '/', I02, '/', I02, ' ', I02, ':', I02, ':', I02)
+             if (m_calendar) then
+                call get_date(Time, year, month, day, hour, minute, second)
+                if (master) write(*,999) year, month, day, hour, minute, second
+999             format(' Range violation on: ', I4, '/', I02, '/', I02, ' ', I02, ':', I02, ':', I02)
+             else
+                call get_time(Time, second, day)
+                year = 0 ; month = 0 ; hour = 0 ; minute = 0
+                if (master) write(*,996) day, second
+996             format(' Range violation on: ', I6, ' days ', I05, ' seconds')
+             endif
           endif
           if ( present(bad_range) ) then
                bad_range = .true.
@@ -4058,7 +4067,11 @@ contains
          do j=js,je
             do i=is,ie
                if( q(i,j)<q_low .or. q(i,j)>q_hi ) then
-                   write(*,*) 'Warn_(i,j)=',i,j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, q(i,j)
+                   write(*,995) i, j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, qname, q(i,j)
+!                   write(*,*) 'Warn_(i,j)=',i,j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, q(i,j)
+!                      write(*,998) k,i,j, pos(i,j,1)*rad2deg, pos(i,j,2)*rad2deg, qname, q(i,j,k)
+
+995                format('Warn_2D: (i,j)=',2I5,' (lon,lat)=',f7.3,1x,f7.3,1x, A,' =',G10.5)
                endif
             enddo
          enddo
