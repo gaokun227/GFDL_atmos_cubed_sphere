@@ -48,13 +48,14 @@
       use fv_arrays_mod,         only: fv_grid_type, fv_flags_type, fv_grid_bounds_type, R_GRID
       use tracer_manager_mod,    only: get_tracer_index
       use field_manager_mod,     only: MODEL_ATMOS
+      use w_forcing_mod,         only: init_w_forcing
       implicit none
       private
 
 !!! A NOTE ON TEST CASES
 !!! If you have a DRY test case with no physics, be sure to set adiabatic = .TRUE. in your runscript.
 !!!! This is especially important for nonhydrostatic cases in which delz will be initialized with the
-!!!!  virtual temperature effect. 
+!!!!  virtual temperature effect.
 
 ! Test Case Number (cubed-sphere domain)
 !                  SHALLOW WATER TESTS:
@@ -105,10 +106,10 @@
 !                        (sfc = 300 K, 200 K 250 mb tropopause)
 !                   15 = Warm bubble in isothermal atmosphere
 !                   16 = Cold bubble in isothermal atmosphere
-!                   17 = Symmetric Supercell 
+!                   17 = Symmetric Supercell
 !                   18 = Asymmetric supercell with M. Toy quarter-circle hodograph
 !                   19 = LJZ update to 17 with Cetrone-Houze marine sounding
-!                        and several bubble and sounding options      
+!                        and several bubble and sounding options
 !                  101 = LES with isothermal atmosphere (not implemented)
 
 
@@ -129,7 +130,9 @@
       logical :: checker_tr
       real    :: small_earth_scale = 1.0
       real    :: umean = 0.0
-      
+      real    :: vmean = 0.0
+      logical :: w_forcing
+
 ! Case 0 parameters
       real :: p0_c0 = 3.0
       real :: rgamma = 5.0
@@ -182,8 +185,8 @@
       public :: case9_forcing1, case9_forcing2, case51_forcing
       public :: init_double_periodic
       public :: checker_tracers
-      public :: radius, omega, small_earth_scale
-      
+      public :: radius, omega, small_earth_scale, w_forcing
+
   INTERFACE mp_update_dwinds
      MODULE PROCEDURE mp_update_dwinds_2d
      MODULE PROCEDURE mp_update_dwinds_3d
@@ -1054,7 +1057,7 @@
             enddo
 
          endif !no_wind
-         
+
          initWindsCase= -1
 
       case(4)
@@ -1147,8 +1150,8 @@
 
             initWindsCase=initWindsCase5
          endif
-         
-         
+
+
       case(6)
          gh0  = 8.E3*Grav
          R    = 4.
@@ -1468,7 +1471,7 @@
               q, delp,ncnst,agrid(isd:ied,jsd:jed,1),agrid(isd:ied,jsd:jed,2),bd)
          call mpp_update_domains(q,domain)
       endif
-      
+
 !--------------- end s-w cases --------------------------
 
 ! Copy 3D data for Shallow Water Tests
@@ -1593,7 +1596,7 @@
 !!$         enddo
 !!$         enddo
 !!$         enddo
-         
+
     ! Initialize surface Pressure
          ps(:,:) = 1.e5
     ! Initialize delta-P
@@ -3673,7 +3676,7 @@
       endif
 
 #endif SW_DYNAMICS
-         
+
     call mp_update_dwinds(u, v, npx, npy, npz, domain, bd)
 
     is_ideal_case = .true.
@@ -4960,8 +4963,8 @@ end subroutine terminator_tracers
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
                      moist_phys, .false., nwat, domain, flagstruct%adiabatic, .true.)
 
-        
-          
+
+
         ze1(npz+1) = 0.
         do k=npz,1,-1
            ze1(k) = ze1(k+1) - delz(is,js,k)
@@ -5071,13 +5074,13 @@ end subroutine terminator_tracers
 ! u-wind
            do j=js,je+1
               do i=is,ie
-                 u(i,j,k) = utmp - 8.
+                 u(i,j,k) = utmp - 8. + Umean
              enddo
            enddo
 ! v-wind
            do j=js,je
               do i=is,ie+1
-                 v(i,j,k) = vtmp - 4.
+                 v(i,j,k) = vtmp - 4. + Vmean
              enddo
            enddo
         enddo
@@ -5218,7 +5221,7 @@ end subroutine terminator_tracers
            ptmp = ( (zm-zc)/zc ) **2
            do j=js,je
               do i=is,ie
-                 dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/r0)**2
+                 dist = ptmp+((i-icenter)*dx_const/r0)**2+((j-jcenter)*dy_const/(r0*8))**2
                  pt(i,j,k) = pt(i,j,k) + pturb*max(1.-sqrt(dist),0.)
               enddo
            enddo
@@ -5244,12 +5247,12 @@ end subroutine terminator_tracers
            do j=jsd,jed
               do i=isd,ied
                  dist=(i-icenter)*dx_const
-                 phis(i,j)=250.*exp(-(dist/5000.)**2)*cos(pi*dist/4000.)*cos(pi*dist/4000.) 
+                 phis(i,j)=250.*exp(-(dist/5000.)**2)*cos(pi*dist/4000.)*cos(pi*dist/4000.)
                  gz(i,j,npz+1) = phis(i,j)
               enddo
            enddo
 
-           !2. Compute surface pressure 
+           !2. Compute surface pressure
            !    then form pressure surfaces
            do j=jsd,jed
               do i=isd,ied
@@ -5405,14 +5408,14 @@ end subroutine terminator_tracers
 
            call mpp_sync()
 #endif
-           
+
            !1. set up topography (uniform-in-y)
            icenter = npx/2
            jcenter = npy/2
            do j=jsd,jed
               do i=isd,ied
                  dist=(i-icenter)*dx_const
-                 phis(i,j)=2000.*exp(-(dist/10000.)**2)*cos(pi*dist/8000.)*cos(pi*dist/8000.) 
+                 phis(i,j)=2000.*exp(-(dist/10000.)**2)*cos(pi*dist/8000.)*cos(pi*dist/8000.)
                  gz(i,j,npz+1) = phis(i,j)
               enddo
            enddo
@@ -5629,8 +5632,13 @@ end subroutine terminator_tracers
 
         end select
 
+
+        if (w_forcing) then
+           call init_w_forcing(bd, npx, npy, npz, flagstruct%grid_type, agrid, flagstruct, 1)
+        endif
+
         is_ideal_case = .true.
-        
+
         nullify(grid)
         nullify(agrid)
 
@@ -5676,7 +5684,8 @@ end subroutine terminator_tracers
         character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
-             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, Umean
+             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, &
+             Umean, Vmean, w_forcing
 
 #include<file_version.h>
 
@@ -6465,7 +6474,7 @@ end subroutine terminator_tracers
    !  and meridional winds on both grids, and rotate as needed
    zvir = rvgas/rdgas - 1.
    Rp  = radius/10.
-   
+
    !PS
    do j=js,je
    do i=is,ie
@@ -6844,7 +6853,7 @@ end subroutine terminator_tracers
    real(kind=R_GRID), dimension(is:ie+1,js:je) :: lat_v,lon_v
 
    fc  = 2.*OMEGA*sin(phip)
-   
+
    !Compute ps, phis, delp, aux pressure variables, Temperature, winds
    ! (with or without perturbation), moisture, w, delz
 
@@ -8723,7 +8732,5 @@ end subroutine terminator_tracers
    enddo
 
  end subroutine sm1_edge
-
-
 
 end module test_cases_mod

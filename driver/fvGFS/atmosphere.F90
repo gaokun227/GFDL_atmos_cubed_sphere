@@ -437,6 +437,7 @@ contains
    type(time_type) :: atmos_time
    integer :: atmos_time_step
    real :: rdt
+   real :: time_total
 !---- Call FV dynamics -----
 
    call mpp_clock_begin (id_dynam)
@@ -450,7 +451,8 @@ contains
 
      call read_new_bc_data(Atm(n), Time, Time_step_atmos, p_split, &
                            isd, ied, jsd, jed )
-   endif
+  endif
+  time_total = time_type_to_real( Time - Atm(n)%Time_init )
    do psc=1,abs(p_split)
       p_step = psc
                     call timing_on('fv_dynamics')
@@ -471,7 +473,8 @@ contains
                       Atm(n)%flagstruct%hybrid_z,                          &
                       Atm(n)%gridstruct, Atm(n)%flagstruct,                &
                       Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
-                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp)
+                      Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp, &
+                      time_total=time_total)
      
      call timing_off('fv_dynamics')
 

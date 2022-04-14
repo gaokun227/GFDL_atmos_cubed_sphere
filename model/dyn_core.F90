@@ -57,6 +57,8 @@ module dyn_core_mod
 #ifdef SW_DYNAMICS
   use test_cases_mod,      only: test_case, case9_forcing1, case9_forcing2
 #endif
+  use test_cases_mod,      only: w_forcing
+  use w_forcing_mod,       only: do_w_forcing
   use fv_regional_mod,     only: dump_field, exch_uv, H_STAGGER, U_STAGGER, V_STAGGER
   use fv_regional_mod,     only: a_step, p_step, k_step, n_step
 
@@ -1272,6 +1274,10 @@ contains
   endif
   if (allocated(heat_source)) deallocate( heat_source ) !If ncon == 0 but d_con > 1.e-5, this would not be deallocated in earlier versions of the code
 
+  if ((.not. hydrostatic) .and. w_forcing .and. present(time_total)) then
+     call do_w_forcing(bd, npx, npy, npz, w, delz, phis, &
+          flagstruct%grid_type, gridstruct%agrid, domain, flagstruct, bdt, time_total)
+  endif
 
   if ( end_step ) then
     deallocate(    gz )
