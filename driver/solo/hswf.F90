@@ -169,13 +169,14 @@ contains
                   sigl = pl(i,k)/pe(i,npz+1,j)
                   f1 = max(0., (sigl-sigb) * rsgb )
                   if (zurita) then
-                     tmp = agrid(i,j,2)*rd_zur_rad
-                     tey = 315.0
-                     tey = tey - (0.19*315.0)*(1.-exp(-tmp*tmp))
+                     tmp = agrid(i,j,2)/rd_zur_rad
+                     tey = 1.0 - 0.19*(1.-exp(-tmp*tmp))
                      tmp = exp(akap*log(sigl))
                      tez = 0.1*(1.-tmp)*rakap
+                     tmp = tmp*315.0
                      teq(i,k) = max(t0, tmp*(tey + tez))
-                     rkt = rka + (rks-rka)
+                     !t_dt(i,j,k) = t_dt(i,j,k) + rka*(teq(i,k)-pt(i,j,k)) * rdt
+                     rkt = rka
                   else
                      tey = ap0k*( 315.0 - ty*SIN(agrid(i,j,2))*SIN(agrid(i,j,2)) )
                      tez =  tz*( ap0k/akap )*COS(agrid(i,j,2))*COS(agrid(i,j,2))
@@ -183,8 +184,8 @@ contains
                      teq(i,k) = max(t0, tmp*pkz(i,j,k))
                      rkt = rka + (rks-rka)*f1*(COS(agrid(i,j,2))**4.0)
                  endif
-                  t_dt(i,j,k) = t_dt(i,j,k) + rkt*(teq(i,k)-pt(i,j,k))/(1.+rkt) * rdt
-                                                       ! Bottom friction:
+                 t_dt(i,j,k) = t_dt(i,j,k) + rkt*(teq(i,k)-pt(i,j,k))/(1.+rkt) * rdt
+                 ! Bottom friction:
                   sigl = pl(i,k) / pe(i,npz+1,j)
                   sigl = (sigl-sigb)*rsgb * rkv
                   if (sigl > 0.) then
