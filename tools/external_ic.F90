@@ -34,7 +34,7 @@ module external_ic_mod
    use fms_io_mod,         only: get_tile_string, field_size, free_restart_type
    use fms_io_mod,         only: restart_file_type, register_restart_field
    use fms_io_mod,         only: save_restart, restore_state, set_filename_appendix, get_global_att_value
-   use mpp_mod,            only: mpp_error, FATAL, NOTE, mpp_pe, mpp_root_pe
+   use mpp_mod,            only: mpp_error, FATAL, NOTE, WARNING, mpp_pe, mpp_root_pe
    use mpp_mod,            only: stdlog, input_nml_file
    use mpp_parameter_mod,  only: AGRID_PARAM=>AGRID
    use mpp_domains_mod,    only: mpp_get_tile_id, domain2d, mpp_update_domains, NORTH, EAST
@@ -53,7 +53,7 @@ module external_ic_mod
    use fv_mp_mod,         only: is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
    use fv_regional_mod,   only: start_regional_cold_start
    use fv_surf_map_mod,   only: surfdrv, FV3_zs_filter
-   use fv_surf_map_mod,   only: sgh_g, oro_g
+   !use fv_surf_map_mod,   only: sgh_g, oro_g !not used (oro_g below is something different)
    use fv_surf_map_mod,   only: del2_cubed_sphere, del4_cubed_sphere
    use fv_timing_mod,     only: timing_on, timing_off
    use init_hydro_mod,    only: p_var
@@ -265,7 +265,7 @@ contains
        call read_data(fname, 'phis', Atm%phis(is:ie,js:je),      &
                          domain=fv_domain, tile_count=n)
        else
-       call mpp_error(NOTE, fname//' not found; generating terrain from USGS data')
+       call mpp_error(NOTE, trim(fname)//' not found (forgot your restart files?); generating terrain from USGS data')
        call surfdrv(  Atm%npx, Atm%npy, Atm%gridstruct%grid_64, Atm%gridstruct%agrid_64,   &
                          Atm%gridstruct%area_64, Atm%gridstruct%dx, Atm%gridstruct%dy, &
                          Atm%gridstruct%dxa, Atm%gridstruct%dya, &
