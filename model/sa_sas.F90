@@ -1,8 +1,48 @@
-      subroutine sa_sas_deep(im,ix,km,delt,delp,prslp,psp,phil,ql,
-     &     q1,t1,u1,v1,er,qr,cldwrk,rn,kbot,ktop,kcnv,islimsk,garea,
-     &     dot,ncloud,ud_mf,dd_mf,dt_mf,cnvw,cnvc,
-     &     clam,c0s,c1,betal,betas,evfact,evfactl,pgcon,asolfac)
-!
+!***********************************************************************
+!*                   GNU Lesser General Public License
+!*
+!* This file is part of the FV3 dynamical core.
+!*
+!* The FV3 dynamical core is free software: you can redistribute it
+!* and/or modify it under the terms of the
+!* GNU Lesser General Public License as published by the
+!* Free Software Foundation, either version 3 of the License, or
+!* (at your option) any later version.
+!*
+!* The FV3 dynamical core is distributed in the hope that it will be
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+!* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+!* See the GNU General Public License for more details.
+!*
+!* You should have received a copy of the GNU Lesser General Public
+!* License along with the FV3 dynamical core.
+!* If not, see <http://www.gnu.org/licenses/>.
+!***********************************************************************
+
+! =======================================================================
+! Scale-Aware Simplified-Arakawa-Schubert (SA-SAS) Convection Scheme
+! This code was originally from GFS. It was later rewritten as an inline scheme.
+! Developers: Jongil Han, Linjiong Zhou, and the GFDL FV3 Team
+! References: Han and Pan (2011), Han et al. (2017), Han and Bretherton (2019)
+! =======================================================================
+
+module sa_sas_mod
+
+    implicit none
+
+    private
+
+contains
+
+! =======================================================================
+! deep convection part
+! =======================================================================
+
+subroutine sa_sas_deep(im,ix,km,delt,delp,prslp,psp,phil,ql, &
+        q1,t1,u1,v1,er,qr,cldwrk,rn,kbot,ktop,kcnv,islimsk,garea, &
+        dot,ncloud,ud_mf,dd_mf,dt_mf,cnvw,cnvc, &
+        clam,c0s,c1,betal,betas,evfact,evfactl,pgcon,asolfac)
+
       use machine , only : kind_phys
       use funcphys , only : fpvs
       use physcons, grav => con_g, cp => con_cp, hvap => con_hvap
@@ -2260,16 +2300,18 @@ c
           endif
         enddo
       enddo
-!!
-      return
-      end
 
-      subroutine sa_sas_shal(im,ix,km,delt,delp,prslp,psp,phil,ql,
-     &     q1,t1,u1,v1,er,qr,rn,kbot,ktop,kcnv,islimsk,garea,
-     &     dot,ncloud,hpbl,ud_mf,dt_mf,cnvw,cnvc,
-!    &     dot,ncloud,hpbl,ud_mf,dt_mf,cnvw,cnvc,me)
-     &     clam,c0s,c1,pgcon,asolfac,evfact,evfactl)
-!
+end subroutine sa_sas_deep
+
+! =======================================================================
+! shallow convection part
+! =======================================================================
+
+subroutine sa_sas_shal(im,ix,km,delt,delp,prslp,psp,phil,ql, &
+        q1,t1,u1,v1,er,qr,rn,kbot,ktop,kcnv,islimsk,garea, &
+        dot,ncloud,hpbl,ud_mf,dt_mf,cnvw,cnvc, &
+        clam,c0s,c1,pgcon,asolfac,evfact,evfactl)
+
       use machine , only : kind_phys
       use funcphys , only : fpvs
       use physcons, grav => con_g, cp => con_cp, hvap => con_hvap
@@ -3712,6 +3754,7 @@ c
            dt_mf(i,k) = ud_mf(i,k)
         endif
       enddo
-!!
-      return
-      end
+
+end subroutine sa_sas_shal
+
+end module sa_sas_mod
