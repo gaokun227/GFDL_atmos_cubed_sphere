@@ -34,7 +34,7 @@ module fast_phys_mod
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index
     use field_manager_mod, only: model_atmos
-    use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj
+    use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, cv_vap
     use sa_sas_mod, only: sa_sas_deep, sa_sas_shal
     
     implicit none
@@ -49,7 +49,7 @@ contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
                c2l_ord, mdt, consv, akap, pfull, hs, te0_2d, ua, va, u, &
-               v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, &
+               v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
                inline_mp, inline_sas, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
                do_inline_mp, do_inline_sas, do_sat_adj, last_step)
     
@@ -63,7 +63,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_sas, do_sat_adj, last_step
 
-    real, intent (in) :: consv, mdt, akap
+    real, intent (in) :: consv, mdt, akap, r_vir
 
     real, intent (in), dimension (km) :: pfull
 
@@ -113,9 +113,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 
     real :: rrg
 
-    real, dimension (is:ie) :: gsize, hpbl
+    real, dimension (is:ie) :: gsize, hpbl, dqv, dql, ps_dt
 
-    real, dimension (is:ie, km) :: q2, q3
+    real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm
 
     real, dimension (is:ie, km+1) :: phis
 
@@ -311,6 +311,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
             ncld = 1
             hpbl = 1500.
 
+            if (consv .gt. consv_min) then
+                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
+                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
+                cvm = (1 - (q (is:ie, j, 1:km, sphum) + qliq + qsol)) * cv_air + &
+                    q (is:ie, j, 1:km, sphum) * cv_vap + qliq * c_liq + qsol * c_ice
+                te (is:ie, j, 1:km) = - cvm * pt (is:ie, j, 1:km) / ((1. + r_vir * q (is:ie, j, 1:km, sphum)) * &
+                    (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
+            endif
+
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
@@ -351,16 +360,29 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
   
             do k = 1, km
                 kr = km - k + 1
-                q (is:ie, j, kr, sphum) = qv (is:ie, k)
-                q (is:ie, j, kr, liq_wat) = ql (is:ie, k)
+                dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
+                dql = ql (is:ie, k) - q (is:ie, j, kr, liq_wat)
+                ps_dt = 1 + dqv + dql
+                q (is:ie, j, kr, sphum) = qv (is:ie, k) / ps_dt
+                q (is:ie, j, kr, liq_wat) = ql (is:ie, k) / ps_dt
                 pt (is:ie, j, kr) = ta (is:ie, k)
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
+                delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
             enddo
  
             ! compute wind tendency at A grid fori D grid wind update
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
             v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
+
+            if (consv .gt. consv_min) then
+                te (is:ie, j, 1:km) = te (is:ie, j, 1:km) + &
+                    cvm * pt (is:ie, j, 1:km) / ((1. + r_vir * q (is:ie, j, 1:km, sphum)) * &
+                    (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
+                do k = 1, km
+                    te0_2d (is:ie, j) = te0_2d (is:ie, j) + te (is:ie, j, k)
+                enddo
+            endif
 
         enddo
 

@@ -331,7 +331,7 @@ contains
 !------------------
 ! Compute p**Kappa
 !------------------
-      do k=1,km+1
+      do k=1,km+1, r_vir
          do i=is,ie
             pk1(i,k) = pk(i,j,k)
          enddo
@@ -837,7 +837,7 @@ contains
 
     call fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
              c2l_ord, mdt, consv, akap, pfull, hs, te0_2d, ua, va, u, &
-             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, &
+             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
              inline_mp, inline_sas, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
              do_inline_mp, do_inline_sas, do_sat_adj, last_step)
 
