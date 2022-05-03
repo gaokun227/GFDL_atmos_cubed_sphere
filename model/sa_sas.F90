@@ -35,12 +35,6 @@ module sa_sas_mod
     private
 
     ! -----------------------------------------------------------------------
-    ! precision definition
-    ! -----------------------------------------------------------------------
-    
-    integer, parameter :: kind_phys = 8 ! double precision
-    
-    ! -----------------------------------------------------------------------
     ! physics constants
     ! -----------------------------------------------------------------------
     
@@ -83,19 +77,19 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
 
     integer, intent (in) :: im, ix, km, ncloud, islimsk (im)
 
-    real (kind = kind_phys), intent (in) :: delt, clam, c0s, c1, betal, &
+    real, intent (in) :: delt, clam, c0s, c1, betal, &
         betas, evfact, evfactl, pgcon, asolfac
-    real (kind = kind_phys), intent (in) :: psp (im), delp (ix, km), &
+    real, intent (in) :: psp (im), delp (ix, km), &
         prslp (ix, km), garea (im), dot (ix, km), phil (ix, km)
     
     integer, intent (inout) :: kcnv (im)
 
-    real (kind = kind_phys), intent (inout) :: ql (ix, km, 2), &
+    real, intent (inout) :: ql (ix, km, 2), &
         q1 (ix, km), t1 (ix, km), u1 (ix, km), v1 (ix, km), qr (ix, km)
     
     integer, intent (out) :: kbot (im), ktop (im)
 
-    real (kind = kind_phys), intent (out) :: cldwrk (im), &
+    real, intent (out) :: cldwrk (im), &
         rn (im), cnvw (ix, km), cnvc (ix, km), &
         ud_mf (im, km), dd_mf (im, km), dt_mf (im, km)
     
@@ -105,11 +99,11 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     
     integer :: i, indx, jmn, k, kk, km1, n
     
-    real (kind = kind_phys) :: cxlamu, cxlamd, xlamde, xlamdd, crtlamu, crtlamd
+    real :: cxlamu, cxlamd, xlamde, xlamdd, crtlamu, crtlamd
     
-    ! real (kind = kind_phys) :: detad
+    ! real :: detad
 
-    real (kind = kind_phys) :: adw, aup, aafac, &
+    real :: adw, aup, aafac, &
         beta, &
         d0, &
         dellat, delta, desdt, dg, &
@@ -142,9 +136,9 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         jmin (im), lmin (im), kbmax (im), &
         kbm (im), kmax (im)
     
-    ! real (kind = kind_phys) :: acrt (im), acrtfct (im),
+    ! real :: acrt (im), acrtfct (im),
 
-    real (kind = kind_phys) :: aa1 (im), &
+    real :: aa1 (im), &
         ps (im), del (ix, km), prsl (ix, km), &
         umean (im), tauadv (im), gdx (im), &
         delhbar (im), delq (im), delq2 (im), &
@@ -162,13 +156,13 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         xpwev (im), xlamx (im), &
         delubar (im), delvbar (im)
     
-    real (kind = kind_phys) :: c0 (im)
+    real :: c0 (im)
 
-    real (kind = kind_phys) :: cinpcr, cinpcrmx, cinpcrmn, &
+    real :: cinpcr, cinpcrmx, cinpcrmn, &
         cinacr, cinacrmx, cinacrmn
 
     ! parameters for updraft velocity calculation
-    real (kind = kind_phys) :: bet1, cd1, f1, gam1, &
+    real :: bet1, cd1, f1, gam1, &
         bb1, bb2, wucb
 
     ! physical parameters
@@ -192,14 +186,14 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     parameter (betaw = .03, dxcrtas = 8.e3, dxcrtuf = 15.e3)
     
     ! local variables and arrays
-    real (kind = kind_phys) :: pfld (im, km), to (im, km), qo (im, km), &
+    real :: pfld (im, km), to (im, km), qo (im, km), &
         uo (im, km), vo (im, km), qeso (im, km)
 
     ! for updraft velocity calculation
-    real (kind = kind_phys) :: wu2 (im, km), buo (im, km), drag (im, km)
-    real (kind = kind_phys) :: wc (im), scaldfunc (im), sigmagfm (im)
+    real :: wu2 (im, km), buo (im, km), drag (im, km)
+    real :: wc (im), scaldfunc (im), sigmagfm (im)
     
-    real (kind = kind_phys) :: qlko_ktcon (im), dellal (im, km), tvo (im, km), &
+    real :: qlko_ktcon (im), dellal (im, km), tvo (im, km), &
         dbyo (im, km), zo (im, km), &
         xlamue (im, km), xlamud (im, km), &
         fent1 (im, km), fent2 (im, km), frh (im, km), &
@@ -218,7 +212,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     
     ! asqecflg: flag for the quasi - equilibrium assumption of arakawa - schubert
     
-    ! real (kind = kind_phys) :: pcrit (15), acritt (15), acrit (15)
+    ! real :: pcrit (15), acritt (15), acrit (15)
     ! save pcrit, acritt
     ! data pcrit / 850., 800., 750., 700., 650., 600., 550., 500., 450., 400., &
     ! 350., 300., 250., 200., 150. /
@@ -228,10 +222,8 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     ! data acritt / .203, .515, .521, .566, .625, .665, .659, .688, &
     ! .743, .813, .886, .947, 1.138, 1.377, 1.896 /
 
-    real (kind = kind_phys) :: tf, tcr, tcrf
+    real :: tf, tcr, tcrf
     parameter (tf = 233.16, tcr = 263.16, tcrf = 1.0 / (tcr - tf))
-    
-    real :: tt
     
     ! -----------------------------------------------------------------------
     ! convert input pa terms to cb terms -- moorthi
@@ -465,8 +457,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km
         do i = 1, im
             if (k <= kmax (i)) then
-                tt = to (i, k)
-                qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                qeso (i, k) = 0.01 * mqs (to (i, k)) ! mqs is in pa
                 qeso (i, k) = eps * qeso (i, k) / (pfld (i, k) + epsm1 * qeso (i, k))
                 val1 = 1.e-8
                 qeso (i, k) = max (qeso (i, k), val1)
@@ -520,8 +511,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
             if (k <= kmax (i) - 1) then
                 dz = .5 * (zo (i, k + 1) - zo (i, k))
                 dp = .5 * (pfld (i, k + 1) - pfld (i, k))
-                tt = to (i, k + 1)
-                es = 0.01 * mqs (tt) ! mqs is in pa
+                es = 0.01 * mqs (to (i, k + 1)) ! mqs is in pa
                 pprime = pfld (i, k + 1) + epsm1 * es
                 qs = eps * es / pprime
                 dqsdp = - qs / pprime
@@ -540,8 +530,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km1
         do i = 1, im
             if (k <= kmax (i) - 1) then
-                tt = to (i, k)
-                qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                qeso (i, k) = 0.01 * mqs (to (i, k)) ! mqs is in pa
                 qeso (i, k) = eps * qeso (i, k) / (po (i, k) + epsm1 * qeso (i, k))
                 val1 = 1.e-8
                 qeso (i, k) = max (qeso (i, k), val1)
@@ -1745,8 +1734,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km
         do i = 1, im
             if (asqecflg (i) .and. k <= kmax (i)) then
-                tt = to (i, k)
-                qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                qeso (i, k) = 0.01 * mqs (to (i, k)) ! mqs is in pa
                 qeso (i, k) = eps * qeso (i, k) / (pfld (i, k) + epsm1 * qeso (i, k))
                 val = 1.e-8
                 qeso (i, k) = max (qeso (i, k), val)
@@ -1764,8 +1752,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
             if (asqecflg (i) .and. k <= kmax (i) - 1) then
                 dz = .5 * (zo (i, k + 1) - zo (i, k))
                 dp = .5 * (pfld (i, k + 1) - pfld (i, k))
-                tt = to (i, k + 1)
-                es = 0.01 * mqs (tt) ! mqs is in pa
+                es = 0.01 * mqs (to (i, k + 1)) ! mqs is in pa
                 pprime = pfld (i, k + 1) + epsm1 * es
                 qs = eps * es / pprime
                 dqsdp = - qs / pprime
@@ -1784,8 +1771,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km1
         do i = 1, im
             if (asqecflg (i) .and. k <= kmax (i) - 1) then
-                tt = to (i, k)
-                qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                qeso (i, k) = 0.01 * mqs (to (i, k)) ! mqs is in pa
                 qeso (i, k) = eps * qeso (i, k) / (po (i, k) + epsm1 * qeso (i, k))
                 val1 = 1.e-8
                 qeso (i, k) = max (qeso (i, k), val1)
@@ -2232,8 +2218,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                 qo (i, k) = q1 (i, k)
                 uo (i, k) = u1 (i, k)
                 vo (i, k) = v1 (i, k)
-                tt = t1 (i, k)
-                qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                qeso (i, k) = 0.01 * mqs (t1 (i, k)) ! mqs is in pa
                 qeso (i, k) = eps * qeso (i, k) / (pfld (i, k) + epsm1 * qeso (i, k))
                 val = 1.e-8
                 qeso (i, k) = max (qeso (i, k), val)
@@ -2283,8 +2268,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         do i = 1, im
             if (cnvflg (i) .and. k <= kmax (i)) then
                 if (k <= ktcon (i)) then
-                    tt = t1 (i, k)
-                    qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                    qeso (i, k) = 0.01 * mqs (t1 (i, k)) ! mqs is in pa
                     qeso (i, k) = eps * qeso (i, k) / (pfld (i, k) + epsm1 * qeso (i, k))
                     val = 1.e-8
                     qeso (i, k) = max (qeso (i, k), val)
@@ -2530,17 +2514,17 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
 
     integer, intent (in) :: im, ix, km, ncloud, islimsk (im)
 
-    real (kind = kind_phys), intent (in) :: delt, clam, c0s, c1, pgcon, asolfac, evfact, evfactl
-    real (kind = kind_phys), intent (in) :: psp (im), delp (ix, km), prslp (ix, km), garea (im), &
+    real, intent (in) :: delt, clam, c0s, c1, pgcon, asolfac, evfact, evfactl
+    real, intent (in) :: psp (im), delp (ix, km), prslp (ix, km), garea (im), &
         dot (ix, km), phil (ix, km), hpbl (im)
         ! rcs (im)
 
     integer, intent (inout) :: kbot (im), ktop (im), kcnv (im)
 
-    real (kind = kind_phys), intent (inout) :: ql (ix, km, 2), q1 (ix, km), t1 (ix, km), &
+    real, intent (inout) :: ql (ix, km, 2), q1 (ix, km), t1 (ix, km), &
         u1 (ix, km), v1 (ix, km), qr (ix, km)
 
-    real (kind = kind_phys), intent (out) :: rn (im), cnvw (ix, km), cnvc (ix, km), &
+    real, intent (out) :: rn (im), cnvw (ix, km), cnvc (ix, km), &
         ! hchuang code change mass flux output
         ud_mf (im, km), dt_mf (im, km)
     
@@ -2551,7 +2535,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     integer :: i, j, indx, k, kk, km1, n
     integer :: kpbl (im)
     
-    real (kind = kind_phys) :: dellat, delta, &
+    real :: dellat, delta, &
         c0l, d0, &
         desdt, dp, &
         dq, dqsdp, dqsdt, dt, &
@@ -2577,7 +2561,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         ktcon (im), ktcon1 (im), ktconn (im), &
         kbm (im), kmax (im)
     
-    real (kind = kind_phys) :: aa1 (im), cina (im), &
+    real :: aa1 (im), cina (im), &
         ps (im), del (ix, km), prsl (ix, km), &
         umean (im), tauadv (im), gdx (im), &
         delhbar (im), delq (im), delq2 (im), &
@@ -2589,15 +2573,15 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         xlamud (im), xmb (im), xmbmax (im), &
         delubar (im), delvbar (im)
     
-    real (kind = kind_phys) :: c0 (im)
+    real :: c0 (im)
     
-    real (kind = kind_phys) :: crtlamd
+    real :: crtlamd
     
-    real (kind = kind_phys) :: cinpcr, cinpcrmx, cinpcrmn, &
+    real :: cinpcr, cinpcrmx, cinpcrmn, &
         cinacr, cinacrmx, cinacrmn
     
     ! parameters for updraft velocity calculation
-    real (kind = kind_phys) :: bet1, cd1, f1, gam1, &
+    real :: bet1, cd1, f1, gam1, &
         bb1, bb2, wucb
 
     ! physical parameters
@@ -2625,16 +2609,16 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     parameter (h1 = 0.33333333)
 
     ! local variables and arrays
-    real (kind = kind_phys) :: pfld (im, km), to (im, km), qo (im, km), &
+    real :: pfld (im, km), to (im, km), qo (im, km), &
         uo (im, km), vo (im, km), qeso (im, km)
 
     ! for updraft velocity calculation
-    real (kind = kind_phys) :: wu2 (im, km), buo (im, km), drag (im, km)
-    real (kind = kind_phys) :: wc (im), scaldfunc (im), sigmagfm (im)
+    real :: wu2 (im, km), buo (im, km), drag (im, km)
+    real :: wc (im), scaldfunc (im), sigmagfm (im)
     
     ! cloud water
-    ! real (kind = kind_phys) qlko_ktcon (im), dellal (im, km), tvo (im, km),
-    real (kind = kind_phys) :: qlko_ktcon (im), dellal (im, km), &
+    ! real :: qlko_ktcon (im), dellal (im, km), tvo (im, km),
+    real :: qlko_ktcon (im), dellal (im, km), &
         dbyo (im, km), zo (im, km), xlamue (im, km), &
         heo (im, km), heso (im, km), &
         dellah (im, km), dellaq (im, km), &
@@ -2646,10 +2630,8 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     
     logical :: totflg, cnvflg (im), flg (im)
     
-    real (kind = kind_phys) :: tf, tcr, tcrf
+    real :: tf, tcr, tcrf
     parameter (tf = 233.16, tcr = 263.16, tcrf = 1.0 / (tcr - tf))
-    
-    real :: tt
     
     ! -----------------------------------------------------------------------
     ! convert input pa terms to cb terms -- moorthi
@@ -2864,8 +2846,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km
         do i = 1, im
             if (cnvflg (i) .and. k <= kmax (i)) then
-                tt = to (i, k)
-                qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                qeso (i, k) = 0.01 * mqs (to (i, k)) ! mqs is in pa
                 qeso (i, k) = eps * qeso (i, k) / (pfld (i, k) + epsm1 * qeso (i, k))
                 val1 = 1.e-8
                 qeso (i, k) = max (qeso (i, k), val1)
@@ -2921,8 +2902,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
             if (cnvflg (i) .and. k <= kmax (i) - 1) then
                 dz = .5 * (zo (i, k + 1) - zo (i, k))
                 dp = .5 * (pfld (i, k + 1) - pfld (i, k))
-                tt = to (i, k + 1)
-                es = 0.01 * mqs (tt) ! mqs is in pa
+                es = 0.01 * mqs (to (i, k + 1)) ! mqs is in pa
                 pprime = pfld (i, k + 1) + epsm1 * es
                 qs = eps * es / pprime
                 dqsdp = - qs / pprime
@@ -2941,8 +2921,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km1
         do i = 1, im
             if (cnvflg (i) .and. k <= kmax (i) - 1) then
-                tt = to (i, k)
-                qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                qeso (i, k) = 0.01 * mqs (to (i, k)) ! mqs is in pa
                 qeso (i, k) = eps * qeso (i, k) / (po (i, k) + epsm1 * qeso (i, k))
                 val1 = 1.e-8
                 qeso (i, k) = max (qeso (i, k), val1)
@@ -3856,8 +3835,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km
         do i = 1, im
             if (cnvflg (i) .and. k <= kmax (i)) then
-                tt = t1 (i, k)
-                qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                qeso (i, k) = 0.01 * mqs (t1 (i, k)) ! mqs is in pa
                 qeso (i, k) = eps * qeso (i, k) / (pfld (i, k) + epsm1 * qeso (i, k))
                 val = 1.e-8
                 qeso (i, k) = max (qeso (i, k), val)
@@ -3901,8 +3879,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         do i = 1, im
             if (cnvflg (i)) then
                 if (k > kb (i) .and. k <= ktcon (i)) then
-                    tt = t1 (i, k)
-                    qeso (i, k) = 0.01 * mqs (tt) ! mqs is in pa
+                    qeso (i, k) = 0.01 * mqs (t1 (i, k)) ! mqs is in pa
                     qeso (i, k) = eps * qeso (i, k) / (pfld (i, k) + epsm1 * qeso (i, k))
                     val = 1.e-8
                     qeso (i, k) = max (qeso (i, k), val)
