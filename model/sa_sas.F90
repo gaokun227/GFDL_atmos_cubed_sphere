@@ -33,6 +33,14 @@ module sa_sas_mod
     implicit none
 
     private
+    
+    ! -----------------------------------------------------------------------
+    ! public subroutines, functions, and variables
+    ! -----------------------------------------------------------------------
+    
+    public :: sa_sas_init
+    public :: sa_sas_deep
+    public :: sa_sas_shal
 
     ! -----------------------------------------------------------------------
     ! physics constants
@@ -55,8 +63,95 @@ module sa_sas_mod
     real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg C (J/kg/K), ref: IFS
 
     real, parameter :: hlv = 2.5e6 ! latent heat of evaporation at 0 deg C (J/kg): ref: GFDL, GFS
+    
+    ! -----------------------------------------------------------------------
+    ! namelist parameters
+    ! -----------------------------------------------------------------------
+    
+    ! mass flux deep convection
+
+    real :: clam_deep    = 0.1   ! c_e for deep convection (Han and Pan, 2011, eq(6))
+    real :: c0s_deep     = 0.002 ! conversion parameter of detrainment from liquid water into convetive precipitaiton
+    real :: c1_deep      = 0.002 ! conversion parameter of detrainment from liquid water into grid-scale cloud water
+    real :: pgcon_deep   = 0.55  ! control the reduction in momentum transport
+                                 ! 0.7 : Gregory et al. (1997, QJRMS)
+                                 ! 0.55: Zhang & Wu (2003, JAS)
+    real :: asolfac_deep = 0.89  ! aerosol-aware parameter based on Lim & Hong (2012)
+                                 ! asolfac_deep= cx / c0s_deep(=.002)
+                                 ! cx = min([-0.7 ln(Nccn) + 24]*1.e-4, c0s_deep)
+                                 ! Nccn: CCN number concentration in cm^(-3)
+                                 ! Until a realistic Nccn is provided, typical Nccns are assumed
+                                 ! as Nccn=100 for sea and Nccn=7000 for land
+    real :: evfact_deep  = 0.3   ! evaporation factor
+    real :: evfactl_deep = 0.3   ! evaporation factor over land
+    real :: betal_deep   = 0.05  ! downdraft heat flux contribution over land
+    real :: betas_deep   = 0.05  ! downdraft heat flux contribution over ocean
+
+    ! mass flux shallow convectio
+
+    real :: clam_shal    = 0.3   ! c_e for shallow convection (Han and Pan, 2011, eq(6))
+    real :: c0s_shal     = 0.002 ! conversion parameter of detrainment from liquid water into convetive precipitaiton
+    real :: c1_shal      = 5.e-4 ! conversion parameter of detrainment from liquid water into grid-scale cloud water
+    real :: pgcon_shal   = 0.55  ! control the reduction in momentum transport
+                                 ! 0.7 : Gregory et al. (1997, QJRMS)
+                                 ! 0.55: Zhang & Wu (2003, JAS)
+    real :: asolfac_shal = 0.89  ! aerosol-aware parameter based on Lim & Hong (2012)
+                                 ! asolfac_shal= cx / c0s_shal(=.002)
+                                 ! cx = min([-0.7 ln(Nccn) + 24]*1.e-4, c0s_shal)
+                                 ! Nccn: CCN number concentration in cm^(-3)
+                                 ! Until a realistic Nccn is provided, typical Nccns are assumed
+                                 ! as Nccn=100 for sea and Nccn=7000 for land
+    real :: evfact_shal  = 0.3   ! rain evaporation efficiency over the ocean
+    real :: evfactl_shal = 0.3   ! rain evaporation efficiency over the land
+
+    ! -----------------------------------------------------------------------
+    ! namelist
+    ! -----------------------------------------------------------------------
+    
+    namelist / sa_sas_nml / &
+        clam_deep, c0s_deep, c1_deep, pgcon_deep, asolfac_deep, evfact_deep, evfactl_deep, &
+        clam_shal, c0s_shal, c1_shal, pgcon_shal, asolfac_shal, evfact_shal, evfactl_shal, &
+        betal_deep, betas_deep
 
 contains
+
+! =======================================================================
+! SA-SAS initialization
+! =======================================================================
+
+subroutine sa_sas_init (input_nml_file, logunit)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: logunit
+    
+    character (len = *), intent (in) :: input_nml_file (:)
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+    
+    logical :: exists
+    
+    ! -----------------------------------------------------------------------
+    ! read namelist
+    ! -----------------------------------------------------------------------
+    
+    read (input_nml_file, nml = sa_sas_nml)
+    
+    ! -----------------------------------------------------------------------
+    ! write namelist to log file
+    ! -----------------------------------------------------------------------
+    
+    write (logunit, *) " ================================================================== "
+    write (logunit, *) "sa_sas_mod"
+    write (logunit, nml = sa_sas_nml)
+    
+end subroutine sa_sas_init
 
 ! =======================================================================
 ! deep convection part
@@ -64,8 +159,7 @@ contains
 
 subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         q1, t1, u1, v1, qr, cldwrk, rn, kbot, ktop, kcnv, islimsk, garea, &
-        dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc, &
-        clam, c0s, c1, betal, betas, evfact, evfactl, pgcon, asolfac)
+        dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc)
     
     implicit none
     
@@ -75,8 +169,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     
     integer, intent (in) :: im, ix, km, ncloud, islimsk (im)
 
-    real, intent (in) :: delt, clam, c0s, c1, betal, &
-        betas, evfact, evfactl, pgcon, asolfac
+    real, intent (in) :: delt
     real, intent (in) :: psp (im), delp (ix, km), &
         prslp (ix, km), garea (im), dot (ix, km), phil (ix, km)
     
@@ -168,9 +261,9 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     parameter (elocp = hlv / cp_air, el2orc = hlv * hlv / (rvgas * cp_air))
     parameter (d0 = .01)
     
-    ! asolfac: aerosol - aware parameter based on lim & hong (2012)
-    ! asolfac = cx / c0s (= .002)
-    ! cx = min ([ - 0.7 ln (nccn) + 24] * 1.e-4, c0s)
+    ! asolfac_deep: aerosol - aware parameter based on lim & hong (2012)
+    ! asolfac_deep = cx / c0s_deep (= .002)
+    ! cx = min ([ - 0.7 ln (nccn) + 24] * 1.e-4, c0s_deep)
     ! nccn: ccn number concentration in cm^ (- 3)
     ! until a realistic nccn is provided, typical nccns are assumed
     ! as nccn = 100 for sea and nccn = 7000 for land
@@ -271,9 +364,9 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     
     do i = 1, im
         if (islimsk (i) == 1) then
-            c0 (i) = c0s * asolfac
+            c0 (i) = c0s_deep * asolfac_deep
         else
-            c0 (i) = c0s
+            c0 (i) = c0s_deep
         endif
     enddo
 
@@ -326,15 +419,15 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
 
     edtmaxl = .3
     edtmaxs = .3
-    ! clam = .1
+    ! clam_deep = .1
     aafac = .1
-    ! betal = .15
-    ! betas = .15
-    ! betal = .05
-    ! betas = .05
+    ! betal_deep = .15
+    ! betas_deep = .15
+    ! betal_deep = .05
+    ! betas_deep = .05
     ! evef = 0.07
-    ! evfact = 0.3
-    ! evfactl = 0.3
+    ! evfact_deep = 0.3
+    ! evfactl_deep = 0.3
     
     crtlamu = 1.0e-4
     crtlamd = 1.0e-4
@@ -344,8 +437,8 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     xlamde = 1.0e-4
     xlamdd = 1.0e-4
     
-    ! pgcon = 0.7 ! gregory et al. (1997, qjrms)
-    ! pgcon = 0.55 ! zhang & wu (2003, jas)
+    ! pgcon_deep = 0.7 ! gregory et al. (1997, qjrms)
+    ! pgcon_deep = 0.55 ! zhang & wu (2003, jas)
     
     w1l = - 8.e-3
     w2l = - 4.e-2
@@ -396,7 +489,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km1
         do i = 1, im
             zi (i, k) = 0.5 * (zo (i, k) + zo (i, k + 1))
-            xlamue (i, k) = clam / zi (i, k)
+            xlamue (i, k) = clam_deep / zi (i, k)
             ! xlamue (i, k) = max (xlamue (i, k), crtlamu)
         enddo
     enddo
@@ -771,8 +864,8 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                     
                     tem = 0.5 * cm * tem
                     factor = 1. + tem
-                    ptem = tem + pgcon
-                    ptem1 = tem - pgcon
+                    ptem = tem + pgcon_deep
+                    ptem1 = tem - pgcon_deep
                     ucko (i, k) = ((1. - tem) * ucko (i, k - 1) + ptem * uo (i, k) &
                          + ptem1 * uo (i, k - 1)) / factor
                     vcko (i, k) = ((1. - tem) * vcko (i, k - 1) + ptem * vo (i, k) &
@@ -1022,9 +1115,9 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                         etah = .5 * (eta (i, k) + eta (i, k - 1))
                         dp = 1000. * del (i, k)
                         if (ncloud > 0 .and. k > jmin (i)) then
-                            ptem = c0t (i, k) + c1
+                            ptem = c0t (i, k) + c1_deep
                             qlk = dq / (eta (i, k) + etah * ptem * dz)
-                            dellal (i, k) = etah * c1 * dz * qlk * g / dp
+                            dellal (i, k) = etah * c1_deep * dz * qlk * g / dp
                         else
                             qlk = dq / (eta (i, k) + etah * c0t (i, k) * dz)
                         endif
@@ -1198,9 +1291,9 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                         etah = .5 * (eta (i, k) + eta (i, k - 1))
                         dp = 1000. * del (i, k)
                         if (ncloud > 0) then
-                            ptem = c0t (i, k) + c1
+                            ptem = c0t (i, k) + c1_deep
                             qlk = dq / (eta (i, k) + etah * ptem * dz)
-                            dellal (i, k) = etah * c1 * dz * qlk * g / dp
+                            dellal (i, k) = etah * c1_deep * dz * qlk * g / dp
                         else
                             qlk = dq / (eta (i, k) + etah * c0t (i, k) * dz)
                         endif
@@ -1399,8 +1492,8 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     enddo
 
     do i = 1, im
-        beta = betas
-        if (islimsk (i) == 1) beta = betal
+        beta = betas_deep
+        if (islimsk (i) == 1) beta = betal_deep
         if (cnvflg (i)) then
             dz = (sumx (i) + zi (i, 1)) / float (kbcon (i))
             tem = 1. / float (kbcon (i))
@@ -1462,8 +1555,8 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                 
                 tem = 0.5 * cm * tem
                 factor = 1. + tem
-                ptem = tem - pgcon
-                ptem1 = tem + pgcon
+                ptem = tem - pgcon_deep
+                ptem1 = tem + pgcon_deep
                 ucdo (i, k) = ((1. - tem) * ucdo (i, k + 1) + ptem * uo (i, k + 1) &
                      + ptem1 * uo (i, k)) / factor
                 vcdo (i, k) = ((1. - tem) * vcdo (i, k + 1) + ptem * vo (i, k + 1) &
@@ -1852,7 +1945,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                     if (k >= kbcon (i) .and. dq > 0.) then
                         etah = .5 * (eta (i, k) + eta (i, k - 1))
                         if (ncloud > 0 .and. k > jmin (i)) then
-                            ptem = c0t (i, k) + c1
+                            ptem = c0t (i, k) + c1_deep
                             qlk = dq / (eta (i, k) + etah * ptem * dz)
                         else
                             qlk = dq / (eta (i, k) + etah * c0t (i, k) * dz)
@@ -2313,8 +2406,8 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                     rn (i) = rn (i) + rain * xmb (i) * .001 * dt2
                 endif
                 if (flg (i) .and. k < ktcon (i)) then
-                    evef = edt (i) * evfact
-                    if (islimsk (i) == 1) evef = edt (i) * evfactl
+                    evef = edt (i) * evfact_deep
+                    if (islimsk (i) == 1) evef = edt (i) * evfactl_deep
                     ! if (islimsk (i) == 1) evef = .07
                     ! if (islimsk (i) == 1) evef = 0.
                     qcond (i) = evef * (q1 (i, k) - qeso (i, k)) &
@@ -2486,8 +2579,7 @@ end subroutine sa_sas_deep
 
 subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, garea, &
-        dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc, &
-        clam, c0s, c1, pgcon, asolfac, evfact, evfactl)
+        dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc)
     
     implicit none
     
@@ -2497,7 +2589,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     
     integer, intent (in) :: im, ix, km, ncloud, islimsk (im)
 
-    real, intent (in) :: delt, clam, c0s, c1, pgcon, asolfac, evfact, evfactl
+    real, intent (in) :: delt
     real, intent (in) :: psp (im), delp (ix, km), prslp (ix, km), garea (im), &
         dot (ix, km), phil (ix, km), hpbl (im)
         ! rcs (im)
@@ -2573,9 +2665,9 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         el2orc = hlv * hlv / (rvgas * cp_air))
     parameter (d0 = .01)
     
-    ! asolfac: aerosol - aware parameter based on lim & hong (2012)
-    ! asolfac = cx / c0s (= .002)
-    ! cx = min ([ - 0.7 ln (nccn) + 24] * 1.e-4, c0s)
+    ! asolfac_shal: aerosol - aware parameter based on lim & hong (2012)
+    ! asolfac_shal = cx / c0s_shal (= .002)
+    ! cx = min ([ - 0.7 ln (nccn) + 24] * 1.e-4, c0s_shal)
     ! nccn: ccn number concentration in cm^ (- 3)
     ! until a realistic nccn is provided, typical nccns are assumed
     ! as nccn = 100 for sea and nccn = 7000 for land
@@ -2659,9 +2751,9 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
 
     do i = 1, im
         if (islimsk (i) == 1) then
-            c0 (i) = c0s * asolfac
+            c0 (i) = c0s_shal * asolfac_shal
         else
-            c0 (i) = c0s
+            c0 (i) = c0s_shal
         endif
     enddo
     
@@ -2701,14 +2793,14 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     ! model tunable parameters are all here
     ! -----------------------------------------------------------------------
 
-    ! clam = .3
+    ! clam_shal = .3
     aafac = .1
     ! evef = 0.07
-    ! evfact = 0.3
-    ! evfactl = 0.3
+    ! evfact_shal = 0.3
+    ! evfactl_shal = 0.3
     
-    ! pgcon = 0.7 ! gregory et al. (1997, qjrms)
-    ! pgcon = 0.55 ! zhang & wu (2003, jas)
+    ! pgcon_shal = 0.7 ! gregory et al. (1997, qjrms)
+    ! pgcon_shal = 0.55 ! zhang & wu (2003, jas)
     w1l = - 8.e-3
     w2l = - 4.e-2
     w3l = - 5.e-3
@@ -2754,7 +2846,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km1
         do i = 1, im
             zi (i, k) = 0.5 * (zo (i, k) + zo (i, k + 1))
-            xlamue (i, k) = clam / zi (i, k)
+            xlamue (i, k) = clam_shal / zi (i, k)
         enddo
     enddo
 
@@ -3089,8 +3181,8 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                     
                     tem = 0.5 * cm * tem
                     factor = 1. + tem
-                    ptem = tem + pgcon
-                    ptem1 = tem - pgcon
+                    ptem = tem + pgcon_shal
+                    ptem1 = tem - pgcon_shal
                     ucko (i, k) = ((1. - tem) * ucko (i, k - 1) + ptem * uo (i, k) &
                          + ptem1 * uo (i, k - 1)) / factor
                     vcko (i, k) = ((1. - tem) * vcko (i, k - 1) + ptem * vo (i, k) &
@@ -3288,9 +3380,9 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                         etah = .5 * (eta (i, k) + eta (i, k - 1))
                         dp = 1000. * del (i, k)
                         if (ncloud > 0) then
-                            ptem = c0t (i, k) + c1
+                            ptem = c0t (i, k) + c1_shal
                             qlk = dq / (eta (i, k) + etah * ptem * dz)
-                            dellal (i, k) = etah * c1 * dz * qlk * g / dp
+                            dellal (i, k) = etah * c1_shal * dz * qlk * g / dp
                         else
                             qlk = dq / (eta (i, k) + etah * c0t (i, k) * dz)
                         endif
@@ -3458,9 +3550,9 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                         etah = .5 * (eta (i, k) + eta (i, k - 1))
                         dp = 1000. * del (i, k)
                         if (ncloud > 0) then
-                            ptem = c0t (i, k) + c1
+                            ptem = c0t (i, k) + c1_shal
                             qlk = dq / (eta (i, k) + etah * ptem * dz)
-                            dellal (i, k) = etah * c1 * dz * qlk * g / dp
+                            dellal (i, k) = etah * c1_shal * dz * qlk * g / dp
                         else
                             qlk = dq / (eta (i, k) + etah * c0t (i, k) * dz)
                         endif
@@ -3904,8 +3996,8 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                     endif
                 endif
                 if (flg (i) .and. k < ktcon (i)) then
-                    evef = edt (i) * evfact
-                    if (islimsk (i) == 1) evef = edt (i) * evfactl
+                    evef = edt (i) * evfact_shal
+                    if (islimsk (i) == 1) evef = edt (i) * evfactl_shal
                     ! if (islimsk (i) == 1) evef = .07
                     ! if (islimsk (i) == 1) evef = 0.
                     qcond (i) = evef * (q1 (i, k) - qeso (i, k)) &
