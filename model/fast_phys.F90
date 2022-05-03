@@ -35,6 +35,7 @@ module fast_phys_mod
     use tracer_manager_mod, only: get_tracer_index
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj
+    use sa_sas_mod, only: sa_sas_deep, sa_sas_shal
     
     implicit none
     
@@ -237,6 +238,26 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 
     !-----------------------------------------------------------------------
     ! <<< Fast Saturation Adjustment
+    !-----------------------------------------------------------------------
+
+    !-----------------------------------------------------------------------
+    ! SA-SAS >>>
+    !-----------------------------------------------------------------------
+
+    do k = 1, km
+        kr = km - k + 1
+    enddo
+
+    call sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
+        q1, t1, u1, v1, qr, cldwrk, rn, kbot, ktop, kcnv, islimsk, garea, &
+        dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc)
+
+    call sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
+        q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, garea, &
+        dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc)
+
+    !-----------------------------------------------------------------------
+    ! <<< SA-SAS
     !-----------------------------------------------------------------------
 
     !-----------------------------------------------------------------------

@@ -157,7 +157,7 @@ end subroutine sa_sas_init
 ! deep convection part
 ! =======================================================================
 
-subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
+subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         q1, t1, u1, v1, qr, cldwrk, rn, kbot, ktop, kcnv, islimsk, garea, &
         dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc)
     
@@ -167,21 +167,21 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    integer, intent (in) :: im, ix, km, ncloud, islimsk (im)
+    integer, intent (in) :: im, km, ncloud, islimsk (im)
 
     real, intent (in) :: delt
-    real, intent (in) :: psp (im), delp (ix, km), &
-        prslp (ix, km), garea (im), dot (ix, km), phil (ix, km)
+    real, intent (in) :: psp (im), delp (im, km), &
+        prslp (im, km), garea (im), dot (im, km), phil (im, km)
     
     integer, intent (inout) :: kcnv (im)
 
-    real, intent (inout) :: ql (ix, km, 2), &
-        q1 (ix, km), t1 (ix, km), u1 (ix, km), v1 (ix, km), qr (ix, km)
+    real, intent (inout) :: ql (im, km, 2), &
+        q1 (im, km), t1 (im, km), u1 (im, km), v1 (im, km), qr (im, km)
     
     integer, intent (out) :: kbot (im), ktop (im)
 
     real, intent (out) :: cldwrk (im), &
-        rn (im), cnvw (ix, km), cnvc (ix, km), &
+        rn (im), cnvw (im, km), cnvc (im, km), &
         ud_mf (im, km), dd_mf (im, km), dt_mf (im, km)
     
     ! -----------------------------------------------------------------------
@@ -230,7 +230,7 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     ! real :: acrt (im), acrtfct (im),
 
     real :: aa1 (im), &
-        ps (im), del (ix, km), prsl (ix, km), &
+        ps (im), del (im, km), prsl (im, km), &
         umean (im), tauadv (im), gdx (im), &
         delhbar (im), delq (im), delq2 (im), &
         delqbar (im), delqev (im), deltbar (im), &
@@ -2577,7 +2577,7 @@ end subroutine sa_sas_deep
 ! shallow convection part
 ! =======================================================================
 
-subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
+subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, garea, &
         dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc)
     
@@ -2587,19 +2587,19 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    integer, intent (in) :: im, ix, km, ncloud, islimsk (im)
+    integer, intent (in) :: im, km, ncloud, islimsk (im)
 
     real, intent (in) :: delt
-    real, intent (in) :: psp (im), delp (ix, km), prslp (ix, km), garea (im), &
-        dot (ix, km), phil (ix, km), hpbl (im)
+    real, intent (in) :: psp (im), delp (im, km), prslp (im, km), garea (im), &
+        dot (im, km), phil (im, km), hpbl (im)
         ! rcs (im)
 
     integer, intent (inout) :: kbot (im), ktop (im), kcnv (im)
 
-    real, intent (inout) :: ql (ix, km, 2), q1 (ix, km), t1 (ix, km), &
-        u1 (ix, km), v1 (ix, km), qr (ix, km)
+    real, intent (inout) :: ql (im, km, 2), q1 (im, km), t1 (im, km), &
+        u1 (im, km), v1 (im, km), qr (im, km)
 
-    real, intent (out) :: rn (im), cnvw (ix, km), cnvc (ix, km), &
+    real, intent (out) :: rn (im), cnvw (im, km), cnvc (im, km), &
         ! hchuang code change mass flux output
         ud_mf (im, km), dt_mf (im, km)
     
@@ -2637,7 +2637,7 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         kbm (im), kmax (im)
     
     real :: aa1 (im), cina (im), &
-        ps (im), del (ix, km), prsl (ix, km), &
+        ps (im), del (im, km), prsl (im, km), &
         umean (im), tauadv (im), gdx (im), &
         delhbar (im), delq (im), delq2 (im), &
         delqbar (im), delqev (im), deltbar (im), &

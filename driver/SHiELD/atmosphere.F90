@@ -83,6 +83,7 @@ use fv_grid_utils_mod,  only: g_sum
 
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
 use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
+use sa_sas_mod,         only: sa_sas_init
 use diag_manager_mod,   only: send_data
 use external_aero_mod,  only: load_aero, read_aero, clean_aero
 use coarse_graining_mod, only: coarse_graining_init
@@ -294,6 +295,7 @@ contains
    allocate(pref(npz+1,2), dum1d(npz+1))
 
    call gfdl_mp_init(input_nml_file, stdlog())
+   call sa_sas_init(input_nml_file, stdlog())
 
    call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, &
                    Atm(mygrid)%gridstruct%grid_type, mygrid, IAU_Data)
