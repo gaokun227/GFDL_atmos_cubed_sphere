@@ -63,7 +63,7 @@ contains
 ! =======================================================================
 
 subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, er, qr, cldwrk, rn, kbot, ktop, kcnv, islimsk, garea, &
+        q1, t1, u1, v1, qr, cldwrk, rn, kbot, ktop, kcnv, islimsk, garea, &
         dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc, &
         clam, c0s, c1, betal, betas, evfact, evfactl, pgcon, asolfac)
     
@@ -73,8 +73,6 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    logical, intent (in) :: er
-
     integer, intent (in) :: im, ix, km, ncloud, islimsk (im)
 
     real, intent (in) :: delt, clam, c0s, c1, betal, &
@@ -2294,15 +2292,6 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                     adw = 1.
                     if (k >= jmin (i)) adw = 0.
                     rain = aup * pwo (i, k) + adw * edto (i) * pwdo (i, k)
-                    ! -----------------------------------------------------------------------
-                    ! the following 6 lines extract all rain water, Linjiong Zhou
-                    ! -----------------------------------------------------------------------
-                    if (er) then
-                        dp = 1000. * del (i, k)
-                        qr (i, k) = qr (i, k) + rain * xmb (i) * dt2 * g / dp
-                        if (rain .gt. 0.0) rain_ext (i) = .true.
-                        rain = 0.0
-                    endif
                     rntot (i) = rntot (i) + rain * xmb (i) * .001 * dt2
                 endif
             endif
@@ -2321,10 +2310,6 @@ subroutine sa_sas_deep (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                     adw = 1.
                     if (k >= jmin (i)) adw = 0.
                     rain = aup * pwo (i, k) + adw * edto (i) * pwdo (i, k)
-                    ! -----------------------------------------------------------------------
-                    ! the following line extract all rain water, Linjiong Zhou
-                    ! -----------------------------------------------------------------------
-                    if (er) rain = 0.0
                     rn (i) = rn (i) + rain * xmb (i) * .001 * dt2
                 endif
                 if (flg (i) .and. k < ktcon (i)) then
@@ -2500,7 +2485,7 @@ end subroutine sa_sas_deep
 ! =======================================================================
 
 subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, er, qr, rn, kbot, ktop, kcnv, islimsk, garea, &
+        q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, garea, &
         dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc, &
         clam, c0s, c1, pgcon, asolfac, evfact, evfactl)
     
@@ -2510,8 +2495,6 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    logical, intent (in) :: er
-
     integer, intent (in) :: im, ix, km, ncloud, islimsk (im)
 
     real, intent (in) :: delt, clam, c0s, c1, pgcon, asolfac, evfact, evfactl
@@ -3899,14 +3882,6 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
         do i = 1, im
             if (cnvflg (i)) then
                 if (k < ktcon (i) .and. k > kb (i)) then
-                    ! -----------------------------------------------------------------------
-                    ! the following 5 lines extract all rain water, Linjiong Zhou
-                    ! -----------------------------------------------------------------------
-                    if (er) then
-                        dp = 1000. * del (i, k)
-                        qr (i, k) = qr (i, k) + pwo (i, k) * xmb (i) * dt2 * g / dp
-                        pwo (i, k) = 0.0
-                    endif
                     rntot (i) = rntot (i) + pwo (i, k) * xmb (i) * .001 * dt2
                 endif
             endif
@@ -3925,10 +3900,6 @@ subroutine sa_sas_shal (im, ix, km, delt, delp, prslp, psp, phil, ql, &
                 qevap (i) = 0.
                 if (cnvflg (i)) then
                     if (k < ktcon (i) .and. k > kb (i)) then
-                        ! -----------------------------------------------------------------------
-                        ! the following line extract all rain water, Linjiong Zhou
-                        ! -----------------------------------------------------------------------
-                        if (er) pwo (i, k) = 0.0
                         rn (i) = rn (i) + pwo (i, k) * xmb (i) * .001 * dt2
                     endif
                 endif
