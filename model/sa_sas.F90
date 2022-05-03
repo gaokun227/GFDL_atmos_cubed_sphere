@@ -158,7 +158,7 @@ end subroutine sa_sas_init
 ! =======================================================================
 
 subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, qr, cldwrk, rn, kbot, ktop, kcnv, islimsk, garea, &
+        q1, t1, u1, v1, rn, kbot, ktop, kcnv, islimsk, gsize, &
         dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc)
     
     implicit none
@@ -171,17 +171,17 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
 
     real, intent (in) :: delt
     real, intent (in) :: psp (im), delp (im, km), &
-        prslp (im, km), garea (im), dot (im, km), phil (im, km)
+        prslp (im, km), gsize (im), dot (im, km), phil (im, km)
     
     integer, intent (inout) :: kcnv (im)
 
-    real, intent (inout) :: ql (im, km, 2), &
-        q1 (im, km), t1 (im, km), u1 (im, km), v1 (im, km), qr (im, km)
+    real, intent (inout) :: ql (im, km), &
+        q1 (im, km), t1 (im, km), u1 (im, km), v1 (im, km)
     
     integer, intent (out) :: kbot (im), ktop (im)
 
-    real, intent (out) :: cldwrk (im), &
-        rn (im), cnvw (im, km), cnvc (im, km), &
+    real, intent (out) :: rn (im)
+    real, intent (out), optional :: cnvw (im, km), cnvc (im, km), &
         ud_mf (im, km), dd_mf (im, km), dt_mf (im, km)
     
     ! -----------------------------------------------------------------------
@@ -230,7 +230,6 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     ! real :: acrt (im), acrtfct (im),
 
     real :: aa1 (im), &
-        ps (im), del (im, km), prsl (im, km), &
         umean (im), tauadv (im), gdx (im), &
         delhbar (im), delq (im), delq2 (im), &
         delqbar (im), delqev (im), deltbar (im), &
@@ -298,7 +297,6 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         tx1 (im), sumx (im), cnvwt (im, km)
       ! rhbar (im)
     
-    logical :: rain_ext (im)
     logical :: totflg, cnvflg (im), asqecflg (im), flg (im)
     
     ! asqecflg: flag for the quasi - equilibrium assumption of arakawa - schubert
@@ -320,10 +318,6 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     ! convert input pa terms to cb terms -- moorthi
     ! -----------------------------------------------------------------------
 
-    ps = psp * 0.001
-    prsl = prslp * 0.001
-    del = delp * 0.001
-
     km1 = km - 1
     
     ! -----------------------------------------------------------------------
@@ -340,7 +334,6 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         ktcon (i) = 1
         ktconn (i) = 1
         dtconv (i) = 3600.
-        cldwrk (i) = 0.
         pdot (i) = 0.
         lmin (i) = 1
         jmin (i) = 1
@@ -359,7 +352,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         xpwav (i) = 0.
         xpwev (i) = 0.
         vshear (i) = 0.
-        gdx (i) = sqrt (garea (i))
+        gdx (i) = gsize (i)
     enddo
     
     do i = 1, im
@@ -384,8 +377,8 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do k = 1, km
         do i = 1, im
-            cnvw (i, k) = 0.
-            cnvc (i, k) = 0.
+            if (present (cnvw)) cnvw (i, k) = 0.
+            if (present (cnvc)) cnvc (i, k) = 0.
         enddo
     enddo
 
@@ -395,9 +388,9 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
 
     do k = 1, km
         do i = 1, im
-            ud_mf (i, k) = 0.
-            dd_mf (i, k) = 0.
-            dt_mf (i, k) = 0.
+            if (present (ud_mf)) ud_mf (i, k) = 0.
+            if (present (dd_mf)) dd_mf (i, k) = 0.
+            if (present (dt_mf)) dt_mf (i, k) = 0.
         enddo
     enddo
     
@@ -458,14 +451,14 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         kbmax (i) = km
         kbm (i) = km
         kmax (i) = km
-        tx1 (i) = 1.0 / ps (i)
+        tx1 (i) = 1.0 / psp (i)
     enddo
     
     do k = 1, km
         do i = 1, im
-            if (prsl (i, k) * tx1 (i) > 0.04) kmax (i) = k + 1
-            if (prsl (i, k) * tx1 (i) > 0.45) kbmax (i) = k + 1
-            if (prsl (i, k) * tx1 (i) > 0.70) kbm (i) = k + 1
+            if (prslp (i, k) * tx1 (i) > 0.04) kmax (i) = k + 1
+            if (prslp (i, k) * tx1 (i) > 0.45) kbmax (i) = k + 1
+            if (prslp (i, k) * tx1 (i) > 0.70) kbm (i) = k + 1
         enddo
     enddo
 
@@ -501,7 +494,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km
         do i = 1, im
             if (k <= kmax (i)) then
-                pfld (i, k) = prsl (i, k) * 10.0
+                pfld (i, k) = prslp (i, k) * 0.01
                 eta (i, k) = 1.
                 fent1 (i, k) = 1.
                 fent2 (i, k) = 1.
@@ -1065,7 +1058,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
             ! xmbmax (i) = .1
             
             k = kbcon (i)
-            dp = 1000. * del (i, k)
+            dp = delp (i, k)
             xmbmax (i) = dp / (g * dt2)
             
             ! mbdt (i) = 0.1 * dp / g
@@ -1113,7 +1106,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                     
                     if (k >= kbcon (i) .and. dq > 0.) then
                         etah = .5 * (eta (i, k) + eta (i, k - 1))
-                        dp = 1000. * del (i, k)
+                        dp = delp (i, k)
                         if (ncloud > 0 .and. k > jmin (i)) then
                             ptem = c0t (i, k) + c1_deep
                             qlk = dq / (eta (i, k) + etah * ptem * dz)
@@ -1289,7 +1282,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                     
                     if (dq > 0.) then
                         etah = .5 * (eta (i, k) + eta (i, k - 1))
-                        dp = 1000. * del (i, k)
+                        dp = delp (i, k)
                         if (ncloud > 0) then
                             ptem = c0t (i, k) + c1_deep
                             qlk = dq / (eta (i, k) + etah * ptem * dz)
@@ -1670,7 +1663,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
 
     do i = 1, im
         if (cnvflg (i)) then
-            dp = 1000. * del (i, 1)
+            dp = delp (i, 1)
             dellah (i, 1) = edto (i) * etad (i, 1) * (hcdo (i, 1) &
                  - heo (i, 1)) * g / dp
             dellaq (i, 1) = edto (i) * etad (i, 1) * (qrcdo (i, 1) &
@@ -1693,7 +1686,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                 if (k <= kb (i)) aup = 0.
                 adw = 1.
                 if (k > jmin (i)) adw = 0.
-                dp = 1000. * del (i, k)
+                dp = delp (i, k)
                 dz = zi (i, k) - zi (i, k - 1)
                 
                 dv1h = heo (i, k)
@@ -1755,7 +1748,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     do i = 1, im
         if (cnvflg (i)) then
             indx = ktcon (i)
-            dp = 1000. * del (i, indx)
+            dp = delp (i, indx)
             dv1h = heo (i, indx - 1)
             dellah (i, indx) = eta (i, indx - 1) * &
                  (hcko (i, indx - 1) - dv1h) * g / dp
@@ -2275,7 +2268,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
             tem = min (max (xlamx (i), 7.e-5), 3.e-4)
             tem = 0.2 / tem
             tem1 = 3.14 * tem * tem
-            sigmagfm (i) = tem1 / garea (i)
+            sigmagfm (i) = tem1 / (gsize (i) ** 2.0)
             sigmagfm (i) = max (sigmagfm (i), 0.001)
             sigmagfm (i) = min (sigmagfm (i), 0.999)
         endif
@@ -2344,7 +2337,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                     ! v1 (i, k) = v1 (i, k) + dellav (i, k) * xmb (i) * dt2 * tem
                     u1 (i, k) = u1 (i, k) + dellau (i, k) * xmb (i) * dt2
                     v1 (i, k) = v1 (i, k) + dellav (i, k) * xmb (i) * dt2
-                    dp = 1000. * del (i, k)
+                    dp = delp (i, k)
                     delhbar (i) = delhbar (i) + dellah (i, k) * xmb (i) * dp / g
                     delqbar (i) = delqbar (i) + dellaq (i, k) * xmb (i) * dp / g
                     deltbar (i) = deltbar (i) + dellat * xmb (i) * dp / g
@@ -2373,7 +2366,6 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         delqev (i) = 0.
         delq2 (i) = 0.
         flg (i) = cnvflg (i)
-        rain_ext (i) = .false.
     enddo
 
     do k = km, 1, - 1
@@ -2412,7 +2404,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                     ! if (islimsk (i) == 1) evef = 0.
                     qcond (i) = evef * (q1 (i, k) - qeso (i, k)) &
                          / (1. + el2orc * qeso (i, k) / t1 (i, k) ** 2)
-                    dp = 1000. * del (i, k)
+                    dp = delp (i, k)
                     if (rn (i) > 0. .and. qcond (i) < 0.) then
                         qevap (i) = - qcond (i) * (1. - exp (- .32 * sqrt (dt2 * rn (i))))
                         qevap (i) = min (qevap (i), rn (i) * 1000. * g / dp)
@@ -2464,13 +2456,12 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
             ! -----------------------------------------------------------------------
             
             if (rn (i) < 0. .and. .not.flg (i)) rn (i) = 0.
-            if (rn (i) <= 0. .and. (.not. rain_ext (i))) then
+            if (rn (i) <= 0.) then
                 rn (i) = 0.
             else
                 ktop (i) = ktcon (i)
                 kbot (i) = kbcon (i)
                 kcnv (i) = 1
-                cldwrk (i) = aa1 (i)
             endif
         endif
     enddo
@@ -2481,7 +2472,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do k = 1, km
         do i = 1, im
-            if (cnvflg (i) .and. (rn (i) > 0. .or. rain_ext (i))) then
+            if (present (cnvw) .and. cnvflg (i) .and. rn (i) > 0.) then
                 if (k >= kbcon (i) .and. k < ktcon (i)) then
                     cnvw (i, k) = cnvwt (i, k) * xmb (i) * dt2
                 endif
@@ -2495,7 +2486,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do k = 1, km
         do i = 1, im
-            if (cnvflg (i) .and. (rn (i) > 0. .or. rain_ext (i))) then
+            if (present (cnvc) .and. cnvflg (i) .and. rn (i) > 0.) then
                 if (k >= kbcon (i) .and. k < ktcon (i)) then
                     cnvc (i, k) = 0.04 * log (1. + 675. * eta (i, k) * xmb (i))
                     cnvc (i, k) = min (cnvc (i, k), 0.6)
@@ -2512,17 +2503,12 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     if (ncloud > 0) then
         do k = 1, km
             do i = 1, im
-                if (cnvflg (i) .and. (rn (i) > 0. .or. rain_ext (i))) then
+                if (cnvflg (i) .and. rn (i) > 0.) then
                     ! if (k > kb (i) .and. k <= ktcon (i)) then
                     if (k >= kbcon (i) .and. k <= ktcon (i)) then
                         tem = dellal (i, k) * xmb (i) * dt2
                         tem1 = max (0.0, min (1.0, (tcr - t1 (i, k)) * tcrf))
-                        if (ql (i, k, 2) > - 999.0) then
-                            ql (i, k, 1) = ql (i, k, 1) + tem * tem1 ! ice
-                            ql (i, k, 2) = ql (i, k, 2) + tem * (1.0 - tem1) ! water
-                        else
-                            ql (i, k, 1) = ql (i, k, 1) + tem
-                        endif
+                        ql (i, k) = ql (i, k) + tem
                     endif
                 endif
             enddo
@@ -2531,7 +2517,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
 
     do k = 1, km
         do i = 1, im
-            if (cnvflg (i) .and. rn (i) <= 0. .and. (.not. rain_ext (i))) then
+            if (cnvflg (i) .and. rn (i) <= 0.) then
                 if (k <= kmax (i)) then
                     t1 (i, k) = to (i, k)
                     q1 (i, k) = qo (i, k)
@@ -2548,7 +2534,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do k = 1, km
         do i = 1, im
-            if (cnvflg (i) .and. (rn (i) > 0. .or. rain_ext (i))) then
+            if (present (ud_mf) .and. cnvflg (i) .and. rn (i) > 0.) then
                 if (k >= kb (i) .and. k < ktop (i)) then
                     ud_mf (i, k) = eta (i, k) * xmb (i) * dt2
                 endif
@@ -2556,14 +2542,14 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     do i = 1, im
-        if (cnvflg (i) .and. (rn (i) > 0. .or. rain_ext (i))) then
+        if (present (dt_mf) .and. present (ud_mf) .and. cnvflg (i) .and. rn (i) > 0.) then
             k = ktop (i) - 1
             dt_mf (i, k) = ud_mf (i, k)
         endif
     enddo
     do k = 1, km
         do i = 1, im
-            if (cnvflg (i) .and. (rn (i) > 0. .or. rain_ext (i))) then
+            if (present (dd_mf) .and. cnvflg (i) .and. rn (i) > 0.) then
                 if (k >= 1 .and. k <= jmin (i)) then
                     dd_mf (i, k) = edto (i) * etad (i, k) * xmb (i) * dt2
                 endif
@@ -2578,7 +2564,7 @@ end subroutine sa_sas_deep
 ! =======================================================================
 
 subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, garea, &
+        q1, t1, u1, v1, rn, kbot, ktop, kcnv, islimsk, gsize, &
         dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc)
     
     implicit none
@@ -2590,16 +2576,17 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     integer, intent (in) :: im, km, ncloud, islimsk (im)
 
     real, intent (in) :: delt
-    real, intent (in) :: psp (im), delp (im, km), prslp (im, km), garea (im), &
+    real, intent (in) :: psp (im), delp (im, km), prslp (im, km), gsize (im), &
         dot (im, km), phil (im, km), hpbl (im)
         ! rcs (im)
 
     integer, intent (inout) :: kbot (im), ktop (im), kcnv (im)
 
-    real, intent (inout) :: ql (im, km, 2), q1 (im, km), t1 (im, km), &
-        u1 (im, km), v1 (im, km), qr (im, km)
+    real, intent (inout) :: ql (im, km), q1 (im, km), t1 (im, km), &
+        u1 (im, km), v1 (im, km)
 
-    real, intent (out) :: rn (im), cnvw (im, km), cnvc (im, km), &
+    real, intent (out) :: rn (im)
+    real, intent (out), optional :: cnvw (im, km), cnvc (im, km), &
         ! hchuang code change mass flux output
         ud_mf (im, km), dt_mf (im, km)
     
@@ -2637,7 +2624,6 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         kbm (im), kmax (im)
     
     real :: aa1 (im), cina (im), &
-        ps (im), del (im, km), prsl (im, km), &
         umean (im), tauadv (im), gdx (im), &
         delhbar (im), delq (im), delq2 (im), &
         delqbar (im), delqev (im), deltbar (im), &
@@ -2712,10 +2698,6 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     ! convert input pa terms to cb terms -- moorthi
     ! -----------------------------------------------------------------------
 
-    ps = psp * 0.001
-    prsl = prslp * 0.001
-    del = delp * 0.001
-
     km1 = km - 1
 
     ! -----------------------------------------------------------------------
@@ -2740,7 +2722,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         aa1 (i) = 0.
         cina (i) = 0.
         vshear (i) = 0.
-        gdx (i) = sqrt (garea (i))
+        gdx (i) = gsize (i)
     enddo
 
     totflg = .true.
@@ -2771,8 +2753,8 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do k = 1, km
         do i = 1, im
-            cnvw (i, k) = 0.
-            cnvc (i, k) = 0.
+            if (present (cnvw)) cnvw (i, k) = 0.
+            if (present (cnvc)) cnvc (i, k) = 0.
         enddo
     enddo
 
@@ -2782,8 +2764,8 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
 
     do k = 1, km
         do i = 1, im
-            ud_mf (i, k) = 0.
-            dt_mf (i, k) = 0.
+            if (present (ud_mf)) ud_mf (i, k) = 0.
+            if (present (dt_mf)) dt_mf (i, k) = 0.
         enddo
     enddo
     !
@@ -2818,13 +2800,13 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     do i = 1, im
         kbm (i) = km
         kmax (i) = km
-        tx1 (i) = 1.0 / ps (i)
+        tx1 (i) = 1.0 / psp (i)
     enddo
     
     do k = 1, km
         do i = 1, im
-            if (prsl (i, k) * tx1 (i) > 0.70) kbm (i) = k + 1
-            if (prsl (i, k) * tx1 (i) > 0.60) kmax (i) = k + 1
+            if (prslp (i, k) * tx1 (i) > 0.70) kbm (i) = k + 1
+            if (prslp (i, k) * tx1 (i) > 0.60) kmax (i) = k + 1
         enddo
     enddo
 
@@ -2885,7 +2867,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km
         do i = 1, im
             if (cnvflg (i) .and. k <= kmax (i)) then
-                pfld (i, k) = prsl (i, k) * 10.0
+                pfld (i, k) = prslp (i, k) * 0.01
                 eta (i, k) = 1.
                 hcko (i, k) = 0.
                 qcko (i, k) = 0.
@@ -3332,7 +3314,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
             ! xmbmax (i) = .1
             !
             k = kbcon (i)
-            dp = 1000. * del (i, k)
+            dp = delp (i, k)
             xmbmax (i) = dp / (g * dt2)
             !
             ! tem = dp / (g * dt2)
@@ -3378,7 +3360,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
                     
                     if (k >= kbcon (i) .and. dq > 0.) then
                         etah = .5 * (eta (i, k) + eta (i, k - 1))
-                        dp = 1000. * del (i, k)
+                        dp = delp (i, k)
                         if (ncloud > 0) then
                             ptem = c0t (i, k) + c1_shal
                             qlk = dq / (eta (i, k) + etah * ptem * dz)
@@ -3548,7 +3530,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
 
                     if (dq > 0.) then
                         etah = .5 * (eta (i, k) + eta (i, k - 1))
-                        dp = 1000. * del (i, k)
+                        dp = delp (i, k)
                         if (ncloud > 0) then
                             ptem = c0t (i, k) + c1_shal
                             qlk = dq / (eta (i, k) + etah * ptem * dz)
@@ -3745,7 +3727,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         do i = 1, im
             if (cnvflg (i)) then
                 if (k > kb (i) .and. k < ktcon (i)) then
-                    dp = 1000. * del (i, k)
+                    dp = delp (i, k)
                     dz = zi (i, k) - zi (i, k - 1)
                     
                     dv1h = heo (i, k)
@@ -3790,7 +3772,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     do i = 1, im
         if (cnvflg (i)) then
             indx = ktcon (i)
-            dp = 1000. * del (i, indx)
+            dp = delp (i, indx)
             dv1h = heo (i, indx - 1)
             dellah (i, indx) = eta (i, indx - 1) * &
                  (hcko (i, indx - 1) - dv1h) * g / dp
@@ -3884,7 +3866,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
             tem = min (max (xlamue (i, kbcon (i)), 2.e-4), 6.e-4)
             tem = 0.2 / tem
             tem1 = 3.14 * tem * tem
-            sigmagfm (i) = tem1 / garea (i)
+            sigmagfm (i) = tem1 / (gsize (i) ** 2.0)
             sigmagfm (i) = max (sigmagfm (i), 0.001)
             sigmagfm (i) = min (sigmagfm (i), 0.999)
         endif
@@ -3939,7 +3921,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
                     ! v1 (i, k) = v1 (i, k) + dellav (i, k) * xmb (i) * dt2 * tem
                     u1 (i, k) = u1 (i, k) + dellau (i, k) * xmb (i) * dt2
                     v1 (i, k) = v1 (i, k) + dellav (i, k) * xmb (i) * dt2
-                    dp = 1000. * del (i, k)
+                    dp = delp (i, k)
                     delhbar (i) = delhbar (i) + dellah (i, k) * xmb (i) * dp / g
                     delqbar (i) = delqbar (i) + dellaq (i, k) * xmb (i) * dp / g
                     deltbar (i) = deltbar (i) + dellat * xmb (i) * dp / g
@@ -4002,7 +3984,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
                     ! if (islimsk (i) == 1) evef = 0.
                     qcond (i) = evef * (q1 (i, k) - qeso (i, k)) &
                          / (1. + el2orc * qeso (i, k) / t1 (i, k) ** 2)
-                    dp = 1000. * del (i, k)
+                    dp = delp (i, k)
                     if (rn (i) > 0. .and. qcond (i) < 0.) then
                         qevap (i) = - qcond (i) * (1. - exp (- .32 * sqrt (dt2 * rn (i))))
                         qevap (i) = min (qevap (i), rn (i) * 1000. * g / dp)
@@ -4060,7 +4042,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do k = 1, km
         do i = 1, im
-            if (cnvflg (i)) then
+            if (present (cnvw) .and. cnvflg (i)) then
                 if (k >= kbcon (i) .and. k < ktcon (i)) then
                     cnvw (i, k) = cnvwt (i, k) * xmb (i) * dt2
                 endif
@@ -4074,7 +4056,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
 
     do k = 1, km
         do i = 1, im
-            if (cnvflg (i)) then
+            if (present (cnvc) .and. cnvflg (i)) then
                 if (k >= kbcon (i) .and. k < ktcon (i)) then
                     cnvc (i, k) = 0.04 * log (1. + 675. * eta (i, k) * xmb (i))
                     cnvc (i, k) = min (cnvc (i, k), 0.2)
@@ -4097,12 +4079,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
                     if (k >= kbcon (i) .and. k <= ktcon (i)) then
                         tem = dellal (i, k) * xmb (i) * dt2
                         tem1 = max (0.0, min (1.0, (tcr - t1 (i, k)) * tcrf))
-                        if (ql (i, k, 2) > - 999.0) then
-                            ql (i, k, 1) = ql (i, k, 1) + tem * tem1 ! ice
-                            ql (i, k, 2) = ql (i, k, 2) + tem * (1.0 - tem1) ! water
-                        else
-                            ql (i, k, 1) = ql (i, k, 1) + tem
-                        endif
+                        ql (i, k) = ql (i, k) + tem
                     endif
                 endif
             enddo
@@ -4116,7 +4093,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do k = 1, km
         do i = 1, im
-            if (cnvflg (i)) then
+            if (present (ud_mf) .and. cnvflg (i)) then
                 if (k >= kb (i) .and. k < ktop (i)) then
                     ud_mf (i, k) = eta (i, k) * xmb (i) * dt2
                 endif
@@ -4125,7 +4102,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     enddo
 
     do i = 1, im
-        if (cnvflg (i)) then
+        if (present (dt_mf) .and. present (ud_mf) .and. cnvflg (i)) then
             k = ktop (i) - 1
             dt_mf (i, k) = ud_mf (i, k)
         endif

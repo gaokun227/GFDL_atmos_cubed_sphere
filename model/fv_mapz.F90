@@ -34,7 +34,7 @@ module fv_mapz_mod
   use fv_fill_mod,       only: fillz
   use mpp_domains_mod,   only: mpp_update_domains, domain2d
   use mpp_mod,           only: FATAL, NOTE, mpp_error, get_unit, mpp_root_pe, mpp_pe
-  use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID, inline_mp_type
+  use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID, inline_mp_type, inline_sas_type
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
   use fast_phys_mod,     only: fast_phys
@@ -67,7 +67,7 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
-                      do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
+                      do_inline_mp, do_inline_sas, inline_mp, inline_sas, c2l_ord, bd, fv_debug, &
                       w_limiter, do_am4_remap)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
@@ -99,6 +99,7 @@ contains
 
   logical, intent(in):: do_sat_adj
   logical, intent(in):: do_inline_mp
+  logical, intent(in):: do_inline_sas
   logical, intent(in):: fill                  ! fill negative tracers
   logical, intent(in):: reproduce_sum
   logical, intent(in):: adiabatic, do_adiabatic_init
@@ -137,6 +138,7 @@ contains
   real, intent(out)::     te(isd:ied,jsd:jed,km)
 
   type(inline_mp_type), intent(inout):: inline_mp
+  type(inline_sas_type), intent(inout):: inline_sas
 
 ! !DESCRIPTION:
 !
@@ -835,9 +837,9 @@ contains
 
     call fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
              c2l_ord, mdt, consv, akap, pfull, hs, te0_2d, ua, va, u, &
-             v, w, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, &
-             inline_mp, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-             do_inline_mp, do_sat_adj, last_step)
+             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, &
+             inline_mp, inline_sas, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+             do_inline_mp, do_inline_sas, do_sat_adj, last_step)
 
 !-----------------------------------------------------------------------
 ! <<< Fast Physics

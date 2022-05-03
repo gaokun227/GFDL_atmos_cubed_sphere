@@ -29,7 +29,7 @@ module fast_phys_mod
 
     use constants_mod, only: rdgas, grav
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
-    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type
+    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type, inline_sas_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index
@@ -49,9 +49,9 @@ contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
                c2l_ord, mdt, consv, akap, pfull, hs, te0_2d, ua, va, u, &
-               v, w, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, &
-               inline_mp, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_mp, do_sat_adj, last_step)
+               v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, &
+               inline_mp, inline_sas, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+               do_inline_mp, do_inline_sas, do_sat_adj, last_step)
     
     implicit none
     
@@ -61,7 +61,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, c2l_ord
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_sat_adj, last_step
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_sas, do_sat_adj, last_step
 
     real, intent (in) :: consv, mdt, akap
 
@@ -81,7 +81,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
     
     real, intent (inout), dimension (isd:, jsd:, 1:) :: q_con, cappa, w
     
-    real, intent (inout), dimension (isd:ied, jsd:jed, km) :: pt, ua, va, delp
+    real, intent (inout), dimension (isd:ied, jsd:jed, km) :: pt, ua, va, delp, omga
 
     real, intent (inout), dimension (isd:ied, jsd:jed, km, *) :: q
 
@@ -102,23 +102,28 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
     type (domain2d), intent (inout) :: domain
 
     type (inline_mp_type), intent (inout) :: inline_mp
+    type (inline_sas_type), intent (inout) :: inline_sas
 
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
 
-    integer :: i, j, k, kmp
+    integer :: i, j, k, kr, kmp, ncld
     integer :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
 
     real :: rrg
 
-    real, dimension (is:ie) :: gsize
+    real, dimension (is:ie) :: gsize, hpbl
 
     real, dimension (is:ie, km) :: q2, q3
 
     real, dimension (is:ie, km+1) :: phis
 
-    real, allocatable, dimension (:,:) :: dz, wa
+    integer, allocatable, dimension (:) :: kb, kt, kc, lsm
+
+    real, allocatable, dimension (:) :: rn
+
+    real, allocatable, dimension (:,:) :: dz, zm, wa, dp, pm, qv, ql, ta, uu, vv, ww
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0
     
@@ -244,17 +249,212 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
     ! SA-SAS >>>
     !-----------------------------------------------------------------------
 
-    do k = 1, km
-        kr = km - k + 1
-    enddo
+    if ((.not. do_adiabatic_init) .and. do_inline_sas) then
 
-    call sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, qr, cldwrk, rn, kbot, ktop, kcnv, islimsk, garea, &
-        dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc)
+        call timing_on ('sa_sas')
 
-    call sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, garea, &
-        dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc)
+        allocate (kb (is:ie))
+        allocate (kt (is:ie))
+        allocate (kc (is:ie))
+        allocate (lsm (is:ie))
+
+        allocate (rn (is:ie))
+
+        allocate (dz (is:ie, 1:km))
+        allocate (zm (is:ie, 1:km))
+        allocate (dp (is:ie, 1:km))
+        allocate (pm (is:ie, 1:km))
+        allocate (qv (is:ie, 1:km))
+        allocate (ql (is:ie, 1:km))
+        allocate (uu (is:ie, 1:km))
+        allocate (vv (is:ie, 1:km))
+        allocate (ww (is:ie, 1:km))
+
+        allocate (u_dt (isd:ied, jsd:jed, km))
+        allocate (v_dt (isd:ied, jsd:jed, km))
+
+        do k = 1, km
+            do j = jsd, jed
+                do i = isd, ied
+                    u_dt (i, j, k) = 0.
+                    v_dt (i, j, k) = 0.
+                enddo
+            enddo
+        enddo
+
+        ! save D grid u and v
+        if (consv .gt. consv_min) then
+            allocate (u0 (isd:ied, jsd:jed+1, km))
+            allocate (v0 (isd:ied+1, jsd:jed, km))
+            u0 = u
+            v0 = v
+        endif
+
+        ! D grid wind to A grid wind remap
+        call cubed_to_latlon (u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
+                 domain, gridstruct%bounded_domain, c2l_ord, bd)
+
+        ! save delp
+        if (consv .gt. consv_min) then
+            allocate (dp0 (isd:ied, jsd:jed, km))
+            dp0 = delp
+        endif
+
+        do j = js, je
+ 
+            ! save ua, va for wind tendency calculation
+            u_dt (is:ie, j, 1:km) = ua (is:ie, j, 1:km)
+            v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
+
+            kc = 0
+            lsm = 0
+            ncld = 1
+            hpbl = 1500.
+
+            do k = 1, km
+                kr = km - k + 1
+                dp (is:ie, k) = delp (is:ie, j, kr)
+                if (.not. hydrostatic) then
+                    pm (is:ie, k) = - delp (is:ie, j, kr) / delz (is:ie, j, kr) * &
+                        rdgas * pt (is:ie, j, kr) / grav
+                    dz (is:ie, k) = delz (is:ie, j, kr)
+                else
+                    pm (is:ie, k) = delp (is:ie, j, kr) / (peln (is:je, kr+1, j) - peln (is:ie, kr, j))
+                    dz (is:ie, k) = (peln (is:je, kr, j) - peln (is:ie, kr+1, j)) * &
+                        rdgas * pt (is:ie, j, kr) / grav
+                endif
+                if (k .eq. 1) then
+                    zm (is:ie, k) = - 0.5 * dz (is:ie, k)
+                else
+                    zm (is:ie, k) = zm (is:ie, k - 1) - 0.5 * (dz (is:ie, k - 1) + dz (is:ie, k))
+                endif
+                qv (is:ie, k) = q (is:ie, j, kr, sphum)
+                ql (is:ie, k) = q (is:ie, j, kr, liq_wat)
+                ta (is:ie, k) = pt (is:ie, j, kr)
+                uu (is:ie, k) = ua (is:ie, j, kr)
+                vv (is:ie, k) = va (is:ie, j, kr)
+                ww (is:ie, k) = omga (is:ie, j, kr)
+                do i = is, ie
+                    lsm (i) = nint (min (1., abs (hs (i, j)) / (10. * grav)))
+                enddo
+            enddo
+  
+            call sa_sas_deep (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
+                qv, ta, uu, vv, rn, kb, kt, kc, lsm, gsize, ww, ncld)
+
+            inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
+  
+            call sa_sas_shal (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
+                qv, ta, uu, vv, rn, kb, kt, kc, lsm, gsize, ww, ncld, hpbl)
+  
+            inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
+  
+            do k = 1, km
+                kr = km - k + 1
+                q (is:ie, j, kr, sphum) = qv (is:ie, k)
+                q (is:ie, j, kr, liq_wat) = ql (is:ie, k)
+                pt (is:ie, j, kr) = ta (is:ie, k)
+                ua (is:ie, j, kr) = uu (is:ie, k)
+                va (is:ie, j, kr) = vv (is:ie, k)
+            enddo
+ 
+            ! compute wind tendency at A grid fori D grid wind update
+            u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
+            v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
+
+        enddo
+
+        deallocate (kb)
+        deallocate (kt)
+        deallocate (kc)
+        deallocate (lsm)
+
+        deallocate (rn)
+
+        deallocate (dz)
+        deallocate (zm)
+        deallocate (dp)
+        deallocate (pm)
+        deallocate (qv)
+        deallocate (ql)
+        deallocate (uu)
+        deallocate (vv)
+        deallocate (ww)
+
+        ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
+        if ( gridstruct%square_domain ) then
+            call mpp_update_domains (u_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.false.)
+            call mpp_update_domains (v_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.true.)
+        else
+            call mpp_update_domains (u_dt, domain, complete=.false.)
+            call mpp_update_domains (v_dt, domain, complete=.true.)
+        endif
+        ! update u_dt and v_dt in halo
+        call mpp_update_domains (u_dt, v_dt, domain)
+
+        ! update D grid wind
+        call update_dwinds_phys (is, ie, js, je, isd, ied, jsd, jed, abs (mdt), u_dt, v_dt, u, v, &
+                 gridstruct, npx, npy, km, domain)
+
+        ! update dry total energy
+        if (consv .gt. consv_min) then
+!$OMP parallel do default (none) shared (is, ie, js, je, km, te0_2d, hydrostatic, delp, &
+!$OMP                                    gridstruct, u, v, dp0, u0, v0, hs, delz, w) &
+!$OMP                           private (phis)
+            do j = js, je
+                if (hydrostatic) then
+                    do k = 1, km
+                        do i = is, ie
+                            te0_2d (i, j) = te0_2d (i, j) + delp (i, j, k) * &
+                                (0.25 * gridstruct%rsin2 (i, j) * (u (i, j, k) ** 2 + &
+                                u (i, j+1, k) ** 2 + v (i, j, k) ** 2 + v (i+1, j, k) ** 2 - &
+                                (u (i, j, k) + u (i, j+1, k)) * (v (i, j, k) + v (i+1, j, k)) * &
+                                gridstruct%cosa_s (i, j))) - dp0 (i, j, k) * &
+                                (0.25 * gridstruct%rsin2 (i, j) * (u0 (i, j, k) ** 2 + &
+                                u0 (i, j+1, k) ** 2 + v0 (i, j, k) ** 2 + v0 (i+1, j, k) ** 2 - &
+                                (u0 (i, j, k) + u0 (i, j+1, k)) * (v0 (i, j, k) + v0 (i+1, j, k)) * &
+                                gridstruct%cosa_s (i, j)))
+                        enddo
+                    enddo
+                else
+                    do i = is, ie
+                        phis (i, km+1) = hs (i, j)
+                    enddo
+                    do k = km, 1, -1
+                        do i = is, ie
+                            phis (i, k) = phis (i, k+1) - grav * delz (i, j, k)
+                        enddo
+                    enddo
+                    do k = 1, km
+                        do i = is, ie
+                            te0_2d (i, j) = te0_2d (i, j) + delp (i, j, k) * &
+                                (0.5 * (phis (i, k) + phis (i, k+1) + w (i, j, k) ** 2 + 0.5 * &
+                                gridstruct%rsin2 (i, j) * (u (i, j, k) ** 2 + u (i, j+1, k) ** 2 + &
+                                v (i, j, k) ** 2 + v (i+1, j, k) ** 2 - (u (i, j, k) + &
+                                u (i, j+1, k)) * (v (i, j, k) + v (i+1, j, k)) * &
+                                gridstruct%cosa_s (i, j)))) - dp0 (i, j, k) * &
+                                (0.5 * (phis (i, k) + phis (i, k+1) + w (i, j, k) ** 2 + &
+                                0.5 * gridstruct%rsin2 (i, j) * (u0 (i, j, k) ** 2 + &
+                                u0 (i, j+1, k) ** 2 + v0 (i, j, k) ** 2 + v0 (i+1, j, k) ** 2 - &
+                                (u0 (i, j, k) + u0 (i, j+1, k)) * (v0 (i, j, k) + v0 (i+1, j, k)) * &
+                                gridstruct%cosa_s (i, j))))
+                        enddo
+                    enddo
+                endif
+            enddo
+        end if
+
+        deallocate (u_dt)
+        deallocate (v_dt)
+        if (consv .gt. consv_min) then
+            deallocate (u0)
+            deallocate (v0)
+            deallocate (dp0)
+        endif
+
+        call timing_off ('sa_sas')
+
+    endif
 
     !-----------------------------------------------------------------------
     ! <<< SA-SAS

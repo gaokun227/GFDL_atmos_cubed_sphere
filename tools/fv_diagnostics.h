@@ -81,7 +81,7 @@
      real, allocatable :: zsurf(:,:)
      real, allocatable :: pt1(:)
 
-     integer :: id_prec, id_prew, id_prer, id_prei, id_pres, id_preg, id_cond, id_dep, id_reevap, id_sub
+     integer :: id_pret, id_prec, id_prew, id_prer, id_prei, id_pres, id_preg, id_cond, id_dep, id_reevap, id_sub
      integer :: id_prefluxw, id_prefluxr, id_prefluxi, id_prefluxs, id_prefluxg
      integer :: id_pcw, id_edw, id_oew, id_rrw, id_tvw
      integer :: id_pci, id_edi, id_oei, id_rri, id_tvi

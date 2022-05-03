@@ -364,6 +364,9 @@ module fv_arrays_mod
    logical :: do_inline_mp = .false.!< Controls Inline GFDL cloud microphysics, in which the full microphysics is
                                     !< called entirely within FV3. If .true. disabling microphysics within the physics
                                     !< is very strongly recommended. .false. by default.
+   logical :: do_inline_sas = .false.!< Controls Inline SAS, in which the SA-SAS is
+                                    !< called entirely within FV3. If .true. disabling SA-SAS within the physics
+                                    !< is very strongly recommended. .false. by default.
    logical :: do_aerosol = .false.  !< Controls climatological aerosol data used in the GFDL cloud microphyiscs.
                                     !< .false. by default.
    logical :: do_f3d    = .false.   !
@@ -1033,6 +1036,9 @@ module fv_arrays_mod
      logical :: BCfile_sw_is_open=.false.
   end type fv_nest_type
 
+  type inline_sas_type
+    real, _ALLOCATABLE :: prec(:,:)     _NULL
+  end type inline_sas_type
   type inline_mp_type
     real, _ALLOCATABLE :: prew(:,:)     _NULL
     real, _ALLOCATABLE :: prer(:,:)     _NULL
@@ -1375,6 +1381,7 @@ module fv_arrays_mod
      integer :: atmos_axes(4)
 
      type(inline_mp_type) :: inline_mp
+     type(inline_sas_type) :: inline_sas
      type(phys_diag_type) :: phys_diag
      type(nudge_diag_type) :: nudge_diag
      type(sg_diag_type) :: sg_diag
@@ -1527,6 +1534,7 @@ contains
     allocate (  Atm%ak(npz_2d+1) )
     allocate (  Atm%bk(npz_2d+1) )
 
+    allocate ( Atm%inline_sas%prec(is:ie,js:je) )
     allocate ( Atm%inline_mp%prew(is:ie,js:je) )
     allocate ( Atm%inline_mp%prer(is:ie,js:je) )
     allocate ( Atm%inline_mp%prei(is:ie,js:je) )
@@ -1646,6 +1654,7 @@ contains
      enddo
      do j=js, je
         do i=is, ie
+           Atm%inline_sas%prec(i,j) = real_big
            Atm%inline_mp%prew(i,j) = real_big
            Atm%inline_mp%prer(i,j) = real_big
            Atm%inline_mp%prei(i,j) = real_big
@@ -1935,6 +1944,7 @@ contains
     deallocate (  Atm%bk )
     deallocate ( Atm%diss_est )
 
+    deallocate ( Atm%inline_sas%prec )
     deallocate ( Atm%inline_mp%prew )
     deallocate ( Atm%inline_mp%prer )
     deallocate ( Atm%inline_mp%prei )
