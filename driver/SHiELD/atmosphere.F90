@@ -1788,6 +1788,14 @@ contains
      IPD_Data(nb)%Statein%phii(:,1) = 0.0_kind_phys
      IPD_Data(nb)%Statein%prsik(:,:) = 1.e25_kind_phys
 
+     if (Atm(mygrid)%flagstruct%do_inline_sas) then
+         do ix = 1, blen
+           i = Atm_block%index(nb)%ii(ix)
+           j = Atm_block%index(nb)%jj(ix)
+           IPD_Data(nb)%Statein%prec(ix) = _DBL_(_RL_(Atm(mygrid)%inline_sas%prec(i,j)))
+         enddo
+     endif
+
      if (Atm(mygrid)%flagstruct%do_inline_mp) then
          do ix = 1, blen
            i = Atm_block%index(nb)%ii(ix)
