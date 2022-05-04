@@ -331,7 +331,7 @@ contains
 !------------------
 ! Compute p**Kappa
 !------------------
-      do k=1,km+1, r_vir
+      do k=1,km+1
          do i=is,ie
             pk1(i,k) = pk(i,j,k)
          enddo

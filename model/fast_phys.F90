@@ -300,8 +300,19 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
             dp0 = delp
         endif
 
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, pe, ua, va, &
+!$OMP                                    te, delp, hydrostatic, hs, pt, peln, delz, omga, &
+!$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
+!$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, ps) &
+!$OMP                           private (u_dt, v_dt, gsize, dz, kb, kt, kc, lsm, rn, &
+!$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, hpbl, qliq, qsol, &
+!$OMP                                    cvm, kr, dqv, dql, ps_dt)
+
         do j = js, je
  
+            gsize (is:ie) = sqrt (gridstruct%area_64 (is:ie, j))
+
             ! save ua, va for wind tendency calculation
             u_dt (is:ie, j, 1:km) = ua (is:ie, j, 1:km)
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
@@ -375,6 +386,27 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
             v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
 
+            ! update pe, peln, pk, ps
+            do k = 2, km + 1
+                pe (is:ie, k, j) = pe (is:ie, k-1, j) + delp (is:ie, j, k-1)
+                peln (is:ie, k, j) = log (pe (is:ie, k, j))
+                pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
+            enddo
+
+            ps (is:ie, j) = pe (is:ie, km+1, j)
+
+            ! update pkz
+            if (.not. hydrostatic) then
+#ifdef MOIST_CAPPA
+                pkz (is:ie, j, 1:km) = exp (cappa (is:ie, j, 1:km) * &
+                    log (rrg * delp (is:ie, j, 1:km) / &
+                    delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
+#else
+                pkz (is:ie, j, 1:km) = exp (akap * log (rrg * delp (is:ie, j, 1:km) / &
+                    delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
+#endif
+            endif
+ 
             if (consv .gt. consv_min) then
                 te (is:ie, j, 1:km) = te (is:ie, j, 1:km) + &
                     cvm * pt (is:ie, j, 1:km) / ((1. + r_vir * q (is:ie, j, 1:km, sphum)) * &
