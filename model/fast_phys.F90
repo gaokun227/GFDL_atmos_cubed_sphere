@@ -318,6 +318,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
             u_dt (is:ie, j, 1:km) = ua (is:ie, j, 1:km)
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
 
+            rn = 0.0
             kc = 0
             lsm = 0
             ncld = 1
@@ -345,9 +346,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
                         rdgas * pt (is:ie, j, kr) / grav
                 endif
                 if (k .eq. 1) then
-                    zm (is:ie, k) = - 0.5 * dz (is:ie, k)
+                    zm (is:ie, k) = - 0.5 * dz (is:ie, k) * grav
                 else
-                    zm (is:ie, k) = zm (is:ie, k - 1) - 0.5 * (dz (is:ie, k - 1) + dz (is:ie, k))
+                    zm (is:ie, k) = zm (is:ie, k - 1) - 0.5 * (dz (is:ie, k - 1) + dz (is:ie, k)) * grav
                 endif
                 qv (is:ie, k) = q (is:ie, j, kr, sphum)
                 ql (is:ie, k) = q (is:ie, j, kr, liq_wat)
