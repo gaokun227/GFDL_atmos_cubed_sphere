@@ -647,9 +647,6 @@ contains
   enddo    ! n_map loop
 
   ! Initialize rain, ice, snow and graupel precipitaiton
-  if (flagstruct%do_inline_sas) then
-      inline_sas%prec = inline_sas%prec / k_split
-  endif
   if (flagstruct%do_inline_mp) then
       inline_mp%prew = inline_mp%prew / k_split
       inline_mp%prer = inline_mp%prer / k_split

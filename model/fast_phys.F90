@@ -322,7 +322,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
             kc = 0
             lsm = 0
             ncld = 1
-            hpbl = 1500.
+            hpbl = 1500. ! to use actual PBL height later
 
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
@@ -337,18 +337,18 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
                 if (.not. hydrostatic) then
-                    pm (is:ie, k) = - delp (is:ie, j, kr) / delz (is:ie, j, kr) * &
+                    pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
                         rdgas * pt (is:ie, j, kr) / grav
                     dz (is:ie, k) = delz (is:ie, j, kr)
                 else
-                    pm (is:ie, k) = delp (is:ie, j, kr) / (peln (is:je, kr+1, j) - peln (is:ie, kr, j))
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:je, kr+1, j) - peln (is:ie, kr, j))
                     dz (is:ie, k) = (peln (is:je, kr, j) - peln (is:ie, kr+1, j)) * &
                         rdgas * pt (is:ie, j, kr) / grav
                 endif
                 if (k .eq. 1) then
                     zm (is:ie, k) = - 0.5 * dz (is:ie, k) * grav
                 else
-                    zm (is:ie, k) = zm (is:ie, k - 1) - 0.5 * (dz (is:ie, k - 1) + dz (is:ie, k)) * grav
+                    zm (is:ie, k) = zm (is:ie, k-1) - 0.5 * (dz (is:ie, k-1) + dz (is:ie, k)) * grav
                 endif
                 qv (is:ie, k) = q (is:ie, j, kr, sphum)
                 ql (is:ie, k) = q (is:ie, j, kr, liq_wat)
@@ -357,7 +357,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
                 vv (is:ie, k) = va (is:ie, j, kr)
                 ww (is:ie, k) = omga (is:ie, j, kr)
                 do i = is, ie
-                    lsm (i) = nint (min (1., abs (hs (i, j)) / (10. * grav)))
+                    if (hs (i, j) .gt. 0) lsm (i) = 1
                 enddo
             enddo
   

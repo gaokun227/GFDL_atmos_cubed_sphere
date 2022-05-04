@@ -2501,7 +2501,6 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                     ! if (k > kb (i) .and. k <= ktcon (i)) then
                     if (k >= kbcon (i) .and. k <= ktcon (i)) then
                         tem = dellal (i, k) * xmb (i) * dt2
-                        tem1 = max (0.0, min (1.0, (tcr - t1 (i, k)) * tcrf))
                         ql (i, k) = ql (i, k) + tem
                     endif
                 endif
@@ -4072,7 +4071,6 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
                     ! if (k > kb (i) .and. k <= ktcon (i)) then
                     if (k >= kbcon (i) .and. k <= ktcon (i)) then
                         tem = dellal (i, k) * xmb (i) * dt2
-                        tem1 = max (0.0, min (1.0, (tcr - t1 (i, k)) * tcrf))
                         ql (i, k) = ql (i, k) + tem
                     endif
                 endif
