@@ -410,6 +410,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
             endif
  
             if (consv .gt. consv_min) then
+                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
+                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
+                cvm = (1 - (q (is:ie, j, 1:km, sphum) + qliq + qsol)) * cv_air + &
+                    q (is:ie, j, 1:km, sphum) * cv_vap + qliq * c_liq + qsol * c_ice
                 te (is:ie, j, 1:km) = te (is:ie, j, 1:km) + &
                     cvm * pt (is:ie, j, 1:km) / ((1. + r_vir * q (is:ie, j, 1:km, sphum)) * &
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
