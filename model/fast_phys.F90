@@ -565,6 +565,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     !-----------------------------------------------------------------------
     ! Inline SA-SAS >>>
+    ! To-Do: pass ud_mf, dd_mf, dt_mf, cnvw, cnvc to physics
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_sas) then
@@ -582,6 +583,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (zm (is:ie, 1:km))
         allocate (dp (is:ie, 1:km))
         allocate (pm (is:ie, 1:km))
+
         allocate (ta (is:ie, 1:km))
         allocate (qv (is:ie, 1:km))
         allocate (ql (is:ie, 1:km))
@@ -757,6 +759,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         deallocate (zm)
         deallocate (dp)
         deallocate (pm)
+
         deallocate (ta)
         deallocate (qv)
         deallocate (ql)
