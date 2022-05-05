@@ -157,12 +157,11 @@ end subroutine sa_tke_edmf_init
 ! =======================================================================
 
 subroutine sa_tke_edmf (im, km, ntrac, ntcw, ntiw, ntke, &
-        u1, v1, t1, q1, swh, hlw, xmu, garea, islimsk, &
-        psk, rbsoil, zorl, u10m, v10m, fm, fh, &
-        tsea, heat, evap, stress, spd1, kpbl, &
-        prsi, del, prsl, prslk, phii, phil, delt, &
-        dusfc, dvsfc, dtsfc, dqsfc, hpbl, &
-        kinver, dkt_out)
+        delt, u1, v1, t1, q1, gsize, islimsk, &
+        swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
+        tsea, heat, evap, stress, spd1, kinver, &
+        psk, del, prsi, prsl, prslk, phii, phil, &
+        hpbl, kpbl, dusfc, dvsfc, dtsfc, dqsfc, dkt_out)
     
     implicit none
     
@@ -175,7 +174,7 @@ subroutine sa_tke_edmf (im, km, ntrac, ntcw, ntiw, ntke, &
 
     real, intent (in) :: delt
     real, intent (in) :: swh (im, km), hlw (im, km), &
-        xmu (im), garea (im), &
+        xmu (im), gsize (im), &
         psk (im), rbsoil (im), &
         zorl (im), tsea (im), &
         u10m (im), v10m (im), &
@@ -189,12 +188,12 @@ subroutine sa_tke_edmf (im, km, ntrac, ntcw, ntiw, ntke, &
     real, intent (inout) :: u1 (im, km), v1 (im, km), &
         t1 (im, km), q1 (im, km, ntrac)
 
-    integer, intent (out) :: kpbl (im)
+    integer, intent (out), optional :: kpbl (im)
     
-    real, intent (out) :: dusfc (im), dvsfc (im), dtsfc (im), dqsfc (im), &
-        hpbl (im)
+    real, intent (out) :: hpbl (im)
     
-    real, dimension (im, km), intent (out), optional :: dkt_out
+    real, intent (out), optional :: dusfc (im), dvsfc (im), dtsfc (im), dqsfc (im), &
+        dkt_out (im, km)
     
     ! -----------------------------------------------------------------------
     ! local variables
@@ -372,7 +371,7 @@ subroutine sa_tke_edmf (im, km, ntrac, ntcw, ntiw, ntke, &
     ! -----------------------------------------------------------------------
 
     do i = 1, im
-        gdx (i) = sqrt (garea (i))
+        gdx (i) = gsize (i)
     enddo
     
     do k = 1, km
@@ -487,10 +486,10 @@ subroutine sa_tke_edmf (im, km, ntrac, ntcw, ntiw, ntke, &
     
     do i = 1, im
         z0 (i) = 0.01 * zorl (i)
-        dusfc (i) = 0.
-        dvsfc (i) = 0.
-        dtsfc (i) = 0.
-        dqsfc (i) = 0.
+        if (present (dusfc)) dusfc (i) = 0.
+        if (present (dvsfc)) dvsfc (i) = 0.
+        if (present (dtsfc)) dtsfc (i) = 0.
+        if (present (dqsfc)) dqsfc (i) = 0.
         kpbl (i) = 1
         hpbl (i) = 0.
         kpblx (i) = 1
@@ -1533,8 +1532,8 @@ subroutine sa_tke_edmf (im, km, ntrac, ntcw, ntiw, ntke, &
         do i = 1, im
             tdt (i, k) = (f1 (i, k) - t1 (i, k)) * rdt
             qdt (i, k) = (f2 (i, k) - q1g (i, k, 1)) * rdt
-            dtsfc (i) = dtsfc (i) + cont * del (i, k) * tdt (i, k)
-            dqsfc (i) = dqsfc (i) + conq * del (i, k) * qdt (i, k)
+            if (present (dtsfc)) dtsfc (i) = dtsfc (i) + cont * del (i, k) * tdt (i, k)
+            if (present (dqsfc)) dqsfc (i) = dqsfc (i) + conq * del (i, k) * qdt (i, k)
             t1 (i, k) = f1 (i, k)
             q1g (i, k, 1) = f2 (i, k)
         enddo
@@ -1658,8 +1657,8 @@ subroutine sa_tke_edmf (im, km, ntrac, ntcw, ntiw, ntke, &
         do i = 1, im
             udt (i, k) = (f1 (i, k) - u1 (i, k)) * rdt
             vdt (i, k) = (f2 (i, k) - v1 (i, k)) * rdt
-            dusfc (i) = dusfc (i) + conw * del (i, k) * udt (i, k)
-            dvsfc (i) = dvsfc (i) + conw * del (i, k) * vdt (i, k)
+            if (present (dusfc)) dusfc (i) = dusfc (i) + conw * del (i, k) * udt (i, k)
+            if (present (dvsfc)) dvsfc (i) = dvsfc (i) + conw * del (i, k) * vdt (i, k)
             u1 (i, k) = f1 (i, k)
             v1 (i, k) = f2 (i, k)
         enddo

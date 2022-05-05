@@ -598,7 +598,7 @@ contains
                      ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, &
                      hybrid_z,     &
-                     flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, flagstruct%do_inline_sas, &
+                     flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, flagstruct%do_inline_sas, flagstruct%do_inline_edmf, &
                      inline_mp, inline_sas, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
                      flagstruct%w_limiter, flagstruct%do_am4_remap)
 

@@ -168,6 +168,7 @@ module fv_control_mod
      logical , pointer :: do_sat_adj
      logical , pointer :: do_inline_mp
      logical , pointer :: do_inline_sas
+     logical , pointer :: do_inline_edmf
      logical , pointer :: do_aerosol
      logical , pointer :: do_f3d
      logical , pointer :: no_dycore
@@ -710,6 +711,7 @@ module fv_control_mod
        do_sat_adj                    => Atm%flagstruct%do_sat_adj
        do_inline_mp                  => Atm%flagstruct%do_inline_mp
        do_inline_sas                 => Atm%flagstruct%do_inline_sas
+       do_inline_edmf                => Atm%flagstruct%do_inline_edmf
        do_aerosol                    => Atm%flagstruct%do_aerosol
        do_f3d                        => Atm%flagstruct%do_f3d
        no_dycore                     => Atm%flagstruct%no_dycore
@@ -928,7 +930,7 @@ module fv_control_mod
             do_schmidt, do_cube_transform, &
             hord_mt, hord_vt, hord_tm, hord_dp, hord_tr, shift_fac, stretch_fac, target_lat, target_lon, &
             kord_mt, kord_wz, kord_tm, kord_tr, remap_te, fv_debug, fv_land, &
-            do_am4_remap, nudge, do_sat_adj, do_inline_mp, do_inline_sas, do_aerosol, do_f3d, &
+            do_am4_remap, nudge, do_sat_adj, do_inline_mp, do_inline_sas, do_inline_edmf, do_aerosol, do_f3d, &
             external_ic, read_increment, ncep_ic, nggps_ic, hrrrv3_ic, ecmwf_ic, use_new_ncep, use_ncep_phy, fv_diag_ic, &
             external_eta, res_latlon_dynamics, res_latlon_tracers, scale_z, w_max, z_min, lim_fac, &
             dddmp, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
