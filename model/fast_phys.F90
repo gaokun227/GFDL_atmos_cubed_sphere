@@ -319,6 +319,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
 
             rn = 0.0
+            kt = 1
+            kb = km
             kc = 0
             lsm = 0
             ncld = 1
