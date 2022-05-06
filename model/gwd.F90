@@ -399,7 +399,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
     ! -----------------------------------------------------------------------
     
     ! for lm mtn blocking
-    real :: wk (im)
+    real :: wk (im), emax (im)
     real :: bnv2lm (im, km), pe (im), ek (im), zbk (im), up (im)
     real :: db (im, km), ang (im, km), uds (im, km)
     real :: zlen, dbtmp, r, phiang, cdmb (im), dbim
@@ -428,9 +428,9 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
     real :: dpmin, hminmt, hncrit, minwnd, sigfac
     ! --- for lm mtn blocking
     ! parameter (cdmb = 1.0) ! non - dim sub grid mtn drag amp (* j *)
-    parameter (hncrit = 8000.) ! max value in meters for elvmax (* j *)
-    ! hncrit set to 8000m and sigfac added to enhance elvmax mtn hgt
-    parameter (sigfac = 4.0) ! mb3a expt test for elvmax factor (* j *)
+    parameter (hncrit = 8000.) ! max value in meters for emax (* j *)
+    ! hncrit set to 8000m and sigfac added to enhance emax mtn hgt
+    parameter (sigfac = 4.0) ! mb3a expt test for emax factor (* j *)
     parameter (hminmt = 50.) ! min mtn height (* j *)
     parameter (minwnd = 0.1) ! min wind component (* j *)
     
@@ -490,6 +490,10 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
     enddo
     
     do i = 1, im
+        emax (i) = elvmax (i)
+    enddo
+    
+    do i = 1, im
         dusfc (i) = 0.
         dvsfc (i) = 0.
     enddo
@@ -520,7 +524,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
         ipt = 0
         npt = 0
         do i = 1, im
-            if ((elvmax (i) .gt. hminmt) .and. (hprime (i) .gt. hpmin)) then
+            if ((emax (i) .gt. hminmt) .and. (hprime (i) .gt. hpmin)) then
                 npt = npt + 1
                 ipt (npt) = i
             endif
@@ -556,21 +560,21 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
         
         do i = 1, npt
             j = ipt (i)
-            elvmax (j) = min (elvmax (j) + sigfac * hprime (j), hncrit)
+            emax (j) = min (emax (j) + sigfac * hprime (j), hncrit)
         enddo
         
         do k = 1, kmll
             do i = 1, npt
                 j = ipt (i)
                 ! --- interpolate to max mtn height for index, iwklm (i) wk[gz]
-                ! --- elvmax is limited to hncrit because to hi res topo30 orog.
+                ! --- emax is limited to hncrit because to hi res topo30 orog.
                 pkp1log = phil (j, k + 1) / grav
                 pklog = phil (j, k) / grav
-                !!! ------- elvmax (j) = min (elvmax (j) + sigfac * hprime (j), hncrit)
-                if ((elvmax (j) .le. pkp1log) .and. (elvmax (j) .ge. pklog)) then
-                    ! print *, ' in gwdps_lm.f 1 = ', k, elvmax (j), pklog, pkp1log, me
+                !!! ------- emax (j) = min (emax (j) + sigfac * hprime (j), hncrit)
+                if ((emax (j) .le. pkp1log) .and. (emax (j) .ge. pklog)) then
+                    ! print *, ' in gwdps_lm.f 1 = ', k, emax (j), pklog, pkp1log, me
                     ! --- wk for diags but can be saved and reused.
-                    wk (i) = grav * elvmax (j) / (phil (j, k + 1) - phil (j, k))
+                    wk (i) = grav * emax (j) / (phil (j, k + 1) - phil (j, k))
                     iwklm (i) = max (iwklm (i), k + 1)
                     ! print *, ' in gwdps_lm.f 2 npt = ', npt, i, j, wk (i), iwklm (i), me
                 endif
@@ -625,7 +629,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
         
         ! --- find the dividing stream line height
         ! --- starting from the level above the max mtn downward
-        ! --- iwklm (i) is the k - index of mtn elvmax elevation
+        ! --- iwklm (i) is the k - index of mtn emax elevation
         ! > - find the dividing streamline height starting from the level above
         !! the maximum mountain height and processing downward.
         do ktrial = kmll, 1, - 1
@@ -637,7 +641,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
         enddo
         ! print *, ' in gwdps_lm.f 4 npt = ', npt, kreflm (npt), me
         
-        ! --- in the layer kreflm (i) to 1 find pe (which needs n, elvmax)
+        ! --- in the layer kreflm (i) to 1 find pe (which needs n, emax)
         ! --- make averages, guess dividing stream (ds) line layer.
         ! --- this is not used in the first cut except for testing and
         ! --- is the vert ave of quantities from the surface to mtn top.
@@ -680,7 +684,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
                 ! --- test to see if we found zb previously
                 if (idxzb (i) .eq. 0) then
                     pe (i) = pe (i) + bnv2lm (i, k) * &
-                         (grav * elvmax (j) - phil (j, k)) * &
+                         (grav * emax (j) - phil (j, k)) * &
                          (phii (j, k + 1) - phii (j, k)) / (grav * grav)
                     ! --- ke
                     ! --- wind projected on the line perpendicular to mtn range, u (zb (k)) .
@@ -725,7 +729,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
         do i = 1, npt
             j = ipt (i)
             ! --- calc if n constant in layers (zb guess) - a diagnostic only.
-            zbk (i) = elvmax (j) &
+            zbk (i) = emax (j) &
                  - sqrt (ubar (i) * ubar (i) + vbar (i) * vbar (i)) / bnv2bar (i)
         enddo
         
