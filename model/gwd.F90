@@ -181,10 +181,10 @@
 !> \section gen_gwdps General Algorithm
 !> @{
       SUBROUTINE GWDPS(IM,IX,IY,KM,A,B,C,U1,V1,T1,Q1,KPBL,              &
-     &               PRSI,DEL,PRSL,PRSLK,PHII, PHIL,DELTIM,KDT,         &
-     &               HPRIME,OC,OA4,CLX4,THETA,SIGMA,GAMMA,ELVMAX,       &
-     &               DUSFC,DVSFC,G, CP, RD, RV, IMX,                    &
-     &               nmtvr, cdmbgwd, me, lprnt, ipr, p_crit, RDXZB)
+                     PRSI,DEL,PRSL,PRSLK,PHII, PHIL,DELTIM,KDT,         &
+                     HPRIME,OC,OA4,CLX4,THETA,SIGMA,GAMMA,ELVMAX,       &
+                     DUSFC,DVSFC,G, CP, RD, RV, IMX,                    &
+                     nmtvr, cdmbgwd, me, lprnt, ipr, p_crit, RDXZB)
 !
 !   ********************************************************************
 ! ----->  I M P L E M E N T A T I O N    V E R S I O N   <----------
@@ -283,12 +283,12 @@
       integer KPBL(IM)                 ! Index for the PBL top layer!
       real(kind=kind_phys) deltim, G, CP, RD, RV,  cdmbgwd(2), p_crit
       real(kind=kind_phys) A(IY,KM),    B(IY,KM),      C(IY,KM),        &
-     &                     U1(IX,KM),   V1(IX,KM),     T1(IX,KM),       &
-     &                     Q1(IX,KM),   PRSI(IX,KM+1), DEL(IX,KM),      &
-     &                     PRSL(IX,KM), PRSLK(IX,KM),  PHIL(IX,KM),     &
-     &                     PHII(IX,KM+1), RDXZB(IY)
-      real(kind=kind_phys) OC(IM),     OA4(IY,4), CLX4(IY,4)            &
-     &,                    HPRIME(IM)
+                           U1(IX,KM),   V1(IX,KM),     T1(IX,KM),       &
+                           Q1(IX,KM),   PRSI(IX,KM+1), DEL(IX,KM),      &
+                           PRSL(IX,KM), PRSLK(IX,KM),  PHIL(IX,KM),     &
+                           PHII(IX,KM+1), RDXZB(IY)
+      real(kind=kind_phys) OC(IM),     OA4(IY,4), CLX4(IY,4)            , &
+                           HPRIME(IM)
 ! for lm mtn blocking
       real(kind=kind_phys) ELVMAX(IM),THETA(IM),SIGMA(IM),GAMMA(IM)
       real(kind=kind_phys) wk(IM)
@@ -299,8 +299,8 @@
 !
 !     Some constants
 !
-      real(kind=kind_phys) pi, dw2min, rimin, ric, bnv2min, efmin
-     &,                    efmax,hpmax,hpmin, rad_to_deg, deg_to_rad
+      real(kind=kind_phys) pi, dw2min, rimin, ric, bnv2min, efmin, &
+                           efmax,hpmax,hpmin, rad_to_deg, deg_to_rad
       PARAMETER (PI=3.1415926535897931)
       PARAMETER (RAD_TO_DEG=180.0/PI, DEG_TO_RAD=PI/180.0)
       PARAMETER (DW2MIN=1., RIMIN=-100., RIC=0.25, BNV2MIN=1.0E-5)
@@ -308,9 +308,9 @@
       PARAMETER (EFMIN=0.0, EFMAX=10.0, hpmax=2400.0, hpmin=1.0)
 !      PARAMETER (P_CRIT=30.E2)
 !
-      real(kind=kind_phys) FRC,    CE,     CEOFRC, frmax, CG, GMAX
-     &,                    VELEPS, FACTOP, RLOLEV, RDI
-!     &,                    CRITAC, VELEPS, FACTOP, RLOLEV, RDI
+      real(kind=kind_phys) FRC,    CE,     CEOFRC, frmax, CG, GMAX, &
+                           VELEPS, FACTOP, RLOLEV, RDI
+!                           CRITAC, VELEPS, FACTOP, RLOLEV, RDI
       parameter (FRC=1.0, CE=0.8, CEOFRC=CE/FRC, frmax=100., CG=0.5)
       parameter (GMAX=1.0, VELEPS=1.0, FACTOP=0.5)
 !      parameter (GMAX=1.0, CRITAC=5.0E-4, VELEPS=1.0, FACTOP=0.5)
@@ -345,15 +345,15 @@
 !
 !----   MOUNTAIN INDUCED GRAVITY WAVE DRAG
 !
-      real(kind=kind_phys) TAUB(IM),  XN(IM),     YN(IM),    UBAR(IM)     &
-     &,                    VBAR(IM),  ULOW(IM),   OA(IM),    CLX(IM)      &
-     &,                    ROLL(IM),  ULOI(IM),   DUSFC(IM), DVSFC(IM)    &
-     &,                    DTFAC(IM), XLINV(IM),  DELKS(IM), DELKS1(IM)
+      real(kind=kind_phys) TAUB(IM),  XN(IM),     YN(IM),    UBAR(IM)     , &
+                           VBAR(IM),  ULOW(IM),   OA(IM),    CLX(IM)      , &
+                           ROLL(IM),  ULOI(IM),   DUSFC(IM), DVSFC(IM)    , &
+                           DTFAC(IM), XLINV(IM),  DELKS(IM), DELKS1(IM)
 !
-      real(kind=kind_phys) BNV2(IM,KM),  TAUP(IM,KM+1), ri_n(IM,KM)       &
-     &,                    TAUD(IM,KM),  RO(IM,KM),     VTK(IM,KM)        &
-     &,                    VTJ(IM,KM),   SCOR(IM),      VELCO(IM,KM-1)    &
-     &,                    bnv2bar(im)
+      real(kind=kind_phys) BNV2(IM,KM),  TAUP(IM,KM+1), ri_n(IM,KM)       , &
+                           TAUD(IM,KM),  RO(IM,KM),     VTK(IM,KM)        , &
+                           VTJ(IM,KM),   SCOR(IM),      VELCO(IM,KM-1)    , &
+                           bnv2bar(im)
 !
 !     real(kind=kind_phys) VELKO(KM-1)
       Integer   kref(IM), kint(im), iwk(im), ipt(im)
@@ -361,16 +361,16 @@
       Integer   kreflm(IM), iwklm(im)
       Integer   idxzb(im), ktrial, klevm1, nmtvr
 !
-      real(kind=kind_phys) gor,    gocp,  fv,    gr2,  bnv,  fr           &
-     &,                    brvf,   cleff, tem,   tem1,  tem2, temc, temv  &
-     &,                    wdir,   ti,    rdz,   dw2,   shr2, bvf2        &
-     &,                    rdelks, efact, coefm, gfobnv                   &
-     &,                    scork,  rscor, hd,    fro,   rim,  sira        &
-     &,                    dtaux,  dtauy, pkp1log, pklog
-      integer kmm1, kmm2, lcap, lcapp1, kbps, kbpsp1,kbpsm1               &
-     &, kmps, idir, nwd, i, j, k, klcap, kp1, kmpbl, npt, npr             &
-     &, kmll                                
-!    &, kmll,kmds,ihit,jhit
+      real(kind=kind_phys) gor,    gocp,  fv,    gr2,  bnv,  fr           , &
+                           brvf,   cleff, tem,   tem1,  tem2, temc, temv  , &
+                           wdir,   ti,    rdz,   dw2,   shr2, bvf2        , &
+                           rdelks, efact, coefm, gfobnv                   , &
+                           scork,  rscor, hd,    fro,   rim,  sira        , &
+                           dtaux,  dtauy, pkp1log, pklog
+      integer kmm1, kmm2, lcap, lcapp1, kbps, kbpsp1,kbpsm1               , &
+        kmps, idir, nwd, i, j, k, klcap, kp1, kmpbl, npt, npr             , &
+        kmll                               
+!       kmll,kmds,ihit,jhit
       logical lprnt
 !
 !     parameter (cdmb = 1.0)     ! non-dim sub grid mtn drag Amp (*j*)
@@ -413,8 +413,7 @@
         ipt = 0
         npt = 0
         DO I = 1,IM
-          IF ( (elvmax(i) .GT. HMINMT) 
-     &       .and. (hprime(i) .GT. hpmin) )  then
+          IF ( (elvmax(i) .GT. HMINMT) .and. (hprime(i) .GT. hpmin) )  then
              npt      = npt + 1
              ipt(npt) = i
              if (ipr .eq. i) npr = npt
@@ -422,8 +421,8 @@
         ENDDO
         IF (npt .eq. 0) RETURN     ! No gwd/mb calculation done!
 !
-!       if (lprnt) print *,' npt=',npt,' npr=',npr,' ipr=',ipr,' im=',im
-!    &,' ipt(npt)=',ipt(npt)
+!       if (lprnt) print *,' npt=',npt,' npr=',npr,' ipr=',ipr,' im=',im, &
+!      ' ipt(npt)=',ipt(npt)
 !
 ! --- iwklm is the level above the height of the of the mountain.
 ! --- idxzb is the level of the dividing streamline.
@@ -434,8 +433,7 @@
           IDXZB(i)  = 0 
           kreflm(i) = 0
         enddo
-!       if (lprnt) 
-!    &  print *,' in gwdps_lm.f npt,IM,IX,IY,km,me=',npt,IM,IX,IY,km,me
+!       if (lprnt) print *,' in gwdps_lm.f npt,IM,IX,IY,km,me=',npt,IM,IX,IY,km,me
 !
 !
 !> --- Subgrid Mountain Blocking Section
@@ -463,8 +461,7 @@
             pkp1log =  phil(j,k+1) / G
             pklog =  phil(j,k)   / G
 !!!-------     ELVMAX(J) = min (ELVMAX(J) + sigfac * hprime(j), hncrit)
-            if ( ( ELVMAX(j) .le.  pkp1log ) .and. 
-     &           ( ELVMAX(j) .ge.   pklog  ) ) THEN
+            if ( ( ELVMAX(j) .le.  pkp1log ) .and. ( ELVMAX(j) .ge.   pklog  ) ) THEN
 !     print *,' in gwdps_lm.f 1  =',k,ELVMAX(j),pklog,pkp1log,me
 ! ---        wk for diags but can be saved and reused.  
                wk(i)  = G * ELVMAX(j) / ( phil(j,k+1) - phil(j,k) )
@@ -491,8 +488,8 @@
 !            jhit = j
 !          endif
 !        enddo
-!     print *, ' mb: kdt,max(iwklm),jhit,phil,me=',
-!    &          kdt,ihit,jhit,phil(jhit,ihit),me
+!     print *, ' mb: kdt,max(iwklm),jhit,phil,me=',&
+!               kdt,ihit,jhit,phil(jhit,ihit),me
          
         klevm1 = KMLL - 1
         DO K = 1, klevm1  
@@ -501,8 +498,8 @@
             RDZ  = g   / ( phil(j,k+1) - phil(j,k) )
 ! ---                               Brunt-Vaisala Frequency
 !> - Compute Brunt-Vaisala Frequency \f$N\f$.
-            BNV2LM(I,K) = (G+G) * RDZ * ( VTK(I,K+1)-VTK(I,K) )
-     &                     / ( VTK(I,K+1)+VTK(I,K) )
+            BNV2LM(I,K) = (G+G) * RDZ * ( VTK(I,K+1)-VTK(I,K) )&
+                           / ( VTK(I,K+1)+VTK(I,K) )
             bnv2lm(i,k) = max( bnv2lm(i,k), bnv2min )
           ENDDO
         ENDDO
@@ -572,13 +569,13 @@
 !!\f]
 !! where \f$ minwnd=0.1 \f$, \f$U1\f$ and \f$V1\f$ are zonal and 
 !! meridional wind components of model layer wind.
-            UDS(I,K) = 
-     &          MAX(SQRT(U1(J,K)*U1(J,K) + V1(J,K)*V1(J,K)), minwnd)
+            UDS(I,K) = &
+                MAX(SQRT(U1(J,K)*U1(J,K) + V1(J,K)*V1(J,K)), minwnd)
 ! --- Test to see if we found Zb previously
             IF (IDXZB(I) .eq. 0 ) then
-              PE(I) = PE(I) + BNV2lm(I,K) * 
-     &           ( G * ELVMAX(J) - phil(J,K) ) * 
-     &           ( PHII(J,K+1) - PHII(J,K) ) / (G*G)
+              PE(I) = PE(I) + BNV2lm(I,K) * &
+                 ( G * ELVMAX(J) - phil(J,K) ) * &
+                 ( PHII(J,K+1) - PHII(J,K) ) / (G*G)
 ! --- KE
 ! --- Wind projected on the line perpendicular to mtn range, U(Zb(K)).
 ! --- kenetic energy is at the layer Zb
@@ -622,8 +619,8 @@
         DO I = 1, npt
           J    = ipt(i)
 ! --- Calc if N constant in layers (Zb guess) - a diagnostic only.
-          ZBK(I) = ELVMAX(J)
-     &           - SQRT(UBAR(I)*UBAR(I) + VBAR(I)*VBAR(I))/BNV2bar(I)
+          ZBK(I) = ELVMAX(J)&
+                 - SQRT(UBAR(I)*UBAR(I) + VBAR(I)*VBAR(I))/BNV2bar(I)
         ENDDO
 !
 !     if (lprnt .and. npr .gt. 0) then
@@ -649,8 +646,8 @@
 !!\f]
 !! where \f$z\f$ is the height, \f$h'\f$ is the orographic standard 
 !! deviation (HPRIME).
-                ZLEN = SQRT( ( PHIL(J,IDXZB(I)) - PHIL(J,K) ) / 
-     &                       ( PHIL(J,K ) + G * hprime(J) ) )
+                ZLEN = SQRT( ( PHIL(J,IDXZB(I)) - PHIL(J,K) ) / &
+                             ( PHIL(J,K ) + G * hprime(J) ) )
 ! --- lm eq 14:
 !> - Calculate the drag coefficient to vary with the aspect ratio of 
 !! the obstable as seen by the incident flow (see eq.14 in Lott and
@@ -677,16 +674,16 @@
 !! where \f$C_{d}\f$ is a specified constant, \f$\sigma\f$ is the 
 !! orographic slope. 
 
-                DBTMP = 0.25 *  CDmb *
-     &                  MAX( 2. - R, 0. ) * sigma(J) *
-     &                  MAX(cos(ANG(I,K)), gamma(J)*sin(ANG(I,K))) *
-     &                  ZLEN / hprime(J) 
+                DBTMP = 0.25 *  CDmb *&
+                        MAX( 2. - R, 0. ) * sigma(J) *&
+                        MAX(cos(ANG(I,K)), gamma(J)*sin(ANG(I,K))) *&
+                        ZLEN / hprime(J) 
                 DB(I,K) =  DBTMP * UDS(I,K)    
                 endif
 !
 !               if(lprnt .and. i .eq. npr) then 
-!                 print *,' in gwdps_lmi.f 10 npt=',npt,i,j,idxzb(i)
-!    &,           DBTMP,R' ang=',ang(i,k),' gamma=',gamma(j),' K=',K
+!                 print *,' in gwdps_lmi.f 10 npt=',npt,i,j,idxzb(i), &
+!                 DBTMP,R' ang=',ang(i,k),' gamma=',gamma(j),' K=',K
 !                 print *,' in gwdps_lmi.f 11   K=',k,ZLEN,cos(ANG(I,K))
 !                 print *,' in gwdps_lmi.f 12  DB=',DB(i,k),sin(ANG(I,K))
 !               endif
@@ -713,8 +710,8 @@
         ENDDO
         IF (npt .eq. 0) RETURN     ! No gwd/mb calculation done!
 !
-!       if (lprnt) print *,' NPR=',npr,' npt=',npt,' IPR=',IPR
-!      &,' ipt(npt)=',ipt(npt)
+!       if (lprnt) print *,' NPR=',npr,' npt=',npt,' IPR=',IPR, &
+!        ' ipt(npt)=',ipt(npt)
 !
         do i=1,npt
           IDXZB(i) = 0
@@ -768,8 +765,8 @@
 !                                              Brunt-Vaisala Frequency
 !         TEM       = GR2 * (PRSL(J,K)+PRSL(J,K+1)) * TEM
 !         BNV2(I,K) = TEM * (VTK(I,K+1)-VTK(I,K))/(VTK(I,K+1)+VTK(I,K))
-          BNV2(I,K) = (G+G) * RDZ * (VTK(I,K+1)-VTK(I,K))
-     &                            / (VTK(I,K+1)+VTK(I,K))
+          BNV2(I,K) = (G+G) * RDZ * (VTK(I,K+1)-VTK(I,K))&
+                                  / (VTK(I,K+1)+VTK(I,K))
           bnv2(i,k) = max( bnv2(i,k), bnv2min )
         ENDDO
       ENDDO
@@ -853,8 +850,8 @@
         CLX(I) = CLX4(J,MOD(NWD-1,4)+1)
       ENDDO
 !
-!-----XN,YN            "LOW-LEVEL" WIND PROJECTIONS IN ZONAL
-!                                    & MERIDIONAL DIRECTIONS
+!-----XN,YN            "LOW-LEVEL" WIND PROJECTIONS IN ZONAL &
+!                                      MERIDIONAL DIRECTIONS
 !-----ULOW             "LOW-LEVEL" WIND MAGNITUDE -        (= U)
 !-----BNV2             BNV2 = N**2
 !-----TAUB             BASE MOMENTUM FLUX
@@ -883,8 +880,8 @@
       DO  K = 1,KMM1
         DO  I = 1,npt
           J            = ipt(i)
-          VELCO(I,K)   = 0.5 * ((U1(J,K)+U1(J,K+1))*UBAR(I)
-     &                       +  (V1(J,K)+V1(J,K+1))*VBAR(I))
+          VELCO(I,K)   = 0.5 * ((U1(J,K)+U1(J,K+1))*UBAR(I)&
+                             +  (V1(J,K)+V1(J,K+1))*VBAR(I))
           VELCO(I,K)   = VELCO(I,K) * ULOI(I)
 !         IF ((VELCO(I,K).LT.VELEPS) .AND. (VELCO(I,K).GT.0.)) THEN
 !           VELCO(I,K) = VELEPS
@@ -913,8 +910,8 @@
         kint(i) = kref(i)
       enddo
 !
-!     if(lprnt) print *,' ubar=',ubar
-!    &,' vbar=',vbar,' ulow=',ulow,' veleps=',veleps
+!     if(lprnt) print *,' ubar=',ubar, &
+!      ' vbar=',vbar,' ulow=',ulow,' veleps=',veleps
 !
       DO I = 1,npt
         J      = ipt(i)
@@ -977,8 +974,8 @@
         TEM      = FR    * FR * OC(J)
         GFOBNV   = GMAX  * TEM / ((TEM + CG)*BNV)  ! G/N0
 !
-        TAUB(I)  = XLINV(I) * ROLL(I) * ULOW(I) * ULOW(I)
-     &           * ULOW(I)  * GFOBNV  * EFACT         ! BASE FLUX Tau0
+        TAUB(I)  = XLINV(I) * ROLL(I) * ULOW(I) * ULOW(I)&
+                 * ULOW(I)  * GFOBNV  * EFACT         ! BASE FLUX Tau0
 !
 !         tem      = min(HPRIME(I),hpmax)
 !         TAUB(I)  = XLINV(I) * ROLL(I) * ULOW(I) * BNV * tem * tem
@@ -1008,8 +1005,8 @@
 !---- AT (U-C)=0. CRIT LAYER EXISTS AND BIT VECTOR SHOULD BE SET (.LE.)
 !
           IF (K .GE. kref(I)) THEN
-            ICRILV(I) = ICRILV(I) .OR. ( ri_n(I,K) .LT. RIC)
-     &                            .OR. (VELCO(I,K) .LE. 0.0)
+            ICRILV(I) = ICRILV(I) .OR. ( ri_n(I,K) .LT. RIC)&
+                                  .OR. (VELCO(I,K) .LE. 0.0)
           ENDIF
         ENDDO
 !
@@ -1052,8 +1049,8 @@
 
               BRVF = SQRT(BNV2(I,K))        ! Brunt-Vaisala Frequency
 !             TEM1 = XLINV(I)*(RO(I,KP1)+RO(I,K))*BRVF*VELCO(I,K)*0.5
-              TEM1 = XLINV(I)*(RO(I,KP1)+RO(I,K))*BRVF*0.5
-     &                       * max(VELCO(I,K),0.01)
+              TEM1 = XLINV(I)*(RO(I,KP1)+RO(I,K))*BRVF*0.5&
+                             * max(VELCO(I,K),0.01)
               HD   = SQRT(TAUP(I,K) / TEM1)
               FRO  = BRVF * HD * TEMV
 !
@@ -1091,9 +1088,8 @@
 !! \f$\tau\f$ is unchanged (note: scaled by the ratio of the Scorer 
 !! paramter).
 !                                       ----------------------
-              IF (RIM .LE. RIC .AND.
-!    &           (OA(I) .LE. 0. .OR.  PRSI(ipt(I),KP1).LE.RLOLEV )) THEN
-     &           (OA(I) .LE. 0. .OR.  kp1 .ge. kint(i) )) THEN
+              IF (RIM .LE. RIC .AND. (OA(I) .LE. 0. .OR.  kp1 .ge. kint(i) )) THEN
+!    &           IF (RIM .LE. RIC .AND. (OA(I) .LE. 0. .OR.  PRSI(ipt(I),KP1).LE.RLOLEV )) THEN
                  TEMC = 2.0 + 1.0 / TEM2
                  HD   = VELCO(I,K) * (2.*SQRT(TEMC)-TEMC) / BRVF
                  TAUP(I,KP1) = TEM1 * HD * HD
@@ -1126,8 +1122,8 @@
          j = ipt(i)
          do k = km/2, km+1
            if ( prsi(j,k) < p_crit ) then  ! scale it to zero @ top
-              taup(i,k) = taup(i,k) * (prsi(j,k) - prsi(j,km+1)) /
-     &                                (p_crit    - prsi(j,km+1))
+              taup(i,k) = taup(i,k) * (prsi(j,k) - prsi(j,km+1)) /&
+                                      (p_crit    - prsi(j,km+1))
            elseif ( prsi(j,k) < 1.e2) then
               taup(i,k) = taup(i,k-1)  ! constant stress-> zero Drag
            endif
@@ -1193,18 +1189,18 @@
             A(J,K)  = - DBIM * V1(J,K) + A(J,K)
             B(J,K)  = - DBIM * U1(J,K) + B(J,K)
             ENG1    = ENG0*(1.0-DBIM*DELTIM)*(1.0-DBIM*DELTIM)
-!          if ( ABS(DBIM * U1(J,K)) .gt. .01 ) 
-!    & print *,' in gwdps_lmi.f KDT=',KDT,I,K,DB(I,K),
-!    &                      dbim,idxzb(I),U1(J,K),V1(J,K),me
+!          if ( ABS(DBIM * U1(J,K)) .gt. .01 ) &
+!      print *,' in gwdps_lmi.f KDT=',KDT,I,K,DB(I,K),&
+!                           dbim,idxzb(I),U1(J,K),V1(J,K),me
             DUSFC(J)   = DUSFC(J) - DBIM * U1(J,K) * DEL(J,K)
             DVSFC(J)   = DVSFC(J) - DBIM * V1(J,K) * DEL(J,K)
           else
 !
             A(J,K)     = DTAUY     + A(J,K)
             B(J,K)     = DTAUX     + B(J,K)
-            ENG1       = 0.5*(
-     &                   (U1(J,K)+DTAUX*DELTIM)*(U1(J,K)+DTAUX*DELTIM)
-     &                 + (V1(J,K)+DTAUY*DELTIM)*(V1(J,K)+DTAUY*DELTIM))
+            ENG1       = 0.5*(&
+                         (U1(J,K)+DTAUX*DELTIM)*(U1(J,K)+DTAUX*DELTIM)&
+                       + (V1(J,K)+DTAUY*DELTIM)*(V1(J,K)+DTAUY*DELTIM))
             DUSFC(J)   = DUSFC(J)  + DTAUX * DEL(J,K)
             DVSFC(J)   = DVSFC(J)  + DTAUY * DEL(J,K)
           endif
@@ -1263,8 +1259,8 @@
 !        ENDIF
 !     ENDIF
 !
-!      print *,' in gwdps_lm.f 18  =',A(ipt(1),idxzb(1))
-!    &,                          B(ipt(1),idxzb(1)),me
+!      print *,' in gwdps_lm.f 18  =',A(ipt(1),idxzb(1)), &
+!                                B(ipt(1),idxzb(1)),me
       RETURN
       END
 !> @}
@@ -1343,10 +1339,10 @@
 !!
 !> \section al_gwdc General Algorithm
 !> @{
-      subroutine gwdc(im,ix,iy,km,lat,u1,v1,t1,q1,deltim,
-     &                pmid1,pint1,dpmid1,qmax,ktop,kbot,kcnv,cldf,
-     &                grav,cp,rd,fv,pi,dlength,lprnt,ipr,fhour,
-     &                utgwc,vtgwc,tauctx,taucty)
+      subroutine gwdc(im,ix,iy,km,lat,u1,v1,t1,q1,deltim,&
+                      pmid1,pint1,dpmid1,qmax,ktop,kbot,kcnv,cldf,&
+                      grav,cp,rd,fv,pi,dlength,lprnt,ipr,fhour,&
+                      utgwc,vtgwc,tauctx,taucty)
 
 !***********************************************************************
 ! aug   2005 Ake Johansson - ORIGINAL CODE FOR PARAMETERIZATION OF CONVECTIVELY FORCED
@@ -1391,12 +1387,12 @@
 
 !     real(kind=kind_phys) grav,cp,rd,fv,fhour,fhourpr,deltim
       real(kind=kind_phys) grav,cp,rd,fv,fhour,deltim,pi
-      real(kind=kind_phys), dimension(im)      :: qmax                  &
-     &,                                           tauctx, taucty
+      real(kind=kind_phys), dimension(im)      :: qmax                  , &
+                                                  tauctx, taucty
       real(kind=kind_phys), dimension(im)      :: cldf,dlength
       real(kind=kind_phys), dimension(ix,km)   :: u1,v1,t1,q1,          &
-     &                                            pmid1,dpmid1    
-!    &,                                           cumchr1
+                                                  pmid1,dpmid1
+!                                                 cumchr1
       real(kind=kind_phys), dimension(iy,km)   :: utgwc,vtgwc
       real(kind=kind_phys), dimension(ix,km+1) :: pint1
 
@@ -1459,42 +1455,42 @@
       integer, dimension(im) :: ipt
 
       real(kind=kind_phys) tem, tem1,  tem2, qtem, wtgwc, tauct,        &
-     &                     windcltop,  shear, nonlinct, nonlin, nonlins,&
-     &                     n2,   dtdp,  crit1, crit2,     p1, p2,       &
-!    &                     n2,   dtdp,  crit1, crit2, pi, p1, p2,
-     &                     gsqr,  onebg
-!    &                     taus, n2,   dtdp,  crit1, crit2, pi, p1, p2
+                           windcltop,  shear, nonlinct, nonlin, nonlins,&
+                           n2,   dtdp,  crit1, crit2,     p1, p2,       &
+!                          n2,   dtdp,  crit1, crit2, pi, p1, p2,&
+                           gsqr,  onebg
+!                          taus, n2,   dtdp,  crit1, crit2, pi, p1, p2
 
       integer,              allocatable :: kcldtop(:),kcldbot(:)
       logical,              allocatable :: do_gwc(:)
-      real(kind=kind_phys), allocatable :: tauctxl(:), tauctyl(:),
-     &                                     gwdcloc(:), break(:),
-!    &                                     critic(:),
-!    &                                     critic(:),  angle(:),
-     &                                     cosphi(:),  sinphi(:),
-     &                                     xstress(:), ystress(:),
-     &                                     ucltop(:),  vcltop(:),
-     &                                     wrk(:),     dtfac(:),
-     &                                     dlen(:),       gqmcldlen(:)
-!     real(kind=kind_phys), allocatable :: plnint(:,:),   dpint(:,:),
-!    &                                     taugwci(:,:),  taugwcxi(:,:),
-!    &                                     taugwcyi(:,:), bruni(:,:),
-!    &                                     taugwcyi(:,:), bruni(:,:),
-      real(kind=kind_phys), allocatable :: plnint(:,:),   velco(:,:),
-     &                                     taugwci(:,:),  bruni(:,:),
-     &                                     rhoi(:,:),     basicui(:,:),
-     &                                     ti(:,:),       riloc(:,:),
-     &                                     rimin(:,:),    pint(:,:)
+      real(kind=kind_phys), allocatable :: tauctxl(:), tauctyl(:),&
+                                           gwdcloc(:), break(:),&
+!                                          critic(:),&
+!                                          critic(:),  angle(:),&
+                                           cosphi(:),  sinphi(:),&
+                                           xstress(:), ystress(:),&
+                                           ucltop(:),  vcltop(:),&
+                                           wrk(:),     dtfac(:),&
+                                           dlen(:),       gqmcldlen(:)
+!     real(kind=kind_phys), allocatable :: plnint(:,:),   dpint(:,:),&
+!                                          taugwci(:,:),  taugwcxi(:,:),&
+!                                          taugwcyi(:,:), bruni(:,:),&
+!                                          taugwcyi(:,:), bruni(:,:),
+      real(kind=kind_phys), allocatable :: plnint(:,:),   velco(:,:),&
+                                           taugwci(:,:),  bruni(:,:),&
+                                           rhoi(:,:),     basicui(:,:),&
+                                           ti(:,:),       riloc(:,:),&
+                                           rimin(:,:),    pint(:,:)
 !     real(kind=kind_phys), allocatable :: ugwdc(:,:),    vgwdc(:,:),
-      real(kind=kind_phys), allocatable :: 
-!    &                                     plnmid(:,:),   wtgwc(:,:),
-     &                                     plnmid(:,:),   taugw(:,:),
-     &                                     utgwcl(:,:),   vtgwcl(:,:),
-     &                                     basicum(:,:),  u(:,:),v(:,:),
-     &                                     t(:,:),        spfh(:,:),
-     &                                     pmid(:,:),     dpmid(:,:),
-!    &                                     pmid(:,:),     cumchr(:,:),
-     &                                     brunm(:,:),    rhom(:,:)
+      real(kind=kind_phys), allocatable :: &
+!                                          plnmid(:,:),   wtgwc(:,:),&
+                                           plnmid(:,:),   taugw(:,:),&
+                                           utgwcl(:,:),   vtgwcl(:,:),&
+                                           basicum(:,:),  u(:,:),v(:,:),&
+                                           t(:,:),        spfh(:,:),&
+                                           pmid(:,:),     dpmid(:,:),&
+!                                          pmid(:,:),     cumchr(:,:),&
+                                           brunm(:,:),    rhom(:,:)
 
 !-----------------------------------------------------------------------
 !
@@ -1520,16 +1516,16 @@
 !
 !-----------------------------------------------------------------------
 
-      real(kind=kind_phys), parameter ::
-     &                      c1=1.41,          c2=-0.38,     ricrit=0.25
-     &,                     n2min=1.e-32,     zero=0.0,     one=1.0
-     &,                     taumin=1.0e-20,   tauctmax=-20.
-!    &,                     taumin=1.0e-20,   tauctmax=-5.
-     &,                     qmin=1.0e-10,     shmin=1.0e-20
-     &,                     rimax=1.0e+20,    rimaxm=0.99e+20
-     &,                     rimaxp=1.01e+20,  rilarge=0.9e+20
-     &,                     riminx=-1.0e+20,  riminm=-1.01e+20
-     &,                     riminp=-0.99e+20, rismall=-0.9e+20
+      real(kind=kind_phys), parameter ::&
+                            c1=1.41,          c2=-0.38,     ricrit=0.25, &
+                            n2min=1.e-32,     zero=0.0,     one=1.0, &
+                            taumin=1.0e-20,   tauctmax=-20., &
+!                           taumin=1.0e-20,   tauctmax=-5., &
+                            qmin=1.0e-10,     shmin=1.0e-20, &
+                            rimax=1.0e+20,    rimaxm=0.99e+20, &
+                            rimaxp=1.01e+20,  rilarge=0.9e+20, &
+                            riminx=-1.0e+20,  riminm=-1.01e+20, &
+                            riminp=-0.99e+20, rismall=-0.9e+20
 
 !
       npt = 0
@@ -1568,8 +1564,8 @@
 !     if (lprnt) then
 !       if (fhour >= fhourpr) then
 !         print *,' '
-!         write(*,*) 'Inside GWDC raw input start print at fhour = ',
-!    &               fhour
+!         write(*,*) 'Inside GWDC raw input start print at fhour = ',&
+!                    fhour
 !         write(*,*) 'IX  IM  KM  ',ix,im,km
 !         write(*,*) 'KBOT KTOP QMAX DLENGTH kcnv  ',
 !    +     kbot(ipr),ktop(ipr),qmax(ipr),dlength(ipr),kcnv(ipr)
@@ -1580,8 +1576,8 @@
 !         ilev=km+1
 !         write(*,9110) ilev,(10.*pint1(ipr,ilev))
 !         do ilev=km,1,-1
-!           write(*,9120) ilev,(10.*pmid1(ipr,ilev)),
-!    &                         (10.*dpmid1(ipr,ilev))
+!           write(*,9120) ilev,(10.*pmid1(ipr,ilev)),&
+!                              (10.*dpmid1(ipr,ilev))
 !           write(*,9110) ilev,(10.*pint1(ipr,ilev))
 !         enddo
 
@@ -1606,31 +1602,31 @@
 !     Allocate local arrays
 
       allocate (kcldtop(npt), kcldbot(npt), do_gwc(npt))
-      allocate (tauctxl(npt), tauctyl(npt), dtfac(npt),
-     &          gwdcloc(npt), break(npt),                cosphi(npt),
-!    &          gwdcloc(npt), break(npt), critic(npt),   cosphi(npt),
-     &          sinphi(npt),  xstress(npt),  ystress(npt), wrk(npt),
-     &          ucltop(npt),  vcltop(npt),dlen(npt),     gqmcldlen(npt))
+      allocate (tauctxl(npt), tauctyl(npt), dtfac(npt),&
+                gwdcloc(npt), break(npt),                cosphi(npt),&
+!               gwdcloc(npt), break(npt), critic(npt),   cosphi(npt),&
+                sinphi(npt),  xstress(npt),  ystress(npt), wrk(npt),&
+                ucltop(npt),  vcltop(npt),dlen(npt),     gqmcldlen(npt))
 
-!     allocate (plnint(npt,2:km+1), dpint(npt,km+1),
-!    &          taugwci(npt,km+1),  taugwcxi(npt,km+1),
-!    &          taugwcyi(npt,km+1), bruni(npt,km+1),
-      allocate (plnint(npt,2:km+1),
-     &          taugwci(npt,km+1),  bruni(npt,km+1),
-     &          rhoi(npt,km+1),     basicui(npt,km+1),
-     &          ti(npt,km+1),       riloc(npt,km+1),
-     &          rimin(npt,km+1),    pint(npt,km+1))
+!     allocate (plnint(npt,2:km+1), dpint(npt,km+1),&
+!               taugwci(npt,km+1),  taugwcxi(npt,km+1),&
+!               taugwcyi(npt,km+1), bruni(npt,km+1),
+      allocate (plnint(npt,2:km+1),&
+                taugwci(npt,km+1),  bruni(npt,km+1),&
+                rhoi(npt,km+1),     basicui(npt,km+1),&
+                ti(npt,km+1),       riloc(npt,km+1),&
+                rimin(npt,km+1),    pint(npt,km+1))
 
 !     allocate (ugwdc(npt,km),   vgwdc(npt,km),
-      allocate 
-!    &         (plnmid(npt,km),  wtgwc(npt,km),
-     &         (plnmid(npt,km),  velco(npt,km),
-     &          utgwcl(npt,km),  vtgwcl(npt,km),
-     &          basicum(npt,km), u(npt,km),    v(npt,km),
-     &          t(npt,km),       spfh(npt,km), pmid(npt,km),
-     &          dpmid(npt,km),   taugw(npt,km),
-!    &          dpmid(npt,km),   cumchr(npt,km),
-     &          brunm(npt,km),   rhom(npt,km))
+      allocate &
+!              (plnmid(npt,km),  wtgwc(npt,km),&
+               (plnmid(npt,km),  velco(npt,km),&
+                utgwcl(npt,km),  vtgwcl(npt,km),&
+                basicum(npt,km), u(npt,km),    v(npt,km),&
+                t(npt,km),       spfh(npt,km), pmid(npt,km),&
+                dpmid(npt,km),   taugw(npt,km),&
+!               dpmid(npt,km),   cumchr(npt,km),&
+                brunm(npt,km),   rhom(npt,km))
 
 !-----------------------------------------------------------------------
 !> -# Create local arrays with reversed vertical indices
@@ -1700,9 +1696,9 @@
 !                                    (g*qmax(ii)*cldf(ii)*dlength(ii))
         gqmcldlen(i) = grav*qmax(ii)*cldf(ii)*dlen(i)
       enddo
-!     if (lprnt) write(7000,*)' ktop=',ktop(ipr),' kbot=',kbot(ipr)
-!    &,' kcldtop=',kcldtop(npr),' kcldbot=',kcldbot(npr),
-!    &' dlength=',dlength(ipr),' qmax=',qmax(ipr),' cldf=',cldf(ipr)
+!     if (lprnt) write(7000,*)' ktop=',ktop(ipr),' kbot=',kbot(ipr), &
+!      ' kcldtop=',kcldtop(npr),' kcldbot=',kcldbot(npr),&
+!     ' dlength=',dlength(ipr),' qmax=',qmax(ipr),' cldf=',cldf(ipr)
 
 !     if (lprnt) then
 !       if (fhour.ge.fhourpr) then
@@ -1829,14 +1825,14 @@
 !-------- Pressure levels ----------
 !         write(*,9101)
 !         do ilev=1,km
-!           write(*,9111) ilev,(0.01*pint(ipr,ilev)),
-!    &                         (0.01*dpint(ipr,ilev)),plnint(ipr,ilev)
-!           write(*,9121) ilev,(0.01*pmid(ipr,ilev)),
-!    &                         (0.01*dpmid(ipr,ilev)),plnmid(ipr,ilev)
+!           write(*,9111) ilev,(0.01*pint(ipr,ilev)),&
+!                              (0.01*dpint(ipr,ilev)),plnint(ipr,ilev)
+!           write(*,9121) ilev,(0.01*pmid(ipr,ilev)),&
+!                              (0.01*dpmid(ipr,ilev)),plnmid(ipr,ilev)
 !         enddo
 !         ilev=km+1
-!         write(*,9111) ilev,(0.01*pint(ipr,ilev)),
-!    &                       (0.01*dpint(ipr,ilev)),plnint(ipr,ilev)
+!         write(*,9111) ilev,(0.01*pint(ipr,ilev)),&
+!                            (0.01*dpint(ipr,ilev)),plnint(ipr,ilev)
 
 !                2
 !-------- U V T N  ----------
@@ -1885,8 +1881,8 @@
         ucltop(i) = u(i,kk)
         vcltop(i) = v(i,kk)
 !       windcltop = sqrt( ucltop(i)*ucltop(i) + vcltop(i)*vcltop(i) )
-        windcltop = 1.0 / sqrt( ucltop(i)*ucltop(i)
-     &                        + vcltop(i)*vcltop(i) )
+        windcltop = 1.0 / sqrt( ucltop(i)*ucltop(i)&
+                              + vcltop(i)*vcltop(i) )
         cosphi(i) = ucltop(i)*windcltop
         sinphi(i) = vcltop(i)*windcltop
 !       angle(i)  = acos(cosphi)*180./pi
@@ -1962,8 +1958,8 @@
 
       do k=2,km
         do i=1,npt
-          shear = grav*rhoi(i,k) * (basicum(i,k) - basicum(i,k-1))
-     &                           / (pmid(i,k) - pmid(i,k-1))
+          shear = grav*rhoi(i,k) * (basicum(i,k) - basicum(i,k-1))&
+                                 / (pmid(i,k) - pmid(i,k-1))
           if ( abs(shear) < shmin ) then
             riloc(i,k) = rimax
           else
@@ -2097,8 +2093,8 @@
           nonlinct  = gqmcldlen(i) / (bruni(i,kk)*t(i,kk)*tem1)    ! Mu
           tem2      = c2*nonlinct
 !                                  RhoU^3c1(c2mu)^2/Ndx
-          tauct     = - rhom(i,kk) * tem * tem1 * c1 * tem2 * tem2
-     &              /  (bruni(i,kk)*dlen(i))
+          tauct     = - rhom(i,kk) * tem * tem1 * c1 * tem2 * tem2&
+                    /  (bruni(i,kk)*dlen(i))
 
           tauct         = max(tauctmax, tauct)
           tauctxl(i)    = tauct * cosphi(i)           ! X stress at cloud top
@@ -2168,19 +2164,17 @@
               crit2 = vcltop(i)*v(i,1)
               velco(i,1) = u(i,1) * cosphi(i) + v(i,1) * sinphi(i)
             end if
-!     if (lprnt .and. i == npr) write(7000,*)' k=',k,' crit1=',
-!    &crit1,' crit2=',crit2,' basicui=',basicui(i,k)
+!     if (lprnt .and. i == npr) write(7000,*)' k=',k,' crit1=',&
+!     crit1,' crit2=',crit2,' basicui=',basicui(i,k)
 
-            if ( abs(basicui(i,k)) > zero .and. crit1 > zero 
-     &                                    .and. crit2 > zero ) then
+            if ( abs(basicui(i,k)) > zero .and. crit1 > zero .and. crit2 > zero ) then
               tem = basicui(i,k) * basicui(i,k)
               nonlin   = gqmcldlen(i) / (bruni(i,k)*ti(i,k)*tem)        
               tem  = nonlin*abs(c2)
               if ( riloc(i,k)  <  rimaxm ) then
                 tem1 = 1 + tem*sqrt(riloc(i,k))
                 rimin(i,k) = riloc(i,k) * (1-tem) / (tem1*tem1)
-              else if((riloc(i,k) > rimaxm) .and.
-     &                (riloc(i,k) < rimaxp)) then
+              else if((riloc(i,k) > rimaxm) .and. (riloc(i,k) < rimaxp)) then
                 rimin(i,k) = ( 1 - tem) / (tem*tem)
               end if
               if ( rimin(i,k) <= riminx ) then
@@ -2275,8 +2269,8 @@
                     nonlins = (1.0/abs(c2)) * (2.*sqrt(tem) - tem) 
                     tem1 = basicui(i,k)
                     tem2 = c2*nonlins*tem1
-                    taugwci(i,k) = - rhoi(i,k) * c1 * tem1 * tem2 * tem2
-     &                           /  (bruni(i,k)*dlen(i))
+                    taugwci(i,k) = - rhoi(i,k) * c1 * tem1 * tem2 * tem2&
+                                 /  (bruni(i,k)*dlen(i))
                   elseif (rimin(i,k) > riminm) then
                     taugwci(i,k) = zero 
 !                   taugwci(i,k) = taugwci(i,k+1) 
@@ -2311,11 +2305,11 @@
             endif
 
 !     if(lprnt .and. i == npr) then
-!     write(7000,*)'k=',k,'  taugwci=',taugwci(i,k),
-!    &'riloc',riloc(i,k),'riminp=',riminp,' ricrit=',ricrit
-!    &,'bruni(i,k)=',bruni(i,k),' deln=',bruni(i,k)
-!    &,'basicui(i,k)=',basicui(i,k),' rimin=',rimin(i,k)
-!    &,' dlen=',dlen(i),' rhoi=',rhoi(i,k)
+!     write(7000,*)'k=',k,'  taugwci=',taugwci(i,k),&
+!     'riloc',riloc(i,k),'riminp=',riminp,' ricrit=',ricrit, &
+!      'bruni(i,k)=',bruni(i,k),' deln=',bruni(i,k), &
+!      'basicui(i,k)=',basicui(i,k),' rimin=',rimin(i,k), &
+!      ' dlen=',dlen(i),' rhoi=',rhoi(i,k)
 !     endif
 
           endif
@@ -2364,10 +2358,10 @@
               vtgwcl(i,k) = zero
             endif
 !     if(lprnt .and. i == npr) then
-!     write(7000,*)'k=',k,' wtgwc=',wtgwc,' taugwci=',taugwci(i,k),
-!    &taugwci(i,k+1),' dpmid=',dpmid(i,k),' cosphi=',cosphi(i),
-!    & ' sinphi=',sinphi(i),' utgwcl=',utgwcl(i,k),
-!    &'vtgwcl=',vtgwcl(i,k),' dtfac=',dtfac(i)
+!     write(7000,*)'k=',k,' wtgwc=',wtgwc,' taugwci=',taugwci(i,k),&
+!     taugwci(i,k+1),' dpmid=',dpmid(i,k),' cosphi=',cosphi(i),&
+!      ' sinphi=',sinphi(i),' utgwcl=',utgwcl(i,k),&
+!     'vtgwcl=',vtgwcl(i,k),' dtfac=',dtfac(i)
 !     endif
           endif
         enddo
@@ -2545,9 +2539,7 @@
 
 !       do k = 1, kk-1
 
-!        if ( ( abs(taugwci(i,k)).lt.taumin ) .and.
-!    &        ( abs(taugwci(i,k+1)).gt.taumin ) .and.
-!    &        ( basicum(i,k+1)*basicum(i,k) .lt. 0. ) ) then
+!        if ( ( abs(taugwci(i,k)).lt.taumin ) .and.( abs(taugwci(i,k+1)).gt.taumin ) .and.( basicum(i,k+1)*basicum(i,k) .lt. 0. ) ) then
 !         critic(i) = 1.0
 !         print *,i,k,' inside GWDC  taugwci(k) = ',taugwci(i,k)
 !         print *,i,k+1,' inside GWDC  taugwci(k+1) = ',taugwci(i,k+1)
@@ -2583,8 +2575,8 @@
 !         rhom(ii,kk) = rhom(i,k)
 
         enddo
-!       if (lprnt) write(7000,*)' k=',k,' k1=',k1,' utgwc='
-!    &, utgwc(ipr,k1),' vtgwc=',vtgwc(ipr,k1)
+!       if (lprnt) write(7000,*)' k=',k,' k1=',k1,' utgwc=', &
+!       utgwc(ipr,k1),' vtgwc=',vtgwc(ipr,k1)
       enddo
       do i=1,npt
         ii = ipt(i)
@@ -2608,18 +2600,18 @@
 !9226 format(i4,2(2x,f10.3))
 
       deallocate (kcldtop,kcldbot,do_gwc)
-      deallocate (tauctxl,  tauctyl, dtfac,
-!    &            gwdcloc, break, critic,   cosphi,
-     &            gwdcloc, break,           cosphi,
-     &            sinphi,         xstress,  ystress,
-     &            dlen,    ucltop, vcltop,  gqmcldlen, wrk)
+      deallocate (tauctxl,  tauctyl, dtfac,&
+!                 gwdcloc, break, critic,   cosphi,&
+                  gwdcloc, break,           cosphi,&
+                  sinphi,         xstress,  ystress,&
+                  dlen,    ucltop, vcltop,  gqmcldlen, wrk)
 
-      deallocate (plnint,          taugwci, velco,
-     &            bruni, rhoi,     basicui,
-     &            ti,       riloc, rimin,    pint)
+      deallocate (plnint,          taugwci, velco,&
+                  bruni, rhoi,     basicui,&
+                  ti,       riloc, rimin,    pint)
 
-      deallocate (plnmid, utgwcl, vtgwcl, basicum, u, v, t,
-     &            pmid,   dpmid,  brunm,  rhom, taugw)
+      deallocate (plnmid, utgwcl, vtgwcl, basicum, u, v, t,&
+                  pmid,   dpmid,  brunm,  rhom, taugw)
 
       return
       end
