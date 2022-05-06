@@ -248,6 +248,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     !-----------------------------------------------------------------------
     ! Inline SA-TKE-EDMF >>>
+    ! To-Do: pass the hpbl, kpbl to the physics
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_edmf) then
@@ -315,6 +316,18 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             allocate (dp0 (isd:ied, jsd:jed, km))
             dp0 = delp
         endif
+
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, pe, ua, va, &
+!$OMP                                    te, delp, hydrostatic, hs, pt, peln, delz, &
+!$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
+!$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, hpbl, &
+!$OMP                                    ptop) &
+!$OMP                           private (u_dt, v_dt, gsize, dz, lsm, zi, pi, pik, pmk, &
+!$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
+!$OMP                                    swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
+!$OMP                                    tsea, heat, evap, stress, spd1, ntke, kinver, &
+!$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
 
         do j = js, je
  
@@ -566,6 +579,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     !-----------------------------------------------------------------------
     ! Inline SA-SAS >>>
     ! To-Do: pass ud_mf, dd_mf, dt_mf, cnvw, cnvc to physics
+    ! To-Do: pass heating to the physics to activate the convective GWD
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_sas) then
@@ -625,9 +639,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, peln, delz, omga, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
-!$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, ps, do_inline_edmf) &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, ps, &
+!$OMP                                    hpbl, do_inline_edmf) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, kb, kt, kc, lsm, rn, &
-!$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, hpbl, qliq, qsol, &
+!$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, dql, ps_dt)
 
         do j = js, je
