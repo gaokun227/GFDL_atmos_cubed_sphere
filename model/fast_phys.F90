@@ -120,11 +120,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     real, dimension (is:ie, km+1) :: phis
 
-    integer, allocatable, dimension (:) :: kb, kt, kc, lsm, kinver
+    integer, allocatable, dimension (:) :: kb, kt, kc, lsm, kinver, kpbl
 
-    real, allocatable, dimension (:) :: rn, swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, tsea, heat, evap, stress, spd1
+    real, allocatable, dimension (:) :: rn, xmu, rbsoil, zorl, u10m, v10m, fm, fh, tsea, heat, evap, stress, spd1
 
-    real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql, ta, uu, vv, ww
+    real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql, ta, uu, vv, ww, swh, hlw
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
@@ -255,8 +255,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         call timing_on ('sa_tke_edmf')
 
+        ntke = get_tracer_index (model_atmos, 'sgs_tke')
+
         allocate (lsm (is:ie))
         allocate (kinver (is:ie))
+        allocate (kpbl (is:ie))
 
         allocate (dz (is:ie, 1:km))
         allocate (zm (is:ie, 1:km))
@@ -270,10 +273,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (ta (is:ie, 1:km))
         allocate (uu (is:ie, 1:km))
         allocate (vv (is:ie, 1:km))
-        allocate (qa (is:ie, 1:km, nq))
+        allocate (qa (is:ie, 1:km, 1:nq))
 
-        allocate (swh (is:ie))
-        allocate (hlw (is:ie))
+        allocate (swh (is:ie, 1:km))
+        allocate (hlw (is:ie, 1:km))
         allocate (xmu (is:ie))
         allocate (rbsoil (is:ie))
         allocate (zorl (is:ie))
@@ -322,12 +325,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, hpbl, &
-!$OMP                                    ptop) &
+!$OMP                                    ptop, ntke) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, lsm, zi, pi, pik, pmk, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
 !$OMP                                    swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
-!$OMP                                    tsea, heat, evap, stress, spd1, ntke, kinver, &
-!$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
+!$OMP                                    tsea, heat, evap, stress, spd1, kinver, &
+!$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, kpbl)
 
         do j = js, je
  
@@ -337,23 +340,23 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             u_dt (is:ie, j, 1:km) = ua (is:ie, j, 1:km)
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
 
-            ntke = get_tracer_index (model_atmos, 'sgs_tke')
             lsm = 0
             kinver = km
+            kpbl = 1
             swh = 0.0
             hlw = 0.0
             xmu = 0.0
             rbsoil = 0.0
-            zorl = 0.0
+            zorl = 1.0
             u10m = 0.0
             v10m = 0.0
-            fm = 0.0
-            fh = 0.0
-            tsea = 0.0
+            fm = 1.0
+            fh = 1.0
+            tsea = 300.0
             heat = 0.0
             evap = 0.0
             stress = 0.0
-            spd1 = 0.0
+            spd1 = 1.0
 
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
@@ -401,7 +404,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 abs (mdt), uu, vv, ta, qa, gsize, lsm, &
                 swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
                 tsea, heat, evap, stress, spd1, kinver, &
-                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl)
+                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl, kpbl)
 
             do k = 1, km
                 kr = km - k + 1
@@ -467,6 +470,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         deallocate (lsm)
         deallocate (kinver)
+        deallocate (kpbl)
 
         deallocate (dz)
         deallocate (zm)
@@ -476,6 +480,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         deallocate (pi)
         deallocate (pmk)
         deallocate (pik)
+
+        deallocate (ta)
+        deallocate (uu)
+        deallocate (vv)
+        deallocate (qa)
 
         deallocate (swh)
         deallocate (hlw)
@@ -491,11 +500,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         deallocate (evap)
         deallocate (stress)
         deallocate (spd1)
-
-        deallocate (ta)
-        deallocate (uu)
-        deallocate (vv)
-        deallocate (qa)
 
         ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
         if ( gridstruct%square_domain ) then

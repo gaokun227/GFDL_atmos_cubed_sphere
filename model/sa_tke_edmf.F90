@@ -188,7 +188,7 @@ subroutine sa_tke_edmf (im, km, ntrac, ntcw, ntiw, ntke, &
     real, intent (inout) :: u1 (im, km), v1 (im, km), &
         t1 (im, km), q1 (im, km, ntrac)
 
-    integer, intent (out), optional :: kpbl (im)
+    integer, intent (out) :: kpbl (im)
     
     real, intent (out) :: hpbl (im)
     
