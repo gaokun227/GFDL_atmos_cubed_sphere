@@ -53,7 +53,7 @@ module external_ic_mod
    use fv_mp_mod,         only: is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
    use fv_regional_mod,   only: start_regional_cold_start
    use fv_surf_map_mod,   only: surfdrv, FV3_zs_filter
-   !use fv_surf_map_mod,   only: sgh_g, oro_g !not used (oro_g below is something different)
+   use fv_surf_map_mod,   only: sgh_g, oro_g
    use fv_surf_map_mod,   only: del2_cubed_sphere, del4_cubed_sphere
    use fv_timing_mod,     only: timing_on, timing_off
    use init_hydro_mod,    only: p_var
@@ -178,6 +178,10 @@ contains
            call get_fv_ic( Atm, fv_domain, nq )
       endif
 
+      if (.not. (Atm%flagstruct%ncep_ic .or. Atm%flagstruct%nggps_ic) .and. Atm%flagstruct%fv_land) then
+         call mpp_error(FATAL, "fv_land = .true. only supported for ncep_ic, nggps_ic, restart run with n_zs_filter > 0, or idealized test.")
+      endif
+
       call prt_maxmin('PS', Atm%ps, is, ie, js, je, ng, 1, 0.01)
       call prt_maxmin('T', Atm%pt, is, ie, js, je, ng, Atm%npz, 1.)
       if (.not.Atm%flagstruct%hydrostatic) call prt_maxmin('W', Atm%w, is, ie, js, je, ng, Atm%npz, 1.)
@@ -234,8 +238,9 @@ contains
     real, allocatable :: g_dat2(:,:,:)
     real, allocatable :: pt_coarse(:,:,:)
     integer isc_p, iec_p, jsc_p, jec_p, isg, ieg, jsg,jeg
+    integer :: i,j
 
-      integer :: is,  ie,  js,  je
+    integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed, ng
 
     is  = Atm%bd%is
@@ -257,24 +262,32 @@ contains
 
     tile_id = mpp_get_tile_id( fv_domain )
 
-       call get_tile_string(fname, 'INPUT/fv_core.res'//trim(gn)//'.tile', tile_id(n), '.nc' )
+    call get_tile_string(fname, 'INPUT/fv_core.res'//trim(gn)//'.tile', tile_id(n), '.nc' )
     call mpp_error(NOTE, 'external_ic: looking for '//fname)
 
 
-       if( file_exist(fname) ) then
+    if( file_exist(fname) ) then
        call read_data(fname, 'phis', Atm%phis(is:ie,js:je),      &
-                         domain=fv_domain, tile_count=n)
-       else
+            domain=fv_domain, tile_count=n)
+    else
        call mpp_error(NOTE, trim(fname)//' not found (forgot your restart files?); generating terrain from USGS data')
        call surfdrv(  Atm%npx, Atm%npy, Atm%gridstruct%grid_64, Atm%gridstruct%agrid_64,   &
-                         Atm%gridstruct%area_64, Atm%gridstruct%dx, Atm%gridstruct%dy, &
-                         Atm%gridstruct%dxa, Atm%gridstruct%dya, &
-                         Atm%gridstruct%dxc, Atm%gridstruct%dyc, Atm%gridstruct%sin_sg, &
-                         Atm%phis, Atm%flagstruct%stretch_fac, &
-                         Atm%neststruct%nested, Atm%gridstruct%bounded_domain, &
-                         Atm%neststruct%npx_global, Atm%domain, &
-                         Atm%flagstruct%grid_number, Atm%bd )
+            Atm%gridstruct%area_64, Atm%gridstruct%dx, Atm%gridstruct%dy, &
+            Atm%gridstruct%dxa, Atm%gridstruct%dya, &
+            Atm%gridstruct%dxc, Atm%gridstruct%dyc, Atm%gridstruct%sin_sg, &
+            Atm%phis, Atm%flagstruct%stretch_fac, &
+            Atm%neststruct%nested, Atm%gridstruct%bounded_domain, &
+            Atm%neststruct%npx_global, Atm%domain, &
+            Atm%flagstruct%grid_number, Atm%bd )
+       if ( Atm%flagstruct%fv_land ) then
+          do j=js,je
+             do i=is,ie
+                Atm%sgh(i,j) = sgh_g(i,j)
+                Atm%oro(i,j) = oro_g(i,j)
+             enddo
+          enddo
        endif
+    endif
 
 
     !Needed for reproducibility. DON'T REMOVE THIS!!
@@ -315,7 +328,7 @@ contains
     type(domain2d),      intent(inout) :: fv_domain
 ! local:
     real, dimension(:), allocatable:: ak, bk
-    real, dimension(:,:), allocatable:: wk2, ps, oro_g
+    real, dimension(:,:), allocatable:: wk2, ps, oro_ic
     real, dimension(:,:,:), allocatable:: ud, vd, u_w, v_w, u_s, v_s, omga, temp
     real, dimension(:,:,:), allocatable:: zh(:,:,:)  ! 3D height at 65 edges
     real, dimension(:,:,:,:), allocatable:: q
@@ -455,13 +468,13 @@ contains
     endif
 
     if ( Atm%flagstruct%full_zs_filter) then
-       allocate (oro_g(isd:ied,jsd:jed))
-       oro_g = 0.
+       allocate (oro_ic(isd:ied,jsd:jed))
+       oro_ic = 0.
       ! land-frac
-      id_res = register_restart_field (ORO_restart, fn_oro_ics, 'land_frac', oro_g, domain=Atm%domain)
-      call mpp_update_domains(oro_g, Atm%domain)
+      id_res = register_restart_field (ORO_restart, fn_oro_ics, 'land_frac', oro_ic, domain=Atm%domain)
+      call mpp_update_domains(oro_ic, Atm%domain)
       if (Atm%neststruct%nested) then
-       call extrapolation_BC(oro_g, 0, 0, Atm%npx, Atm%npy, Atm%bd, .true.)
+       call extrapolation_BC(oro_ic, 0, 0, Atm%npx, Atm%npy, Atm%bd, .true.)
       endif
     endif
 
@@ -594,8 +607,8 @@ contains
             Atm%gridstruct%area_64, Atm%gridstruct%dxa, Atm%gridstruct%dya, &
             Atm%gridstruct%dx, Atm%gridstruct%dy, Atm%gridstruct%dxc, &
             Atm%gridstruct%dyc, Atm%gridstruct%grid_64, Atm%gridstruct%agrid_64, &
-            Atm%gridstruct%sin_sg, Atm%phis, oro_g)
-       deallocate(oro_g)
+            Atm%gridstruct%sin_sg, Atm%phis, oro_ic)
+       deallocate(oro_ic)
     endif
 
 
@@ -606,7 +619,7 @@ contains
                Atm%gridstruct%area_64, Atm%gridstruct%dx, Atm%gridstruct%dy,   &
                Atm%gridstruct%dxc, Atm%gridstruct%dyc, Atm%gridstruct%sin_sg, &
                Atm%flagstruct%n_zs_filter, cnst_0p20*Atm%gridstruct%da_min, &
-               .false., oro_g, Atm%gridstruct%bounded_domain, &
+               .false., oro_ic, Atm%gridstruct%bounded_domain, &
          Atm%domain, Atm%bd)
         if ( is_master() ) write(*,*) 'Warning !!! del-2 terrain filter has been applied ', &
                Atm%flagstruct%n_zs_filter, ' times'
@@ -614,7 +627,7 @@ contains
         call del4_cubed_sphere(Atm%npx, Atm%npy, Atm%phis, Atm%gridstruct%area_64, &
                Atm%gridstruct%dx, Atm%gridstruct%dy,   &
                Atm%gridstruct%dxc, Atm%gridstruct%dyc, Atm%gridstruct%sin_sg, &
-               Atm%flagstruct%n_zs_filter, .false., oro_g, &
+               Atm%flagstruct%n_zs_filter, .false., oro_ic, &
          Atm%gridstruct%bounded_domain, &
                Atm%domain, Atm%bd)
         if ( is_master() ) write(*,*) 'Warning !!! del-4 terrain filter has been applied ', &
@@ -816,7 +829,7 @@ contains
       type(domain2d),      intent(inout) :: fv_domain
 ! local:
       real, dimension(:), allocatable:: ak, bk
-      real, dimension(:,:), allocatable:: wk2, ps, oro_g
+      real, dimension(:,:), allocatable:: wk2, ps, oro_ic
       real, dimension(:,:,:), allocatable:: ud, vd, u_w, v_w, u_s, v_s, w, t
       real, dimension(:,:,:), allocatable:: zh ! 3D height at 51 edges
       real, dimension(:,:,:,:), allocatable:: q
@@ -951,11 +964,11 @@ contains
         endif
 
         if ( Atm%flagstruct%full_zs_filter) then
-           allocate (oro_g(isd:ied,jsd:jed))
-           oro_g = 0.
+           allocate (oro_ic(isd:ied,jsd:jed))
+           oro_ic = 0.
           ! land-frac
-          id_res = register_restart_field (ORO_restart, fn_oro_ics, 'land_frac', oro_g, domain=Atm%domain)
-          call mpp_update_domains(oro_g, Atm%domain)
+          id_res = register_restart_field (ORO_restart, fn_oro_ics, 'land_frac', oro_ic, domain=Atm%domain)
+          call mpp_update_domains(oro_ic, Atm%domain)
         endif
 
         if ( Atm%flagstruct%fv_land ) then
@@ -1081,8 +1094,8 @@ contains
                 Atm%gridstruct%area_64, Atm%gridstruct%dxa, Atm%gridstruct%dya, &
                 Atm%gridstruct%dx, Atm%gridstruct%dy, Atm%gridstruct%dxc, &
                 Atm%gridstruct%dyc, Atm%gridstruct%grid_64, Atm%gridstruct%agrid_64, &
-                Atm%gridstruct%sin_sg, Atm%phis, oro_g)
-           deallocate(oro_g)
+                Atm%gridstruct%sin_sg, Atm%phis, oro_ic)
+           deallocate(oro_ic)
         endif
 
 
@@ -1093,7 +1106,7 @@ contains
                    Atm%gridstruct%area_64, Atm%gridstruct%dx, Atm%gridstruct%dy,   &
                    Atm%gridstruct%dxc, Atm%gridstruct%dyc, Atm%gridstruct%sin_sg, &
                    Atm%flagstruct%n_zs_filter, cnst_0p20*Atm%gridstruct%da_min, &
-                   .false., oro_g, Atm%gridstruct%bounded_domain, &
+                   .false., oro_ic, Atm%gridstruct%bounded_domain, &
                    Atm%domain, Atm%bd)
             if ( is_master() ) write(*,*) 'Warning !!! del-2 terrain filter has been applied ', &
                    Atm%flagstruct%n_zs_filter, ' times'
@@ -1101,7 +1114,7 @@ contains
             call del4_cubed_sphere(Atm%npx, Atm%npy, Atm%phis, Atm%gridstruct%area_64, &
                    Atm%gridstruct%dx, Atm%gridstruct%dy,   &
                    Atm%gridstruct%dxc, Atm%gridstruct%dyc, Atm%gridstruct%sin_sg, &
-                   Atm%flagstruct%n_zs_filter, .false., oro_g, &
+                   Atm%flagstruct%n_zs_filter, .false., oro_ic, &
                    Atm%gridstruct%bounded_domain, &
                    Atm%domain, Atm%bd)
             if ( is_master() ) write(*,*) 'Warning !!! del-4 terrain filter has been applied ', &
@@ -4036,4 +4049,3 @@ subroutine pmaxmn(qname, q, is, ie, js, je, km, fac, area, domain)
 
 
  end module external_ic_mod
-

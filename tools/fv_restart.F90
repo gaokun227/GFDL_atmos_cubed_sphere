@@ -311,6 +311,14 @@ contains
                       if ( is_master() ) write(*,*) 'Warning !!! del-4 terrain filter has been applied ', &
                            Atm(n)%flagstruct%n_zs_filter, ' times'
                    endif
+                   if ( Atm(n)%flagstruct%fv_land .and. allocated(sgh_g) .and. allocated(oro_g) ) then
+                      do j=jsc,jec
+                         do i=isc,iec
+                            Atm(n)%sgh(i,j) = sgh_g(i,j)
+                            Atm(n)%oro(i,j) = oro_g(i,j)
+                         enddo
+                      enddo
+                   endif
                 endif
                 call mpp_update_domains( Atm(n)%phis, Atm(n)%domain, complete=.true. )
              else
@@ -367,7 +375,7 @@ contains
 
              !Turn this off on the nested grid if you are just interpolating topography from the coarse grid!
              !These parameters are needed in LM3/LM4, and are communicated through restart files
-             if ( Atm(n)%flagstruct%fv_land ) then
+             if ( Atm(n)%flagstruct%fv_land  .and. allocated(sgh_g) .and. allocated(oro_g)) then
                 do j=jsc,jec
                    do i=isc,iec
                       Atm(n)%sgh(i,j) = sgh_g(i,j)
@@ -1364,7 +1372,7 @@ contains
     ! Write4 energy correction term
 #endif
 
-       call fv_io_write_restart(Atm)    	
+       call fv_io_write_restart(Atm)
        if (Atm%coarse_graining%write_coarse_restart_files) then
           call fv_io_write_restart_coarse(Atm)
        endif
