@@ -37,10 +37,77 @@ module gwd_mod
     ! public subroutines, functions, and variables
     ! -----------------------------------------------------------------------
     
+    public :: gwd_init
     public :: gwdps
     public :: gwdc
 
+    ! -----------------------------------------------------------------------
+    ! physics constants
+    ! -----------------------------------------------------------------------
+    
+    real, parameter :: grav = 9.80665 ! acceleration due to gravity (m/s^2), ref: IFS
+    
+    real, parameter :: pi = 4.0 * atan (1.0) ! ratio of circle circumference to diameter
+
+    real, parameter :: rdgas = 287.05 ! gas constant for dry air (J/kg/K): ref: GFDL, GFS
+    real, parameter :: rvgas = 461.50 ! gas constant for water vapor (J/kg/K): ref: GFDL, GFS
+
+    real, parameter :: zvir = rvgas / rdgas - 1. ! 0.6077667316114637
+    real, parameter :: eps = rdgas / rvgas ! 0.6219934994582882
+    real, parameter :: epsm1 = rdgas / rvgas - 1. ! -0.3780065005417118
+
+    real, parameter :: tice = 273.15 ! freezing temperature (K): ref: GFDL, GFS
+
+    real, parameter :: cp_air = 1004.6 ! heat capacity of dry air at constant pressure (J/kg/K): ref: GFDL, GFS
+    real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0885419672554, heat capacity of water vapor at constnat pressure (J/kg/K)
+
+    real, parameter :: c_liq = 4.218e3 ! heat capacity of water at 0 deg C (J/kg/K), ref: IFS
+
+    real, parameter :: hlv = 2.5e6 ! latent heat of evaporation at 0 deg C (J/kg): ref: GFDL, GFS
+    
+    ! -----------------------------------------------------------------------
+    ! namelist parameters
+    ! -----------------------------------------------------------------------
+
+    ! -----------------------------------------------------------------------
+    ! namelist
+    ! -----------------------------------------------------------------------
+    
+    namelist / gwd_nml / &
+    
 contains
+
+! =======================================================================
+! GWD initialization
+! =======================================================================
+
+subroutine gwd_init (input_nml_file, logunit)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: logunit
+    
+    character (len = *), intent (in) :: input_nml_file (:)
+    
+    ! -----------------------------------------------------------------------
+    ! read namelist
+    ! -----------------------------------------------------------------------
+    
+    read (input_nml_file, nml = gwd_nml)
+    
+    ! -----------------------------------------------------------------------
+    ! write namelist to log file
+    ! -----------------------------------------------------------------------
+    
+    write (logunit, *) " ================================================================== "
+    write (logunit, *) "gwd_mod"
+    write (logunit, nml = gwd_nml)
+    
+end subroutine gwd_init
 
 ! =======================================================================
 ! This subroutine is the parameterization of orographic gravity wave
@@ -186,8 +253,7 @@ contains
 ! \param[in] PRSLK   exner function at layer
 ! \param[in] PHII    interface geopotential (\f$m^2/s^2\f$)
 ! \param[in] PHIL    layer geopotential (\f$m^2/s^2\f$)
-! \param[in] DELTIM  physics time step in seconds
-! \param[in] KDT     number of the current time step
+! \param[in] DELT    physics time step in seconds
 ! \param[in] HPRIME  orographic standard deviation (m) (mtnvar (:, 1))
 ! \param[in] OC      orographic convexity (mtnvar (:, 2))
 ! \param[in] OA4     orographic asymmetry (mtnvar (:, 3:6))
@@ -200,17 +266,10 @@ contains
 ! \param[in] ELVMAX  orographic maximum (mtnvar (:, 14))
 ! \param[out] DUSFC  u component of surface stress
 ! \param[out] DVSFC  v component of surface stress
-! \param[in] G       see physcons :: con_g
-! \param[in] CP      see physcons :: con_cp
-! \param[in] RD      see physcons :: con_tird
-! \param[in] RV      see physcons :: con_rv
 ! \param[in] IMX     number of longitude points
 ! \param[in] NMTVR   number of topographic variables such as variance etc
 !                    used in the GWD parameterization, current operational, nmtvr = 14
 ! \param[in] CDMBGWD multiplication factors for cdmb and gwd
-! \param[in] ME      pe number-used for debug prints
-! \param[in] LPRNT   logical print flag
-! \param[in] IPR     check print point for debugging
 !
 !-----------------------------------------------------------------------
 ! Implementation Versions
@@ -288,12 +347,11 @@ contains
 ! T1 (im, km) temperature deg k at t0 - dt
 ! Q1 (im, km) specific humidity at t0 - dt
 !
-! deltim time step secs
+! delt time step secs
 ! SI (n) p / psfc at base of layer n
 ! SL (n) p / psfc at middle of layer n
 ! DEL (n) positive increment of p / psfc across layer n
 ! KPBL (im) is the index of the top layer of the pbl
-! ipr & lprnt for diagnostics
 !
 ! OUTPUT
 ! A, B as augmented by tendency due to gwdps
@@ -306,16 +364,15 @@ contains
 ! =======================================================================
 
 subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
-        prsi, del, prsl, prslk, phii, phil, deltim, kdt, &
+        prsi, del, prsl, prslk, phii, phil, delt, &
         hprime, oc, oa4, clx4, theta, sigma, gamma, elvmax, &
-        dusfc, dvsfc, g, cp, rd, rv, imx, &
-        nmtvr, cdmbgwd, me, lprnt, ipr, p_crit, rdxzb)
+        dusfc, dvsfc, imx, nmtvr, cdmbgwd, p_crit, rdxzb)
 
     implicit none
 
-    integer im, km, imx, kdt, ipr, me
+    integer im, km, imx
     integer kpbl (im) ! index for the pbl top layer
-    real deltim, g, cp, rd, rv, cdmbgwd (2), p_crit
+    real delt, cdmbgwd (2), p_crit
     real a (im, km), b (im, km), c (im, km), &
         u1 (im, km), v1 (im, km), t1 (im, km), &
         q1 (im, km), prsi (im, km + 1), del (im, km), &
@@ -331,18 +388,17 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     real db (im, km), ang (im, km), uds (im, km)
     real zlen, dbtmp, r, phiang, cdmb, dbim
     real eng0, eng1
-    !
+    
     ! some constants
-    !
-    real pi, dw2min, rimin, ric, bnv2min, efmin, &
+    
+    real dw2min, rimin, ric, bnv2min, efmin, &
         efmax, hpmax, hpmin, rad_to_deg, deg_to_rad
-    parameter (pi = 3.1415926535897931)
     parameter (rad_to_deg = 180.0 / pi, deg_to_rad = pi / 180.0)
     parameter (dw2min = 1., rimin = - 100., ric = 0.25, bnv2min = 1.0e-5)
     ! parameter (efmin = 0.0, efmax = 10.0, hpmax = 200.0)
     parameter (efmin = 0.0, efmax = 10.0, hpmax = 2400.0, hpmin = 1.0)
     ! parameter (p_crit = 30.e2)
-    !
+    
     real frc, ce, ceofrc, frmax, cg, gmax, &
         veleps, factop, rlolev, rdi
     ! critac, veleps, factop, rlolev, rdi
@@ -352,7 +408,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     parameter (rlolev = 50000.0)
     ! parameter (rlolev = 500.0)
     ! parameter (rlolev = 0.5)
-    !
+    
     real dpmin, hminmt, hncrit, minwnd, sigfac
     ! --- for lm mtn blocking
     ! parameter (cdmb = 1.0) ! non - dim sub grid mtn drag amp (* j *)
@@ -368,59 +424,57 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     ! in centibars
     parameter (dpmin = 5000.0) ! minimum thickness of the reference layer
     ! in pa
-    !
+    
     real fdir
     integer mdir
     parameter (mdir = 8, fdir = mdir / (pi + pi))
     integer nwdir (mdir)
     data nwdir / 6, 7, 5, 8, 2, 3, 1, 4 /
     save nwdir
-    !
+    
     logical icrilv (im)
-    !
+    
     ! ---- mountain induced gravity wave drag
-    !
+    
     real taub (im), xn (im), yn (im), ubar (im), &
         vbar (im), ulow (im), oa (im), clx (im), &
         roll (im), uloi (im), dusfc (im), dvsfc (im), &
         dtfac (im), xlinv (im), delks (im), delks1 (im)
-    !
+    
     real bnv2 (im, km), taup (im, km + 1), ri_n (im, km), &
         taud (im, km), ro (im, km), vtk (im, km), &
         vtj (im, km), scor (im), velco (im, km - 1), &
         bnv2bar (im)
-    !
+    
     ! real velko (km - 1)
     integer kref (im), kint (im), iwk (im), ipt (im)
     ! for lm mtn blocking
     integer kreflm (im), iwklm (im)
     integer idxzb (im), ktrial, klevm1, nmtvr
-    !
-    real gor, gocp, fv, gr2, bnv, fr, &
+    
+    real gor, gocp, gr2, bnv, fr, &
         brvf, cleff, tem, tem1, tem2, temc, temv, &
         wdir, ti, rdz, dw2, shr2, bvf2, &
         rdelks, efact, coefm, gfobnv, &
         scork, rscor, hd, fro, rim, sira, &
         dtaux, dtauy, pkp1log, pklog
     integer kmm1, kmm2, lcap, lcapp1, kbps, kbpsp1, kbpsm1, &
-        kmps, idir, nwd, i, j, k, klcap, kp1, kmpbl, npt, npr, &
+        kmps, idir, nwd, i, j, k, klcap, kp1, kmpbl, npt, &
         kmll
     ! kmll, kmds, ihit, jhit
-    logical lprnt
-    !
+    
     ! parameter (cdmb = 1.0) ! non - dim sub grid mtn drag amp (* j *)
     ! non - dim sub grid mtn drag amp (* j *)
     ! cdmb = 1.0 / float (imx / 192)
     ! cdmb = 192.0 / float (imx)
     cdmb = 4.0 * 192.0 / float (imx)
     if (cdmbgwd (1) >= 0.0) cdmb = cdmb * cdmbgwd (1)
-    !
-    npr = 0
+    
     do i = 1, im
         dusfc (i) = 0.
         dvsfc (i) = 0.
     enddo
-    !
+    
     do k = 1, km
         do i = 1, im
             db (i, k) = 0.
@@ -428,20 +482,19 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             uds (i, k) = 0.
         enddo
     enddo
-    !
-    rdi = 1.0 / rd
-    gor = g / rd
-    gr2 = g * gor
-    gocp = g / cp
-    fv = rv / rd - 1
-    !
+    
+    rdi = 1.0 / rdgas
+    gor = grav / rdgas
+    gr2 = grav * gor
+    gocp = grav / cp_air
+    
     ! ncnt = 0
     kmm1 = km - 1
     kmm2 = km - 2
     lcap = km
     lcapp1 = lcap + 1
-    !
-    !
+    
+    
     if (nmtvr .eq. 14) then
         ! ---- for lm and gwd calculation points
         rdxzb (:) = 0.
@@ -451,69 +504,68 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             if ((elvmax (i) .gt. hminmt) .and. (hprime (i) .gt. hpmin)) then
                 npt = npt + 1
                 ipt (npt) = i
-                if (ipr .eq. i) npr = npt
             endif
         enddo
-        if (npt .eq. 0) return ! no gwd / mb calculation done!
-        !
+        if (npt .eq. 0) return ! no gwd / mb calculation done
+        
         ! if (lprnt) print *, ' npt = ', npt, ' npr = ', npr, ' ipr = ', ipr, ' im = ', im, &
         ! ' ipt (npt) = ', ipt (npt)
-        !
+        
         ! --- iwklm is the level above the height of the of the mountain.
         ! --- idxzb is the level of the dividing streamline.
         ! initialize dividing streamline (ds) control vector
-        !
+        
         do i = 1, npt
             iwklm (i) = 2
             idxzb (i) = 0
             kreflm (i) = 0
         enddo
         ! if (lprnt) print *, ' in gwdps_lm.f npt, im, km, me = ', npt, im, km, me
-        !
-        !
+        
+        
         ! > --- subgrid mountain blocking section
-        !
+        
         !..............................
         !..............................
-        !
+        
         ! (* j *) 11 / 03: test upper limit on kmll = km - 1
         ! then do not need hncrit -- test with large hncrit first.
         ! kmll = km / 2 ! maximum mtnlm height : # of vertical levels / 2
         kmll = kmm1
         ! --- no mtn should be as high as kmll (so we do not have to start at
         ! --- the top of the model but could do calc for all levels) .
-        !
+        
         do i = 1, npt
             j = ipt (i)
             elvmax (j) = min (elvmax (j) + sigfac * hprime (j), hncrit)
         enddo
-        !
+        
         do k = 1, kmll
             do i = 1, npt
                 j = ipt (i)
                 ! --- interpolate to max mtn height for index, iwklm (i) wk[gz]
                 ! --- elvmax is limited to hncrit because to hi res topo30 orog.
-                pkp1log = phil (j, k + 1) / g
-                pklog = phil (j, k) / g
+                pkp1log = phil (j, k + 1) / grav
+                pklog = phil (j, k) / grav
                 !!! ------- elvmax (j) = min (elvmax (j) + sigfac * hprime (j), hncrit)
                 if ((elvmax (j) .le. pkp1log) .and. (elvmax (j) .ge. pklog)) then
                     ! print *, ' in gwdps_lm.f 1 = ', k, elvmax (j), pklog, pkp1log, me
                     ! --- wk for diags but can be saved and reused.
-                    wk (i) = g * elvmax (j) / (phil (j, k + 1) - phil (j, k))
+                    wk (i) = grav * elvmax (j) / (phil (j, k + 1) - phil (j, k))
                     iwklm (i) = max (iwklm (i), k + 1)
                     ! print *, ' in gwdps_lm.f 2 npt = ', npt, i, j, wk (i), iwklm (i), me
                 endif
-                !
+                
                 ! --- find at prsl levels large scale environment variables
                 ! --- these cover all possible mtn max heights
-                vtj (i, k) = t1 (j, k) * (1. + fv * q1 (j, k))
+                vtj (i, k) = t1 (j, k) * (1. + zvir * q1 (j, k))
                 vtk (i, k) = vtj (i, k) / prslk (j, k)
                 ro (i, k) = rdi * prsl (j, k) / vtj (i, k) ! density kg / m ** 3
             enddo
         enddo
-        !
+        
         ! testing for highest model level of mountain top
-        !
+        
         ! ihit = 2
         ! jhit = 0
         ! do i = 1, npt
@@ -530,16 +582,16 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
         do k = 1, klevm1
             do i = 1, npt
                 j = ipt (i)
-                rdz = g / (phil (j, k + 1) - phil (j, k))
+                rdz = grav / (phil (j, k + 1) - phil (j, k))
                 ! --- brunt - vaisala frequency
                 ! > - compute brunt - vaisala frequency \f$n\f$.
-                bnv2lm (i, k) = (g + g) * rdz * (vtk (i, k + 1) - vtk (i, k)) &
+                bnv2lm (i, k) = (grav + grav) * rdz * (vtk (i, k + 1) - vtk (i, k)) &
                      / (vtk (i, k + 1) + vtk (i, k))
                 bnv2lm (i, k) = max (bnv2lm (i, k), bnv2min)
             enddo
         enddo
         ! print *, ' in gwdps_lm.f 3 npt = ', npt, j, rdz, me
-        !
+        
         do i = 1, npt
             j = ipt (i)
             delks (i) = 1.0 / (prsi (j, 1) - prsi (j, iwklm (i)))
@@ -565,12 +617,12 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             enddo
         enddo
         ! print *, ' in gwdps_lm.f 4 npt = ', npt, kreflm (npt), me
-        !
+        
         ! --- in the layer kreflm (i) to 1 find pe (which needs n, elvmax)
         ! --- make averages, guess dividing stream (ds) line layer.
         ! --- this is not used in the first cut except for testing and
         ! --- is the vert ave of quantities from the surface to mtn top.
-        !
+        
         do i = 1, npt
             do k = 1, kreflm (i)
                 j = ipt (i)
@@ -584,11 +636,11 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             enddo
         enddo
         ! print *, ' in gwdps_lm.f 5 = ', i, kreflm (npt), bnv2bar (npt), me
-        !
+        
         ! --- integrate to get pe in the trial layer.
         ! --- need the first layer where pe > ek - as soon as
         ! --- idxzb is not 0 we have a hit and zb is found.
-        !
+        
         do i = 1, npt
             j = ipt (i)
             do k = iwklm (i), 1, - 1
@@ -597,7 +649,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                 if (ang (i, k) .gt. 90.) ang (i, k) = ang (i, k) - 180.
                 if (ang (i, k) .lt. - 90.) ang (i, k) = ang (i, k) + 180.
                 ang (i, k) = ang (i, k) * deg_to_rad
-                !
+                
                 ! > - compute wind speed uds
                 !!\f[
                 !! uds = \max (\sqrt{u1^2 + v1^2}, minwnd)
@@ -609,8 +661,8 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                 ! --- test to see if we found zb previously
                 if (idxzb (i) .eq. 0) then
                     pe (i) = pe (i) + bnv2lm (i, k) * &
-                         (g * elvmax (j) - phil (j, k)) * &
-                         (phii (j, k + 1) - phii (j, k)) / (g * g)
+                         (grav * elvmax (j) - phil (j, k)) * &
+                         (phii (j, k + 1) - phii (j, k)) / (grav * grav)
                     ! --- ke
                     ! --- wind projected on the line perpendicular to mtn range, u (zb (k)) .
                     ! --- kenetic energy is at the layer zb
@@ -624,7 +676,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                         rdxzb (j) = real (k)
                     endif
                     ! --- then mtn blocked flow is between zb = k (idxzb (i)) and surface
-                    !
+                    
                     ! > - the dividing streamline height (idxzb), of a subgrid scale
                     !! obstable, is found by comparing the potential (pe) and kinetic
                     !! energies (ek) of the upstream large scale wind and subgrid scale air
@@ -641,31 +693,31 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                 endif
             enddo
         enddo
-        !
+        
         ! print *, ' in gwdps_lm.f 6 = ', phiang, theta (ipt (npt)), me
         ! print *, ' in gwdps_lm.f 7 = ', idxzb (npt), pe (npt)
-        !
+        
         ! if (lprnt .and. npr .gt. 0) then
         ! print *, ' bnv2bar, bnv2lm = ', bnv2bar (npr), bnv2lm (npr, 1:klevm1)
         ! print *, ' npr, idxzb, uds = ', npr, idxzb (npr), uds (npr, :)
         ! print *, ' pe, up, ek = ', pe (npr), up (npr), ek (npr)
         ! endif
-        !
+        
         do i = 1, npt
             j = ipt (i)
             ! --- calc if n constant in layers (zb guess) - a diagnostic only.
             zbk (i) = elvmax (j) &
                  - sqrt (ubar (i) * ubar (i) + vbar (i) * vbar (i)) / bnv2bar (i)
         enddo
-        !
+        
         ! if (lprnt .and. npr .gt. 0) then
         ! print *, ' iwklm, zbk = ', iwklm (npr), zbk (npr), idxzb (npr)
-        ! print *, ' zb = ', phil (ipr), idxzb (npr)) / g
+        ! print *, ' zb = ', phil (ipr), idxzb (npr)) / grav
         ! print *, ' in gwdps_lm.f 8 npt = ', npt, zbk (npt), up (npt), me
         ! endif
-        !
+        
         ! --- the drag for mtn blocked flow
-        !
+        
         do i = 1, npt
             j = ipt (i)
             zlen = 0.
@@ -682,7 +734,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                         !! where \f$z\f$ is the height, \f$h'\f$ is the orographic standard
                         !! deviation (hprime) .
                         zlen = sqrt ((phil (j, idxzb (i)) - phil (j, k)) / &
-                             (phil (j, k) + g * hprime (j)))
+                             (phil (j, k) + grav * hprime (j)))
                         ! --- lm eq 14:
                         ! > - calculate the drag coefficient to vary with the aspect ratio of
                         !! the obstable as seen by the incident flow (see eq.14 in lott and
@@ -715,7 +767,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                                 zlen / hprime (j)
                             db (i, k) = dbtmp * uds (i, k)
                         endif
-                        !
+                        
                         ! if (lprnt .and. i .eq. npr) then
                         ! print *, ' in gwdps_lmi.f 10 npt = ', npt, i, j, idxzb (i), &
                         ! dbtmp, r' ang = ', ang (i, k), ' gamma = ', gamma (j), ' k = ', k
@@ -727,11 +779,11 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                 ! if (lprnt) print *, ' @k = 1, zlen, dbtmp = ', k, zlen, dbtmp
             endif
         enddo
-        !
+        
         !.............................
         !.............................
         ! end mtn blocking section
-        !
+        
     elseif (nmtvr .ne. 14) then
         ! ---- for mb not present and gwd (nmtvr .ne .14)
         ipt = 0
@@ -740,46 +792,45 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             if (hprime (i) .gt. hpmin) then
                 npt = npt + 1
                 ipt (npt) = i
-                if (ipr .eq. i) npr = npt
             endif
         enddo
-        if (npt .eq. 0) return ! no gwd / mb calculation done!
-        !
+        if (npt .eq. 0) return ! no gwd / mb calculation done
+        
         ! if (lprnt) print *, ' npr = ', npr, ' npt = ', npt, ' ipr = ', ipr, &
         ! ' ipt (npt) = ', ipt (npt)
-        !
+        
         do i = 1, npt
             idxzb (i) = 0
             rdxzb (i) = 0.
         enddo
     endif
-    !
+    
     !.............................
     !.............................
-    !
+    
     ! > --- orographic gravity wave drag section
     kmpbl = km / 2 ! maximum pbl height : # of vertical levels / 2
-    !
+    
     ! scale cleff between im = 384 * 2 and 192 * 2 for t126 / t170 and t62
-    !
+    
     if (imx .gt. 0) then
-        ! cleff = 1.0e-5 * sqrt (float (imx) / 384.0) ! this is inverse of cleff!
-        ! cleff = 1.0e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff!
-        ! cleff = 0.5e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff!
+        ! cleff = 1.0e-5 * sqrt (float (imx) / 384.0) ! this is inverse of cleff
+        ! cleff = 1.0e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
+        ! cleff = 0.5e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
         ! cleff = 1.0e-5 * sqrt (float (imx) / 192) / float (imx / 192)
-        ! cleff = 1.0e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff!
-        cleff = 0.5e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff!
+        ! cleff = 1.0e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff
+        cleff = 0.5e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff
         ! hmhj for ndsl
-        ! jw cleff = 0.1e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff!
-        ! cleff = 2.0e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff!
-        ! cleff = 2.5e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff!
+        ! jw cleff = 0.1e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff
+        ! cleff = 2.0e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
+        ! cleff = 2.5e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
     endif
     if (cdmbgwd (2) >= 0.0) cleff = cleff * cdmbgwd (2)
-    !
+    
     do k = 1, km
         do i = 1, npt
             j = ipt (i)
-            vtj (i, k) = t1 (j, k) * (1. + fv * q1 (j, k))
+            vtj (i, k) = t1 (j, k) * (1. + zvir * q1 (j, k))
             vtk (i, k) = vtj (i, k) / prslk (j, k)
             ro (i, k) = rdi * prsl (j, k) / vtj (i, k) ! density tons / m ** 3
             taup (i, k) = 0.0
@@ -790,25 +841,25 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             j = ipt (i)
             ti = 2.0 / (t1 (j, k) + t1 (j, k + 1))
             tem = ti / (prsl (j, k) - prsl (j, k + 1))
-            rdz = g / (phil (j, k + 1) - phil (j, k))
+            rdz = grav / (phil (j, k + 1) - phil (j, k))
             tem1 = u1 (j, k) - u1 (j, k + 1)
             tem2 = v1 (j, k) - v1 (j, k + 1)
             dw2 = tem1 * tem1 + tem2 * tem2
             shr2 = max (dw2, dw2min) * rdz * rdz
-            bvf2 = g * (gocp + rdz * (vtj (i, k + 1) - vtj (i, k))) * ti
+            bvf2 = grav * (gocp + rdz * (vtj (i, k + 1) - vtj (i, k))) * ti
             ri_n (i, k) = max (bvf2 / shr2, rimin) ! richardson number
             ! brunt - vaisala frequency
             ! tem = gr2 * (prsl (j, k) + prsl (j, k + 1)) * tem
             ! bnv2 (i, k) = tem * (vtk (i, k + 1) - vtk (i, k)) / (vtk (i, k + 1) + vtk (i, k))
-            bnv2 (i, k) = (g + g) * rdz * (vtk (i, k + 1) - vtk (i, k)) &
+            bnv2 (i, k) = (grav + grav) * rdz * (vtk (i, k + 1) - vtk (i, k)) &
                  / (vtk (i, k + 1) + vtk (i, k))
             bnv2 (i, k) = max (bnv2 (i, k), bnv2min)
         enddo
     enddo
     ! print *, ' in gwdps_lm.f gwd:14 = ', npt, kmm1, bnv2 (npt, kmm1)
-    !
+    
     ! apply 3 point smoothing on bnv2
-    !
+    
     ! do k = 1, km
     ! do i = 1, im
     ! vtk (i, k) = bnv2 (i, k)
@@ -819,9 +870,9 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     ! bnv2 (i, k) = 0.25 * (vtk (i, k - 1) + vtk (i, k + 1)) + 0.5 * vtk (i, k)
     ! enddo
     ! enddo
-    !
+    
     ! finding the first interface index above 50 hpa level
-    !
+    
     do i = 1, npt
         iwk (i) = 2
     enddo
@@ -832,7 +883,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             if (tem .lt. dpmin) iwk (i) = k
         enddo
     enddo
-    !
+    
     ! > - calculate the reference level index: kref = max (2, kpbl + 1) . where
     !! kpbl is the index for the pbl top layer.
     kbps = 1
@@ -847,7 +898,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
         roll (i) = 0.0
         kbps = max (kbps, kref (i))
         kmps = min (kmps, kref (i))
-        !
+        
         bnv2bar (i) = (prsl (j, 1) - prsl (j, 2)) * delks1 (i) * bnv2 (i, 1)
     enddo
     ! print *, ' in gwdps_lm.f gwd:15 = ', kbps, kmps
@@ -860,7 +911,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                 rdelks = del (j, k) * delks (i)
                 ubar (i) = ubar (i) + rdelks * u1 (j, k) ! mean u below kref
                 vbar (i) = vbar (i) + rdelks * v1 (j, k) ! mean v below kref
-                !
+                
                 roll (i) = roll (i) + rdelks * ro (i, k) ! mean ro below kref
                 rdelks = (prsl (j, k) - prsl (j, k + 1)) * delks1 (i)
                 bnv2bar (i) = bnv2bar (i) + bnv2 (i, k) * rdelks
@@ -868,12 +919,12 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
         enddo
     enddo
     ! print *, ' in gwdps_lm.f gwd:15b = ', bnv2bar (npt)
-    !
+    
     ! figure out low - level horizontal wind direction and find 'oa'
-    !
+    
     ! nwd 1 2 3 4 5 6 7 8
     ! wd w s sw nw e n ne se
-    !
+    
     ! > - calculate low - level horizontal wind direction, the derived
     !! orographic asymmetry parameter (oa), and the derived lx (clx) .
     do i = 1, npt
@@ -884,7 +935,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
         oa (i) = (1 - 2 * int ((nwd - 1) / 4)) * oa4 (j, mod (nwd - 1, 4) + 1)
         clx (i) = clx4 (j, mod (nwd - 1, 4) + 1)
     enddo
-    !
+    
     ! ----- xn, yn "low - level" wind projections in zonal &
     ! meridional directions
     ! ----- ulow "low - level" wind magnitude - (= u)
@@ -894,9 +945,9 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     ! ----- = 0. for n ** 2 < 0
     ! ----- fr froude = n * hprime / u
     ! ----- g gmax * fr ** 2 / (fr ** 2 + cg / oc)
-    !
+    
     ! ----- initialize some arrays
-    !
+    
     do i = 1, npt
         xn (i) = 0.0
         yn (i) = 0.0
@@ -905,13 +956,13 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
         dtfac (i) = 1.0
         icrilv (i) = .false. ! initialize critical level control vector
         
-        !
+        
         ! ---- compute the "low level" wind magnitude (m / s)
-        !
+        
         ulow (i) = max (sqrt (ubar (i) * ubar (i) + vbar (i) * vbar (i)), 1.0)
         uloi (i) = 1.0 / ulow (i)
     enddo
-    !
+    
     do k = 1, kmm1
         do i = 1, npt
             j = ipt (i)
@@ -923,11 +974,11 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             ! endif
         enddo
     enddo
-    !
-    !
+    
+    
     ! find the interface level of the projected wind where
     ! low levels & upper levels meet above pbl
-    !
+    
     ! do i = 1, npt
     ! kint (i) = km
     ! enddo
@@ -940,14 +991,14 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     ! endif
     ! enddo
     ! enddo
-    ! warning kint = kref !!!!!!!!!
+    ! warning kint = kref !!!!!!!!
     do i = 1, npt
         kint (i) = kref (i)
     enddo
-    !
+    
     ! if (lprnt) print *, ' ubar = ', ubar, &
     ! ' vbar = ', vbar, ' ulow = ', ulow, ' veleps = ', veleps
-    !
+    
     do i = 1, npt
         j = ipt (i)
         bnv = sqrt (bnv2bar (i))
@@ -955,12 +1006,12 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
         fr = min (fr, frmax)
         xn (i) = ubar (i) * uloi (i)
         yn (i) = vbar (i) * uloi (i)
-        !
+        
         ! compute the base level stress and store it in taub
         ! calculate enhancement factor, number of mountains & aspect
         ! ratio const. use simplified relationship between standard
         ! deviation & critical hgt
-        !
+        
         ! > - calculate enhancement factor (e), number of mountans (m') and
         !! aspect ratio constant.
         !!\n as in eq. (4.9), (4.10), (4.11) in kim and arakawa (1995)
@@ -1001,50 +1052,50 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
         
         efact = (oa (i) + 2.) ** (ceofrc * fr)
         efact = min (max (efact, efmin), efmax)
-        !
+        
         coefm = (1. + clx (i)) ** (oa (i) + 1.)
-        !
+        
         xlinv (i) = coefm * cleff
-        !
+        
         tem = fr * fr * oc (j)
         gfobnv = gmax * tem / ((tem + cg) * bnv) ! g / n0
-        !
+        
         taub (i) = xlinv (i) * roll (i) * ulow (i) * ulow (i) &
              * ulow (i) * gfobnv * efact ! base flux tau0
-        !
+        
         ! tem = min (hprime (i), hpmax)
         ! taub (i) = xlinv (i) * roll (i) * ulow (i) * bnv * tem * tem
-        !
+        
         k = max (1, kref (i) - 1)
         tem = max (velco (i, k) * velco (i, k), 0.1)
         scor (i) = bnv2 (i, k) / tem ! scorer parameter below ref level
     enddo
     ! if (lprnt) print *, ' taub = ', taub
-    !
+    
     ! ---- set up bottom values of stress
-    !
+    
     do k = 1, kbps
         do i = 1, npt
             if (k .le. kref (i)) taup (i, k) = taub (i)
         enddo
     enddo
-    !
+    
     ! now compute vertical structure of the stress.
-    !
-    do k = kmps, kmm1 ! vertical level k loop!
+    
+    do k = kmps, kmm1 ! vertical level k loop
         kp1 = k + 1
         do i = 1, npt
-            !
+            
             ! ----- unstable layer if ri < ric
             ! ----- unstable layer if upper air vel comp along surf vel <= 0 (crit lay)
             ! ---- at (u - c) = 0. crit layer exists and bit vector should be set (.le.)
-            !
+            
             if (k .ge. kref (i)) then
                 icrilv (i) = icrilv (i) .or. (ri_n (i, k) .lt. ric) &
                     .or. (velco (i, k) .le. 0.0)
             endif
         enddo
-        !
+        
         ! > - compute the drag above the reference level (\f$k\geq kref\f$) :
         !! - calculate the ratio of the scorer parameter (\f$r_{scor}\f$) .
         !! \n from a series of experiments, kim and arakawa (1995)
@@ -1069,7 +1120,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                     else
                         rscor = 1.
                     endif
-                    !
+                    
                     ! > - the drag above the reference level is expressed as:
                     !!\f[
                     !! \tau = \frac{m'}{\triangle x}\rho nuh_d^2
@@ -1088,9 +1139,9 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                          * max (velco (i, k), 0.01)
                     hd = sqrt (taup (i, k) / tem1)
                     fro = brvf * hd * temv
-                    !
+                    
                     ! rim is the minimum - richardson number by shutts (1985)
-                    !
+                    
                     ! > - the minimum richardson number (\f$ri_{m}\f$) or local
                     !! wave - modified richardson number, which determines the onset of wave
                     !! breaking, is expressed in terms of \f$r_{i}\f$ and
@@ -1103,10 +1154,10 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                     tem2 = sqrt (ri_n (i, k))
                     tem = 1. + tem2 * fro
                     rim = ri_n (i, k) * (1. - fro) / (tem * tem)
-                    !
+                    
                     ! check stability to employ the 'saturation hypothesis'
                     ! of lindzen (1981) except at tropospheric downstream regions
-                    !
+                    
                     ! > - check stability to employ the 'saturation hypothesis' of lindzen
                     !! (1981) \cite lindzen_1981 except at tropospheric downstream regions.
                     !! \n wave breaking occurs when \f$ri_{m} < ri_{c} = 0.25\f$. then
@@ -1136,11 +1187,11 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             endif
         enddo
     enddo
-    !
+    
     ! do i = 1, im
     ! taup (i, km + 1) = taup (i, km)
     ! enddo
-    !
+    
     if (lcap .le. km) then
         do klcap = lcapp1, km + 1
             do i = 1, npt
@@ -1167,18 +1218,18 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     endif
     ! ----------------------- sjl mod ------------------------------
     
-    !
-    ! calculate - (g / p *) * d (tau) / d (sigma) and decel terms dtaux, dtauy
-    !
+    
+    ! calculate - (grav / p *) * d (tau) / d (sigma) and decel terms dtaux, dtauy
+    
     do k = 1, km
         do i = 1, npt
-            taud (i, k) = g * (taup (i, k + 1) - taup (i, k)) / del (ipt (i), k)
+            taud (i, k) = grav * (taup (i, k + 1) - taup (i, k)) / del (ipt (i), k)
         enddo
     enddo
-    !
+    
     ! ------ limit de - acceleration (momentum deposition) at top to 1 / 2 value
     ! ------ the idea is some stuff must go out the 'top'
-    !
+    
     if (p_crit <= 1.e-10) then
         do klcap = lcap, km
             do i = 1, npt
@@ -1186,22 +1237,22 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             enddo
         enddo
     endif
-    !
+    
     ! ------ if the gravity wave drag would force a critical line in the
-    ! ------ layers below sigma = rlolev during the next deltim timestep,
+    ! ------ layers below sigma = rlolev during the next delt timestep,
     ! ------ then only apply drag until that critical line is reached.
-    !
+    
     do k = 1, kmm1
         do i = 1, npt
             if (k .gt. kref (i) .and. prsi (ipt (i), k) .ge. rlolev) then
                 if (taud (i, k) .ne.0.) then
-                    tem = deltim * taud (i, k)
+                    tem = delt * taud (i, k)
                     dtfac (i) = min (dtfac (i), abs (velco (i, k) / tem))
                 endif
             endif
         enddo
     enddo
-    !
+    
     ! if (lprnt .and. npr .gt. 0) then
     ! print *, ' before a = ', a (npr, :)
     ! print *, ' before b = ', b (npr, :)
@@ -1220,26 +1271,26 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             eng0 = 0.5 * (u1 (j, k) * u1 (j, k) + v1 (j, k) * v1 (j, k))
             ! --- lm mb (* j *) changes overwrite gwd
             if (k .lt. idxzb (i) .and. idxzb (i) .ne. 0) then
-                dbim = db (i, k) / (1. + db (i, k) * deltim)
+                dbim = db (i, k) / (1. + db (i, k) * delt)
                 a (j, k) = - dbim * v1 (j, k) + a (j, k)
                 b (j, k) = - dbim * u1 (j, k) + b (j, k)
-                eng1 = eng0 * (1.0 - dbim * deltim) * (1.0 - dbim * deltim)
+                eng1 = eng0 * (1.0 - dbim * delt) * (1.0 - dbim * delt)
                 ! if (abs (dbim * u1 (j, k)) .gt. .01) &
                 ! print *, ' in gwdps_lmi.f kdt = ', kdt, i, k, db (i, k), &
                 ! dbim, idxzb (i), u1 (j, k), v1 (j, k), me
                 dusfc (j) = dusfc (j) - dbim * u1 (j, k) * del (j, k)
                 dvsfc (j) = dvsfc (j) - dbim * v1 (j, k) * del (j, k)
             else
-                !
+                
                 a (j, k) = dtauy + a (j, k)
                 b (j, k) = dtaux + b (j, k)
                 eng1 = 0.5 * (&
-                     (u1 (j, k) + dtaux * deltim) * (u1 (j, k) + dtaux * deltim) &
-                     + (v1 (j, k) + dtauy * deltim) * (v1 (j, k) + dtauy * deltim))
+                     (u1 (j, k) + dtaux * delt) * (u1 (j, k) + dtaux * delt) &
+                     + (v1 (j, k) + dtauy * delt) * (v1 (j, k) + dtauy * delt))
                 dusfc (j) = dusfc (j) + dtaux * del (j, k)
                 dvsfc (j) = dvsfc (j) + dtauy * del (j, k)
             endif
-            c (j, k) = c (j, k) + max (eng0 - eng1, 0.) / cp / deltim
+            c (j, k) = c (j, k) + max (eng0 - eng1, 0.) / cp_air / delt
         enddo
     enddo
     ! if (lprnt) then
@@ -1247,16 +1298,16 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     ! print *, ' in gwdps_lm.f after b = ', b (ipr, :)
     ! print *, ' db = ', db (ipr, :)
     ! endif
-    tem = - 1.0 / g
+    tem = - 1.0 / grav
     do i = 1, npt
         j = ipt (i)
-        ! tem = (- 1.e3 / g)
+        ! tem = (- 1.e3 / grav)
         dusfc (j) = tem * dusfc (j)
         dvsfc (j) = tem * dvsfc (j)
     enddo
-    !
+    
     ! monitor for excessive gravity wave drag tendencies if ncnt > 0
-    !
+    
     ! if (ncnt.gt.0) then
     ! if (lat.ge.38.and.lat.le.42) then
     !cmic$ guard 37
@@ -1293,7 +1344,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     !124 format (2x, 10e13.6)
     ! endif
     ! endif
-    !
+    
     ! print *, ' in gwdps_lm.f 18 = ', a (ipt (1), idxzb (1)), &
     ! b (ipt (1), idxzb (1)), me
 
@@ -1347,14 +1398,7 @@ end subroutine gwdps
 ! \param[in] KBOT    vertical level index for cloud bottom
 ! \param[in] KCNV    (0, 1) dependent on whether convection occur or not
 ! \param[in] CLDF    deep convective cloud fraction at the cloud top
-! \param[in] GRAV    gravity defined in physcon
-! \param[in] CP      specific heat at constant pressure defined in physcon
-! \param[in] RD      gas constant air defined in physcon
-! \param[in] FV      con_fvirt = con_rv / con_rd - 1
 ! \param[in] DLENGTH grid spacing in the direction of basic wind at the cloud top
-! \param[in] LPRNT   logical print flag
-! \param[in] IPR     check print point for debugging
-! \param[in] FHOUR   forecast hour
 ! \param[out] UTGWC  zonal wind tendency
 ! \param[out] VTGWC  meridional wind tendency
 ! \param[out] TAUCTX wave stress at the cloud top projected in the east
@@ -1469,18 +1513,17 @@ end subroutine gwdps
 ! crit2     : variable 2 for checking critical level
 ! =======================================================================
     
-subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
+subroutine gwdc (im, km, lat, u1, v1, t1, q1, delt, &
         pmid1, pint1, dpmid1, qmax, ktop, kbot, kcnv, cldf, &
-        grav, cp, rd, fv, pi, dlength, lprnt, ipr, fhour, &
-        utgwc, vtgwc, tauctx, taucty)
+        dlength, utgwc, vtgwc, tauctx, taucty)
     
     implicit none
     
-    integer im, km, lat, ipr
+    integer im, km, lat
     integer ktop (im), kbot (im), kcnv (im)
     
-    ! real grav, cp, rd, fv, fhour, fhourpr, deltim
-    real grav, cp, rd, fv, fhour, deltim, pi
+    ! real fhourpr, delt
+    real delt
     real, dimension (im) :: qmax, &
         tauctx, taucty
     real, dimension (im) :: cldf, dlength
@@ -1490,17 +1533,15 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     real, dimension (im, km) :: utgwc, vtgwc
     real, dimension (im, km + 1) :: pint1
     
-    logical lprnt
-    
-    integer i, ii, k, k1, kk, kb, ilev, npt, kcb, kcldm, npr
+    integer i, ii, k, k1, kk, kb, ilev, npt, kcb, kcldm
     integer, dimension (im) :: ipt
     
     real tem, tem1, tem2, qtem, wtgwc, tauct, &
         windcltop, shear, nonlinct, nonlin, nonlins, &
         n2, dtdp, crit1, crit2, p1, p2, &
-        ! n2, dtdp, crit1, crit2, pi, p1, p2, &
+        ! n2, dtdp, crit1, crit2, p1, p2, &
     gsqr, onebg
-    ! taus, n2, dtdp, crit1, crit2, pi, p1, p2
+    ! taus, n2, dtdp, crit1, crit2, p1, p2
     
     integer, allocatable :: kcldtop (:), kcldbot (:)
     logical, allocatable :: do_gwc (:)
@@ -1544,7 +1585,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
         riminx = - 1.0e+20, riminm = - 1.01e+20, &
         riminp = - 0.99e+20, rismall = - 0.9e+20
     
-    !
+    
     npt = 0
     do i = 1, im
         ipt (i) = 0
@@ -1565,12 +1606,12 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
         tauctx (i) = 0.0
         taucty (i) = 0.0
     enddo
-    if (npt == 0) return ! no gwdc calculation done!
+    if (npt == 0) return ! no gwdc calculation done
     
     ! ***********************************************************************
-    !
+    
     ! begin gwdc
-    !
+    
     ! ***********************************************************************
     
     ! -----------------------------------------------------------------------
@@ -1586,7 +1627,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     ! write (*, *) 'im km ', im, km
     ! write (*, *) 'kbot ktop qmax dlength kcnv ',
     ! + kbot (ipr), ktop (ipr), qmax (ipr), dlength (ipr), kcnv (ipr)
-    ! write (*, *) 'grav cp rd ', grav, cp, rd
+    ! write (*, *) 'grav cp_air rdgas ', grav, cp_air, rdgas
     
     ! -------- pressure levels ----------
     ! write (*, 9100)
@@ -1652,15 +1693,15 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     gsqr = grav * grav
     onebg = one / grav
     
-    if (lprnt) then
-        npr = 1
-        do i = 1, npt
-            if (ipr == ipt (i)) then
-                npr = i
-                exit
-            endif
-        enddo
-    endif
+    ! if (lprnt) then
+    ! npr = 1
+    ! do i = 1, npt
+    ! if (ipr == ipt (i)) then
+    ! npr = i
+    ! exit
+    ! endif
+    ! enddo
+    ! endif
     
     do k = 1, km
         k1 = km - k + 1
@@ -1674,7 +1715,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
             dpmid (i, k) = dpmid1 (ii, k1) * onebg
             ! cumchr (i, k) = cumchr1 (ii, k1)
             
-            rhom (i, k) = pmid (i, k) / (rd * t (i, k) * (1.0 + fv * spfh (i, k)))
+            rhom (i, k) = pmid (i, k) / (rdgas * t (i, k) * (1.0 + zvir * spfh (i, k)))
             plnmid (i, k) = log (pmid (i, k))
             utgwcl (i, k) = zero
             vtgwcl (i, k) = zero
@@ -1710,7 +1751,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
         kcldtop (i) = km - ktop (ii) + 1
         kcldbot (i) = km - kbot (ii) + 1
         dlen (i) = dlength (ii)
-        ! (g * qmax (ii) * cldf (ii) * dlength (ii))
+        ! (grav * qmax (ii) * cldf (ii) * dlength (ii))
         gqmcldlen (i) = grav * qmax (ii) * cldf (ii) * dlen (i)
     enddo
     ! if (lprnt) write (7000, *) ' ktop = ', ktop (ipr), ' kbot = ', kbot (ipr), &
@@ -1732,12 +1773,10 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     
     ! ***********************************************************************
     
-    ! pi = 2. * asin (1.)
-    
     ! -----------------------------------------------------------------------
-    !
+    
     ! pressure variables
-    !
+    
     ! interface 1 ======== pint (1) *********
     ! mid - level 1 -------- pmid (1) dpmid (1)
     ! 2 ======== pint (2) dpint (2)
@@ -1752,7 +1791,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     ! 18 ======== pint (18) dpint (18)
     ! 18 -------- pmid (18) dpmid (18)
     ! 19 ======== pint (19) *********
-    !
+    
     ! -----------------------------------------------------------------------
     
     do i = 1, npt
@@ -1761,7 +1800,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
         
         ! -----------------------------------------------------------------------
         ! thermal variables
-        !
+        
         ! interface 1 ======== ti (1) rhoi (1) bruni (1)
         ! 1 -------- t (1) rhom (1) brunm (1)
         ! 2 ======== ti (2) rhoi (2) bruni (2)
@@ -1776,32 +1815,32 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
         ! 18 ======== ti (18) rhoi (18) bruni (18)
         ! 18 -------- t (18) rhom (18) brunm (18)
         ! 19 ======== ti (19) rhoi (19) bruni (19)
-        !
         
-        !
+        
+        
         ! > - the top interface temperature, density, and brunt - vaisala
         !! frequencies (\f$n\f$) are calculated assuming an isothermal
         !! atmosphere above the top mid level.
         
         ti (i, 1) = t (i, 1)
-        rhoi (i, 1) = pint (i, 1) / (rd * ti (i, 1))
-        bruni (i, 1) = sqrt (gsqr / (cp * ti (i, 1)))
-        !
+        rhoi (i, 1) = pint (i, 1) / (rdgas * ti (i, 1))
+        bruni (i, 1) = sqrt (gsqr / (cp_air * ti (i, 1)))
+        
         ! > - the bottom interface temperature, density, and brunt - vaisala
         !! frequencies (\f$n\f$) are calculated assuming an isothermal
         !! atmosphere below the bottom mid level.
         
         ti (i, km + 1) = t (i, km)
-        rhoi (i, km + 1) = pint (i, km + 1) / (rd * ti (i, km + 1) * (1.0 + fv * spfh (i, km)))
-        bruni (i, km + 1) = sqrt (gsqr / (cp * ti (i, km + 1)))
+        rhoi (i, km + 1) = pint (i, km + 1) / (rdgas * ti (i, km + 1) * (1.0 + zvir * spfh (i, km)))
+        bruni (i, km + 1) = sqrt (gsqr / (cp_air * ti (i, km + 1)))
     enddo
     
     ! -----------------------------------------------------------------------
-    !
+    
     ! > - the interface level temperature, density, and brunt - vaisala
     !! frequencies (\f$n\f$) are calculated based on linear interpolation
     !! of temperature in ln (p) .
-    !
+    
     ! -----------------------------------------------------------------------
     
     do k = 2, km
@@ -1810,16 +1849,16 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
             tem2 = one - tem1
             ti (i, k) = t (i, k - 1) * tem1 + t (i, k) * tem2
             qtem = spfh (i, k - 1) * tem1 + spfh (i, k) * tem2
-            rhoi (i, k) = pint (i, k) / (rd * ti (i, k) * (1.0 + fv * qtem))
+            rhoi (i, k) = pint (i, k) / (rdgas * ti (i, k) * (1.0 + zvir * qtem))
             dtdp = (t (i, k) - t (i, k - 1)) / (pmid (i, k) - pmid (i, k - 1))
-            n2 = gsqr / ti (i, k) * (1. / cp - rhoi (i, k) * dtdp)
+            n2 = gsqr / ti (i, k) * (1. / cp_air - rhoi (i, k) * dtdp)
             bruni (i, k) = sqrt (max (n2min, n2))
         enddo
     enddo
     
     deallocate (spfh)
     ! -----------------------------------------------------------------------
-    !
+    
     ! > - the mid - level brunt - vaisala frequencies (\f$n\f$) are calculated
     !! based on interpolated interface temperatures.
     ! -----------------------------------------------------------------------
@@ -1827,7 +1866,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     do k = 1, km
         do i = 1, npt
             dtdp = (ti (i, k + 1) - ti (i, k)) / (pint (i, k + 1) - pint (i, k))
-            n2 = gsqr / t (i, k) * (1. / cp - rhom (i, k) * dtdp)
+            n2 = gsqr / t (i, k) * (1. / cp_air - rhom (i, k) * dtdp)
             brunm (i, k) = sqrt (max (n2min, n2))
         enddo
     enddo
@@ -1876,9 +1915,9 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     
     
     ! ***********************************************************************
-    !
+    
     ! big loop over grid points only done if kcnv = 1
-    !
+    
     ! ***********************************************************************
     
     kcldm = 1
@@ -1888,11 +1927,11 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
         kcldm = max (kcldm, kk)
         
         ! -----------------------------------------------------------------------
-        !
+        
         ! > - # calculate the cloud top wind components and speed.
         !! here, ucltop, vcltop, and windcltop are wind components and
         !! wind speed at mid - level cloud top index
-        !
+        
         ! -----------------------------------------------------------------------
         
         ucltop (i) = u (i, kk)
@@ -1906,7 +1945,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     enddo
     
     ! -----------------------------------------------------------------------
-    !
+    
     ! > - # calculate the basic state wind projected in the direction of the
     !! cloud top wind at mid level and interface level (u, ui), where:
     !! \n u : basic - wind speed profile. basic - wind is parallel to the wind
@@ -1914,7 +1953,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     !! \n ui: basic - wind speed profile. basic - wind is parallel to the wind
     !! vector at the cloud top level. (interface level)
     ! input u (i, k) and v (i, k) is defined at mid level
-    !
+    
     ! -----------------------------------------------------------------------
     
     do k = 1, km
@@ -1924,13 +1963,13 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     enddo
     
     ! -----------------------------------------------------------------------
-    !
+    
     ! basic state wind at interface level is also calculated
     ! based on linear interpolation in ln (pressure)
-    !
+    
     ! in the top and bottom boundaries, basic - state wind at interface level
     ! is assumed to be vertically uniform.
-    !
+    
     ! -----------------------------------------------------------------------
     
     do i = 1, npt
@@ -1946,7 +1985,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     enddo
     
     ! -----------------------------------------------------------------------
-    !
+    
     ! > - # calculate the local richardson number
     !! \f[
     !! ri = n^2 / \eta^2
@@ -1955,7 +1994,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     
     ! basicum : u at mid level
     ! basicui : ui at interface level
-    !
+    
     ! interface 1 ======== ui (1) rhoi (1) bruni (1) riloc (1)
     ! mid - level 1 -------- u (1)
     ! 2 ======== ui (2) dpint (2) rhoi (2) bruni (2) riloc (2)
@@ -1970,7 +2009,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     ! 18 ======== ui (18) dpint (18) rhoi (18) bruni (18) riloc (18)
     ! 18 -------- u (18)
     ! 19 ======== ui (19) rhoi (19) bruni (19) riloc (19)
-    !
+    
     ! -----------------------------------------------------------------------
     
     do k = 2, km
@@ -2014,23 +2053,23 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     !9124 format (i4, 1x, f8.2)
     
     ! -----------------------------------------------------------------------
-    !
+    
     ! > - # calculate the gravity wave stress at the interface level cloud top.
-    !
+    
     ! kcldtopi : the interface level cloud top index
     ! kcldtop : the midlevel cloud top index
     ! kcldbot : the midlevel cloud bottom index
-    !
+    
     ! a : find deep convective heating rate maximum
-    !
+    
     ! if kcldtop (i) is less than kcldbot (i) in a horizontal grid point,
     ! it can be thought that there is deep convective cloud. however,
     ! deep convective heating between kcldbot and kcldtop is sometimes
     ! zero in spite of kcldtop less than kcldbot. in this case,
     ! maximum deep convective heating is assumed to be 1.e-30.
-    !
+    
     ! b : kk is the vertical index for interface level cloud top
-    !
+    
     ! c : total convective fractional cover (cldf) is used as the
     ! convective cloud cover for gwdc calculation instead of
     ! convective cloud cover in each layer (concld) .
@@ -2042,24 +2081,24 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     ! cumulus convection is determined assuming total convective
     ! cloud cover is randomly overlapped in each layer in the
     ! cumulus convection.
-    !
+    
     ! d : wave stress at cloud top is calculated when the atmosphere
     ! is dynamically stable at the cloud top
-    !
+    
     ! e : cloud top wave stress and nonlinear parameter are calculated
     ! using density, temperature, and wind that are defined at mid
     ! level just below the interface level in which cloud top wave
     ! stress is defined.
     ! nonlinct is defined at the interface level.
-    !
+    
     ! f : if the atmosphere is dynamically unstable at the cloud top,
     ! gwdc calculation in current horizontal grid is skipped.
-    !
+    
     ! g : if mean wind at the cloud top is less than zero, gwdc
     
     ! > - wave stress at cloud top is calculated when the atmosphere
     !! is dynamically stable at the cloud top
-    !!
+    !
     ! > - the cloud top wave stress and nonlinear parameter are calculated
     !! using density, temperature, and wind that are defined at mid
     !! level just below the interface level in which cloud top wave
@@ -2091,14 +2130,14 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     !! top heights of thermal forcing. if the atmosphere is dynamically
     !! unstable at the cloud top, the convective gwd calculation is
     !! skipped at that grid point.
-    !!
+    !
     ! - if mean wind at the cloud top is less than zero, gwdc
     ! calculation in current horizontal grid is skipped.
-    !
+    
     
     ! > - the stress is capped at tauctmax = - 5\f$n / m^2\f$
     !! in order to prevent numerical instability.
-    !
+    
     ! -----------------------------------------------------------------------
     !d
     do i = 1, npt
@@ -2137,26 +2176,26 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     ! + ' in direction ', f6.2, 4x, 'kk = ', i2, /)
     
     ! -----------------------------------------------------------------------
-    !
+    
     ! at this point, mean wind at the cloud top is larger than zero and
     ! local ri at the cloud top is larger than ricrit (= 0.25)
-    !
+    
     ! calculate minimum of richardson number including both basic - state
     ! condition and wave effects.
-    !
+    
     ! g * q_0 * alpha * dx ri_loc * (1 - mu * |c2|)
     ! mu = ---------------- ri_min = -----------------------------
     ! c_p * n * t * u^2 (1 + mu * ri_loc^ (0.5) * |c2|) ^2
-    !
+    
     ! minimum ri is calculated for the following two cases
-    !
+    
     ! (1) riloc < 1.e+20
     ! (2) riloc = 1.e+20 ---- > vertically uniform basic - state wind
-    !
+    
     ! riloc cannot be smaller than zero because n^2 becomes 1.e-32 in the
     ! case of n^2 < 0.. thus the sign of rinum is determined by
     ! 1 - nonlin * |c2|.
-    !
+    
     ! -----------------------------------------------------------------------
     ! > - # calculate the minimum richardson number including both the
     !! basic - state condition and wave effects.
@@ -2203,21 +2242,21 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
                 ! if (lprnt .and. i == npr) write (7000, *) ' rimin = ', rimin (i, k)
                 
                 ! -----------------------------------------------------------------------
-                !
+                
                 ! if the minimum \f$r_{i}\f$ at interface cloud top is less than or equal to 1 / 4,
                 ! the convective gwd calculation is skipped at that grid point.
-                !
+                
                 ! -----------------------------------------------------------------------
                 
                 ! -----------------------------------------------------------------------
-                !
+                
                 ! > - # calculate the gravity wave stress profile using the wave
                 !! saturation hypothesis of lindzen (1981) \cite lindzen_1981.
-                !
+                
                 ! assuming kcldtop (i) = 10 and kcldbot = 16,
-                !
+                
                 ! taugwci riloc rimin utgwc
-                !
+                
                 ! interface 1 ======== - 0.001 - 1.e20
                 ! 1 -------- 0.000
                 ! 2 ======== - 0.001 - 1.e20
@@ -2255,14 +2294,14 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
                 ! 18 ======== 0
                 ! 18 --------
                 ! 19 ======== 0
-                !
+                
                 ! -----------------------------------------------------------------------
-                !
+                
                 ! even though the cloud top level obtained in deep convective para -
                 ! meterization is defined in mid - level, the cloud top level for
                 ! the gwdc calculation is assumed to be the interface level just
                 ! above the mid - level cloud top vertical level index.
-                !
+                
                 ! -----------------------------------------------------------------------
                 
                 ! > - when \f$ri_{min}\f$ is set to 1 / 4 based on lindzen's (1981)
@@ -2343,7 +2382,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
                 if (k < kk) then
                     taugw (i, k) = (taugwci (i, k + 1) - taugwci (i, k)) / dpmid (i, k)
                     if (taugw (i, k) /= 0.0) then
-                        tem = deltim * taugw (i, k)
+                        tem = delt * taugw (i, k)
                         dtfac (i) = min (dtfac (i), abs (velco (i, k) / tem))
                     endif
                 else
@@ -2356,7 +2395,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     enddo
     
     !!!!!! vertical differentiation
-    !!!!!!
+    !!!!!
     ! > - # calculate wind tendency in direction to the wind vector, zonal
     !! wind tendency and meridional wind tendency above the cloud top
     !! level due to convectively generated gravity waves.
@@ -2385,10 +2424,10 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     enddo
     
     ! -----------------------------------------------------------------------
-    !
+    
     ! calculate momentum flux = stress deposited above cloup top
     ! apply equal amount with opposite sign within cloud
-    !
+    
     ! -----------------------------------------------------------------------
     
     do i = 1, npt
@@ -2409,7 +2448,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     ! -----------------------------------------------------------------------
     
     ! kk = kcldtop (i)
-    ! tem1 = g / dpmid (i, kk)
+    ! tem1 = grav / dpmid (i, kk)
     ! utgwc (i, kk) = - tem1 * xstress
     ! vtgwc (i, kk) = - tem1 * ystress
     
@@ -2444,15 +2483,15 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     ! do k = kcldtop (i), kcldbot (i)
     ! p1 = cumchr (i, k)
     ! p2 = cumchr (i, k + 1)
-    ! utgwcl (i, k) = - g * xstress * (p1 - p2) / dpmid (i, k)
+    ! utgwcl (i, k) = - grav * xstress * (p1 - p2) / dpmid (i, k)
     ! enddo
     
     ! -----------------------------------------------------------------------
-    !
+    
     ! the gwdc should accelerate the zonal and meridional wind in the
     ! opposite direction of the previous zonal and meridional wind,
     ! respectively
-    !
+    
     ! -----------------------------------------------------------------------
     
     ! do k = 1, kcldtop (i) - 1
@@ -2533,9 +2572,9 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, deltim, &
     !9221 format (i4, 2 (2x, f10.3))
     
     ! -----------------------------------------------------------------------
-    !
+    
     ! for gwdc performance analysis
-    !
+    
     ! -----------------------------------------------------------------------
     
     ! do k = 1, kk - 1
