@@ -1358,7 +1358,7 @@ contains
     Atm%gridstruct%grid_type => Atm%flagstruct%grid_type
     Atm%flagstruct%grid_number => Atm%grid_number
     Atm%gridstruct%regional  => Atm%flagstruct%regional
-    Atm%gridstruct%bounded_domain = Atm%flagstruct%regional .or. Atm%neststruct%nested
+    Atm%gridstruct%bounded_domain = Atm%flagstruct%regional .or. Atm%neststruct%nested .or. (Atm%flagstruct%grid_type == 4)
     if (Atm%neststruct%nested) Atm%neststruct%parent_grid => Atm%parent_grid
 
     Atm%allocated = .true.

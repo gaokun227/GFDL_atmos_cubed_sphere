@@ -135,6 +135,7 @@ public :: fv_phys, fv_nudge
   real:: abl_s_fac  =  0.1
   real:: ml_c0 = 6.285E7           ! Ocean heat capabicity 4190*depth*e3, depth = 15.
   real:: sw_abs = 0.            ! fraction of the solar absorbed/reflected by the atm
+  real :: fixed_sfc_htg = 0. !surface heating rate, K/s
 
   
   !Kessler parameters
@@ -168,7 +169,7 @@ namelist /sim_phys_nml/do_strat_HS_forcing, &
 namelist /GFDL_sim_phys_nml/ diurnal_cycle, mixed_layer, gray_rad, strat_rad, do_abl, do_mon_obkv, &
      heating_rate, cooling_rate, uniform_sst, sst0, sst_type, shift_n, do_t_strat, p_strat, t_strat, tau_strat, &
      mo_t_fac, tau_difz, prog_low_cloud, low_cf0, zero_winds, tau_zero, do_mo_fixed_cd, mo_cd, mo_u_mean, &
-     abl_s_fac, ml_c0, sw_abs
+     abl_s_fac, ml_c0, sw_abs, fixed_sfc_htg
 
 namelist /Kessler_sim_phys_nml/ K_sedi_transport, do_K_sedi_w, do_K_sedi_heat, K_cycle
 
@@ -580,10 +581,10 @@ contains
 
 
     if (id_dudt > 0) then
-       used=send_data(id_dudt, u_dt(is:ie,js:je,npz), time)
+       used=send_data(id_dudt, u_dt(is:ie,js:je,:), time)
     endif
     if (id_dvdt > 0) then
-       used=send_data(id_dvdt, v_dt(is:ie,js:je,npz), time)
+       used=send_data(id_dvdt, v_dt(is:ie,js:je,:), time)
     endif
     if (id_dtdt > 0) then
        used=send_data(id_dtdt, t_dt(:,:,:), time)
@@ -933,9 +934,14 @@ if( do_mon_obkv ) then
                rate_v = flux_v(i,j)/delm(i,j)
            v3(i,j,km) =   v3(i,j,km) + pdt*rate_v
          v_dt(i,j,km) = v_dt(i,j,km) + rate_v
+         if (abs(fixed_sfc_htg) > 1.e-8) then
+            rate_t = fixed_sfc_htg
+            flux_t(i,j) = rate_t*cp_air*delm(i,j)
+         else
                rate_t = flux_t(i,j)/(cp_air*delm(i,j))
+         endif
          t_dt(i,j,km) = t_dt(i,j,km) + rate_t
-           t3(i,j,km) =   t3(i,j,km) + rate_t*pdt
+            t3(i,j,km) =   t3(i,j,km) + rate_t*pdt
                rate_q = flux_q(i,j)/delm(i,j)
          q_dt(i,j,km,sphum) = q_dt(i,j,km,sphum) + rate_q
            q3(i,j,km,sphum) =   q3(i,j,km,sphum) + rate_q*pdt
@@ -1152,6 +1158,12 @@ endif
        enddo
 125 continue
 
+!!! DEBUG CODE
+       if (is_master()) then
+          print*, 'ABL: pblh = ', sum(pblh)/((ie-is+1)*(je-js+1))
+       endif
+!!! END DEBUG CODE
+       
   do k=km, 1, -1
      do i=is, ie
         if ( gh(i,k)>6.E3 .or. (pblh(i,j) < -0.5*dz(i,j,km)) ) then

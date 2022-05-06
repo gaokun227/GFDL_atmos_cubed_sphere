@@ -111,7 +111,7 @@
 !                   19 = LJZ update to 17 with Cetrone-Houze marine sounding
 !                        and several bubble and sounding options
 !                  101 = LES with isothermal atmosphere (not implemented)
-
+!                  102 = Beare et al. (Boundary-Layer Meteorol. 2006) SBL LES case
 
 
 
@@ -4545,7 +4545,7 @@ end subroutine terminator_tracers
         type(fv_flags_type), target :: flagstruct
 
         real, dimension(bd%is:bd%ie):: pm, qs
-        real, dimension(1:npz):: pk1, ts1, qs1
+        real, dimension(1:npz):: pk1, ts1, qs1, pe1
         real :: us0 = 30.
         real :: dist, r0, f0_const, prf, rgrav
         real :: ptmp, ze, zc, zm, utmp, vtmp, xr, yr
@@ -5629,6 +5629,101 @@ end subroutine terminator_tracers
                  enddo
               enddo
            enddo
+           
+        case ( 102 )
+
+           !No topography (simpler)
+           
+           t00 = 265.
+           N2 = 0.0
+           N2b = 0.01**2
+           p00 = 1.e5
+           pk0 = exp(kappa*log(p00))
+           th0 = t00/pk0
+           !NOTE since lowest 100 m is well mixed amp is different
+           amp = -grav/(cp_air*th0)
+           ampb = grav*grav/(cp_air*N2b)
+           rkap = 1./kappa
+
+           !Uniform 5 m grid spacing up to 300 m
+           dz = 5.
+           ze = 0.0
+           zt = 300.
+           thp = th0
+           pkp = pk0
+           ak(npz+1) = 0.0
+           bk(npz+1) = 1.0 
+           if (is_master()) print*, 'SBL Test case (102)'
+           if (is_master()) write(*,'(I, 2F)') npz+1, ak(npz+1), bk(npz+1)
+           ze1(npz+1) = ze
+           pk1(npz+1) = pk0
+           pe1(npz+1) = p00
+           
+           do k=npz,1,-1
+              ze = ze+dz
+              ze1(k) = ze
+              if (ze >= 100.) then
+                 ths = thp*exp(dz*N2b/grav)
+                 pks = pkp + ampb*(1./ths - 1./thp)
+              else
+                 ths = thp*exp(dz*N2/grav)
+                 pks = pkp + amp*dz
+              endif
+              pk1(k) = pks
+              ts1(k) = ths*pks
+              pp = exp(1./kappa*log(pks))
+              pe1(k) = pp
+              if (ze >= zt) then
+                 ak(k) = pp
+                 bk(k) = 0.0
+              else
+                 bk(k) = ((zt-ze)/zt)**2
+                 ak(k) = pp - bk(k)*p00
+              endif
+              thp = ths
+              pkp = pks
+
+              if (is_master()) write(*,'(I, 6(2x,F11.3))') k, ak(k), bk(k), ak(k+1)-ak(k) + p00*(bk(k+1)-bk(k)), ths*pks, pp, ze1(k)
+
+           enddo
+           
+           call mpp_sync()
+           
+
+         phis = 0.
+         u = 8. !m/s
+         v = 0.
+         w = 0.
+
+         do j=js,je
+            do i=is,ie
+               ps(i,j) = p00
+               pe(i,npz+1,j) = p00
+               pk(i,j,npz+1) = pk0
+               peln(i,npz+1,j) = log(p00)
+            enddo
+         enddo
+
+         do k=npz,1,-1
+            do j=js,je
+               do i=is,ie
+                  peln(i,k,j) = log(pe1(k))
+                  delp(i,j,k) = pe1(k+1) - pe1(k)
+                  delz(i,j,k) = ze1(k+1) - ze1(k)
+                  pe(i,k,j) = pe1(k)
+                  pk(i,j,k) = pk1(k)
+                  pkz(i,j,k) = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
+                  pkz(i,j,k) = exp(kappa*log(pkz(i,j,k)))
+                  pt(i,j,k) = ts1(k)
+               enddo
+            enddo
+         enddo
+         ptop = ak(1)
+
+          call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                     pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                     moist_phys, hydrostatic, nwat, domain, flagstruct%adiabatic, .not. hydrostatic )
+
 
         end select
 
