@@ -29,7 +29,7 @@
 
 module gwd_mod
 
-    implict none
+    implicit none
 
     private
 
@@ -69,11 +69,16 @@ module gwd_mod
     ! namelist parameters
     ! -----------------------------------------------------------------------
 
+    integer :: nmtvr ! number of topographic variables such as variance etc
+
+    real :: cdmbgwd (2) ! multiplication factors for cdmb and gwd
+    real :: p_crit      ! Optional level above which GWD stress decays with height
+
     ! -----------------------------------------------------------------------
     ! namelist
     ! -----------------------------------------------------------------------
     
-    namelist / gwd_nml / &
+    namelist / gwd_nml / nmtvr, cdmbgwd, p_crit
     
 contains
 
@@ -239,9 +244,9 @@ end subroutine gwd_init
 !-----------------------------------------------------------------------
 ! \param[in] IM      horizontal number of used pts
 ! \param[in] KM      vertical layer dimension
-! \param[in, out] A  non-linear tendency for v wind component
-! \param[in, out] B  non-linear tendency for u wind component
-! \param[in, out] C  non-linear tendency for temperature (not used)
+! \param[in, out] VTGWD  non-linear tendency for v wind component
+! \param[in, out] UTGWD  non-linear tendency for u wind component
+! \param[in, out] TTGWD  non-linear tendency for temperature (not used)
 ! \param[in] U1      zonal wind component of model layer wind (m/s)
 ! \param[in] V1      meridional wind component of model layer wind (m/s)
 ! \param[in] T1      model layer mean temperature (K)
@@ -339,9 +344,9 @@ end subroutine gwd_init
 ! critical levels
 !
 ! INPUT
-! A (im, km) non-lin tendency for v wind component
-! B (im, km) non-lin tendency for u wind component
-! C (im, km) non-lin tendency for temperature
+! VTGWD (im, km) non-lin tendency for v wind component
+! UTGWD (im, km) non-lin tendency for u wind component
+! TTGWD (im, km) non-lin tendency for temperature
 ! U1 (im, km) zonal wind m / sec at t0 - dt
 ! V1 (im, km) meridional wind m / sec at t0 - dt
 ! T1 (im, km) temperature deg k at t0 - dt
@@ -354,7 +359,7 @@ end subroutine gwd_init
 ! KPBL (im) is the index of the top layer of the pbl
 !
 ! OUTPUT
-! A, B as augmented by tendency due to gwdps
+! VTGWD, UTGWD as augmented by tendency due to gwdps
 ! other input variables unmodified.
 !
 !-----------------------------------------------------------------------
@@ -363,35 +368,46 @@ end subroutine gwd_init
 ! Jan 2014 J. Wang merge henry and fangin's dissipation heat in GFS to nems
 ! =======================================================================
 
-subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
-        prsi, del, prsl, prslk, phii, phil, delt, &
+subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
+        kpbl, prsi, del, prsl, prslk, phii, phil, &
         hprime, oc, oa4, clx4, theta, sigma, gamma, elvmax, &
-        dusfc, dvsfc, imx, nmtvr, cdmbgwd, p_crit, rdxzb)
+        utgwd, vtgwd, ttgwd, dusfc, dvsfc, rdxzb)
 
     implicit none
 
-    integer im, km, imx
-    integer kpbl (im) ! index for the pbl top layer
-    real delt, cdmbgwd (2), p_crit
-    real a (im, km), b (im, km), c (im, km), &
-        u1 (im, km), v1 (im, km), t1 (im, km), &
-        q1 (im, km), prsi (im, km + 1), del (im, km), &
-        prsl (im, km), prslk (im, km), phil (im, km), &
-        phii (im, km + 1), rdxzb (im)
-    real oc (im), oa4 (im, 4), clx4 (im, 4), &
-        hprime (im)
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: im, km
+    integer, intent (in) :: kpbl (im) ! index for the pbl top layer
+    
+    real, intent (in) :: delt
+    real, intent (in) :: gsize (im)
+    real, intent (in) :: u1 (im, km), v1 (im, km), t1 (im, km), q1 (im, km)
+    real, intent (in) :: prsl (im, km), prsi (im, km + 1), del (im, km), &
+        prslk (im, km), phil (im, km), phii (im, km + 1)
+    real, intent (in) :: oc (im), oa4 (im, 4), clx4 (im, 4), hprime (im)
+    real, intent (in) :: elvmax (im), theta (im), sigma (im), gamma (im)
 
+    real, intent (out) :: utgwd (im, km), vtgwd (im, km), ttgwd (im, km)
+
+    real, intent (out), optional :: dusfc (im), dvsfc (im), rdxzb (im)
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+    
     ! for lm mtn blocking
-    real elvmax (im), theta (im), sigma (im), gamma (im)
-    real wk (im)
-    real bnv2lm (im, km), pe (im), ek (im), zbk (im), up (im)
-    real db (im, km), ang (im, km), uds (im, km)
-    real zlen, dbtmp, r, phiang, cdmb, dbim
-    real eng0, eng1
+    real :: wk (im)
+    real :: bnv2lm (im, km), pe (im), ek (im), zbk (im), up (im)
+    real :: db (im, km), ang (im, km), uds (im, km)
+    real :: zlen, dbtmp, r, phiang, cdmb (im), dbim
+    real :: eng0, eng1
     
     ! some constants
     
-    real dw2min, rimin, ric, bnv2min, efmin, &
+    real :: dw2min, rimin, ric, bnv2min, efmin, &
         efmax, hpmax, hpmin, rad_to_deg, deg_to_rad
     parameter (rad_to_deg = 180.0 / pi, deg_to_rad = pi / 180.0)
     parameter (dw2min = 1., rimin = - 100., ric = 0.25, bnv2min = 1.0e-5)
@@ -399,7 +415,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     parameter (efmin = 0.0, efmax = 10.0, hpmax = 2400.0, hpmin = 1.0)
     ! parameter (p_crit = 30.e2)
     
-    real frc, ce, ceofrc, frmax, cg, gmax, &
+    real :: frc, ce, ceofrc, frmax, cg, gmax, &
         veleps, factop, rlolev, rdi
     ! critac, veleps, factop, rlolev, rdi
     parameter (frc = 1.0, ce = 0.8, ceofrc = ce / frc, frmax = 100., cg = 0.5)
@@ -409,7 +425,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     ! parameter (rlolev = 500.0)
     ! parameter (rlolev = 0.5)
     
-    real dpmin, hminmt, hncrit, minwnd, sigfac
+    real :: dpmin, hminmt, hncrit, minwnd, sigfac
     ! --- for lm mtn blocking
     ! parameter (cdmb = 1.0) ! non - dim sub grid mtn drag amp (* j *)
     parameter (hncrit = 8000.) ! max value in meters for elvmax (* j *)
@@ -425,40 +441,40 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     parameter (dpmin = 5000.0) ! minimum thickness of the reference layer
     ! in pa
     
-    real fdir
-    integer mdir
+    real :: fdir
+    integer :: mdir
     parameter (mdir = 8, fdir = mdir / (pi + pi))
-    integer nwdir (mdir)
+    integer :: nwdir (mdir)
     data nwdir / 6, 7, 5, 8, 2, 3, 1, 4 /
     save nwdir
     
-    logical icrilv (im)
+    logical :: icrilv (im)
     
     ! ---- mountain induced gravity wave drag
     
-    real taub (im), xn (im), yn (im), ubar (im), &
+    real :: taub (im), xn (im), yn (im), ubar (im), &
         vbar (im), ulow (im), oa (im), clx (im), &
-        roll (im), uloi (im), dusfc (im), dvsfc (im), &
+        roll (im), uloi (im), &
         dtfac (im), xlinv (im), delks (im), delks1 (im)
     
-    real bnv2 (im, km), taup (im, km + 1), ri_n (im, km), &
+    real :: bnv2 (im, km), taup (im, km + 1), ri_n (im, km), &
         taud (im, km), ro (im, km), vtk (im, km), &
         vtj (im, km), scor (im), velco (im, km - 1), &
         bnv2bar (im)
     
-    ! real velko (km - 1)
-    integer kref (im), kint (im), iwk (im), ipt (im)
+    ! real :: velko (km - 1)
+    integer :: kref (im), kint (im), iwk (im), ipt (im)
     ! for lm mtn blocking
-    integer kreflm (im), iwklm (im)
-    integer idxzb (im), ktrial, klevm1, nmtvr
+    integer :: kreflm (im), iwklm (im)
+    integer :: idxzb (im), ktrial, klevm1
     
-    real gor, gocp, gr2, bnv, fr, &
-        brvf, cleff, tem, tem1, tem2, temc, temv, &
+    real :: gor, gocp, gr2, bnv, fr, &
+        brvf, cleff (im), tem, tem1, tem2, temc, temv, &
         wdir, ti, rdz, dw2, shr2, bvf2, &
         rdelks, efact, coefm, gfobnv, &
         scork, rscor, hd, fro, rim, sira, &
         dtaux, dtauy, pkp1log, pklog
-    integer kmm1, kmm2, lcap, lcapp1, kbps, kbpsp1, kbpsm1, &
+    integer :: kmm1, kmm2, lcap, lcapp1, kbps, kbpsp1, kbpsm1, &
         kmps, idir, nwd, i, j, k, klcap, kp1, kmpbl, npt, &
         kmll
     ! kmll, kmds, ihit, jhit
@@ -467,8 +483,11 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     ! non - dim sub grid mtn drag amp (* j *)
     ! cdmb = 1.0 / float (imx / 192)
     ! cdmb = 192.0 / float (imx)
-    cdmb = 4.0 * 192.0 / float (imx)
-    if (cdmbgwd (1) >= 0.0) cdmb = cdmb * cdmbgwd (1)
+    ! cdmb = 4.0 * 192.0 / float (imx)
+    do i = 1, im
+        cdmb (im) = 4.0 * 2.e-5 * gsize (im)
+        if (cdmbgwd (1) >= 0.0) cdmb (im) = cdmb (im) * cdmbgwd (1)
+    enddo
     
     do i = 1, im
         dusfc (i) = 0.
@@ -761,7 +780,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                             !! where \f$c_{d}\f$ is a specified constant, \f$\sigma\f$ is the
                             !! orographic slope.
                             
-                            dbtmp = 0.25 * cdmb * &
+                            dbtmp = 0.25 * cdmb (j) * &
                                 max (2. - r, 0.) * sigma (j) * &
                                 max (cos (ang (i, k)), gamma (j) * sin (ang (i, k))) * &
                                 zlen / hprime (j)
@@ -813,19 +832,22 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
     
     ! scale cleff between im = 384 * 2 and 192 * 2 for t126 / t170 and t62
     
-    if (imx .gt. 0) then
-        ! cleff = 1.0e-5 * sqrt (float (imx) / 384.0) ! this is inverse of cleff
-        ! cleff = 1.0e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
-        ! cleff = 0.5e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
-        ! cleff = 1.0e-5 * sqrt (float (imx) / 192) / float (imx / 192)
-        ! cleff = 1.0e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff
-        cleff = 0.5e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff
-        ! hmhj for ndsl
-        ! jw cleff = 0.1e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff
-        ! cleff = 2.0e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
-        ! cleff = 2.5e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
-    endif
-    if (cdmbgwd (2) >= 0.0) cleff = cleff * cdmbgwd (2)
+    !if (imx .gt. 0) then
+    !cleff = 1.0e-5 * sqrt (float (imx) / 384.0) ! this is inverse of cleff
+    !cleff = 1.0e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
+    !cleff = 0.5e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
+    !cleff = 1.0e-5 * sqrt (float (imx) / 192) / float (imx / 192)
+    !cleff = 1.0e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff
+    !cleff = 0.5e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff
+    !hmhj for ndsl
+    !jw cleff = 0.1e-5 / sqrt (float (imx) / 192.0) ! this is inverse of cleff
+    !cleff = 2.0e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
+    !cleff = 2.5e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
+    !ndif
+    do i = 1, im
+        cleff (im) = 0.5e-5 / sqrt (2.e5 / gsize (im))
+        if (cdmbgwd (2) >= 0.0) cleff (im) = cleff (im) * cdmbgwd (2)
+    enddo
     
     do k = 1, km
         do i = 1, npt
@@ -1055,7 +1077,7 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
         
         coefm = (1. + clx (i)) ** (oa (i) + 1.)
         
-        xlinv (i) = coefm * cleff
+        xlinv (i) = coefm * cleff (j)
         
         tem = fr * fr * oc (j)
         gfobnv = gmax * tem / ((tem + cg) * bnv) ! g / n0
@@ -1272,8 +1294,8 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
             ! --- lm mb (* j *) changes overwrite gwd
             if (k .lt. idxzb (i) .and. idxzb (i) .ne. 0) then
                 dbim = db (i, k) / (1. + db (i, k) * delt)
-                a (j, k) = - dbim * v1 (j, k) + a (j, k)
-                b (j, k) = - dbim * u1 (j, k) + b (j, k)
+                vtgwd (j, k) = - dbim * v1 (j, k) + vtgwd (j, k)
+                utgwd (j, k) = - dbim * u1 (j, k) + utgwd (j, k)
                 eng1 = eng0 * (1.0 - dbim * delt) * (1.0 - dbim * delt)
                 ! if (abs (dbim * u1 (j, k)) .gt. .01) &
                 ! print *, ' in gwdps_lmi.f kdt = ', kdt, i, k, db (i, k), &
@@ -1282,15 +1304,15 @@ subroutine gwdps (im, km, a, b, c, u1, v1, t1, q1, kpbl, &
                 dvsfc (j) = dvsfc (j) - dbim * v1 (j, k) * del (j, k)
             else
                 
-                a (j, k) = dtauy + a (j, k)
-                b (j, k) = dtaux + b (j, k)
+                vtgwd (j, k) = dtauy + vtgwd (j, k)
+                utgwd (j, k) = dtaux + utgwd (j, k)
                 eng1 = 0.5 * (&
                      (u1 (j, k) + dtaux * delt) * (u1 (j, k) + dtaux * delt) &
                      + (v1 (j, k) + dtauy * delt) * (v1 (j, k) + dtauy * delt))
                 dusfc (j) = dusfc (j) + dtaux * del (j, k)
                 dvsfc (j) = dvsfc (j) + dtauy * del (j, k)
             endif
-            c (j, k) = c (j, k) + max (eng0 - eng1, 0.) / cp_air / delt
+            ttgwd (j, k) = ttgwd (j, k) + max (eng0 - eng1, 0.) / cp_air / delt
         enddo
     enddo
     ! if (lprnt) then
@@ -1383,14 +1405,13 @@ end subroutine gwdps
 !-----------------------------------------------------------------------
 ! \param[in] IM      horizontal number of used pts
 ! \param[in] KM      vertical layer dimension
-! \param[in] LAT     latitude index - used for debug prints
 ! \param[in] U1      u component of layer wind
 ! \param[in] V1      v component of layer wind
 ! \param[in] T1      layer mean temperature (k)
 ! \param[in] Q1      layer mean tracer concentration
-! \param[in] PMID1   mean layer pressure
-! \param[in] PINT1   pressure at layer interfaces
-! \param[in] DPMID1  mean layer delta p
+! \param[in] PRSL    mean layer pressure
+! \param[in] PRSI    pressure at layer interfaces
+! \param[in] DEL     mean layer delta p
 ! \param[in] QMAX    maximum convective heating rate (k / s) in a
 !                    horizontal grid point calculated
 !                    from cumulus parameterization
@@ -1426,7 +1447,6 @@ end subroutine gwdps
 ! PMID    : midpoint pressures
 ! PINT    : interface pressures
 ! DPMID   : midpoint delta p (pi (k) - pi (k - 1))
-! LAT     : latitude index
 ! QMAX    : deep convective heating
 ! KCLDTOP : vertical level index for cloud top (mid level)
 ! KCLDBOT : vertical level index for cloud bottom (mid level)
@@ -1513,30 +1533,38 @@ end subroutine gwdps
 ! crit2     : variable 2 for checking critical level
 ! =======================================================================
     
-subroutine gwdc (im, km, lat, u1, v1, t1, q1, delt, &
-        pmid1, pint1, dpmid1, qmax, ktop, kbot, kcnv, cldf, &
+subroutine gwdc (im, km, u1, v1, t1, q1, delt, &
+        prsl, prsi, del, qmax, ktop, kbot, kcnv, cldf, &
         dlength, utgwc, vtgwc, tauctx, taucty)
     
     implicit none
     
-    integer im, km, lat
-    integer ktop (im), kbot (im), kcnv (im)
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+
+    integer, intent (in) :: im, km
+    integer, intent (in) :: ktop (im), kbot (im), kcnv (im)
     
-    ! real fhourpr, delt
-    real delt
-    real, dimension (im) :: qmax, &
-        tauctx, taucty
-    real, dimension (im) :: cldf, dlength
-    real, dimension (im, km) :: u1, v1, t1, q1, &
-        pmid1, dpmid1
-    ! cumchr1
-    real, dimension (im, km) :: utgwc, vtgwc
-    real, dimension (im, km + 1) :: pint1
+    real, intent (in) :: delt
+    real, intent (in) :: qmax (im), cldf (im), dlength (im)
+    real, intent (in) :: u1 (im, km), v1 (im, km), t1 (im, km), q1 (im, km)
+    real, intent (in) :: prsl (im, km), prsi (im, km + 1), del (im, km)
+
+    real, intent (out) :: utgwc (im, km), vtgwc (im, km)
+
+    real, intent (out), optional :: tauctx (im), taucty (im)
+
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
     
-    integer i, ii, k, k1, kk, kb, ilev, npt, kcb, kcldm
-    integer, dimension (im) :: ipt
+    ! cumchr1 (im, km)
     
-    real tem, tem1, tem2, qtem, wtgwc, tauct, &
+    integer :: i, ii, k, k1, kk, kb, ilev, npt, kcb, kcldm
+    integer :: ipt (im)
+    
+    real :: tem, tem1, tem2, qtem, wtgwc, tauct, &
         windcltop, shear, nonlinct, nonlin, nonlins, &
         n2, dtdp, crit1, crit2, p1, p2, &
         ! n2, dtdp, crit1, crit2, p1, p2, &
@@ -1632,11 +1660,11 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, delt, &
     ! -------- pressure levels ----------
     ! write (*, 9100)
     ! ilev = km + 1
-    ! write (*, 9110) ilev, (10. * pint1 (ipr, ilev))
+    ! write (*, 9110) ilev, (10. * prsi (ipr, ilev))
     ! do ilev = km, 1, - 1
-    ! write (*, 9120) ilev, (10. * pmid1 (ipr, ilev)), &
-    ! (10. * dpmid1 (ipr, ilev))
-    ! write (*, 9110) ilev, (10. * pint1 (ipr, ilev))
+    ! write (*, 9120) ilev, (10. * prsl (ipr, ilev)), &
+    ! (10. * del (ipr, ilev))
+    ! write (*, 9110) ilev, (10. * prsi (ipr, ilev))
     ! enddo
     
     ! -------- u1 v1 t1 ----------
@@ -1651,7 +1679,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, delt, &
     ! endif
     
     !9100 format (//, 14x, 'pressure levels', //,
-    ! + ' ilev', 6x, 'pint1', 7x, 'pmid1', 6x, 'dpmid1', /)
+    ! + ' ilev', 6x, 'prsi', 7x, 'prsl', 6x, 'del', /)
     !9110 format (i4, 2x, f10.3)
     !9120 format (i4, 12x, 2 (2x, f10.3))
     !9130 format (//, ' ilev', 7x, 'u1', 10x, 'v1', 10x, 't1', /)
@@ -1711,8 +1739,8 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, delt, &
             v (i, k) = v1 (ii, k1)
             t (i, k) = t1 (ii, k1)
             spfh (i, k) = max (q1 (ii, k1), qmin)
-            pmid (i, k) = pmid1 (ii, k1)
-            dpmid (i, k) = dpmid1 (ii, k1) * onebg
+            pmid (i, k) = prsl (ii, k1)
+            dpmid (i, k) = del (ii, k1) * onebg
             ! cumchr (i, k) = cumchr1 (ii, k1)
             
             rhom (i, k) = pmid (i, k) / (rdgas * t (i, k) * (1.0 + zvir * spfh (i, k)))
@@ -1730,7 +1758,7 @@ subroutine gwdc (im, km, lat, u1, v1, t1, q1, delt, &
         k1 = km - k + 2
         do i = 1, npt
             ii = ipt (i)
-            pint (i, k) = pint1 (ii, k1)
+            pint (i, k) = prsi (ii, k1)
             taugwci (i, k) = zero
             bruni (i, k) = zero
             rhoi (i, k) = zero
