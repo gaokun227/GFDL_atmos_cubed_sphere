@@ -190,7 +190,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             if (.not. hydrostatic) then
                 dz (is:ie, kmp:km) = delz (is:ie, j, kmp:km)
             else
-                dz (is:ie, kmp:km) = (peln (is:je, kmp:km, j) - peln (is:ie, kmp+1:km+1, j)) * &
+                dz (is:ie, kmp:km) = (peln (is:ie, kmp:km, j) - peln (is:ie, kmp+1:km+1, j)) * &
                     rdgas * pt (is:ie, j, kmp:km) / grav
             endif
 
@@ -380,8 +380,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                         rdgas * pt (is:ie, j, kr) / grav
                     dz (is:ie, k) = delz (is:ie, j, kr)
                 else
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:je, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:je, kr, j) - peln (is:ie, kr+1, j)) * &
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
+                    dz (is:ie, k) = (peln (is:ie, kr, j) - peln (is:ie, kr+1, j)) * &
                         rdgas * pt (is:ie, j, kr) / grav
                 endif
                 pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
@@ -684,8 +684,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                         rdgas * pt (is:ie, j, kr) / grav
                     dz (is:ie, k) = delz (is:ie, j, kr)
                 else
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:je, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:je, kr, j) - peln (is:ie, kr+1, j)) * &
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
+                    dz (is:ie, k) = (peln (is:ie, kr, j) - peln (is:ie, kr+1, j)) * &
                         rdgas * pt (is:ie, j, kr) / grav
                 endif
                 if (k .eq. 1) then
@@ -975,7 +975,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 wa (is:ie, kmp:km) = w (is:ie, j, kmp:km)
                 dz (is:ie, kmp:km) = delz (is:ie, j, kmp:km)
             else
-                dz (is:ie, kmp:km) = (peln (is:je, kmp:km, j) - peln (is:ie, kmp+1:km+1, j)) * &
+                dz (is:ie, kmp:km) = (peln (is:ie, kmp:km, j) - peln (is:ie, kmp+1:km+1, j)) * &
                     rdgas * pt (is:ie, j, kmp:km) / grav
             endif
 
