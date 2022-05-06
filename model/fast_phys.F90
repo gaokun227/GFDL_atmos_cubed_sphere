@@ -114,7 +114,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     real :: rrg
 
-    real, dimension (is:ie) :: gsize, hpbl, dqv, dql, dqi, dqr, dqs, dqg, ps_dt
+    real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt
+
+    real, dimension (is:ie, js:je) :: hpbl
 
     real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm
 
@@ -395,16 +397,17 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
-                do i = is, ie
-                    if (hs (i, j) .gt. 0) lsm (i) = 1
-                enddo
+            enddo
+
+            do i = is, ie
+                if (hs (i, j) .gt. 0) lsm (i) = 1
             enddo
 
             call sa_tke_edmf (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
                 abs (mdt), uu, vv, ta, qa, gsize, lsm, &
                 swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
                 tsea, heat, evap, stress, spd1, kinver, &
-                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl, kpbl)
+                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl (is:ie, j), kpbl)
 
             do k = 1, km
                 kr = km - k + 1
@@ -664,7 +667,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             lsm = 0
             ncld = 1
             if (.not. do_inline_edmf) then
-                hpbl = 1500.
+                hpbl (is:ie, j) = 1500.
             endif
 
             if (consv .gt. consv_min) then
@@ -699,18 +702,19 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 ww (is:ie, k) = omga (is:ie, j, kr)
-                do i = is, ie
-                    if (hs (i, j) .gt. 0) lsm (i) = 1
-                enddo
             enddo
   
+            do i = is, ie
+                if (hs (i, j) .gt. 0) lsm (i) = 1
+            enddo
+
             call sa_sas_deep (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
                 qv, ta, uu, vv, rn, kb, kt, kc, lsm, gsize, ww, ncld)
 
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
   
             call sa_sas_shal (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
-                qv, ta, uu, vv, rn, kb, kt, kc, lsm, gsize, ww, ncld, hpbl)
+                qv, ta, uu, vv, rn, kb, kt, kc, lsm, gsize, ww, ncld, hpbl (is:ie, j))
   
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
   
