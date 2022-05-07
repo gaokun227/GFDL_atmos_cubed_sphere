@@ -257,7 +257,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     !-----------------------------------------------------------------------
     ! Inline SA-TKE-EDMF >>>
-    ! To-Do: pass the hpbl to the physics
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_edmf) then
@@ -351,6 +350,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             lsm = 0
             kinver = km
             kpbl (is:ie, j) = 1
+
+            ! These need to be reviewed later
             swh = 0.0
             hlw = 0.0
             xmu = 0.0
@@ -590,6 +591,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     !-----------------------------------------------------------------------
     ! Inline SA-SAS >>>
+    ! Need "hpbl" from the SA-TKE-EDMF
     ! To-Do: pass ud_mf, dd_mf, dt_mf, cnvw, cnvc to physics
     ! To-Do: pass heating to the physics to activate the convective GWD
     !-----------------------------------------------------------------------
@@ -886,6 +888,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     !-----------------------------------------------------------------------
     ! Inline SA-GWD >>>
+    ! Need "kpbl" from the SA-TKE-EDMF
+    ! Need "cumabs", "ktop", "kbot", "kcnv" from the SA-SAS
+    ! To-Do: get sub-grid orographic parameters from the data file
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_gwd) then
@@ -963,6 +968,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             u_dt (is:ie, j, 1:km) = ua (is:ie, j, 1:km)
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
 
+            ! These need to be reviewed later
             oc = 0.0
             oa4 = 0.0
             clx4 = 0.0
