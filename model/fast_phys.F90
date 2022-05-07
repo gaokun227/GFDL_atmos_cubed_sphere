@@ -29,7 +29,7 @@ module fast_phys_mod
 
     use constants_mod, only: rdgas, grav, kappa
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
-    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type, inline_sas_type
+    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type, inline_sas_type, inline_gwd_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index
@@ -52,8 +52,8 @@ contains
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
                v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
-               inline_mp, inline_sas, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_mp, do_inline_sas, do_inline_edmf, do_inline_gwd, do_sat_adj, last_step)
+               inline_mp, inline_sas, inline_gwd, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+               do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, do_sat_adj, last_step)
     
     implicit none
     
@@ -106,6 +106,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     type (inline_mp_type), intent (inout) :: inline_mp
     type (inline_sas_type), intent (inout) :: inline_sas
+    type (inline_gwd_type), intent (inout) :: inline_gwd
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -129,11 +130,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     integer, allocatable, dimension (:) :: lsm, kinver
 
     real, allocatable, dimension (:) :: rn, xmu, rbsoil, zorl, u10m, v10m, fm, fh, tsea
-    real, allocatable, dimension (:) :: heat, evap, stress, spd1, tmp, oc, hprime
-    real, allocatable, dimension (:) :: elvmax, theta, sigma, gamma
+    real, allocatable, dimension (:) :: heat, evap, stress, spd1, tmp
 
     real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql
-    real, allocatable, dimension (:,:) :: ta, uu, vv, ww, swh, hlw, oa4, clx4
+    real, allocatable, dimension (:,:) :: ta, uu, vv, ww, swh, hlw
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
@@ -890,21 +890,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     ! Inline SA-GWD >>>
     ! Need "kpbl" from the SA-TKE-EDMF
     ! Need "cumabs", "ktop", "kbot", "kcnv" from the SA-SAS
-    ! To-Do: get sub-grid orographic parameters from the data file
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_gwd) then
 
         call timing_on ('sa_gwd')
-
-        allocate (oc (is:ie))
-        allocate (oa4 (is:ie, 4))
-        allocate (clx4 (is:ie, 4))
-        allocate (hprime (is:ie))
-        allocate (elvmax (is:ie))
-        allocate (theta (is:ie))
-        allocate (sigma (is:ie))
-        allocate (gamma (is:ie))
 
         allocate (dz (is:ie, 1:km))
         allocate (zm (is:ie, 1:km))
@@ -953,12 +943,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    te, delp, hydrostatic, pt, peln, delz, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
-!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, inline_gwd, &
 !$OMP                                    kbot, ktop, kcnv, kpbl, ptop, cumabs) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, pi, pmk, zi, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
-!$OMP                                    cvm, kr, dqv, ps_dt, oc, oa4, clx4, hprime, &
-!$OMP                                    elvmax, theta, sigma, gamma)
+!$OMP                                    cvm, kr, dqv, ps_dt)
 
         do j = js, je
  
@@ -967,16 +956,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             ! save ua, va for wind tendency calculation
             u_dt (is:ie, j, 1:km) = ua (is:ie, j, 1:km)
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
-
-            ! These need to be reviewed later
-            oc = 0.0
-            oa4 = 0.0
-            clx4 = 0.0
-            hprime = 0.0
-            elvmax = 0.0
-            theta = 0.0
-            sigma = 0.0
-            gamma = 0.0
 
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
@@ -1017,7 +996,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
   
             call sa_gwd_oro (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, &
                 kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
-                hprime, oc, oa4, clx4, theta, sigma, gamma, elvmax)
+                inline_gwd%hprime (is:ie, j), inline_gwd%oc (is:ie, j), inline_gwd%oa (is:ie, j, :), &
+                inline_gwd%ol (is:ie, j, :), inline_gwd%theta (is:ie, j), inline_gwd%sigma (is:ie, j), &
+                inline_gwd%gamma (is:ie, j), inline_gwd%elvmax (is:ie, j))
 
             call sa_gwd_cnv (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, cumabs (is:ie, j), &
                 pm, pi, dp, ktop (is:ie, j), kbot (is:ie, j), kcnv (is:ie, j))
@@ -1072,15 +1053,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             endif
 
         enddo
-
-        deallocate (oc)
-        deallocate (oa4)
-        deallocate (clx4)
-        deallocate (hprime)
-        deallocate (elvmax)
-        deallocate (theta)
-        deallocate (sigma)
-        deallocate (gamma)
 
         deallocate (dz)
         deallocate (zm)

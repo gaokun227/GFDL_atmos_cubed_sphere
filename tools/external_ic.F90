@@ -473,6 +473,24 @@ contains
         endif
       endif
 
+      if ( Atm%flagstruct%do_inline_gwd ) then
+        call register_restart_field(ORO_restart, 'stddev', Atm%inline_gwd%hprime, dim_names_2d)
+        call register_restart_field(ORO_restart, 'convexity', Atm%inline_gwd%oc, dim_names_2d)
+        call register_restart_field(ORO_restart, 'oa1', Atm%inline_gwd%oa(:,:,1), dim_names_2d)
+        call register_restart_field(ORO_restart, 'oa2', Atm%inline_gwd%oa(:,:,2), dim_names_2d)
+        call register_restart_field(ORO_restart, 'oa3', Atm%inline_gwd%oa(:,:,3), dim_names_2d)
+        call register_restart_field(ORO_restart, 'oa4', Atm%inline_gwd%oa(:,:,4), dim_names_2d)
+        call register_restart_field(ORO_restart, 'ol1', Atm%inline_gwd%ol(:,:,1), dim_names_2d)
+        call register_restart_field(ORO_restart, 'ol2', Atm%inline_gwd%ol(:,:,2), dim_names_2d)
+        call register_restart_field(ORO_restart, 'ol3', Atm%inline_gwd%ol(:,:,3), dim_names_2d)
+        call register_restart_field(ORO_restart, 'ol4', Atm%inline_gwd%ol(:,:,4), dim_names_2d)
+        call register_restart_field(ORO_restart, 'ol4', Atm%inline_gwd%ol(:,:,4), dim_names_2d)
+        call register_restart_field(ORO_restart, 'theta', Atm%inline_gwd%theta, dim_names_2d)
+        call register_restart_field(ORO_restart, 'sigma', Atm%inline_gwd%sigma, dim_names_2d)
+        call register_restart_field(ORO_restart, 'gamma', Atm%inline_gwd%gamma, dim_names_2d)
+        call register_restart_field(ORO_restart, 'elvmax', Atm%inline_gwd%elvmax, dim_names_2d)
+      endif
+
       if ( Atm%flagstruct%fv_land ) then
         ! stddev
         call register_restart_field(ORO_restart, 'stddev', Atm%sgh, dim_names_2d)
