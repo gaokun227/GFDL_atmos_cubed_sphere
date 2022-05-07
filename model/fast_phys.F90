@@ -52,7 +52,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
                v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
                inline_mp, inline_sas, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_mp, do_inline_sas, do_inline_edmf, do_sat_adj, last_step)
+               do_inline_mp, do_inline_sas, do_inline_edmf, do_inline_gwd, do_sat_adj, last_step)
     
     implicit none
     
@@ -62,7 +62,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_sas, do_inline_edmf, do_sat_adj, last_step
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_sas
+    logical, intent (in) :: do_inline_edmf, do_inline_gwd, do_sat_adj, last_step
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop
 
@@ -114,19 +115,24 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     real :: rrg
 
+    integer, dimension (is:ie, js:je) :: ktop, kbot, kcnv, kpbl
+
     real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt
 
-    real, dimension (is:ie, js:je) :: hpbl
+    real, dimension (is:ie, js:je) :: hpbl, cumabs
 
     real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm
 
     real, dimension (is:ie, km+1) :: phis
 
-    integer, allocatable, dimension (:) :: kb, kt, kc, lsm, kinver, kpbl
+    integer, allocatable, dimension (:) :: lsm, kinver
 
-    real, allocatable, dimension (:) :: rn, xmu, rbsoil, zorl, u10m, v10m, fm, fh, tsea, heat, evap, stress, spd1
+    real, allocatable, dimension (:) :: rn, xmu, rbsoil, zorl, u10m, v10m, fm, fh, tsea
+    real, allocatable, dimension (:) :: heat, evap, stress, spd1, tmp, oc, hprime
+    real, allocatable, dimension (:) :: elvmax, theta, sigma, gamma
 
-    real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql, ta, uu, vv, ww, swh, hlw
+    real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql
+    real, allocatable, dimension (:,:) :: ta, uu, vv, ww, swh, hlw, oa4, clx4
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
@@ -250,7 +256,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     !-----------------------------------------------------------------------
     ! Inline SA-TKE-EDMF >>>
-    ! To-Do: pass the hpbl, kpbl to the physics
+    ! To-Do: pass the hpbl to the physics
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_edmf) then
@@ -261,7 +267,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         allocate (lsm (is:ie))
         allocate (kinver (is:ie))
-        allocate (kpbl (is:ie))
 
         allocate (dz (is:ie, 1:km))
         allocate (zm (is:ie, 1:km))
@@ -327,12 +332,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, hpbl, &
-!$OMP                                    ptop, ntke) &
+!$OMP                                    ptop, ntke, kpbl) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, lsm, zi, pi, pik, pmk, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
 !$OMP                                    swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
 !$OMP                                    tsea, heat, evap, stress, spd1, kinver, &
-!$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, kpbl)
+!$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
 
         do j = js, je
  
@@ -344,7 +349,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
             lsm = 0
             kinver = km
-            kpbl = 1
+            kpbl (is:ie, j) = 1
             swh = 0.0
             hlw = 0.0
             xmu = 0.0
@@ -407,7 +412,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 abs (mdt), uu, vv, ta, qa, gsize, lsm, &
                 swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
                 tsea, heat, evap, stress, spd1, kinver, &
-                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl (is:ie, j), kpbl)
+                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl (is:ie, j), kpbl (is:ie, j))
 
             do k = 1, km
                 kr = km - k + 1
@@ -473,7 +478,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         deallocate (lsm)
         deallocate (kinver)
-        deallocate (kpbl)
 
         deallocate (dz)
         deallocate (zm)
@@ -593,12 +597,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         call timing_on ('sa_sas')
 
-        allocate (kb (is:ie))
-        allocate (kt (is:ie))
-        allocate (kc (is:ie))
         allocate (lsm (is:ie))
 
         allocate (rn (is:ie))
+        allocate (tmp (is:ie))
 
         allocate (dz (is:ie, 1:km))
         allocate (zm (is:ie, 1:km))
@@ -647,8 +649,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, ps, &
-!$OMP                                    hpbl, do_inline_edmf) &
-!$OMP                           private (u_dt, v_dt, gsize, dz, kb, kt, kc, lsm, rn, &
+!$OMP                                    hpbl, kbot, ktop, kcnv, cumabs) &
+!$OMP                           private (u_dt, v_dt, gsize, dz, lsm, rn, tmp, &
 !$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, dql, ps_dt)
 
@@ -661,14 +663,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
 
             rn = 0.0
-            kt = 1
-            kb = km
-            kc = 0
+            ktop (is:ie, j) = 1
+            kbot (is:ie, j) = km
+            kcnv (is:ie, j) = 0
             lsm = 0
             ncld = 1
-            if (.not. do_inline_edmf) then
-                hpbl (is:ie, j) = 1500.
-            endif
 
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
@@ -709,14 +708,31 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             enddo
 
             call sa_sas_deep (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
-                qv, ta, uu, vv, rn, kb, kt, kc, lsm, gsize, ww, ncld)
+                qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
+                lsm, gsize, ww, ncld)
 
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
   
             call sa_sas_shal (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
-                qv, ta, uu, vv, rn, kb, kt, kc, lsm, gsize, ww, ncld, hpbl (is:ie, j))
+                qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
+                lsm, gsize, ww, ncld, hpbl (is:ie, j))
   
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
+
+            cumabs (is:ie, j) = 0.0
+            tmp (is:ie) = 0.0
+            do k = 1, km
+                kr = km - k + 1
+                do i = is, ie
+                    if (k .ge. kbot (i, j) .and. k .le. ktop (i, j)) then
+                        cumabs (i, j) = cumabs (i, j) + (ta (i, k) - pt (i, j, kr)) * dp (i, k)
+                        tmp (i) = tmp (i) + dp (i, k)
+                    endif
+                enddo
+            enddo
+            do i = is, ie
+                if (tmp (i) .gt. 0.0) cumabs (i, j) = cumabs (i, j) / (abs (mdt) * tmp (i))
+            enddo
   
             do k = 1, km
                 kr = km - k + 1
@@ -771,12 +787,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         enddo
 
-        deallocate (kb)
-        deallocate (kt)
-        deallocate (kc)
         deallocate (lsm)
 
         deallocate (rn)
+        deallocate (tmp)
 
         deallocate (dz)
         deallocate (zm)
@@ -867,6 +881,289 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     !-----------------------------------------------------------------------
     ! <<< Inline SA-SAS
+    !-----------------------------------------------------------------------
+
+    !-----------------------------------------------------------------------
+    ! Inline GWD >>>
+    !-----------------------------------------------------------------------
+
+    if ((.not. do_adiabatic_init) .and. do_inline_gwd) then
+
+        call timing_on ('gwd')
+
+        allocate (oc (is:ie))
+        allocate (oa4 (is:ie, 4))
+        allocate (clx4 (is:ie, 4))
+        allocate (hprime (is:ie))
+        allocate (elvmax (is:ie))
+        allocate (theta (is:ie))
+        allocate (sigma (is:ie))
+        allocate (gamma (is:ie))
+
+        allocate (dz (is:ie, 1:km))
+        allocate (zm (is:ie, 1:km))
+        allocate (zi (is:ie, 1:km+1))
+        allocate (dp (is:ie, 1:km))
+        allocate (pm (is:ie, 1:km))
+        allocate (pi (is:ie, 1:km+1))
+        allocate (pmk (is:ie, 1:km))
+
+        allocate (ta (is:ie, 1:km))
+        allocate (qv (is:ie, 1:km))
+        allocate (uu (is:ie, 1:km))
+        allocate (vv (is:ie, 1:km))
+
+        allocate (u_dt (isd:ied, jsd:jed, km))
+        allocate (v_dt (isd:ied, jsd:jed, km))
+
+        do k = 1, km
+            do j = jsd, jed
+                do i = isd, ied
+                    u_dt (i, j, k) = 0.
+                    v_dt (i, j, k) = 0.
+                enddo
+            enddo
+        enddo
+
+        ! save D grid u and v
+        if (consv .gt. consv_min) then
+            allocate (u0 (isd:ied, jsd:jed+1, km))
+            allocate (v0 (isd:ied+1, jsd:jed, km))
+            u0 = u
+            v0 = v
+        endif
+
+        ! D grid wind to A grid wind remap
+        call cubed_to_latlon (u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
+                 domain, gridstruct%bounded_domain, c2l_ord, bd)
+
+        ! save delp
+        if (consv .gt. consv_min) then
+            allocate (dp0 (isd:ied, jsd:jed, km))
+            dp0 = delp
+        endif
+
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, pe, ua, va, &
+!$OMP                                    te, delp, hydrostatic, pt, peln, delz, &
+!$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
+!$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, &
+!$OMP                                    kbot, ktop, kcnv, kpbl, ptop, cumabs) &
+!$OMP                           private (u_dt, v_dt, gsize, dz, pi, pmk, zi, &
+!$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
+!$OMP                                    cvm, kr, dqv, ps_dt, oc, oa4, clx4, hprime, &
+!$OMP                                    elvmax, theta, sigma, gamma)
+
+        do j = js, je
+ 
+            gsize (is:ie) = sqrt (gridstruct%area_64 (is:ie, j))
+
+            ! save ua, va for wind tendency calculation
+            u_dt (is:ie, j, 1:km) = ua (is:ie, j, 1:km)
+            v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
+
+            oc = 0.0
+            oa4 = 0.0
+            clx4 = 0.0
+            hprime = 0.0
+            elvmax = 0.0
+            theta = 0.0
+            sigma = 0.0
+            gamma = 0.0
+
+            if (consv .gt. consv_min) then
+                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
+                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
+                cvm = (1 - (q (is:ie, j, 1:km, sphum) + qliq + qsol)) * cv_air + &
+                    q (is:ie, j, 1:km, sphum) * cv_vap + qliq * c_liq + qsol * c_ice
+                te (is:ie, j, 1:km) = - cvm * pt (is:ie, j, 1:km) / ((1. + r_vir * q (is:ie, j, 1:km, sphum)) * &
+                    (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
+            endif
+
+            zi (is:ie, 1) = 0.0
+            pi (is:ie, km+1) = ptop
+            do k = 1, km
+                kr = km - k + 1
+                dp (is:ie, k) = delp (is:ie, j, kr)
+                pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
+                if (.not. hydrostatic) then
+                    pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
+                        rdgas * pt (is:ie, j, kr) / grav
+                    dz (is:ie, k) = delz (is:ie, j, kr)
+                else
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
+                    dz (is:ie, k) = (peln (is:ie, kr, j) - peln (is:ie, kr+1, j)) * &
+                        rdgas * pt (is:ie, j, kr) / grav
+                endif
+                pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
+                zi (is:ie, k+1) = zi (is:ie, k) - dz (is:ie, k) * grav
+                if (k .eq. 1) then
+                    zm (is:ie, k) = - 0.5 * dz (is:ie, k) * grav
+                else
+                    zm (is:ie, k) = zm (is:ie, k-1) - 0.5 * (dz (is:ie, k-1) + dz (is:ie, k)) * grav
+                endif
+                qv (is:ie, k) = q (is:ie, j, kr, sphum)
+                ta (is:ie, k) = pt (is:ie, j, kr)
+                uu (is:ie, k) = ua (is:ie, j, kr)
+                vv (is:ie, k) = va (is:ie, j, kr)
+            enddo
+  
+            call gwdps (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, &
+                kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
+                hprime, oc, oa4, clx4, theta, sigma, gamma, elvmax)
+
+            call gwdc (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, cumabs (is:ie, j), &
+                pm, pi, dp, ktop (is:ie, j), kbot (is:ie, j), kcnv (is:ie, j))
+  
+            do k = 1, km
+                kr = km - k + 1
+                dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
+                ps_dt = 1 + dqv
+                q (is:ie, j, kr, sphum) = qv (is:ie, k) / ps_dt
+                pt (is:ie, j, kr) = ta (is:ie, k)
+                ua (is:ie, j, kr) = uu (is:ie, k)
+                va (is:ie, j, kr) = vv (is:ie, k)
+                delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
+            enddo
+ 
+            ! compute wind tendency at A grid fori D grid wind update
+            u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
+            v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
+
+            ! update pe, peln, pk, ps
+            do k = 2, km + 1
+                pe (is:ie, k, j) = pe (is:ie, k-1, j) + delp (is:ie, j, k-1)
+                peln (is:ie, k, j) = log (pe (is:ie, k, j))
+                pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
+            enddo
+
+            ps (is:ie, j) = pe (is:ie, km+1, j)
+
+            ! update pkz
+            if (.not. hydrostatic) then
+#ifdef MOIST_CAPPA
+                pkz (is:ie, j, 1:km) = exp (cappa (is:ie, j, 1:km) * &
+                    log (rrg * delp (is:ie, j, 1:km) / &
+                    delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
+#else
+                pkz (is:ie, j, 1:km) = exp (akap * log (rrg * delp (is:ie, j, 1:km) / &
+                    delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
+#endif
+            endif
+ 
+            if (consv .gt. consv_min) then
+                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
+                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
+                cvm = (1 - (q (is:ie, j, 1:km, sphum) + qliq + qsol)) * cv_air + &
+                    q (is:ie, j, 1:km, sphum) * cv_vap + qliq * c_liq + qsol * c_ice
+                te (is:ie, j, 1:km) = te (is:ie, j, 1:km) + &
+                    cvm * pt (is:ie, j, 1:km) / ((1. + r_vir * q (is:ie, j, 1:km, sphum)) * &
+                    (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
+                do k = 1, km
+                    te0_2d (is:ie, j) = te0_2d (is:ie, j) + te (is:ie, j, k)
+                enddo
+            endif
+
+        enddo
+
+        deallocate (oc)
+        deallocate (oa4)
+        deallocate (clx4)
+        deallocate (hprime)
+        deallocate (elvmax)
+        deallocate (theta)
+        deallocate (sigma)
+        deallocate (gamma)
+
+        deallocate (dz)
+        deallocate (zm)
+        deallocate (dp)
+        deallocate (pm)
+        deallocate (pi)
+        deallocate (pmk)
+
+        deallocate (ta)
+        deallocate (qv)
+        deallocate (uu)
+        deallocate (vv)
+
+        ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
+        if ( gridstruct%square_domain ) then
+            call mpp_update_domains (u_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.false.)
+            call mpp_update_domains (v_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.true.)
+        else
+            call mpp_update_domains (u_dt, domain, complete=.false.)
+            call mpp_update_domains (v_dt, domain, complete=.true.)
+        endif
+        ! update u_dt and v_dt in halo
+        call mpp_update_domains (u_dt, v_dt, domain)
+
+        ! update D grid wind
+        call update_dwinds_phys (is, ie, js, je, isd, ied, jsd, jed, abs (mdt), u_dt, v_dt, u, v, &
+                 gridstruct, npx, npy, km, domain)
+
+        ! update dry total energy
+        if (consv .gt. consv_min) then
+!$OMP parallel do default (none) shared (is, ie, js, je, km, te0_2d, hydrostatic, delp, &
+!$OMP                                    gridstruct, u, v, dp0, u0, v0, hs, delz, w) &
+!$OMP                           private (phis)
+            do j = js, je
+                if (hydrostatic) then
+                    do k = 1, km
+                        do i = is, ie
+                            te0_2d (i, j) = te0_2d (i, j) + delp (i, j, k) * &
+                                (0.25 * gridstruct%rsin2 (i, j) * (u (i, j, k) ** 2 + &
+                                u (i, j+1, k) ** 2 + v (i, j, k) ** 2 + v (i+1, j, k) ** 2 - &
+                                (u (i, j, k) + u (i, j+1, k)) * (v (i, j, k) + v (i+1, j, k)) * &
+                                gridstruct%cosa_s (i, j))) - dp0 (i, j, k) * &
+                                (0.25 * gridstruct%rsin2 (i, j) * (u0 (i, j, k) ** 2 + &
+                                u0 (i, j+1, k) ** 2 + v0 (i, j, k) ** 2 + v0 (i+1, j, k) ** 2 - &
+                                (u0 (i, j, k) + u0 (i, j+1, k)) * (v0 (i, j, k) + v0 (i+1, j, k)) * &
+                                gridstruct%cosa_s (i, j)))
+                        enddo
+                    enddo
+                else
+                    do i = is, ie
+                        phis (i, km+1) = hs (i, j)
+                    enddo
+                    do k = km, 1, -1
+                        do i = is, ie
+                            phis (i, k) = phis (i, k+1) - grav * delz (i, j, k)
+                        enddo
+                    enddo
+                    do k = 1, km
+                        do i = is, ie
+                            te0_2d (i, j) = te0_2d (i, j) + delp (i, j, k) * &
+                                (0.5 * (phis (i, k) + phis (i, k+1) + w (i, j, k) ** 2 + 0.5 * &
+                                gridstruct%rsin2 (i, j) * (u (i, j, k) ** 2 + u (i, j+1, k) ** 2 + &
+                                v (i, j, k) ** 2 + v (i+1, j, k) ** 2 - (u (i, j, k) + &
+                                u (i, j+1, k)) * (v (i, j, k) + v (i+1, j, k)) * &
+                                gridstruct%cosa_s (i, j)))) - dp0 (i, j, k) * &
+                                (0.5 * (phis (i, k) + phis (i, k+1) + w (i, j, k) ** 2 + &
+                                0.5 * gridstruct%rsin2 (i, j) * (u0 (i, j, k) ** 2 + &
+                                u0 (i, j+1, k) ** 2 + v0 (i, j, k) ** 2 + v0 (i+1, j, k) ** 2 - &
+                                (u0 (i, j, k) + u0 (i, j+1, k)) * (v0 (i, j, k) + v0 (i+1, j, k)) * &
+                                gridstruct%cosa_s (i, j))))
+                        enddo
+                    enddo
+                endif
+            enddo
+        end if
+
+        deallocate (u_dt)
+        deallocate (v_dt)
+        if (consv .gt. consv_min) then
+            deallocate (u0)
+            deallocate (v0)
+            deallocate (dp0)
+        endif
+
+        call timing_off ('gwd')
+
+    endif
+
+    !-----------------------------------------------------------------------
+    ! <<< Inline GWD
     !-----------------------------------------------------------------------
 
     !-----------------------------------------------------------------------
@@ -1004,15 +1301,20 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                      cappa (isd:, jsd, 1:), &
 #endif
                      consv .gt. consv_min, te (is:ie, j, kmp:km), &
-                     inline_mp%pcw (is:ie, j, kmp:km), inline_mp%edw (is:ie, j, kmp:km), inline_mp%oew (is:ie, j, kmp:km), &
+                     inline_mp%pcw (is:ie, j, kmp:km), inline_mp%edw (is:ie, j, kmp:km), &
+                     inline_mp%oew (is:ie, j, kmp:km), &
                      inline_mp%rrw (is:ie, j, kmp:km), inline_mp%tvw (is:ie, j, kmp:km), &
-                     inline_mp%pci (is:ie, j, kmp:km), inline_mp%edi (is:ie, j, kmp:km), inline_mp%oei (is:ie, j, kmp:km), &
+                     inline_mp%pci (is:ie, j, kmp:km), inline_mp%edi (is:ie, j, kmp:km), &
+                     inline_mp%oei (is:ie, j, kmp:km), &
                      inline_mp%rri (is:ie, j, kmp:km), inline_mp%tvi (is:ie, j, kmp:km), &
-                     inline_mp%pcr (is:ie, j, kmp:km), inline_mp%edr (is:ie, j, kmp:km), inline_mp%oer (is:ie, j, kmp:km), &
+                     inline_mp%pcr (is:ie, j, kmp:km), inline_mp%edr (is:ie, j, kmp:km), &
+                     inline_mp%oer (is:ie, j, kmp:km), &
                      inline_mp%rrr (is:ie, j, kmp:km), inline_mp%tvr (is:ie, j, kmp:km), &
-                     inline_mp%pcs (is:ie, j, kmp:km), inline_mp%eds (is:ie, j, kmp:km), inline_mp%oes (is:ie, j, kmp:km), &
+                     inline_mp%pcs (is:ie, j, kmp:km), inline_mp%eds (is:ie, j, kmp:km), &
+                     inline_mp%oes (is:ie, j, kmp:km), &
                      inline_mp%rrs (is:ie, j, kmp:km), inline_mp%tvs (is:ie, j, kmp:km), &
-                     inline_mp%pcg (is:ie, j, kmp:km), inline_mp%edg (is:ie, j, kmp:km), inline_mp%oeg (is:ie, j, kmp:km), &
+                     inline_mp%pcg (is:ie, j, kmp:km), inline_mp%edg (is:ie, j, kmp:km), &
+                     inline_mp%oeg (is:ie, j, kmp:km), &
                      inline_mp%rrg (is:ie, j, kmp:km), inline_mp%tvg (is:ie, j, kmp:km), &
                      inline_mp%prefluxw(is:ie, j, kmp:km), &
                      inline_mp%prefluxr(is:ie, j, kmp:km), inline_mp%prefluxi(is:ie, j, kmp:km), &

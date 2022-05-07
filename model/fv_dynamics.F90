@@ -44,7 +44,8 @@ module fv_dynamics_mod
    use fv_regional_mod,     only: a_step, p_step, k_step
    use fv_regional_mod,     only: current_time_in_seconds
    use boundary_mod,        only: nested_grid_BC_apply_intT
-   use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, fv_diag_type, fv_grid_bounds_type, inline_mp_type, inline_sas_type
+   use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, &
+                                  fv_diag_type, fv_grid_bounds_type, inline_mp_type, inline_sas_type
    use fv_nwp_nudge_mod,    only: do_adiabatic_init
 
 implicit none
@@ -598,7 +599,8 @@ contains
                      ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, &
                      hybrid_z,     &
-                     flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, flagstruct%do_inline_sas, flagstruct%do_inline_edmf, &
+                     flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
+                     flagstruct%do_inline_sas, flagstruct%do_inline_edmf, flagstruct%do_inline_gwd, &
                      inline_mp, inline_sas, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
                      flagstruct%w_limiter, flagstruct%do_am4_remap)
 

@@ -47,6 +47,8 @@ module gwd_mod
     
     real, parameter :: grav = 9.80665 ! acceleration due to gravity (m/s^2), ref: IFS
     
+    real, parameter :: rerth = 6.3712e6 ! radius of earth (m)
+    
     real, parameter :: pi = 4.0 * atan (1.0) ! ratio of circle circumference to diameter
 
     real, parameter :: rdgas = 287.05 ! gas constant for dry air (J/kg/K): ref: GFDL, GFS
@@ -69,16 +71,17 @@ module gwd_mod
     ! namelist parameters
     ! -----------------------------------------------------------------------
 
-    integer :: nmtvr ! number of topographic variables such as variance etc
+    integer :: nmtvr = 14 ! number of topographic variables such as variance etc
 
-    real :: cdmbgwd (2) ! multiplication factors for cdmb and gwd
-    real :: p_crit      ! Optional level above which GWD stress decays with height
+    real :: cdmbgwd (2) = (/2.0, 0.25/) ! multiplication factors for cdmb and gwd
+    real :: p_crit = 0.                 ! Optional level above which GWD stress decays with height
+    real :: cgwf (2) = (/0.5, 0.05/)    !< multiplication factor for convective GWD
 
     ! -----------------------------------------------------------------------
     ! namelist
     ! -----------------------------------------------------------------------
     
-    namelist / gwd_nml / nmtvr, cdmbgwd, p_crit
+    namelist / gwd_nml / nmtvr, cdmbgwd, p_crit, cgwf
     
 contains
 
@@ -384,13 +387,14 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
     
     real, intent (in) :: delt
     real, intent (in) :: gsize (im)
-    real, intent (in) :: u1 (im, km), v1 (im, km), t1 (im, km), q1 (im, km)
     real, intent (in) :: prsl (im, km), prsi (im, km + 1), del (im, km), &
         prslk (im, km), phil (im, km), phii (im, km + 1)
     real, intent (in) :: oc (im), oa4 (im, 4), clx4 (im, 4), hprime (im)
     real, intent (in) :: elvmax (im), theta (im), sigma (im), gamma (im)
 
-    real, intent (out) :: utgwd (im, km), vtgwd (im, km), ttgwd (im, km)
+    real, intent (inout) :: u1 (im, km), v1 (im, km), t1 (im, km), q1 (im, km)
+
+    real, intent (out), optional :: utgwd (im, km), vtgwd (im, km), ttgwd (im, km)
 
     real, intent (out), optional :: dusfc (im), dvsfc (im), rdxzb (im)
 
@@ -493,9 +497,17 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
         emax (i) = elvmax (i)
     enddo
     
+    do k = 1, km
+        do i = 1, im
+            if (present (utgwd)) utgwd (i, k) = 0.
+            if (present (vtgwd)) vtgwd (i, k) = 0.
+            if (present (ttgwd)) ttgwd (i, k) = 0.
+        enddo
+    enddo
+    
     do i = 1, im
-        dusfc (i) = 0.
-        dvsfc (i) = 0.
+        if (present (dusfc)) dusfc (i) = 0.
+        if (present (dvsfc)) dvsfc (i) = 0.
     enddo
     
     do k = 1, km
@@ -520,7 +532,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
     
     if (nmtvr .eq. 14) then
         ! ---- for lm and gwd calculation points
-        rdxzb (:) = 0.
+        if (present (rdxzb)) rdxzb (:) = 0.
         ipt = 0
         npt = 0
         do i = 1, im
@@ -696,7 +708,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
                     ! --- dividing stream lime is found when pe = exceeds ek.
                     if (pe (i) .ge. ek (i)) then
                         idxzb (i) = k
-                        rdxzb (j) = real (k)
+                        if (present (rdxzb)) rdxzb (j) = real (k)
                     endif
                     ! --- then mtn blocked flow is between zb = k (idxzb (i)) and surface
                     
@@ -824,7 +836,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
         
         do i = 1, npt
             idxzb (i) = 0
-            rdxzb (i) = 0.
+            if (present (rdxzb)) rdxzb (i) = 0.
         enddo
     endif
     
@@ -1298,25 +1310,29 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
             ! --- lm mb (* j *) changes overwrite gwd
             if (k .lt. idxzb (i) .and. idxzb (i) .ne. 0) then
                 dbim = db (i, k) / (1. + db (i, k) * delt)
-                vtgwd (j, k) = - dbim * v1 (j, k) + vtgwd (j, k)
-                utgwd (j, k) = - dbim * u1 (j, k) + utgwd (j, k)
+                if (present (vtgwd)) vtgwd (j, k) = - dbim * v1 (j, k)
+                if (present (utgwd)) utgwd (j, k) = - dbim * u1 (j, k)
                 eng1 = eng0 * (1.0 - dbim * delt) * (1.0 - dbim * delt)
                 ! if (abs (dbim * u1 (j, k)) .gt. .01) &
                 ! print *, ' in gwdps_lmi.f kdt = ', kdt, i, k, db (i, k), &
                 ! dbim, idxzb (i), u1 (j, k), v1 (j, k), me
-                dusfc (j) = dusfc (j) - dbim * u1 (j, k) * del (j, k)
-                dvsfc (j) = dvsfc (j) - dbim * v1 (j, k) * del (j, k)
+                if (present (dusfc)) dusfc (j) = dusfc (j) - dbim * u1 (j, k) * del (j, k)
+                if (present (dvsfc)) dvsfc (j) = dvsfc (j) - dbim * v1 (j, k) * del (j, k)
+                v1 (j, k) = v1 (j, k) - dbim * v1 (j, k) * delt
+                u1 (j, k) = u1 (j, k) - dbim * u1 (j, k) * delt
             else
-                
-                vtgwd (j, k) = dtauy + vtgwd (j, k)
-                utgwd (j, k) = dtaux + utgwd (j, k)
+                if (present (vtgwd)) vtgwd (j, k) = dtauy
+                if (present (utgwd)) utgwd (j, k) = dtaux
                 eng1 = 0.5 * (&
                      (u1 (j, k) + dtaux * delt) * (u1 (j, k) + dtaux * delt) &
                      + (v1 (j, k) + dtauy * delt) * (v1 (j, k) + dtauy * delt))
-                dusfc (j) = dusfc (j) + dtaux * del (j, k)
-                dvsfc (j) = dvsfc (j) + dtauy * del (j, k)
+                if (present (dusfc)) dusfc (j) = dusfc (j) + dtaux * del (j, k)
+                if (present (dvsfc)) dvsfc (j) = dvsfc (j) + dtauy * del (j, k)
+                v1 (j, k) = v1 (j, k) + dtauy * delt
+                u1 (j, k) = u1 (j, k) + dtaux * delt
             endif
-            ttgwd (j, k) = ttgwd (j, k) + max (eng0 - eng1, 0.) / cp_air / delt
+            if (present (ttgwd)) ttgwd (j, k) = max (eng0 - eng1, 0.) / cp_air / delt
+            t1 (j, k) = t1 (j, k) + max (eng0 - eng1, 0.) / cp_air
         enddo
     enddo
     ! if (lprnt) then
@@ -1328,8 +1344,8 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
     do i = 1, npt
         j = ipt (i)
         ! tem = (- 1.e3 / grav)
-        dusfc (j) = tem * dusfc (j)
-        dvsfc (j) = tem * dvsfc (j)
+        if (present (dusfc)) dusfc (j) = tem * dusfc (j)
+        if (present (dvsfc)) dvsfc (j) = tem * dvsfc (j)
     enddo
     
     ! monitor for excessive gravity wave drag tendencies if ncnt > 0
@@ -1537,9 +1553,9 @@ end subroutine gwdps
 ! crit2     : variable 2 for checking critical level
 ! =======================================================================
     
-subroutine gwdc (im, km, u1, v1, t1, q1, delt, &
-        prsl, prsi, del, qmax, ktop, kbot, kcnv, cldf, &
-        dlength, utgwc, vtgwc, tauctx, taucty)
+subroutine gwdc (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
+        prsl, prsi, del, ktop, kbot, kcnv, &
+        utgwc, vtgwc, tauctx, taucty)
     
     implicit none
     
@@ -1551,11 +1567,12 @@ subroutine gwdc (im, km, u1, v1, t1, q1, delt, &
     integer, intent (in) :: ktop (im), kbot (im), kcnv (im)
     
     real, intent (in) :: delt
-    real, intent (in) :: qmax (im), cldf (im), dlength (im)
-    real, intent (in) :: u1 (im, km), v1 (im, km), t1 (im, km), q1 (im, km)
+    real, intent (in) :: gsize (im), qmax (im)
     real, intent (in) :: prsl (im, km), prsi (im, km + 1), del (im, km)
 
-    real, intent (out) :: utgwc (im, km), vtgwc (im, km)
+    real, intent (inout) :: u1 (im, km), v1 (im, km), t1 (im, km), q1 (im, km)
+
+    real, intent (out), optional :: utgwc (im, km), vtgwc (im, km)
 
     real, intent (out), optional :: tauctx (im), taucty (im)
 
@@ -1566,7 +1583,7 @@ subroutine gwdc (im, km, u1, v1, t1, q1, delt, &
     ! cumchr1 (im, km)
     
     integer :: i, ii, k, k1, kk, kb, ilev, npt, kcb, kcldm
-    integer :: ipt (im)
+    integer :: ipt (im), cldf (im), dlength (im)
     
     real :: tem, tem1, tem2, qtem, wtgwc, tauct, &
         windcltop, shear, nonlinct, nonlin, nonlins, &
@@ -1605,6 +1622,10 @@ subroutine gwdc (im, km, u1, v1, t1, q1, delt, &
         pmid (:, :), dpmid (:, :), &
         ! pmid (:, :), cumchr (:, :), &
     brunm (:, :), rhom (:, :)
+
+    ! copy from gsmphys/physcons.f90
+    integer, parameter :: max_lon = 5000, max_lat = 2000, min_lon = 192, min_lat = 94
+    real :: dxmax, dxmin, dxinv, work1 (im), work2 (im)
     
     real, parameter :: &
         c1 = 1.41, c2 = - 0.38, ricrit = 0.25, &
@@ -1628,17 +1649,35 @@ subroutine gwdc (im, km, u1, v1, t1, q1, delt, &
     enddo
     do k = 1, km
         do i = 1, im
-            utgwc (i, k) = 0.0
-            vtgwc (i, k) = 0.0
+            if (present (utgwc)) utgwc (i, k) = 0.0
+            if (present (vtgwc)) vtgwc (i, k) = 0.0
             ! brunm (i, k) = 0.0
             ! rhom (i, k) = 0.0
         enddo
     enddo
     do i = 1, im
-        tauctx (i) = 0.0
-        taucty (i) = 0.0
+        if (present (tauctx)) tauctx (i) = 0.0
+        if (present (taucty)) taucty (i) = 0.0
     enddo
     if (npt == 0) return ! no gwdc calculation done
+
+    !-------------------------------------------------------------------
+    ! calculate deep convective cloud fraction at the cloud top.
+    tem = rerth * rerth * (pi + pi) * pi
+    dxmax = log (tem / (max_lon * max_lat))
+    dxmin = log (tem / (min_lon * min_lat))
+    dxinv = 1.0 / (dxmax - dxmin)
+    do i = 1, im
+        work1 (i) = (2.0 * log (gsize (i)) - dxmin) * dxinv
+        work1 (i) = max (0.0, min (1.0, work1 (i)))
+        work2 (i) = 1.0 - work1 (i)
+        cldf (i) = cgwf (1) * work1 (i) + cgwf (2) * work2 (i)
+    enddo
+    !-------------------------------------------------------------------
+    ! calculate grid spacing in the direction of basic wind at the cloud top
+    do i = 1, im
+        dlength(i) = sqrt (2. * gsize (i) * gsize (i))
+    enddo
     
     ! ***********************************************************************
     
@@ -2653,23 +2692,23 @@ subroutine gwdc (im, km, u1, v1, t1, q1, delt, &
         k1 = km - k + 1
         do i = 1, npt
             ii = ipt (i)
-            utgwc (ii, k1) = utgwcl (i, k)
-            
-            vtgwc (ii, k1) = vtgwcl (i, k)
+            if (present (utgwc)) utgwc (ii, k1) = utgwcl (i, k)
+            if (present (vtgwc)) vtgwc (ii, k1) = vtgwcl (i, k)
             
             ! brunm (ii, kk) = brunm (i, k)
             ! brunm (i, k) = tem
             
             ! rhom (ii, kk) = rhom (i, k)
-            
+            u1 (ii, k1) = u1 (ii, k1) + utgwcl (i, k) * delt
+            v1 (ii, k1) = v1 (ii, k1) + vtgwcl (i, k) * delt
         enddo
         ! if (lprnt) write (7000, *) ' k = ', k, ' k1 = ', k1, ' utgwc = ', &
         ! utgwc (ipr, k1), ' vtgwc = ', vtgwc (ipr, k1)
     enddo
     do i = 1, npt
         ii = ipt (i)
-        tauctx (ii) = tauctxl (i)
-        taucty (ii) = tauctyl (i)
+        if (present (tauctx)) tauctx (ii) = tauctxl (i)
+        if (present (taucty)) taucty (ii) = tauctyl (i)
     enddo
     
     ! if (lprnt) then

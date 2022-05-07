@@ -67,7 +67,8 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
-                      do_inline_mp, do_inline_sas, do_inline_edmf, inline_mp, inline_sas, c2l_ord, bd, fv_debug, &
+                      do_inline_mp, do_inline_sas, do_inline_edmf, do_inline_gwd, &
+                      inline_mp, inline_sas, c2l_ord, bd, fv_debug, &
                       w_limiter, do_am4_remap)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
@@ -101,6 +102,7 @@ contains
   logical, intent(in):: do_inline_mp
   logical, intent(in):: do_inline_sas
   logical, intent(in):: do_inline_edmf
+  logical, intent(in):: do_inline_gwd
   logical, intent(in):: fill                  ! fill negative tracers
   logical, intent(in):: reproduce_sum
   logical, intent(in):: adiabatic, do_adiabatic_init
@@ -840,7 +842,7 @@ contains
              c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
              v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
              inline_mp, inline_sas, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-             do_inline_mp, do_inline_sas, do_inline_edmf, do_sat_adj, last_step)
+             do_inline_mp, do_inline_sas, do_inline_edmf, do_inline_gwd, do_sat_adj, last_step)
 
 !-----------------------------------------------------------------------
 ! <<< Fast Physics

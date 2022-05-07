@@ -370,6 +370,9 @@ module fv_arrays_mod
    logical :: do_inline_edmf = .false.!< Controls Inline SA-TKE-EDMF, in which the SA-TKE-EDMF is
                                     !< called entirely within FV3. If .true. disabling SA-TKE-EDMF within the physics
                                     !< is very strongly recommended. .false. by default.
+   logical :: do_inline_gwd = .false.!< Controls Inline GWD, in which the GWD is
+                                    !< called entirely within FV3. If .true. disabling GWD within the physics
+                                    !< is very strongly recommended. .false. by default.
    logical :: do_aerosol = .false.  !< Controls climatological aerosol data used in the GFDL cloud microphyiscs.
                                     !< .false. by default.
    logical :: do_f3d    = .false.   !
