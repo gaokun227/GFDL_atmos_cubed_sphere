@@ -29,7 +29,8 @@ module fast_phys_mod
 
     use constants_mod, only: rdgas, grav, kappa
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
-    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type, inline_sas_type, inline_gwd_type
+    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type, &
+                             inline_edmf_type, inline_sas_type, inline_gwd_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index
@@ -52,7 +53,7 @@ contains
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
                v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
-               inline_mp, inline_sas, inline_gwd, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+               inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
                do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, do_sat_adj, last_step)
     
     implicit none
@@ -105,6 +106,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     type (domain2d), intent (inout) :: domain
 
     type (inline_mp_type), intent (inout) :: inline_mp
+    type (inline_edmf_type), intent (inout) :: inline_edmf
     type (inline_sas_type), intent (inout) :: inline_sas
     type (inline_gwd_type), intent (inout) :: inline_gwd
 
@@ -129,7 +131,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     integer, allocatable, dimension (:) :: lsm, kinver
 
-    real, allocatable, dimension (:) :: rn, xmu, rbsoil, zorl, u10m, v10m, fm, fh, tsea
+    real, allocatable, dimension (:) :: rn, xmu, rbsoil, u10m, v10m
     real, allocatable, dimension (:) :: heat, evap, stress, spd1, tmp
 
     real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql
@@ -286,12 +288,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (hlw (is:ie, 1:km))
         allocate (xmu (is:ie))
         allocate (rbsoil (is:ie))
-        allocate (zorl (is:ie))
         allocate (u10m (is:ie))
         allocate (v10m (is:ie))
-        allocate (fm (is:ie))
-        allocate (fh (is:ie))
-        allocate (tsea (is:ie))
         allocate (heat (is:ie))
         allocate (evap (is:ie))
         allocate (stress (is:ie))
@@ -332,11 +330,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, hpbl, &
-!$OMP                                    ptop, ntke, kpbl) &
+!$OMP                                    ptop, ntke, kpbl, inline_edmf) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, lsm, zi, pi, pik, pmk, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
-!$OMP                                    swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
-!$OMP                                    tsea, heat, evap, stress, spd1, kinver, &
+!$OMP                                    swh, hlw, xmu, rbsoil, u10m, v10m, &
+!$OMP                                    heat, evap, stress, spd1, kinver, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
 
         do j = js, je
@@ -356,12 +354,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             hlw = 0.0
             xmu = 0.0
             rbsoil = 0.0
-            zorl = 1.0
             u10m = 0.0
             v10m = 0.0
-            fm = 1.0
-            fh = 1.0
-            tsea = 300.0
             heat = 0.0
             evap = 0.0
             stress = 0.0
@@ -412,8 +406,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
             call sa_tke_edmf (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
                 abs (mdt), uu, vv, ta, qa, gsize, lsm, &
-                swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
-                tsea, heat, evap, stress, spd1, kinver, &
+                swh, hlw, xmu, rbsoil, inline_edmf%zorl (is:ie, j), u10m, v10m, &
+                inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
+                inline_edmf%tsfc (is:ie, j), heat, evap, stress, spd1, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl (is:ie, j), kpbl (is:ie, j))
 
             do k = 1, km
@@ -499,12 +494,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         deallocate (hlw)
         deallocate (xmu)
         deallocate (rbsoil)
-        deallocate (zorl)
         deallocate (u10m)
         deallocate (v10m)
-        deallocate (fm)
-        deallocate (fh)
-        deallocate (tsea)
         deallocate (heat)
         deallocate (evap)
         deallocate (stress)

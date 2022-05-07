@@ -1099,6 +1099,15 @@ module fv_arrays_mod
 
   end type inline_mp_type
 
+  type inline_edmf_type
+
+    real, _ALLOCATABLE :: zorl(:,:)     _NULL
+    real, _ALLOCATABLE :: ffmm(:,:)     _NULL
+    real, _ALLOCATABLE :: ffhh(:,:)     _NULL
+    real, _ALLOCATABLE :: tsfc(:,:)     _NULL
+
+  end type inline_edmf_type
+
   type inline_sas_type
 
     real, _ALLOCATABLE :: prec(:,:)     _NULL
@@ -1405,6 +1414,7 @@ module fv_arrays_mod
      integer :: atmos_axes(4)
 
      type(inline_mp_type) :: inline_mp
+     type(inline_edmf_type) :: inline_edmf
      type(inline_sas_type) :: inline_sas
      type(inline_gwd_type) :: inline_gwd
      type(phys_diag_type) :: phys_diag
@@ -1599,6 +1609,11 @@ contains
     allocate ( Atm%inline_mp%rrg(is:ie,js:je,npz) )
     allocate ( Atm%inline_mp%tvg(is:ie,js:je,npz) )
 
+    allocate ( Atm%inline_edmf%zorl(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%ffmm(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%ffhh(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%tsfc(is:ie,js:je) )
+
     allocate ( Atm%inline_sas%prec(is:ie,js:je) )
 
     allocate ( Atm%inline_gwd%hprime(is:ie,js:je) )
@@ -1728,6 +1743,11 @@ contains
            Atm%inline_mp%oeg(i,j,:) = real_big
            Atm%inline_mp%rrg(i,j,:) = real_big
            Atm%inline_mp%tvg(i,j,:) = real_big
+
+           Atm%inline_edmf%zorl(i,j) = real_big
+           Atm%inline_edmf%ffmm(i,j) = real_big
+           Atm%inline_edmf%ffhh(i,j) = real_big
+           Atm%inline_edmf%tsfc(i,j) = real_big
 
            Atm%inline_sas%prec(i,j) = real_big
 
@@ -2028,6 +2048,11 @@ contains
     deallocate ( Atm%inline_mp%oeg )
     deallocate ( Atm%inline_mp%rrg )
     deallocate ( Atm%inline_mp%tvg )
+
+    deallocate ( Atm%inline_edmf%zorl )
+    deallocate ( Atm%inline_edmf%ffmm )
+    deallocate ( Atm%inline_edmf%ffhh )
+    deallocate ( Atm%inline_edmf%tsfc )
 
     deallocate ( Atm%inline_sas%prec )
 

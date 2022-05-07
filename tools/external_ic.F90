@@ -440,6 +440,14 @@ contains
       call register_axis(SFC_restart, dim_names_alloc(2), "y")
       call register_axis(SFC_restart, dim_names_alloc(1), "x")
       call register_restart_field(SFC_restart, 'tsea', Atm%ts, dim_names_alloc)
+
+      if ( Atm%flagstruct%do_inline_edmf ) then
+        call register_restart_field(SFC_restart, 'zorl', Atm%inline_edmf%zorl, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'ffmm', Atm%inline_edmf%ffmm, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'ffhh', Atm%inline_edmf%ffhh, dim_names_alloc)
+        Atm%inline_edmf%tsfc = Atm%ts
+      endif
+
       call read_restart(SFC_restart)
       call close_file(SFC_restart)
       deallocate (dim_names_alloc)
@@ -483,7 +491,6 @@ contains
         call register_restart_field(ORO_restart, 'ol1', Atm%inline_gwd%ol(:,:,1), dim_names_2d)
         call register_restart_field(ORO_restart, 'ol2', Atm%inline_gwd%ol(:,:,2), dim_names_2d)
         call register_restart_field(ORO_restart, 'ol3', Atm%inline_gwd%ol(:,:,3), dim_names_2d)
-        call register_restart_field(ORO_restart, 'ol4', Atm%inline_gwd%ol(:,:,4), dim_names_2d)
         call register_restart_field(ORO_restart, 'ol4', Atm%inline_gwd%ol(:,:,4), dim_names_2d)
         call register_restart_field(ORO_restart, 'theta', Atm%inline_gwd%theta, dim_names_2d)
         call register_restart_field(ORO_restart, 'sigma', Atm%inline_gwd%sigma, dim_names_2d)

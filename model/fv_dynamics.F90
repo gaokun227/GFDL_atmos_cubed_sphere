@@ -46,7 +46,7 @@ module fv_dynamics_mod
    use boundary_mod,        only: nested_grid_BC_apply_intT
    use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, &
                                   fv_diag_type, fv_grid_bounds_type, inline_mp_type, &
-                                  inline_sas_type, inline_gwd_type
+                                  inline_edmf_type, inline_sas_type, inline_gwd_type
    use fv_nwp_nudge_mod,    only: do_adiabatic_init
 
 implicit none
@@ -78,7 +78,8 @@ contains
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
-                        parent_grid, domain, inline_mp, inline_sas, inline_gwd, diss_est, time_total)
+                        parent_grid, domain, inline_mp, inline_edmf, inline_sas, &
+                        inline_gwd, diss_est, time_total)
 
     real, intent(IN) :: bdt  ! Large time-step
     real, intent(IN) :: consv_te
@@ -136,6 +137,7 @@ contains
     real, intent(in),    dimension(npz+1):: ak, bk
 
     type(inline_mp_type), intent(inout) :: inline_mp
+    type(inline_edmf_type), intent(inout) :: inline_edmf
     type(inline_sas_type), intent(inout) :: inline_sas
     type(inline_gwd_type), intent(inout) :: inline_gwd
 
@@ -413,9 +415,6 @@ contains
   mdt = bdt / real(k_split)
 
   ! Initialize rain, ice, snow and graupel precipitaiton
-  if (flagstruct%do_inline_sas) then
-      inline_sas%prec = 0.0
-  endif
   if (flagstruct%do_inline_mp) then
       inline_mp%prew = 0.0
       inline_mp%prer = 0.0
@@ -442,6 +441,9 @@ contains
       if (allocated(inline_mp%t_dt))  inline_mp%t_dt = 0.0
       if (allocated(inline_mp%u_dt)) inline_mp%u_dt = 0.0
       if (allocated(inline_mp%v_dt)) inline_mp%v_dt = 0.0
+  endif
+  if (flagstruct%do_inline_sas) then
+      inline_sas%prec = 0.0
   endif
 
                                                   call timing_on('FV_DYN_LOOP')
@@ -603,8 +605,8 @@ contains
                      hybrid_z,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      flagstruct%do_inline_edmf, flagstruct%do_inline_sas, flagstruct%do_inline_gwd, &
-                     inline_mp, inline_sas, inline_gwd, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
-                     flagstruct%w_limiter, flagstruct%do_am4_remap)
+                     inline_mp, inline_edmf, inline_sas, inline_gwd, flagstruct%c2l_ord, bd, &
+                     flagstruct%fv_debug, flagstruct%w_limiter, flagstruct%do_am4_remap)
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split
