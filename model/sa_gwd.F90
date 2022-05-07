@@ -20,14 +20,14 @@
 !***********************************************************************
 
 ! =======================================================================
-! Gravity Wave Drag (GWD) Package
+! Scale-Aware Gravity Wave Drag (SA-GWD) Package
 ! This package includes orographic gravity wave drag, mountain blokcing,
 ! and convective gravity wave drag
 ! Developer:
 ! References: 
 ! =======================================================================
 
-module gwd_mod
+module sa_gwd_mod
 
     implicit none
 
@@ -37,9 +37,9 @@ module gwd_mod
     ! public subroutines, functions, and variables
     ! -----------------------------------------------------------------------
     
-    public :: gwd_init
-    public :: gwdps
-    public :: gwdc
+    public :: sa_gwd_init
+    public :: sa_gwd_oro
+    public :: sa_gwd_cnv
 
     ! -----------------------------------------------------------------------
     ! physics constants
@@ -89,7 +89,7 @@ contains
 ! GWD initialization
 ! =======================================================================
 
-subroutine gwd_init (input_nml_file, logunit)
+subroutine sa_gwd_init (input_nml_file, logunit)
     
     implicit none
     
@@ -115,7 +115,7 @@ subroutine gwd_init (input_nml_file, logunit)
     write (logunit, *) "gwd_mod"
     write (logunit, nml = gwd_nml)
     
-end subroutine gwd_init
+end subroutine sa_gwd_init
 
 ! =======================================================================
 ! This subroutine is the parameterization of orographic gravity wave
@@ -371,7 +371,7 @@ end subroutine gwd_init
 ! Jan 2014 J. Wang merge henry and fangin's dissipation heat in GFS to nems
 ! =======================================================================
 
-subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
+subroutine sa_gwd_oro (im, km, u1, v1, t1, q1, delt, gsize, &
         kpbl, prsi, del, prsl, prslk, phii, phil, &
         hprime, oc, oa4, clx4, theta, sigma, gamma, elvmax, &
         utgwd, vtgwd, ttgwd, dusfc, dvsfc, rdxzb)
@@ -1390,7 +1390,7 @@ subroutine gwdps (im, km, u1, v1, t1, q1, delt, gsize, &
     ! print *, ' in gwdps_lm.f 18 = ', a (ipt (1), idxzb (1)), &
     ! b (ipt (1), idxzb (1)), me
 
-end subroutine gwdps
+end subroutine sa_gwd_oro
     
 ! =======================================================================
 ! Stationary convection forced gravity wave drag based on chun and
@@ -1553,7 +1553,7 @@ end subroutine gwdps
 ! crit2     : variable 2 for checking critical level
 ! =======================================================================
     
-subroutine gwdc (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
+subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
         prsl, prsi, del, ktop, kbot, kcnv, &
         utgwc, vtgwc, tauctx, taucty)
     
@@ -2740,6 +2740,6 @@ subroutine gwdc (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
     deallocate (plnmid, utgwcl, vtgwcl, basicum, u, v, t, &
         pmid, dpmid, brunm, rhom, taugw)
     
-end subroutine gwdc
+end subroutine sa_gwd_cnv
 
-end module gwd_mod
+end module sa_gwd_mod

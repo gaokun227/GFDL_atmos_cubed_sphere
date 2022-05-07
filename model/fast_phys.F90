@@ -37,6 +37,7 @@ module fast_phys_mod
     use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, cv_vap
     use sa_sas_mod, only: sa_sas_deep, sa_sas_shal
     use sa_tke_edmf_mod, only: sa_tke_edmf
+    use sa_gwd_mod, only: sa_gwd_oro, sa_gwd_cnv
     
     implicit none
     
@@ -884,12 +885,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     !-----------------------------------------------------------------------
 
     !-----------------------------------------------------------------------
-    ! Inline GWD >>>
+    ! Inline SA-GWD >>>
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_gwd) then
 
-        call timing_on ('gwd')
+        call timing_on ('sa_gwd')
 
         allocate (oc (is:ie))
         allocate (oa4 (is:ie, 4))
@@ -1008,11 +1009,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 vv (is:ie, k) = va (is:ie, j, kr)
             enddo
   
-            call gwdps (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, &
+            call sa_gwd_oro (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, &
                 kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
                 hprime, oc, oa4, clx4, theta, sigma, gamma, elvmax)
 
-            call gwdc (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, cumabs (is:ie, j), &
+            call sa_gwd_cnv (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, cumabs (is:ie, j), &
                 pm, pi, dp, ktop (is:ie, j), kbot (is:ie, j), kcnv (is:ie, j))
   
             do k = 1, km
@@ -1158,12 +1159,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             deallocate (dp0)
         endif
 
-        call timing_off ('gwd')
+        call timing_off ('sa_gwd')
 
     endif
 
     !-----------------------------------------------------------------------
-    ! <<< Inline GWD
+    ! <<< Inline SA-GWD
     !-----------------------------------------------------------------------
 
     !-----------------------------------------------------------------------
