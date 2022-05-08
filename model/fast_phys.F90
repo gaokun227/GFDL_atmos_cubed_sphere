@@ -37,7 +37,7 @@ module fast_phys_mod
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, cv_vap
     use sa_sas_mod, only: sa_sas_deep, sa_sas_shal
-    use sa_tke_edmf_mod, only: sa_tke_edmf
+    use sa_tke_edmf_mod, only: sa_tke_edmf_sfc, sa_tke_edmf_pbl
     use sa_gwd_mod, only: sa_gwd_oro, sa_gwd_cnv
     
     implicit none
@@ -129,13 +129,13 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     real, dimension (is:ie, km+1) :: phis
 
-    integer, allocatable, dimension (:) :: lsm, kinver
+    integer, allocatable, dimension (:) :: lsm, kinver, vegtype
 
-    real, allocatable, dimension (:) :: rn, xmu, rbsoil, u10m, v10m
-    real, allocatable, dimension (:) :: heat, evap, stress, spd1, tmp
+    real, allocatable, dimension (:) :: rn, xmu, rb, u10m, v10m, sigmaf
+    real, allocatable, dimension (:) :: heat, evap, stress, wind, tmp, qsurf
 
     real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql
-    real, allocatable, dimension (:,:) :: ta, uu, vv, ww, swh, hlw
+    real, allocatable, dimension (:,:) :: ta, uu, vv, ww, swh, lwh
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
@@ -285,15 +285,18 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (qa (is:ie, 1:km, 1:nq))
 
         allocate (swh (is:ie, 1:km))
-        allocate (hlw (is:ie, 1:km))
+        allocate (lwh (is:ie, 1:km))
         allocate (xmu (is:ie))
-        allocate (rbsoil (is:ie))
+        allocate (rb (is:ie))
         allocate (u10m (is:ie))
         allocate (v10m (is:ie))
         allocate (heat (is:ie))
         allocate (evap (is:ie))
         allocate (stress (is:ie))
-        allocate (spd1 (is:ie))
+        allocate (wind (is:ie))
+        allocate (sigmaf (is:ie))
+        allocate (vegtype (is:ie))
+        allocate (qsurf (is:ie))
 
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
@@ -333,8 +336,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    ptop, ntke, kpbl, inline_edmf) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, lsm, zi, pi, pik, pmk, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
-!$OMP                                    swh, hlw, xmu, rbsoil, u10m, v10m, &
-!$OMP                                    heat, evap, stress, spd1, kinver, &
+!$OMP                                    swh, lwh, xmu, rb, u10m, v10m, sigmaf, vegtype, &
+!$OMP                                    heat, evap, stress, wind, kinver, qsurf, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
 
         do j = js, je
@@ -351,15 +354,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
             ! These need to be reviewed later
             swh = 0.0
-            hlw = 0.0
+            lwh = 0.0
             xmu = 0.0
-            rbsoil = 0.0
-            u10m = 0.0
-            v10m = 0.0
             heat = 0.0
             evap = 0.0
-            stress = 0.0
-            spd1 = 1.0
+            qsurf = 0.0
 
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
@@ -402,13 +401,25 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
             do i = is, ie
                 if (hs (i, j) .gt. 0) lsm (i) = 1
+                sigmaf (i) = max (inline_edmf%vfrac (i, j), 0.01)
+                vegtype (i) = int (inline_edmf%vtype (i, j) + 0.5)
             enddo
 
-            call sa_tke_edmf (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
+            call sa_tke_edmf_sfc (ie-is+1, pi (is:ie, 1), uu (is:ie, 1), vv (is:ie, 1), &
+                ta (is:ie, 1), qa (is:ie, 1, 1), inline_edmf%tsfc (is:ie, j), qsurf, &
+                pm (is:ie, 1), pik (is:ie, 1) / pmk (is:ie, 1), &
+                evap, inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
+                zm (is:ie, 1) / grav, inline_edmf%snwdph (is:ie, j), &
+                inline_edmf%zorl (is:ie, j), lsm, inline_edmf%uustar (is:ie, j), &
+                sigmaf, vegtype, inline_edmf%shdmax (is:ie, j), &
+                u10m_out = u10m, v10m_out = v10m, rb_out = rb, &
+                stress_out = stress, wind_out = wind)
+
+            call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
                 abs (mdt), uu, vv, ta, qa, gsize, lsm, &
-                swh, hlw, xmu, rbsoil, inline_edmf%zorl (is:ie, j), u10m, v10m, &
+                swh, lwh, xmu, rb, inline_edmf%zorl (is:ie, j), u10m, v10m, &
                 inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
-                inline_edmf%tsfc (is:ie, j), heat, evap, stress, spd1, kinver, &
+                inline_edmf%tsfc (is:ie, j), heat, evap, stress, wind, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl (is:ie, j), kpbl (is:ie, j))
 
             do k = 1, km
@@ -491,15 +502,18 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         deallocate (qa)
 
         deallocate (swh)
-        deallocate (hlw)
+        deallocate (lwh)
         deallocate (xmu)
-        deallocate (rbsoil)
+        deallocate (rb)
         deallocate (u10m)
         deallocate (v10m)
         deallocate (heat)
         deallocate (evap)
         deallocate (stress)
-        deallocate (spd1)
+        deallocate (wind)
+        deallocate (sigmaf)
+        deallocate (vegtype)
+        deallocate (qsurf)
 
         ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
         if ( gridstruct%square_domain ) then
@@ -984,7 +998,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
             enddo
-  
+
             call sa_gwd_oro (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, &
                 kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
                 inline_gwd%hprime (is:ie, j), inline_gwd%oc (is:ie, j), inline_gwd%oa (is:ie, j, :), &
