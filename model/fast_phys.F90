@@ -131,11 +131,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     integer, allocatable, dimension (:) :: lsm, kinver, vegtype
 
-    real, allocatable, dimension (:) :: rn, xmu, rb, u10m, v10m, sigmaf
-    real, allocatable, dimension (:) :: heat, evap, stress, wind, tmp, qsurf
+    real, allocatable, dimension (:) :: rn, rb, u10m, v10m, sigmaf
+    real, allocatable, dimension (:) :: stress, wind, tmp, qsurf
 
     real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql
-    real, allocatable, dimension (:,:) :: ta, uu, vv, ww, swh, lwh
+    real, allocatable, dimension (:,:) :: ta, uu, vv, ww, radh
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
@@ -284,14 +284,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (vv (is:ie, 1:km))
         allocate (qa (is:ie, 1:km, 1:nq))
 
-        allocate (swh (is:ie, 1:km))
-        allocate (lwh (is:ie, 1:km))
-        allocate (xmu (is:ie))
+        allocate (radh (is:ie, 1:km))
         allocate (rb (is:ie))
         allocate (u10m (is:ie))
         allocate (v10m (is:ie))
-        allocate (heat (is:ie))
-        allocate (evap (is:ie))
         allocate (stress (is:ie))
         allocate (wind (is:ie))
         allocate (sigmaf (is:ie))
@@ -336,8 +332,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    ptop, ntke, kpbl, inline_edmf) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, lsm, zi, pi, pik, pmk, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
-!$OMP                                    swh, lwh, xmu, rb, u10m, v10m, sigmaf, vegtype, &
-!$OMP                                    heat, evap, stress, wind, kinver, qsurf, &
+!$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, &
+!$OMP                                    stress, wind, kinver, qsurf, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
 
         do j = js, je
@@ -353,11 +349,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             kpbl (is:ie, j) = 1
 
             ! These need to be reviewed later
-            swh = 0.0
-            lwh = 0.0
-            xmu = 0.0
-            heat = 0.0
-            evap = 0.0
             qsurf = 0.0
 
             if (consv .gt. consv_min) then
@@ -397,6 +388,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
+                radh (is:ie, k) = inline_edmf%radh (is:ie, j, kr)
             enddo
 
             do i = is, ie
@@ -408,7 +400,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             call sa_tke_edmf_sfc (ie-is+1, pi (is:ie, 1), uu (is:ie, 1), vv (is:ie, 1), &
                 ta (is:ie, 1), qa (is:ie, 1, 1), inline_edmf%tsfc (is:ie, j), qsurf, &
                 pm (is:ie, 1), pik (is:ie, 1) / pmk (is:ie, 1), &
-                evap, inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
+                inline_edmf%evap (is:ie, j), inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
                 zm (is:ie, 1) / grav, inline_edmf%snwdph (is:ie, j), &
                 inline_edmf%zorl (is:ie, j), lsm, inline_edmf%uustar (is:ie, j), &
                 sigmaf, vegtype, inline_edmf%shdmax (is:ie, j), &
@@ -417,9 +409,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
             call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
                 abs (mdt), uu, vv, ta, qa, gsize, lsm, &
-                swh, lwh, xmu, rb, inline_edmf%zorl (is:ie, j), u10m, v10m, &
+                radh, rb, inline_edmf%zorl (is:ie, j), u10m, v10m, &
                 inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
-                inline_edmf%tsfc (is:ie, j), heat, evap, stress, wind, kinver, &
+                inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
+                inline_edmf%evap (is:ie, j), stress, wind, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl (is:ie, j), kpbl (is:ie, j))
 
             do k = 1, km
@@ -501,14 +494,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         deallocate (vv)
         deallocate (qa)
 
-        deallocate (swh)
-        deallocate (lwh)
-        deallocate (xmu)
+        deallocate (radh)
         deallocate (rb)
         deallocate (u10m)
         deallocate (v10m)
-        deallocate (heat)
-        deallocate (evap)
         deallocate (stress)
         deallocate (wind)
         deallocate (sigmaf)

@@ -1110,6 +1110,9 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: vfrac(:,:)     _NULL
     real, _ALLOCATABLE :: snwdph(:,:)     _NULL
     real, _ALLOCATABLE :: uustar(:,:)     _NULL
+    real, _ALLOCATABLE :: radh(:,:,:)     _NULL
+    real, _ALLOCATABLE :: hflx(:,:)     _NULL
+    real, _ALLOCATABLE :: evap(:,:)     _NULL
 
   end type inline_edmf_type
 
@@ -1623,6 +1626,9 @@ contains
     allocate ( Atm%inline_edmf%vfrac(is:ie,js:je) )
     allocate ( Atm%inline_edmf%snwdph(is:ie,js:je) )
     allocate ( Atm%inline_edmf%uustar(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%radh(is:ie,js:je,npz) )
+    allocate ( Atm%inline_edmf%hflx(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%evap(is:ie,js:je) )
 
     allocate ( Atm%inline_sas%prec(is:ie,js:je) )
 
@@ -1763,6 +1769,9 @@ contains
            Atm%inline_edmf%vfrac(i,j) = real_big
            Atm%inline_edmf%snwdph(i,j) = real_big
            Atm%inline_edmf%uustar(i,j) = real_big
+           Atm%inline_edmf%radh(i,j,:) = 0.0
+           Atm%inline_edmf%hflx(i,j) = 0.0
+           Atm%inline_edmf%evap(i,j) = 0.0
 
            Atm%inline_sas%prec(i,j) = real_big
 
@@ -2073,6 +2082,9 @@ contains
     deallocate ( Atm%inline_edmf%vfrac )
     deallocate ( Atm%inline_edmf%snwdph )
     deallocate ( Atm%inline_edmf%uustar )
+    deallocate ( Atm%inline_edmf%radh )
+    deallocate ( Atm%inline_edmf%hflx )
+    deallocate ( Atm%inline_edmf%evap )
 
     deallocate ( Atm%inline_sas%prec )
 

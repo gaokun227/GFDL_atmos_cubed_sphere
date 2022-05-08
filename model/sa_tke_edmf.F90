@@ -175,7 +175,7 @@ end subroutine sa_tke_edmf_init
 
 subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         delt, u1, v1, t1, q1, gsize, islimsk, &
-        swh, hlw, xmu, rbsoil, zorl, u10m, v10m, fm, fh, &
+        radh, rbsoil, zorl, u10m, v10m, fm, fh, &
         tsea, heat, evap, stress, spd1, kinver, &
         psk, del, prsi, prsl, prslk, phii, phil, &
         hpbl, kpbl, dusfc, dvsfc, dtsfc, dqsfc, dkt_out)
@@ -190,8 +190,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     integer, intent (in) :: kinver (im), islimsk (im)
 
     real, intent (in) :: delt
-    real, intent (in) :: swh (im, km), hlw (im, km), &
-        xmu (im), gsize (im), &
+    real, intent (in) :: radh (im, km), gsize (im), &
         psk (im), rbsoil (im), &
         zorl (im), tsea (im), &
         u10m (im), v10m (im), &
@@ -642,7 +641,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             cku (i, k) = 0.
             ckt (i, k) = 0.
             tem = zi (i, k + 1) - zi (i, k)
-            radx (i, k) = tem * (swh (i, k) * xmu (i) + hlw (i, k))
+            radx (i, k) = tem * radh (i, k)
         enddo
     enddo
     

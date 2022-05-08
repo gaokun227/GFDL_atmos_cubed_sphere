@@ -1302,7 +1302,15 @@ contains
          Atm(n)%delp(i,j,k1) = q0
          Atm(n)%q(i,j,k1,1:nq_adv) = qwat(1:nq_adv) / q0
          if (dnats .gt. 0) Atm(n)%q(i,j,k1,nq_adv+1:nq) = IPD_Data(nb)%Stateout%gq0(ix,k,nq_adv+1:nq)
+         if (Atm(n)%flagstruct%do_inline_edmf) Atm(n)%inline_edmf%radh(i,j,k1) = IPD_Data(nb)%Stateout%radh(ix,k)
        enddo
+     enddo
+
+     do ix = 1, blen
+       i = Atm_block%index(nb)%ii(ix)
+       j = Atm_block%index(nb)%jj(ix)
+       if (Atm(n)%flagstruct%do_inline_edmf) Atm(n)%inline_edmf%hflx(i,j) = IPD_Data(nb)%Stateout%hflx(ix)
+       if (Atm(n)%flagstruct%do_inline_edmf) Atm(n)%inline_edmf%evap(i,j) = IPD_Data(nb)%Stateout%evap(ix)
      enddo
 
 !GFDL     if ( dnats > 0 ) then
