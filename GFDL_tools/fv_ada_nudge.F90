@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -37,11 +37,8 @@ module fv_ada_nudge_mod
 
  use external_sst_mod,  only: i_sst, j_sst, sst_ncep, sst_anom, forecast_mode
  use diag_manager_mod,  only: register_diag_field, send_data
- use constants_mod,     only: pi, grav, rdgas, cp_air, kappa, seconds_per_day
- use fv_arrays_mod,     only: radius ! scaled for small earth
- use fms_mod,           only: write_version_number, open_namelist_file, &
-                              check_nml_error, file_exist, close_file
-!use fms_io_mod,        only: field_size
+ use constants_mod,     only: pi, grav, rdgas, cp_air, kappa, cnst_radius=>radius, seconds_per_day
+ use fms_mod,           only: write_version_number, check_nml_error
  use mpp_mod,           only: mpp_error, FATAL, stdlog, get_unit, mpp_pe, input_nml_file
  use mpp_mod,           only: mpp_root_pe, stdout ! snz
  use mpp_mod,           only: mpp_clock_id, mpp_clock_begin, mpp_clock_end
@@ -64,8 +61,10 @@ module fv_ada_nudge_mod
                               get_var3_r4, get_var2_r4, get_var1_real
  use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, fv_nest_type, R_GRID
 
- use fms_io_mod, only: register_restart_field, restart_file_type, restore_state
- use fms_io_mod, only: save_restart, get_mosaic_tile_file
+ use fms2_io_mod,       only : register_restart_field, open_file, close_file, &
+                               read_restart, register_field, &
+                               register_variable_attribute, file_exists, FmsNetcdfFile_t
+ use fv_io_mod,         only : fv_io_register_axis
  use axis_utils_mod, only : frac_index
 
 #ifdef ENABLE_ADA
@@ -75,6 +74,8 @@ module fv_ada_nudge_mod
 
  implicit none
  private
+
+ real(kind=R_GRID), parameter :: radius = cnst_radius
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -234,8 +235,9 @@ module fv_ada_nudge_mod
   integer :: id_u_da, id_v_da, id_t_da, id_q_da, id_ps_da ! snz
   integer :: id_ada
 
-  type(restart_file_type) :: ada_driver_restart ! snz
-  character(len=*), parameter :: restart_file="ada_driver.res.nc" ! snz
+  type(FmsNetcdfFile_t) :: ada_driver_restart ! snz
+  character(len=*), parameter :: restart_file="INPUT/ada_driver.res.nc" ! snz
+  character(len=8), dimension(4) :: dim_names_4d
 
 #ifdef ENABLE_ADA ! snz
   type(model_data_type) :: Atm_var
@@ -1033,7 +1035,8 @@ endif
            pt0 = tm(i,j)/(pk0(km+1)-pk0(km))*(kappa*(pn0(km+1)-pn0(km)))
            pst = pk0(km+1) + (gz0(i,j)-phis(i,j))/(cp_air*pt0)
       endif
-666   ps_dt(i,j) = pst**(1./kappa) - ps(i,j)
+      ps_dt(i,j) = pst**(1./kappa) - ps(i,j)
+666   continue ! i-loop
       enddo   ! j-loop
 
       if( nf_ps>0 ) call del2_scalar(ps_dt, del2_cd, 1, nf_ps, bd, npx, npy, gridstruct, domain)
@@ -1481,7 +1484,6 @@ endif
 
   integer :: id_restart !< Currently not used for anything other than a return
   !value.
-  character(len=256) :: restart_file_instance
 
   real, pointer, dimension(:,:,:) :: agrid
 
@@ -1521,20 +1523,9 @@ endif
 
    track_file_name = "No_File_specified"
 
-#ifdef INTERNAL_FILE_NML
-       read(input_nml_file, nml = fv_ada_nudge_nml, iostat = io)
-       ierr = check_nml_error(io,'fv_ada_nudge_nml')
-#else
-    if( file_exist( 'input.nml' ) ) then
-       unit = open_namelist_file ()
-       io = 1
-       do while ( io .ne. 0 )
-          read( unit, nml = fv_ada_nudge_nml, iostat = io, end = 10 )
-          ierr = check_nml_error(io,'fv_ada_nudge_nml')
-       end do
-10     call close_file ( unit )
-    end if
-#endif
+    read(input_nml_file, nml = fv_ada_nudge_nml, iostat = io)
+    ierr = check_nml_error(io,'fv_ada_nudge_nml')
+
     call write_version_number ( 'FV_ADA_NUDGE_MOD', version )
     if ( master ) then
          f_unit=stdlog()
@@ -1792,26 +1783,32 @@ endif
                'da ps', 'Pa', missing_value=missing_value )
 
 ! snz add the following lines for recording the return values from the previous assim run
-    call get_mosaic_tile_file(restart_file, restart_file_instance,&
-         & .FALSE., domain)
 
-    id_restart = register_restart_field(ada_driver_restart, restart_file_instance, &
-         & "u_adj", Atm_var%u_adj(:,:,:), domain=domain)
-    id_restart = register_restart_field(ada_driver_restart, restart_file_instance, &
-         & "v_adj", Atm_var%v_adj(:,:,:), domain=domain)
-    id_restart = register_restart_field(ada_driver_restart, restart_file_instance, &
-         & "t_adj", Atm_var%t_adj(:,:,:), domain=domain)
-    id_restart = register_restart_field(ada_driver_restart, restart_file_instance, &
-         & "q_adj", Atm_var%q_adj(:,:,:), domain=domain)
-    id_restart = register_restart_field(ada_driver_restart, restart_file_instance, &
-         & "ps_adj", Atm_var%ps_adj(:,:), domain=domain)
+! set dimensions for register restart
+    dim_names_4d(1) = "xaxis_1"
+    dim_names_4d(2) = "yaxis_1"
+    dim_names_4d(3) = "zaxis_1"
+    dim_names_4d(4) = "Time"
 
-    if ( file_exist('INPUT/'//trim(restart_file_instance), domain=domain) ) then
-       if ( mpp_pe() .eq. mpp_root_pe() ) then
-          write (stdout_unit,*) 'Reading ada restart information from ', 'INPUT/'//trim(restart_file_instance)
-       end if
-       call restore_state(ada_driver_restart, DIRECTORY='INPUT')
-    end if
+    if (open_file(ada_driver_restart, restart_file, "read", domain, is_restart=.true.))
+      call fv_io_register_axis(ada_driver_restart, numx=1, numy=1, numz=1, zsize=(/size(Atm_var%u_adj,3)/))
+      call register_restart_field(ada_driver_restart, &
+           & "u_adj", Atm_var%u_adj(:,:,:), dim_names_4d)
+      call register_restart_field(ada_driver_restart, &
+           & "v_adj", Atm_var%v_adj(:,:,:), dim_names_4d)
+      call register_restart_field(ada_driver_restart, &
+           & "t_adj", Atm_var%t_adj(:,:,:), dim_names_4d)
+      call register_restart_field(ada_driver_restart, &
+           & "q_adj", Atm_var%q_adj(:,:,:), dim_names_4d)
+      call register_restart_field(ada_driver_restart, &
+           & "ps_adj", Atm_var%ps_adj(:,:), dim_names_4d)
+
+      if ( mpp_pe() .eq. mpp_root_pe() ) then
+          write (stdout_unit,*) 'Reading ada restart information from ', 'INPUT/'//trim(restart_file)
+      end if
+      call read_restart(ada_driver_restart)
+      call close_file(ada_driver_restart)
+    endif
 
 #endif ! snz for ENABLE_ADA
 
@@ -1847,7 +1844,7 @@ endif
                                           !! model run
   integer :: is,  ie,  js,  je
 
-  if( .not. file_exist(fname) ) then
+  if( .not. file_exists(fname) ) then
      call mpp_error(FATAL,'==> Error from get_ncep_analysis: file not found')
   else
      call open_ncfile( fname, ncid )        ! open the file
@@ -2514,7 +2511,41 @@ endif
 
 #ifdef ENABLE_ADA ! snz
 
-    call save_restart(ada_driver_restart)
+    if (open_file(ada_driver_restart, restart_file, "overwrite", domain, is_restart=.true.)) then
+       call fv_io_register_axis(ada_driver_restart, numx=1, numy=1, numz=1, zsize=(/size(Atm_var%u_adj,3)/))
+       call register_restart_field(ada_driver_restart, &
+            & "u_adj", Atm_var%u_adj(:,:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "u_adj", "long_name", "u_adj", str_len=len("u_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "u_adj", "units", "none", str_len=len("none"))
+       call register_restart_field(ada_driver_restart, &
+            & "v_adj", Atm_var%v_adj(:,:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "v_adj", "long_name", "v_adj", str_len=len("v_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "v_adj", "units", "none", str_len=len("none"))
+       call register_restart_field(ada_driver_restart, &
+            & "t_adj", Atm_var%t_adj(:,:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "t_adj", "long_name", "t_adj", str_len=len("t_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "t_adj", "units", "none", str_len=len("none"))
+       call register_restart_field(ada_driver_restart, &
+            & "q_adj", Atm_var%q_adj(:,:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "q_adj", "long_name", "q_adj", str_len=len("q_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "q_adj", "units", "none", str_len=len("none"))
+       call register_restart_field(ada_driver_restart, &
+            & "ps_adj", Atm_var%ps_adj(:,:), dim_names_4d)
+       call register_variable_attribute(ada_driver_restart, &
+            & "ps_adj", "long_name", "ps_adj", str_len=len("ps_adj"))
+       call register_variable_attribute(ada_driver_restart, &
+            & "ps_adj", "units", "none", str_len=len("none"))
+       call write_restart(ada_driver_restart)
+       call close_file(ada_driver_restart)
+    endif
 
     deallocate ( Atm_var%u, Atm_var%v, Atm_var%t, Atm_var%u_adj, Atm_var%v_adj, Atm_var%t_adj)
     deallocate ( Atm_var%q, Atm_var%ps, Atm_var%q_adj, Atm_var%ps_adj)

@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -23,7 +23,7 @@ module fv_grid_tools_mod
 
   use constants_mod,  only: grav, pi=>pi_8
   use fv_arrays_mod,  only: radius, omega ! scaled for small earth
-!  use test_cases_mod, only: small_earth_scale 
+!  use test_cases_mod, only: small_earth_scale
   use fv_arrays_mod, only: fv_atmos_type, fv_grid_type, fv_grid_bounds_type, R_GRID
   use fv_grid_utils_mod, only: gnomonic_grids, great_circle_dist,  &
                            mid_pt_sphere, spherical_angle,     &
@@ -43,7 +43,6 @@ module fv_grid_tools_mod
                                mpp_get_data_domain, mpp_get_compute_domain, &
                                mpp_get_global_domain, mpp_global_sum, mpp_global_max, mpp_global_min
  use mpp_domains_mod,    only: domain2d
-  use mpp_io_mod,        only: mpp_get_att_value
 
   use mpp_parameter_mod, only: AGRID_PARAM=>AGRID,       &
                                DGRID_NE_PARAM=>DGRID_NE, &
@@ -53,9 +52,9 @@ module fv_grid_tools_mod
                                BGRID_SW_PARAM=>BGRID_SW, &
                                SCALAR_PAIR,              &
                                CORNER, CENTER, XUPDATE
-  use fms_mod,           only: get_mosaic_tile_grid
-  use fms_io_mod,        only: file_exist, field_exist, read_data, &
-                               get_global_att_value, get_var_att_value
+  use fms2_io_mod,       only: file_exists, variable_exists, open_file, read_data, &
+                               get_global_attribute, get_variable_attribute, &
+                               close_file, get_mosaic_tile_grid, FmsNetcdfFile_t
   use mosaic_mod,       only : get_mosaic_ntiles
 
   use mpp_mod, only: mpp_transmit, mpp_recv
@@ -87,6 +86,7 @@ contains
     integer,             intent(IN)    :: nregions
     integer,             intent(IN)    :: ng
 
+    type(FmsNetcdfFile_t) :: Grid_input
     real, allocatable, dimension(:,:)  :: tmpx, tmpy
     real(kind=R_GRID), pointer, dimension(:,:,:)    :: grid
     character(len=128)                 :: units = ""
@@ -109,31 +109,34 @@ contains
     jed = Atm%bd%jed
     grid  => Atm%gridstruct%grid_64
 
-    if(.not. file_exist(grid_file)) call mpp_error(FATAL, 'fv_grid_tools(read_grid): file '// &
+    if(.not. file_exists(grid_file)) call mpp_error(FATAL, 'fv_grid_tools(read_grid): file '// &
          trim(grid_file)//' does not exist')
 
     !--- make sure the grid file is mosaic file.
-    if( field_exist(grid_file, 'atm_mosaic_file') .OR. field_exist(grid_file, 'gridfiles') ) then
-       stdunit = stdout()
-       write(stdunit,*) '==>Note from fv_grid_tools_mod(read_grid): read atmosphere grid from mosaic version grid'
-    else
-       call mpp_error(FATAL, 'fv_grid_tools(read_grid): neither atm_mosaic_file nor gridfiles exists in file ' &
-            //trim(grid_file))
-    endif
+    if( open_file(Grid_input, grid_file, "read") ) then
+       if( variable_exists(Grid_input, 'atm_mosaic_file') .OR. variable_exists(Grid_input, 'gridfiles') ) then
+          stdunit = stdout()
+          write(stdunit,*) '==>Note from fv_grid_tools_mod(read_grid): read atmosphere grid from mosaic version grid'
+       else
+          call mpp_error(FATAL, 'fv_grid_tools(read_grid): neither atm_mosaic_file nor gridfiles exists in file ' &
+               //trim(grid_file))
+       endif
 
-    if(field_exist(grid_file, 'atm_mosaic_file')) then
-       call read_data(grid_file, "atm_mosaic_file", atm_mosaic)
-       atm_mosaic = "INPUT/"//trim(atm_mosaic)
-    else
-       atm_mosaic = trim(grid_file)
+       if(variable_exists(Grid_input, 'atm_mosaic_file') ) then
+          call read_data(Grid_input, "atm_mosaic_file", atm_mosaic)
+          atm_mosaic = "INPUT/"//trim(atm_mosaic)
+       else
+          atm_mosaic = trim(grid_file)
+       endif
+       call close_file(Grid_input)
     endif
 
     call get_mosaic_tile_grid(atm_hgrid, atm_mosaic, Atm%domain)
 
     grid_form = "none"
-    if( get_global_att_value(atm_hgrid, "history", attvalue) ) then
+    if (open_file(Grid_input, atm_hgrid, "read")) then
+       call get_global_attribute(Grid_input, "history", attvalue)
        if( index(attvalue, "gnomonic_ed") > 0) grid_form = "gnomonic_ed"
-    endif
     if(grid_form .NE. "gnomonic_ed") call mpp_error(FATAL, &
          "fv_grid_tools(read_grid): the grid should be 'gnomonic_ed' when reading from grid file, contact developer")
 
@@ -145,22 +148,24 @@ contains
        'fv_grid_tools(read_grid): nregions should be 6 when reading from mosaic file '//trim(grid_file) )
     endif
 
-    call get_var_att_value(atm_hgrid, 'x', 'units', units)
+       call get_variable_attribute(Grid_input, 'x', 'units', units)
 
-    !--- get the geographical coordinates of super-grid.
-    isc2 = 2*is-1; iec2 = 2*ie+1
-    jsc2 = 2*js-1; jec2 = 2*je+1
-    if( Atm%gridstruct%bounded_domain ) then
-      isc2 = 2*(isd+halo)-1; iec2 = 2*(ied+1+halo)-1   ! For the regional domain the cell corner locations must be transferred
-      jsc2 = 2*(jsd+halo)-1; jec2 = 2*(jed+1+halo)-1   ! from the entire supergrid to the compute grid, including the halo region.
+       !--- get the geographical coordinates of super-grid.
+       isc2 = 2*is-1; iec2 = 2*ie+1
+       jsc2 = 2*js-1; jec2 = 2*je+1
+       if( Atm%gridstruct%bounded_domain ) then
+         isc2 = 2*(isd+halo)-1; iec2 = 2*(ied+1+halo)-1   ! For the regional domain the cell corner locations must be transferred
+         jsc2 = 2*(jsd+halo)-1; jec2 = 2*(jed+1+halo)-1   ! from the entire supergrid to the compute grid, including the halo region.
+       endif
+       allocate(tmpx(isc2:iec2, jsc2:jec2) )
+       allocate(tmpy(isc2:iec2, jsc2:jec2) )
+       start = 1; nread = 1
+       start(1) = isc2; nread(1) = iec2 - isc2 + 1
+       start(2) = jsc2; nread(2) = jec2 - jsc2 + 1
+       call read_data(Grid_input, 'x', tmpx, corner=start, edge_lengths=nread)  !<-- tmpx (lon, deg east) is on the supergrid
+       call read_data(Grid_input, 'y', tmpy, corner=start, edge_lengths=nread)  !<-- tmpy (lat, deg) is on the supergrid
+       call close_file(Grid_input)
     endif
-    allocate(tmpx(isc2:iec2, jsc2:jec2) )
-    allocate(tmpy(isc2:iec2, jsc2:jec2) )
-    start = 1; nread = 1
-    start(1) = isc2; nread(1) = iec2 - isc2 + 1
-    start(2) = jsc2; nread(2) = jec2 - jsc2 + 1
-    call read_data(atm_hgrid, 'x', tmpx, start, nread, no_domain=.TRUE.)  !<-- tmpx (lon, deg east) is on the supergrid
-    call read_data(atm_hgrid, 'y', tmpy, start, nread, no_domain=.TRUE.)  !<-- tmpy (lat, deg) is on the supergrid
 
     !--- geographic grid at cell corner
     grid(isd: is-1, jsd:js-1,1:ndims)=0.
@@ -653,6 +658,9 @@ contains
                            grid_global(i,j,1,n) = grid_global(i,j,1,n) + 2.*pi
                       if (ABS(grid_global(i,j,1,1)) < 1.d-10) grid_global(i,j,1,1) = 0.0
                       if (ABS(grid_global(i,j,2,1)) < 1.d-10) grid_global(i,j,2,1) = 0.0
+                      !Change from Github PR #39 - this changes answers
+                      !if (ABS(grid_global(i,j,1,n)) < 1.d-10) grid_global(i,j,1,n) = 0.0
+                      !if (ABS(grid_global(i,j,2,n)) < 1.d-10) grid_global(i,j,2,n) = 0.0
                    enddo
                    enddo
                    enddo
@@ -687,7 +695,7 @@ contains
                            Atm%flagstruct%target_lon, Atm%flagstruct%target_lat, &
                            n, grid_global(1:npx,1:npy,1,n), grid_global(1:npx,1:npy,2,n))
                    enddo
-                else
+                elseif ( Atm%flagstruct%do_cube_transform) then
                    do n=1,nregions
                       call cube_transform(Atm%flagstruct%stretch_fac, 1, npx, 1, npy, &
                            Atm%flagstruct%target_lon, Atm%flagstruct%target_lat, &
@@ -1065,10 +1073,11 @@ contains
           write(*,*  ) ''
           write(*,*) ' Radius is ', radius, ', omega is ', omega!, ' small_earth_scale = ', small_earth_scale
           write(*,*  ) ' Cubed-Sphere Grid Stats : ', npx,'x',npy,'x',nregions
-          write(*,201) '      Grid Length               : min: ', dxN,' max: ', dxM,' avg: ', dxAV, ' min/max: ',dxN/dxM
-          write(*,200) '      Deviation from Orthogonal : min: ',angN,' max: ',angM,' avg: ',angAV
-          write(*,200) '      Aspect Ratio              : min: ',aspN,' max: ',aspM,' avg: ',aspAV
+          write(*,'(A,f11.2,A,f11.2,A,f11.2,A,f11.2)') '      Grid Length               : min: ', dxN,' max: ', dxM,' avg: ', dxAV, ' min/max: ',dxN/dxM
+          write(*,'(A,e21.14,A,e21.14,A,e21.14)') '      Deviation from Orthogonal : min: ',angN,' max: ',angM,' avg: ',angAV
+          write(*,'(A,e21.14,A,e21.14,A,e21.14)') '      Aspect Ratio              : min: ',aspN,' max: ',aspM,' avg: ',aspAV
           write(*,*  ) ''
+
        endif
     endif!if gridtype > 3
 
@@ -1078,9 +1087,6 @@ contains
        if (Atm%neststruct%child_grids(n) .and. is_master()) then
           !need to get tile_coarse AND determine local number for tile
           if (ntiles_g > 1) then ! coarse grid only!!
-!!$             !!! DEBUG CODE
-!!$             print*, 'SENDING GRID_GLOBAL: ', mpp_pe(), tile_coarse(n), grids_master_procs(n), grid_global(1,npy,:,tile_coarse(n))
-!!$             !!! END DEBUG CODE
              call mpp_send(grid_global(:,:,:,tile_coarse(n)), &
                   size(grid_global)/Atm%flagstruct%ntiles,grids_master_procs(n))
           else
@@ -1227,6 +1233,7 @@ contains
       ! real, pointer, dimension(:,:,:) :: e1, e2
 
 
+      type(FmsNetcdfFile_t)              :: Grid_input
       character(len=256)                 :: atm_mosaic, atm_hgrid
       real, allocatable, dimension(:,:)  :: tmpx, tmpy, tmpu, tmpv, tmpa
 
@@ -1252,23 +1259,26 @@ contains
       jed = bd%jed
 
 
-      if(.not. file_exist(grid_file)) call mpp_error(FATAL, 'fv_grid_tools(read_grid): file '// &
+      if(.not. file_exists(grid_file)) call mpp_error(FATAL, 'fv_grid_tools(read_grid): file '// &
       trim(grid_file)//' does not exist')
 
       !--- make sure the grid file is mosaic file.
-      if( field_exist(grid_file, 'atm_mosaic_file') .OR. field_exist(grid_file, 'gridfiles') ) then
-        stdunit = stdout()
-        write(stdunit,*) '==>Note from fv_grid_tools_mod(read_grid): read atmosphere grid from mosaic version grid'
-      else
-        call mpp_error(FATAL, 'fv_grid_tools(read_grid): neither atm_mosaic_file nor gridfiles exists in file ' &
-        //trim(grid_file))
-      endif
+      if( open_file(Grid_input, grid_file, "read") ) then
+        if( variable_exists(Grid_input, 'atm_mosaic_file') .OR. variable_exists(Grid_input, 'gridfiles') ) then
+          stdunit = stdout()
+          write(stdunit,*) '==>Note from fv_grid_tools_mod(read_grid): read atmosphere grid from mosaic version grid'
+        else
+          call mpp_error(FATAL, 'fv_grid_tools(read_grid): neither atm_mosaic_file nor gridfiles exists in file ' &
+               //trim(grid_file))
+        endif
 
-      if(field_exist(grid_file, 'atm_mosaic_file')) then
-        call read_data(grid_file, "atm_mosaic_file", atm_mosaic)
-        atm_mosaic = "INPUT/"//trim(atm_mosaic)
-      else
-        atm_mosaic = trim(grid_file)
+        if(variable_exists(Grid_input, 'atm_mosaic_file') ) then
+          call read_data(Grid_input, "atm_mosaic_file", atm_mosaic)
+          atm_mosaic = "INPUT/"//trim(atm_mosaic)
+        else
+          atm_mosaic = trim(grid_file)
+        endif
+        call close_file(Grid_input)
       endif
 
       call get_mosaic_tile_grid(atm_hgrid, atm_mosaic, Atm%domain)
@@ -1285,69 +1295,73 @@ contains
       start = 1; nread = 1
       start(1) = isc2; nread(1) = iec2 - isc2 + 1
       start(2) = jsc2; nread(2) = jec2 - jsc2 + 1
-      call read_data(atm_hgrid, 'x', tmpx, start, nread, no_domain=.TRUE.)  !<-- tmpx (lon, deg east) is on the supergrid
-      call read_data(atm_hgrid, 'y', tmpy, start, nread, no_domain=.TRUE.)  !<-- tmpy (lat, deg) is on the supergrid
+      if (open_file(Grid_input, atm_hgrid, "read")) then
+        call read_data(Grid_input, 'x', tmpx, corner=start, edge_lengths=nread)  !<-- tmpx (lon, deg east) is on the supergrid
+        call read_data(Grid_input, 'y', tmpy, corner=start, edge_lengths=nread)  !<-- tmpy (lat, deg) is on the supergrid
 
-      !--- geographic grid at cell corner
-      grid(isd: is-1, jsd:js-1,1:ndims)=0.
-      grid(isd: is-1, je+2:jed+1,1:ndims)=0.
-      grid(ie+2:ied+1,jsd:js-1,1:ndims)=0.
-      grid(ie+2:ied+1,je+2:jed+1,1:ndims)=0.
+        !--- geographic grid at cell corner
+        grid(isd: is-1, jsd:js-1,1:ndims)=0.
+        grid(isd: is-1, je+2:jed+1,1:ndims)=0.
+        grid(ie+2:ied+1,jsd:js-1,1:ndims)=0.
+        grid(ie+2:ied+1,je+2:jed+1,1:ndims)=0.
 
 
-      do j = jsd, jed+1
-        do i = isd, ied+1
-          grid(i,j,1) = tmpx(2*i+halo+2,2*j+halo+2)*pi/180.
-          grid(i,j,2) = tmpy(2*i+halo+2,2*j+halo+2)*pi/180.
+        do j = jsd, jed+1
+          do i = isd, ied+1
+            grid(i,j,1) = tmpx(2*i+halo+2,2*j+halo+2)*pi/180.
+            grid(i,j,2) = tmpy(2*i+halo+2,2*j+halo+2)*pi/180.
+          enddo
         enddo
-      enddo
 
-      call mpp_update_domains( grid, Atm%domain, position=CORNER)
+        call mpp_update_domains( grid, Atm%domain, position=CORNER)
 
-      iec2 = 2*(ied+1+halo)-2   ! For the regional domain the cell corner locations must be transferred
-      jec2 = 2*(jed+1+halo)-1   ! from the entire supergrid to the compute grid, including the halo region.
+        iec2 = 2*(ied+1+halo)-2   ! For the regional domain the cell corner locations must be transferred
+        jec2 = 2*(jed+1+halo)-1   ! from the entire supergrid to the compute grid, including the halo region.
 
-      allocate(tmpu(isc2:iec2, jsc2:jec2) )
+        allocate(tmpu(isc2:iec2, jsc2:jec2) )
 
-      nread(1) = iec2 - isc2 + 1
-      nread(2) = jec2 - jsc2 + 1
-      call read_data(atm_hgrid, 'dx', tmpu, start, nread, no_domain=.TRUE.)
+        nread(1) = iec2 - isc2 + 1
+        nread(2) = jec2 - jsc2 + 1
+        call read_data(Grid_input, 'dx', tmpu, corner=start, edge_lengths=nread)
 
 
-      do j = jsd, jed+1
-        do i = isd, ied
-          dx(i,j) = tmpu(2*i+halo+2,2*j+halo+2) + tmpu(2*i+halo+3,2*j+halo+2)
+        do j = jsd, jed+1
+          do i = isd, ied
+            dx(i,j) = tmpu(2*i+halo+2,2*j+halo+2) + tmpu(2*i+halo+3,2*j+halo+2)
+          enddo
         enddo
-      enddo
 
-      iec2 = 2*(ied+1+halo)-1   ! For the regional domain the cell corner locations must be transferred
-      jec2 = 2*(jed+1+halo)-2   ! from the entire supergrid to the compute grid, including the halo region.
+        iec2 = 2*(ied+1+halo)-1   ! For the regional domain the cell corner locations must be transferred
+        jec2 = 2*(jed+1+halo)-2   ! from the entire supergrid to the compute grid, including the halo region.
 
-      allocate(tmpv(isc2:iec2, jsc2:jec2) )
+        allocate(tmpv(isc2:iec2, jsc2:jec2) )
 
-      nread(1) = iec2 - isc2 + 1
-      nread(2) = jec2 - jsc2 + 1
-      call read_data(atm_hgrid, 'dy', tmpv, start, nread, no_domain=.TRUE.)
+        nread(1) = iec2 - isc2 + 1
+        nread(2) = jec2 - jsc2 + 1
+        call read_data(Grid_input, 'dy', tmpv, corner=start, edge_lengths=nread)
 
 
-      do j = jsd, jed
-        do i = isd, ied+1
-          dy(i,j) = tmpv(2*i+halo+2,2*j+halo+2) + tmpv(2*i+halo+2,2*j+halo+3)
+        do j = jsd, jed
+          do i = isd, ied+1
+            dy(i,j) = tmpv(2*i+halo+2,2*j+halo+2) + tmpv(2*i+halo+2,2*j+halo+3)
+          enddo
         enddo
-      enddo
 
 
-      call mpp_update_domains( dy, dx, Atm%domain, flags=SCALAR_PAIR,      &
-      gridtype=CGRID_NE_PARAM, complete=.true.)
+        call mpp_update_domains( dy, dx, Atm%domain, flags=SCALAR_PAIR,      &
+        gridtype=CGRID_NE_PARAM, complete=.true.)
 
-      iec2 = 2*(ied+1+halo)-2   ! For the regional domain the cell corner locations must be transferred
-      jec2 = 2*(jed+1+halo)-2   ! from the entire supergrid to the compute grid, including the halo region.
+        iec2 = 2*(ied+1+halo)-2   ! For the regional domain the cell corner locations must be transferred
+        jec2 = 2*(jed+1+halo)-2   ! from the entire supergrid to the compute grid, including the halo region.
 
-      allocate(tmpa(isc2:iec2, jsc2:jec2) )
+        allocate(tmpa(isc2:iec2, jsc2:jec2) )
 
-      nread(1) = iec2 - isc2 + 1
-      nread(2) = jec2 - jsc2 + 1
-      call read_data(atm_hgrid, 'area', tmpa, start, nread, no_domain=.TRUE.)  !<-- tmpx (lon, deg east) is on the supergrid
+        nread(1) = iec2 - isc2 + 1
+        nread(2) = jec2 - jsc2 + 1
+        call read_data(Grid_input, 'area', tmpa, corner=start, edge_lengths=nread) !<-- tmpx (lon, deg east) is on the supergrid
+        call close_file(Grid_input)
+      endif
+
 
       !agrid(:,:,:) = -1.e25
       area_c(:,:) = -missing ! To prevent divide by zero error
@@ -1506,7 +1520,7 @@ contains
         write(*,210) '   GLOBAL AREA (m*m):', globalarea
         write(*,*  ) ''
 
-201  format(A,f9.2,A,f9.2,A,f9.2,A,f9.2)
+201  format(A,f11.2,A,f11.2,A,f11.2,A,f11.2)
 209  format(A,e21.14,A,e21.14)
 210  format(A,e21.14)
 
@@ -1618,25 +1632,10 @@ contains
 
          call mpp_recv(p_grid( isg-ng:ieg+1+ng, jsg-ng:jeg+1+ng,1:2), size(p_grid( isg-ng:ieg+1+ng, jsg-ng:jeg+1+ng,1:2)), &
                        Atm%parent_grid%pelist(1))
-!!$         !!!! DEBUG CODE
-!!$         print*, 'RECEIVING GRID GLOBAL: ', mpp_pe(), Atm%parent_grid%pelist(1), p_grid(1,jeg+1,:)
-!!$         !!!! END DEBUG CODE
-
       endif
 
       call mpp_broadcast( p_grid(isg-ng:ieg+ng+1, jsg-ng:jeg+ng+1, :), &
            (ieg-isg+2+2*ng)*(jeg-jsg+2+2*ng)*ndims, mpp_root_pe() )
-
-         !NOTE : Grid now allowed to lie outside of parent
-         !Check that the grid does not lie outside its parent
-         !3aug15: allows halo of nest to lie within halo of coarse grid.
-!!$         !  NOTE: will this then work with the mpp_update_nest_fine?
-!!$         if ( joffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
-!!$              ioffset + floor( real(1-ng) / real(refinement) ) < 1-ng .or. &
-!!$              joffset + floor( real(npy+ng) / real(refinement) ) > Atm%parent_grid%npy+ng .or. &
-!!$              ioffset + floor( real(npx+ng) / real(refinement) ) > Atm%parent_grid%npx+ng ) then
-!!$            call mpp_error(FATAL, 'nested grid lies outside its parent')
-!!$         end if
 
       ! Generate grid global and parent_grid indices
       ! Grid global only needed in case we create a new child nest on-the-fly?
@@ -1736,10 +1735,6 @@ contains
 
 
             if (imod < refinement/2) then
-!!$               !!! DEBUG CODE
-!!$               if (ic /= ic) print*, gid, ' Bad ic ', i, j
-!!$               print*, i, j, ic
-!!$               !!! END DEBUG CODE
                ind_h(i,j,1) = ic - 1
             else
                ind_h(i,j,1) = ic
@@ -1788,9 +1783,6 @@ contains
             ind_u(i,j,1) = ic
 #else
             if (imod < refinement/2) then
-!!$               !!! DEBUG CODE
-!!$               print*, i, j, ic
-!!$               !!! END DEBUG CODE
                ind_u(i,j,1) = ic - 1
             else
                ind_u(i,j,1) = ic
@@ -2408,33 +2400,6 @@ contains
               !globalarea = globalarea + area(i,j)
             enddo
          enddo
-
-!!$         allocate( p_R8(nx-1,ny-1,ntiles_g) )   ! this is a "global" array
-!!$         do j=js,je
-!!$            do i=is,ie
-!!$               p_R8(i,j,tile) = area(i,j)
-!!$            enddo
-!!$         enddo
-!!$         call mp_gather(p_R8, is,ie, js,je, nx-1, ny-1, ntiles_g)
-!!$         if (is_master()) then
-!!$            globalarea = 0.0
-!!$            do n=1,ntiles_g
-!!$               do j=1,ny-1
-!!$                  do i=1,nx-1
-!!$                     globalarea = globalarea + p_R8(i,j,n)
-!!$                  enddo
-!!$               enddo
-!!$            enddo
-!!$         endif
-!!$
-!!$         call mpp_broadcast(globalarea, mpp_root_pe())
-!!$
-!!$         deallocate( p_R8 )
-!!$
-!!$         call mp_reduce_max(maxarea)
-!!$         minarea = -minarea
-!!$         call mp_reduce_max(minarea)
-!!$         minarea = -minarea
 
          globalarea = mpp_global_sum(domain, area)
          maxarea = mpp_global_max(domain, area)

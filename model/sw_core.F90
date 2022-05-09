@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -493,7 +493,7 @@ module sw_core_mod
    subroutine d_sw(delpc, delp,  ptc,   pt, u,  v, w, uc,vc, &
                    ua, va, divg_d, xflux, yflux, cx, cy,              &
                    crx_adv, cry_adv,  xfx_adv, yfx_adv, q_con, z_rat, kgb, heat_source,    &
-                   zvir, sphum, nq, q, k, km, inline_q,  &
+                   diss_est, zvir, sphum, nq, q, k, km, inline_q,  &
                    dt, hord_tr, hord_mt, hord_vt, hord_tm, hord_dp, nord,   &
                    nord_v, nord_w, nord_t, dddmp, d2_bg, d4_bg, damp_v, damp_w, &
                    damp_t, d_con, hydrostatic, gridstruct, flagstruct, bd)
@@ -517,6 +517,7 @@ module sw_core_mod
       real, intent(INOUT):: q(bd%isd:bd%ied,bd%jsd:bd%jed,km,nq)
       real, intent(OUT),   dimension(bd%isd:bd%ied,  bd%jsd:bd%jed)  :: delpc, ptc
       real, intent(OUT),   dimension(bd%is:bd%ie,bd%js:bd%je):: heat_source
+      real, intent(OUT),   dimension(bd%is:bd%ie,bd%js:bd%je):: diss_est
 ! The flux capacitors:
       real, intent(INOUT):: xflux(bd%is:bd%ie+1,bd%js:bd%je  )
       real, intent(INOUT):: yflux(bd%is:bd%ie  ,bd%js:bd%je+1)
@@ -935,6 +936,7 @@ module sw_core_mod
         do j=js,je
            do i=is,ie
               heat_source(i,j) = 0.
+              diss_est(i,j) = 0.
            enddo
         enddo
 
@@ -949,6 +951,9 @@ module sw_core_mod
 ! 0.5 * [ (w+dw)**2 - w**2 ] = w*dw + 0.5*dw*dw
 !                   heat_source(i,j) = -d_con*dw(i,j)*(w(i,j)+0.5*dw(i,j))
                     heat_source(i,j) = dd8 - dw(i,j)*(w(i,j)+0.5*dw(i,j))
+                    if ( flagstruct%do_diss_est ) then
+                       diss_est(i,j) = heat_source(i,j)
+                    endif
                    enddo
                 enddo
             endif
@@ -1487,7 +1492,7 @@ module sw_core_mod
         call del6_vt_flux(nord_v, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd)
    endif
 
-   if ( d_con > 1.e-5 ) then
+   if ( d_con > 1.e-5 .or. flagstruct%do_diss_est ) then
       do j=js,je+1
          do i=is,ie
             ub(i,j) = (ub(i,j) + vt(i,j))*rdx(i,j)
@@ -1518,6 +1523,12 @@ module sw_core_mod
                   (ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
                               + 2.*(gy(i,j)+gy(i,j+1)+gx(i,j)+gx(i+1,j))   &
                               - cosa_s(i,j)*(u2*dv2 + v2*du2 + du2*dv2)) )
+           if (flagstruct%do_diss_est) then
+             diss_est(i,j) = diss_est(i,j)-rsin2(i,j)*( &
+                  (ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
+                              + 2.*(gy(i,j)+gy(i,j+1)+gx(i,j)+gx(i+1,j))   &
+                              - cosa_s(i,j)*(u2*dv2 + v2*du2 + du2*dv2))
+           endif
          enddo
       enddo
    endif
@@ -1847,26 +1858,6 @@ module sw_core_mod
              divg_d(i,j) = (vf(i,j-1) - vf(i,j) + uf(i-1,j) - uf(i,j))*rarea_c(i,j)
           enddo
        enddo
-
-!!$       !Edges
-!!$
-!!$       !West, East
-!!$       do j=jsd+1,jed
-!!$          divg_d(isd  ,j) = (vf(isd,j-1) - vf(isd,j) + uf(isd,j) - uf(isd+1,j))*rarea_c(isd,j)
-!!$          divg_d(ied+1,j) = (vf(ied+1,j-1) - vf(ied+1,j) + uf(ied-1,j) - uf(ied,j))*rarea_c(ied,j)
-!!$       end do
-!!$
-!!$       !North, South
-!!$       do i=isd+1,ied
-!!$          divg_d(i,jsd  ) = (vf(i,jsd) - vf(i,jsd+1) + uf(i-1,jsd) - uf(i,jsd))*rarea_c(i,jsd)
-!!$          divg_d(i,jed+1) = (vf(i,jed-1) - vf(i,jed) + uf(i-1,jed+1) - uf(i,jed+1))*rarea_c(i,jed)
-!!$       end do
-!!$
-!!$       !Corners (just use next corner value)
-!!$       divg_d(isd,jsd)   = divg_d(isd+1,jsd+1)
-!!$       divg_d(isd,jed+1) = divg_d(isd+1,jed)
-!!$       divg_d(ied+1,jsd)   = divg_d(ied,jsd+1)
-!!$       divg_d(ied+1,jed+1) = divg_d(ied,jed)
 
     endif
 

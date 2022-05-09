@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -21,14 +21,13 @@
 module fv_cmip_diag_mod
 
 use mpp_mod,            only: input_nml_file
-use fms_mod,            only: open_namelist_file, check_nml_error, &
-                              close_file, stdlog, mpp_pe, mpp_root_pe, &
-                              write_version_number, file_exist, &
+use fms_mod,            only: check_nml_error, string, &
+                              stdlog, mpp_pe, mpp_root_pe, &
+                              write_version_number, &
                               error_mesg, FATAL, WARNING, NOTE
-use fms_io_mod,         only: set_domain, nullify_domain, string
 use time_manager_mod,   only: time_type
 use mpp_domains_mod,    only: domain2d
-use diag_manager_mod,   only: register_diag_field, &
+use diag_manager_mod,   only: register_diag_field, diag_axis_init, &
                               send_data, get_diag_field_id, &
                               register_static_field, &
                               diag_field_add_attribute, &
@@ -36,13 +35,13 @@ use diag_manager_mod,   only: register_diag_field, &
 use diag_data_mod,      only: CMOR_MISSING_VALUE, null_axis_id
 use tracer_manager_mod, only: get_tracer_index
 use field_manager_mod,  only: MODEL_ATMOS
-use constants_mod,      only: GRAV
+use constants_mod,      only: GRAV, RDGAS
 
 use fv_mapz_mod,        only: E_Flux
 use fv_arrays_mod,      only: fv_atmos_type
 use fv_diagnostics_mod, only: interpolate_vertical, &
                               get_height_given_pressure, &
-                              rh_calc, get_height_field
+                              rh_calc, get_height_field, get_vorticity
 
 use atmos_cmip_diag_mod, only: register_cmip_diag_field_2d, &
                                register_cmip_diag_field_3d, &
@@ -58,7 +57,7 @@ private
 
 public :: fv_cmip_diag_init, fv_cmip_diag, fv_cmip_diag_end
 
-integer :: sphum
+integer :: sphum, nql, nqi, nqa
 
 !-----------------------------------------------------------------------
 !--- namelist ---
@@ -69,12 +68,17 @@ namelist /fv_cmip_diag_nml/ dummy
 
 !-----------------------------------------------------------------------
 
-type(cmip_diag_id_type) :: ID_ta, ID_ua, ID_va, ID_hus, ID_hur, ID_wap, ID_zg
+type(cmip_diag_id_type) :: ID_ta, ID_ua, ID_va, ID_hus, ID_hur, ID_wap, ID_zg, &
+                           ID_u2, ID_v2, ID_t2, ID_wap2, ID_uv, ID_ut, ID_vt,  &
+                           ID_uwap, ID_vwap, ID_twap, ID_wa, &
+                           ID_cls, ID_clws, ID_clis
+
 integer              :: id_ps, id_orog
 integer              :: id_ua200, id_va200, id_ua850, id_va850, &
                         id_ta500, id_ta700, id_ta850, id_zg500, &
                         id_zg100, id_zg10,  id_zg1000,          &
                         id_hus850, id_wap500, id_ua10
+integer              :: id_rv200, id_rv500, id_rv850, id_vortmean
 
 character(len=5) :: mod_name = 'atmos'
 
@@ -105,6 +109,7 @@ integer, dimension(7) :: plevels = (/10,100,200,500,700,850,1000/)
 integer, dimension(7) :: id_plevels
 integer, parameter    :: id_p10=1, id_p100=2, id_p200=3, id_p500=4, id_p700=5, id_p850=6, id_p1000=7
 character(len=4)      :: plabel
+integer               :: id_pl700, id_pl700_bnds, id_nv
 !-----------------------------------------------------------------------
 
   if (module_is_initialized) then
@@ -114,30 +119,14 @@ character(len=4)      :: plabel
   endif
 
 !----- read namelist -----
-#ifdef INTERNAL_FILE_NML
   read (input_nml_file, nml=fv_cmip_diag_nml, iostat=io)
   ierr = check_nml_error (io, 'fv_cmip_diag_nml')
-#else
-  if (file_exist('input.nml') ) then
-    iunit = open_namelist_file()
-    ierr=1
-    do while (ierr /= 0)
-      read (iunit, nml=fv_cmip_diag_nml, iostat=io, end=10)
-      ierr = check_nml_error (io, 'fv_cmip_diag_nml')
-    enddo
-10  call close_file (iunit)
-  endif
-#endif
 
 !----- write version and namelist to log file -----
 
   iunit = stdlog()
-  call write_version_number ( 'FV_CMIP_DIAG_MOD',  version )
+  call write_version_number ( 'FV_CMIP_DIAG_MOD', version )
   if (mpp_pe() == mpp_root_pe()) write (iunit, nml=fv_cmip_diag_nml)
-
-
-! Set domain so that diag_manager can access tile information
-  call set_domain(Atm(1)%domain)
 
 ! axis identifiers
   area_id = get_diag_field_id ('dynamics', 'area')
@@ -149,6 +138,9 @@ character(len=4)      :: plabel
 !-----------------------------------------------------------------------
 
   sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
+  nql   = get_tracer_index (MODEL_ATMOS, 'liq_wat')
+  nqi   = get_tracer_index (MODEL_ATMOS, 'ice_wat')
+  nqa   = get_tracer_index (MODEL_ATMOS, 'cld_amt')
 
 !-----------------------------------------------------------------------
 ! register cmip 3D variables (on model levels and pressure levels)
@@ -171,10 +163,70 @@ character(len=4)      :: plabel
     ID_hur = register_cmip_diag_field_3d (mod_name, 'hur', Time, &
                        'Relative Humidity', '%', standard_name='relative_humidity')
 
+    ID_wa = register_cmip_diag_field_3d (mod_name, 'wa', Time, &
+                       'Upward Air Velocity', 'm s-1', standard_name='upward_air_velocity')
+
     ID_zg = register_cmip_diag_field_3d (mod_name, 'zg', Time, &
                        'Geopotential Height', 'm', standard_name='geopotential_height', axis='half')
 
+!-----------------------------------------------------------------------
+! register products of 3D variables (on model levels and pressure levels)
 
+    ID_u2 = register_cmip_diag_field_3d (mod_name, 'u2', Time, &
+                      'Square of Eastward Wind', 'm2 s-2', standard_name='square_of_eastward_wind')
+
+    ID_v2 = register_cmip_diag_field_3d (mod_name, 'v2', Time, &
+                       'Square of Northward Wind', 'm2 s-2', standard_name='square_of_northward_wind')
+
+    ID_t2 = register_cmip_diag_field_3d (mod_name, 't2', Time, &
+                       'Square of Air Temperature', 'K2', standard_name='square_of_air_temperature')
+
+    ID_wap2 = register_cmip_diag_field_3d (mod_name, 'wap2', Time, &
+                       'Square of Omega', 'Pa2 s-2', standard_name='square_of_omega')
+
+    ID_uv = register_cmip_diag_field_3d (mod_name, 'uv', Time, &
+                        'Eastward Wind times Northward Wind', 'm2 s-2', &
+                         standard_name='product_of_eastward_wind_and_northward_wind')
+
+    ID_ut = register_cmip_diag_field_3d (mod_name, 'ut', Time, &
+                        'Air Temperature times Eastward Wind', 'K m s-1', &
+                         standard_name='product_of_eastward_wind_and_air_temperature')
+
+    ID_vt = register_cmip_diag_field_3d (mod_name, 'vt', Time, &
+                        'Air Temperature times Northward Wind', 'K m s-1', &
+                         standard_name='product_of_northward_wind_and_air_temperature')
+
+    ID_uwap = register_cmip_diag_field_3d (mod_name, 'uwap', Time, &
+                           'Eastward Wind times Omega', 'K m s-1', &
+                           standard_name='product_of_eastward_wind_and_omega')
+
+    ID_vwap = register_cmip_diag_field_3d (mod_name, 'vwap', Time, &
+                           'Northward Wind times Omega', 'K m s-1', &
+                           standard_name='product_of_northward_wind_and_omega')
+
+    ID_twap = register_cmip_diag_field_3d (mod_name, 'twap', Time, &
+                           'Air Temperature times Omega', 'K m s-1', &
+                           standard_name='product_of_omega_and_air_temperature')
+
+!-----------------------------------------------------------------------
+! stratiform cloud tracers
+
+    if (nql > 0) then
+      ID_clws = register_cmip_diag_field_3d (mod_name, 'clws', Time, &
+                        'Mass Fraction of Stratiform Cloud Liquid Water', '1.0', &
+                 standard_name='mass_fraction_of_stratiform_cloud_liquid_water_in_air')
+    endif
+    if (nqi > 0) then
+      ID_clis = register_cmip_diag_field_3d (mod_name, 'clis', Time, &
+                        'Mass Fraction of Stratiform Cloud Ice', '1.0', &
+                 standard_name='mass_fraction_of_convective_cloud_ice_in_air')
+    endif
+    if (nqa > 0) then
+      ID_cls = register_cmip_diag_field_3d (mod_name, 'cls', Time, &
+                        'Percentage Cover of Stratiform Cloud', '%', &
+                 standard_name='stratiform_cloud_area_fraction_in_atmosphere_layer')
+    endif
+!-----------------------------------------------------------------------
     ! 2D fields
 
     id_ps = register_cmip_diag_field_2d (mod_name, 'ps', Time, &
@@ -191,14 +243,14 @@ character(len=4)      :: plabel
     id_orog = register_static_field (mod_name, 'orog', axes(1:2), &
                                     'Surface Altitude', 'm', &
                                     standard_name='surface_altitude', &
-                                    area=area_id)
+                                    area=area_id, interp_method='conserve_order1')
     if (id_orog > 0) used = send_data (id_orog, Atm(n)%phis(isc:iec,jsc:jec)/GRAV, Time)
 #else
 !--- for now output this as 'zsurf' from fv_diagnostics ---
 !   id_orog = register_diag_field (mod_name, 'orog', axes(1:2), Time, &
 !                                  'Surface Altitude', 'm', &
 !                                  standard_name='surface_altitude', &
-!                                  area=area_id)
+!                                  area=area_id, interp_method='conserve_order1')
 #endif
 
 !-----------------------------------------------------------------------
@@ -217,6 +269,24 @@ character(len=4)      :: plabel
         used = send_data (id_plevels(k), real(plevels(k))*100., Time)
       endif
     enddo
+
+    id_pl700 = register_static_field (mod_name, 'pl700', (/null_axis_id/), &
+                        '700 hPa Average', 'Pa', standard_name='air_pressure')
+    if (id_pl700 > 0) then
+      call diag_field_add_attribute (id_pl700, 'axis', 'Z')
+      call diag_field_add_attribute (id_pl700, 'positive', 'down' )
+      call diag_field_add_attribute (id_pl700, 'comment', 'average at levels 600,700,850 hPa' )
+      ! add bounds
+      id_nv = diag_axis_init('nv', (/1.,2./), 'none', 'N', 'vertex number', set_name='nv')
+      id_pl700_bnds = register_static_field (mod_name, 'pl700_bnds', (/id_nv,null_axis_id/), &
+                                     '700 hPa boundaries', 'Pa', standard_name='air_pressure')
+      if (id_pl700_bnds > 0) then
+        call diag_field_add_attribute (id_pl700, 'bounds', 'pl700_bnds' )
+        used = send_data (id_pl700_bnds, (/850.e2,600.e2/), Time)
+      endif
+      used = send_data (id_pl700, 700.e2, Time)
+    endif
+
 
   !---- register field on single pressure levels ----
 
@@ -270,6 +340,30 @@ character(len=4)      :: plabel
     if (id_hus850 > 0 .and. id_plevels(id_p850) > 0) &
         call diag_field_add_attribute (id_hus850, 'coordinates', 'p850')
 
+  !---- relative vorticity at 200, 500, 850 hPa ----
+    id_rv200 = register_cmip_diag_field_2d (mod_name, 'rv200', Time, &
+                  'Relative Vorticity at 200 hPa', 's-1', standard_name='atmosphere_relative_vorticity')
+    if (id_rv200 > 0 .and. id_plevels(id_p200) > 0) &
+        call diag_field_add_attribute (id_rv200, 'coordinates', 'p200')
+
+    id_rv500 = register_cmip_diag_field_2d (mod_name, 'rv500', Time, &
+                  'Relative Vorticity at 500 hPa', 's-1', standard_name='atmosphere_relative_vorticity')
+    if (id_rv500 > 0 .and. id_plevels(id_p500) > 0) &
+        call diag_field_add_attribute (id_rv500, 'coordinates', 'p500')
+
+    id_rv850 = register_cmip_diag_field_2d (mod_name, 'rv850', Time, &
+                  'Relative Vorticity at 850 hPa', 's-1', standard_name='atmosphere_relative_vorticity')
+    if (id_rv850 > 0 .and. id_plevels(id_p850) > 0) &
+        call diag_field_add_attribute (id_rv850, 'coordinates', 'p850')
+
+  !---- mean relative vorticity 600, 700, 850 hPa ----
+
+    id_vortmean = register_cmip_diag_field_2d (mod_name, 'vortmean', Time, &
+                 'Mean Relative Vorticity over 600-850 hPa', 's-1',  &
+                        standard_name='atmosphere_relative_vorticity')
+    if (id_vortmean > 0 .and. id_pl700 > 0) &
+        call diag_field_add_attribute (id_vortmean, 'coordinates', 'pl700')
+
   !---- omega at 500 hPa ----
 
     id_wap500 = register_cmip_diag_field_2d (mod_name, 'wap500', Time, &
@@ -300,7 +394,6 @@ character(len=4)      :: plabel
         call diag_field_add_attribute (id_zg1000, 'coordinates', 'p1000')
 
 !--- done ---
-  call nullify_domain()
   module_is_initialized=.true.
 
 !-----------------------------------------------------------------------
@@ -316,15 +409,18 @@ type(time_type),     intent(in) :: Time
 integer :: isc, iec, jsc, jec, n, i, j, k, id
 integer :: ngc, npz
 logical :: used
+logical :: compute_wa , compute_rh
 
 real, dimension(Atm(1)%bd%isc:Atm(1)%bd%iec, &
-                Atm(1)%bd%jsc:Atm(1)%bd%jec) :: pfull, dat2
+                Atm(1)%bd%jsc:Atm(1)%bd%jec) :: pfull, dat2, &
+                                                rv850, rv700, rv600
+
 real, dimension(Atm(1)%bd%isc:Atm(1)%bd%iec, &
                 Atm(1)%bd%jsc:Atm(1)%bd%jec,1) :: dat3
 
 real, dimension(Atm(1)%bd%isc:Atm(1)%bd%iec, &
                 Atm(1)%bd%jsc:Atm(1)%bd%jec, &
-                Atm(1)%npz) :: rhum
+                Atm(1)%npz) :: rhum, wa, rv
 
 real, dimension(Atm(1)%bd%isc:Atm(1)%bd%iec, &
                 Atm(1)%bd%jsc:Atm(1)%bd%jec, &
@@ -341,26 +437,43 @@ real, dimension(Atm(1)%bd%isc:Atm(1)%bd%iec, &
   ngc = Atm(n)%ng
   npz = Atm(n)%npz
 
-  call set_domain(Atm(n)%domain)
+  ! set flags for computing quantities
+  compute_rh = .false.
+  compute_wa = .false.
+  if (count(ID_hur%field_id(:)>0) > 0) compute_rh = .true.
+  if (count(ID_wa%field_id(:)>0)  > 0) compute_wa = .true.
 
   ! compute relative humidity at model levels (if needed)
-  if (count(ID_hur%field_id(:)>0) > 0) then
+  if (compute_rh .or. compute_wa) then
     do k=1,npz
       do j=jsc,jec
       do i=isc,iec
         pfull(i,j) = Atm(n)%delp(i,j,k)/(Atm(n)%peln(i,k+1,j)-Atm(n)%peln(i,k,j))
       enddo
       enddo
-      call rh_calc (pfull, Atm(n)%pt(isc:iec,jsc:jec,k), &
+      ! compute relative humidity
+      if (compute_rh) then
+        call rh_calc (pfull, Atm(n)%pt(isc:iec,jsc:jec,k), &
                     Atm(n)%q(isc:iec,jsc:jec,k,sphum), rhum(isc:iec,jsc:jec,k), do_cmip=.true.)
+      endif
+      ! compute vertical velocity
+      if (compute_wa) then
+        wa(isc:iec,jsc:jec,k) = -(Atm(n)%omga(isc:iec,jsc:jec,k)*Atm(n)%pt(isc:iec,jsc:jec,k)/ &
+                                        pfull(isc:iec,jsc:jec))*(RDGAS/GRAV)
+      endif
     enddo
   endif
-
 
   ! height field (wz) if needed
   if (count(ID_zg%field_id(:)>0) > 0 .or. any((/id_zg10,id_zg100,id_zg500,id_zg1000/) > 0)) then
     call get_height_field(isc, iec, jsc, jec, ngc, npz, Atm(n)%flagstruct%hydrostatic, Atm(n)%delz, &
                           wz, Atm(n)%pt, Atm(n)%q, Atm(n)%peln, zvir)
+  endif
+
+  ! relative vorticity
+  if (any((/id_rv200,id_rv500,id_rv850,id_vortmean/) > 0)) then
+    call get_vorticity(isc, iec, jsc, jec, Atm(n)%bd%isd, Atm(n)%bd%ied, Atm(n)%bd%jsd, Atm(n)%bd%jed, npz, &
+                       Atm(n)%u, Atm(n)%v, rv, Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy, Atm(n)%gridstruct%rarea)
   endif
 
 !----------------------------------------------------------------------
@@ -390,9 +503,63 @@ real, dimension(Atm(1)%bd%isc:Atm(1)%bd%iec, &
   if (query_cmip_diag_id(ID_hur)) &
           used = send_cmip_data_3d (ID_hur, rhum(isc:iec,jsc:jec,:), Time, phalf=Atm(n)%peln, opt=1)
 
+    ! vertical velocity
+  if (query_cmip_diag_id(ID_wa)) &
+          used = send_cmip_data_3d (ID_wa, wa(isc:iec,jsc:jec,:), Time, phalf=Atm(n)%peln, opt=1)
+
     ! geopotential height
   if (query_cmip_diag_id(ID_zg)) &
           used = send_cmip_data_3d (ID_zg, wz, Time, phalf=Atm(n)%peln, opt=1, ext=.true.)
+
+!----------------------------------------------------------------------
+  ! process product of fields on model levels and/or pressure levels
+
+  if (query_cmip_diag_id(ID_u2)) &
+          used = send_cmip_data_3d (ID_u2,  Atm(n)%ua  (isc:iec,jsc:jec,:)*Atm(n)%ua  (isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+  if (query_cmip_diag_id(ID_v2)) &
+          used = send_cmip_data_3d (ID_v2,  Atm(n)%va  (isc:iec,jsc:jec,:)*Atm(n)%va  (isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+  if (query_cmip_diag_id(ID_t2)) &
+          used = send_cmip_data_3d (ID_t2,  Atm(n)%pt  (isc:iec,jsc:jec,:)*Atm(n)%pt  (isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+  if (query_cmip_diag_id(ID_wap2)) &
+          used = send_cmip_data_3d (ID_wap2, Atm(n)%omga(isc:iec,jsc:jec,:)*Atm(n)%omga(isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+  if (query_cmip_diag_id(ID_uv)) &
+          used = send_cmip_data_3d (ID_uv,  Atm(n)%ua  (isc:iec,jsc:jec,:)*Atm(n)%va  (isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+  if (query_cmip_diag_id(ID_ut)) &
+          used = send_cmip_data_3d (ID_ut,  Atm(n)%ua  (isc:iec,jsc:jec,:)*Atm(n)%pt  (isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+  if (query_cmip_diag_id(ID_vt)) &
+          used = send_cmip_data_3d (ID_vt,  Atm(n)%va  (isc:iec,jsc:jec,:)*Atm(n)%pt  (isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+  if (query_cmip_diag_id(ID_uwap)) &
+          used = send_cmip_data_3d (ID_uwap, Atm(n)%ua  (isc:iec,jsc:jec,:)*Atm(n)%omga(isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+  if (query_cmip_diag_id(ID_vwap)) &
+          used = send_cmip_data_3d (ID_vwap, Atm(n)%va  (isc:iec,jsc:jec,:)*Atm(n)%omga(isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+  if (query_cmip_diag_id(ID_twap)) &
+          used = send_cmip_data_3d (ID_twap, Atm(n)%pt  (isc:iec,jsc:jec,:)*Atm(n)%omga(isc:iec,jsc:jec,:), &
+                                    Time, phalf=Atm(n)%peln, opt=1)
+
+!----------------------------------------------------------------------
+! stratiform cloud tracers (only on model levels)
+
+  if (query_cmip_diag_id(ID_cls))  used = send_cmip_data_3d (ID_cls,  Atm(n)%q(isc:iec,jsc:jec,:,nqa)*100., Time)
+  if (query_cmip_diag_id(ID_clws)) used = send_cmip_data_3d (ID_clws, Atm(n)%q(isc:iec,jsc:jec,:,nql), Time)
+  if (query_cmip_diag_id(ID_clis)) used = send_cmip_data_3d (ID_clis, Atm(n)%q(isc:iec,jsc:jec,:,nqi), Time)
 
 !----------------------------------------------------------------------
 ! process 2D fields on specific pressure levels
@@ -457,33 +624,49 @@ real, dimension(Atm(1)%bd%isc:Atm(1)%bd%iec, &
     used = send_data (id_wap500, dat2, Time)
   endif
 
+  if (id_rv200 > 0) then
+    call interpolate_vertical (isc, iec, jsc, jec, npz, 200.e2, Atm(n)%peln, rv, dat2)
+    used = send_data (id_rv200, dat2, Time)
+  endif
+
+  if (id_rv500 > 0) then
+    call interpolate_vertical (isc, iec, jsc, jec, npz, 500.e2, Atm(n)%peln, rv, dat2)
+    used = send_data (id_rv500, dat2, Time)
+  endif
+
+  if (id_rv850 > 0 .or. id_vortmean > 0 ) then
+    call interpolate_vertical (isc, iec, jsc, jec, npz, 850.e2, Atm(n)%peln, rv, rv850)
+    if (id_rv850 > 0) used = send_data (id_rv850, rv850, Time)
+    if (id_vortmean > 0) then
+      call interpolate_vertical (isc, iec, jsc, jec, npz, 600.e2, Atm(n)%peln, rv, rv600)
+      call interpolate_vertical (isc, iec, jsc, jec, npz, 700.e2, Atm(n)%peln, rv, rv700)
+      used = send_data (id_vortmean, (rv600+rv700+rv850)/3., Time)
+    endif
+  endif
+
   if (id_zg10 > 0) then
-    call get_height_given_pressure (isc, iec, jsc, jec, ngc, npz, wz, 1, (/id_zg10/), &
+    call get_height_given_pressure (isc, iec, jsc, jec, npz, wz, 1, (/id_zg10/), &
                                     (/log(10.e2)/), Atm(n)%peln, dat3)
     used = send_data (id_zg10, dat3(:,:,1), Time)
   endif
 
   if (id_zg100 > 0) then
-    call get_height_given_pressure (isc, iec, jsc, jec, ngc, npz, wz, 1, (/id_zg100/), &
+    call get_height_given_pressure (isc, iec, jsc, jec, npz, wz, 1, (/id_zg100/), &
                                     (/log(100.e2)/), Atm(n)%peln, dat3)
     used = send_data (id_zg100, dat3(:,:,1), Time)
   endif
 
   if (id_zg500 > 0) then
-    call get_height_given_pressure (isc, iec, jsc, jec, ngc, npz, wz, 1, (/id_zg500/), &
+    call get_height_given_pressure (isc, iec, jsc, jec, npz, wz, 1, (/id_zg500/), &
                                     (/log(500.e2)/), Atm(n)%peln, dat3)
     used = send_data (id_zg500, dat3(:,:,1), Time)
   endif
 
   if (id_zg1000 > 0) then
-    call get_height_given_pressure (isc, iec, jsc, jec, ngc, npz, wz, 1, (/id_zg1000/), &
+    call get_height_given_pressure (isc, iec, jsc, jec, npz, wz, 1, (/id_zg1000/), &
                                     (/log(1000.e2)/), Atm(n)%peln, dat3)
     used = send_data (id_zg1000, dat3(:,:,1), Time)
   endif
-
-!----------------------------------------------------------------------
-
-  call nullify_domain()
 
 !----------------------------------------------------------------------
 

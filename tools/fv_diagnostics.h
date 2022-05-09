@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -66,6 +66,10 @@
      integer ic_ps, ic_ua, ic_va, ic_ppt
      integer ic_sphum
      integer, allocatable :: id_tracer(:)
+
+! dissipation estimates
+ integer :: id_diss
+
 ! ESM requested diagnostics  -  dry mass/volume mixing ratios
  integer, allocatable :: id_tracer_dmmr(:)
  integer, allocatable :: id_tracer_dvmr(:)

@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -393,20 +393,6 @@ contains
           enddo
        enddo
 
-!!$       do k=2,km
-!!$          do i=is,ie
-!!$             if ( ph(i,k-1) <= p1 ) then
-!!$! Isothermal
-!!$                 gz(i,k) = gz(i,k-1) + (rdgas*t1)*log(ph(i,k-1)/ph(i,k))
-!!$             else
-!!$! Constant lapse rate region (troposphere)
-!!$                 !gz(i,k) = (hs(i,j)+c0)/(ph(i,k)/ps(i,j))**(a0*rdgas) - c0
-!!$                 gz(i,k) = (hs(i,j)+c0)/(ph(i,k)/ps(i,j))**(a0*rdgas) - c0
-!!$             endif
-!!$          enddo
-!!$       enddo
-       !bottom-up
-
        do k=km,2,-1
           do i=is,ie
              if (ph(i,k) <= p1) then
@@ -459,7 +445,7 @@ contains
  ! Added by Linjiong Zhou, bugfix + increase temperature above tropospause
  subroutine hydro_eq_ext(km, is, ie, js, je, ps, hs, drym, delp, ak, bk,  &
                      pt, delz, area, ng, mountain, hydrostatic, hybrid_z, domain)
-! Input: 
+! Input:
   integer, intent(in):: is, ie, js, je, km, ng
   real, intent(in):: ak(km+1), bk(km+1)
   real, intent(in):: hs(is-ng:ie+ng,js-ng:je+ng)
@@ -480,7 +466,7 @@ contains
   real mslp, z1, z2, t1, t2, p1, p2, t0, a0, a1, psm
   real ztop, c0, c1
 #ifdef INIT_4BYTE
-  real(kind=4) ::  dps 
+  real(kind=4) ::  dps
 #else
   real dps    ! note that different PEs will get differt dps during initialization
               ! this has no effect after cold start
@@ -506,7 +492,7 @@ contains
         c1 = t1/a1
 
      if ( hybrid_z ) then
-          ptop = 100.   ! *** hardwired model top *** 
+          ptop = 100.   ! *** hardwired model top ***
      else
           ptop = ak(1)
      endif
@@ -542,8 +528,8 @@ contains
         ps(i,j) = ps(i,j) + dps
         gz(i,   1) = ztop
         gz(i,km+1) = hs(i,j)
-        ph(i,   1) = ptop                                                     
-        ph(i,km+1) = ps(i,j)                                               
+        ph(i,   1) = ptop
+        ph(i,km+1) = ps(i,j)
      enddo
 
      if ( hybrid_z ) then
@@ -552,14 +538,14 @@ contains
 !---------------
         do k=km,2,-1
            do i=is,ie
-              gz(i,k) = gz(i,k+1) - delz(i,j,k)*grav 
+              gz(i,k) = gz(i,k+1) - delz(i,j,k)*grav
            enddo
         enddo
 ! Correct delz at the top:
         do i=is,ie
             delz(i,j,1) = (gz(i,2) - ztop) / grav
         enddo
- 
+
         do k=2,km
            do i=is,ie
               if ( gz(i,k) >= z2 ) then

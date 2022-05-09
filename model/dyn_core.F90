@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -91,7 +91,7 @@ contains
                      u,  v,  w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va, &
                      uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, &
                      ks, gridstruct, flagstruct, neststruct, idiag, bd, domain, &
-                     init_step, i_pack, end_step, time_total)
+                     init_step, i_pack, end_step, diss_est, time_total)
     integer, intent(IN) :: npx
     integer, intent(IN) :: npy
     integer, intent(IN) :: npz
@@ -115,6 +115,7 @@ contains
     real, intent(inout) :: pt(  bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! temperature (K)
     real, intent(inout) :: delp(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  ! pressure thickness (pascal)
     real, intent(inout) :: q(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, nq)  !
+    real, intent(inout) :: diss_est(bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz)  !< skeb dissipation
     real, intent(in), optional:: time_total  ! total time (seconds) since start
 
 !-----------------------------------------------------------------------
@@ -173,6 +174,8 @@ contains
     real wk(bd%isd:bd%ied,bd%jsd:bd%jed)
     real fz(bd%is: bd%ie+1,bd%js: bd%je+1)
     real heat_s(bd%is:bd%ie,bd%js:bd%je)
+! new array for stochastic kinetic energy backscatter (SKEB)
+    real diss_e(bd%is:bd%ie,bd%js:bd%je)
     real damp_vt(npz+1)
     integer nord_v(npz+1)
 !-------------------------------------
@@ -271,6 +274,7 @@ contains
                allocate( dv(isd:ied+1,jsd:jed,  npz) )
                call init_ijk_mem(isd,ied+1, jsd,jed  , npz, dv, 0.)
           endif
+          call init_ijk_mem(isd,ied, jsd,jed, npz, diss_est, 0.)
       endif    ! end init_step
 
 ! Empty the "flux capacitors"
@@ -457,13 +461,13 @@ contains
                                       isd, ied, jsd, jed, npz, &
                                       is,  ie,  js,  je,       &
                                       isd, ied, jsd, jed,      &
-                                      reg_bc_update_time )
+                                      reg_bc_update_time,it )
 #ifndef SW_DYNAMICS
         call regional_boundary_update(ptc, 'pt', &
                                       isd, ied, jsd, jed, npz, &
                                       is,  ie,  js,  je,       &
                                       isd, ied, jsd, jed,      &
-                                      reg_bc_update_time )
+                                      reg_bc_update_time,it )
 #endif
       endif
       if ( hydrostatic ) then
@@ -613,12 +617,12 @@ contains
                                       isd, ied, jsd, jed+1, npz, &
                                       is,  ie,  js,  je,       &
                                       isd, ied, jsd, jed,      &
-                                      reg_bc_update_time )
+                                      reg_bc_update_time,it )
         call regional_boundary_update(uc, 'uc', &
                                       isd, ied+1, jsd, jed, npz, &
                                       is,  ie,  js,  je,       &
                                       isd, ied, jsd, jed,      &
-                                      reg_bc_update_time )
+                                      reg_bc_update_time,it )
         call mpp_update_domains(uc, vc, domain, gridtype=CGRID_NE)
 !!! Currently divgd is always 0.0 in the regional domain boundary area.
         reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(it-1)*dt
@@ -626,7 +630,7 @@ contains
                                       isd, ied+1, jsd, jed+1, npz, &
                                       is,  ie,  js,  je,       &
                                       isd, ied, jsd, jed,      &
-                                      reg_bc_update_time )
+                                      reg_bc_update_time,it )
       endif
 
     if ( flagstruct%inline_q ) then
@@ -644,7 +648,7 @@ contains
                                         isd, ied, jsd, jed, npz, &
                                         is,  ie,  js,  je,       &
                                         isd, ied, jsd, jed,      &
-                                        reg_bc_update_time )
+                                        reg_bc_update_time,it )
         enddo
       endif
 
@@ -656,9 +660,9 @@ contains
 !$OMP                                  is,ie,js,je,isd,ied,jsd,jed,omga,delp,gridstruct,npx,npy,  &
 !$OMP                                  ng,zh,vt,ptc,pt,u,v,w,uc,vc,ua,va,divgd,mfx,mfy,cx,cy,     &
 !$OMP                                  crx,cry,xfx,yfx,q_con,zvir,sphum,nq,q,dt,bd,rdt,iep1,jep1, &
-!$OMP                                  heat_source,is_ideal_case,radius)                          &
+!$OMP                                  heat_source,is_ideal_case,diss_est,radius)                 &
 !$OMP                          private(nord_k, nord_w, nord_t, damp_w, damp_t, d2_divg,   &
-!$OMP                          d_con_k,kgb, hord_m, hord_v, hord_t, hord_p, wk, heat_s, z_rat)
+!$OMP                          d_con_k,kgb, hord_m, hord_v, hord_t, hord_p, wk, heat_s, diss_e, z_rat)
     do k=1,npz
        hord_m = flagstruct%hord_mt
        hord_t = flagstruct%hord_tm
@@ -760,7 +764,7 @@ contains
 #else
                   q_con(isd:,jsd:,1),  z_rat(isd,jsd),  &
 #endif
-                  kgb, heat_s, zvir, sphum, nq,  q,  k,  npz, flagstruct%inline_q,  dt,  &
+                  kgb, heat_s, diss_e, zvir, sphum, nq,  q,  k,  npz, flagstruct%inline_q,  dt,  &
                   flagstruct%hord_tr, hord_m, hord_v, hord_t, hord_p,    &
                   nord_k, nord_v(k), nord_w, nord_t, flagstruct%dddmp, d2_divg, flagstruct%d4_bg,  &
                   damp_vt(k), damp_w, damp_t, d_con_k, hydrostatic, gridstruct, flagstruct, bd)
@@ -781,11 +785,12 @@ contains
                enddo
             enddo
        endif
-       if ( flagstruct%d_con > 1.0E-5 ) then
+       if ( flagstruct%d_con > 1.0E-5 .OR. flagstruct%do_diss_est ) then
 ! Average horizontal "convergence" to cell center
             do j=js,je
                do i=is,ie
                   heat_source(i,j,k) = heat_source(i,j,k) + heat_s(i,j)
+                  diss_est(i,j,k) = diss_est(i,j,k) + diss_e(i,j)
                enddo
             enddo
        endif
@@ -867,20 +872,20 @@ contains
                                     isd, ied, jsd, jed, npz, &
                                     is,  ie,  js,  je,       &
                                     isd, ied, jsd, jed,      &
-                                    reg_bc_update_time )
+                                    reg_bc_update_time,it )
 #ifndef SW_DYNAMICS
       call regional_boundary_update(pt, 'pt', &
                                     isd, ied, jsd, jed, npz, &
                                     is,  ie,  js,  je,       &
                                     isd, ied, jsd, jed,      &
-                                    reg_bc_update_time )
+                                    reg_bc_update_time,it )
 
 #ifdef USE_COND
       call regional_boundary_update(q_con, 'q_con', &
                                     isd, ied, jsd, jed, npz, &
                                     is,  ie,  js,  je,       &
                                     isd, ied, jsd, jed,      &
-                                    reg_bc_update_time )
+                                    reg_bc_update_time,it )
 #endif
 
 #endif
@@ -1176,14 +1181,14 @@ contains
 
       if (flagstruct%regional) then
 
+           reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+it*dt
 #ifndef SW_DYNAMICS
          if (.not. hydrostatic) then
-           reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+it*dt
            call regional_boundary_update(w, 'w', &
                                          isd, ied, jsd, jed, ubound(w,3), &
                                          is,  ie,  js,  je,       &
                                          isd, ied, jsd, jed,      &
-                                         reg_bc_update_time )
+                                         reg_bc_update_time,it )
          endif
 #endif SW_DYNAMICS
 
@@ -1191,12 +1196,12 @@ contains
                                        isd, ied, jsd, jed+1, npz, &
                                        is,  ie,  js,  je,       &
                                        isd, ied, jsd, jed,      &
-                                       reg_bc_update_time )
+                                       reg_bc_update_time,it )
          call regional_boundary_update(v, 'v', &
                                        isd, ied+1, jsd, jed, npz, &
                                        is,  ie,  js,  je,       &
                                        isd, ied, jsd, jed,      &
-                                       reg_bc_update_time )
+                                       reg_bc_update_time,it )
 
          call mpp_update_domains(u, v, domain, gridtype=DGRID_NE)
       end if

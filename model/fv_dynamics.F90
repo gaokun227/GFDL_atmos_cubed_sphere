@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -76,7 +76,7 @@ contains
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
-                        parent_grid, domain, inline_mp, time_total)
+                        parent_grid, domain, inline_mp, diss_est, time_total)
 
     real, intent(IN) :: bdt  ! Large time-step
     real, intent(IN) :: consv_te
@@ -107,6 +107,7 @@ contains
     real, intent(inout) :: q(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, ncnst) ! specific humidity and constituents
     real, intent(inout) :: delz(bd%is:,bd%js:,1:)   ! delta-height (m); non-hydrostatic only
     real, intent(inout) ::  ze0(bd%is:, bd%js: ,1:) ! height at edges (m); non-hydrostatic
+    real, intent(inout) :: diss_est(bd%isd:bd%ied  ,bd%jsd:bd%jed, npz) ! diffusion estimate for SKEB
 ! ze0 no longer used
 
 !-----------------------------------------------------------------------
@@ -486,7 +487,7 @@ contains
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
-                    domain, n_map==1, i_pack, last_step, time_total)
+                    domain, n_map==1, i_pack, last_step, diss_est, time_total)
                                            call timing_off('DYN_CORE')
 
 
@@ -559,10 +560,6 @@ contains
          enddo
 
                                                   call timing_on('Remapping')
-#ifdef AVEC_TIMERS
-                                                  call avec_timer_start(6)
-#endif
-
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'before remap k_split ', n_map, '/', k_split
        call prt_mxm('T_ldyn',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
@@ -623,9 +620,6 @@ contains
        if ( graupel > 0 )  &
       call prt_mxm('graupel_dyn', q(isd,jsd,1,graupel), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
      endif
-#ifdef AVEC_TIMERS
-                                                  call avec_timer_stop(6)
-#endif
                                                   call timing_off('Remapping')
 #ifdef MOIST_CAPPA
          if ( neststruct%nested .and. .not. last_step) then
@@ -639,7 +633,7 @@ contains
                                           isd, ied, jsd, jed, npz, &
                                           is,  ie,  js,  je,       &
                                           isd, ied, jsd, jed,      &
-                                          reg_bc_update_time )
+                                          reg_bc_update_time,1 )
          endif
 #endif
 !--------------------------
@@ -991,7 +985,7 @@ contains
 #endif
        allocate( rf(npz) )
        rf(:) = 0.
-       
+
        do k=1, ks+1
           if( is_master() ) write(6,*) k, 0.01*pm(k)
        enddo

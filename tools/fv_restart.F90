@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -34,36 +34,36 @@ module fv_restart_mod
   use fv_arrays_mod,       only: radius, omega ! scaled for small earth
   use fv_arrays_mod,       only: fv_atmos_type, fv_nest_type, fv_grid_bounds_type, R_GRID
   use fv_io_mod,           only: fv_io_init, fv_io_read_restart, fv_io_write_restart, &
-                                 remap_restart, fv_io_register_restart, fv_io_register_nudge_restart, &
-                                 fv_io_register_restart_BCs, fv_io_write_BCs, fv_io_read_BCs
+                                 remap_restart, fv_io_write_BCs, fv_io_read_BCs, &
+                                 fv_io_write_atminc
   use fv_grid_utils_mod,   only: ptop_min, fill_ghost, g_sum, &
                                  make_eta_level, cubed_to_latlon, great_circle_dist
   use fv_diagnostics_mod,  only: prt_maxmin
   use init_hydro_mod,      only: p_var
   use mpp_domains_mod,     only: mpp_update_domains, domain2d, DGRID_NE
+  use mpp_domains_mod,     only: mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
+  use mpp_domains_mod,     only: CENTER, CORNER, NORTH, EAST,  mpp_get_C2F_index, WEST, SOUTH
+  use mpp_domains_mod,     only: mpp_global_field
   use mpp_mod,             only: mpp_chksum, stdout, mpp_error, FATAL, NOTE
-  use mpp_mod,             only: get_unit, mpp_sum, mpp_broadcast, mpp_max, mpp_npes
+  use mpp_mod,             only: get_unit, mpp_sum, mpp_broadcast, mpp_max
   use mpp_mod,             only: mpp_get_current_pelist, mpp_npes, mpp_set_current_pelist
+  use mpp_mod,             only: mpp_send, mpp_recv, mpp_sync_self, mpp_pe, mpp_sync
+  use fms2_io_mod,         only: file_exists, set_filename_appendix, FmsNetcdfFile_t, open_file, close_file
+  use fms_io_mod,          only: fmsset_filename_appendix=> set_filename_appendix
   use test_cases_mod,      only: alpha, init_case, init_double_periodic!, init_latlon
   use fv_mp_mod,           only: is_master, mp_reduce_min, mp_reduce_max, corners_YDir => YDir, fill_corners, tile_fine, global_nest_domain
   use fv_surf_map_mod,     only: sgh_g, oro_g
-  use tracer_manager_mod,  only: get_tracer_names
+  use tracer_manager_mod,  only: get_tracer_index, get_tracer_names, set_tracer_profile
   use field_manager_mod,   only: MODEL_ATMOS
   use external_ic_mod,     only: get_external_ic
   use fv_eta_mod,          only: compute_dz_var, compute_dz_L32, set_hybrid_z
   use fv_surf_map_mod,     only: del2_cubed_sphere, del4_cubed_sphere
   use boundary_mod,        only: fill_nested_grid, nested_grid_BC, update_coarse_grid
-  use tracer_manager_mod,  only: get_tracer_index
-  use field_manager_mod,   only: MODEL_ATMOS
   use fv_timing_mod,       only: timing_on, timing_off
-  use mpp_domains_mod,     only: mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
-  use mpp_mod,             only: mpp_send, mpp_recv, mpp_sync_self, mpp_set_current_pelist, mpp_get_current_pelist, mpp_npes, mpp_pe, mpp_sync
-  use mpp_domains_mod,     only: CENTER, CORNER, NORTH, EAST,  mpp_get_C2F_index, WEST, SOUTH
-  use mpp_domains_mod,     only: mpp_global_field
-  use fms_mod,             only: file_exist
   use fv_treat_da_inc_mod, only: read_da_inc
-  use coarse_grained_restart_files_mod, only: fv_io_write_restart_coarse
   use fv_regional_mod,     only: write_full_fields
+  use fv_iau_mod,          only: iau_external_data_type
+  use coarse_grained_restart_files_mod, only: fv_io_write_restart_coarse
 
   implicit none
   private
@@ -99,7 +99,8 @@ contains
   ! The fv core restart facility
   ! </DESCRIPTION>
   !
-  subroutine fv_restart(fv_domain, Atm, dt_atmos, seconds, days, cold_start, grid_type, this_grid)
+  subroutine fv_restart(fv_domain, Atm, dt_atmos, seconds, days, cold_start, grid_type, &
+                        this_grid, IAU_Data)
     type(domain2d),      intent(inout) :: fv_domain
     type(fv_atmos_type), intent(inout) :: Atm(:)
     real,                intent(in)    :: dt_atmos
@@ -107,8 +108,9 @@ contains
     integer,             intent(out)   :: days
     logical,             intent(inout)    :: cold_start
     integer,             intent(in)    :: grid_type, this_grid
+    type(iau_external_data_type), intent(inout), optional :: IAU_Data
 
-    integer :: i, j, k, n, ntileMe, nt, iq
+    integer :: i, j, k, l, m, n, ntileMe, nt, iq
     integer :: isc, iec, jsc, jec, ncnst, ntprog, ntdiag
     integer :: isd, ied, jsd, jed, npz
     integer isd_p, ied_p, jsd_p, jed_p, isc_p, iec_p, jsc_p, jec_p, isg, ieg, jsg,jeg, npx_p, npy_p
@@ -121,12 +123,15 @@ contains
     character(len=128):: tname, errstring, fname, tracer_name
     character(len=120):: fname_ne, fname_sw
     character(len=3) :: gn
+    character(len=10) :: inputdir
+    character(len=6) :: gnn
 
     integer :: npts, sphum
     integer, allocatable :: pelist(:), global_pelist(:), smoothed_topo(:)
     real    :: sumpertn
-    real    :: zvir
+    real    :: zvir, nbg_inv
 
+    type(FmsNetcdfFile_t) :: fileobj
     logical :: do_read_restart = .false.
     logical :: do_read_restart_bc = .false.
     integer, allocatable :: ideal_test_case(:), new_nest_topo(:)
@@ -161,18 +166,14 @@ contains
        ntprog = size(Atm(n)%q,4)
        ntdiag = size(Atm(n)%qdiag,4)
 
-!!$       if (is_master()) then
-!!$          print*, 'FV_RESTART: ', n, cold_start_grids(n)
-!!$       endif
-
-       !1. sort out restart, external_ic, and cold-start (idealized)
+       !1. sort out restart, external_ic, and cold-start (idealized) plus initialize tracers
        if (Atm(n)%neststruct%nested) then
           write(fname,   '(A, I2.2, A)') 'INPUT/fv_core.res.nest', Atm(n)%grid_number, '.nc'
           write(fname_ne,'(A, I2.2, A)') 'INPUT/fv_BC_ne.res.nest', Atm(n)%grid_number, '.nc'
           write(fname_sw,'(A, I2.2, A)') 'INPUT/fv_BC_sw.res.nest', Atm(n)%grid_number, '.nc'
           if (is_master()) print*, 'Searching for nested grid BC files ', trim(fname_ne), ' ', trim (fname_sw)
-          do_read_restart = file_exist(fname, Atm(n)%domain)
-          do_read_restart_bc = file_exist(fname_ne, Atm(n)%domain) .and. file_exist(fname_sw, Atm(n)%domain)
+          do_read_restart = file_exists(fname)
+          do_read_restart_bc = file_exists(fname_ne) .and. file_exists(fname_sw)
           if (is_master()) then
              print*, 'FV_RESTART: ', n, do_read_restart, do_read_restart_bc
              if (.not. do_read_restart_bc) write(*,*) 'BC files not found, re-generating nested grid boundary conditions'
@@ -180,16 +181,32 @@ contains
           Atm(N)%neststruct%first_step = .not. do_read_restart_bc
        else
           fname='INPUT/fv_core.res.nc'
-          do_read_restart = file_exist('INPUT/fv_core.res.nc') .or. file_exist('INPUT/fv_core.res.tile1.nc')
+          do_read_restart = open_file(fileobj, fname, "read", is_restart=.true.)
+          if (do_read_restart) call close_file(fileobj)
           if (is_master()) print*, 'FV_RESTART: ', n, do_read_restart, do_read_restart_bc
        endif
 
+       !initialize tracers
+       do nt = 1, ntprog
+          call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
+          ! set all tracers to an initial profile value
+          call set_tracer_profile (MODEL_ATMOS, nt, Atm(n)%q(:,:,:,nt))
+       enddo
+       do nt = ntprog+1, ntprog+ntdiag
+          call get_tracer_names(MODEL_ATMOS, nt, tracer_name)
+          ! set all tracers to an initial profile value
+          call set_tracer_profile (MODEL_ATMOS, nt, Atm(n)%qdiag(:,:,:,nt))
+       enddo
+
        !2. Register restarts
-       !--- call fv_io_register_restart to register restart field to be written out in fv_io_write_restart
-       if ( n==this_grid ) call fv_io_register_restart(Atm(n)%domain,Atm(n:n))
+       !No longer need to register restarts in fv_restart_mod with fms2_io implementation
 
-       !if (Atm(n)%neststruct%nested) call fv_io_register_restart_BCs(Atm(n)) !TODO put into fv_io_register_restart
-
+       ! The two calls are needed until everything uses fms2io
+       if (Atm(n)%neststruct%nested .and. n==this_grid) then
+          write(gnn,'(A4, I2.2)') "nest", Atm(n)%grid_number
+          call set_filename_appendix(gnn)
+          call fmsset_filename_appendix(gnn)
+       endif
 
        !3preN. Topography BCs for nest, including setup for blending
 
@@ -249,8 +266,114 @@ contains
              call get_external_ic(Atm(n), Atm(n)%domain, .not. do_read_restart)
              if( is_master() ) write(*,*) 'IC generated from the specified external source'
 
-             !4. Restart
+          !4. Restart
           elseif (do_read_restart) then
+
+             if ( Atm(n)%flagstruct%replay == 1) then
+
+                if( is_master() ) write(*,*) 'Read background and external IC to compute replay increment'
+
+                ! Initialize IAU increment variables
+                IAU_Data%ua_inc=0.0
+                IAU_Data%va_inc=0.0
+                IAU_Data%temp_inc=0.0
+                IAU_Data%delp_inc=0.0
+                IAU_Data%delz_inc=0.0
+                IAU_Data%tracer_inc=0.0
+
+                ! read restart background
+                if( is_master() ) write(*,*) 'Get replay background nrestartbg ', Atm(n)%flagstruct%nrestartbg
+                nbg_inv = 1./Atm(n)%flagstruct%nrestartbg
+                do m=1,Atm(n)%flagstruct%nrestartbg
+                   write(inputdir,'(A5, I1)') "INPUT", m
+                   if( is_master() ) write(*,*) 'inputdir ', inputdir
+                   call fv_io_read_restart(Atm(n)%domain,Atm(n:n),directory=inputdir)
+                   call prt_maxmin('UA_b', Atm(n)%ua, isc, iec, jsc, jec, Atm(n)%ng, npz, 1.)
+                   call prt_maxmin('VA_b', Atm(n)%va, isc, iec, jsc, jec, Atm(n)%ng, npz, 1.)
+                   ! test read in
+                   !call fv_io_write_atminput(Atm(n),'atmf06','ATMF06')
+
+                   if ( .not.Atm(n)%flagstruct%hybrid_z ) then
+                      if(Atm(n)%ptop/=Atm(n)%ak(1)) call mpp_error(FATAL,'FV restart: ptop not equal Atm(n)%ak(1)')
+                   else
+                      Atm(n)%ptop = Atm(n)%ak(1);  Atm(n)%ks = 0
+                   endif
+                   call p_var(npz,         isc,         iec,       jsc,     jec,   Atm(n)%ptop,     ptop_min,  &
+                        Atm(n)%delp, Atm(n)%delz, Atm(n)%pt, Atm(n)%ps, Atm(n)%pe, Atm(n)%peln,   &
+                        Atm(n)%pk,   Atm(n)%pkz, kappa, Atm(n)%q, Atm(n)%ng, &
+                        ncnst,  Atm(n)%gridstruct%area_64, Atm(n)%flagstruct%dry_mass,  &
+                        Atm(n)%flagstruct%adjust_dry_mass,  Atm(n)%flagstruct%mountain, &
+                        Atm(n)%flagstruct%moist_phys,  Atm(n)%flagstruct%hydrostatic, &
+                        Atm(n)%flagstruct%nwat, Atm(n)%domain, Atm(1)%flagstruct%adiabatic, Atm(n)%flagstruct%make_nh)
+
+                   !call fv_io_write_atminput(Atm(n),'atmf06','ATMF06p')
+
+                   ! temporarily hold background fields
+                   do k=1,npz
+                      do j=jsc,jec
+                         do i=isc,iec
+                            IAU_Data%ua_inc(i,j,k) = IAU_Data%ua_inc(i,j,k) + Atm(n)%ua(i,j,k)
+                            IAU_Data%va_inc(i,j,k) = IAU_Data%va_inc(i,j,k) + Atm(n)%va(i,j,k)
+                            IAU_Data%temp_inc(i,j,k) = IAU_Data%temp_inc(i,j,k) + Atm(n)%pt(i,j,k)
+                            IAU_Data%delp_inc(i,j,k) = IAU_Data%delp_inc(i,j,k) + Atm(n)%delp(i,j,k)
+                            IAU_Data%delz_inc(i,j,k) = IAU_Data%delz_inc(i,j,k) + Atm(n)%delz(i,j,k)
+                            do l=1,size(Atm(n)%q,4)
+                               IAU_Data%tracer_inc(i,j,k,l) = IAU_Data%tracer_inc(i,j,k,l) + Atm(n)%q(i,j,k,l)
+                            enddo
+                         enddo
+                      enddo
+                   enddo
+
+                enddo
+                if( is_master() ) write(*,*) 'nbg_inv ', nbg_inv
+                IAU_Data%ua_inc = IAU_Data%ua_inc * nbg_inv
+                IAU_Data%va_inc = IAU_Data%va_inc * nbg_inv
+                IAU_Data%temp_inc = IAU_Data%temp_inc * nbg_inv
+                IAU_Data%delp_inc = IAU_Data%delp_inc * nbg_inv
+                IAU_Data%delz_inc = IAU_Data%delz_inc * nbg_inv
+                IAU_Data%tracer_inc = IAU_Data%tracer_inc * nbg_inv
+                ! get external ic for replay
+                if( is_master() ) write(*,*) 'Calling get_external_ic for replay'
+                call get_external_ic(Atm(n), Atm(n)%domain, .true., 'EXTIC')
+                if( is_master() ) write(*,*) 'IC generated from the specified external source'
+                ! compute ua, va
+                call cubed_to_latlon(Atm(n)%u, Atm(n)%v, Atm(n)%ua, Atm(n)%va, &
+                     Atm(n)%gridstruct, &
+                     Atm(n)%npx, Atm(n)%npy, npz, 1, &
+                     Atm(n)%gridstruct%grid_type, Atm(n)%domain, &
+                     Atm(n)%gridstruct%bounded_domain, Atm(n)%flagstruct%c2l_ord, Atm(n)%bd)
+                if( is_master() ) write(*,*) 'external ic compute ua, va'
+                call fv_io_write_restart(Atm(n),prefix='atmanl',directory='ATMANL',atmos=.true.)
+                ! compute increments
+                do k=1,npz
+                   do j=jsc,jec
+                      do i=isc,iec
+                         IAU_Data%ua_inc(i,j,k) = Atm(n)%ua(i,j,k) - IAU_Data%ua_inc(i,j,k)
+                         IAU_Data%va_inc(i,j,k) = Atm(n)%va(i,j,k) - IAU_Data%va_inc(i,j,k)
+                         IAU_Data%temp_inc(i,j,k) = Atm(n)%pt(i,j,k) - IAU_Data%temp_inc(i,j,k)
+                         IAU_Data%delp_inc(i,j,k) = Atm(n)%delp(i,j,k) - IAU_Data%delp_inc(i,j,k)
+                         IAU_Data%delz_inc(i,j,k) = Atm(n)%delz(i,j,k) - IAU_Data%delz_inc(i,j,k)
+                         do l=1,size(Atm(n)%q,4)
+                            IAU_Data%tracer_inc(i,j,k,l) = Atm(n)%q(i,j,k,l) - IAU_Data%tracer_inc(i,j,k,l)
+                         enddo
+                      enddo
+                   enddo
+                enddo
+
+                ! Output IC and increments on model grid
+                if (Atm(n)%flagstruct%write_replay_ic) call fv_io_write_atminc(Atm(n),IAU_Data)
+
+                call prt_maxmin('ua_inc', IAU_Data%ua_inc, isc, iec, jsc, jec, 0, npz, 1.)
+                call prt_maxmin('va_inc', IAU_Data%va_inc, isc, iec, jsc, jec, 0, npz, 1.)
+                call prt_maxmin('t_inc', IAU_Data%temp_inc, isc, iec, jsc, jec, 0, npz, 1.)
+                call prt_maxmin('delp_inc', IAU_Data%delp_inc, isc, iec, jsc, jec, 0, npz, 1.)
+                call prt_maxmin('delz_inc', IAU_Data%delz_inc, isc, iec, jsc, jec, 0, npz, 1.)
+                do l=1,size(Atm(n)%q,4)
+                   call get_tracer_names(MODEL_ATMOS, l, tracer_name)
+                   if( is_master() ) write(*,*) 'IAU_Data input', tracer_name
+                   call prt_maxmin('q_inc', IAU_Data%tracer_inc(:,:,:,l), isc, iec, jsc, jec, 0, npz, 1.)
+                enddo
+             endif
 
              if ( Atm(n)%flagstruct%npz_rst /= 0 .and. Atm(n)%flagstruct%npz_rst /= Atm(n)%npz ) then
                 !Remap vertically the prognostic variables for the chosen vertical resolution
@@ -273,8 +396,7 @@ contains
                    j = (Atm(n)%bd%jsc + Atm(n)%bd%jec)/2
                    k = Atm(n)%npz/2
                    if( is_master() ) write(*,*) 'Calling read_da_inc',Atm(n)%pt(i,j,k)
-                   call read_da_inc(Atm(n), Atm(n)%domain, Atm(n)%bd, Atm(n)%npz, Atm(n)%ncnst, &
-                        Atm(n)%u, Atm(n)%v, Atm(n)%q, Atm(n)%delp, Atm(n)%pt, isd, jsd, ied, jed)
+                   call read_da_inc(Atm(n), Atm(n)%domain)
                    if( is_master() ) write(*,*) 'Back from read_da_inc',Atm(n)%pt(i,j,k)
                 endif
                 !====== end PJP added DA functionailty======
@@ -394,11 +516,6 @@ contains
           !Currently even though we do fill in the nested-grid IC from
           ! init_case or external_ic we appear to overwrite it using
           !  coarse-grid data
-!!$          if (Atm(n)%neststruct%nested) then
-!!$             if (.not. Atm(n)%flagstruct%external_ic .and.  .not. Atm(n)%flagstruct%nggps_ic .and. grid_type < 4 ) then
-!!$                call fill_nested_grid_data(Atm(n:n))
-!!$             endif
-!!$          end if
 
 !       endif  !end cold_start check
 
@@ -521,7 +638,6 @@ contains
        npz = Atm(n)%npz
        ntprog = size(Atm(n)%q,4)
        ntdiag = size(Atm(n)%qdiag,4)
-
 
        if (ideal_test_case(n) == 0) then
 #ifdef SW_DYNAMICS
@@ -704,7 +820,7 @@ contains
 !--------------------------------------------
 ! Initialize surface winds for flux coupler:
 !--------------------------------------------
-    if ( .not. Atm(n)%flagstruct%srf_init ) then
+      if ( .not. Atm(n)%flagstruct%srf_init ) then
          call cubed_to_latlon(Atm(n)%u, Atm(n)%v, Atm(n)%ua, Atm(n)%va, &
               Atm(n)%gridstruct, &
               Atm(n)%npx, Atm(n)%npy, npz, 1, &
@@ -717,7 +833,15 @@ contains
             enddo
          enddo
          Atm(n)%flagstruct%srf_init = .true.
-    endif
+      endif
+
+      !if (n==this_grid) then
+      !  if (Atm(n)%flagstruct%external_ic) then
+      !    call fv_io_write_atminput(Atm(n))
+      !  else
+      !    call fv_io_write_atminput(Atm(n),'atmrst','ATMRST')
+      !  endif
+      !endif
 
     end do   ! n_tile
 
@@ -764,8 +888,6 @@ contains
     else
        process = .true.
     endif
-
-!!$    if (.not. Atm%neststruct%nested) return
 
     call mpp_get_global_domain( Atm%parent_grid%domain, &
          isg, ieg, jsg, jeg)
@@ -1242,17 +1364,6 @@ contains
 
 
 #ifdef SW_DYNAMICS
-!!$    !ps: first level only
-!!$    !This is only valid for shallow-water simulations
-!!$    if (process) then
-!!$    do j=jsd,jed
-!!$       do i=isd,ied
-!!$
-!!$          Atm%ps(i,j) = Atm%delp(i,j,1)/grav
-!!$
-!!$       end do
-!!$    end do
-!!$    endif
 #else
     !Reset p_var after updating topography
     if (process) call p_var(npz, isc, iec, jsc, jec, Atm%ptop, ptop_min, Atm%delp, &
@@ -1279,10 +1390,10 @@ contains
     if (Atm%coarse_graining%write_coarse_restart_files) then
        call fv_io_write_restart_coarse(Atm, timestamp)
        if (.not. Atm%coarse_graining%write_only_coarse_intermediate_restarts) then
-          call fv_io_write_restart(Atm, timestamp)
+          call fv_io_write_restart(Atm, prefix=timestamp)
        endif
     else
-       call fv_io_write_restart(Atm, timestamp)
+       call fv_io_write_restart(Atm, prefix=timestamp)
     endif
 
     if (Atm%neststruct%nested) then
@@ -1440,4 +1551,5 @@ subroutine pmaxmn_g(qname, q, is, ie, js, je, km, fac, area, domain)
       if(is_master()) write(6,*) qname, qmax*fac, qmin*fac, gmean*fac
 
 end subroutine pmaxmn_g
+
 end module fv_restart_mod

@@ -1,3 +1,24 @@
+!***********************************************************************
+!*                   GNU Lesser General Public License
+!*
+!* This file is part of the FV3 dynamical core.
+!*
+!* The FV3 dynamical core is free software: you can redistribute it
+!* and/or modify it under the terms of the
+!* GNU Lesser General Public License as published by the
+!* Free Software Foundation, either version 3 of the License, or
+!* (at your option) any later version.
+!*
+!* The FV3 dynamical core is distributed in the hope that it will be
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+!* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+!* See the GNU General Public License for more details.
+!*
+!* You should have received a copy of the GNU Lesser General Public
+!* License along with the FV3 dynamical core.
+!* If not, see <http://www.gnu.org/licenses/>.
+!***********************************************************************
+
 module fv_diag_column_mod
 
   use fv_arrays_mod,      only: fv_atmos_type, fv_grid_type, fv_diag_type, fv_grid_bounds_type, &
@@ -8,7 +29,6 @@ module fv_diag_column_mod
   use fms_mod,            only: write_version_number, lowercase
   use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, &
                                 mpp_max, NOTE, input_nml_file, get_unit
-  use mpp_io_mod,         only: mpp_flush
   use fv_sg_mod,          only: qsmith
 
   implicit none
@@ -61,8 +81,7 @@ contains
    logical, intent(OUT) :: do_diag_debug_out, do_diag_sonde_out
    integer, intent(OUT) :: sound_freq_out
 
-   integer :: ios, nlunit
-   logical :: exists
+   integer :: ios
 
    m_calendar = m_calendar_in
 
@@ -84,20 +103,7 @@ contains
     diag_sonde_j(:) = -999
     diag_sonde_tile(:) = -99
 
-#ifdef INTERNAL_FILE_NML
     read(input_nml_file, nml=fv_diag_column_nml,iostat=ios)
-#else
-    inquire (file=trim(Atm%nml_filename), exist=exists)
-    if (.not. exists) then
-      write(errmsg,*) 'fv_diag_column_nml: namelist file ',trim(Atm%nml_filename),' does not exist'
-      call mpp_error(FATAL, errmsg)
-    else
-      open (unit=nlunit, file=Atm%nml_filename, READONLY, status='OLD', iostat=ios)
-    endif
-    rewind(nlunit)
-    read (nlunit, nml=fv_diag_column_nml, iostat=ios)
-    close (nlunit)
-#endif
 
     if (do_diag_debug .or. do_diag_sonde) then
        call read_column_table
@@ -118,7 +124,6 @@ contains
     do_diag_debug_out = do_diag_debug
     do_diag_sonde_out = do_diag_sonde
     sound_freq_out    = sound_freq
-
 
  end subroutine fv_diag_column_init
 
@@ -306,10 +311,9 @@ contains
        if (point_found) then
 
           !Initialize output file
-          diag_units(m) = get_unit()
           write(filename, 202) trim(diag_names(m)), trim(diag_class)
 202       format(A, '.', A, '.out')
-          open(diag_units(m), file=trim(filename), action='WRITE', position='rewind', iostat=io)
+          open(newunit=diag_units(m), file=trim(filename), action='WRITE', position='rewind', iostat=io)
           if(io/=0) call mpp_error(FATAL, ' find_diagnostic_column: Error in opening file '//trim(filename))
           !Print debug message
           write(*,'(A, 1x, A, 1x, 1x, A, 2F8.3, 2I5, I3, I04)') trim(diag_class), 'point: ', diag_names(m), diag_lon(m), diag_lat(m), diag_i(m), diag_j(m), diag_tile(m), mpp_pe()
@@ -423,8 +427,7 @@ contains
        write(unit, *) '==================================================================='
        write(unit, *)
 
-       call mpp_flush(unit)
-
+       call flush(unit)
 
     enddo
 
@@ -546,7 +549,7 @@ contains
        write(unit, *) '==================================================================='
        write(unit, *)
 
-       call mpp_flush(unit)
+       call flush(unit)
 
     enddo
 
@@ -647,7 +650,7 @@ contains
              enddo
           endif
 
-          call mpp_flush(unit)
+          call flush(unit)
 
     enddo
 
