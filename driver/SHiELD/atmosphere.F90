@@ -1306,12 +1306,23 @@ contains
        enddo
      enddo
 
-     do ix = 1, blen
-       i = Atm_block%index(nb)%ii(ix)
-       j = Atm_block%index(nb)%jj(ix)
-       if (Atm(n)%flagstruct%do_inline_edmf) Atm(n)%inline_edmf%hflx(i,j) = IPD_Data(nb)%Stateout%hflx(ix)
-       if (Atm(n)%flagstruct%do_inline_edmf) Atm(n)%inline_edmf%evap(i,j) = IPD_Data(nb)%Stateout%evap(ix)
-     enddo
+     if (Atm(n)%flagstruct%do_inline_edmf) then
+       do ix = 1, blen
+         i = Atm_block%index(nb)%ii(ix)
+         j = Atm_block%index(nb)%jj(ix)
+         Atm(n)%inline_edmf%hflx(i,j) = IPD_Data(nb)%Stateout%hflx(ix)
+         Atm(n)%inline_edmf%evap(i,j) = IPD_Data(nb)%Stateout%evap(ix)
+         Atm(n)%inline_edmf%tsfc(i,j) = IPD_Data(nb)%Stateout%tsfc(ix)
+         Atm(n)%inline_edmf%vfrac(i,j) = IPD_Data(nb)%Stateout%vfrac(ix)
+         Atm(n)%inline_edmf%vtype(i,j) = IPD_Data(nb)%Stateout%vtype(ix)
+         Atm(n)%inline_edmf%ffmm(i,j) = IPD_Data(nb)%Stateout%ffmm(ix)
+         Atm(n)%inline_edmf%ffhh(i,j) = IPD_Data(nb)%Stateout%ffhh(ix)
+         Atm(n)%inline_edmf%snowd(i,j) = IPD_Data(nb)%Stateout%snowd(ix)
+         Atm(n)%inline_edmf%zorl(i,j) = IPD_Data(nb)%Stateout%zorl(ix)
+         Atm(n)%inline_edmf%uustar(i,j) = IPD_Data(nb)%Stateout%uustar(ix)
+         Atm(n)%inline_edmf%shdmax(i,j) = IPD_Data(nb)%Stateout%shdmax(ix)
+       enddo
+     endif
 
 !GFDL     if ( dnats > 0 ) then
 !GFDL       do iq = nq-dnats+1, nq
@@ -1830,6 +1841,15 @@ contains
            i = Atm_block%index(nb)%ii(ix)
            j = Atm_block%index(nb)%jj(ix)
            IPD_Data(nb)%Statein%prec(ix) = _DBL_(_RL_(Atm(mygrid)%inline_sas%prec(i,j)))
+         enddo
+     endif
+
+     if (Atm(mygrid)%flagstruct%do_inline_edmf) then
+         do ix = 1, blen
+           i = Atm_block%index(nb)%ii(ix)
+           j = Atm_block%index(nb)%jj(ix)
+           IPD_Data(nb)%Statein%hpbl(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%hpbl(i,j)))
+           IPD_Data(nb)%Statein%kpbl(ix) = Atm(mygrid)%inline_edmf%kpbl(i,j)
          enddo
      endif
 

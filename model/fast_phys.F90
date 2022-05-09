@@ -119,11 +119,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     real :: rrg
 
-    integer, dimension (is:ie, js:je) :: ktop, kbot, kcnv, kpbl
+    integer, dimension (is:ie, js:je) :: ktop, kbot, kcnv
 
     real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt
 
-    real, dimension (is:ie, js:je) :: hpbl, cumabs
+    real, dimension (is:ie, js:je) :: cumabs
 
     real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm
 
@@ -328,8 +328,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, peln, delz, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
-!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, hpbl, &
-!$OMP                                    ptop, ntke, kpbl, inline_edmf) &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, &
+!$OMP                                    ptop, ntke, inline_edmf) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, lsm, zi, pi, pik, pmk, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, &
@@ -346,7 +346,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
             lsm = 0
             kinver = km
-            kpbl (is:ie, j) = 1
 
             ! These need to be reviewed later
             qsurf = 0.0
@@ -401,7 +400,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 ta (is:ie, 1), qa (is:ie, 1, 1), inline_edmf%tsfc (is:ie, j), qsurf, &
                 pm (is:ie, 1), pik (is:ie, 1) / pmk (is:ie, 1), &
                 inline_edmf%evap (is:ie, j), inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
-                zm (is:ie, 1) / grav, inline_edmf%snwdph (is:ie, j), &
+                zm (is:ie, 1) / grav, inline_edmf%snowd (is:ie, j), &
                 inline_edmf%zorl (is:ie, j), lsm, inline_edmf%uustar (is:ie, j), &
                 sigmaf, vegtype, inline_edmf%shdmax (is:ie, j), &
                 u10m_out = u10m, v10m_out = v10m, rb_out = rb, &
@@ -413,7 +412,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
                 inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
                 inline_edmf%evap (is:ie, j), stress, wind, kinver, &
-                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, hpbl (is:ie, j), kpbl (is:ie, j))
+                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
+                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j))
 
             do k = 1, km
                 kr = km - k + 1
@@ -646,7 +646,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, ps, &
-!$OMP                                    hpbl, kbot, ktop, kcnv, cumabs) &
+!$OMP                                    kbot, ktop, kcnv, cumabs, inline_edmf) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, lsm, rn, tmp, &
 !$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, dql, ps_dt)
@@ -712,7 +712,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
   
             call sa_sas_shal (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
                 qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
-                lsm, gsize, ww, ncld, hpbl (is:ie, j))
+                lsm, gsize, ww, ncld, inline_edmf%hpbl (is:ie, j))
   
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
 
@@ -938,7 +938,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, inline_gwd, &
-!$OMP                                    kbot, ktop, kcnv, kpbl, ptop, cumabs) &
+!$OMP                                    kbot, ktop, kcnv, ptop, cumabs, inline_edmf) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, pi, pmk, zi, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, ps_dt)
@@ -989,7 +989,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             enddo
 
             call sa_gwd_oro (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, &
-                kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
+                inline_edmf%kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
                 inline_gwd%hprime (is:ie, j), inline_gwd%oc (is:ie, j), inline_gwd%oa (is:ie, j, :), &
                 inline_gwd%ol (is:ie, j, :), inline_gwd%theta (is:ie, j), inline_gwd%sigma (is:ie, j), &
                 inline_gwd%gamma (is:ie, j), inline_gwd%elvmax (is:ie, j))

@@ -449,7 +449,7 @@ contains
         call register_restart_field(SFC_restart, 'shdmax', Atm%inline_edmf%shdmax, dim_names_alloc)
         call register_restart_field(SFC_restart, 'vtype', Atm%inline_edmf%vtype, dim_names_alloc)
         call register_restart_field(SFC_restart, 'vfrac', Atm%inline_edmf%vfrac, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'snwdph', Atm%inline_edmf%snwdph, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'snwdph', Atm%inline_edmf%snowd, dim_names_alloc)
         call register_restart_field(SFC_restart, 'uustar', Atm%inline_edmf%uustar, dim_names_alloc)
       endif
 

@@ -1108,11 +1108,13 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: shdmax(:,:)     _NULL
     real, _ALLOCATABLE :: vtype(:,:)     _NULL
     real, _ALLOCATABLE :: vfrac(:,:)     _NULL
-    real, _ALLOCATABLE :: snwdph(:,:)     _NULL
+    real, _ALLOCATABLE :: snowd(:,:)     _NULL
     real, _ALLOCATABLE :: uustar(:,:)     _NULL
     real, _ALLOCATABLE :: radh(:,:,:)     _NULL
     real, _ALLOCATABLE :: hflx(:,:)     _NULL
     real, _ALLOCATABLE :: evap(:,:)     _NULL
+    real, _ALLOCATABLE :: hpbl(:,:)     _NULL
+    integer, _ALLOCATABLE :: kpbl(:,:)     _NULL
 
   end type inline_edmf_type
 
@@ -1624,11 +1626,13 @@ contains
     allocate ( Atm%inline_edmf%shdmax(is:ie,js:je) )
     allocate ( Atm%inline_edmf%vtype(is:ie,js:je) )
     allocate ( Atm%inline_edmf%vfrac(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%snwdph(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%snowd(is:ie,js:je) )
     allocate ( Atm%inline_edmf%uustar(is:ie,js:je) )
     allocate ( Atm%inline_edmf%radh(is:ie,js:je,npz) )
     allocate ( Atm%inline_edmf%hflx(is:ie,js:je) )
     allocate ( Atm%inline_edmf%evap(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%hpbl(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%kpbl(is:ie,js:je) )
 
     allocate ( Atm%inline_sas%prec(is:ie,js:je) )
 
@@ -1767,11 +1771,13 @@ contains
            Atm%inline_edmf%shdmax(i,j) = real_big
            Atm%inline_edmf%vtype(i,j) = real_big
            Atm%inline_edmf%vfrac(i,j) = real_big
-           Atm%inline_edmf%snwdph(i,j) = real_big
+           Atm%inline_edmf%snowd(i,j) = real_big
            Atm%inline_edmf%uustar(i,j) = real_big
            Atm%inline_edmf%radh(i,j,:) = 0.0
            Atm%inline_edmf%hflx(i,j) = 0.0
            Atm%inline_edmf%evap(i,j) = 0.0
+           Atm%inline_edmf%hpbl(i,j) = real_big
+           Atm%inline_edmf%kpbl(i,j) = 1
 
            Atm%inline_sas%prec(i,j) = real_big
 
@@ -2080,11 +2086,13 @@ contains
     deallocate ( Atm%inline_edmf%shdmax )
     deallocate ( Atm%inline_edmf%vtype )
     deallocate ( Atm%inline_edmf%vfrac )
-    deallocate ( Atm%inline_edmf%snwdph )
+    deallocate ( Atm%inline_edmf%snowd )
     deallocate ( Atm%inline_edmf%uustar )
     deallocate ( Atm%inline_edmf%radh )
     deallocate ( Atm%inline_edmf%hflx )
     deallocate ( Atm%inline_edmf%evap )
+    deallocate ( Atm%inline_edmf%hpbl )
+    deallocate ( Atm%inline_edmf%kpbl )
 
     deallocate ( Atm%inline_sas%prec )
 
