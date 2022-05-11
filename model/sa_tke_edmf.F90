@@ -295,7 +295,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         ri, rimin, &
         rbcr, rbint, tdzmin, &
         elmx, &
-        ttend, utend, qtend, &
+        ttend, utend, vtend, qtend, &
         zfac, zfmin, vk, spdk2, &
         tkmin, dspfac, &
         zlup, zldn, bsum, &
@@ -392,7 +392,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     
     do k = 1, km
         do i = 1, im
-            tke (i, k) = max (q1g (i, k, ntrac), tkmin) ! tke at layer centers
+            tke (i, k) = max (q1 (i, k, ntke), tkmin) ! tke at layer centers
         enddo
     enddo
     do k = 1, km1
@@ -936,7 +936,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     ! -----------------------------------------------------------------------
 
     call mfpblt (im, km, kmpbl, ntcw_new, ntrac1, dt2, &
-        pcnvflg, zl, zm, q1, t1, u1, v1, plyr, pix, thlx, thvx, &
+        pcnvflg, zl, zm, q1g, t1, u1, v1, plyr, pix, thlx, thvx, &
         gdx, hpbl, kpbl, vpert, buou, xmf, &
         tcko, qcko, ucko, vcko, xlamue)
 
@@ -945,7 +945,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     ! -----------------------------------------------------------------------
 
     call mfscu (im, km, kmscu, ntcw_new, ntrac1, dt2, &
-        scuflg, zl, zm, q1, t1, u1, v1, plyr, pix, &
+        scuflg, zl, zm, q1g, t1, u1, v1, plyr, pix, &
         thlx, thvx, thlvx, gdx, thetae, radj, &
         krad, mrad, radmin, buod, xmfd, &
         tcdo, qcdo, ucdo, vcdo, xlamde)

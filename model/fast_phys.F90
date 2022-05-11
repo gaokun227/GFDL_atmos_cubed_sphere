@@ -27,7 +27,7 @@
 
 module fast_phys_mod
 
-    use constants_mod, only: rdgas, grav, kappa
+    use constants_mod, only: rdgas, grav, kappa, cp_air
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type, &
                              inline_edmf_type, inline_sas_type, inline_gwd_type
@@ -121,7 +121,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     integer, dimension (is:ie, js:je) :: ktop, kbot, kcnv
 
-    real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt
+    real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c_moist
 
     real, dimension (is:ie, js:je) :: cumabs
 
@@ -332,8 +332,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    ptop, ntke, inline_edmf) &
 !$OMP                           private (u_dt, v_dt, gsize, dz, lsm, zi, pi, pik, pmk, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
-!$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, &
-!$OMP                                    stress, wind, kinver, qsurf, &
+!$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
+!$OMP                                    stress, wind, kinver, qsurf, q_sol, c_moist, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
 
         do j = js, je
@@ -413,13 +413,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
                 inline_edmf%evap (is:ie, j), stress, wind, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j))
+                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j), &
+                inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
+                inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
 
             do k = 1, km
                 kr = km - k + 1
-                pt (is:ie, j, kr) = ta (is:ie, k)
-                ua (is:ie, j, kr) = uu (is:ie, k)
-                va (is:ie, j, kr) = vv (is:ie, k)
                 q (is:ie, j, kr, ntke) = qa (is:ie, k, ntke)
                 dqv = qa (is:ie, k, sphum  ) - q (is:ie, j, kr, sphum  )
                 dql = qa (is:ie, k, liq_wat) - q (is:ie, j, kr, liq_wat)
@@ -435,6 +434,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 q (is:ie, j, kr, snowwat) = qa (is:ie, k, snowwat) / ps_dt
                 q (is:ie, j, kr, graupel) = qa (is:ie, k, graupel) / ps_dt
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
+                q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
+                q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
+                c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
+                    q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+                ps_dt = pt (is:ie, j, kr)
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - pt (is:ie, j, kr)) * cp_air / c_moist
+                ua (is:ie, j, kr) = uu (is:ie, k)
+                va (is:ie, j, kr) = vv (is:ie, k)
             enddo
 
             ! compute wind tendency at A grid fori D grid wind update

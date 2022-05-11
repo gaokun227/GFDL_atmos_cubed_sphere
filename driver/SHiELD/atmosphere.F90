@@ -1850,6 +1850,10 @@ contains
            j = Atm_block%index(nb)%jj(ix)
            IPD_Data(nb)%Statein%hpbl(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%hpbl(i,j)))
            IPD_Data(nb)%Statein%kpbl(ix) = Atm(mygrid)%inline_edmf%kpbl(i,j)
+           IPD_Data(nb)%Statein%dusfc(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%dusfc(i,j)))
+           IPD_Data(nb)%Statein%dvsfc(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%dvsfc(i,j)))
+           IPD_Data(nb)%Statein%dtsfc(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%dtsfc(i,j)))
+           IPD_Data(nb)%Statein%dqsfc(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%dqsfc(i,j)))
          enddo
      endif
 

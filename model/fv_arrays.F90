@@ -1115,6 +1115,10 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: evap(:,:)     _NULL
     real, _ALLOCATABLE :: hpbl(:,:)     _NULL
     integer, _ALLOCATABLE :: kpbl(:,:)     _NULL
+    real, _ALLOCATABLE :: dtsfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dqsfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dusfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dvsfc(:,:)     _NULL
 
   end type inline_edmf_type
 
@@ -1633,6 +1637,10 @@ contains
     allocate ( Atm%inline_edmf%evap(is:ie,js:je) )
     allocate ( Atm%inline_edmf%hpbl(is:ie,js:je) )
     allocate ( Atm%inline_edmf%kpbl(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%dtsfc(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%dqsfc(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%dusfc(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%dvsfc(is:ie,js:je) )
 
     allocate ( Atm%inline_sas%prec(is:ie,js:je) )
 
@@ -1778,6 +1786,10 @@ contains
            Atm%inline_edmf%evap(i,j) = 0.0
            Atm%inline_edmf%hpbl(i,j) = real_big
            Atm%inline_edmf%kpbl(i,j) = 1
+           Atm%inline_edmf%dtsfc(i,j) = real_big
+           Atm%inline_edmf%dqsfc(i,j) = real_big
+           Atm%inline_edmf%dusfc(i,j) = real_big
+           Atm%inline_edmf%dvsfc(i,j) = real_big
 
            Atm%inline_sas%prec(i,j) = real_big
 
@@ -2093,6 +2105,10 @@ contains
     deallocate ( Atm%inline_edmf%evap )
     deallocate ( Atm%inline_edmf%hpbl )
     deallocate ( Atm%inline_edmf%kpbl )
+    deallocate ( Atm%inline_edmf%dtsfc )
+    deallocate ( Atm%inline_edmf%dqsfc )
+    deallocate ( Atm%inline_edmf%dusfc )
+    deallocate ( Atm%inline_edmf%dvsfc )
 
     deallocate ( Atm%inline_sas%prec )
 
