@@ -285,8 +285,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, q_con, &
 !$OMP                                    sphum, w, pk, pkz, last_step, consv, te0_2d, &
 !$OMP                                    gridstruct, q, mdt, cld_amt, cappa, rrg, akap, &
-!$OMP                                    ccn_cm3, cin_cm3, inline_mp, do_inline_mp, ps, aerosol) &
-!$OMP                           private (u_dt, v_dt, q2, q3, gsize, dz, wa)
+!$OMP                                    ccn_cm3, cin_cm3, inline_mp, do_inline_mp, ps, &
+!$OMP                                    u_dt, v_dt, aerosol) &
+!$OMP                           private (q2, q3, gsize, dz, wa)
 
         do j = js, je
 
@@ -472,6 +473,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
         call update_dwinds_phys (is, ie, js, je, isd, ied, jsd, jed, abs (mdt), u_dt, v_dt, u, v, &
                  gridstruct, npx, npy, km, domain)
 
+        deallocate (u_dt)
+        deallocate (v_dt)
+
         ! update dry total energy
         if (consv .gt. consv_min) then
 !$OMP parallel do default (none) shared (is, ie, js, je, km, te0_2d, hydrostatic, delp, &
@@ -520,8 +524,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
             enddo
         end if
 
-        deallocate (u_dt)
-        deallocate (v_dt)
         if (consv .gt. consv_min) then
             deallocate (u0)
             deallocate (v0)
