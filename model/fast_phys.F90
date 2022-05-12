@@ -121,7 +121,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     logical :: safety_check = .true.
 
-    integer :: i, j, k, kr, kmp, ncld, ntke, sphum, liq_wat, ice_wat, 
+    integer :: i, j, k, kr, kmp, ncld, ntke, sphum, liq_wat, ice_wat
     integer :: rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
 
     real :: rrg
