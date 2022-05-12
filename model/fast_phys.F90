@@ -52,9 +52,11 @@ contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
-               v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
-               inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, do_sat_adj, last_step)
+               v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, &
+               pk, ps, r_vir, inline_mp, inline_edmf, inline_sas, inline_gwd, &
+               gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+               do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, &
+               do_sat_adj, last_step)
     
     implicit none
     
@@ -106,8 +108,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     type (domain2d), intent (inout) :: domain
 
     type (inline_mp_type), intent (inout) :: inline_mp
+
     type (inline_edmf_type), intent (inout) :: inline_edmf
+
     type (inline_sas_type), intent (inout) :: inline_sas
+
     type (inline_gwd_type), intent (inout) :: inline_gwd
 
     ! -----------------------------------------------------------------------
@@ -116,8 +121,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     logical :: safety_check = .true.
 
-    integer :: i, j, k, kr, kmp, ncld, ntke
-    integer :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
+    integer :: i, j, k, kr, kmp, ncld, ntke, sphum, liq_wat, ice_wat, 
+    integer :: rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
 
     real :: rrg
 
@@ -133,11 +138,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     integer, allocatable, dimension (:) :: lsm, kinver, vegtype
 
-    real, allocatable, dimension (:) :: rn, rb, u10m, v10m, sigmaf
-    real, allocatable, dimension (:) :: stress, wind, tmp, qsurf
+    real, allocatable, dimension (:) :: rn, rb, u10m, v10m, sigmaf, stress, wind, tmp, qsurf
 
-    real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql
-    real, allocatable, dimension (:,:) :: ta, uu, vv, ww, radh
+    real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql, ta, uu, vv, ww, radh
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
@@ -151,6 +154,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     ccn_cm3 = get_tracer_index (model_atmos, 'ccn_cm3')
     cin_cm3 = get_tracer_index (model_atmos, 'cin_cm3')
     aerosol = get_tracer_index (model_atmos, 'aerosol')
+    ntke = get_tracer_index (model_atmos, 'sgs_tke')
 
     rrg = - rdgas / grav
 
@@ -185,8 +189,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         do j = js, je
 
+            ! grid size
             gsize (is:ie) = sqrt (gridstruct%area_64 (is:ie, j))
 
+            ! aerosol
             if (aerosol .gt. 0) then
                 q2 (is:ie, kmp:km) = q (is:ie, j, kmp:km, aerosol)
             elseif (ccn_cm3 .gt. 0) then
@@ -200,13 +206,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 q3 (is:ie, kmp:km) = 0.0
             endif
  
+            ! layer thickness
             if (.not. hydrostatic) then
                 dz (is:ie, kmp:km) = delz (is:ie, j, kmp:km)
             else
-                dz (is:ie, kmp:km) = (peln (is:ie, kmp:km, j) - peln (is:ie, kmp+1:km+1, j)) * &
-                    rdgas * pt (is:ie, j, kmp:km) / grav
+                dz (is:ie, kmp:km) = (peln (is:ie, kmp+1:km+1, j) - peln (is:ie, kmp:km, j)) * &
+                    rrg * pt (is:ie, j, kmp:km)
             endif
 
+            ! fast saturation adjustment
             call fast_sat_adj (abs (mdt), is, ie, kmp, km, hydrostatic, consv .gt. consv_min, &
                      te (is:ie, j, kmp:km), q (is:ie, j, kmp:km, sphum), q (is:ie, j, kmp:km, liq_wat), &
                      q (is:ie, j, kmp:km, rainwat), q (is:ie, j, kmp:km, ice_wat), &
@@ -239,6 +247,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 #endif
             endif
  
+            ! add total energy change to te0_2d
             if (consv .gt. consv_min) then
                 do i = is, ie
                     do k = kmp, km
@@ -266,8 +275,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     if ((.not. do_adiabatic_init) .and. do_inline_edmf) then
 
         call timing_on ('sa_tke_edmf')
-
-        ntke = get_tracer_index (model_atmos, 'sgs_tke')
 
         allocate (lsm (is:ie))
         allocate (kinver (is:ie))
@@ -299,6 +306,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
+        ! initialize wind tendencies
         do k = 1, km
             do j = jsd, jed
                 do i = isd, ied
@@ -340,6 +348,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         do j = js, je
  
+            ! grid size
             gsize (is:ie) = sqrt (gridstruct%area_64 (is:ie, j))
 
             ! save ua, va for wind tendency calculation
@@ -349,9 +358,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             lsm = 0
             kinver = km
 
-            ! These need to be reviewed later
+            ! if q2m is needed, qsurf cannot be zero
             qsurf = 0.0
 
+            ! total energy before parameterization
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
                 qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
@@ -361,6 +371,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
             endif
 
+            ! vertical index flip over
             zi (is:ie, 1) = 0.0
             pi (is:ie, km+1) = ptop
             pik (is:ie, km+1) = exp (kappa * log (pi (is:ie, km+1) * 1.e-5))
@@ -370,14 +381,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
                 pik (is:ie, kr) = exp (kappa * log (pi (is:ie, kr) * 1.e-5))
                 if (.not. hydrostatic) then
-                    !pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
-                    !    rdgas * pt (is:ie, j, kr) / grav
+                    !pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
+                    !    rrg * pt (is:ie, j, kr)
                     pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
                     dz (is:ie, k) = delz (is:ie, j, kr)
                 else
                     pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:ie, kr, j) - peln (is:ie, kr+1, j)) * &
-                        rdgas * pt (is:ie, j, kr) / grav
+                    dz (is:ie, k) = (peln (is:ie, kr+1, j) - peln (is:ie, kr, j)) * &
+                        rrg * pt (is:ie, j, kr)
                 endif
                 pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
                 zi (is:ie, k+1) = zi (is:ie, k) - dz (is:ie, k) * grav
@@ -399,6 +410,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 vegtype (i) = int (inline_edmf%vtype (i, j) + 0.5)
             enddo
 
+            ! check if pressure or height cross over
             if (safety_check) then
                 do k = 1, km
                     do i = is, ie
@@ -420,6 +432,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 enddo
             endif
 
+            ! diagnose surface variables for PBL parameterization
             if (inline_edmf%sfc_cpl) then
                 u10m = inline_edmf%u10m (is:ie, j)
                 v10m = inline_edmf%v10m (is:ie, j)
@@ -438,6 +451,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                     stress_out = stress, wind_out = wind)
             endif
 
+            ! SA-TKE-EDMF main program
             call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
                 abs (mdt), uu, vv, ta, qa, gsize, lsm, &
                 radh, rb, inline_edmf%zorl (is:ie, j), u10m, v10m, &
@@ -449,6 +463,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
                 inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
 
+            ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
                 kr = km - k + 1
                 q (is:ie, j, kr, ntke) = qa (is:ie, k, ntke)
@@ -486,7 +501,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 peln (is:ie, k, j) = log (pe (is:ie, k, j))
                 pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
             enddo
-
             ps (is:ie, j) = pe (is:ie, km+1, j)
 
             ! update pkz
@@ -501,6 +515,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 #endif
             endif
  
+            ! total energy after parameterization, add total energy change to te0_2d
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
                 qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
@@ -651,6 +666,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
+        ! initialize wind tendencies
         do k = 1, km
             do j = jsd, jed
                 do i = isd, ied
@@ -691,6 +707,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         do j = js, je
  
+            ! grid size
             gsize (is:ie) = sqrt (gridstruct%area_64 (is:ie, j))
 
             ! save ua, va for wind tendency calculation
@@ -704,6 +721,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             lsm = 0
             ncld = 1
 
+            ! total energy before parameterization
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
                 qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
@@ -713,18 +731,19 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
             endif
 
+            ! vertical index flip over
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
                 if (.not. hydrostatic) then
-                    !pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
-                    !    rdgas * pt (is:ie, j, kr) / grav
+                    !pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
+                    !    rrg * pt (is:ie, j, kr)
                     pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
                     dz (is:ie, k) = delz (is:ie, j, kr)
                 else
                     pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:ie, kr, j) - peln (is:ie, kr+1, j)) * &
-                        rdgas * pt (is:ie, j, kr) / grav
+                    dz (is:ie, k) = (peln (is:ie, kr+1, j) - peln (is:ie, kr, j)) * &
+                        rrg * pt (is:ie, j, kr)
                 endif
                 if (k .eq. 1) then
                     zm (is:ie, k) = - 0.5 * dz (is:ie, k) * grav
@@ -743,6 +762,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 if (hs (i, j) .gt. 0) lsm (i) = 1
             enddo
 
+            ! check if pressure or height cross over
             if (safety_check) then
                 do k = 1, km
                     do i = is, ie
@@ -758,18 +778,23 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 enddo
             endif
 
+            ! SA-SAS deep convection main program
             call sa_sas_deep (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
                 qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
                 lsm, gsize, ww, ncld)
 
+            ! convective precipitation accumulation
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
   
+            ! SA-SAS shallow convection main program
             call sa_sas_shal (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
                 qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
                 lsm, gsize, ww, ncld, inline_edmf%hpbl (is:ie, j))
   
+            ! convective precipitation accumulation
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
 
+            ! convective heating for convective gravity wave drag parameterization
             cumabs (is:ie, j) = 0.0
             tmp (is:ie) = 0.0
             do k = 1, km
@@ -785,6 +810,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 if (tmp (i) .gt. 0.0) cumabs (i, j) = cumabs (i, j) / (abs (mdt) * tmp (i))
             enddo
   
+            ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
                 kr = km - k + 1
                 dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
@@ -813,7 +839,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 peln (is:ie, k, j) = log (pe (is:ie, k, j))
                 pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
             enddo
-
             ps (is:ie, j) = pe (is:ie, km+1, j)
 
             ! update pkz
@@ -828,6 +853,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 #endif
             endif
  
+            ! total energy after parameterization, add total energy change to te0_2d
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
                 qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
@@ -964,6 +990,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
+        ! initialize wind tendencies
         do k = 1, km
             do j = jsd, jed
                 do i = isd, ied
@@ -1004,12 +1031,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         do j = js, je
  
+            ! grid size
             gsize (is:ie) = sqrt (gridstruct%area_64 (is:ie, j))
 
             ! save ua, va for wind tendency calculation
             u_dt (is:ie, j, 1:km) = ua (is:ie, j, 1:km)
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
 
+            ! total energy before parameterization
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
                 qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
@@ -1019,6 +1048,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
             endif
 
+            ! vertical index flip over
             zi (is:ie, 1) = 0.0
             pi (is:ie, km+1) = ptop
             do k = 1, km
@@ -1026,14 +1056,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 dp (is:ie, k) = delp (is:ie, j, kr)
                 pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
                 if (.not. hydrostatic) then
-                    !pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
-                    !    rdgas * pt (is:ie, j, kr) / grav
+                    !pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
+                    !    rrg * pt (is:ie, j, kr)
                     pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
                     dz (is:ie, k) = delz (is:ie, j, kr)
                 else
                     pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:ie, kr, j) - peln (is:ie, kr+1, j)) * &
-                        rdgas * pt (is:ie, j, kr) / grav
+                    dz (is:ie, k) = (peln (is:ie, kr+1, j) - peln (is:ie, kr, j)) * &
+                        rrg * pt (is:ie, j, kr)
                 endif
                 pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
                 zi (is:ie, k+1) = zi (is:ie, k) - dz (is:ie, k) * grav
@@ -1048,6 +1078,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 vv (is:ie, k) = va (is:ie, j, kr)
             enddo
 
+            ! check if pressure or height cross over
             if (safety_check) then
                 do k = 1, km
                     do i = is, ie
@@ -1069,15 +1100,18 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 enddo
             endif
 
+            ! orographic gravity wave drag and mountain blocking main program
             call sa_gwd_oro (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, &
                 inline_edmf%kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
                 inline_gwd%hprime (is:ie, j), inline_gwd%oc (is:ie, j), inline_gwd%oa (is:ie, j, :), &
                 inline_gwd%ol (is:ie, j, :), inline_gwd%theta (is:ie, j), inline_gwd%sigma (is:ie, j), &
                 inline_gwd%gamma (is:ie, j), inline_gwd%elvmax (is:ie, j))
 
+            ! convective gravity wave drag main program
             call sa_gwd_cnv (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, cumabs (is:ie, j), &
                 pm, pi, dp, ktop (is:ie, j), kbot (is:ie, j), kcnv (is:ie, j))
   
+            ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
                 kr = km - k + 1
                 dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
@@ -1104,7 +1138,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 peln (is:ie, k, j) = log (pe (is:ie, k, j))
                 pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
             enddo
-
             ps (is:ie, j) = pe (is:ie, km+1, j)
 
             ! update pkz
@@ -1119,6 +1152,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 #endif
             endif
  
+            ! total energy after parameterization, add total energy change to te0_2d
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
                 qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
@@ -1237,6 +1271,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
+        ! initialize wind tendencies
         do k = 1, km
             do j = jsd, jed
                 do i = isd, ied
@@ -1278,8 +1313,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         do j = js, je
 
+            ! grid size
             gsize (is:ie) = sqrt (gridstruct%area_64 (is:ie, j))
 
+            ! aerosol
             if (aerosol .gt. 0) then
                 q2 (is:ie, kmp:km) = q (is:ie, j, kmp:km, aerosol)
             elseif (ccn_cm3 .gt. 0) then
@@ -1308,6 +1345,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             u_dt (is:ie, j, kmp:km) = ua (is:ie, j, kmp:km)
             v_dt (is:ie, j, kmp:km) = va (is:ie, j, kmp:km)
 
+            ! initialize tendencies diagnostic
             if (allocated (inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt (is:ie, j, kmp:km) = &
                 inline_mp%liq_wat_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, liq_wat)
             if (allocated (inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt (is:ie, j, kmp:km) = &
@@ -1333,14 +1371,16 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             if (allocated (inline_mp%v_dt)) inline_mp%v_dt (is:ie, j, kmp:km) = &
                 inline_mp%v_dt (is:ie, j, kmp:km) - va (is:ie, j, kmp:km)
 
+            ! vertical velocity and layer thickness
             if (.not. hydrostatic) then
                 wa (is:ie, kmp:km) = w (is:ie, j, kmp:km)
                 dz (is:ie, kmp:km) = delz (is:ie, j, kmp:km)
             else
-                dz (is:ie, kmp:km) = (peln (is:ie, kmp:km, j) - peln (is:ie, kmp+1:km+1, j)) * &
-                    rdgas * pt (is:ie, j, kmp:km) / grav
+                dz (is:ie, kmp:km) = (peln (is:ie, kmp+1:km+1, j) - peln (is:ie, kmp:km, j)) * &
+                    rrg * pt (is:ie, j, kmp:km)
             endif
 
+            ! GFDL cloud microphysics main program
             call gfdl_mp_driver (q (is:ie, j, kmp:km, sphum), q (is:ie, j, kmp:km, liq_wat), &
                      q (is:ie, j, kmp:km, rainwat), q (is:ie, j, kmp:km, ice_wat), &
                      q (is:ie, j, kmp:km, snowwat), q (is:ie, j, kmp:km, graupel), &
@@ -1383,6 +1423,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                      inline_mp%cond (is:ie, j), inline_mp%dep (is:ie, j), inline_mp%reevap (is:ie, j), &
                      inline_mp%sub (is:ie, j), last_step, do_inline_mp)
 
+            ! update vertical velocity
             if (.not. hydrostatic) then
                 w (is:ie, j, kmp:km) = wa (is:ie, kmp:km)
             endif
@@ -1391,6 +1432,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             u_dt (is:ie, j, kmp:km) = (ua (is:ie, j, kmp:km) - u_dt (is:ie, j, kmp:km)) / abs (mdt)
             v_dt (is:ie, j, kmp:km) = (va (is:ie, j, kmp:km) - v_dt (is:ie, j, kmp:km)) / abs (mdt)
 
+            ! tendencies diagnostic
             if (allocated (inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt (is:ie, j, kmp:km) = &
                 inline_mp%liq_wat_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, liq_wat)
             if (allocated (inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt (is:ie, j, kmp:km) = &
@@ -1422,7 +1464,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 peln (is:ie, k, j) = log (pe (is:ie, k, j))
                 pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
             enddo
-
             ps (is:ie, j) = pe (is:ie, km+1, j)
 
             ! update pkz
@@ -1437,6 +1478,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 #endif
             endif
  
+            ! add total energy change to te0_2d
             if (consv .gt. consv_min) then
                 do i = is, ie
                     do k = kmp, km
