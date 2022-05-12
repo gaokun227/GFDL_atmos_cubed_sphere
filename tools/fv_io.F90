@@ -398,6 +398,125 @@ contains
              call register_variable_attribute(Atm%Tra_restart, tracer_name, "units", "none", str_len=len("none"))
           endif
        enddo
+
+    ! fname = 'oro_data.res'//trim(stile_name)//'.nc'
+    elseif (Atm%Oro_restart_is_open) then
+       if ( Atm%flagstruct%do_inline_gwd ) then
+          call fv_io_register_axis(Atm%Oro_restart, numx=numx, numy=numy, xpos=xpos, ypos=ypos)
+          call register_restart_field (Atm%Oro_restart, 'stddev', Atm%inline_gwd%hprime, dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'convexity', Atm%inline_gwd%oc, dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'oa1', Atm%inline_gwd%oa(:,:,1), dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'oa2', Atm%inline_gwd%oa(:,:,2), dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'oa3', Atm%inline_gwd%oa(:,:,3), dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'oa4', Atm%inline_gwd%oa(:,:,4), dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'ol1', Atm%inline_gwd%ol(:,:,1), dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'ol2', Atm%inline_gwd%ol(:,:,2), dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'ol3', Atm%inline_gwd%ol(:,:,3), dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'ol4', Atm%inline_gwd%ol(:,:,4), dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'theta', Atm%inline_gwd%theta, dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'sigma', Atm%inline_gwd%sigma, dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'gamma', Atm%inline_gwd%gamma, dim_names_3d2)
+          call register_restart_field (Atm%Oro_restart, 'elvmax', Atm%inline_gwd%elvmax, dim_names_3d2)
+          if (.not. Atm%Oro_restart%is_readonly) then !if writing file
+            call register_variable_attribute(Atm%Oro_restart, 'stddev', "long_name", "stddev", str_len=len("stddev"))
+            call register_variable_attribute(Atm%Oro_restart, 'stddev', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'convexity', "long_name", "convexity", str_len=len("convexity"))
+            call register_variable_attribute(Atm%Oro_restart, 'convexity', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'oa1', "long_name", "oa1", str_len=len("oa1"))
+            call register_variable_attribute(Atm%Oro_restart, 'oa1', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'oa2', "long_name", "oa2", str_len=len("oa2"))
+            call register_variable_attribute(Atm%Oro_restart, 'oa2', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'oa3', "long_name", "oa3", str_len=len("oa3"))
+            call register_variable_attribute(Atm%Oro_restart, 'oa3', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'oa4', "long_name", "oa4", str_len=len("oa4"))
+            call register_variable_attribute(Atm%Oro_restart, 'oa4', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'ol1', "long_name", "ol1", str_len=len("ol1"))
+            call register_variable_attribute(Atm%Oro_restart, 'ol1', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'ol2', "long_name", "ol2", str_len=len("ol2"))
+            call register_variable_attribute(Atm%Oro_restart, 'ol2', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'ol3', "long_name", "ol3", str_len=len("ol3"))
+            call register_variable_attribute(Atm%Oro_restart, 'ol3', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'ol4', "long_name", "ol4", str_len=len("ol4"))
+            call register_variable_attribute(Atm%Oro_restart, 'ol4', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'theta', "long_name", "theta", str_len=len("theta"))
+            call register_variable_attribute(Atm%Oro_restart, 'theta', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'sigma', "long_name", "sigma", str_len=len("sigma"))
+            call register_variable_attribute(Atm%Oro_restart, 'sigma', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'gamma', "long_name", "gamma", str_len=len("gamma"))
+            call register_variable_attribute(Atm%Oro_restart, 'gamma', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Oro_restart, 'elvmax', "long_name", "elvmax", str_len=len("elvmax"))
+            call register_variable_attribute(Atm%Oro_restart, 'elvmax', "units", "none", str_len=len("none"))
+          endif
+       endif
+
+    ! fname = 'phy_data.res'//trim(stile_name)//'.nc'
+    elseif (Atm%Phy_restart_is_open) then
+       if ( Atm%flagstruct%do_inline_edmf ) then
+          zsize = (/size(Atm%inline_edmf%radh,3)/)
+          call fv_io_register_axis(Atm%Phy_restart, numx=numx, numy=numy, xpos=xpos, ypos=ypos, numz=numz, zsize=zsize)
+          call register_restart_field (Atm%Phy_restart, 'radh', Atm%inline_edmf%radh, dim_names_4d)
+          if (.not. Atm%Phy_restart%is_readonly) then !if writing file
+            call register_variable_attribute(Atm%Phy_restart, 'radh', "long_name", "radh", str_len=len("radh"))
+            call register_variable_attribute(Atm%Phy_restart, 'radh', "units", "none", str_len=len("none"))
+          endif
+       endif
+
+    ! fname = 'sfc_data.res'//trim(stile_name)//'.nc'
+    elseif (Atm%Sfc_restart_is_open) then
+       if ( Atm%flagstruct%do_inline_edmf ) then
+          call fv_io_register_axis(Atm%Sfc_restart, numx=numx, numy=numy, xpos=xpos, ypos=ypos)
+          call register_restart_field (Atm%Sfc_restart, 'hflx', Atm%inline_edmf%hflx, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'evap', Atm%inline_edmf%evap, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'tsfc', Atm%inline_edmf%tsfc, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'vfrac', Atm%inline_edmf%vfrac, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'vtype', Atm%inline_edmf%vtype, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'ffmm', Atm%inline_edmf%ffmm, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'ffhh', Atm%inline_edmf%ffhh, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'snowd', Atm%inline_edmf%snowd, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'zorl', Atm%inline_edmf%zorl, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'uustar', Atm%inline_edmf%uustar, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'shdmax', Atm%inline_edmf%shdmax, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'u10m', Atm%inline_edmf%u10m, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'v10m', Atm%inline_edmf%v10m, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'rb', Atm%inline_edmf%rb, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'stress', Atm%inline_edmf%stress, dim_names_3d2)
+          call register_restart_field (Atm%Sfc_restart, 'wind', Atm%inline_edmf%wind, dim_names_3d2)
+          if (.not. Atm%Sfc_restart%is_readonly) then !if writing file
+            call register_variable_attribute(Atm%Sfc_restart, 'hflx', "long_name", "hflx", str_len=len("hflx"))
+            call register_variable_attribute(Atm%Sfc_restart, 'hflx', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'evap', "long_name", "evap", str_len=len("evap"))
+            call register_variable_attribute(Atm%Sfc_restart, 'evap', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'tsfc', "long_name", "tsfc", str_len=len("tsfc"))
+            call register_variable_attribute(Atm%Sfc_restart, 'tsfc', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'vfrac', "long_name", "vfrac", str_len=len("vfrac"))
+            call register_variable_attribute(Atm%Sfc_restart, 'vfrac', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'vtype', "long_name", "vtype", str_len=len("vtype"))
+            call register_variable_attribute(Atm%Sfc_restart, 'vtype', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'ffmm', "long_name", "ffmm", str_len=len("ffmm"))
+            call register_variable_attribute(Atm%Sfc_restart, 'ffmm', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'ffhh', "long_name", "ffhh", str_len=len("ffhh"))
+            call register_variable_attribute(Atm%Sfc_restart, 'ffhh', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'snowd', "long_name", "snowd", str_len=len("snowd"))
+            call register_variable_attribute(Atm%Sfc_restart, 'snowd', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'zorl', "long_name", "zorl", str_len=len("zorl"))
+            call register_variable_attribute(Atm%Sfc_restart, 'zorl', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'uustar', "long_name", "uustar", str_len=len("uustar"))
+            call register_variable_attribute(Atm%Sfc_restart, 'uustar', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'shdmax', "long_name", "shdmax", str_len=len("shdmax"))
+            call register_variable_attribute(Atm%Sfc_restart, 'shdmax', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'u10m', "long_name", "u10m", str_len=len("u10m"))
+            call register_variable_attribute(Atm%Sfc_restart, 'u10m', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'v10m', "long_name", "v10m", str_len=len("v10m"))
+            call register_variable_attribute(Atm%Sfc_restart, 'v10m', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'rb', "long_name", "rb", str_len=len("rb"))
+            call register_variable_attribute(Atm%Sfc_restart, 'rb', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'stress', "long_name", "stress", str_len=len("stress"))
+            call register_variable_attribute(Atm%Sfc_restart, 'stress', "units", "none", str_len=len("none"))
+            call register_variable_attribute(Atm%Sfc_restart, 'wind', "long_name", "wind", str_len=len("wind"))
+            call register_variable_attribute(Atm%Sfc_restart, 'wind', "units", "none", str_len=len("none"))
+          endif
+       endif
+
     endif
   end subroutine  fv_io_register_restart
   ! </SUBROUTINE> NAME="fv_io_register_restart"
@@ -515,6 +634,46 @@ contains
            call read_restart(Atm(1)%Lnd_restart)
            call close_file(Atm(1)%Lnd_restart)
            Atm(1)%Lnd_restart_is_open = .false.
+         else
+           call mpp_error(NOTE,'==> Warning from fv_read_restart: Expected file '//trim(fname)//' does not exist')
+         endif
+    endif
+
+    if ( Atm(1)%flagstruct%do_inline_gwd ) then
+!--- restore data for oro_data - if it exists
+         fname = ''//trim(dir)//'/'//trim(pre)//'oro_data.res'//trim(suffix)//'.nc'
+         Atm(1)%Oro_restart_is_open = open_file(Atm(1)%Oro_restart, fname, "read", fv_domain, is_restart=.true.)
+         if (Atm(1)%Oro_restart_is_open) then
+           call fv_io_register_restart(Atm(1))
+           call read_restart(Atm(1)%Oro_restart)
+           call close_file(Atm(1)%Oro_restart)
+           Atm(1)%Oro_restart_is_open = .false.
+         else
+           call mpp_error(NOTE,'==> Warning from fv_read_restart: Expected file '//trim(fname)//' does not exist')
+         endif
+    endif
+
+    if ( Atm(1)%flagstruct%do_inline_edmf ) then
+!--- restore data for phy_data - if it exists
+         fname = ''//trim(dir)//'/'//trim(pre)//'phy_data.res'//trim(suffix)//'.nc'
+         Atm(1)%Phy_restart_is_open = open_file(Atm(1)%Phy_restart, fname, "read", fv_domain, is_restart=.true.)
+         if (Atm(1)%Phy_restart_is_open) then
+           call fv_io_register_restart(Atm(1))
+           call read_restart(Atm(1)%Phy_restart)
+           call close_file(Atm(1)%Phy_restart)
+           Atm(1)%Phy_restart_is_open = .false.
+         else
+           call mpp_error(NOTE,'==> Warning from fv_read_restart: Expected file '//trim(fname)//' does not exist')
+         endif
+!--- restore data for sfc_data - if it exists
+         fname = ''//trim(dir)//'/'//trim(pre)//'sfc_data.res'//trim(suffix)//'.nc'
+         Atm(1)%Sfc_restart_is_open = open_file(Atm(1)%Sfc_restart, fname, "read", fv_domain, is_restart=.true.)
+         if (Atm(1)%Sfc_restart_is_open) then
+           call fv_io_register_restart(Atm(1))
+           call read_restart(Atm(1)%Sfc_restart)
+           call close_file(Atm(1)%Sfc_restart)
+           Atm(1)%Sfc_restart_is_open = .false.
+           Atm(1)%inline_edmf%sfc_cpl = .true.
          else
            call mpp_error(NOTE,'==> Warning from fv_read_restart: Expected file '//trim(fname)//' does not exist')
          endif
@@ -729,6 +888,68 @@ contains
          call close_file(Tra_restart_r)
        else
          call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
+       endif
+
+       if ( Atm(1)%flagstruct%do_inline_gwd ) then
+!--- restore data for oro_data - if it exists
+         fname = 'INPUT/oro_data.res'//trim(stile_name)//'.nc'
+         Atm(1)%Oro_restart_is_open = open_file(Atm(1)%Oro_restart, fname, "read", fv_domain, is_restart=.true.)
+         if (Atm(1)%Oro_restart_is_open) then
+            call read_data(Atm(1)%Oro_restart, 'stddev', Atm(1)%inline_gwd%hprime)
+            call read_data(Atm(1)%Oro_restart, 'convexity', Atm(1)%inline_gwd%oc)
+            call read_data(Atm(1)%Oro_restart, 'oa1', Atm(1)%inline_gwd%oa(:,:,1))
+            call read_data(Atm(1)%Oro_restart, 'oa2', Atm(1)%inline_gwd%oa(:,:,2))
+            call read_data(Atm(1)%Oro_restart, 'oa3', Atm(1)%inline_gwd%oa(:,:,3))
+            call read_data(Atm(1)%Oro_restart, 'oa4', Atm(1)%inline_gwd%oa(:,:,4))
+            call read_data(Atm(1)%Oro_restart, 'ol1', Atm(1)%inline_gwd%ol(:,:,1))
+            call read_data(Atm(1)%Oro_restart, 'ol2', Atm(1)%inline_gwd%ol(:,:,2))
+            call read_data(Atm(1)%Oro_restart, 'ol3', Atm(1)%inline_gwd%ol(:,:,3))
+            call read_data(Atm(1)%Oro_restart, 'ol4', Atm(1)%inline_gwd%ol(:,:,4))
+            call read_data(Atm(1)%Oro_restart, 'theta', Atm(1)%inline_gwd%theta)
+            call read_data(Atm(1)%Oro_restart, 'sigma', Atm(1)%inline_gwd%sigma)
+            call read_data(Atm(1)%Oro_restart, 'gamma', Atm(1)%inline_gwd%gamma)
+            call read_data(Atm(1)%Oro_restart, 'elvmax', Atm(1)%inline_gwd%elvmax)
+            call close_file(Atm(1)%Oro_restart)
+         else
+           call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
+         endif
+       endif
+
+       if ( Atm(1)%flagstruct%do_inline_edmf ) then
+!--- restore data for phy_data - if it exists
+         fname = 'INPUT/phy_data.res'//trim(stile_name)//'.nc'
+         Atm(1)%Phy_restart_is_open = open_file(Atm(1)%Phy_restart, fname, "read", fv_domain, is_restart=.true.)
+         if (Atm(1)%Phy_restart_is_open) then
+            call read_data(Atm(1)%Phy_restart, 'radh', Atm(1)%inline_edmf%radh)
+            call close_file(Atm(1)%Phy_restart)
+         else
+           call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
+         endif
+!--- restore data for sfc_data - if it exists
+         fname = 'INPUT/sfc_data.res'//trim(stile_name)//'.nc'
+         Atm(1)%Sfc_restart_is_open = open_file(Atm(1)%Sfc_restart, fname, "read", fv_domain, is_restart=.true.)
+         if (Atm(1)%Sfc_restart_is_open) then
+            call read_data(Atm(1)%Sfc_restart, 'hflx', Atm(1)%inline_edmf%hflx)
+            call read_data(Atm(1)%Sfc_restart, 'evap', Atm(1)%inline_edmf%evap)
+            call read_data(Atm(1)%Sfc_restart, 'tsfc', Atm(1)%inline_edmf%tsfc)
+            call read_data(Atm(1)%Sfc_restart, 'vfrac', Atm(1)%inline_edmf%vfrac)
+            call read_data(Atm(1)%Sfc_restart, 'vtype', Atm(1)%inline_edmf%vtype)
+            call read_data(Atm(1)%Sfc_restart, 'ffmm', Atm(1)%inline_edmf%ffmm)
+            call read_data(Atm(1)%Sfc_restart, 'ffhh', Atm(1)%inline_edmf%ffhh)
+            call read_data(Atm(1)%Sfc_restart, 'snowd', Atm(1)%inline_edmf%snowd)
+            call read_data(Atm(1)%Sfc_restart, 'zorl', Atm(1)%inline_edmf%zorl)
+            call read_data(Atm(1)%Sfc_restart, 'uustar', Atm(1)%inline_edmf%uustar)
+            call read_data(Atm(1)%Sfc_restart, 'shdmax', Atm(1)%inline_edmf%shdmax)
+            call read_data(Atm(1)%Sfc_restart, 'u10m', Atm(1)%inline_edmf%u10m)
+            call read_data(Atm(1)%Sfc_restart, 'v10m', Atm(1)%inline_edmf%v10m)
+            call read_data(Atm(1)%Sfc_restart, 'rb', Atm(1)%inline_edmf%rb)
+            call read_data(Atm(1)%Sfc_restart, 'stress', Atm(1)%inline_edmf%stress)
+            call read_data(Atm(1)%Sfc_restart, 'wind', Atm(1)%inline_edmf%wind)
+            call close_file(Atm(1)%Sfc_restart)
+         else
+           call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
+         endif
+         Atm(1)%inline_edmf%sfc_cpl = .true.
        endif
 
 !      ====== PJP added DA functionality ======
@@ -993,6 +1214,36 @@ contains
        call write_restart(Atm%Tra_restart)
        call close_file(Atm%Tra_restart)
        Atm%Tra_restart_is_open = .false.
+    endif
+
+    if ( Atm%flagstruct%do_inline_gwd ) then
+       fname = ''//trim(dir)//'/'//trim(pre)//'oro_data.res'//trim(suffix)//'.nc'
+       Atm%Oro_restart_is_open = open_file(Atm%Oro_restart, fname, "overwrite", fv_domain, is_restart=.true.)
+       if (Atm%Oro_restart_is_open) then
+          call fv_io_register_restart(Atm)
+          call write_restart(Atm%Oro_restart)
+          call close_file(Atm%Oro_restart)
+          Atm%Oro_restart_is_open = .false.
+       endif
+    endif
+
+    if ( Atm%flagstruct%do_inline_edmf ) then
+       fname = ''//trim(dir)//'/'//trim(pre)//'phy_data.res'//trim(suffix)//'.nc'
+       Atm%Phy_restart_is_open = open_file(Atm%Phy_restart, fname, "overwrite", fv_domain, is_restart=.true.)
+       if (Atm%Phy_restart_is_open) then
+          call fv_io_register_restart(Atm)
+          call write_restart(Atm%Phy_restart)
+          call close_file(Atm%Phy_restart)
+          Atm%Phy_restart_is_open = .false.
+       endif
+       fname = ''//trim(dir)//'/'//trim(pre)//'sfc_data.res'//trim(suffix)//'.nc'
+       Atm%Sfc_restart_is_open = open_file(Atm%Sfc_restart, fname, "overwrite", fv_domain, is_restart=.true.)
+       if (Atm%Sfc_restart_is_open) then
+          call fv_io_register_restart(Atm)
+          call write_restart(Atm%Sfc_restart)
+          call close_file(Atm%Sfc_restart)
+          Atm%Sfc_restart_is_open = .false.
+       endif
     endif
 
   end subroutine fv_io_write_restart
