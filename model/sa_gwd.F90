@@ -1583,7 +1583,9 @@ subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
     ! cumchr1 (im, km)
     
     integer :: i, ii, k, k1, kk, kb, ilev, npt, kcb, kcldm
-    integer :: ipt (im), cldf (im), dlength (im)
+    integer :: ipt (im)
+
+    real :: cldf (im), dlength (im)
     
     real :: tem, tem1, tem2, qtem, wtgwc, tauct, &
         windcltop, shear, nonlinct, nonlin, nonlins, &
