@@ -114,6 +114,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     ! local variables
     ! -----------------------------------------------------------------------
 
+    logical :: safety_check = .true.
+
     integer :: i, j, k, kr, kmp, ncld, ntke
     integer :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
 
@@ -328,8 +330,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, peln, delz, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
-!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, &
-!$OMP                                    u_dt, v_dt, ptop, ntke, inline_edmf) &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, u_dt, v_dt, &
+!$OMP                                    ptop, ntke, inline_edmf, safety_check) &
 !$OMP                           private (gsize, dz, lsm, zi, pi, pik, pmk, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
@@ -368,8 +370,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
                 pik (is:ie, kr) = exp (kappa * log (pi (is:ie, kr) * 1.e-5))
                 if (.not. hydrostatic) then
-                    pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
-                        rdgas * pt (is:ie, j, kr) / grav
+                    !pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
+                    !    rdgas * pt (is:ie, j, kr) / grav
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
                     dz (is:ie, k) = delz (is:ie, j, kr)
                 else
                     pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
@@ -395,6 +398,27 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 sigmaf (i) = max (inline_edmf%vfrac (i, j), 0.01)
                 vegtype (i) = int (inline_edmf%vtype (i, j) + 0.5)
             enddo
+
+            if (safety_check) then
+                do k = 1, km
+                    do i = is, ie
+                        if (k .lt. km) then
+                            if (pm (i, k) .le. pm (i, k+1)) then
+                                print*, "Warning: inline edmf pressure layer cross over", k, pm (i, k), pm (i, k+1)
+                            endif
+                            if (zm (i, k) .ge. zm (i, k+1)) then
+                                print*, "Warning: inline edmf height layer cross over", k, zm (i, k), zm (i, k+1)
+                            endif
+                        endif
+                        if (pi (i, k) .le. pi (i, k+1)) then
+                            print*, "Warning: inline edmf pressure interface cross over", k, pi (i, k), pi (i, k+1)
+                        endif
+                        if (zi (i, k) .ge. zi (i, k+1)) then
+                            print*, "Warning: inline edmf height interface cross over", k, zi (i, k), zi (i, k+1)
+                        endif
+                    enddo
+                enddo
+            endif
 
             if (inline_edmf%sfc_cpl) then
                 u10m = inline_edmf%u10m (is:ie, j)
@@ -659,7 +683,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, ps, &
-!$OMP                                    u_dt, v_dt, kbot, ktop, kcnv, cumabs, inline_edmf) &
+!$OMP                                    u_dt, v_dt, kbot, ktop, kcnv, cumabs, inline_edmf, &
+!$OMP                                    safety_check) &
 !$OMP                           private (gsize, dz, lsm, rn, tmp, q_liq, q_sol, &
 !$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, dql, ps_dt, c_moist)
@@ -692,8 +717,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
                 if (.not. hydrostatic) then
-                    pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
-                        rdgas * pt (is:ie, j, kr) / grav
+                    !pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
+                    !    rdgas * pt (is:ie, j, kr) / grav
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
                     dz (is:ie, k) = delz (is:ie, j, kr)
                 else
                     pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
@@ -716,6 +742,21 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             do i = is, ie
                 if (hs (i, j) .gt. 0) lsm (i) = 1
             enddo
+
+            if (safety_check) then
+                do k = 1, km
+                    do i = is, ie
+                        if (k .lt. km) then
+                            if (pm (i, k) .le. pm (i, k+1)) then
+                                print*, "Warning: inline sas pressure layer cross over", k, pm (i, k), pm (i, k+1)
+                            endif
+                            if (zm (i, k) .ge. zm (i, k+1)) then
+                                print*, "Warning: inline sas height layer cross over", k, zm (i, k), zm (i, k+1)
+                            endif
+                        endif
+                    enddo
+                enddo
+            endif
 
             call sa_sas_deep (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
                 qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
@@ -956,7 +997,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, inline_gwd, &
 !$OMP                                    kbot, ktop, kcnv, ptop, cumabs, inline_edmf, &
-!$OMP                                    u_dt, v_dt) &
+!$OMP                                    u_dt, v_dt, safety_check) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, ps_dt, c_moist)
@@ -985,8 +1026,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 dp (is:ie, k) = delp (is:ie, j, kr)
                 pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
                 if (.not. hydrostatic) then
-                    pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
-                        rdgas * pt (is:ie, j, kr) / grav
+                    !pm (is:ie, k) = - dp (is:ie, k) / delz (is:ie, j, kr) * &
+                    !    rdgas * pt (is:ie, j, kr) / grav
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
                     dz (is:ie, k) = delz (is:ie, j, kr)
                 else
                     pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
@@ -1005,6 +1047,27 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
             enddo
+
+            if (safety_check) then
+                do k = 1, km
+                    do i = is, ie
+                        if (k .lt. km) then
+                            if (pm (i, k) .le. pm (i, k+1)) then
+                                print*, "Warning: inline gwd pressure layer cross over", k, pm (i, k), pm (i, k+1)
+                            endif
+                            if (zm (i, k) .ge. zm (i, k+1)) then
+                                print*, "Warning: inline gwd height layer cross over", k, zm (i, k), zm (i, k+1)
+                            endif
+                        endif
+                        if (pi (i, k) .le. pi (i, k+1)) then
+                            print*, "Warning: inline gwd pressure interface cross over", k, pi (i, k), pi (i, k+1)
+                        endif
+                        if (zi (i, k) .ge. zi (i, k+1)) then
+                            print*, "Warning: inline gwd height interface cross over", k, zi (i, k), zi (i, k+1)
+                        endif
+                    enddo
+                enddo
+            endif
 
             call sa_gwd_oro (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, &
                 inline_edmf%kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
