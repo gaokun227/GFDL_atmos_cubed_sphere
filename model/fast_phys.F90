@@ -601,9 +601,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     !-----------------------------------------------------------------------
     ! Inline SA-SAS >>>
-    ! Need "hpbl" from the SA-TKE-EDMF
-    ! To-Do: pass ud_mf, dd_mf, dt_mf, cnvw, cnvc to physics
-    ! To-Do: pass heating to the physics to activate the convective GWD
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_sas) then
@@ -904,8 +901,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     !-----------------------------------------------------------------------
     ! Inline SA-GWD >>>
-    ! Need "kpbl" from the SA-TKE-EDMF
-    ! Need "cumabs", "ktop", "kbot", "kcnv" from the SA-SAS
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_gwd) then
@@ -962,9 +957,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, inline_gwd, &
 !$OMP                                    kbot, ktop, kcnv, ptop, cumabs, inline_edmf, &
 !$OMP                                    u_dt, v_dt) &
-!$OMP                           private (gsize, dz, pi, pmk, zi, &
+!$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
-!$OMP                                    cvm, kr, dqv, ps_dt)
+!$OMP                                    cvm, kr, dqv, ps_dt, c_moist)
 
         do j = js, je
  
@@ -1025,10 +1020,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
                 ps_dt = 1 + dqv
                 q (is:ie, j, kr, sphum) = qv (is:ie, k) / ps_dt
-                pt (is:ie, j, kr) = ta (is:ie, k)
+                delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
+                q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
+                q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
+                c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
+                    q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+                ps_dt = pt (is:ie, j, kr)
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
-                delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
             enddo
  
             ! compute wind tendency at A grid fori D grid wind update
