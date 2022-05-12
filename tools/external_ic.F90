@@ -45,7 +45,7 @@ module external_ic_mod
    use constants_mod,     only: pi=>pi_8, grav, kappa, rdgas, rvgas, cp_air
    use fv_arrays_mod,     only: omega ! scaled for small earth
    use fv_arrays_mod,     only: fv_atmos_type, fv_grid_type, fv_grid_bounds_type, R_GRID
-   use fv_diagnostics_mod,only: prt_maxmin, prt_gb_nh_sh, prt_height
+   use fv_diagnostics_mod,only: prt_maxmin, prt_mxm, prt_gb_nh_sh, prt_height
    use fv_grid_utils_mod, only: ptop_min, g_sum,mid_pt_sphere,get_unit_vect2,get_latlon_vector,inner_prod
    use fv_io_mod,         only: fv_io_read_tracers
    use fv_mapz_mod,       only: mappm
@@ -183,10 +183,10 @@ contains
            call get_fv_ic( Atm, fv_domain, nq )
       endif
 
-      call prt_maxmin('PS', Atm%ps, is, ie, js, je, ng, 1, 0.01)
-      call prt_maxmin('T', Atm%pt, is, ie, js, je, ng, Atm%npz, 1.)
-      if (.not.Atm%flagstruct%hydrostatic) call prt_maxmin('W', Atm%w, is, ie, js, je, ng, Atm%npz, 1.)
-      call prt_maxmin('SPHUM', Atm%q(:,:,:,1), is, ie, js, je, ng, Atm%npz, 1.)
+      call prt_mxm('PS', Atm%ps, is, ie, js, je, ng, 1, 0.01, Atm%gridstruct%area_64, Atm%domain)
+      call prt_mxm('T', Atm%pt, is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
+      if (.not.Atm%flagstruct%hydrostatic) call prt_mxm('W', Atm%w, is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
+      call prt_mxm('SPHUM', Atm%q(:,:,:,1), is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
       if ( Atm%flagstruct%nggps_ic .or. Atm%flagstruct%ecmwf_ic .or. Atm%flagstruct%hrrrv3_ic ) then
         sphum   = get_tracer_index(MODEL_ATMOS, 'sphum')
         liq_wat   = get_tracer_index(MODEL_ATMOS, 'liq_wat')
@@ -198,21 +198,21 @@ contains
         sgs_tke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
         cld_amt = get_tracer_index(MODEL_ATMOS, 'cld_amt')
         if ( liq_wat > 0 ) &
-        call prt_maxmin('liq_wat', Atm%q(:,:,:,liq_wat), is, ie, js, je, ng, Atm%npz, 1.)
+        call prt_mxm('liq_wat', Atm%q(:,:,:,liq_wat), is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
         if ( ice_wat > 0 ) &
-        call prt_maxmin('ice_wat', Atm%q(:,:,:,ice_wat), is, ie, js, je, ng, Atm%npz, 1.)
+        call prt_mxm('ice_wat', Atm%q(:,:,:,ice_wat), is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
         if ( rainwat > 0 ) &
-        call prt_maxmin('rainwat', Atm%q(:,:,:,rainwat), is, ie, js, je, ng, Atm%npz, 1.)
+        call prt_mxm('rainwat', Atm%q(:,:,:,rainwat), is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
         if ( snowwat > 0 ) &
-        call prt_maxmin('snowwat', Atm%q(:,:,:,snowwat), is, ie, js, je, ng, Atm%npz, 1.)
+        call prt_mxm('snowwat', Atm%q(:,:,:,snowwat), is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
         if ( graupel > 0 ) &
-        call prt_maxmin('graupel', Atm%q(:,:,:,graupel), is, ie, js, je, ng, Atm%npz, 1.)
+        call prt_mxm('graupel', Atm%q(:,:,:,graupel), is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
         if ( o3mr > 0    ) &
-        call prt_maxmin('O3MR',    Atm%q(:,:,:,o3mr),    is, ie, js, je, ng, Atm%npz, 1.)
+        call prt_mxm('O3MR',    Atm%q(:,:,:,o3mr),    is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
         if ( sgs_tke > 0    ) &
-        call prt_maxmin('sgs_tke', Atm%q(:,:,:,sgs_tke), is, ie, js, je, ng, Atm%npz, 1.)
+        call prt_mxm('sgs_tke', Atm%q(:,:,:,sgs_tke), is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
         if ( cld_amt > 0    ) &
-        call prt_maxmin('cld_amt', Atm%q(:,:,:,cld_amt), is, ie, js, je, ng, Atm%npz, 1.)
+        call prt_mxm('cld_amt', Atm%q(:,:,:,cld_amt), is, ie, js, je, ng, Atm%npz, 1., Atm%gridstruct%area_64, Atm%domain)
       endif
 
 ! If used in replay mode
@@ -279,7 +279,7 @@ contains
     call mpp_update_domains( Atm%phis, Atm%domain )
     ftop = g_sum(Atm%domain, Atm%phis(is:ie,js:je), is, ie, js, je, ng, Atm%gridstruct%area_64, 1)
 
-    call prt_maxmin('ZS', Atm%phis,  is, ie, js, je, ng, 1, 1./grav)
+    call prt_mxm('ZS', Atm%phis,  is, ie, js, je, ng, 1, 1./grav, Atm%gridstruct%area_64, Atm%domain)
     if(is_master()) write(*,*) 'mean terrain height (m)=', ftop/grav
 
   end subroutine get_cubed_sphere_terrain
@@ -1521,7 +1521,7 @@ contains
                              s2c(i,j,3)*wk2(i2,j1+1) + s2c(i,j,4)*wk2(i1,j1+1)
           enddo
         enddo
-        call prt_maxmin('SST_model', Atm%ts, is, ie, js, je, 0, 1, 1.)
+        call prt_mxm('SST_model', Atm%ts, is, ie, js, je, 0, 1, 1., Atm%gridstruct%area_64, Atm%domain)
 
 ! Perform interp to FMS SST format/grid
 #ifndef DYCORE_SOLO
@@ -3406,9 +3406,9 @@ contains
 
 5000 continue
 
-  call prt_maxmin('UT', ut, is, ie, js, je, ng, npz, 1.)
-  call prt_maxmin('VT', vt, is, ie, js, je, ng, npz, 1.)
-  call prt_maxmin('UA_top',ut(:,:,1), is, ie, js, je, ng, 1, 1.)
+  call prt_mxm('UT', ut, is, ie, js, je, ng, npz, 1., Atm%gridstruct%area_64, Atm%domain)
+  call prt_mxm('VT', vt, is, ie, js, je, ng, npz, 1., Atm%gridstruct%area_64, Atm%domain)
+  call prt_mxm('UA_top',ut(:,:,1), is, ie, js, je, ng, 1, 1., Atm%gridstruct%area_64, Atm%domain)
 
 !----------------------------------------------
 ! winds: lat-lon ON A to Cubed-D transformation:
@@ -3667,9 +3667,9 @@ contains
 
 5000 continue
 
-  call prt_maxmin('PS_model', Atm%ps, is, ie, js, je, ng, 1, 0.01)
-  call prt_maxmin('UT', ut, is, ie, js, je, ng, npz, 1.)
-  call prt_maxmin('VT', vt, is, ie, js, je, ng, npz, 1.)
+  call prt_mxm('PS_model', Atm%ps, is, ie, js, je, ng, 1, 0.01, Atm%gridstruct%area_64, Atm%domain)
+  call prt_mxm('UT', ut, is, ie, js, je, ng, npz, 1., Atm%gridstruct%area_64, Atm%domain)
+  call prt_mxm('VT', vt, is, ie, js, je, ng, npz, 1., Atm%gridstruct%area_64, Atm%domain)
 
 !----------------------------------------------
 ! winds: lat-lon ON A to Cubed-D transformation:

@@ -1101,11 +1101,17 @@ module fv_arrays_mod
 
   type inline_edmf_type
 
+    logical :: sfc_cpl
     real, _ALLOCATABLE :: zorl(:,:)     _NULL
     real, _ALLOCATABLE :: ffmm(:,:)     _NULL
     real, _ALLOCATABLE :: ffhh(:,:)     _NULL
     real, _ALLOCATABLE :: tsfc(:,:)     _NULL
     real, _ALLOCATABLE :: shdmax(:,:)     _NULL
+    real, _ALLOCATABLE :: u10m(:,:)     _NULL
+    real, _ALLOCATABLE :: v10m(:,:)     _NULL
+    real, _ALLOCATABLE :: rb(:,:)     _NULL
+    real, _ALLOCATABLE :: stress(:,:)     _NULL
+    real, _ALLOCATABLE :: wind(:,:)     _NULL
     real, _ALLOCATABLE :: vtype(:,:)     _NULL
     real, _ALLOCATABLE :: vfrac(:,:)     _NULL
     real, _ALLOCATABLE :: snowd(:,:)     _NULL
@@ -1628,6 +1634,11 @@ contains
     allocate ( Atm%inline_edmf%ffhh(is:ie,js:je) )
     allocate ( Atm%inline_edmf%tsfc(is:ie,js:je) )
     allocate ( Atm%inline_edmf%shdmax(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%u10m(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%v10m(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%rb(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%stress(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%wind(is:ie,js:je) )
     allocate ( Atm%inline_edmf%vtype(is:ie,js:je) )
     allocate ( Atm%inline_edmf%vfrac(is:ie,js:je) )
     allocate ( Atm%inline_edmf%snowd(is:ie,js:je) )
@@ -1730,6 +1741,7 @@ contains
         enddo
         enddo
      enddo
+     Atm%inline_edmf%sfc_cpl = .false.
      do j=js, je
         do i=is, ie
            Atm%inline_mp%prew(i,j) = real_big
@@ -1777,6 +1789,11 @@ contains
            Atm%inline_edmf%ffhh(i,j) = real_big
            Atm%inline_edmf%tsfc(i,j) = real_big
            Atm%inline_edmf%shdmax(i,j) = real_big
+           Atm%inline_edmf%u10m(i,j) = real_big
+           Atm%inline_edmf%v10m(i,j) = real_big
+           Atm%inline_edmf%rb(i,j) = real_big
+           Atm%inline_edmf%stress(i,j) = real_big
+           Atm%inline_edmf%wind(i,j) = real_big
            Atm%inline_edmf%vtype(i,j) = real_big
            Atm%inline_edmf%vfrac(i,j) = real_big
            Atm%inline_edmf%snowd(i,j) = real_big
@@ -2096,6 +2113,11 @@ contains
     deallocate ( Atm%inline_edmf%ffhh )
     deallocate ( Atm%inline_edmf%tsfc )
     deallocate ( Atm%inline_edmf%shdmax )
+    deallocate ( Atm%inline_edmf%u10m )
+    deallocate ( Atm%inline_edmf%v10m )
+    deallocate ( Atm%inline_edmf%rb )
+    deallocate ( Atm%inline_edmf%stress )
+    deallocate ( Atm%inline_edmf%wind )
     deallocate ( Atm%inline_edmf%vtype )
     deallocate ( Atm%inline_edmf%vfrac )
     deallocate ( Atm%inline_edmf%snowd )
