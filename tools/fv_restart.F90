@@ -334,7 +334,7 @@ contains
                 IAU_Data%tracer_inc = IAU_Data%tracer_inc * nbg_inv
                 ! get external ic for replay
                 if( is_master() ) write(*,*) 'Calling get_external_ic for replay'
-                call get_external_ic(Atm(n), Atm(n)%domain, .true., 'EXTIC')
+                call get_external_ic(Atm(n), .true., 'EXTIC')
                 if( is_master() ) write(*,*) 'IC generated from the specified external source'
                 ! compute ua, va
                 call cubed_to_latlon(Atm(n)%u, Atm(n)%v, Atm(n)%ua, Atm(n)%va, &
