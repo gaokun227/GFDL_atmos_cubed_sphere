@@ -474,7 +474,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 dqs = qa (is:ie, k, snowwat) - q (is:ie, j, kr, snowwat)
                 dqg = qa (is:ie, k, graupel) - q (is:ie, j, kr, graupel)
                 ps_dt = 1 + dqv + dql + dqi + dqr + dqs + dqg
-                q (is:ie, j, kr, sphum  ) = qa (is:ie, k, sphum  ) / ps_dt
+                q (is:ie, j, kr, sphum) = qa (is:ie, k, sphum) / ps_dt
                 q (is:ie, j, kr, liq_wat) = qa (is:ie, k, liq_wat) / ps_dt
                 q (is:ie, j, kr, ice_wat) = qa (is:ie, k, ice_wat) / ps_dt
                 q (is:ie, j, kr, rainwat) = qa (is:ie, k, rainwat) / ps_dt
@@ -485,7 +485,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                ps_dt = pt (is:ie, j, kr)
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
@@ -818,12 +817,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 ps_dt = 1 + dqv + dql
                 q (is:ie, j, kr, sphum) = qv (is:ie, k) / ps_dt
                 q (is:ie, j, kr, liq_wat) = ql (is:ie, k) / ps_dt
+                q (is:ie, j, kr, ice_wat) = q (is:ie, j, kr, ice_wat) / ps_dt
+                q (is:ie, j, kr, rainwat) = q (is:ie, j, kr, rainwat) / ps_dt
+                q (is:ie, j, kr, snowwat) = q (is:ie, j, kr, snowwat) / ps_dt
+                q (is:ie, j, kr, graupel) = q (is:ie, j, kr, graupel) / ps_dt
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                ps_dt = pt (is:ie, j, kr)
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
@@ -1117,12 +1119,16 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
                 ps_dt = 1 + dqv
                 q (is:ie, j, kr, sphum) = qv (is:ie, k) / ps_dt
+                q (is:ie, j, kr, liq_wat) = q (is:ie, j, kr, liq_wat) / ps_dt
+                q (is:ie, j, kr, ice_wat) = q (is:ie, j, kr, ice_wat) / ps_dt
+                q (is:ie, j, kr, rainwat) = q (is:ie, j, kr, rainwat) / ps_dt
+                q (is:ie, j, kr, snowwat) = q (is:ie, j, kr, snowwat) / ps_dt
+                q (is:ie, j, kr, graupel) = q (is:ie, j, kr, graupel) / ps_dt
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                ps_dt = pt (is:ie, j, kr)
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
