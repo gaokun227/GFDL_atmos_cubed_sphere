@@ -289,7 +289,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         qrcko (im, km), qrcdo (im, km), &
         pwo (im, km), pwdo (im, km), c0t (im, km), &
         tx1 (im), sumx (im), cnvwt (im, km)
-      ! rhbar (im)
+    ! rhbar (im)
     
     logical :: totflg, cnvflg (im), asqecflg (im), flg (im)
     
@@ -2404,24 +2404,23 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                         qevap (i) = min (qevap (i), rn (i) * 1000. * g / dp)
                         delq2 (i) = delqev (i) + .001 * qevap (i) * dp / g
                     endif
-                    if (rn (i) > 0. .and. qcond (i) < 0. .and. &
-                        delq2 (i) > rntot (i)) then
-                    qevap (i) = 1000. * g * (rntot (i) - delqev (i)) / dp
-                    flg (i) = .false.
+                    if (rn (i) > 0. .and. qcond (i) < 0. .and. delq2 (i) > rntot (i)) then
+                        qevap (i) = 1000. * g * (rntot (i) - delqev (i)) / dp
+                        flg (i) = .false.
+                    endif
+                    if (rn (i) > 0. .and. qevap (i) > 0.) then
+                        q1 (i, k) = q1 (i, k) + qevap (i)
+                        t1 (i, k) = t1 (i, k) - elocp * qevap (i)
+                        rn (i) = rn (i) - .001 * qevap (i) * dp / g
+                        deltv (i) = - elocp * qevap (i) / dt2
+                        delq (i) = + qevap (i) / dt2
+                        delqev (i) = delqev (i) + .001 * dp * qevap (i) / g
+                    endif
+                    delqbar (i) = delqbar (i) + delq (i) * dp / g
+                    deltbar (i) = deltbar (i) + deltv (i) * dp / g
                 endif
-                if (rn (i) > 0. .and. qevap (i) > 0.) then
-                    q1 (i, k) = q1 (i, k) + qevap (i)
-                    t1 (i, k) = t1 (i, k) - elocp * qevap (i)
-                    rn (i) = rn (i) - .001 * qevap (i) * dp / g
-                    deltv (i) = - elocp * qevap (i) / dt2
-                    delq (i) = + qevap (i) / dt2
-                    delqev (i) = delqev (i) + .001 * dp * qevap (i) / g
-                endif
-                delqbar (i) = delqbar (i) + delq (i) * dp / g
-                deltbar (i) = deltbar (i) + deltv (i) * dp / g
             endif
-        endif
-    enddo
+        enddo
     enddo
 
     ! do i = 1, im
@@ -2571,7 +2570,6 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     real, intent (in) :: delt
     real, intent (in) :: psp (im), delp (im, km), prslp (im, km), gsize (im), &
         dot (im, km), phil (im, km), hpbl (im)
-        ! rcs (im)
 
     integer, intent (inout) :: kbot (im), ktop (im), kcnv (im)
 
