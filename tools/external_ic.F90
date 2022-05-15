@@ -442,6 +442,7 @@ contains
       call register_restart_field(SFC_restart, 'tsea', Atm%ts, dim_names_alloc)
 
       if ( Atm%flagstruct%do_inline_edmf ) then
+        call register_restart_field(SFC_restart, 'slmsk', Atm%inline_edmf%lsm, dim_names_alloc)
         call register_restart_field(SFC_restart, 'zorl', Atm%inline_edmf%zorl, dim_names_alloc)
         call register_restart_field(SFC_restart, 'ffmm', Atm%inline_edmf%ffmm, dim_names_alloc)
         call register_restart_field(SFC_restart, 'ffhh', Atm%inline_edmf%ffhh, dim_names_alloc)

@@ -1310,6 +1310,7 @@ contains
        do ix = 1, blen
          i = Atm_block%index(nb)%ii(ix)
          j = Atm_block%index(nb)%jj(ix)
+         Atm(n)%inline_edmf%lsm(i,j) = IPD_Data(nb)%Stateout%lsm(ix)
          Atm(n)%inline_edmf%hflx(i,j) = IPD_Data(nb)%Stateout%hflx(ix)
          Atm(n)%inline_edmf%evap(i,j) = IPD_Data(nb)%Stateout%evap(ix)
          Atm(n)%inline_edmf%tsfc(i,j) = IPD_Data(nb)%Stateout%tsfc(ix)

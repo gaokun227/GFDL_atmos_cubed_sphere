@@ -136,7 +136,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     real, dimension (is:ie, km+1) :: phis
 
-    integer, allocatable, dimension (:) :: lsm, kinver, vegtype
+    integer, allocatable, dimension (:) :: kinver, vegtype
 
     real, allocatable, dimension (:) :: rn, rb, u10m, v10m, sigmaf, stress, wind, tmp, qsurf
 
@@ -276,7 +276,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         call timing_on ('sa_tke_edmf')
 
-        allocate (lsm (is:ie))
         allocate (kinver (is:ie))
 
         allocate (dz (is:ie, 1:km))
@@ -340,7 +339,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, u_dt, v_dt, &
 !$OMP                                    ptop, ntke, inline_edmf, safety_check) &
-!$OMP                           private (gsize, dz, lsm, zi, pi, pik, pmk, &
+!$OMP                           private (gsize, dz, zi, pi, pik, pmk, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
 !$OMP                                    stress, wind, kinver, qsurf, q_sol, c_moist, &
@@ -355,7 +354,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             u_dt (is:ie, j, 1:km) = ua (is:ie, j, 1:km)
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
 
-            lsm = 0
             kinver = km
 
             ! if q2m is needed, qsurf cannot be zero
@@ -405,7 +403,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             enddo
 
             do i = is, ie
-                if (hs (i, j) .gt. 0) lsm (i) = 1
                 sigmaf (i) = max (inline_edmf%vfrac (i, j), 0.01)
                 vegtype (i) = int (inline_edmf%vtype (i, j) + 0.5)
             enddo
@@ -433,19 +430,21 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             endif
 
             ! diagnose surface variables for PBL parameterization
-            call sa_tke_edmf_sfc (ie-is+1, pi (is:ie, 1), uu (is:ie, 1), vv (is:ie, 1), &
-                ta (is:ie, 1), qa (is:ie, 1, 1), inline_edmf%tsfc (is:ie, j), qsurf, &
-                pm (is:ie, 1), pik (is:ie, 1) / pmk (is:ie, 1), &
-                inline_edmf%evap (is:ie, j), inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
+            call sa_tke_edmf_sfc (ie-is+1, pi (is:ie, 1), uu (is:ie, 1), &
+                vv (is:ie, 1), ta (is:ie, 1), qa (is:ie, 1, sphum), &
+                inline_edmf%tsfc (is:ie, j), qsurf, pm (is:ie, 1), &
+                pik (is:ie, 1) / pmk (is:ie, 1), inline_edmf%evap (is:ie, j), &
+                inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
                 zm (is:ie, 1) / grav, inline_edmf%snowd (is:ie, j), &
-                inline_edmf%zorl (is:ie, j), lsm, inline_edmf%uustar (is:ie, j), &
-                sigmaf, vegtype, inline_edmf%shdmax (is:ie, j), &
-                u10m_out = u10m, v10m_out = v10m, rb_out = rb, &
-                stress_out = stress, wind_out = wind)
+                inline_edmf%zorl (is:ie, j), inline_edmf%lsm (is:ie, j), &
+                inline_edmf%uustar (is:ie, j), sigmaf, vegtype, &
+                inline_edmf%shdmax (is:ie, j), u10m_out = u10m, &
+                v10m_out = v10m, rb_out = rb, stress_out = stress, &
+                wind_out = wind)
 
             ! SA-TKE-EDMF main program
             call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
-                abs (mdt), uu, vv, ta, qa, gsize, lsm, &
+                abs (mdt), uu, vv, ta, qa, gsize, inline_edmf%lsm (is:ie, j), &
                 radh, rb, inline_edmf%zorl (is:ie, j), u10m, v10m, &
                 inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
                 inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
@@ -522,7 +521,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         enddo
 
-        deallocate (lsm)
         deallocate (kinver)
 
         deallocate (dz)
@@ -637,8 +635,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
         call timing_on ('sa_sas')
 
-        allocate (lsm (is:ie))
-
         allocate (rn (is:ie))
         allocate (tmp (is:ie))
 
@@ -692,7 +688,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, ps, &
 !$OMP                                    u_dt, v_dt, kbot, ktop, kcnv, cumabs, inline_edmf, &
 !$OMP                                    safety_check) &
-!$OMP                           private (gsize, dz, lsm, rn, tmp, q_liq, q_sol, &
+!$OMP                           private (gsize, dz, rn, tmp, q_liq, q_sol, &
 !$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, dql, ps_dt, c_moist)
 
@@ -709,7 +705,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             ktop (is:ie, j) = 1
             kbot (is:ie, j) = km
             kcnv (is:ie, j) = 0
-            lsm = 0
             ncld = 1
 
             ! total energy before parameterization
@@ -749,10 +744,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 ww (is:ie, k) = omga (is:ie, j, kr)
             enddo
   
-            do i = is, ie
-                if (hs (i, j) .gt. 0) lsm (i) = 1
-            enddo
-
             ! check if pressure or height cross over
             if (safety_check) then
                 do k = 1, km
@@ -772,7 +763,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             ! SA-SAS deep convection main program
             call sa_sas_deep (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
                 qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
-                lsm, gsize, ww, ncld)
+                inline_edmf%lsm (is:ie, j), gsize, ww, ncld)
 
             ! convective precipitation accumulation
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
@@ -780,7 +771,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             ! SA-SAS shallow convection main program
             call sa_sas_shal (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
                 qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
-                lsm, gsize, ww, ncld, inline_edmf%hpbl (is:ie, j))
+                inline_edmf%lsm (is:ie, j), gsize, ww, ncld, inline_edmf%hpbl (is:ie, j))
   
             ! convective precipitation accumulation
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
@@ -862,8 +853,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             endif
 
         enddo
-
-        deallocate (lsm)
 
         deallocate (rn)
         deallocate (tmp)

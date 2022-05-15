@@ -1101,6 +1101,7 @@ module fv_arrays_mod
 
   type inline_edmf_type
 
+    integer, _ALLOCATABLE :: lsm(:,:)     _NULL
     real, _ALLOCATABLE :: zorl(:,:)     _NULL
     real, _ALLOCATABLE :: ffmm(:,:)     _NULL
     real, _ALLOCATABLE :: ffhh(:,:)     _NULL
@@ -1627,6 +1628,7 @@ contains
     allocate ( Atm%inline_mp%rrg(is:ie,js:je,npz) )
     allocate ( Atm%inline_mp%tvg(is:ie,js:je,npz) )
 
+    allocate ( Atm%inline_edmf%lsm(is:ie,js:je) )
     allocate ( Atm%inline_edmf%zorl(is:ie,js:je) )
     allocate ( Atm%inline_edmf%ffmm(is:ie,js:je) )
     allocate ( Atm%inline_edmf%ffhh(is:ie,js:je) )
@@ -1776,6 +1778,7 @@ contains
            Atm%inline_mp%rrg(i,j,:) = real_big
            Atm%inline_mp%tvg(i,j,:) = real_big
 
+           Atm%inline_edmf%lsm(i,j) = 0
            Atm%inline_edmf%zorl(i,j) = real_big
            Atm%inline_edmf%ffmm(i,j) = real_big
            Atm%inline_edmf%ffhh(i,j) = real_big
@@ -2095,6 +2098,7 @@ contains
     deallocate ( Atm%inline_mp%rrg )
     deallocate ( Atm%inline_mp%tvg )
 
+    deallocate ( Atm%inline_edmf%lsm )
     deallocate ( Atm%inline_edmf%zorl )
     deallocate ( Atm%inline_edmf%ffmm )
     deallocate ( Atm%inline_edmf%ffhh )
