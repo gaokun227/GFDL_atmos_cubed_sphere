@@ -297,8 +297,8 @@ contains
    allocate(pref(npz+1,2), dum1d(npz+1))
 
    call gfdl_mp_init(input_nml_file, stdlog())
-   call sa_sas_init(input_nml_file, stdlog())
    call sa_tke_edmf_init(input_nml_file, stdlog())
+   call sa_sas_init(input_nml_file, stdlog())
    call sa_gwd_init(input_nml_file, stdlog())
 
    call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, &

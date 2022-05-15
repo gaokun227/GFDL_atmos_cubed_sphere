@@ -467,7 +467,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             do k = 1, km
                 kr = km - k + 1
                 q (is:ie, j, kr, ntke) = qa (is:ie, k, ntke)
-                dqv = qa (is:ie, k, sphum  ) - q (is:ie, j, kr, sphum  )
+                dqv = qa (is:ie, k, sphum) - q (is:ie, j, kr, sphum)
                 dql = qa (is:ie, k, liq_wat) - q (is:ie, j, kr, liq_wat)
                 dqi = qa (is:ie, k, ice_wat) - q (is:ie, j, kr, ice_wat)
                 dqr = qa (is:ie, k, rainwat) - q (is:ie, j, kr, rainwat)
