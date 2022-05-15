@@ -433,23 +433,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             endif
 
             ! diagnose surface variables for PBL parameterization
-            if (inline_edmf%sfc_cpl) then
-                u10m = inline_edmf%u10m (is:ie, j)
-                v10m = inline_edmf%v10m (is:ie, j)
-                rb = inline_edmf%rb (is:ie, j)
-                stress = inline_edmf%stress (is:ie, j)
-                wind = inline_edmf%wind (is:ie, j)
-            else
-                call sa_tke_edmf_sfc (ie-is+1, pi (is:ie, 1), uu (is:ie, 1), vv (is:ie, 1), &
-                    ta (is:ie, 1), qa (is:ie, 1, 1), inline_edmf%tsfc (is:ie, j), qsurf, &
-                    pm (is:ie, 1), pik (is:ie, 1) / pmk (is:ie, 1), &
-                    inline_edmf%evap (is:ie, j), inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
-                    zm (is:ie, 1) / grav, inline_edmf%snowd (is:ie, j), &
-                    inline_edmf%zorl (is:ie, j), lsm, inline_edmf%uustar (is:ie, j), &
-                    sigmaf, vegtype, inline_edmf%shdmax (is:ie, j), &
-                    u10m_out = u10m, v10m_out = v10m, rb_out = rb, &
-                    stress_out = stress, wind_out = wind)
-            endif
+            call sa_tke_edmf_sfc (ie-is+1, pi (is:ie, 1), uu (is:ie, 1), vv (is:ie, 1), &
+                ta (is:ie, 1), qa (is:ie, 1, 1), inline_edmf%tsfc (is:ie, j), qsurf, &
+                pm (is:ie, 1), pik (is:ie, 1) / pmk (is:ie, 1), &
+                inline_edmf%evap (is:ie, j), inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
+                zm (is:ie, 1) / grav, inline_edmf%snowd (is:ie, j), &
+                inline_edmf%zorl (is:ie, j), lsm, inline_edmf%uustar (is:ie, j), &
+                sigmaf, vegtype, inline_edmf%shdmax (is:ie, j), &
+                u10m_out = u10m, v10m_out = v10m, rb_out = rb, &
+                stress_out = stress, wind_out = wind)
 
             ! SA-TKE-EDMF main program
             call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &

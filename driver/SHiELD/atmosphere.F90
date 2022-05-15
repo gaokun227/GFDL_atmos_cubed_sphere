@@ -1322,11 +1322,6 @@ contains
          Atm(n)%inline_edmf%zorl(i,j) = IPD_Data(nb)%Stateout%zorl(ix)
          Atm(n)%inline_edmf%uustar(i,j) = IPD_Data(nb)%Stateout%uustar(ix)
          Atm(n)%inline_edmf%shdmax(i,j) = IPD_Data(nb)%Stateout%shdmax(ix)
-         Atm(n)%inline_edmf%u10m(i,j) = IPD_Data(nb)%Stateout%u10m(ix)
-         Atm(n)%inline_edmf%v10m(i,j) = IPD_Data(nb)%Stateout%v10m(ix)
-         Atm(n)%inline_edmf%rb(i,j) = IPD_Data(nb)%Stateout%rb(ix)
-         Atm(n)%inline_edmf%stress(i,j) = IPD_Data(nb)%Stateout%stress(ix)
-         Atm(n)%inline_edmf%wind(i,j) = IPD_Data(nb)%Stateout%wind(ix)
        enddo
      endif
 

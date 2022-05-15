@@ -476,11 +476,6 @@ contains
           call register_restart_field (Atm%Sfc_restart, 'zorl', Atm%inline_edmf%zorl, dim_names_3d2)
           call register_restart_field (Atm%Sfc_restart, 'uustar', Atm%inline_edmf%uustar, dim_names_3d2)
           call register_restart_field (Atm%Sfc_restart, 'shdmax', Atm%inline_edmf%shdmax, dim_names_3d2)
-          call register_restart_field (Atm%Sfc_restart, 'u10m', Atm%inline_edmf%u10m, dim_names_3d2)
-          call register_restart_field (Atm%Sfc_restart, 'v10m', Atm%inline_edmf%v10m, dim_names_3d2)
-          call register_restart_field (Atm%Sfc_restart, 'rb', Atm%inline_edmf%rb, dim_names_3d2)
-          call register_restart_field (Atm%Sfc_restart, 'stress', Atm%inline_edmf%stress, dim_names_3d2)
-          call register_restart_field (Atm%Sfc_restart, 'wind', Atm%inline_edmf%wind, dim_names_3d2)
           if (.not. Atm%Sfc_restart%is_readonly) then !if writing file
             call register_variable_attribute(Atm%Sfc_restart, 'hflx', "long_name", "hflx", str_len=len("hflx"))
             call register_variable_attribute(Atm%Sfc_restart, 'hflx', "units", "none", str_len=len("none"))
@@ -504,16 +499,6 @@ contains
             call register_variable_attribute(Atm%Sfc_restart, 'uustar', "units", "none", str_len=len("none"))
             call register_variable_attribute(Atm%Sfc_restart, 'shdmax', "long_name", "shdmax", str_len=len("shdmax"))
             call register_variable_attribute(Atm%Sfc_restart, 'shdmax', "units", "none", str_len=len("none"))
-            call register_variable_attribute(Atm%Sfc_restart, 'u10m', "long_name", "u10m", str_len=len("u10m"))
-            call register_variable_attribute(Atm%Sfc_restart, 'u10m', "units", "none", str_len=len("none"))
-            call register_variable_attribute(Atm%Sfc_restart, 'v10m', "long_name", "v10m", str_len=len("v10m"))
-            call register_variable_attribute(Atm%Sfc_restart, 'v10m', "units", "none", str_len=len("none"))
-            call register_variable_attribute(Atm%Sfc_restart, 'rb', "long_name", "rb", str_len=len("rb"))
-            call register_variable_attribute(Atm%Sfc_restart, 'rb', "units", "none", str_len=len("none"))
-            call register_variable_attribute(Atm%Sfc_restart, 'stress', "long_name", "stress", str_len=len("stress"))
-            call register_variable_attribute(Atm%Sfc_restart, 'stress', "units", "none", str_len=len("none"))
-            call register_variable_attribute(Atm%Sfc_restart, 'wind', "long_name", "wind", str_len=len("wind"))
-            call register_variable_attribute(Atm%Sfc_restart, 'wind', "units", "none", str_len=len("none"))
           endif
        endif
 
@@ -940,11 +925,6 @@ contains
             call read_data(Atm(1)%Sfc_restart, 'zorl', Atm(1)%inline_edmf%zorl)
             call read_data(Atm(1)%Sfc_restart, 'uustar', Atm(1)%inline_edmf%uustar)
             call read_data(Atm(1)%Sfc_restart, 'shdmax', Atm(1)%inline_edmf%shdmax)
-            call read_data(Atm(1)%Sfc_restart, 'u10m', Atm(1)%inline_edmf%u10m)
-            call read_data(Atm(1)%Sfc_restart, 'v10m', Atm(1)%inline_edmf%v10m)
-            call read_data(Atm(1)%Sfc_restart, 'rb', Atm(1)%inline_edmf%rb)
-            call read_data(Atm(1)%Sfc_restart, 'stress', Atm(1)%inline_edmf%stress)
-            call read_data(Atm(1)%Sfc_restart, 'wind', Atm(1)%inline_edmf%wind)
             call close_file(Atm(1)%Sfc_restart)
          else
            call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
