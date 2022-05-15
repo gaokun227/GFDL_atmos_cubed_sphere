@@ -658,7 +658,6 @@ contains
            call read_restart(Atm(1)%Sfc_restart)
            call close_file(Atm(1)%Sfc_restart)
            Atm(1)%Sfc_restart_is_open = .false.
-           Atm(1)%inline_edmf%sfc_cpl = .true.
          else
            call mpp_error(NOTE,'==> Warning from fv_read_restart: Expected file '//trim(fname)//' does not exist')
          endif
@@ -929,7 +928,6 @@ contains
          else
            call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
          endif
-         Atm(1)%inline_edmf%sfc_cpl = .true.
        endif
 
 !      ====== PJP added DA functionality ======

@@ -1307,7 +1307,6 @@ contains
      enddo
 
      if (Atm(n)%flagstruct%do_inline_edmf) then
-       Atm(n)%inline_edmf%sfc_cpl = IPD_Data(nb)%Stateout%sfc_cpl
        do ix = 1, blen
          i = Atm_block%index(nb)%ii(ix)
          j = Atm_block%index(nb)%jj(ix)

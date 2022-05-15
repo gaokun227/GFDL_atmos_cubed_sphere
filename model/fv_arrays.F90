@@ -1101,7 +1101,6 @@ module fv_arrays_mod
 
   type inline_edmf_type
 
-    logical :: sfc_cpl
     real, _ALLOCATABLE :: zorl(:,:)     _NULL
     real, _ALLOCATABLE :: ffmm(:,:)     _NULL
     real, _ALLOCATABLE :: ffhh(:,:)     _NULL
@@ -1735,7 +1734,6 @@ contains
         enddo
         enddo
      enddo
-     Atm%inline_edmf%sfc_cpl = .false.
      do j=js, je
         do i=is, ie
            Atm%inline_mp%prew(i,j) = real_big
