@@ -330,6 +330,7 @@ contains
     character(len=8), allocatable  :: dim_names_alloc(:)
     character(len=8), dimension(2) :: dim_names_2d
     character(len=8), dimension(3) :: dim_names_3d, dim_names_3d2, dim_names_3d3, dim_names_3d4
+    character(len=8), dimension(4) :: dim_names_4d
     character(len=6)  :: stile_name
     character(len=64) :: tracer_name
     character(len=64) :: fn_gfs_ctl = 'INPUT/gfs_ctrl.nc'
@@ -440,7 +441,6 @@ contains
       call register_axis(SFC_restart, dim_names_alloc(2), "y")
       call register_axis(SFC_restart, dim_names_alloc(1), "x")
       call register_restart_field(SFC_restart, 'tsea', Atm%ts, dim_names_alloc)
-
       if ( Atm%flagstruct%do_inline_edmf ) then
         call register_restart_field(SFC_restart, 'slmsk', Atm%inline_edmf%lsm, dim_names_alloc)
         call register_restart_field(SFC_restart, 'zorl', Atm%inline_edmf%zorl, dim_names_alloc)
@@ -452,14 +452,37 @@ contains
         call register_restart_field(SFC_restart, 'vfrac', Atm%inline_edmf%vfrac, dim_names_alloc)
         call register_restart_field(SFC_restart, 'snwdph', Atm%inline_edmf%snowd, dim_names_alloc)
         call register_restart_field(SFC_restart, 'uustar', Atm%inline_edmf%uustar, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'srflag', Atm%inline_edmf%srflag, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'hice', Atm%inline_edmf%hice, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'fice', Atm%inline_edmf%fice, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'tisfc', Atm%inline_edmf%tice, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'sheleg', Atm%inline_edmf%weasd, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'tprcp', Atm%inline_edmf%tprcp, dim_names_alloc)
       endif
-
       call read_restart(SFC_restart)
       call close_file(SFC_restart)
       deallocate (dim_names_alloc)
     else
       call mpp_error(FATAL,'==> Error in External_ic::get_nggps_ic: tiled file '//trim(fn_sfc_ics)//' for NGGPS IC does not exist')
     endif
+
+    if ( Atm%flagstruct%do_inline_edmf ) then
+      if( open_file(SFC_restart, fn_sfc_ics, "read", Atm%domain, is_restart=.true., dont_add_res_to_filename=.true.) ) then
+          naxis_dims = get_variable_num_dimensions(SFC_restart, 'stc')
+          allocate (dim_names_alloc(naxis_dims))
+          call get_variable_dimension_names(SFC_restart, 'stc', dim_names_alloc)
+          call register_axis(SFC_restart, dim_names_alloc(3), size(Atm%inline_edmf%stc,3))
+          call register_axis(SFC_restart, dim_names_alloc(2), "y")
+          call register_axis(SFC_restart, dim_names_alloc(1), "x")
+          call register_restart_field(SFC_restart, 'stc', Atm%inline_edmf%stc, dim_names_alloc)
+          call read_restart(SFC_restart)
+          call close_file(SFC_restart)
+          deallocate (dim_names_alloc)
+      else
+        call mpp_error(FATAL,'==> Error in External_ic::get_nggps_ic: tiled file '//trim(fn_sfc_ics)//' for NGGPS IC does not exist')
+      endif
+    endif
+
     call mpp_error(NOTE,'==> External_ic::get_nggps_ic: using tiled data file '//trim(fn_sfc_ics)//' for NGGPS IC')
 
     ! set dimensions for register restart

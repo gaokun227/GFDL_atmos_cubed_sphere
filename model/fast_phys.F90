@@ -121,7 +121,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     logical :: safety_check = .true.
 
-    integer :: i, j, k, kr, kmp, ncld, ntke, sphum, liq_wat, ice_wat
+    integer :: i, j, k, kr, kmp, ncld, ntke, sphum, liq_wat, ice_wat, lsoil
     integer :: rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
 
     real :: rrg
@@ -138,7 +138,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     integer, allocatable, dimension (:) :: kinver, vegtype
 
-    real, allocatable, dimension (:) :: rn, rb, u10m, v10m, sigmaf, stress, wind, tmp, qsurf
+    real, allocatable, dimension (:) :: rn, rb, u10m, v10m, sigmaf, stress, wind, tmp
 
     real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql, ta, uu, vv, ww, radh
 
@@ -300,7 +300,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         allocate (wind (is:ie))
         allocate (sigmaf (is:ie))
         allocate (vegtype (is:ie))
-        allocate (qsurf (is:ie))
 
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
@@ -339,10 +338,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, u_dt, v_dt, &
 !$OMP                                    ptop, ntke, inline_edmf, safety_check) &
-!$OMP                           private (gsize, dz, zi, pi, pik, pmk, &
+!$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
-!$OMP                                    stress, wind, kinver, qsurf, q_sol, c_moist, &
+!$OMP                                    stress, wind, kinver, q_sol, c_moist, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
 
         do j = js, je
@@ -355,9 +354,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
 
             kinver = km
-
-            ! if q2m is needed, qsurf cannot be zero
-            qsurf = 0.0
+            lsoil = 4
 
             ! total energy before parameterization
             if (consv .gt. consv_min) then
@@ -430,16 +427,21 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             endif
 
             ! diagnose surface variables for PBL parameterization
-            call sa_tke_edmf_sfc (ie-is+1, pi (is:ie, 1), uu (is:ie, 1), &
+            call sa_tke_edmf_sfc (ie-is+1, lsoil, pi (is:ie, 1), uu (is:ie, 1), &
                 vv (is:ie, 1), ta (is:ie, 1), qa (is:ie, 1, sphum), &
-                inline_edmf%tsfc (is:ie, j), qsurf, pm (is:ie, 1), &
+                abs (mdt), inline_edmf%tsfc (is:ie, j), pm (is:ie, 1), &
                 pik (is:ie, 1) / pmk (is:ie, 1), inline_edmf%evap (is:ie, j), &
-                inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
-                zm (is:ie, 1) / grav, inline_edmf%snowd (is:ie, j), &
-                inline_edmf%zorl (is:ie, j), inline_edmf%lsm (is:ie, j), &
-                inline_edmf%uustar (is:ie, j), sigmaf, vegtype, &
-                inline_edmf%shdmax (is:ie, j), u10m_out = u10m, &
-                v10m_out = v10m, rb_out = rb, stress_out = stress, &
+                inline_edmf%hflx (is:ie, j), inline_edmf%ffmm (is:ie, j), &
+                inline_edmf%ffhh (is:ie, j), zm (is:ie, 1) / grav, &
+                inline_edmf%snowd (is:ie, j), inline_edmf%zorl (is:ie, j), &
+                inline_edmf%lsm (is:ie, j), inline_edmf%uustar (is:ie, j), sigmaf, vegtype, &
+                inline_edmf%shdmax (is:ie, j), inline_edmf%sfcemis (is:ie, j), &
+                inline_edmf%dlwflx (is:ie, j), inline_edmf%sfcnsw (is:ie, j), &
+                inline_edmf%sfcdsw (is:ie, j), inline_edmf%srflag (is:ie, j), &
+                inline_edmf%hice (is:ie, j), inline_edmf%fice (is:ie, j), &
+                inline_edmf%tice (is:ie, j), inline_edmf%weasd (is:ie, j), &
+                inline_edmf%tprcp (is:ie, j), inline_edmf%stc (is:ie, j, :), &
+                u10m_out = u10m, v10m_out = v10m, rb_out = rb, stress_out = stress, &
                 wind_out = wind)
 
             ! SA-TKE-EDMF main program
@@ -545,7 +547,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
         deallocate (wind)
         deallocate (sigmaf)
         deallocate (vegtype)
-        deallocate (qsurf)
 
         ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
         if ( gridstruct%square_domain ) then

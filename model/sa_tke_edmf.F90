@@ -71,6 +71,8 @@ module sa_tke_edmf_mod
     
     real, parameter :: grav = 9.80665 ! acceleration due to gravity (m/s^2), ref: IFS
     
+    real, parameter :: sbc = 5.670400e-8 ! Stefan-Boltzmann constant (kg/s^3/K^4)
+    
     real, parameter :: rdgas = 287.05 ! gas constant for dry air (J/kg/K): ref: GFDL, GFS
     real, parameter :: rvgas = 461.50 ! gas constant for water vapor (J/kg/K): ref: GFDL, GFS
 
@@ -78,7 +80,8 @@ module sa_tke_edmf_mod
     real, parameter :: eps = rdgas / rvgas ! 0.6219934994582882
     real, parameter :: epsm1 = rdgas / rvgas - 1. ! -0.3780065005417118
 
-    real, parameter :: tice = 273.15 ! freezing temperature (K): ref: GFDL, GFS
+    real, parameter :: t0ice = 273.15 ! freezing temperature (K): ref: GFDL, GFS
+    real, parameter :: tgice = 271.2 ! freezing temperature at sea (K)
 
     real, parameter :: cp_air = 1004.6 ! heat capacity of dry air at constant pressure (J/kg/K): ref: GFDL, GFS
     real, parameter :: cp_vap = 4.0 * rvgas ! 1846.0885419672554, heat capacity of water vapor at constnat pressure (J/kg/K)
@@ -1695,10 +1698,12 @@ end subroutine sa_tke_edmf_pbl
 ! subroutine to calcualte surface variables for PBL
 ! =======================================================================
 
-subroutine sa_tke_edmf_sfc (im, ps, u1, v1, t1, q1, &
-        tsurf, qsurf, prsl1, prslki, evap, fm, fh, &
+subroutine sa_tke_edmf_sfc (im, lsoil, ps, u1, v1, t1, q1, &
+        delt, tsurf, prsl1, prslki, evap, hflx, fm, fh, &
         z1, snwdph, zorl, islimsk, ustar, sigmaf, &
-        vegtype, shdmax, u10m_out, v10m_out, t2m_out, &
+        vegtype, shdmax, sfcemis, dlwflx, sfcnsw, &
+        sfcdsw, srflag, hice, fice, tice, weasd, &
+        tprcp, stc, u10m_out, v10m_out, t2m_out, &
         q2m_out, cm_out, ch_out, rb_out, stress_out, &
         wind_out)
     
@@ -1708,16 +1713,20 @@ subroutine sa_tke_edmf_sfc (im, ps, u1, v1, t1, q1, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
 
-    integer, intent (in) :: im
+    integer, intent (in) :: im, lsoil
     
     integer, intent (in) :: islimsk (im), vegtype (im)
     
-    real, intent (in) :: ps (im), u1 (im), v1 (im), t1 (im), q1 (im), &
-        tsurf (im), qsurf (im), prslki (im), evap (im), z1 (im), snwdph (im), &
-        prsl1 (im), sigmaf (im), shdmax (im)
-
-    real, intent (inout) :: fm (im), fh (im), zorl (im), ustar (im)
+    real, intent (in) :: delt
     
+    real, intent (in) :: ps (im), u1 (im), v1 (im), t1 (im), q1 (im), &
+        prslki (im), z1 (im), prsl1 (im), sigmaf (im), shdmax (im), &
+        sfcemis (im), dlwflx (im), sfcnsw (im), sfcdsw (im), srflag (im)
+
+    real, intent (inout) :: fm (im), fh (im), zorl (im), ustar (im), snwdph (im), &
+        hice (im), fice (im), tice (im), weasd (im), tprcp (im), stc (im, lsoil), &
+        evap (im), hflx (im), tsurf (im)
+
     real, intent (out), optional :: u10m_out (im), v10m_out (im), &
         t2m_out (im), q2m_out (im), cm_out (im), ch_out (im), rb_out (im), &
         stress_out (im), wind_out (im)
@@ -1726,38 +1735,69 @@ subroutine sa_tke_edmf_sfc (im, ps, u1, v1, t1, q1, &
     ! local variables
     ! -----------------------------------------------------------------------
 
+    logical :: mom4ice = .false.
+
+    integer :: lsm = 1
+
     real :: fm10 (im), fh2 (im)
     real :: u10m (im), v10m (im), t2m (im), q2m (im), cm (im), &
-        ch (im), rb (im), stress (im), wind (im)
+        ch (im), rb (im), stress (im), wind (im), qsurf (im), &
+        cmm (im), chh (im), gflux (im), ep (im), snowmt (im)
     
-    ! =======================================================================
+    ! -----------------------------------------------------------------------
+    ! initialization
+    ! -----------------------------------------------------------------------
+
+    qsurf = 0.0
+    cmm = 0.0
+    chh = 0.0
+    gflux = 0.0
+    ep = 0.0
+    snowmt = 0.0
+
+    ! -----------------------------------------------------------------------
     ! calculate surface exchange coefficients and near-surface wind
-    ! =======================================================================
+    ! -----------------------------------------------------------------------
 
     call sfc_exch (im, ps, u1, v1, t1, q1, z1, &
         snwdph, tsurf, zorl, cm, ch, rb, &
         prsl1, prslki, islimsk, stress, fm, fh, &
         ustar, wind, fm10, fh2, sigmaf, vegtype, shdmax)
 
-    ! =======================================================================
+    ! -----------------------------------------------------------------------
     ! surface energy balance over ocean
-    ! =======================================================================
+    ! -----------------------------------------------------------------------
 
-    ! =======================================================================
+    call sfc_ocea (im, ps, u1, v1, t1, q1, tsurf, cm, ch, &
+        prsl1, prslki, islimsk, qsurf, cmm, chh, gflux, evap, hflx, ep)
+    
+    ! -----------------------------------------------------------------------
     ! surface energy balance over land
-    ! =======================================================================
+    ! -----------------------------------------------------------------------
 
-    ! =======================================================================
+    ! TBD
+
+    ! -----------------------------------------------------------------------
     ! surface energy balance over seaice
-    ! =======================================================================
+    ! -----------------------------------------------------------------------
 
-    ! =======================================================================
+    call sfc_seai (im, lsoil, ps, u1, v1, t1, q1, delt, &
+        sfcemis, dlwflx, sfcnsw, sfcdsw, srflag, &
+        cm, ch, prsl1, prslki, islimsk, mom4ice, lsm, &
+        hice, fice, tice, weasd, tsurf, tprcp, stc, ep, &
+        snwdph, qsurf, snowmt, gflux, cmm, chh, evap, hflx)
+
+    ! -----------------------------------------------------------------------
     ! update near surface fields
-    ! =======================================================================
+    ! -----------------------------------------------------------------------
 
     call sfc_updt (im, ps, u1, v1, t1, q1, &
         tsurf, qsurf, u10m, v10m, t2m, q2m, &
         prslki, evap, fm, fh, fm10, fh2)
+
+    ! -----------------------------------------------------------------------
+    ! optional output
+    ! -----------------------------------------------------------------------
 
     if (present (u10m_out)) u10m_out = u10m
     if (present (v10m_out)) v10m_out = v10m
@@ -2178,6 +2218,720 @@ subroutine sfc_exch (im, ps, u1, v1, t1, q1, z1, &
     enddo
     
 end subroutine sfc_exch
+
+! =======================================================================
+! subroutine to surface energy balance over ocean
+!
+! program history log:
+! 2005 -- created from the original progtm to account for ocean only
+! oct 2006 -- h. wei added cmm and chh to the output
+! apr 2009 -- y. - t. hou modified to match the modified gbphys.f
+! reformatted the code and added program documentation
+! sep 2009 -- s. moorthi removed rcl and made pa as pressure unit
+! and furthur reformatted the code
+!
+! inputs: size
+! im - integer, horizontal dimension 1
+! ps - real, surface pressure im
+! u1, v1 - real, u / v component of surface layer wind im
+! t1 - real, surface layer mean temperature (k) im
+! q1 - real, surface layer mean specific humidity im
+! tskin - real, ground surface skin temperature (k) im
+! cm - real, surface exchange coeff for momentum (m / s) im
+! ch - real, surface exchange coeff heat & moisture (m / s) im
+! prsl1 - real, surface layer mean pressure im
+! prslki - real, im
+! islimsk - integer, sea / land / ice mask (= 0 / 1 / 2) im
+! ddvel - real, wind enhancement due to convection (m / s) im
+! flag_iter - logical, im
+!
+! outputs: size
+! qsurf - real, specific humidity at sfc im
+! cmm - real, im
+! chh - real, im
+! gflux - real, ground heat flux (zero for ocean) im
+! evap - real, evaporation from latent heat flux im
+! hflx - real, sensible heat flux im
+! ep - real, potential evaporation im
+! =======================================================================
+
+subroutine sfc_ocea (im, ps, u1, v1, t1, q1, tskin, cm, ch, &
+    prsl1, prslki, islimsk, qsurf, cmm, chh, gflux, evap, hflx, ep)
+    
+    implicit none
+
+    ! --- constant parameters:
+    real, parameter :: cpinv = 1.0 / cp_air, &
+        hvapi = 1.0 / hlv, &
+        elocp = hlv / cp_air
+    
+    ! --- inputs:
+    integer, intent (in) :: im
+    
+    real, dimension (im), intent (in) :: ps, u1, v1, &
+        t1, q1, tskin, cm, ch, prsl1, prslki
+    integer, dimension (im), intent (in) :: islimsk
+    
+    ! --- outputs:
+    real, dimension (im), intent (inout) :: qsurf, &
+        cmm, chh, gflux, evap, hflx, ep
+    
+    ! --- locals:
+    
+    real :: q0, qss, rch, rho, wind, tem, ddvel (im)
+    
+    integer :: i
+    
+    logical :: flag (im), flag_iter (im)
+    !
+    ! ===> ... begin here
+    !
+    ! --- ... flag for open water
+
+    ddvel = 0.0
+    flag_iter = .true.
+    
+    do i = 1, im
+        flag (i) = (islimsk (i) == 0 .and. flag_iter (i))
+        
+        ! --- ... initialize variables. all units are supposedly m.k.s. unless specified
+        ! ps is in pascals, wind is wind speed,
+        ! rho is density, qss is sat. hum. at surface
+        
+        if (flag (i)) then
+            
+            wind = max (sqrt (u1 (i) * u1 (i) + v1 (i) * v1 (i)) &
+                 + max (0.0, min (ddvel (i), 30.0)), 1.0)
+            
+            q0 = max (q1 (i), 1.0e-8)
+            rho = prsl1 (i) / (rdgas * t1 (i) * (1.0 + zvir * q0))
+            
+            qss = mqs (tskin (i))
+            qss = eps * qss / (ps (i) + epsm1 * qss)
+            
+            evap (i) = 0.0
+            hflx (i) = 0.0
+            ep (i) = 0.0
+            gflux (i) = 0.0
+            
+            ! --- ... rcp = rho cp_air ch v
+            
+            rch = rho * cp_air * ch (i) * wind
+            cmm (i) = cm (i) * wind
+            chh (i) = rho * ch (i) * wind
+            
+            ! --- ... sensible and latent heat flux over open water
+            
+            hflx (i) = rch * (tskin (i) - t1 (i) * prslki (i))
+            
+            evap (i) = elocp * rch * (qss - q0)
+            qsurf (i) = qss
+            
+            tem = 1.0 / rho
+            hflx (i) = hflx (i) * tem * cpinv
+            evap (i) = evap (i) * tem * hvapi
+        endif
+    enddo
+
+end subroutine sfc_ocea
+
+! =======================================================================
+! subroutine to surface energy balance over land
+! =======================================================================
+
+! =======================================================================
+! subroutine to surface energy balance over seaice
+!
+! program history log:
+! 2005 -- xingren wu created from original progtm and added
+! two - layer ice model
+! 200x -- sarah lu added flag_iter
+! oct 2006 -- h. wei added cmm and chh to output
+! 2007 -- x. wu modified for mom4 coupling (i.e. mom4ice)
+! 2007 -- s. moorthi micellaneous changes
+! may 2009 -- y. - t. hou modified to include surface emissivity
+! effect on lw radiation. replaced the confusing
+! slrad with sfc net sw sfcnsw (dn - up) . reformatted
+! the code and add program documentation block.
+! sep 2009 -- s. moorthi removed rcl, changed pressure units and
+! further optimized
+! jan 2015 -- x. wu change "cimin = 0.15" for both
+! uncoupled and coupled case
+! 
+! inputs: size
+! im, km - integer, horiz dimension and num of soil layers 1
+! ps - real, surface pressure im
+! u1, v1 - real, u / v component of surface layer wind im
+! t1 - real, surface layer mean temperature (k) im
+! q1 - real, surface layer mean specific humidity im
+! delt - real, time interval (second) 1
+! sfcemis - real, sfc lw emissivity (fraction) im
+! dlwflx - real, total sky sfc downward lw flux (w / m ** 2) im
+! sfcnsw - real, total sky sfc netsw flx into ground (w / m ** 2) im
+! sfcdsw - real, total sky sfc downward sw flux (w / m ** 2) im
+! srflag - real, snow / rain flag for precipitation im
+! cm - real, surface exchange coeff for momentum (m / s) im
+! ch - real, surface exchange coeff heat & moisture (m / s) im
+! prsl1 - real, surface layer mean pressure im
+! prslki - real, im
+! islimsk - integer, sea / land / ice mask (= 0 / 1 / 2) im
+! ddvel - real, im
+! flag_iter - logical, im
+! mom4ice - logical, im
+! islimsk - integer, flag for land surface model scheme 1
+! = 0: use osu scheme; = 1: use noah scheme
+!
+! input / outputs:
+! hice - real, sea - ice thickness im
+! fice - real, sea - ice concentration im
+! tice - real, sea - ice surface temperature im
+! weasd - real, water equivalent accumulated snow depth (mm) im
+! tskin - real, ground surface skin temperature (k) im
+! tprcp - real, total precipitation im
+! stc - real, soil temp (k) im, km
+! ep - real, potential evaporation im
+!
+! outputs:
+! snwdph - real, water equivalent snow depth (mm) im
+! qsurf - real, specific humidity at sfc im
+! snowmt - real, snow melt (m) im
+! gflux - real, soil heat flux (w / m ** 2) im
+! cmm - real, im
+! chh - real, im
+! evap - real, evaperation from latent heat flux im
+! hflx - real, sensible heat flux im
+! =======================================================================
+
+subroutine sfc_seai (im, km, ps, u1, v1, t1, q1, delt, &
+    sfcemis, dlwflx, sfcnsw, sfcdsw, srflag, &
+    cm, ch, prsl1, prslki, islimsk, mom4ice, lsm, &
+    hice, fice, tice, weasd, tskin, tprcp, stc, ep, &
+    snwdph, qsurf, snowmt, gflux, cmm, chh, evap, hflx)
+
+    implicit none
+    
+    ! --- constant parameters:
+    integer, parameter :: kmi = 2 ! 2 - layer of ice
+    real, parameter :: cpinv = 1.0 / cp_air
+    real, parameter :: hvapi = 1.0 / hlv
+    real, parameter :: elocp = hlv / cp_air
+    real, parameter :: himax = 8.0 ! maximum ice thickness allowed
+    real, parameter :: himin = 0.1 ! minimum ice thickness required
+    real, parameter :: hsmax = 2.0 ! maximum snow depth allowed
+    real, parameter :: timin = 173.0 ! minimum temperature allowed for snow / ice
+    real, parameter :: albfw = 0.06 ! albedo for lead
+    real, parameter :: dsi = 1.0 / 0.33
+    
+    ! --- inputs:
+    integer, intent (in) :: im, km, lsm
+    
+    real, dimension (im), intent (in) :: ps, u1, v1, &
+        t1, q1, sfcemis, dlwflx, sfcnsw, sfcdsw, srflag, cm, ch, &
+        prsl1, prslki
+    
+    integer, dimension (im), intent (in) :: islimsk
+    real, intent (in) :: delt
+    
+    logical, intent (in) :: mom4ice
+    
+    ! --- input / outputs:
+    real, dimension (im), intent (inout) :: hice, &
+        fice, tice, weasd, tskin, tprcp, ep
+    
+    real, dimension (im, km), intent (inout) :: stc
+    
+    ! --- outputs:
+    real, dimension (im), intent (inout) :: snwdph, &
+        qsurf, snowmt, gflux, cmm, chh, evap, hflx
+    
+    ! --- locals:
+    real, dimension (im) :: ffw, evapi, evapw, &
+        sneti, snetw, hfd, hfi, &
+        ! hflxi, hflxw, sneti, snetw, qssi, qssw, hfd, hfi, hfw, &
+    focn, snof, hi_save, hs_save, rch, rho, &
+        snowd, theta1, ddvel
+    
+    real :: t12, t14, tem, stsice (im, kmi), &
+        hflxi, hflxw, q0, qs1, wind, qssi, qssw
+    real, parameter :: cimin = 0.15 ! --- minimum ice concentration
+    
+    integer :: i, k
+    
+    logical :: flag (im), flag_iter (im)
+    !
+    ! ===> ... begin here
+    !
+    ! --- ... set flag for sea - ice
+    
+    ddvel = 0.0
+    flag_iter = .true.
+    
+    do i = 1, im
+        flag (i) = (islimsk (i) >= 2) .and. flag_iter (i)
+        if (flag_iter (i) .and. islimsk (i) < 2) then
+            hice (i) = 0.0
+            fice (i) = 0.0
+        endif
+    enddo
+    
+    ! --- ... update sea ice temperature
+    
+    do k = 1, kmi
+        do i = 1, im
+            if (flag (i)) then
+                stsice (i, k) = stc (i, k)
+            endif
+        enddo
+    enddo
+    !
+    if (mom4ice) then
+        do i = 1, im
+            if (flag (i)) then
+                hi_save (i) = hice (i)
+                hs_save (i) = weasd (i) * 0.001
+            endif
+        enddo
+    elseif (lsm > 0) then ! --- ... snow - rain detection
+        do i = 1, im
+            if (flag (i)) then
+                if (srflag (i) == 1.0) then
+                    ep (i) = 0.0
+                    weasd (i) = weasd (i) + 1.e3 * tprcp (i)
+                    tprcp (i) = 0.0
+                endif
+            endif
+        enddo
+    endif
+    
+    ! --- ... initialize variables. all units are supposedly m.k.s. unless specifie
+    ! psurf is in pascals, wind is wind speed, theta1 is adiabatic surface
+    ! temp from level 1, rho is density, qs1 is sat. hum. at level1 and qss
+    ! is sat. hum. at surface
+    ! convert slrad to the civilized unit from langley minute - 1 k - 4
+    
+    do i = 1, im
+        if (flag (i)) then
+            ! psurf (i) = 1000.0 * ps (i)
+            ! ps1 (i) = 1000.0 * prsl1 (i)
+            
+            ! dlwflx has been given a negative sign for downward longwave
+            ! sfcnsw is the net shortwave flux (direction: dn - up)
+            
+            wind = max (sqrt (u1 (i) * u1 (i) + v1 (i) * v1 (i)) &
+                 + max (0.0, min (ddvel (i), 30.0)), 1.0)
+            
+            q0 = max (q1 (i), 1.0e-8)
+            ! tsurf (i) = tskin (i)
+            theta1 (i) = t1 (i) * prslki (i)
+            rho (i) = prsl1 (i) / (rdgas * t1 (i) * (1.0 + zvir * q0))
+            qs1 = mqs (t1 (i))
+            qs1 = max (eps * qs1 / (prsl1 (i) + epsm1 * qs1), 1.e-8)
+            q0 = min (qs1, q0)
+            
+            ffw (i) = 1.0 - fice (i)
+            if (fice (i) < cimin) then
+                print *, 'warning: ice fraction is low:', fice (i)
+                fice (i) = cimin
+                ffw (i) = 1.0 - fice (i)
+                tice (i) = tgice
+                tskin (i) = tgice
+                print *, 'fix ice fraction: reset it to:', fice (i)
+            endif
+            
+            qssi = mqs (tice (i))
+            qssi = eps * qssi / (ps (i) + epsm1 * qssi)
+            qssw = mqs (tgice)
+            qssw = eps * qssw / (ps (i) + epsm1 * qssw)
+            
+            ! --- ... snow depth in water equivalent is converted from mm to m unit
+            
+            if (mom4ice) then
+                snowd (i) = weasd (i) * 0.001 / fice (i)
+            else
+                snowd (i) = weasd (i) * 0.001
+            endif
+            ! flagsnw (i) = .false.
+            
+            ! --- ... when snow depth is less than 1 mm, a patchy snow is assumed and
+            ! soil is allowed to interact with the atmosphere.
+            ! we should eventually move to a linear combination of soil and
+            ! snow under the condition of patchy snow.
+            
+            ! --- ... rcp = rho cp_air ch v
+            
+            cmm (i) = cm (i) * wind
+            chh (i) = rho (i) * ch (i) * wind
+            rch (i) = chh (i) * cp_air
+            
+            ! --- ... sensible and latent heat flux over open water & sea ice
+            
+            evapi (i) = elocp * rch (i) * (qssi - q0)
+            evapw (i) = elocp * rch (i) * (qssw - q0)
+            ! evap (i) = fice (i) * evapi (i) + ffw (i) * evapw (i)
+            
+            ! if (lprnt) write (0, *) ' tice = ', tice (ipr)
+            
+            snetw (i) = sfcdsw (i) * (1.0 - albfw)
+            snetw (i) = min (3.0 * sfcnsw (i) / (1.0 + 2.0 * ffw (i)), snetw (i))
+            sneti (i) = (sfcnsw (i) - ffw (i) * snetw (i)) / fice (i)
+            
+            t12 = tice (i) * tice (i)
+            t14 = t12 * t12
+            
+            ! --- ... hfi = net non - solar and upir heat flux @ ice surface
+            
+            hfi (i) = - dlwflx (i) + sfcemis (i) * sbc * t14 + evapi (i) &
+                 + rch (i) * (tice (i) - theta1 (i))
+            hfd (i) = 4.0 * sfcemis (i) * sbc * tice (i) * t12 &
+                 + (1.0 + elocp * eps * hlv * qs1 / (rdgas * t12)) * rch (i)
+            
+            t12 = tgice * tgice
+            t14 = t12 * t12
+            
+            ! --- ... hfw = net heat flux @ water surface (within ice)
+            
+            ! hfw (i) = - dlwflx (i) + sfcemis (i) * sbc * t14 + evapw (i) &
+            ! + rch (i) * (tgice - theta1 (i)) - snetw (i)
+            
+            focn (i) = 2.0 ! heat flux from ocean - should be from ocn model
+            snof (i) = 0.0 ! snowfall rate - snow accumulates in gbphys
+            
+            hice (i) = max (min (hice (i), himax), himin)
+            snowd (i) = min (snowd (i), hsmax)
+            
+            if (snowd (i) > (2.0 * hice (i))) then
+                print *, 'warning: too much snow :', snowd (i)
+                snowd (i) = hice (i) + hice (i)
+                print *, 'fix: decrease snow depth to:', snowd (i)
+            endif
+        endif
+    enddo
+    
+    ! if (lprnt) write (0, *) ' tice2 = ', tice (ipr)
+    call ice3lay &
+        ! --- inputs: !
+        (im, kmi, fice, flag, hfi, hfd, sneti, focn, delt, &
+        ! --- outputs: !
+        snowd, hice, stsice, tice, snof, snowmt, gflux) !
+    
+    ! if (lprnt) write (0, *) ' tice3 = ', tice (ipr)
+    if (mom4ice) then
+        do i = 1, im
+            if (flag (i)) then
+                hice (i) = hi_save (i)
+                snowd (i) = hs_save (i)
+            endif
+        enddo
+    endif
+    
+    do i = 1, im
+        if (flag (i)) then
+            if (tice (i) < timin) then
+                print *, 'warning: snow / ice temperature is too low:', tice (i), ' i = ', i
+                tice (i) = timin
+                print *, 'fix snow / ice temperature: reset it to:', tice (i)
+            endif
+            
+            if (stsice (i, 1) < timin) then
+                print *, 'warning: layer 1 ice temp is too low:', stsice (i, 1), ' i = ', i
+                stsice (i, 1) = timin
+                print *, 'fix layer 1 ice temp: reset it to:', stsice (i, 1)
+            endif
+            
+            if (stsice (i, 2) < timin) then
+                print *, 'warning: layer 2 ice temp is too low:', stsice (i, 2)
+                stsice (i, 2) = timin
+                print *, 'fix layer 2 ice temp: reset it to:', stsice (i, 2)
+            endif
+            
+            tskin (i) = tice (i) * fice (i) + tgice * ffw (i)
+        endif
+    enddo
+    
+    do k = 1, kmi
+        do i = 1, im
+            if (flag (i)) then
+                stc (i, k) = min (stsice (i, k), t0ice)
+            endif
+        enddo
+    enddo
+    
+    do i = 1, im
+        if (flag (i)) then
+            ! --- ... calculate sensible heat flux (& evap over sea ice)
+            
+            hflxi = rch (i) * (tice (i) - theta1 (i))
+            hflxw = rch (i) * (tgice - theta1 (i))
+            hflx (i) = fice (i) * hflxi + ffw (i) * hflxw
+            evap (i) = fice (i) * evapi (i) + ffw (i) * evapw (i)
+            !
+            ! --- ... the rest of the output
+            
+            qsurf (i) = q1 (i) + evap (i) / (elocp * rch (i))
+            
+            ! --- ... convert snow depth back to mm of water equivalent
+            
+            weasd (i) = snowd (i) * 1000.0
+            snwdph (i) = weasd (i) * dsi ! snow depth in mm
+            
+            tem = 1.0 / rho (i)
+            hflx (i) = hflx (i) * tem * cpinv
+            evap (i) = evap (i) * tem * hvapi
+        endif
+    enddo
+
+end subroutine sfc_seai
+
+! =======================================================================
+! Three-Layer Sea Ice Vertical Thermodynamics
+!
+! based on:  m. winton, "a reformulated three-layer sea ice model",
+! journal of atmospheric and oceanic technology, 2000
+!
+!
+!        -> +---------+ <- tice - diagnostic surface temperature ( <= 0c )
+!       /   |         |
+!   snowd   |  snow   | <- 0-heat capacity snow layer
+!       \   |         |
+!        => +---------+
+!       /   |         |
+!      /    |         | <- t1 - upper 1/2 ice temperature; this layer has
+!     /     |         |         a variable (t/s dependent) heat capacity
+!   hice    |...ice...|
+!     \     |         |
+!      \    |         | <- t2 - lower 1/2 ice temp. (fixed heat capacity)
+!       \   |         |
+!        -> +---------+ <- base of ice fixed at seawater freezing temp.
+!
+! inputs: size
+! im, kmi - integer, horiz dimension and num of ice layers 1
+! fice - real, sea - ice concentration im
+! flag - logical, ice mask flag 1
+! hfi - real, net non - solar and heat flux @ surface (w / m^2) im
+! hfd - real, heat flux derivatice @ sfc (w / m^2 / deg - c) im
+! sneti - real, net solar incoming at top (w / m^2) im
+! focn - real, heat flux from ocean (w / m^2) im
+! delt - real, timestep (sec) 1
+!
+! input / outputs:
+! snowd - real, surface pressure im
+! hice - real, sea - ice thickness im
+! stsice - real, temp @ midpt of ice levels (deg c) im, km
+! tice - real, surface temperature (deg c) im
+! snof - real, snowfall rate (m / sec) im
+!
+! outputs:
+! snowmt - real, snow melt during delt (m) im
+! gflux - real, conductive heat flux (w / m^2) im
+!
+! locals:
+! hdi - real, ice - water interface (m)
+! hsni - real, snow - ice (m)
+!
+! =======================================================================
+
+subroutine ice3lay &
+    !...................................
+    ! --- inputs:
+    (im, kmi, fice, flag, hfi, hfd, sneti, focn, delt, &
+    ! --- input / outputs:
+    snowd, hice, stsice, tice, snof, &
+    ! --- outputs:
+    snowmt, gflux)
+
+    implicit none
+    
+    ! --- constant parameters: (properties of ice, snow, and seawater)
+    real, parameter :: ds = 330.0 ! snow (ov sea ice) density (kg / m^3)
+    real, parameter :: dw = 1000.0 ! fresh water density (kg / m^3)
+    real, parameter :: dsdw = ds / dw
+    real, parameter :: dwds = dw / ds
+    real, parameter :: ks = 0.31 ! conductivity of snow (w / mk)
+    real, parameter :: i0 = 0.3 ! ice surface penetrating solar fraction
+    real, parameter :: ki = 2.03 ! conductivity of ice (w / mk)
+    real, parameter :: di = 917.0 ! density of ice (kg / m^3)
+    real, parameter :: didw = di / dw
+    real, parameter :: dsdi = ds / di
+    real, parameter :: ci = 2054.0 ! heat capacity of fresh ice (j / kg / k)
+    real, parameter :: li = 3.34e5 ! latent heat of fusion (j / kg - ice)
+    real, parameter :: si = 1.0 ! salinity of sea ice
+    real, parameter :: mu = 0.054 ! relates freezing temp to salinity
+    real, parameter :: tfi = - mu * si ! sea ice freezing temp = - mu * salinity
+    real, parameter :: tfw = - 1.8 ! tfw - seawater freezing temp (c)
+    real, parameter :: tfi0 = tfi - 0.0001
+    real, parameter :: dici = di * ci
+    real, parameter :: dili = di * li
+    real, parameter :: dsli = ds * li
+    real, parameter :: ki4 = ki * 4.0
+    
+    ! --- inputs:
+    integer, intent (in) :: im, kmi
+    
+    real, dimension (im), intent (in) :: fice, hfi, hfd, sneti, focn
+    
+    real, intent (in) :: delt
+    
+    logical, dimension (im), intent (in) :: flag
+    
+    ! --- input / outputs:
+    real, dimension (im), intent (inout) :: snowd, hice, tice, snof
+    
+    real, dimension (im, kmi), intent (inout) :: stsice
+    
+    ! --- outputs:
+    real, dimension (im), intent (out) :: snowmt, gflux
+    
+    ! --- locals:
+    
+    real :: dt2, dt4, dt6, h1, h2, dh, wrk, wrk1, &
+        dt2i, hdi, hsni, ai, bi, a1, b1, a10, b10, &
+        c1, ip, k12, k32, tsf, f1, tmelt, bmelt
+    
+    integer :: i
+    !
+    ! ===> ... begin here
+    !
+    dt2 = 2.0 * delt
+    dt4 = 4.0 * delt
+    dt6 = 6.0 * delt
+    dt2i = 1.0 / dt2
+    
+    do i = 1, im
+        if (flag (i)) then
+            snowd (i) = snowd (i) * dwds
+            hdi = (dsdw * snowd (i) + didw * hice (i))
+            
+            if (hice (i) < hdi) then
+                snowd (i) = snowd (i) + hice (i) - hdi
+                hsni = (hdi - hice (i)) * dsdi
+                hice (i) = hice (i) + hsni
+            endif
+            
+            snof (i) = snof (i) * dwds
+            tice (i) = tice (i) - t0ice
+            stsice (i, 1) = min (stsice (i, 1) - t0ice, tfi0) ! degc
+            stsice (i, 2) = min (stsice (i, 2) - t0ice, tfi0) ! degc
+            
+            ip = i0 * sneti (i) ! ip + v (in winton ip = - i0 * sneti as sol - v)
+            if (snowd (i) > 0.0) then
+                tsf = 0.0
+                ip = 0.0
+            else
+                tsf = tfi
+                ip = i0 * sneti (i) ! ip + v here (in winton ip = - i0 * sneti)
+            endif
+            tice (i) = min (tice (i), tsf)
+            
+            ! --- ... compute ice temperature
+            
+            bi = hfd (i)
+            ai = hfi (i) - sneti (i) + ip - tice (i) * bi ! + v sol input here
+            k12 = ki4 * ks / (ks * hice (i) + ki4 * snowd (i))
+            k32 = (ki + ki) / hice (i)
+            
+            wrk = 1.0 / (dt6 * k32 + dici * hice (i))
+            a10 = dici * hice (i) * dt2i + k32 * (dt4 * k32 + dici * hice (i)) * wrk
+            b10 = - di * hice (i) * (ci * stsice (i, 1) + li * tfi / stsice (i, 1)) &
+                 * dt2i - ip &
+                 - k32 * (dt4 * k32 * tfw + dici * hice (i) * stsice (i, 2)) * wrk
+            
+            wrk1 = k12 / (k12 + bi)
+            a1 = a10 + bi * wrk1
+            b1 = b10 + ai * wrk1
+            c1 = dili * tfi * dt2i * hice (i)
+            
+            stsice (i, 1) = - (sqrt (b1 * b1 - 4.0 * a1 * c1) + b1) / (a1 + a1)
+            tice (i) = (k12 * stsice (i, 1) - ai) / (k12 + bi)
+            
+            if (tice (i) > tsf) then
+                a1 = a10 + k12
+                b1 = b10 - k12 * tsf
+                stsice (i, 1) = - (sqrt (b1 * b1 - 4.0 * a1 * c1) + b1) / (a1 + a1)
+                tice (i) = tsf
+                tmelt = (k12 * (stsice (i, 1) - tsf) - (ai + bi * tsf)) * delt
+            else
+                tmelt = 0.0
+                snowd (i) = snowd (i) + snof (i) * delt
+            endif
+            
+            stsice (i, 2) = (dt2 * k32 * (stsice (i, 1) + tfw + tfw) &
+                 + dici * hice (i) * stsice (i, 2)) * wrk
+            
+            bmelt = (focn (i) + ki4 * (stsice (i, 2) - tfw) / hice (i)) * delt
+            
+            ! --- ... resize the ice ...
+            
+            h1 = 0.5 * hice (i)
+            h2 = 0.5 * hice (i)
+            
+            ! --- ... top ...
+            
+            if (tmelt <= snowd (i) * dsli) then
+                snowmt (i) = tmelt / dsli
+                snowd (i) = snowd (i) - snowmt (i)
+            else
+                snowmt (i) = snowd (i)
+                h1 = h1 - (tmelt - snowd (i) * dsli) &
+                     / (di * (ci - li / stsice (i, 1)) * (tfi - stsice (i, 1)))
+                snowd (i) = 0.0
+            endif
+            
+            ! --- ... and bottom
+            
+            if (bmelt < 0.0) then
+                dh = - bmelt / (dili + dici * (tfi - tfw))
+                stsice (i, 2) = (h2 * stsice (i, 2) + dh * tfw) / (h2 + dh)
+                h2 = h2 + dh
+            else
+                h2 = h2 - bmelt / (dili + dici * (tfi - stsice (i, 2)))
+            endif
+            
+            ! --- ... if ice remains, even up 2 layers, else, pass negative energy back in snow
+            
+            hice (i) = h1 + h2
+            
+            if (hice (i) > 0.0) then
+                if (h1 > 0.5 * hice (i)) then
+                    f1 = 1.0 - (h2 + h2) / hice (i)
+                    stsice (i, 2) = f1 * (stsice (i, 1) + li * tfi / (ci * stsice (i, 1))) &
+                         + (1.0 - f1) * stsice (i, 2)
+                    
+                    if (stsice (i, 2) > tfi) then
+                        hice (i) = hice (i) - h2 * ci * (stsice (i, 2) - tfi) / (li * delt)
+                        stsice (i, 2) = tfi
+                    endif
+                else
+                    f1 = (h1 + h1) / hice (i)
+                    stsice (i, 1) = f1 * (stsice (i, 1) + li * tfi / (ci * stsice (i, 1))) &
+                         + (1.0 - f1) * stsice (i, 2)
+                    stsice (i, 1) = (stsice (i, 1) - sqrt (stsice (i, 1) * stsice (i, 1) &
+                         - 4.0 * tfi * li / ci)) * 0.5
+                endif
+                
+                k12 = ki4 * ks / (ks * hice (i) + ki4 * snowd (i))
+                gflux (i) = k12 * (stsice (i, 1) - tice (i))
+            else
+                snowd (i) = snowd (i) + (h1 * (ci * (stsice (i, 1) - tfi) &
+                     - li * (1.0 - tfi / stsice (i, 1))) &
+                     + h2 * (ci * (stsice (i, 2) - tfi) - li)) / li
+                
+                hice (i) = max (0.0, snowd (i) * dsdi)
+                snowd (i) = 0.0
+                stsice (i, 1) = tfw
+                stsice (i, 2) = tfw
+                gflux (i) = 0.0
+            endif ! endif_hice_block
+            
+            gflux (i) = fice (i) * gflux (i)
+            snowmt (i) = snowmt (i) * dsdw
+            snowd (i) = snowd (i) * dsdw
+            tice (i) = tice (i) + t0ice
+            stsice (i, 1) = stsice (i, 1) + t0ice
+            stsice (i, 2) = stsice (i, 2) + t0ice
+        endif ! endif_flag_block
+    enddo ! enddo_i_loop
+    
+end subroutine ice3lay
 
 ! =======================================================================
 ! subroutine to update near surface fields

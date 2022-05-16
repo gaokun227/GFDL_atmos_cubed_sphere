@@ -1322,6 +1322,17 @@ contains
          Atm(n)%inline_edmf%zorl(i,j) = IPD_Data(nb)%Stateout%zorl(ix)
          Atm(n)%inline_edmf%uustar(i,j) = IPD_Data(nb)%Stateout%uustar(ix)
          Atm(n)%inline_edmf%shdmax(i,j) = IPD_Data(nb)%Stateout%shdmax(ix)
+         Atm(n)%inline_edmf%sfcemis(i,j) = IPD_Data(nb)%Stateout%sfcemis(ix)
+         Atm(n)%inline_edmf%dlwflx(i,j) = IPD_Data(nb)%Stateout%dlwflx(ix)
+         Atm(n)%inline_edmf%sfcnsw(i,j) = IPD_Data(nb)%Stateout%sfcnsw(ix)
+         Atm(n)%inline_edmf%sfcdsw(i,j) = IPD_Data(nb)%Stateout%sfcdsw(ix)
+         Atm(n)%inline_edmf%srflag(i,j) = IPD_Data(nb)%Stateout%srflag(ix)
+         Atm(n)%inline_edmf%hice(i,j) = IPD_Data(nb)%Stateout%hice(ix)
+         Atm(n)%inline_edmf%fice(i,j) = IPD_Data(nb)%Stateout%fice(ix)
+         Atm(n)%inline_edmf%tice(i,j) = IPD_Data(nb)%Stateout%tice(ix)
+         Atm(n)%inline_edmf%weasd(i,j) = IPD_Data(nb)%Stateout%weasd(ix)
+         Atm(n)%inline_edmf%tprcp(i,j) = IPD_Data(nb)%Stateout%tprcp(ix)
+         Atm(n)%inline_edmf%stc(i,j,:) = IPD_Data(nb)%Stateout%stc(ix,:)
        enddo
      endif
 

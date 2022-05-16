@@ -1114,6 +1114,17 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: radh(:,:,:)     _NULL
     real, _ALLOCATABLE :: hflx(:,:)     _NULL
     real, _ALLOCATABLE :: evap(:,:)     _NULL
+    real, _ALLOCATABLE :: sfcemis(:,:)     _NULL
+    real, _ALLOCATABLE :: dlwflx(:,:)     _NULL
+    real, _ALLOCATABLE :: sfcnsw(:,:)     _NULL
+    real, _ALLOCATABLE :: sfcdsw(:,:)     _NULL
+    real, _ALLOCATABLE :: srflag(:,:)     _NULL
+    real, _ALLOCATABLE :: hice(:,:)     _NULL
+    real, _ALLOCATABLE :: fice(:,:)     _NULL
+    real, _ALLOCATABLE :: tice(:,:)     _NULL
+    real, _ALLOCATABLE :: weasd(:,:)     _NULL
+    real, _ALLOCATABLE :: tprcp(:,:)     _NULL
+    real, _ALLOCATABLE :: stc(:,:,:)     _NULL
     real, _ALLOCATABLE :: hpbl(:,:)     _NULL
     integer, _ALLOCATABLE :: kpbl(:,:)     _NULL
     real, _ALLOCATABLE :: dtsfc(:,:)     _NULL
@@ -1414,7 +1425,7 @@ module fv_arrays_mod
      type(FmsNetcdfFile_t) :: Fv_restart
      type(FmsNetcdfDomainFile_t) :: SST_restart, Fv_restart_tile, &
           Rsf_restart, Mg_restart, Lnd_restart, Tra_restart, &
-          Oro_restart, Phy_restart, Sfc_restart
+          Oro_restart, Phy_restart, Sfc_restart, Soi_restart
      logical :: Fv_restart_is_open=.false.
      logical :: SST_restart_is_open=.false.
      logical :: Fv_restart_tile_is_open=.false.
@@ -1425,6 +1436,7 @@ module fv_arrays_mod
      logical :: Oro_restart_is_open=.false.
      logical :: Phy_restart_is_open=.false.
      logical :: Sfc_restart_is_open=.false.
+     logical :: Soi_restart_is_open=.false.
      type(fv_nest_type) :: neststruct
 
      !Hold on to coarse-grid global grid, so we don't have to waste processor time getting it again when starting to do grid nesting
@@ -1641,6 +1653,17 @@ contains
     allocate ( Atm%inline_edmf%radh(is:ie,js:je,npz) )
     allocate ( Atm%inline_edmf%hflx(is:ie,js:je) )
     allocate ( Atm%inline_edmf%evap(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%sfcemis(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%dlwflx(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%sfcnsw(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%sfcdsw(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%srflag(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%hice(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%fice(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%tice(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%weasd(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%tprcp(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%stc(is:ie,js:je,4) )
     allocate ( Atm%inline_edmf%hpbl(is:ie,js:je) )
     allocate ( Atm%inline_edmf%kpbl(is:ie,js:je) )
     allocate ( Atm%inline_edmf%dtsfc(is:ie,js:je) )
@@ -1791,6 +1814,17 @@ contains
            Atm%inline_edmf%radh(i,j,:) = 0.0
            Atm%inline_edmf%hflx(i,j) = 0.0
            Atm%inline_edmf%evap(i,j) = 0.0
+           Atm%inline_edmf%sfcemis(i,j) = 0.0
+           Atm%inline_edmf%dlwflx(i,j) = 0.0
+           Atm%inline_edmf%sfcnsw(i,j) = 0.0
+           Atm%inline_edmf%sfcdsw(i,j) = 0.0
+           Atm%inline_edmf%srflag(i,j) = real_big
+           Atm%inline_edmf%hice(i,j) = real_big
+           Atm%inline_edmf%fice(i,j) = real_big
+           Atm%inline_edmf%tice(i,j) = real_big
+           Atm%inline_edmf%weasd(i,j) = real_big
+           Atm%inline_edmf%tprcp(i,j) = real_big
+           Atm%inline_edmf%stc(i,j,:) = real_big
            Atm%inline_edmf%hpbl(i,j) = real_big
            Atm%inline_edmf%kpbl(i,j) = 1
            Atm%inline_edmf%dtsfc(i,j) = real_big
@@ -2111,6 +2145,17 @@ contains
     deallocate ( Atm%inline_edmf%radh )
     deallocate ( Atm%inline_edmf%hflx )
     deallocate ( Atm%inline_edmf%evap )
+    deallocate ( Atm%inline_edmf%sfcemis )
+    deallocate ( Atm%inline_edmf%dlwflx )
+    deallocate ( Atm%inline_edmf%sfcnsw )
+    deallocate ( Atm%inline_edmf%sfcdsw )
+    deallocate ( Atm%inline_edmf%srflag )
+    deallocate ( Atm%inline_edmf%hice )
+    deallocate ( Atm%inline_edmf%fice )
+    deallocate ( Atm%inline_edmf%tice )
+    deallocate ( Atm%inline_edmf%weasd )
+    deallocate ( Atm%inline_edmf%tprcp )
+    deallocate ( Atm%inline_edmf%stc )
     deallocate ( Atm%inline_edmf%hpbl )
     deallocate ( Atm%inline_edmf%kpbl )
     deallocate ( Atm%inline_edmf%dtsfc )
