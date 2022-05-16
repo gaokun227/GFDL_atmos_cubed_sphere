@@ -723,8 +723,8 @@ contains
  end subroutine set_atmosphere_pelist
 
 
- subroutine atmosphere_domain ( fv_domain, layout, regional, bounded_domain )
-   type(domain2d), intent(out) :: fv_domain
+ subroutine atmosphere_domain ( fv_domain, rd_domain, layout, regional, bounded_domain )
+   type(domain2d), intent(out) :: fv_domain, rd_domain
    integer, intent(out) :: layout(2)
    logical, intent(out) :: regional
    logical, intent(out) :: bounded_domain
@@ -732,6 +732,7 @@ contains
 !  note: coupling is done using the mass/temperature grid with no halos
 
    fv_domain = Atm(mygrid)%domain_for_coupler
+   rd_domain = Atm(mygrid)%domain_for_read
    layout(1:2) =  Atm(mygrid)%layout(1:2)
 
    regional = Atm(mygrid)%flagstruct%regional
