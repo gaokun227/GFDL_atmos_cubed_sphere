@@ -1703,9 +1703,9 @@ subroutine sa_tke_edmf_sfc (im, lsoil, ps, u1, v1, t1, q1, &
         z1, snwdph, zorl, islimsk, ustar, sigmaf, &
         vegtype, shdmax, sfcemis, dlwflx, sfcnsw, &
         sfcdsw, srflag, hice, fice, tice, weasd, &
-        tprcp, stc, u10m_out, v10m_out, t2m_out, &
-        q2m_out, cm_out, ch_out, rb_out, stress_out, &
-        wind_out)
+        tprcp, stc, qsurf, cmm, chh, gflux, ep, &
+        snowmt, u10m_out, v10m_out, t2m_out, q2m_out, &
+        cm_out, ch_out, rb_out, stress_out, wind_out)
     
     implicit none
     
@@ -1725,7 +1725,8 @@ subroutine sa_tke_edmf_sfc (im, lsoil, ps, u1, v1, t1, q1, &
 
     real, intent (inout) :: fm (im), fh (im), zorl (im), ustar (im), snwdph (im), &
         hice (im), fice (im), tice (im), weasd (im), tprcp (im), stc (im, lsoil), &
-        evap (im), hflx (im), tsurf (im)
+        evap (im), hflx (im), tsurf (im), qsurf (im), cmm (im), chh (im), &
+        gflux (im), ep (im), snowmt (im)
 
     real, intent (out), optional :: u10m_out (im), v10m_out (im), &
         t2m_out (im), q2m_out (im), cm_out (im), ch_out (im), rb_out (im), &
@@ -1741,20 +1742,8 @@ subroutine sa_tke_edmf_sfc (im, lsoil, ps, u1, v1, t1, q1, &
 
     real :: fm10 (im), fh2 (im)
     real :: u10m (im), v10m (im), t2m (im), q2m (im), cm (im), &
-        ch (im), rb (im), stress (im), wind (im), qsurf (im), &
-        cmm (im), chh (im), gflux (im), ep (im), snowmt (im)
+        ch (im), rb (im), stress (im), wind (im)
     
-    ! -----------------------------------------------------------------------
-    ! initialization
-    ! -----------------------------------------------------------------------
-
-    qsurf = 0.0
-    cmm = 0.0
-    chh = 0.0
-    gflux = 0.0
-    ep = 0.0
-    snowmt = 0.0
-
     ! -----------------------------------------------------------------------
     ! calculate surface exchange coefficients and near-surface wind
     ! -----------------------------------------------------------------------

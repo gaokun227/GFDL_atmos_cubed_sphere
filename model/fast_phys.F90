@@ -441,8 +441,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 inline_edmf%hice (is:ie, j), inline_edmf%fice (is:ie, j), &
                 inline_edmf%tice (is:ie, j), inline_edmf%weasd (is:ie, j), &
                 inline_edmf%tprcp (is:ie, j), inline_edmf%stc (is:ie, j, :), &
-                u10m_out = u10m, v10m_out = v10m, rb_out = rb, stress_out = stress, &
-                wind_out = wind)
+                inline_edmf%qsurf (is:ie, j), inline_edmf%cmm (is:ie, j), &
+                inline_edmf%chh (is:ie, j), inline_edmf%gflux (is:ie, j), &
+                inline_edmf%ep (is:ie, j), inline_edmf%snowmt (is:ie, j), &
+                u10m_out = u10m, v10m_out = v10m, rb_out = rb, &
+                stress_out = stress, wind_out = wind)
 
             ! SA-TKE-EDMF main program
             call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
