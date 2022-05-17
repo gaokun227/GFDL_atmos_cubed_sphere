@@ -1130,7 +1130,6 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: chh(:,:)     _NULL
     real, _ALLOCATABLE :: gflux(:,:)     _NULL
     real, _ALLOCATABLE :: ep(:,:)     _NULL
-    real, _ALLOCATABLE :: snowmt(:,:)     _NULL
     real, _ALLOCATABLE :: hpbl(:,:)     _NULL
     integer, _ALLOCATABLE :: kpbl(:,:)     _NULL
     real, _ALLOCATABLE :: dtsfc(:,:)     _NULL
@@ -1675,7 +1674,6 @@ contains
     allocate ( Atm%inline_edmf%chh(is:ie,js:je) )
     allocate ( Atm%inline_edmf%gflux(is:ie,js:je) )
     allocate ( Atm%inline_edmf%ep(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%snowmt(is:ie,js:je) )
     allocate ( Atm%inline_edmf%hpbl(is:ie,js:je) )
     allocate ( Atm%inline_edmf%kpbl(is:ie,js:je) )
     allocate ( Atm%inline_edmf%dtsfc(is:ie,js:je) )
@@ -1842,7 +1840,6 @@ contains
            Atm%inline_edmf%chh(i,j) = real_big
            Atm%inline_edmf%gflux(i,j) = real_big
            Atm%inline_edmf%ep(i,j) = real_big
-           Atm%inline_edmf%snowmt(i,j) = real_big
            Atm%inline_edmf%hpbl(i,j) = real_big
            Atm%inline_edmf%kpbl(i,j) = 1
            Atm%inline_edmf%dtsfc(i,j) = real_big
@@ -2179,7 +2176,6 @@ contains
     deallocate ( Atm%inline_edmf%chh )
     deallocate ( Atm%inline_edmf%gflux )
     deallocate ( Atm%inline_edmf%ep )
-    deallocate ( Atm%inline_edmf%snowmt )
     deallocate ( Atm%inline_edmf%hpbl )
     deallocate ( Atm%inline_edmf%kpbl )
     deallocate ( Atm%inline_edmf%dtsfc )

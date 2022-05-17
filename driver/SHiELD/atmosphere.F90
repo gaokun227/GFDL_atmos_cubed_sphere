@@ -83,8 +83,8 @@ use fv_grid_utils_mod,  only: g_sum
 
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
 use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
-use sa_sas_mod,         only: sa_sas_init
 use sa_tke_edmf_mod,    only: sa_tke_edmf_init
+use sa_sas_mod,         only: sa_sas_init
 use sa_gwd_mod,         only: sa_gwd_init
 use diag_manager_mod,   only: send_data
 use external_aero_mod,  only: load_aero, read_aero, clean_aero

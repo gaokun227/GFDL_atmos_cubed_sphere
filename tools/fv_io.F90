@@ -492,7 +492,6 @@ contains
           call register_restart_field (Atm%Sfc_restart, 'chh', Atm%inline_edmf%chh, dim_names_3d2)
           call register_restart_field (Atm%Sfc_restart, 'gflux', Atm%inline_edmf%gflux, dim_names_3d2)
           call register_restart_field (Atm%Sfc_restart, 'ep', Atm%inline_edmf%ep, dim_names_3d2)
-          call register_restart_field (Atm%Sfc_restart, 'snowmt', Atm%inline_edmf%snowmt, dim_names_3d2)
           if (.not. Atm%Sfc_restart%is_readonly) then !if writing file
             call register_variable_attribute(Atm%Sfc_restart, 'hflx', "long_name", "hflx", str_len=len("hflx"))
             call register_variable_attribute(Atm%Sfc_restart, 'hflx', "units", "none", str_len=len("none"))
@@ -548,8 +547,6 @@ contains
             call register_variable_attribute(Atm%Sfc_restart, 'gflux', "units", "none", str_len=len("none"))
             call register_variable_attribute(Atm%Sfc_restart, 'ep', "long_name", "ep", str_len=len("ep"))
             call register_variable_attribute(Atm%Sfc_restart, 'ep', "units", "none", str_len=len("none"))
-            call register_variable_attribute(Atm%Sfc_restart, 'snowmt', "long_name", "snowmt", str_len=len("snowmt"))
-            call register_variable_attribute(Atm%Sfc_restart, 'snowmt', "units", "none", str_len=len("none"))
           endif
        endif
 
@@ -1014,7 +1011,6 @@ contains
             call read_data(Atm(1)%Sfc_restart, 'chh', Atm(1)%inline_edmf%chh)
             call read_data(Atm(1)%Sfc_restart, 'gflux', Atm(1)%inline_edmf%gflux)
             call read_data(Atm(1)%Sfc_restart, 'ep', Atm(1)%inline_edmf%ep)
-            call read_data(Atm(1)%Sfc_restart, 'snowmt', Atm(1)%inline_edmf%snowmt)
             call close_file(Atm(1)%Sfc_restart)
          else
            call mpp_error(NOTE,'==> Warning from remap_restart: Expected file '//trim(fname)//' does not exist')
@@ -1321,6 +1317,14 @@ contains
           call write_restart(Atm%Sfc_restart)
           call close_file(Atm%Sfc_restart)
           Atm%Sfc_restart_is_open = .false.
+       endif
+       fname = ''//trim(dir)//'/'//trim(pre)//'soi_data.res'//trim(suffix)//'.nc'
+       Atm%Soi_restart_is_open = open_file(Atm%Soi_restart, fname, "overwrite", fv_domain, is_restart=.true.)
+       if (Atm%Soi_restart_is_open) then
+          call fv_io_register_restart(Atm)
+          call write_restart(Atm%Soi_restart)
+          call close_file(Atm%Soi_restart)
+          Atm%Soi_restart_is_open = .false.
        endif
     endif
 

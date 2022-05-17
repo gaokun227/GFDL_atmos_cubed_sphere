@@ -36,8 +36,8 @@ module fast_phys_mod
     use tracer_manager_mod, only: get_tracer_index
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, cv_vap
-    use sa_sas_mod, only: sa_sas_deep, sa_sas_shal
     use sa_tke_edmf_mod, only: sa_tke_edmf_sfc, sa_tke_edmf_pbl
+    use sa_sas_mod, only: sa_sas_deep, sa_sas_shal
     use sa_gwd_mod, only: sa_gwd_oro, sa_gwd_cnv
     
     implicit none
@@ -66,8 +66,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_sas
-    logical, intent (in) :: do_inline_edmf, do_inline_gwd, do_sat_adj, last_step
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf
+    logical, intent (in) :: do_inline_sas, do_inline_gwd, do_sat_adj, last_step
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop
 
@@ -443,9 +443,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 inline_edmf%tprcp (is:ie, j), inline_edmf%stc (is:ie, j, :), &
                 inline_edmf%qsurf (is:ie, j), inline_edmf%cmm (is:ie, j), &
                 inline_edmf%chh (is:ie, j), inline_edmf%gflux (is:ie, j), &
-                inline_edmf%ep (is:ie, j), inline_edmf%snowmt (is:ie, j), &
-                u10m_out = u10m, v10m_out = v10m, rb_out = rb, &
-                stress_out = stress, wind_out = wind)
+                inline_edmf%ep (is:ie, j), u10m_out = u10m, v10m_out = v10m, &
+                rb_out = rb, stress_out = stress, wind_out = wind)
 
             ! SA-TKE-EDMF main program
             call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
