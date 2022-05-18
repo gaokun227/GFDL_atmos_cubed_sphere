@@ -25,7 +25,7 @@
 ! Last Update: 3/5/2021
 ! =======================================================================
 
-module fast_phys_mod
+module intermediate_phys_mod
 
     use constants_mod, only: rdgas, grav, kappa, cp_air
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
@@ -46,11 +46,11 @@ module fast_phys_mod
 
     real, parameter :: consv_min = 0.001
 
-    public :: fast_phys
+    public :: intermediate_phys
 
 contains
 
-subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
+subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
                v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, &
                pk, ps, r_vir, inline_mp, inline_edmf, inline_sas, inline_gwd, &
@@ -1568,6 +1568,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     ! <<< Inline GFDL MP
     !-----------------------------------------------------------------------
 
-end subroutine fast_phys
+end subroutine intermediate_phys
 
-end module fast_phys_mod
+end module intermediate_phys_mod

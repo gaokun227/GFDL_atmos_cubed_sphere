@@ -38,7 +38,7 @@ module fv_mapz_mod
                                inline_edmf_type, inline_sas_type, inline_gwd_type
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
-  use fast_phys_mod,     only: fast_phys
+  use intermediate_phys_mod, only: intermediate_phys
   use gfdl_mp_mod,       only: c_liq, c_ice
 
   implicit none
@@ -841,7 +841,7 @@ contains
 ! Fast Physics >>>
 !-----------------------------------------------------------------------
 
-    call fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
+    call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
              c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
              v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
              inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, &
