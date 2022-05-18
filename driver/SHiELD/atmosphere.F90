@@ -1871,7 +1871,7 @@ contains
            IPD_Data(nb)%Statein%dvsfc(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%dvsfc(i,j)))
            IPD_Data(nb)%Statein%dtsfc(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%dtsfc(i,j)))
            IPD_Data(nb)%Statein%dqsfc(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%dqsfc(i,j)))
-           !IPD_Data(nb)%Statein%lsm(ix) = Atm(mygrid)%inline_edmf%lsm(i,j)
+           IPD_Data(nb)%Statein%lsm(ix) = Atm(mygrid)%inline_edmf%lsm(i,j)
            IPD_Data(nb)%Statein%hflx(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%hflx(i,j)))
            IPD_Data(nb)%Statein%evap(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%evap(i,j)))
            IPD_Data(nb)%Statein%tsfc(ix) = _DBL_(_RL_(Atm(mygrid)%inline_edmf%tsfc(i,j)))
