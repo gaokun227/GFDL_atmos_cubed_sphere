@@ -1555,7 +1555,7 @@ end subroutine sa_gwd_oro
     
 subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
         prsl, prsi, del, ktop, kbot, kcnv, &
-        utgwc, vtgwc, tauctx, taucty)
+        utgwc, vtgwc, ttgwc, tauctx, taucty)
     
     implicit none
     
@@ -1572,7 +1572,7 @@ subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
 
     real, intent (inout) :: u1 (im, km), v1 (im, km), t1 (im, km), q1 (im, km)
 
-    real, intent (out), optional :: utgwc (im, km), vtgwc (im, km)
+    real, intent (out), optional :: utgwc (im, km), vtgwc (im, km), ttgwc (im, km)
 
     real, intent (out), optional :: tauctx (im), taucty (im)
 
@@ -1591,8 +1591,8 @@ subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
         windcltop, shear, nonlinct, nonlin, nonlins, &
         n2, dtdp, crit1, crit2, p1, p2, &
         ! n2, dtdp, crit1, crit2, p1, p2, &
-    gsqr, onebg
-    ! taus, n2, dtdp, crit1, crit2, p1, p2
+        gsqr, onebg, eng0, eng1
+        ! taus, n2, dtdp, crit1, crit2, p1, p2
     
     integer, allocatable :: kcldtop (:), kcldbot (:)
     logical, allocatable :: do_gwc (:)
@@ -1653,6 +1653,7 @@ subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
         do i = 1, im
             if (present (utgwc)) utgwc (i, k) = 0.0
             if (present (vtgwc)) vtgwc (i, k) = 0.0
+            if (present (ttgwc)) ttgwc (i, k) = 0.0
             ! brunm (i, k) = 0.0
             ! rhom (i, k) = 0.0
         enddo
@@ -2694,6 +2695,7 @@ subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
         k1 = km - k + 1
         do i = 1, npt
             ii = ipt (i)
+            eng0 = 0.5 * (u1 (ii, k1) * u1 (ii, k1) + v1 (ii, k1) * v1 (ii, k1))
             if (present (utgwc)) utgwc (ii, k1) = utgwcl (i, k)
             if (present (vtgwc)) vtgwc (ii, k1) = vtgwcl (i, k)
             
@@ -2703,6 +2705,9 @@ subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
             ! rhom (ii, kk) = rhom (i, k)
             u1 (ii, k1) = u1 (ii, k1) + utgwcl (i, k) * delt
             v1 (ii, k1) = v1 (ii, k1) + vtgwcl (i, k) * delt
+            eng1 = 0.5 * (u1 (ii, k1) * u1 (ii, k1) + v1 (ii, k1) * v1 (ii, k1))
+            if (present (ttgwc)) ttgwc (ii, k1) = max (eng0 - eng1, 0.) / cp_air / delt
+            t1 (ii, k1) = t1 (ii, k1) + max (eng0 - eng1, 0.) / cp_air
         enddo
         ! if (lprnt) write (7000, *) ' k = ', k, ' k1 = ', k1, ' utgwc = ', &
         ! utgwc (ipr, k1), ' vtgwc = ', vtgwc (ipr, k1)
