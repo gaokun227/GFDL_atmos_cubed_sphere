@@ -59,6 +59,7 @@ module dyn_core_mod
 #endif
   use fv_regional_mod,     only: dump_field, exch_uv, H_STAGGER, U_STAGGER, V_STAGGER
   use fv_regional_mod,     only: a_step, p_step, k_step, n_step
+  use fast_phys_mod,       only: fast_phys
 
 implicit none
 private
@@ -1209,6 +1210,24 @@ contains
               allocated(heat_source), npz, nq, sphum, flagstruct%nwat, zvir, ptop, hydrostatic, bd, fv_time, n_map, it)
       endif
 
+!-----------------------------------------------------------------------
+! Fast Physics >>>
+!-----------------------------------------------------------------------
+
+      if (flagstruct%do_fast_phys) then
+
+          call fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
+             c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
+             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
+             inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, &
+             hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf, do_inline_sas, &
+             do_inline_gwd, do_sat_adj, last_step)
+
+      endif
+
+!-----------------------------------------------------------------------
+! <<< Fast Physics
+!-----------------------------------------------------------------------
 
 !-----------------------------------------------------
   enddo   ! time split loop
