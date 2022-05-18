@@ -489,7 +489,7 @@ subroutine sa_gwd_oro (im, km, u1, v1, t1, q1, delt, gsize, &
     ! cdmb = 192.0 / float (imx)
     ! cdmb = 4.0 * 192.0 / float (imx)
     do i = 1, im
-        cdmb (i) = 4.0 * 2.e-5 * gsize (i)
+        cdmb (i) = 2.e-5 * gsize (i)
         if (cdmbgwd (1) >= 0.0) cdmb (i) = cdmb (i) * cdmbgwd (1)
     enddo
     
@@ -861,7 +861,7 @@ subroutine sa_gwd_oro (im, km, u1, v1, t1, q1, delt, gsize, &
     !cleff = 2.5e-5 * sqrt (float (imx) / 192.0) ! this is inverse of cleff
     !ndif
     do i = 1, im
-        cleff (i) = 0.5e-5 / sqrt (2.e5 / gsize (i))
+        cleff (i) = 0.25e-5 * sqrt (2.e-5 * gsize (i))
         if (cdmbgwd (2) >= 0.0) cleff (i) = cleff (i) * cdmbgwd (2)
     enddo
     
