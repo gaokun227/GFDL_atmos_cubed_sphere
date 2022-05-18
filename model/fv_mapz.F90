@@ -838,7 +838,7 @@ contains
   endif        ! end last_step check
 
 !-----------------------------------------------------------------------
-! Fast Physics >>>
+! Intermediate Physics >>>
 !-----------------------------------------------------------------------
 
     call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
@@ -849,7 +849,7 @@ contains
              do_inline_gwd, do_sat_adj, last_step)
 
 !-----------------------------------------------------------------------
-! <<< Fast Physics
+! <<< Intermediate Physics
 !-----------------------------------------------------------------------
 
   if ( last_step ) then
