@@ -841,7 +841,7 @@ contains
 ! Fast Physics >>>
 !-----------------------------------------------------------------------
 
-    call fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
+    call fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
              c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
              v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
              inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, &

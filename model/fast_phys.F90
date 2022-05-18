@@ -50,7 +50,7 @@ module fast_phys_mod
 
 contains
 
-subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
+subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
                v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, &
                pk, ps, r_vir, inline_mp, inline_edmf, inline_sas, inline_gwd, &
@@ -64,7 +64,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
 
-    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord
+    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord, nwat
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf
     logical, intent (in) :: do_inline_sas, do_inline_gwd, do_sat_adj, last_step
@@ -337,7 +337,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, u_dt, v_dt, &
-!$OMP                                    ptop, ntke, inline_edmf, safety_check) &
+!$OMP                                    ptop, ntke, inline_edmf, safety_check, nwat) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
@@ -392,7 +392,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 else
                     zm (is:ie, k) = zm (is:ie, k-1) - 0.5 * (dz (is:ie, k-1) + dz (is:ie, k)) * grav
                 endif
-                ta (is:ie, k) = pt (is:ie, j, kr)
+                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
+                    (1. - (qliq (is:ie, kr) + qsol (is:ie, kr))))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
@@ -461,7 +462,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
                 kr = km - k + 1
-                q (is:ie, j, kr, ntke) = qa (is:ie, k, ntke)
+                q (is:ie, j, kr, nwat+1:nq) = qa (is:ie, k, nwat+1:nq)
                 dqv = qa (is:ie, k, sphum) - q (is:ie, j, kr, sphum)
                 dql = qa (is:ie, k, liq_wat) - q (is:ie, j, kr, liq_wat)
                 dqi = qa (is:ie, k, ice_wat) - q (is:ie, j, kr, ice_wat)
@@ -480,7 +481,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - pt (is:ie, j, kr)) * cp_air / c_moist
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
+                    ((1. + r_vir *  q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
+                    pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
             enddo
@@ -741,7 +744,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 endif
                 qv (is:ie, k) = q (is:ie, j, kr, sphum)
                 ql (is:ie, k) = q (is:ie, j, kr, liq_wat)
-                ta (is:ie, k) = pt (is:ie, j, kr)
+                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
+                    (1. - (qliq (is:ie, kr) + qsol (is:ie, kr))))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 ww (is:ie, k) = omga (is:ie, j, kr)
@@ -812,7 +816,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - pt (is:ie, j, kr)) * cp_air / c_moist
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
+                    ((1. + r_vir *  q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
+                    pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
             enddo
@@ -1059,7 +1065,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                     zm (is:ie, k) = zm (is:ie, k-1) - 0.5 * (dz (is:ie, k-1) + dz (is:ie, k)) * grav
                 endif
                 qv (is:ie, k) = q (is:ie, j, kr, sphum)
-                ta (is:ie, k) = pt (is:ie, j, kr)
+                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
+                    (1. - (qliq (is:ie, kr) + qsol (is:ie, kr))))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
             enddo
@@ -1113,7 +1120,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - pt (is:ie, j, kr)) * cp_air / c_moist
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
+                    ((1. + r_vir *  q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
+                    pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
             enddo
