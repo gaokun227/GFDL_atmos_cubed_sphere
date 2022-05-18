@@ -126,11 +126,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real :: rrg
 
-    integer, dimension (is:ie, js:je) :: ktop, kbot, kcnv
-
     real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c_moist
-
-    real, dimension (is:ie, js:je) :: cumabs
 
     real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm
 
@@ -692,8 +688,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, ps, &
-!$OMP                                    u_dt, v_dt, kbot, ktop, kcnv, cumabs, inline_edmf, &
-!$OMP                                    safety_check) &
+!$OMP                                    u_dt, v_dt, inline_edmf, safety_check) &
 !$OMP                           private (gsize, dz, rn, tmp, q_liq, q_sol, &
 !$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, dql, ps_dt, c_moist)
@@ -708,10 +703,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             v_dt (is:ie, j, 1:km) = va (is:ie, j, 1:km)
 
             rn = 0.0
-            ktop (is:ie, j) = 1
-            kbot (is:ie, j) = km
-            kcnv (is:ie, j) = 0
             ncld = 1
+            inline_sas%ktop (is:ie, j) = 1
+            inline_sas%kbot (is:ie, j) = km
+            inline_sas%kcnv (is:ie, j) = 0
+            inline_sas%cumabs (is:ie, j) = 0
 
             ! total energy before parameterization
             if (consv .gt. consv_min) then
@@ -769,34 +765,35 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
             ! SA-SAS deep convection main program
             call sa_sas_deep (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
-                qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
-                inline_edmf%lsm (is:ie, j), gsize, ww, ncld)
+                qv, ta, uu, vv, rn, inline_sas%kbot (is:ie, j), inline_sas%ktop (is:ie, j), &
+                inline_sas%kcnv (is:ie, j), inline_edmf%lsm (is:ie, j), gsize, ww, ncld)
 
             ! convective precipitation accumulation
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
   
             ! SA-SAS shallow convection main program
             call sa_sas_shal (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
-                qv, ta, uu, vv, rn, kbot (is:ie, j), ktop (is:ie, j), kcnv (is:ie, j), &
-                inline_edmf%lsm (is:ie, j), gsize, ww, ncld, inline_edmf%hpbl (is:ie, j))
+                qv, ta, uu, vv, rn, inline_sas%kbot (is:ie, j), inline_sas%ktop (is:ie, j), &
+                inline_sas%kcnv (is:ie, j), inline_edmf%lsm (is:ie, j), gsize, ww, ncld, &
+                inline_edmf%hpbl (is:ie, j))
   
             ! convective precipitation accumulation
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
 
             ! convective heating for convective gravity wave drag parameterization
-            cumabs (is:ie, j) = 0.0
             tmp (is:ie) = 0.0
             do k = 1, km
                 kr = km - k + 1
                 do i = is, ie
-                    if (k .ge. kbot (i, j) .and. k .le. ktop (i, j)) then
-                        cumabs (i, j) = cumabs (i, j) + (ta (i, k) - pt (i, j, kr)) * dp (i, k)
+                    if (k .ge. inline_sas%kbot (i, j) .and. k .le. inline_sas%ktop (i, j)) then
+                        inline_sas%cumabs (i, j) = inline_sas%cumabs (i, j) + &
+                            (ta (i, k) - pt (i, j, kr)) * dp (i, k)
                         tmp (i) = tmp (i) + dp (i, k)
                     endif
                 enddo
             enddo
             do i = is, ie
-                if (tmp (i) .gt. 0.0) cumabs (i, j) = cumabs (i, j) / (abs (mdt) * tmp (i))
+                if (tmp (i) .gt. 0.0) inline_sas%cumabs (i, j) = inline_sas%cumabs (i, j) / (abs (mdt) * tmp (i))
             enddo
   
             ! update u, v, T, q, and delp, vertical index flip over
@@ -1015,8 +1012,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, inline_gwd, &
-!$OMP                                    kbot, ktop, kcnv, ptop, cumabs, inline_edmf, &
-!$OMP                                    u_dt, v_dt, safety_check) &
+!$OMP                                    ptop, inline_edmf, inline_sas, u_dt, v_dt, &
+!$OMP                                    safety_check) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, ps_dt, c_moist)
@@ -1101,8 +1098,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 inline_gwd%gamma (is:ie, j), inline_gwd%elvmax (is:ie, j))
 
             ! convective gravity wave drag main program
-            call sa_gwd_cnv (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, cumabs (is:ie, j), &
-                pm, pi, dp, ktop (is:ie, j), kbot (is:ie, j), kcnv (is:ie, j))
+            call sa_gwd_cnv (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, inline_sas%cumabs (is:ie, j), &
+                pm, pi, dp, inline_sas%ktop (is:ie, j), inline_sas%kbot (is:ie, j), inline_sas%kcnv (is:ie, j))
   
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km

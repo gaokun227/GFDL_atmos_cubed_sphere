@@ -1142,6 +1142,10 @@ module fv_arrays_mod
   type inline_sas_type
 
     real, _ALLOCATABLE :: prec(:,:)     _NULL
+    real, _ALLOCATABLE :: cumabs(:,:)     _NULL
+    integer, _ALLOCATABLE :: ktop(:,:)     _NULL
+    integer, _ALLOCATABLE :: kbot(:,:)     _NULL
+    integer, _ALLOCATABLE :: kcnv(:,:)     _NULL
 
   end type inline_sas_type
 
@@ -1682,6 +1686,10 @@ contains
     allocate ( Atm%inline_edmf%dvsfc(is:ie,js:je) )
 
     allocate ( Atm%inline_sas%prec(is:ie,js:je) )
+    allocate ( Atm%inline_sas%cumabs(is:ie,js:je) )
+    allocate ( Atm%inline_sas%ktop(is:ie,js:je) )
+    allocate ( Atm%inline_sas%kbot(is:ie,js:je) )
+    allocate ( Atm%inline_sas%kcnv(is:ie,js:je) )
 
     allocate ( Atm%inline_gwd%hprime(is:ie,js:je) )
     allocate ( Atm%inline_gwd%oc(is:ie,js:je) )
@@ -1848,6 +1856,10 @@ contains
            Atm%inline_edmf%dvsfc(i,j) = real_big
 
            Atm%inline_sas%prec(i,j) = real_big
+           Atm%inline_sas%cumabs(i,j) = real_big
+           Atm%inline_sas%ktop(i,j) = 1
+           Atm%inline_sas%kbot(i,j) = npz
+           Atm%inline_sas%kcnv(i,j) = 0
 
            Atm%inline_gwd%hprime(i,j) = real_big
            Atm%inline_gwd%oc(i,j) = real_big
@@ -2184,6 +2196,10 @@ contains
     deallocate ( Atm%inline_edmf%dvsfc )
 
     deallocate ( Atm%inline_sas%prec )
+    deallocate ( Atm%inline_sas%cumabs )
+    deallocate ( Atm%inline_sas%ktop )
+    deallocate ( Atm%inline_sas%kbot )
+    deallocate ( Atm%inline_sas%kcnv )
 
     deallocate ( Atm%inline_gwd%hprime )
     deallocate ( Atm%inline_gwd%oc )
