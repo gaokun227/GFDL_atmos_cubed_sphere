@@ -402,8 +402,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 else
                     zm (is:ie, k) = zm (is:ie, k-1) - 0.5 * (dz (is:ie, k-1) + dz (is:ie, k)) * grav
                 endif
+                q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
+                q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
-                    (1. - (qliq (is:ie, kr) + qsol (is:ie, kr))))
+                    (1. - (q_liq + q_sol)))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
@@ -761,8 +763,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 endif
                 qv (is:ie, k) = q (is:ie, j, kr, sphum)
                 ql (is:ie, k) = q (is:ie, j, kr, liq_wat)
+                q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
+                q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
-                    (1. - (qliq (is:ie, kr) + qsol (is:ie, kr))))
+                    (1. - (q_liq + q_sol)))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 ww (is:ie, k) = omga (is:ie, j, kr)
@@ -1091,8 +1095,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     zm (is:ie, k) = zm (is:ie, k-1) - 0.5 * (dz (is:ie, k-1) + dz (is:ie, k)) * grav
                 endif
                 qv (is:ie, k) = q (is:ie, j, kr, sphum)
+                q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
+                q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
-                    (1. - (qliq (is:ie, kr) + qsol (is:ie, kr))))
+                    (1. - (q_liq + q_sol)))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
             enddo
