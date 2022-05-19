@@ -1097,32 +1097,36 @@ contains
           call start_group_halo_update(i_pack(7), w, domain)
           call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
           call start_group_halo_update(i_pack(10), q, domain)
+          call start_group_halo_update(i_pack(11), q_con, domain)
           call start_group_halo_update(i_pack(12), cappa, domain)
           call complete_group_halo_update(i_pack(1), domain)
           call complete_group_halo_update(i_pack(7), domain)
           call complete_group_halo_update(i_pack(8), domain)
           call complete_group_halo_update(i_pack(10), domain)
+          call complete_group_halo_update(i_pack(11), domain)
           call complete_group_halo_update(i_pack(12), domain)
           call timing_off('COMM_TOTAL')
        
           call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, flagstruct%nwat, &
              flagstruct%c2l_ord, dt, consv, akap, ptop, pfull, phis, te0_2d, u, v, w, pt, &
-             delp, delz, cappa, q, pkz, zvir, inline_edmf, inline_gwd, &
+             delp, delz, q_con, cappa, q, pkz, zvir, inline_edmf, inline_gwd, &
              gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
              flagstruct%do_inline_edmf, flagstruct%do_inline_gwd)
 
           call timing_on('COMM_TOTAL')
           call start_group_halo_update(i_pack(1), delp, domain, complete=.false.)
           call start_group_halo_update(i_pack(1), pt, domain, complete=.true.)
-          !call start_group_halo_update(i_pack(7), w, domain)
+          call start_group_halo_update(i_pack(7), w, domain)
           call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
           call start_group_halo_update(i_pack(10), q, domain)
-          !call start_group_halo_update(i_pack(12), cappa, domain)
+          call start_group_halo_update(i_pack(11), q_con, domain)
+          call start_group_halo_update(i_pack(12), cappa, domain)
           call complete_group_halo_update(i_pack(1), domain)
-          !call complete_group_halo_update(i_pack(7), domain)
+          call complete_group_halo_update(i_pack(7), domain)
           call complete_group_halo_update(i_pack(8), domain)
           call complete_group_halo_update(i_pack(10), domain)
-          !call complete_group_halo_update(i_pack(12), domain)
+          call complete_group_halo_update(i_pack(11), domain)
+          call complete_group_halo_update(i_pack(12), domain)
           call timing_off('COMM_TOTAL')
 
       endif

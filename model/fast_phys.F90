@@ -51,7 +51,7 @@ contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, pt, &
-               delp, delz, cappa, q, pkz, r_vir, &
+               delp, delz, q_con, cappa, q, pkz, r_vir, &
                inline_edmf, inline_gwd, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
                do_inline_edmf, do_inline_gwd)
@@ -74,7 +74,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real, intent (in), dimension (is:, js:, 1:) :: delz
     
-    real, intent (in), dimension (isd:, jsd:, 1:) :: cappa, w
+    real, intent (inout), dimension (isd:, jsd:, 1:) :: q_con, cappa, w
     
     real, intent (inout), dimension (is:ie, js:je) :: te0_2d
 
@@ -86,7 +86,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real, intent (inout), dimension (isd:ied+1, jsd:jed, km) :: v
 
-    real, intent (inout), dimension (is:ie, js:je, km) :: pkz
+    real, intent (out), dimension (is:ie, js:je, km) :: pkz
 
     type (fv_grid_type), intent (in), target :: gridstruct
 
@@ -222,7 +222,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         endif
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, &
-!$OMP                                    te, delp, hydrostatic, hs, pt, delz, &
+!$OMP                                    te, delp, hydrostatic, hs, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
@@ -295,7 +295,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 endif
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
-                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
+                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * &
                     (1. - (q_liq + q_sol)))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
@@ -382,10 +382,16 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
+#ifdef USE_COND
+                q_con (is:ie, j, kr) = q_liq + q_sol
+#endif
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+#ifdef MOIST_CAPPA
+                cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
+#endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
-                    ((1. + r_vir *  q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
+                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
                     pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
@@ -581,7 +587,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         endif
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, ua, va, &
-!$OMP                                    te, delp, hydrostatic, pt, delz, &
+!$OMP                                    te, delp, hydrostatic, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_gwd, &
@@ -649,7 +655,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 qv (is:ie, k) = q (is:ie, j, kr, sphum)
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
-                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
+                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * &
                     (1. - (q_liq + q_sol)))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
@@ -698,10 +704,16 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
+#ifdef USE_COND
+                q_con (is:ie, j, kr) = q_liq + q_sol
+#endif
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+#ifdef MOIST_CAPPA
+                cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
+#endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
-                    ((1. + r_vir *  q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
+                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
                     pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
@@ -838,6 +850,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     do k = 1, km
         do j = js, je
             do i = is, ie
+#ifdef MOIST_CAPPA
+                pkz (i, j, k) = exp (cappa (i, j, k) * &
+                    log (rrg * delp (i, j, k) / &
+                    delz (i, j, k) * pt (i, j, k)))
+#else
+                pkz (i, j, k) = exp (akap * log (rrg * delp (i, j, k) / &
+                    delz (i, j, k) * pt (i, j, k)))
+#endif
                 pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
             enddo
         enddo

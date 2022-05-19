@@ -331,7 +331,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         endif
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, &
-!$OMP                                    te, delp, hydrostatic, hs, pt, delz, &
+!$OMP                                    te, delp, hydrostatic, hs, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
@@ -404,7 +404,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 endif
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
-                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
+                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * &
                     (1. - (q_liq + q_sol)))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
@@ -491,10 +491,16 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
+#ifdef USE_COND
+                q_con (is:ie, j, kr) = q_liq + q_sol
+#endif
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+#ifdef MOIST_CAPPA
+                cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
+#endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
-                    ((1. + r_vir *  q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
+                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
                     pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
@@ -692,7 +698,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             dp0 = delp
         endif
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, ua, va, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, ua, va, q_con, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, delz, omga, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
@@ -765,7 +771,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 ql (is:ie, k) = q (is:ie, j, kr, liq_wat)
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
-                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
+                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * &
                     (1. - (q_liq + q_sol)))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
@@ -839,10 +845,16 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
+#ifdef USE_COND
+                q_con (is:ie, j, kr) = q_liq + q_sol
+#endif
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+#ifdef MOIST_CAPPA
+                cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
+#endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
-                    ((1. + r_vir *  q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
+                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
                     pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
@@ -1029,7 +1041,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         endif
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, ua, va, &
-!$OMP                                    te, delp, hydrostatic, pt, delz, &
+!$OMP                                    te, delp, hydrostatic, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_gwd, &
@@ -1097,7 +1109,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 qv (is:ie, k) = q (is:ie, j, kr, sphum)
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
-                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir *  q (is:ie, j, kr, sphum)) * &
+                ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * &
                     (1. - (q_liq + q_sol)))
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
@@ -1154,10 +1166,16 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
+#ifdef USE_COND
+                q_con (is:ie, j, kr) = q_liq + q_sol
+#endif
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+#ifdef MOIST_CAPPA
+                cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
+#endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
-                    ((1. + r_vir *  q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
+                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
                     pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
