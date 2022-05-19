@@ -146,7 +146,13 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     do k = 1, km
         do j = js, je
             do i = is, ie
-                pt (i, j, k) = pt (i, j, k) * pkz (i, j, k)
+#ifdef MOIST_CAPPA
+                pt (i, j, k) = pt (i, j, k) * exp (cappa (i, j, k) / (1. - cappa (i, j, k)) * &
+                    log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
+#else
+                pt (i, j, k) = pt (i, j, k) * exp (akap / (1 - akap) * &
+                    log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
+#endif
             enddo
         enddo
     enddo
