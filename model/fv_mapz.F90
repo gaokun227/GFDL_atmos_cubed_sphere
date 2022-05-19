@@ -843,8 +843,8 @@ contains
 !-----------------------------------------------------------------------
 
     call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-             c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
-             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
+             c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
+             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, &
              inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, &
              hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf, do_inline_sas, &
              do_inline_gwd, do_sat_adj, last_step, do_fast_phys)

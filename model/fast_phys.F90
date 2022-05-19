@@ -22,7 +22,7 @@
 ! =======================================================================
 ! Fast Physics Interface
 ! Developer: Linjiong Zhou
-! Last Update: 5/18/2021
+! Last Update: 5/19/2022
 ! =======================================================================
 
 module fast_phys_mod
@@ -51,7 +51,8 @@ contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, pt, &
-               delp, delz, cappa, q, pkz, r_vir, inline_edmf, inline_gwd, &
+               delp, delz, cappa, q, pkz, r_vir, &
+               inline_edmf, inline_gwd, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
                do_inline_edmf, do_inline_gwd)
     
@@ -112,7 +113,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm
 
-    real, dimension (is:ie, km+1) :: phis
+    real, dimension (is:ie, km+1) :: phis, pe, peln
 
     real, dimension (isd:ied, jsd:jed, km) :: te, ua, va
 
@@ -220,10 +221,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
 !$OMP                                    ptop, ntke, inline_edmf, safety_check, nwat) &
-!$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, &
+!$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
-!$OMP                                    stress, wind, kinver, q_sol, c_moist, &
+!$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
 
         do j = js, je
@@ -248,19 +249,36 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
             endif
 
+            ! calculate pe, peln
+            pe (is:ie, 1) = ptop
+            peln (is:ie, 1) = log (ptop)
+            do k = 2, km + 1
+                pe (is:ie, k) = pe (is:ie, k-1) + delp (is:ie, j, k-1)
+                peln (is:ie, k) = log (pe (is:ie, k))
+            enddo
+
             ! vertical index flip over
             zi (is:ie, 1) = 0.0
-            pi (is:ie, km+1) = ptop
-            pik (is:ie, km+1) = exp (kappa * log (pi (is:ie, km+1) * 1.e-5))
+            pi (is:ie, 1) = pe (is:ie, km+1)
+            pik (is:ie, 1) = exp (kappa * log (pi (is:ie, 1) * 1.e-5))
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
-                pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
-                pik (is:ie, kr) = exp (kappa * log (pi (is:ie, kr) * 1.e-5))
+                pi (is:ie, k+1) = pe (is:ie, kr)
+                pik (is:ie, k+1) = exp (kappa * log (pi (is:ie, k+1) * 1.e-5))
                 if (.not. hydrostatic) then
                     pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
                         rrg * pt (is:ie, j, kr)
                     dz (is:ie, k) = delz (is:ie, j, kr)
+                    ! ensure subgrid monotonicity of pressure
+                    do i = is, ie
+                        pm (i, k) = min (pm (i, k), pi (i, k) - 0.01 * pm (i, k))
+                        pm (i, k) = max (pm (i, k), pi (i, k+1) + 0.01 * pm (i, k))
+                    enddo
+                else
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1) - peln (is:ie, kr))
+                    dz (is:ie, k) = (peln (is:ie, kr+1) - peln (is:ie, kr)) * &
+                        rrg * pt (is:ie, j, kr)
                 endif
                 pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
                 zi (is:ie, k+1) = zi (is:ie, k) - dz (is:ie, k) * grav
@@ -561,9 +579,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_gwd, &
 !$OMP                                    ptop, inline_edmf, u_dt, v_dt, &
 !$OMP                                    safety_check) &
-!$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, &
+!$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, pe, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
-!$OMP                                    cvm, kr, dqv, ps_dt, c_moist)
+!$OMP                                    cvm, kr, dqv, ps_dt, c_moist, peln)
 
         do j = js, je
  
@@ -584,17 +602,34 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
             endif
 
+            ! calculate pe, peln
+            pe (is:ie, 1) = ptop
+            peln (is:ie, 1) = log (ptop)
+            do k = 2, km + 1
+                pe (is:ie, k) = pe (is:ie, k-1) + delp (is:ie, j, k-1)
+                peln (is:ie, k) = log (pe (is:ie, k))
+            enddo
+
             ! vertical index flip over
             zi (is:ie, 1) = 0.0
-            pi (is:ie, km+1) = ptop
+            pi (is:ie, 1) = pe (is:ie, km+1)
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
-                pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
+                pi (is:ie, k+1) = pe (is:ie, kr)
                 if (.not. hydrostatic) then
                     pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
                         rrg * pt (is:ie, j, kr)
                     dz (is:ie, k) = delz (is:ie, j, kr)
+                    ! ensure subgrid monotonicity of pressure
+                    do i = is, ie
+                        pm (i, k) = min (pm (i, k), pi (i, k) - 0.01 * pm (i, k))
+                        pm (i, k) = max (pm (i, k), pi (i, k+1) + 0.01 * pm (i, k))
+                    enddo
+                else
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1) - peln (is:ie, kr))
+                    dz (is:ie, k) = (peln (is:ie, kr+1) - peln (is:ie, kr)) * &
+                        rrg * pt (is:ie, j, kr)
                 endif
                 pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
                 zi (is:ie, k+1) = zi (is:ie, k) - dz (is:ie, k) * grav

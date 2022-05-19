@@ -22,7 +22,7 @@
 ! =======================================================================
 ! Intermediate Physics Interface
 ! Developer: Linjiong Zhou
-! Last Update: 3/5/2021
+! Last Update: 5/19/2022
 ! =======================================================================
 
 module intermediate_phys_mod
@@ -51,9 +51,9 @@ module intermediate_phys_mod
 contains
 
 subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-               c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
-               v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, &
-               pk, ps, r_vir, inline_mp, inline_edmf, inline_sas, inline_gwd, &
+               c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, omga, pt, &
+               delp, delz, q_con, cappa, q, pkz, r_vir, &
+               inline_mp, inline_edmf, inline_sas, inline_gwd, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
                do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, &
                do_sat_adj, last_step, do_fast_phys)
@@ -75,19 +75,15 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
-    real, intent (inout), dimension (isd:ied, jsd:jed) :: ps
-
-    real, intent (inout), dimension (is:ie, js:je) :: te0_2d
-
-    real, intent (inout), dimension (is:ie, js:je, km+1) :: pk
-
-    real, intent (inout), dimension (is:ie, km+1, js:je) :: peln
-
-    real, intent (inout), dimension (is:, js:, 1:) :: delz
+    real, intent (in), dimension (is:, js:, 1:) :: delz
     
+    real, intent (in), dimension (isd:ied, jsd:jed, km) :: omga
+
     real, intent (inout), dimension (isd:, jsd:, 1:) :: q_con, cappa, w
     
-    real, intent (inout), dimension (isd:ied, jsd:jed, km) :: pt, ua, va, delp, omga
+    real, intent (inout), dimension (is:ie, js:je) :: te0_2d
+
+    real, intent (inout), dimension (isd:ied, jsd:jed, km) :: pt, delp
 
     real, intent (inout), dimension (isd:ied, jsd:jed, km, *) :: q
 
@@ -95,11 +91,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real, intent (inout), dimension (isd:ied+1, jsd:jed, km) :: v
 
-    real, intent (inout), dimension (is-1:ie+1, km+1, js-1:je+1) :: pe
-
     real, intent (out), dimension (is:ie, js:je, km) :: pkz
-
-    real, intent (out), dimension (isd:ied, jsd:jed, km) :: te
 
     type (fv_grid_type), intent (in), target :: gridstruct
 
@@ -130,7 +122,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm
 
-    real, dimension (is:ie, km+1) :: phis
+    real, dimension (is:ie, km+1) :: phis, pe, peln
+
+    real, dimension (isd:ied, jsd:jed, km) :: te, ua, va
 
     integer, allocatable, dimension (:) :: kinver, vegtype
 
@@ -175,13 +169,13 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
         allocate (dz (is:ie, kmp:km))
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, kmp, km, te, &
-!$OMP                                    delp, hydrostatic, hs, pt, peln, delz, rainwat, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, kmp, km, te, ptop, &
+!$OMP                                    delp, hydrostatic, hs, pt, delz, rainwat, &
 !$OMP                                    liq_wat, ice_wat, snowwat, graupel, q_con, &
 !$OMP                                    sphum, pkz, last_step, consv, te0_2d, gridstruct, &
 !$OMP                                    q, mdt, cld_amt, cappa, rrg, akap, ccn_cm3, &
 !$OMP                                    cin_cm3, aerosol, inline_mp, do_sat_adj) &
-!$OMP                           private (q2, q3, gsize, dz)
+!$OMP                           private (q2, q3, gsize, dz, pe, peln)
 
         do j = js, je
 
@@ -202,11 +196,19 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 q3 (is:ie, kmp:km) = 0.0
             endif
  
+            ! calculate pe, peln
+            pe (is:ie, 1) = ptop
+            peln (is:ie, 1) = log (ptop)
+            do k = 2, km + 1
+                pe (is:ie, k) = pe (is:ie, k-1) + delp (is:ie, j, k-1)
+                peln (is:ie, k) = log (pe (is:ie, k))
+            enddo
+
             ! layer thickness
             if (.not. hydrostatic) then
                 dz (is:ie, kmp:km) = delz (is:ie, j, kmp:km)
             else
-                dz (is:ie, kmp:km) = (peln (is:ie, kmp+1:km+1, j) - peln (is:ie, kmp:km, j)) * &
+                dz (is:ie, kmp:km) = (peln (is:ie, kmp+1:km+1) - peln (is:ie, kmp:km)) * &
                     rrg * pt (is:ie, j, kmp:km)
             endif
 
@@ -328,16 +330,16 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             dp0 = delp
         endif
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, pe, ua, va, &
-!$OMP                                    te, delp, hydrostatic, hs, pt, peln, delz, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, &
+!$OMP                                    te, delp, hydrostatic, hs, pt, delz, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
-!$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
-!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, u_dt, v_dt, &
+!$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
 !$OMP                                    ptop, ntke, inline_edmf, safety_check, nwat) &
-!$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, &
+!$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
-!$OMP                                    stress, wind, kinver, q_sol, c_moist, &
+!$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
 
         do j = js, je
@@ -362,23 +364,35 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
             endif
 
+            ! calculate pe, peln
+            pe (is:ie, 1) = ptop
+            peln (is:ie, 1) = log (ptop)
+            do k = 2, km + 1
+                pe (is:ie, k) = pe (is:ie, k-1) + delp (is:ie, j, k-1)
+                peln (is:ie, k) = log (pe (is:ie, k))
+            enddo
+
             ! vertical index flip over
             zi (is:ie, 1) = 0.0
-            pi (is:ie, km+1) = ptop
-            pik (is:ie, km+1) = exp (kappa * log (pi (is:ie, km+1) * 1.e-5))
+            pi (is:ie, 1) = pe (is:ie, km+1)
+            pik (is:ie, 1) = exp (kappa * log (pi (is:ie, 1) * 1.e-5))
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
-                pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
-                pik (is:ie, kr) = exp (kappa * log (pi (is:ie, kr) * 1.e-5))
+                pi (is:ie, k+1) = pe (is:ie, kr)
+                pik (is:ie, k+1) = exp (kappa * log (pi (is:ie, k+1) * 1.e-5))
                 if (.not. hydrostatic) then
-                    !pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
-                    !    rrg * pt (is:ie, j, kr)
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
+                    pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
+                        rrg * pt (is:ie, j, kr)
                     dz (is:ie, k) = delz (is:ie, j, kr)
+                    ! ensure subgrid monotonicity of pressure
+                    do i = is, ie
+                        pm (i, k) = min (pm (i, k), pi (i, k) - 0.01 * pm (i, k))
+                        pm (i, k) = max (pm (i, k), pi (i, k+1) + 0.01 * pm (i, k))
+                    enddo
                 else
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:ie, kr+1, j) - peln (is:ie, kr, j)) * &
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1) - peln (is:ie, kr))
+                    dz (is:ie, k) = (peln (is:ie, kr+1) - peln (is:ie, kr)) * &
                         rrg * pt (is:ie, j, kr)
                 endif
                 pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
@@ -442,7 +456,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 inline_edmf%chh (is:ie, j), inline_edmf%gflux (is:ie, j), &
                 inline_edmf%ep (is:ie, j), u10m_out = u10m, v10m_out = v10m, &
                 rb_out = rb, stress_out = stress, wind_out = wind)
-            
+
             ! SA-TKE-EDMF main program
             call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
                 abs (mdt), uu, vv, ta, qa, gsize, inline_edmf%lsm (is:ie, j), &
@@ -454,7 +468,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j), &
                 inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
                 inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
-            
+
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
                 kr = km - k + 1
@@ -487,14 +501,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! compute wind tendency at A grid fori D grid wind update
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
             v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
-
-            ! update pe, peln, pk, ps
-            do k = 2, km + 1
-                pe (is:ie, k, j) = pe (is:ie, k-1, j) + delp (is:ie, j, k-1)
-                peln (is:ie, k, j) = log (pe (is:ie, k, j))
-                pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
-            enddo
-            ps (is:ie, j) = pe (is:ie, km+1, j)
 
             ! update pkz
             if (.not. hydrostatic) then
@@ -644,6 +650,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         allocate (zm (is:ie, 1:km))
         allocate (dp (is:ie, 1:km))
         allocate (pm (is:ie, 1:km))
+        allocate (pi (is:ie, 1:km+1))
 
         allocate (ta (is:ie, 1:km))
         allocate (qv (is:ie, 1:km))
@@ -683,13 +690,13 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             dp0 = delp
         endif
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, pe, ua, va, &
-!$OMP                                    te, delp, hydrostatic, hs, pt, peln, delz, omga, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, ua, va, &
+!$OMP                                    te, delp, hydrostatic, hs, pt, delz, omga, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
-!$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
-!$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, ps, &
-!$OMP                                    u_dt, v_dt, inline_edmf, safety_check) &
-!$OMP                           private (gsize, dz, rn, tmp, q_liq, q_sol, &
+!$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_sas, &
+!$OMP                                    u_dt, v_dt, inline_edmf, safety_check, ptop) &
+!$OMP                           private (gsize, dz, pi, rn, tmp, q_liq, q_sol, pe, peln, &
 !$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, dql, ps_dt, c_moist)
 
@@ -719,18 +726,32 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
             endif
 
+            ! calculate pe, peln
+            pe (is:ie, 1) = ptop
+            peln (is:ie, 1) = log (ptop)
+            do k = 2, km + 1
+                pe (is:ie, k) = pe (is:ie, k-1) + delp (is:ie, j, k-1)
+                peln (is:ie, k) = log (pe (is:ie, k))
+            enddo
+
             ! vertical index flip over
+            pi (is:ie, 1) = pe (is:ie, km+1)
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
+                pi (is:ie, k+1) = pe (is:ie, kr)
                 if (.not. hydrostatic) then
-                    !pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
-                    !    rrg * pt (is:ie, j, kr)
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
+                    pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
+                        rrg * pt (is:ie, j, kr)
                     dz (is:ie, k) = delz (is:ie, j, kr)
+                    ! ensure subgrid monotonicity of pressure
+                    do i = is, ie
+                        pm (i, k) = min (pm (i, k), pi (i, k) - 0.01 * pm (i, k))
+                        pm (i, k) = max (pm (i, k), pi (i, k+1) + 0.01 * pm (i, k))
+                    enddo
                 else
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:ie, kr+1, j) - peln (is:ie, kr, j)) * &
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1) - peln (is:ie, kr))
+                    dz (is:ie, k) = (peln (is:ie, kr+1) - peln (is:ie, kr)) * &
                         rrg * pt (is:ie, j, kr)
                 endif
                 if (k .eq. 1) then
@@ -755,6 +776,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                             if (pm (i, k) .le. pm (i, k+1)) then
                                 print*, "Warning: inline sas pressure layer cross over", k, pm (i, k), pm (i, k+1)
                             endif
+                        if (pi (i, k) .le. pi (i, k+1)) then
+                            print*, "Warning: inline sas pressure interface cross over", k, pi (i, k), pi (i, k+1)
+                        endif
                             if (zm (i, k) .ge. zm (i, k+1)) then
                                 print*, "Warning: inline sas height layer cross over", k, zm (i, k), zm (i, k+1)
                             endif
@@ -764,7 +788,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             endif
 
             ! SA-SAS deep convection main program
-            call sa_sas_deep (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
+            call sa_sas_deep (ie-is+1, km, abs (mdt), dp, pm, pi (is:ie, 1), zm, ql, &
                 qv, ta, uu, vv, rn, inline_sas%kbot (is:ie, j), inline_sas%ktop (is:ie, j), &
                 inline_sas%kcnv (is:ie, j), inline_edmf%lsm (is:ie, j), gsize, ww, ncld)
 
@@ -772,7 +796,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             inline_sas%prec (is:ie, j) = inline_sas%prec (is:ie, j) + rn
   
             ! SA-SAS shallow convection main program
-            call sa_sas_shal (ie-is+1, km, abs (mdt), dp, pm, pe (is:ie, km+1, j), zm, ql, &
+            call sa_sas_shal (ie-is+1, km, abs (mdt), dp, pm, pi (is:ie, 1), zm, ql, &
                 qv, ta, uu, vv, rn, inline_sas%kbot (is:ie, j), inline_sas%ktop (is:ie, j), &
                 inline_sas%kcnv (is:ie, j), inline_edmf%lsm (is:ie, j), gsize, ww, ncld, &
                 inline_edmf%hpbl (is:ie, j))
@@ -824,14 +848,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
             v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
 
-            ! update pe, peln, pk, ps
-            do k = 2, km + 1
-                pe (is:ie, k, j) = pe (is:ie, k-1, j) + delp (is:ie, j, k-1)
-                peln (is:ie, k, j) = log (pe (is:ie, k, j))
-                pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
-            enddo
-            ps (is:ie, j) = pe (is:ie, km+1, j)
-
             ! update pkz
             if (.not. hydrostatic) then
 #ifdef MOIST_CAPPA
@@ -867,6 +883,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         deallocate (zm)
         deallocate (dp)
         deallocate (pm)
+        deallocate (pi)
 
         deallocate (ta)
         deallocate (qv)
@@ -1007,16 +1024,16 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             dp0 = delp
         endif
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, pe, ua, va, &
-!$OMP                                    te, delp, hydrostatic, pt, peln, delz, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, ua, va, &
+!$OMP                                    te, delp, hydrostatic, pt, delz, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
-!$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
-!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, inline_gwd, &
+!$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_gwd, &
 !$OMP                                    ptop, inline_edmf, inline_sas, u_dt, v_dt, &
 !$OMP                                    safety_check, do_fast_phys) &
-!$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, &
+!$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, pe, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
-!$OMP                                    cvm, kr, dqv, ps_dt, c_moist)
+!$OMP                                    cvm, kr, dqv, ps_dt, c_moist, peln)
 
         do j = js, je
  
@@ -1037,21 +1054,33 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
             endif
 
+            ! calculate pe, peln
+            pe (is:ie, 1) = ptop
+            peln (is:ie, 1) = log (ptop)
+            do k = 2, km + 1
+                pe (is:ie, k) = pe (is:ie, k-1) + delp (is:ie, j, k-1)
+                peln (is:ie, k) = log (pe (is:ie, k))
+            enddo
+
             ! vertical index flip over
             zi (is:ie, 1) = 0.0
-            pi (is:ie, km+1) = ptop
+            pi (is:ie, 1) = pe (is:ie, km+1)
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
-                pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
+                pi (is:ie, k+1) = pe (is:ie, kr)
                 if (.not. hydrostatic) then
-                    !pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
-                    !    rrg * pt (is:ie, j, kr)
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
+                    pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
+                        rrg * pt (is:ie, j, kr)
                     dz (is:ie, k) = delz (is:ie, j, kr)
+                    ! ensure subgrid monotonicity of pressure
+                    do i = is, ie
+                        pm (i, k) = min (pm (i, k), pi (i, k) - 0.01 * pm (i, k))
+                        pm (i, k) = max (pm (i, k), pi (i, k+1) + 0.01 * pm (i, k))
+                    enddo
                 else
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:ie, kr+1, j) - peln (is:ie, kr, j)) * &
+                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1) - peln (is:ie, kr))
+                    dz (is:ie, k) = (peln (is:ie, kr+1) - peln (is:ie, kr)) * &
                         rrg * pt (is:ie, j, kr)
                 endif
                 pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
@@ -1131,14 +1160,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! compute wind tendency at A grid fori D grid wind update
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
             v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
-
-            ! update pe, peln, pk, ps
-            do k = 2, km + 1
-                pe (is:ie, k, j) = pe (is:ie, k-1, j) + delp (is:ie, j, k-1)
-                peln (is:ie, k, j) = log (pe (is:ie, k, j))
-                pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
-            enddo
-            ps (is:ie, j) = pe (is:ie, km+1, j)
 
             ! update pkz
             if (.not. hydrostatic) then
@@ -1302,14 +1323,14 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         allocate (dz (is:ie, kmp:km))
         allocate (wa (is:ie, kmp:km))
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, kmp, km, pe, ua, va, &
-!$OMP                                    te, delp, hydrostatic, hs, pt, peln, delz, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, kmp, km, ua, va, &
+!$OMP                                    te, delp, hydrostatic, hs, pt, delz, ptop, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, q_con, &
-!$OMP                                    sphum, w, pk, pkz, last_step, consv, te0_2d, &
+!$OMP                                    sphum, w, pkz, last_step, consv, te0_2d, &
 !$OMP                                    gridstruct, q, mdt, cld_amt, cappa, rrg, akap, &
-!$OMP                                    ccn_cm3, cin_cm3, inline_mp, do_inline_mp, ps, &
+!$OMP                                    ccn_cm3, cin_cm3, inline_mp, do_inline_mp, &
 !$OMP                                    u_dt, v_dt, aerosol) &
-!$OMP                           private (q2, q3, gsize, dz, wa)
+!$OMP                           private (q2, q3, gsize, dz, wa, pe, peln)
 
         do j = js, je
 
@@ -1371,12 +1392,20 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             if (allocated (inline_mp%v_dt)) inline_mp%v_dt (is:ie, j, kmp:km) = &
                 inline_mp%v_dt (is:ie, j, kmp:km) - va (is:ie, j, kmp:km)
 
+            ! calculate pe, peln
+            pe (is:ie, 1) = ptop
+            peln (is:ie, 1) = log (ptop)
+            do k = 2, km + 1
+                pe (is:ie, k) = pe (is:ie, k-1) + delp (is:ie, j, k-1)
+                peln (is:ie, k) = log (pe (is:ie, k))
+            enddo
+
             ! vertical velocity and layer thickness
             if (.not. hydrostatic) then
                 wa (is:ie, kmp:km) = w (is:ie, j, kmp:km)
                 dz (is:ie, kmp:km) = delz (is:ie, j, kmp:km)
             else
-                dz (is:ie, kmp:km) = (peln (is:ie, kmp+1:km+1, j) - peln (is:ie, kmp:km, j)) * &
+                dz (is:ie, kmp:km) = (peln (is:ie, kmp+1:km+1) - peln (is:ie, kmp:km)) * &
                     rrg * pt (is:ie, j, kmp:km)
             endif
 
@@ -1457,14 +1486,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 inline_mp%u_dt (is:ie, j, kmp:km) + ua (is:ie, j, kmp:km)
             if (allocated (inline_mp%v_dt)) inline_mp%v_dt (is:ie, j, kmp:km) = &
                 inline_mp%v_dt (is:ie, j, kmp:km) + va (is:ie, j, kmp:km)
-
-            ! update pe, peln, pk, ps
-            do k = kmp + 1, km + 1
-                pe (is:ie, k, j) = pe (is:ie, k-1, j) + delp (is:ie, j, k-1)
-                peln (is:ie, k, j) = log (pe (is:ie, k, j))
-                pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
-            enddo
-            ps (is:ie, j) = pe (is:ie, km+1, j)
 
             ! update pkz
             if (.not. hydrostatic) then
