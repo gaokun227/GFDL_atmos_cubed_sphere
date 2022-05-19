@@ -490,7 +490,8 @@ contains
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
-                    domain, n_map==1, i_pack, last_step, diss_est, time_total)
+                    domain, n_map==1, i_pack, last_step, diss_est, &
+                    consv_te, te_2d, inline_edmf, inline_gwd, time_total)
                                            call timing_off('DYN_CORE')
 
 

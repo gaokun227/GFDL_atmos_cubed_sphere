@@ -29,16 +29,15 @@ module fast_phys_mod
 
     use constants_mod, only: rdgas, grav, kappa, cp_air
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
-    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type, &
-                             inline_edmf_type, inline_sas_type, inline_gwd_type
+    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, &
+                             inline_edmf_type, inline_gwd_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index
     use field_manager_mod, only: model_atmos
-    use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, cv_vap
+    use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap
     use sa_tke_edmf_mod, only: sa_tke_edmf_sfc, sa_tke_edmf_pbl
-    use sa_sas_mod, only: sa_sas_deep, sa_sas_shal
-    use sa_gwd_mod, only: sa_gwd_oro, sa_gwd_cnv
+    use sa_gwd_mod, only: sa_gwd_oro
     
     implicit none
     
@@ -51,12 +50,10 @@ module fast_phys_mod
 contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-               c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
-               v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, &
-               pk, ps, r_vir, inline_mp, inline_edmf, inline_sas, inline_gwd, &
+               c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, pt, &
+               delp, delz, cappa, q, pkz, r_vir, inline_edmf, inline_gwd, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, &
-               do_sat_adj, last_step)
+               do_inline_edmf, do_inline_gwd)
     
     implicit none
     
@@ -66,8 +63,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord, nwat
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf
-    logical, intent (in) :: do_inline_sas, do_inline_gwd, do_sat_adj, last_step
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_edmf, do_inline_gwd
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop
 
@@ -75,31 +71,21 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
-    real, intent (inout), dimension (isd:ied, jsd:jed) :: ps
-
+    real, intent (in), dimension (is:, js:, 1:) :: delz
+    
+    real, intent (in), dimension (isd:, jsd:, 1:) :: cappa, w
+    
     real, intent (inout), dimension (is:ie, js:je) :: te0_2d
 
-    real, intent (inout), dimension (is:ie, js:je, km+1) :: pk
+    real, intent (inout), dimension (isd:ied, jsd:jed, km) :: pt, delp
 
-    real, intent (inout), dimension (is:ie, km+1, js:je) :: peln
-
-    real, intent (inout), dimension (is:, js:, 1:) :: delz
-    
-    real, intent (inout), dimension (isd:, jsd:, 1:) :: q_con, cappa, w
-    
-    real, intent (inout), dimension (isd:ied, jsd:jed, km) :: pt, ua, va, delp, omga
-
-    real, intent (inout), dimension (isd:ied, jsd:jed, km, *) :: q
+    real, intent (inout), dimension (isd:ied, jsd:jed, km, nq) :: q
 
     real, intent (inout), dimension (isd:ied, jsd:jed+1, km) :: u
 
     real, intent (inout), dimension (isd:ied+1, jsd:jed, km) :: v
 
-    real, intent (inout), dimension (is-1:ie+1, km+1, js-1:je+1) :: pe
-
-    real, intent (out), dimension (is:ie, js:je, km) :: pkz
-
-    real, intent (out), dimension (isd:ied, jsd:jed, km) :: te
+    real, intent (inout), dimension (is:ie, js:je, km) :: pkz
 
     type (fv_grid_type), intent (in), target :: gridstruct
 
@@ -107,11 +93,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     type (domain2d), intent (inout) :: domain
 
-    type (inline_mp_type), intent (inout) :: inline_mp
-
     type (inline_edmf_type), intent (inout) :: inline_edmf
-
-    type (inline_sas_type), intent (inout) :: inline_sas
 
     type (inline_gwd_type), intent (inout) :: inline_gwd
 
@@ -131,6 +113,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm
 
     real, dimension (is:ie, km+1) :: phis
+
+    real, dimension (isd:ied, jsd:jed, km) :: te, ua, va
 
     integer, allocatable, dimension (:) :: kinver, vegtype
 
@@ -153,6 +137,18 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     ntke = get_tracer_index (model_atmos, 'sgs_tke')
 
     rrg = - rdgas / grav
+
+    !-----------------------------------------------------------------------
+    ! pt conversion
+    !-----------------------------------------------------------------------
+
+    do k = 1, km
+        do j = js, je
+            do i = is, ie
+                pt (i, j, k) = pt (i, j, k) * pkz (i, j, k)
+            enddo
+        enddo
+    enddo
 
     !-----------------------------------------------------------------------
     ! Inline SA-TKE-EDMF >>>
@@ -218,11 +214,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             dp0 = delp
         endif
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, pe, ua, va, &
-!$OMP                                    te, delp, hydrostatic, hs, pt, peln, delz, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, &
+!$OMP                                    te, delp, hydrostatic, hs, pt, delz, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
-!$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
-!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, u_dt, v_dt, &
+!$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
 !$OMP                                    ptop, ntke, inline_edmf, safety_check, nwat) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
@@ -262,14 +258,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
                 pik (is:ie, kr) = exp (kappa * log (pi (is:ie, kr) * 1.e-5))
                 if (.not. hydrostatic) then
-                    !pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
-                    !    rrg * pt (is:ie, j, kr)
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = delz (is:ie, j, kr)
-                else
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:ie, kr+1, j) - peln (is:ie, kr, j)) * &
+                    pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
                         rrg * pt (is:ie, j, kr)
+                    dz (is:ie, k) = delz (is:ie, j, kr)
                 endif
                 pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
                 zi (is:ie, k+1) = zi (is:ie, k) - dz (is:ie, k) * grav
@@ -377,14 +368,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             ! compute wind tendency at A grid fori D grid wind update
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
             v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
-
-            ! update pe, peln, pk, ps
-            do k = 2, km + 1
-                pe (is:ie, k, j) = pe (is:ie, k-1, j) + delp (is:ie, j, k-1)
-                peln (is:ie, k, j) = log (pe (is:ie, k, j))
-                pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
-            enddo
-            ps (is:ie, j) = pe (is:ie, km+1, j)
 
             ! update pkz
             if (.not. hydrostatic) then
@@ -571,12 +554,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             dp0 = delp
         endif
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, pe, ua, va, &
-!$OMP                                    te, delp, hydrostatic, pt, peln, delz, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, ua, va, &
+!$OMP                                    te, delp, hydrostatic, pt, delz, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
-!$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
-!$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, inline_gwd, &
-!$OMP                                    ptop, inline_edmf, inline_sas, u_dt, v_dt, &
+!$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
+!$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_gwd, &
+!$OMP                                    ptop, inline_edmf, u_dt, v_dt, &
 !$OMP                                    safety_check) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
@@ -609,14 +592,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 dp (is:ie, k) = delp (is:ie, j, kr)
                 pi (is:ie, kr) = pi (is:ie, kr+1) + delp (is:ie, j, k)
                 if (.not. hydrostatic) then
-                    !pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
-                    !    rrg * pt (is:ie, j, kr)
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = delz (is:ie, j, kr)
-                else
-                    pm (is:ie, k) = dp (is:ie, k) / (peln (is:ie, kr+1, j) - peln (is:ie, kr, j))
-                    dz (is:ie, k) = (peln (is:ie, kr+1, j) - peln (is:ie, kr, j)) * &
+                    pm (is:ie, k) = dp (is:ie, k) / delz (is:ie, j, kr) * &
                         rrg * pt (is:ie, j, kr)
+                    dz (is:ie, k) = delz (is:ie, j, kr)
                 endif
                 pmk (is:ie, k) = exp (kappa * log (pm (is:ie, k) * 1.e-5))
                 zi (is:ie, k+1) = zi (is:ie, k) - dz (is:ie, k) * grav
@@ -687,14 +665,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             ! compute wind tendency at A grid fori D grid wind update
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
             v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
-
-            ! update pe, peln, pk, ps
-            do k = 2, km + 1
-                pe (is:ie, k, j) = pe (is:ie, k-1, j) + delp (is:ie, j, k-1)
-                peln (is:ie, k, j) = log (pe (is:ie, k, j))
-                pk (is:ie, j, k) = exp (akap * peln (is:ie, k, j))
-            enddo
-            ps (is:ie, j) = pe (is:ie, km+1, j)
 
             ! update pkz
             if (.not. hydrostatic) then
@@ -815,6 +785,18 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     !-----------------------------------------------------------------------
     ! <<< Inline SA-GWD
     !-----------------------------------------------------------------------
+
+    !-----------------------------------------------------------------------
+    ! pt conversion
+    !-----------------------------------------------------------------------
+
+    do k = 1, km
+        do j = js, je
+            do i = is, ie
+                pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
+            enddo
+        enddo
+    enddo
 
 end subroutine fast_phys
 

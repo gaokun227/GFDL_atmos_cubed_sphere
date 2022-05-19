@@ -268,7 +268,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     ! Inline SA-TKE-EDMF >>>
     !-----------------------------------------------------------------------
 
-    if ((.not. do_adiabatic_init) .and. do_inline_edmf) then
+    if ((.not. do_adiabatic_init) .and. do_inline_edmf .and. (.not. do_fast_phys)) then
 
         call timing_on ('sa_tke_edmf')
 
@@ -423,42 +423,38 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 enddo
             endif
 
-            if (.not. do_fast_phys) then
-
-                ! diagnose surface variables for PBL parameterization
-                call sa_tke_edmf_sfc (ie-is+1, lsoil, pi (is:ie, 1), uu (is:ie, 1), &
-                    vv (is:ie, 1), ta (is:ie, 1), qa (is:ie, 1, sphum), &
-                    abs (mdt), inline_edmf%tsfc (is:ie, j), pm (is:ie, 1), &
-                    pik (is:ie, 1) / pmk (is:ie, 1), inline_edmf%evap (is:ie, j), &
-                    inline_edmf%hflx (is:ie, j), inline_edmf%ffmm (is:ie, j), &
-                    inline_edmf%ffhh (is:ie, j), zm (is:ie, 1) / grav, &
-                    inline_edmf%snowd (is:ie, j), inline_edmf%zorl (is:ie, j), &
-                    inline_edmf%lsm (is:ie, j), inline_edmf%uustar (is:ie, j), sigmaf, vegtype, &
-                    inline_edmf%shdmax (is:ie, j), inline_edmf%sfcemis (is:ie, j), &
-                    inline_edmf%dlwflx (is:ie, j), inline_edmf%sfcnsw (is:ie, j), &
-                    inline_edmf%sfcdsw (is:ie, j), inline_edmf%srflag (is:ie, j), &
-                    inline_edmf%hice (is:ie, j), inline_edmf%fice (is:ie, j), &
-                    inline_edmf%tice (is:ie, j), inline_edmf%weasd (is:ie, j), &
-                    inline_edmf%tprcp (is:ie, j), inline_edmf%stc (is:ie, j, :), &
-                    inline_edmf%qsurf (is:ie, j), inline_edmf%cmm (is:ie, j), &
-                    inline_edmf%chh (is:ie, j), inline_edmf%gflux (is:ie, j), &
-                    inline_edmf%ep (is:ie, j), u10m_out = u10m, v10m_out = v10m, &
-                    rb_out = rb, stress_out = stress, wind_out = wind)
-             
-                ! SA-TKE-EDMF main program
-                call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
-                    abs (mdt), uu, vv, ta, qa, gsize, inline_edmf%lsm (is:ie, j), &
-                    radh, rb, inline_edmf%zorl (is:ie, j), u10m, v10m, &
-                    inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
-                    inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
-                    inline_edmf%evap (is:ie, j), stress, wind, kinver, &
-                    pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                    inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j), &
-                    inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
-                    inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
-             
-                endif
-
+            ! diagnose surface variables for PBL parameterization
+            call sa_tke_edmf_sfc (ie-is+1, lsoil, pi (is:ie, 1), uu (is:ie, 1), &
+                vv (is:ie, 1), ta (is:ie, 1), qa (is:ie, 1, sphum), &
+                abs (mdt), inline_edmf%tsfc (is:ie, j), pm (is:ie, 1), &
+                pik (is:ie, 1) / pmk (is:ie, 1), inline_edmf%evap (is:ie, j), &
+                inline_edmf%hflx (is:ie, j), inline_edmf%ffmm (is:ie, j), &
+                inline_edmf%ffhh (is:ie, j), zm (is:ie, 1) / grav, &
+                inline_edmf%snowd (is:ie, j), inline_edmf%zorl (is:ie, j), &
+                inline_edmf%lsm (is:ie, j), inline_edmf%uustar (is:ie, j), sigmaf, vegtype, &
+                inline_edmf%shdmax (is:ie, j), inline_edmf%sfcemis (is:ie, j), &
+                inline_edmf%dlwflx (is:ie, j), inline_edmf%sfcnsw (is:ie, j), &
+                inline_edmf%sfcdsw (is:ie, j), inline_edmf%srflag (is:ie, j), &
+                inline_edmf%hice (is:ie, j), inline_edmf%fice (is:ie, j), &
+                inline_edmf%tice (is:ie, j), inline_edmf%weasd (is:ie, j), &
+                inline_edmf%tprcp (is:ie, j), inline_edmf%stc (is:ie, j, :), &
+                inline_edmf%qsurf (is:ie, j), inline_edmf%cmm (is:ie, j), &
+                inline_edmf%chh (is:ie, j), inline_edmf%gflux (is:ie, j), &
+                inline_edmf%ep (is:ie, j), u10m_out = u10m, v10m_out = v10m, &
+                rb_out = rb, stress_out = stress, wind_out = wind)
+            
+            ! SA-TKE-EDMF main program
+            call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
+                abs (mdt), uu, vv, ta, qa, gsize, inline_edmf%lsm (is:ie, j), &
+                radh, rb, inline_edmf%zorl (is:ie, j), u10m, v10m, &
+                inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
+                inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
+                inline_edmf%evap (is:ie, j), stress, wind, kinver, &
+                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
+                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j), &
+                inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
+                inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
+            
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
                 kr = km - k + 1
@@ -1017,7 +1013,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    sphum, pk, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, ps, inline_gwd, &
 !$OMP                                    ptop, inline_edmf, inline_sas, u_dt, v_dt, &
-!$OMP                                    safety_check) &
+!$OMP                                    safety_check, do_fast_phys) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, ps_dt, c_moist)

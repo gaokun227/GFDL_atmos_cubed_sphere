@@ -47,7 +47,8 @@ module dyn_core_mod
 #endif
   use diag_manager_mod,   only: send_data
   use fv_arrays_mod,      only: fv_grid_type, fv_flags_type, fv_nest_type, fv_diag_type, &
-                                fv_grid_bounds_type, R_GRID, fv_nest_BC_type_3d
+                                fv_grid_bounds_type, R_GRID, fv_nest_BC_type_3d, &
+                                inline_edmf_type, inline_gwd_type
 
   use boundary_mod,         only: extrapolation_BC,  nested_grid_BC_apply_intT
   use fv_regional_mod,      only: regional_boundary_update
@@ -90,14 +91,14 @@ contains
                      u,  v,  w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va, &
                      uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, &
                      ks, gridstruct, flagstruct, neststruct, idiag, bd, domain, &
-                     init_step, i_pack, end_step, diss_est, time_total)
+                     init_step, i_pack, end_step, diss_est, consv, te0_2d, inline_edmf, inline_gwd, time_total)
     integer, intent(IN) :: npx
     integer, intent(IN) :: npy
     integer, intent(IN) :: npz
     integer, intent(IN) :: ng, nq, sphum
     integer, intent(IN) :: n_map, n_split
     real   , intent(IN) :: bdt
-    real   , intent(IN) :: zvir, cp, akap, grav
+    real   , intent(IN) :: zvir, cp, akap, grav, consv
     real   , intent(IN) :: ptop
     logical, intent(IN) :: hydrostatic
     logical, intent(IN) :: init_step, end_step
@@ -127,6 +128,9 @@ contains
     real, intent(inout):: peln(bd%is:bd%ie,npz+1,bd%js:bd%je)          ! ln(pe)
     real, intent(inout):: pk(bd%is:bd%ie,bd%js:bd%je, npz+1)        ! pe**kappa
 
+    type(inline_edmf_type), intent(inout):: inline_edmf
+    type(inline_gwd_type), intent(inout):: inline_gwd
+
 !-----------------------------------------------------------------------
 ! Others:
     real,    parameter:: near0 = 1.E-8
@@ -142,6 +146,7 @@ contains
     real, intent(inout):: vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
     real, intent(inout), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz):: ua, va
     real, intent(inout):: q_con(bd%isd:, bd%jsd:, 1:)
+    real, intent(inout):: te0_2d(bd%is:bd%ie,bd%js:bd%je)
 
 ! The Flux capacitors: accumulated Mass flux arrays
     real, intent(inout)::  mfx(bd%is:bd%ie+1, bd%js:bd%je,   npz)
@@ -388,6 +393,7 @@ contains
      if (test_case>1) then
      if (test_case==9) call case9_forcing1(phis, time_total, isd, ied, jsd, jed)
 #endif
+
 
      if ( it==1 ) then
                                        call timing_on('COMM_TOTAL')
@@ -1079,6 +1085,52 @@ contains
     endif
 !-------------------------------------------------------------------------------------------------------
 
+!-----------------------------------------------------------------------
+! Fast Physics >>>
+!-----------------------------------------------------------------------
+
+      if (flagstruct%do_fast_phys) then
+
+          call timing_on('COMM_TOTAL')
+          call start_group_halo_update(i_pack(1), delp, domain, complete=.false.)
+          call start_group_halo_update(i_pack(1), pt, domain, complete=.true.)
+          call start_group_halo_update(i_pack(7), w, domain)
+          call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
+          call start_group_halo_update(i_pack(10), q, domain)
+          call start_group_halo_update(i_pack(12), cappa, domain)
+          call complete_group_halo_update(i_pack(1), domain)
+          call complete_group_halo_update(i_pack(7), domain)
+          call complete_group_halo_update(i_pack(8), domain)
+          call complete_group_halo_update(i_pack(10), domain)
+          call complete_group_halo_update(i_pack(12), domain)
+          call timing_off('COMM_TOTAL')
+       
+          call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, flagstruct%nwat, &
+             flagstruct%c2l_ord, dt, consv, akap, ptop, pfull, phis, te0_2d, u, v, w, pt, &
+             delp, delz, cappa, q, pkz, zvir, inline_edmf, inline_gwd, &
+             gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+             flagstruct%do_inline_edmf, flagstruct%do_inline_gwd)
+
+          call timing_on('COMM_TOTAL')
+          call start_group_halo_update(i_pack(1), delp, domain, complete=.false.)
+          call start_group_halo_update(i_pack(1), pt, domain, complete=.true.)
+          !call start_group_halo_update(i_pack(7), w, domain)
+          call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
+          call start_group_halo_update(i_pack(10), q, domain)
+          !call start_group_halo_update(i_pack(12), cappa, domain)
+          call complete_group_halo_update(i_pack(1), domain)
+          !call complete_group_halo_update(i_pack(7), domain)
+          call complete_group_halo_update(i_pack(8), domain)
+          call complete_group_halo_update(i_pack(10), domain)
+          !call complete_group_halo_update(i_pack(12), domain)
+          call timing_off('COMM_TOTAL')
+
+      endif
+
+!-----------------------------------------------------------------------
+! <<< Fast Physics
+!-----------------------------------------------------------------------
+
                                                      call timing_on('COMM_TOTAL')
     if( it==n_split .and. gridstruct%grid_type<4 .and. .not. gridstruct%bounded_domain) then
 ! Prevent accumulation of rounding errors at overlapped domain edges:
@@ -1100,6 +1152,7 @@ contains
     if ( it/=n_split)   &
          call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
 #endif
+
                                                      call timing_off('COMM_TOTAL')
 
 #ifdef SW_DYNAMICS
@@ -1210,25 +1263,6 @@ contains
               allocated(heat_source), npz, nq, sphum, flagstruct%nwat, zvir, ptop, hydrostatic, bd, fv_time, n_map, it)
       endif
 
-!-----------------------------------------------------------------------
-! Fast Physics >>>
-!-----------------------------------------------------------------------
-
-      if (flagstruct%do_fast_phys) then
-
-          call fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-             c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, ua, va, u, &
-             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, te, peln, pe, pk, ps, r_vir, &
-             inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, &
-             hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf, do_inline_sas, &
-             do_inline_gwd, do_sat_adj, last_step)
-
-      endif
-
-!-----------------------------------------------------------------------
-! <<< Fast Physics
-!-----------------------------------------------------------------------
-
 !-----------------------------------------------------
   enddo   ! time split loop
 !-----------------------------------------------------
@@ -1243,7 +1277,6 @@ contains
   if ( flagstruct%fv_debug ) then
        if(is_master()) write(*,*) 'End of n_split loop'
   endif
-
 
   if ( n_con/=0 .and. flagstruct%d_con > 1.e-5 ) then
        nf_ke = min(3, flagstruct%nord+1)
