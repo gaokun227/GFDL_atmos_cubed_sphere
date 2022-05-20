@@ -50,9 +50,8 @@ module fast_phys_mod
 contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-               c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, pt, &
-               delp, delz, q_con, cappa, q, pkz, r_vir, &
-               inline_edmf, inline_gwd, &
+               c2l_ord, mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
+               delp, delz, q_con, cappa, q, pkz, r_vir, inline_edmf, inline_gwd, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
                do_inline_edmf, do_inline_gwd)
     
@@ -68,8 +67,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop
 
-    real, intent (in), dimension (km) :: pfull
-
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
     real, intent (in), dimension (is:, js:, 1:) :: delz
@@ -80,7 +77,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real, intent (inout), dimension (isd:ied, jsd:jed, km) :: pt, delp
 
-    real, intent (inout), dimension (isd:ied, jsd:jed, km, nq) :: q
+    real, intent (inout), dimension (isd:ied, jsd:jed, km, *) :: q
 
     real, intent (inout), dimension (isd:ied, jsd:jed+1, km) :: u
 
@@ -855,7 +852,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     log (rrg * delp (i, j, k) / &
                     delz (i, j, k) * pt (i, j, k)))
 #else
-                pkz (i, j, k) = exp (akap * log (rrg * delp (i, j, k) / &
+                pkz (i, j, k) = exp (akap * &
+                    log (rrg * delp (i, j, k) / &
                     delz (i, j, k) * pt (i, j, k)))
 #endif
                 pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)

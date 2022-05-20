@@ -1108,7 +1108,7 @@ contains
           call timing_off('COMM_TOTAL')
        
           call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, flagstruct%nwat, &
-             flagstruct%c2l_ord, dt, consv, akap, ptop, pfull, phis, te0_2d, u, v, w, pt, &
+             flagstruct%c2l_ord, dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
              delp, delz, q_con, cappa, q, pkz, zvir, inline_edmf, inline_gwd, &
              gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
              flagstruct%do_inline_edmf, flagstruct%do_inline_gwd)
@@ -1128,6 +1128,22 @@ contains
           call complete_group_halo_update(i_pack(11), domain)
           call complete_group_halo_update(i_pack(12), domain)
           call timing_off('COMM_TOTAL')
+
+          if (remap_step) then
+              pe (is:ie, 1, js:je) = ptop
+              peln (is:ie, 1, js:je) = log (pe (is:ie, 1, js:je))
+              pk (is:ie, js:je, 1) = exp (akap * peln (is:ie, 1, js:je))
+              do k = 2, npz + 1
+                  do j = js, je
+                      do i = is, ie
+                          pe (i, k, j) = pe (i, k-1, j) + delp (i, j, k-1)
+                          peln (i, k, j) = log (pe (i, k, j))
+                          pk (i, j, k) = exp (akap * peln (i, k, j))
+                      enddo
+                  enddo
+              enddo
+              call pe_halo (is, ie, js, je, isd, ied, jsd, jed, npz, ptop, pe, delp)
+          endif
 
       endif
 
