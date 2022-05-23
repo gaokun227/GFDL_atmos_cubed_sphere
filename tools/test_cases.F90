@@ -45,7 +45,8 @@
       use gfdl_mp_mod,       only: mqs3d
       use fv_diagnostics_mod, only: prt_maxmin, ppme, eqv_pot, qcly0, is_ideal_case
       use mpp_mod,            only: mpp_pe, mpp_chksum, stdout
-      use fv_arrays_mod,         only: fv_grid_type, fv_flags_type, fv_grid_bounds_type, R_GRID
+      use fv_arrays_mod,         only: fv_grid_type, fv_flags_type, fv_grid_bounds_type, R_GRID, &
+                                       inline_edmf_type, inline_gwd_type
       use tracer_manager_mod,    only: get_tracer_index
       use field_manager_mod,     only: MODEL_ATMOS
       implicit none
@@ -4467,7 +4468,8 @@ end subroutine terminator_tracers
 !
       subroutine init_double_periodic(u,v,w,pt,delp,q,phis, ps,pe,peln,pk,pkz,  uc,vc, ua,va, ak, bk,  &
                                       gridstruct, flagstruct, npx, npy, npz, ng, ncnst, nwat, ndims, nregions, dry_mass, &
-                                      mountain, moist_phys, hydrostatic, hybrid_z, delz, ze0, ks, ptop, domain_in, tile_in, bd)
+                                      mountain, moist_phys, hydrostatic, hybrid_z, delz, ze0, ks, ptop, domain_in, tile_in, bd, &
+                                      inline_edmf, inline_gwd)
 
 
         type(fv_grid_bounds_type), intent(IN) :: bd
@@ -4509,6 +4511,10 @@ end subroutine terminator_tracers
         real,         intent(INOUT) :: ptop
 
         type(domain2d), intent(IN), target :: domain_in
+
+        type (inline_edmf_type), intent (inout) :: inline_edmf
+        
+        type (inline_gwd_type), intent (inout) :: inline_gwd
 
         type(fv_grid_type), target :: gridstruct
         type(fv_flags_type), target :: flagstruct
@@ -5560,6 +5566,30 @@ end subroutine terminator_tracers
            enddo
 
         end select
+
+        if (flagstruct%do_inline_edmf) then
+            inline_edmf%lsm = 0
+            inline_edmf%zorl = 0.1
+            inline_edmf%ffmm = 10.0
+            inline_edmf%ffhh = 10.0
+            inline_edmf%tsfc = 300.
+            inline_edmf%shdmax = 0.0
+            inline_edmf%vtype = 0.0
+            inline_edmf%vfrac = 0.0
+            inline_edmf%snowd = 0.0
+            inline_edmf%uustar = 0.5
+            inline_edmf%srflag = 0.0
+            inline_edmf%hice = 0.0
+            inline_edmf%fice = 0.0
+            inline_edmf%tice = 300.
+            inline_edmf%weasd = 0.0
+            inline_edmf%tprcp = 0.0
+            inline_edmf%stc = 300.
+        endif
+
+        if (flagstruct%do_inline_gwd) then
+            inline_gwd%hprime = 0.0
+        endif
 
         is_ideal_case = .true.
 

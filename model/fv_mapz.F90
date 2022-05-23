@@ -449,12 +449,12 @@ contains
                      gz(i) = (w2(i,k)-w_max) * dp2(i,k)
                      w2(i,k  ) = w_max
                      w2(i,k+1) = w2(i,k+1) + gz(i)/dp2(i,k+1)
-                     print*, ' W_LIMITER down: ', i,j,k, w2(i,k:k+1), w(i,j,k:k+1)
+                     !print*, ' W_LIMITER down: ', i,j,k, w2(i,k:k+1), w(i,j,k:k+1)
                   elseif ( w2(i,k) < w_min ) then
                      gz(i) = (w2(i,k)-w_min) * dp2(i,k)
                      w2(i,k  ) = w_min
                      w2(i,k+1) = w2(i,k+1) + gz(i)/dp2(i,k+1)
-                     print*, ' W_LIMITER down: ', i,j,k, w2(i,k:k+1), w(i,j,k:k+1)
+                     !print*, ' W_LIMITER down: ', i,j,k, w2(i,k:k+1), w(i,j,k:k+1)
                   endif
                enddo
             enddo
@@ -464,22 +464,22 @@ contains
                      gz(i) = (w2(i,k)-w_max) * dp2(i,k)
                      w2(i,k  ) = w_max
                      w2(i,k-1) = w2(i,k-1) + gz(i)/dp2(i,k-1)
-                     print*, ' W_LIMITER up: ', i,j,k, w2(i,k-1:k), w(i,j,k-1:k)
+                     !print*, ' W_LIMITER up: ', i,j,k, w2(i,k-1:k), w(i,j,k-1:k)
                   elseif ( w2(i,k) < w_min ) then
                      gz(i) = (w2(i,k)-w_min) * dp2(i,k)
                      w2(i,k  ) = w_min
                      w2(i,k-1) = w2(i,k-1) + gz(i)/dp2(i,k-1)
-                     print*, ' W_LIMITER up: ', i,j,k, w2(i,k-1:k), w(i,j,k-1:k)
+                     !print*, ' W_LIMITER up: ', i,j,k, w2(i,k-1:k), w(i,j,k-1:k)
                   endif
                enddo
             enddo
             do i=is,ie
                if (w2(i,1) > w_max*2. ) then
                   w2(i,1) = w_max*2 ! sink out of the top of the domain
-                  print*, ' W_LIMITER top limited: ', i,j,1, w2(i,1), w(i,j,1)
+                  !print*, ' W_LIMITER top limited: ', i,j,1, w2(i,1), w(i,j,1)
                elseif (w2(i,1) < w_min*2. ) then
                   w2(i,1) = w_min*2.
-                  print*, ' W_LIMITER top limited: ', i,j,1, w2(i,1), w(i,j,1)
+                  !print*, ' W_LIMITER top limited: ', i,j,1, w2(i,1), w(i,j,1)
                endif
             enddo
             do k=1,km
