@@ -900,12 +900,12 @@ contains
     if ( flagstruct%fv_debug ) then
          if ( .not. flagstruct%hydrostatic )    then
             call prt_mxm('delz updated',  delz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
-            call prt_maxmin('WS', ws, is, ie, js, je, 0, 1, 1.)
+            call prt_mxm('WS', ws, is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
          endif
     endif
 
         if (idiag%id_ws>0 .and. last_step) then
-!           call prt_maxmin('WS', ws, is, ie, js, je, 0, 1, 1.)
+!           call prt_mxm('WS', ws, is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
             used=send_data(idiag%id_ws, ws, fv_time)
         endif
 
@@ -1209,7 +1209,6 @@ contains
               allocated(heat_source), npz, nq, sphum, flagstruct%nwat, zvir, ptop, hydrostatic, bd, fv_time, n_map, it)
       endif
 
-
 !-----------------------------------------------------
   enddo   ! time split loop
 !-----------------------------------------------------
@@ -1224,7 +1223,6 @@ contains
   if ( flagstruct%fv_debug ) then
        if(is_master()) write(*,*) 'End of n_split loop'
   endif
-
 
   if ( n_con/=0 .and. flagstruct%d_con > 1.e-5 ) then
        nf_ke = min(3, flagstruct%nord+1)
