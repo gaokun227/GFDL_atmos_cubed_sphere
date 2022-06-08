@@ -81,7 +81,7 @@ module sa_gwd_mod
     ! namelist
     ! -----------------------------------------------------------------------
     
-    namelist / gwd_nml / nmtvr, cdmbgwd, p_crit, cgwf
+    namelist / sa_gwd_nml / nmtvr, cdmbgwd, p_crit, cgwf
     
 contains
 
@@ -105,7 +105,7 @@ subroutine sa_gwd_init (input_nml_file, logunit)
     ! read namelist
     ! -----------------------------------------------------------------------
     
-    read (input_nml_file, nml = gwd_nml)
+    read (input_nml_file, nml = sa_gwd_nml)
     
     ! -----------------------------------------------------------------------
     ! write namelist to log file
@@ -113,7 +113,7 @@ subroutine sa_gwd_init (input_nml_file, logunit)
     
     write (logunit, *) " ================================================================== "
     write (logunit, *) "gwd_mod"
-    write (logunit, nml = gwd_nml)
+    write (logunit, nml = sa_gwd_nml)
     
 end subroutine sa_gwd_init
 
