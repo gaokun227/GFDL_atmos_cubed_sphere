@@ -68,7 +68,7 @@ contains
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
-                      moist_phys, w_limiter, do_am4_remap)
+                      moist_phys, phys_hydrostatic, w_limiter, do_am4_remap)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
   logical, intent(in):: w_limiter
@@ -130,6 +130,7 @@ contains
   logical, intent(in):: hybrid_z
   logical, intent(in):: out_dt
   logical, intent(in):: moist_phys !not used --- lmh 13 may 21
+  logical, intent(in):: phys_hydrostatic
 
   real, intent(inout)::   ua(isd:ied,jsd:jed,km)   ! u-wind (m/s) on physics grid
   real, intent(inout)::   va(isd:ied,jsd:jed,km)   ! v-wind (m/s) on physics grid
@@ -976,7 +977,7 @@ contains
 !$OMP                                  gridstruct,q, &
 !$OMP                                  mdt,cld_amt,cappa,rrg,akap, &
 !$OMP                                  ccn_cm3,cin_cm3,inline_mp, &
-!$OMP                                  do_inline_mp,ps) &
+!$OMP                                  do_inline_mp,ps,phys_hydrostatic) &
 !$OMP                          private(u_dt,v_dt,q2,q3,gsize,dp2,t0,dz,wa)
     do j = js, je
 
@@ -1054,7 +1055,8 @@ contains
 #endif
                        consv>consv_min, &
                        te(is:ie,j,:), inline_mp%cond(is:ie,j), inline_mp%dep(is:ie,j), &
-                       inline_mp%reevap(is:ie,j), inline_mp%sub(is:ie,j), last_step, do_inline_mp)
+                       inline_mp%reevap(is:ie,j), inline_mp%sub(is:ie,j), last_step, &
+                       do_inline_mp, phys_hydrostatic)
 
         if (.not. hydrostatic) then
             w(is:ie,j,:) = wa(is:ie,:)
