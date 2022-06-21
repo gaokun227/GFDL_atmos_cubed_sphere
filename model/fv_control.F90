@@ -144,6 +144,7 @@ module fv_control_mod
      real    , pointer :: scale_z
      real    , pointer :: w_max
      real    , pointer :: z_min
+     real    , pointer :: w_diff
      real    , pointer :: lim_fac
 
      integer , pointer :: nord
@@ -686,6 +687,7 @@ module fv_control_mod
        scale_z                       => Atm%flagstruct%scale_z
        w_max                         => Atm%flagstruct%w_max
        z_min                         => Atm%flagstruct%z_min
+       w_diff                        => Atm%flagstruct%w_diff
        lim_fac                       => Atm%flagstruct%lim_fac
        nord                          => Atm%flagstruct%nord
        nord_tr                       => Atm%flagstruct%nord_tr
@@ -926,7 +928,7 @@ module fv_control_mod
             kord_mt, kord_wz, kord_tm, kord_tr, remap_te, fv_debug, fv_land, &
             do_am4_remap, nudge, do_sat_adj, do_inline_mp, do_f3d, &
             external_ic, read_increment, ncep_ic, nggps_ic, hrrrv3_ic, ecmwf_ic, use_new_ncep, use_ncep_phy, fv_diag_ic, &
-            external_eta, res_latlon_dynamics, res_latlon_tracers, scale_z, w_max, z_min, lim_fac, &
+            external_eta, res_latlon_dynamics, res_latlon_tracers, scale_z, w_max, z_min, w_diff, lim_fac, &
             dddmp, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
             warm_start, adjust_dry_mass, mountain, d_con, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
             dry_mass, grid_type, do_Held_Suarez, &

@@ -921,7 +921,7 @@ contains
                          akap, cappa, cp,  ptop, zs, q_con, w, delz, pt, delp, zh,   &
                          pe, pkc, pk3, pk, peln, ws, &
                          flagstruct%scale_z, flagstruct%p_fac, flagstruct%a_imp, &
-                         flagstruct%use_logp, remap_step, beta<-0.1)
+                         flagstruct%use_logp, remap_step, beta<-0.1, flagstruct%w_diff)
                                                          call timing_off('Riem_Solver')
 
                                        call timing_on('COMM_TOTAL')

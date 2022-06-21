@@ -282,6 +282,7 @@ module fv_arrays_mod
    real    :: scale_z = 0.   !< diff_z = scale_z**2 * 0.25 (only used for Riemann solver)
    real    :: w_max = 75.    !< Not used.
    real    :: z_min = 0.05   !< Not used.
+   real    :: w_diff = 0.0   !< Implicit damper for vertical velocity
    real    :: lim_fac = 1.0  !< linear scheme limiting factor when using hord = 1. 1: hord = 5, 3: hord = 6
 
    integer :: nord=1         !< Order of divergence damping: 0 for second-order; 1 for fourth-order
