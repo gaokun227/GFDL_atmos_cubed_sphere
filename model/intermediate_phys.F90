@@ -75,10 +75,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
-    real, intent (in), dimension (is:, js:, 1:) :: delz
-    
     real, intent (in), dimension (isd:ied, jsd:jed, km) :: omga
 
+    real, intent (inout), dimension (is:, js:, 1:) :: delz
+    
     real, intent (inout), dimension (isd:, jsd:, 1:) :: q_con, cappa, w
     
     real, intent (inout), dimension (is:ie, js:je) :: te0_2d
@@ -1484,6 +1484,11 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! compute wind tendency at A grid fori D grid wind update
             u_dt (is:ie, j, kmp:km) = (ua (is:ie, j, kmp:km) - u_dt (is:ie, j, kmp:km)) / abs (mdt)
             v_dt (is:ie, j, kmp:km) = (va (is:ie, j, kmp:km) - v_dt (is:ie, j, kmp:km)) / abs (mdt)
+
+            ! update layer thickness
+            if (.not. hydrostatic) then
+                delz (is:ie, j, kmp:km) = dz (is:ie, kmp:km)
+            endif
 
             ! tendencies diagnostic
             if (allocated (inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt (is:ie, j, kmp:km) = &
