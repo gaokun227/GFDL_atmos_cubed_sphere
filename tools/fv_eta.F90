@@ -802,6 +802,7 @@ module fv_eta_mod
    call check_eta_levels (ak, bk)
 
    if (is_master()) then
+      print*, ' SET_ETA: vertical level interfaces'
       write(*, '(A4, A13, A13, A11)') 'klev', 'ak', 'bk', 'p_ref'
       do k=1,km+1
          write(*,'(I4, F13.5, F13.5, F11.2)') k, ak(k), bk(k), 1000.E2*bk(k) + ak(k)
@@ -985,7 +986,7 @@ module fv_eta_mod
           do k=ks+1,km
              tmp1 = max(tmp1, (ak(k)-ak(k+1))/max(1.E-5, (bk(k+1)-bk(k))) )
           enddo
-          write(*,*) 'Hybrid Sigma-P: minimum allowable surface pressure (hpa)=', tmp1/100.
+          write(*,'(A, F8.2)') 'Hybrid Sigma-P: minimum allowable surface pressure (hpa)=', tmp1/100.
           write(*,800) (pm(k), k=km,1,-1)
       endif
 
@@ -1909,7 +1910,7 @@ module fv_eta_mod
 
   if (.not. monotonic) then
     if (is_master()) then
-       write(*, '(A4, A13, A13, A11)') 'klev', 'ak', 'bk', 'p_ref'
+       write(*, '(A4, A13, A13, A11)') 'klev', 'ak', 'bk', 'p_ref (Pa)'
        do k=1,nlev
           write(*,'(I4, F13.5, F13.5, F11.2)') k, ak(k), bk(k), ak(k) + bk(k)*1000.E2
        enddo
