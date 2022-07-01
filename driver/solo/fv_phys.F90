@@ -109,6 +109,7 @@ public :: fv_phys, fv_nudge
   logical:: diurnal_cycle    = .false.
   logical:: mixed_layer      = .false.
   logical:: gray_rad         = .false.
+  logical:: cloudy_rad       = .false.
   logical:: strat_rad        = .false.
   logical:: do_abl = .false.
   logical:: do_mon_obkv = .true.
@@ -166,9 +167,12 @@ namelist /sim_phys_nml/do_strat_HS_forcing, &
                        do_reed_sim_phys, do_LS_cond, do_surf_drag,    &
                        tau_surf_drag, do_terminator, do_zurita_HS, rd_zur
 
-namelist /GFDL_sim_phys_nml/ diurnal_cycle, mixed_layer, gray_rad, strat_rad, do_abl, do_mon_obkv, &
-     heating_rate, cooling_rate, uniform_sst, sst0, sst_type, shift_n, do_t_strat, p_strat, t_strat, tau_strat, &
-     mo_t_fac, tau_difz, prog_low_cloud, low_cf0, zero_winds, tau_zero, do_mo_fixed_cd, mo_cd, mo_u_mean, &
+namelist /GFDL_sim_phys_nml/ diurnal_cycle, mixed_layer, gray_rad, &
+     cloudy_rad, strat_rad, do_abl, do_mon_obkv, &
+     heating_rate, cooling_rate, uniform_sst, sst0, &
+     sst_type, shift_n, do_t_strat, p_strat, t_strat, tau_strat, &
+     mo_t_fac, tau_difz, prog_low_cloud, low_cf0, &
+     zero_winds, tau_zero, do_mo_fixed_cd, mo_cd, mo_u_mean, &
      abl_s_fac, ml_c0, sw_abs, fixed_sfc_htg
 
 namelist /Kessler_sim_phys_nml/ K_sedi_transport, do_K_sedi_w, do_K_sedi_heat, K_cycle
@@ -844,6 +848,36 @@ contains
          endif
     endif
 
+ elseif (cloudy_rad) then
+
+    do j=js,je
+       do k=1, km
+          do i=is,ie
+             den(i,k) = -delp(i,j,k)/(grav*dz(i,j,k))
+          enddo
+       enddo
+       call cloudy_radiation(is, ie, km, t3(is:ie,j,1:km), &
+                           q(is:ie,j,1:km,sphum), q(is:ie,j,1:km,liq_wat), &
+                           delp(is:ie,j,1:km), &
+                           dz(is:ie,j,1:km), den, t_dt_rad,              &
+                           olr(is,j), lwu(is,j), lwd(is,j), sw_surf(is,j))
+       do k=1, km
+          do i=is,ie
+             t_dt(i,j,k) = t_dt(i,j,k) + t_dt_rad(i,k)
+          enddo
+       enddo
+    enddo
+    if ( print_diag ) then
+       olrm = g0_sum(olr, is, ie, js, je, 0, gridstruct%area(is:ie,js:je), 1)
+       swab = g0_sum(sw_surf, is, ie, js, je, 0, gridstruct%area(is:ie,js:je), 1)
+
+
+       if( master ) then
+          write(*,*) 'Domain mean OLR', trim(gn), ' =', olrm
+          write(*,*) 'Domain mean SWA', trim(gn), ' =', swab
+       endif
+    endif
+
  else
 
 ! Prescribed (non-interating) heating/cooling rate:
@@ -1038,7 +1072,7 @@ endif
         enddo
      enddo
 
-   if ( gray_rad ) then
+   if ( gray_rad .or. cloudy_rad) then
      do j=js, je
         do i=is, ie
            sst(i,j) = sst(i,j)+pdt*(sw_surf(i,j) + lwd(i,j) - rflux(i,j)  &
@@ -1163,7 +1197,7 @@ endif
           print*, 'ABL: pblh = ', sum(pblh)/((ie-is+1)*(je-js+1))
        endif
 !!! END DEBUG CODE
-       
+
   do k=km, 1, -1
      do i=is, ie
         if ( gh(i,k)>6.E3 .or. (pblh(i,j) < -0.5*dz(i,j,km)) ) then
@@ -1559,7 +1593,109 @@ endif
 
  end subroutine gray_radiation
 
+ !From Stevens et al. 2005, MWR
+ subroutine cloudy_radiation(is, ie, km, pt, qv, ql, &
+                             delp, delz, rho, t_dt, olr, lwu, lwd, sw_surf)
 
+   integer, intent(in):: is, ie, km
+   real, intent(in), dimension(is:ie,km):: pt, delp, delz, rho, qv, ql
+   real, intent(out), dimension(is:ie,km):: t_dt
+   real, intent(out), dimension(is:ie):: olr, lwu, lwd, sw_surf
+   !local:
+   real, dimension(is:ie) :: lwp, Qup
+   real, dimension(is:ie,km+1) :: Frad
+   real :: qz, tmp, zi, zint, densT, densB, cube, df
+   integer :: i,j,k,ki
+
+   real, parameter :: F_0 = 70.
+   real, parameter :: F_1 = 22.
+   real, parameter :: kappa = 85.
+   real, parameter :: az = 1.
+   real, parameter :: Divg = 3.75e-6
+   real, parameter :: c13 = 1./3.
+   real, parameter :: c43 = 4.*c13
+
+   !Compute column cloud water
+
+   do i=is,ie
+      lwp(i) = 0.0
+   enddo
+   do k=1,km
+      do i=is,ie
+         lwp(i) = lwp(i) + delp(i,k)*ql(i,k)
+      enddo
+   enddo
+
+   !Compute water above and flux terms
+   do i=is,ie
+      Qup(i) = 0.0
+      Frad(i,1) = F_0 + F_1*exp(-kappa*lwp(i))
+   enddo
+   do k=1,km
+      do i=is,ie
+         Qup(i) = Qup(i) + delp(i,k)*ql(i,k)
+         qz = lwp(i) - Qup(i)
+         tmp = F_0*exp(-kappa*Qup(i))
+         Frad(i,k+1) = tmp + F_1*exp(-kappa*qz)
+      enddo
+   enddo
+
+   do i=is,ie
+      sw_surf(i) = Frad(i,km+1)
+      lwu(i) = F_1
+   enddo
+
+   !Compute cloud top and free tropospheric cooling
+   do i=is,ie
+      ki = 1
+      do while (ki <= km .and. qv(i,ki)+ql(i,ki) < 0.008 )
+         ki = ki+1
+      enddo
+      if (ki > km) continue
+
+      zi = 0.0
+      do k=km,ki+1,-1
+         zi = zi - delz(i,k)
+      enddo
+      zi = zi - 0.5*delz(i,ki)
+
+      zint = 0.0
+      !densT = -delp(i,k)/(grav*delz(i,k))*rdgas*pt(i,k)*(1.+zvir*qv(i,k))
+      densT=rho(i,k)
+
+      cube = -exp(c13*log(abs(zi)))
+      tmp = 0.25*cube**4
+      tmp = tmp + zi*cube
+      tmp = tmp*densT*cp_air*divg*az
+      lwd(i) = tmp
+      Frad(i,km+1) = Frad(i,km+1) + tmp
+
+      do k=km,1,-1
+         zint = zint - delz(i,k)
+         df = zint-zi
+         cube = sign(exp(c13*log(abs(df))), df)
+         tmp = 0.25*cube**4
+         tmp = tmp + zi*cube
+         densB = densT
+         densT = rho(i,k) ! -delp(i,k)/(grav*delz(i,k))*rdgas*pt(i,k)*(1.+zvir*qv(i,k))
+         tmp = tmp*0.5*(densB+densT)*cp_air*Divg*az
+         Frad(i,k) = Frad(i,k) + tmp
+      enddo
+   enddo
+
+   !Compute outputs
+
+   do i=is,ie
+      olr(i) = Frad(i,1)
+   enddo
+   do k=1,km
+      do i=is,ie
+         t_dt(i,k) = (Frad(i,k) - Frad(i,k+1))/(cp_air*rho(i,k)*delz(i,k))
+      enddo
+   enddo
+
+
+ end subroutine cloudy_radiation
 
  subroutine get_low_clouds( is,ie, js,je, km, ql, qi, qa, clouds )
  integer, intent(in):: is,ie, js,je, km

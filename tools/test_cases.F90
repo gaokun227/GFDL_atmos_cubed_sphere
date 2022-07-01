@@ -1731,7 +1731,8 @@
          delta_T = 480000.0
          lapse_rate = 0.005
 !$OMP parallel do default(none) shared(is,ie,js,je,npz,eta,ak,bk,T_0,lapse_rate,eta_t, &
-!$OMP                                  delta_T,ptop,delp,Ubar,eta_v,agrid,grid,pcen,pt,r0,radius,omega) &
+!$OMP                                  delta_T,ptop,delp,Ubar,eta_v,agrid,grid,pcen,pt,&
+!$OMP                                  r0,radius,omega,flagstruct) &
 !$OMP                          private(T_mean,press,pt1,pt2,pt3,pt4,pt5,pt6,pt7,pt8,pt9,p1,r)
          do z=1,npz
             eta(z) = 0.5*( (ak(z)+ak(z+1))/1.e5 + bk(z)+bk(z+1) )
@@ -1744,7 +1745,7 @@
             do zz=1,z
                press = press + delp(is,js,zz)
             enddo
-            if (is_master()) write(*,230) z, eta(z), press/100., T_mean
+            if (is_master() .and. flagstruct%fv_debug) write(*,230) z, eta(z), press/100., T_mean
             do j=js,je
                do i=is,ie
 ! A-grid cell center: i,j
@@ -1898,8 +1899,10 @@
 !         call get_vorticity(is, ie, js, je, isd, ied, jsd, jed, npz, u, v, q(is:ie,js:je,:,2))
 !         call pv_entropy(is, ie, js, je, ng, npz, q(is:ie,js:je,:,2), f0, pt, pkz, delp, grav)
 
-      write(stdout(), *) 'PI:', pi
-      write(stdout(), *) 'PHIS:', mpp_chksum(phis(is:ie,js:je))
+         if (flagstruct%fv_debug) then
+            write(stdout(), *) 'PI:', pi
+            write(stdout(), *) 'PHIS:', mpp_chksum(phis(is:ie,js:je))
+         endif
 
       else if ( (test_case==-12) .or. (test_case==-13) ) then
 
@@ -1908,7 +1911,7 @@
               pk,peln,pe,pkz,gz,phis,ps,grid,agrid,hydrostatic, &
               nwat, adiabatic, test_case == -13, domain, bd)
 
-         write(stdout(), *) 'PHIS:', mpp_chksum(phis(is:ie,js:je))
+         if (flagstruct%fv_debug) write(stdout(), *) 'PHIS:', mpp_chksum(phis(is:ie,js:je))
 
       else if ( test_case==15 .or. test_case==19 ) then
 !------------------------------------
@@ -2561,7 +2564,7 @@
                ak(k) = (((t00-height*gamma)/t00)**(1./exponent)-1.)/(px - 1.)*px*p00
                bk(k) = (((t00-height*gamma)/t00)**(1./exponent)-px)/(1.-px)
             endif
-            if (is_master()) write(*,*) k, ak(k), bk(k), height, ak(k)+bk(k)*p00
+            if (flagstruct%fv_debug .and. is_master()) write(*,*) k, ak(k), bk(k), height, ak(k)+bk(k)*p00
          enddo
 
          ptop = ak(1)
@@ -2709,7 +2712,7 @@
               vbar = vtmp - 4.25
            endif
 
-           if( is_master() ) then
+           if( is_master() .and. flagstruct%fv_debug) then
               write(6,*) k, utmp, vtmp
            endif
 
@@ -5830,7 +5833,7 @@ end subroutine terminator_tracers
 
 
         if (w_forcing) then
-           call init_w_forcing(bd, npx, npy, npz, flagstruct%grid_type, agrid, flagstruct, 1)
+           call init_w_forcing(bd, npx, npy, npz, flagstruct%grid_type, agrid, flagstruct)
         endif
 
         is_ideal_case = .true.
