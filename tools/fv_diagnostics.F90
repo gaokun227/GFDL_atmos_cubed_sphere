@@ -512,6 +512,7 @@ contains
 
 #ifndef DYNAMICS_ZS
        if (id_zsurf > 0) used = send_data(id_zsurf, zsurf, Time)
+       call prt_mxm('ZS', zsurf, isc, iec, jsc, jec, 0,   1, 1.0, Atm(n)%gridstruct%area_64, Atm(n)%domain)
 #endif
        if ( Atm(n)%flagstruct%fv_land ) then
          if (id_zs  > 0) used = send_data(id_zs , zs_g, Time)
@@ -1550,7 +1551,28 @@ contains
 
     if( prt_minmax ) then
 
-        call prt_mxm('ZS', zsurf,     isc, iec, jsc, jec, 0,   1, 1.0, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+        call prt_mass(npz, nq, isc, iec, jsc, jec, ngc, Atm(n)%flagstruct%nwat,    &
+                      Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+
+#ifndef SW_DYNAMICS
+        if (Atm(n)%flagstruct%consv_te > 1.e-5) then
+           idiag%steps = idiag%steps + 1
+           idiag%efx_sum = idiag%efx_sum + E_Flux
+           if ( idiag%steps <= max_step ) idiag%efx(idiag%steps) = E_Flux
+           if (master)  then
+              write(*,*) 'ENG Deficit (W/m**2)', trim(gn), '=', E_Flux
+           endif
+
+
+        endif
+        if ( .not. Atm(n)%flagstruct%hydrostatic )   &
+          call nh_total_energy(isc, iec, jsc, jec, isd, ied, jsd, jed, npz,  &
+                               Atm(n)%w, Atm(n)%delz, Atm(n)%pt, Atm(n)%delp,  &
+                               Atm(n)%q, Atm(n)%phis, Atm(n)%gridstruct%area, Atm(n)%domain, &
+                               sphum, liq_wat, rainwat, ice_wat, snowwat, graupel, Atm(n)%flagstruct%nwat,     &
+                               Atm(n)%ua, Atm(n)%va, Atm(n)%flagstruct%moist_phys, a2)
+#endif
+
         call prt_maxmin('PS', Atm(n)%ps, isc, iec, jsc, jec, ngc, 1, 0.01)
 
 #ifdef HIWPP
@@ -1576,27 +1598,6 @@ contains
         endif
 #endif
 
-        call prt_mass(npz, nq, isc, iec, jsc, jec, ngc, Atm(n)%flagstruct%nwat,    &
-                      Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
-
-#ifndef SW_DYNAMICS
-        if (Atm(n)%flagstruct%consv_te > 1.e-5) then
-           idiag%steps = idiag%steps + 1
-           idiag%efx_sum = idiag%efx_sum + E_Flux
-           if ( idiag%steps <= max_step ) idiag%efx(idiag%steps) = E_Flux
-           if (master)  then
-              write(*,*) 'ENG Deficit (W/m**2)', trim(gn), '=', E_Flux
-           endif
-
-
-        endif
-        if ( .not. Atm(n)%flagstruct%hydrostatic )   &
-          call nh_total_energy(isc, iec, jsc, jec, isd, ied, jsd, jed, npz,  &
-                               Atm(n)%w, Atm(n)%delz, Atm(n)%pt, Atm(n)%delp,  &
-                               Atm(n)%q, Atm(n)%phis, Atm(n)%gridstruct%area, Atm(n)%domain, &
-                               sphum, liq_wat, rainwat, ice_wat, snowwat, graupel, Atm(n)%flagstruct%nwat,     &
-                               Atm(n)%ua, Atm(n)%va, Atm(n)%flagstruct%moist_phys, a2)
-#endif
         call prt_maxmin('UA_top', Atm(n)%ua(isc:iec,jsc:jec,1),    &
                         isc, iec, jsc, jec, 0, 1, 1.)
         call prt_maxmin('UA', Atm(n)%ua, isc, iec, jsc, jec, ngc, npz, 1.)
@@ -1678,6 +1679,7 @@ contains
        enddo
 
        if(id_zsurf > 0)  used=send_data(id_zsurf, zsurf, Time)
+       call prt_mxm('ZS', zsurf,     isc, iec, jsc, jec, 0,   1, 1.0, Atm(n)%gridstruct%area_64, Atm(n)%domain)
 #endif
        if(id_ps > 0) used=send_data(id_ps, Atm(n)%ps(isc:iec,jsc:jec), Time)
 
@@ -4084,6 +4086,7 @@ contains
 
       real qmin, qmax
       integer i,j,k
+      character(len=12) :: display_name
       !mpp_root_pe doesn't appear to recognize nested grid
       master = (mpp_pe()==mpp_root_pe()) .or. is_master()
 
@@ -4107,9 +4110,10 @@ contains
       call mp_reduce_min(qmin)
       call mp_reduce_max(qmax)
 
-895   format(A12, A, ' max=',G8.3,' min=',G8.3)!'Warn_2D: (i,j)=',2I5,' (lon,lat)=',f7.3,1x,f7.3,1x, A,' =',G10.5)
       if(master) then
-            write(*,*) qname, trim(gn), qmax*fac, qmin*fac
+         j = min(len(trim(qname)),12)
+         display_name = qname(1:j)
+         write(*,*) display_name, ' ', trim(gn), ' max=', qmax*fac, 'min=',qmin*fac
       endif
 
  end subroutine prt_maxmin
@@ -4127,6 +4131,7 @@ contains
 !
       real qmin, qmax, gmean
       integer i,j,k
+      character(len=8) :: display_name
 
       !mpp_root_pe doesn't appear to recognize nested grid
       master = (mpp_pe()==mpp_root_pe()) .or. is_master()
@@ -4155,8 +4160,11 @@ contains
 !     gmean = g_sum(domain, q(is,js,km), is, ie, js, je, 3, area, 1)
       gmean = g_sum(domain, q(is:ie,js:je,km), is, ie, js, je, 3, area, 1)
 
-896   format(A12, A, ' max=',G8.3,' min=',G8.3, ' ave=', G8.3)!'Warn_2D: (i,j)=',2I5,' (lon,lat)=',f7.3,1x,f7.3,1x, A,' =',G10.5)
-      if(master) write(6,*) qname, trim(gn), qmax*fac, qmin*fac, gmean*fac
+      if(master) then
+         j = min(len(trim(qname)),8)
+         display_name = qname(1:j)
+         write(6,*) display_name, trim(gn), qmax*fac, qmin*fac, gmean*fac
+      endif
 
  end subroutine prt_mxm
 
@@ -4185,6 +4193,8 @@ contains
     rainwat = get_tracer_index (MODEL_ATMOS, 'rainwat')
     snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat')
     graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
+
+ if (master) write(*,*) '--- Mass Diagnostics ------------------------'
 
  if ( nwat==0 ) then
       psmo = g_sum(domain, ps(is:ie,js:je), is, ie, js, je, n_g, area, 1)
@@ -4222,7 +4232,7 @@ contains
  call z_sum(is, ie, js, je, kstrat, n_g, delp, q(is-n_g,js-n_g,1,sphum), q_strat(is,js))
  psmo = g_sum(domain, q_strat(is,js), is, ie, js, je, n_g, area, 1) * 1.e6           &
       / p_sum(is, ie, js, je, kstrat, n_g, delp, area, domain)
- if(master) write(*,*) 'Mean specific humidity (mg/kg) above 75 mb', trim(gn), '=', psmo
+ if(master) write(*,*) 'Mean sphum (mg/kg) above 75 mb', trim(gn), '=', psmo
  endif
 
 
@@ -4471,6 +4481,7 @@ contains
   real:: t_eq, t_nh, t_sh, t_gb
   real:: area_eq, area_nh, area_sh, area_gb
   integer:: i,j
+  character(len=12) :: display_name
 
      t_eq = 0.   ;    t_nh = 0.;    t_sh = 0.;    t_gb = 0.
      area_eq = 0.; area_nh = 0.; area_sh = 0.; area_gb = 0.
@@ -4504,7 +4515,13 @@ contains
      if (area_nh <= 1.) area_nh = -1.0
      if (area_sh <= 1.) area_sh = -1.0
      if (area_eq <= 1.) area_eq = -1.0
-     if (is_master()) write(*,*) qname, 'GB=',t_gb/area_gb, 'NH=',t_nh/area_nh, 'SH=',t_sh/area_sh, 'EQ=',t_eq/area_eq
+     if (is_master()) then
+        j = min(len(trim(qname)),12)
+        display_name = qname(1:j)
+        write(*,*) display_name, 'GB=',t_gb/area_gb, 'NH=',t_nh/area_nh
+        display_name=''
+        write(*,*) display_name, 'SH=',t_sh/area_sh, 'EQ=',t_eq/area_eq
+     endif
 
  end subroutine prt_gb_nh_sh
 

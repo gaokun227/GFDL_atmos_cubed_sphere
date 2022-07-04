@@ -1535,6 +1535,7 @@ subroutine pmaxmn_g(qname, q, is, ie, js, je, km, fac, area, domain)
 !
       real qmin, qmax, gmean
       integer i,j,k
+      character(len=8) :: display_name
 
       logical, SAVE :: first_time = .true.
 
@@ -1561,9 +1562,11 @@ subroutine pmaxmn_g(qname, q, is, ie, js, je, km, fac, area, domain)
 
       gmean = g_sum(domain, q(is:ie,js:je,km), is, ie, js, je, 3, area, 1, .true.)
 
-995   format(A12, A, ' max=',G8.3,' min=',G8.3, ' ave=', G8.3)!'Warn_2D: (i,j)=',2I5,' (lon,lat)=',f7.3,1x,f7.3,1x, A,' =',G10.5)
-
-      if(is_master()) write(6,*) qname, trim(gn), qmax*fac, qmin*fac, gmean*fac
+      if(is_master()) then
+         j = min(len(trim(qname)),8)
+         display_name = qname(1:j)
+         write(6,*) display_name, trim(gn), qmax*fac, qmin*fac, gmean*fac
+      endif
 
 end subroutine pmaxmn_g
 
