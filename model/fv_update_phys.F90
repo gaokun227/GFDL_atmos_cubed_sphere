@@ -199,7 +199,7 @@ module fv_update_phys_mod
         w_diff = 0
     endif
 
-    if ( .not. hydrostatic .and. .not. flagstruct%phys_hydrostatic .and. nwat == 0 ) then
+    if ( .not. hydrostatic .and. .not. (flagstruct%phys_hydrostatic .or. flagstruct%phys_cp) .and. nwat == 0 ) then
        gama_dt = dt*cp_air/cv_air
     else
        gama_dt = -1.e24
@@ -382,6 +382,15 @@ module fv_update_phys_mod
 !!!                pt(i,j,k) = pt(i,j,k) + t_dt(i,j,k)*dt
                    pt(i,j,k) = pt(i,j,k) + t_dt(i,j,k)*dt*con_cp/cvm(i)
                    delz(i,j,k) = delz(i,j,k) * pt(i,j,k)
+                enddo
+             enddo
+         else if ( flagstruct%phys_cp ) then
+! Constant pressure, no adjustment (INCONSISTENT)
+             do j=js,je
+                call moist_cp(is,ie,isd,ied,jsd,jed, npz, j, k, nwat, sphum, liq_wat, rainwat,    &
+                              ice_wat, snowwat, graupel, q, qc, cvm, pt(is:ie,j,k) )
+                do i=is,ie
+                   pt(i,j,k) = pt(i,j,k) + t_dt(i,j,k)*dt*con_cp/cvm(i)
                 enddo
              enddo
          else

@@ -842,6 +842,19 @@ module fv_arrays_mod
                                           !< balance, causing the entire atmospheric column to expand instantaneously.
                                           !< If .false., heating from the physics is applied simply as a temperature
                                           !< tendency. The default value is .true.; ignored if hydrostatic = .true.
+   logical :: phys_cp = .false.       !< Option to use constant pressure heating instead of constant
+                                      !< volume when applying a temperature increment. This differs
+                                      !< from phys_hydrostatic in that it does not apply a correction
+                                      !< to the cell thickness; in this sense, it is thermodynamically
+                                      !< inconsistent, but this is provided as an option to reduce
+                                      !< over-intensification of explicit convection when using
+                                      !< parameterizations taken from WRF (which does the same thing).
+                                      !< This option is **not recommended** for global simulations or
+                                      !< for simulations lasting for more than ~48 hours. We instead
+                                      !< encourage developers to fix their parameterizations reflecting
+                                      !< the thermodynamically-consistent formulations that already
+                                      !< exist in FV3. The default value is .false.; ignored if
+                                      !< hydrostatic = .true.
    logical :: use_hydro_pressure = .false.   !< Whether to compute hydrostatic pressure for input to the physics.
                                              !< Currently only enabled for the fvGFS model.
                                              !< Ignored in hydrostatic simulations. The default is .false.
@@ -2161,4 +2174,3 @@ end subroutine deallocate_fv_nest_BC_type_3d
 
 
 end module fv_arrays_mod
-
