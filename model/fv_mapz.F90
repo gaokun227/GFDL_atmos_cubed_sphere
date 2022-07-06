@@ -28,7 +28,7 @@ module fv_mapz_mod
 
   use constants_mod,     only: pi=>pi_8, rvgas, rdgas, grav, hlv, hlf, cp_air, cp_vapor
   use fv_arrays_mod,     only: radius ! scaled for small earth
-  use tracer_manager_mod,only: get_tracer_index
+  use tracer_manager_mod,only: get_tracer_index, adjust_mass
   use field_manager_mod, only: MODEL_ATMOS
   use fv_grid_utils_mod, only: g_sum, ptop_min, cubed_to_latlon, update_dwinds_phys
   use fv_fill_mod,       only: fillz
@@ -162,7 +162,7 @@ contains
   real rcp, rg, rrg, bkh, dtmp, k1k, dlnp, tmp, tpe
   logical:: fast_mp_consv
   integer:: i,j,k
-  integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, iq, n, kmp, kp, k_next
+  integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, w_diff, iq, n, kmp, kp, k_next
   integer:: ccn_cm3, cin_cm3
 
 
@@ -177,6 +177,7 @@ contains
   snowwat = get_tracer_index (MODEL_ATMOS, 'snowwat')
   graupel = get_tracer_index (MODEL_ATMOS, 'graupel')
   cld_amt = get_tracer_index (MODEL_ATMOS, 'cld_amt')
+  w_diff  = get_tracer_index (MODEL_ATMOS, 'w_diff')
   ccn_cm3 = get_tracer_index (MODEL_ATMOS, 'ccn_cm3')
   cin_cm3 = get_tracer_index (MODEL_ATMOS, 'cin_cm3')
 
@@ -977,8 +978,9 @@ contains
 !$OMP                                  gridstruct,q, &
 !$OMP                                  mdt,cld_amt,cappa,rrg,akap, &
 !$OMP                                  ccn_cm3,cin_cm3,inline_mp, &
-!$OMP                                  do_inline_mp,ps,phys_hydrostatic,phys_cp) &
-!$OMP                          private(u_dt,v_dt,q2,q3,gsize,dp2,t0,dz,wa)
+!$OMP                                  do_inline_mp,ps,phys_hydrostatic,&
+!$OMP                                  phys_cp,nq,w_diff,nwat) &
+!$OMP                          private(u_dt,v_dt,q2,q3,gsize,dp2,t0,dz,wa,iq)
     do j = js, je
 
        if (cld_amt <= 0) then
@@ -1035,6 +1037,15 @@ contains
             dz(is:ie,:) = (peln(is:je,1:km,j) - peln(is:ie,2:km+1,j)) * rdgas * pt(is:ie,j,:) / grav
         endif
 
+        !Tracer adjustment
+        if (nwat > 0) then
+           do iq=nwat+1,nq
+              if (iq /= cld_amt .and. iq /= w_diff .and. adjust_mass(MODEL_ATMOS,IQ)) then
+                 q(is:ie,j,:,iq) = q(is:ie,j,:,iq)*delp(is:ie,j,:)
+              endif
+           enddo
+        endif
+
         call gfdl_mp_driver(q(is:ie,j,:,sphum), q(is:ie,j,:,liq_wat), &
                        q(is:ie,j,:,rainwat), q(is:ie,j,:,ice_wat), q(is:ie,j,:,snowwat), &
                        q(is:ie,j,:,graupel), q(is:ie,j,:,cld_amt), q2(is:ie,:), q3(is:ie,:),  &
@@ -1056,11 +1067,20 @@ contains
                        consv>consv_min, &
                        te(is:ie,j,:), inline_mp%cond(is:ie,j), inline_mp%dep(is:ie,j), &
                        inline_mp%reevap(is:ie,j), inline_mp%sub(is:ie,j), last_step, &
-                       do_inline_mp, phys_hydrostatic, phys_cp)
+                       do_inline_mp, phys_hydrostatic, phys_cp, nwat)
 
         if (.not. hydrostatic) then
            w(is:ie,j,:) = wa(is:ie,:)
            if (phys_hydrostatic) delz(is:ie,j,:) = dz(is:ie,:)
+        endif
+
+        !Tracer adjustment
+        if (nwat > 0) then
+           do iq=7,nq
+              if (iq /= cld_amt .and. iq /= w_diff .and. adjust_mass(MODEL_ATMOS,IQ)) then
+                 q(is:ie,j,:,iq) = q(is:ie,j,:,iq)/delp(is:ie,j,:)
+              endif
+           enddo
         endif
 
         ! compute wind tendency at A grid fori D grid wind update
