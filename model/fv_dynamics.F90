@@ -608,7 +608,7 @@ contains
                      flagstruct%do_inline_edmf, flagstruct%do_inline_sas, flagstruct%do_inline_gwd, &
                      inline_mp, inline_edmf, inline_sas, inline_gwd, flagstruct%c2l_ord, bd, &
                      flagstruct%fv_debug, flagstruct%w_limiter, flagstruct%do_am4_remap, &
-                     flagstruct%do_fast_phys)
+                     flagstruct%do_fast_phys, flagstruct%adj_mass_vmr)
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split

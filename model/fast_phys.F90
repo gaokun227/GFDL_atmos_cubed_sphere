@@ -33,7 +33,7 @@ module fast_phys_mod
                              inline_edmf_type, inline_gwd_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use fv_timing_mod, only: timing_on, timing_off
-    use tracer_manager_mod, only: get_tracer_index
+    use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap
     use sa_tke_edmf_mod, only: sa_tke_edmf_sfc, sa_tke_edmf_pbl
@@ -53,7 +53,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                c2l_ord, mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, inline_edmf, inline_gwd, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_edmf, do_inline_gwd)
+               do_inline_edmf, do_inline_gwd, adj_mass_vmr)
     
     implicit none
     
@@ -63,7 +63,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord, nwat
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_edmf, do_inline_gwd
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_edmf, do_inline_gwd, adj_mass_vmr
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop
 
@@ -101,14 +101,16 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     logical :: safety_check = .true.
 
-    integer :: i, j, k, kr, kmp, ncld, ntke, sphum, liq_wat, ice_wat, lsoil
+    logical, allocatable, dimension (:) :: conv_vmr_mmr
+
+    integer :: i, j, k, m, kr, kmp, ncld, ntke, sphum, liq_wat, ice_wat, lsoil
     integer :: rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
 
     real :: rrg
 
     real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c_moist
 
-    real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm
+    real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm, adj_vmr
 
     real, dimension (is:ie, km+1) :: phis, pe, peln
 
@@ -122,6 +124,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
+    character (len = 32) :: tracer_units, tracer_name
+
     sphum = get_tracer_index (model_atmos, 'sphum')
     liq_wat = get_tracer_index (model_atmos, 'liq_wat')
     ice_wat = get_tracer_index (model_atmos, 'ice_wat')
@@ -135,6 +139,20 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     ntke = get_tracer_index (model_atmos, 'sgs_tke')
 
     rrg = - rdgas / grav
+
+    ! decide which tracer needs adjustment
+    if (.not. allocated (conv_vmr_mmr)) allocate (conv_vmr_mmr (nq))
+    conv_vmr_mmr (:) = .false.
+    if (adj_mass_vmr) then
+        do m = 1, nq
+            call get_tracer_names (model_atmos, m, name = tracer_name, units = tracer_units)
+            if (trim (tracer_units) .eq. 'vmr') then
+                conv_vmr_mmr (m) = .true.
+            else
+                conv_vmr_mmr (m) = .false.
+            endif
+        enddo
+    endif
 
     !-----------------------------------------------------------------------
     ! pt conversion
@@ -223,9 +241,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
-!$OMP                                    ptop, ntke, inline_edmf, safety_check, nwat) &
+!$OMP                                    ptop, ntke, inline_edmf, safety_check, nwat, &
+!$OMP                                    adj_mass_vmr, conv_vmr_mmr) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
-!$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, &
+!$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, adj_vmr, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
 !$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
@@ -370,6 +389,13 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 dqs = qa (is:ie, k, snowwat) - q (is:ie, j, kr, snowwat)
                 dqg = qa (is:ie, k, graupel) - q (is:ie, j, kr, graupel)
                 ps_dt = 1 + dqv + dql + dqi + dqr + dqs + dqg
+                adj_vmr (is:ie, kr) = (ps_dt - (qa (is:ie, k, sphum) + &
+                    qa (is:ie, k, liq_wat) + qa (is:ie, k, ice_wat) + &
+                    qa (is:ie, k, rainwat) + qa (is:ie, k, snowwat) + &
+                    qa (is:ie, k, graupel))) / (1. - (qa (is:ie, k, sphum) + &
+                    qa (is:ie, k, liq_wat) + qa (is:ie, k, ice_wat) + &
+                    qa (is:ie, k, rainwat) + qa (is:ie, k, snowwat) + &
+                    qa (is:ie, k, graupel))) / ps_dt
                 q (is:ie, j, kr, sphum) = qa (is:ie, k, sphum) / ps_dt
                 q (is:ie, j, kr, liq_wat) = qa (is:ie, k, liq_wat) / ps_dt
                 q (is:ie, j, kr, ice_wat) = qa (is:ie, k, ice_wat) / ps_dt
@@ -393,6 +419,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
             enddo
+
+            ! update non-microphyiscs tracers due to mass change
+            if (adj_mass_vmr) then
+                do m = 1, nq
+                    if (conv_vmr_mmr (m)) then
+                        q (is:ie, j, 1:km, m) = q (is:ie, j, 1:km, m) * adj_vmr (is:ie, 1:km)
+                    endif
+                enddo
+            endif
 
             ! compute wind tendency at A grid fori D grid wind update
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
@@ -588,11 +623,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_gwd, &
-!$OMP                                    ptop, inline_edmf, u_dt, v_dt, &
-!$OMP                                    safety_check) &
+!$OMP                                    ptop, inline_edmf, u_dt, v_dt, safety_check, &
+!$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, pe, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
-!$OMP                                    cvm, kr, dqv, ps_dt, c_moist, peln)
+!$OMP                                    cvm, kr, dqv, ps_dt, c_moist, peln, adj_vmr)
 
         do j = js, je
  
@@ -692,6 +727,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 kr = km - k + 1
                 dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
                 ps_dt = 1 + dqv
+                adj_vmr (is:ie, kr) = (ps_dt - (qv (is:ie, k) + q (is:ie, j, kr, liq_wat) + &
+                    q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, rainwat) + &
+                    q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel))) / &
+                    (1. - (qv (is:ie, k) + q (is:ie, j, kr, liq_wat) + &
+                    q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, rainwat) + &
+                    q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel))) / ps_dt
                 q (is:ie, j, kr, sphum) = qv (is:ie, k) / ps_dt
                 q (is:ie, j, kr, liq_wat) = q (is:ie, j, kr, liq_wat) / ps_dt
                 q (is:ie, j, kr, ice_wat) = q (is:ie, j, kr, ice_wat) / ps_dt
@@ -716,6 +757,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 va (is:ie, j, kr) = vv (is:ie, k)
             enddo
  
+            ! update non-microphyiscs tracers due to mass change
+            if (adj_mass_vmr) then
+                do m = 1, nq
+                    if (conv_vmr_mmr (m)) then
+                        q (is:ie, j, 1:km, m) = q (is:ie, j, 1:km, m) * adj_vmr (is:ie, 1:km)
+                    endif
+                enddo
+            endif
+
             ! compute wind tendency at A grid fori D grid wind update
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
             v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)

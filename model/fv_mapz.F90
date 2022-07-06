@@ -70,12 +70,13 @@ contains
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, &
                       inline_mp, inline_edmf, inline_sas, inline_gwd, c2l_ord, bd, &
-                      fv_debug, w_limiter, do_am4_remap, do_fast_phys)
+                      fv_debug, w_limiter, do_am4_remap, do_fast_phys, adj_mass_vmr)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
   logical, intent(in):: w_limiter
   logical, intent(in):: do_am4_remap
   logical, intent(in):: do_fast_phys
+  logical, intent(in):: adj_mass_vmr
   real,    intent(in):: mdt                   ! remap time step
   real,    intent(in):: pdt                   ! phys time step
   integer, intent(in):: npx, npy
@@ -847,7 +848,7 @@ contains
              v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, &
              inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, &
              hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf, do_inline_sas, &
-             do_inline_gwd, do_sat_adj, last_step, do_fast_phys)
+             do_inline_gwd, do_sat_adj, last_step, do_fast_phys, adj_mass_vmr)
 
 !-----------------------------------------------------------------------
 ! <<< Intermediate Physics
