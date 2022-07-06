@@ -32,7 +32,7 @@ module fast_phys_mod
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use fv_timing_mod, only: timing_on, timing_off
-    use tracer_manager_mod, only: get_tracer_index
+    use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj
     
@@ -46,11 +46,11 @@ module fast_phys_mod
 
 contains
 
-subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
+subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, inline_mp, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_mp, do_sat_adj, last_step)
+               do_inline_mp, do_sat_adj, last_step, adj_mass_vmr)
     
     implicit none
     
@@ -58,9 +58,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
 
-    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, c2l_ord
+    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_sat_adj, last_step
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_sat_adj, last_step, adj_mass_vmr
 
     real, intent (in) :: consv, mdt, akap, ptop
 
@@ -96,14 +96,16 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
     ! local variables
     ! -----------------------------------------------------------------------
 
-    integer :: i, j, k, kmp, sphum, liq_wat, ice_wat
+    logical, allocatable, dimension (:) :: conv_vmr_mmr
+
+    integer :: i, j, k, m, kmp, sphum, liq_wat, ice_wat
     integer :: rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
 
     real :: rrg
 
     real, dimension (is:ie) :: gsize
 
-    real, dimension (is:ie, km) :: q2, q3
+    real, dimension (is:ie, km) :: q2, q3, adj_vmr
 
     real, dimension (is:ie, km+1) :: phis, pe, peln
 
@@ -113,6 +115,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0
     
+    character (len = 32) :: tracer_units, tracer_name
+
     sphum = get_tracer_index (model_atmos, 'sphum')
     liq_wat = get_tracer_index (model_atmos, 'liq_wat')
     ice_wat = get_tracer_index (model_atmos, 'ice_wat')
@@ -136,6 +140,20 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
         enddo
     endif
 
+    ! decide which tracer needs adjustment
+    if (.not. allocated (conv_vmr_mmr)) allocate (conv_vmr_mmr (nq))
+    conv_vmr_mmr (:) = .false.
+    if (adj_mass_vmr) then
+        do m = 1, nq
+            call get_tracer_names (model_atmos, m, name = tracer_name, units = tracer_units)
+            if (trim (tracer_units) .eq. 'vmr') then
+                conv_vmr_mmr (m) = .true.
+            else
+                conv_vmr_mmr (m) = .false.
+            endif
+        enddo
+    endif
+
     !-----------------------------------------------------------------------
     ! Fast Saturation Adjustment >>>
     !-----------------------------------------------------------------------
@@ -152,8 +170,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 !$OMP                                    liq_wat, ice_wat, snowwat, graupel, q_con, &
 !$OMP                                    sphum, pkz, last_step, consv, te0_2d, gridstruct, &
 !$OMP                                    q, mdt, cld_amt, cappa, rrg, akap, ccn_cm3, &
-!$OMP                                    cin_cm3, aerosol, inline_mp, do_sat_adj) &
-!$OMP                           private (q2, q3, gsize, dz, pe, peln)
+!$OMP                                    cin_cm3, aerosol, inline_mp, do_sat_adj, &
+!$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq) &
+!$OMP                           private (q2, q3, gsize, dz, pe, peln, adj_vmr)
 
         do j = js, je
 
@@ -192,12 +211,12 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 
             ! fast saturation adjustment
             call fast_sat_adj (abs (mdt), is, ie, kmp, km, hydrostatic, consv .gt. consv_min, &
-                     te (is:ie, j, kmp:km), q (is:ie, j, kmp:km, sphum), q (is:ie, j, kmp:km, liq_wat), &
-                     q (is:ie, j, kmp:km, rainwat), q (is:ie, j, kmp:km, ice_wat), &
-                     q (is:ie, j, kmp:km, snowwat), q (is:ie, j, kmp:km, graupel), &
-                     q (is:ie, j, kmp:km, cld_amt), q2 (is:ie, kmp:km), q3 (is:ie, kmp:km), &
-                     hs (is:ie, j), dz (is:ie, kmp:km), pt (is:ie, j, kmp:km), &
-                     delp (is:ie, j, kmp:km), &
+                     adj_vmr (is:ie, kmp:km), te (is:ie, j, kmp:km), q (is:ie, j, kmp:km, sphum), &
+                     q (is:ie, j, kmp:km, liq_wat), q (is:ie, j, kmp:km, rainwat), &
+                     q (is:ie, j, kmp:km, ice_wat), q (is:ie, j, kmp:km, snowwat), &
+                     q (is:ie, j, kmp:km, graupel), q (is:ie, j, kmp:km, cld_amt), &
+                     q2 (is:ie, kmp:km), q3 (is:ie, kmp:km), hs (is:ie, j), &
+                     dz (is:ie, kmp:km), pt (is:ie, j, kmp:km), delp (is:ie, j, kmp:km), &
 #ifdef USE_COND
                      q_con (is:ie, j, kmp:km), &
 #else
@@ -210,6 +229,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 #endif
                      gsize, last_step, inline_mp%cond (is:ie, j), inline_mp%reevap (is:ie, j), &
                      inline_mp%dep (is:ie, j), inline_mp%sub (is:ie, j), do_sat_adj)
+
+            ! update non-microphyiscs tracers due to mass change
+            if (adj_mass_vmr) then
+                do m = 1, nq
+                    if (conv_vmr_mmr (m)) then
+                        q (is:ie, j, kmp:km, m) = q (is:ie, j, kmp:km, m) * adj_vmr (is:ie, kmp:km)
+                    endif
+                enddo
+            endif
 
             ! update pkz
             if (.not. hydrostatic) then
@@ -292,8 +320,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 !$OMP                                    sphum, w, pkz, last_step, consv, te0_2d, &
 !$OMP                                    gridstruct, q, mdt, cld_amt, cappa, rrg, akap, &
 !$OMP                                    ccn_cm3, cin_cm3, inline_mp, do_inline_mp, &
-!$OMP                                    u_dt, v_dt, aerosol) &
-!$OMP                           private (q2, q3, gsize, dz, wa, pe, peln)
+!$OMP                                    u_dt, v_dt, aerosol, adj_mass_vmr, conv_vmr_mmr, nq) &
+!$OMP                           private (q2, q3, gsize, dz, wa, pe, peln, adj_vmr)
 
         do j = js, je
 
@@ -393,7 +421,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
 #else
                      cappa (isd:, jsd, 1:), &
 #endif
-                     consv .gt. consv_min, te (is:ie, j, kmp:km), &
+                     consv .gt. consv_min, adj_vmr (is:ie, kmp:km), te (is:ie, j, kmp:km), &
                      inline_mp%pcw (is:ie, j, kmp:km), inline_mp%edw (is:ie, j, kmp:km), &
                      inline_mp%oew (is:ie, j, kmp:km), &
                      inline_mp%rrw (is:ie, j, kmp:km), inline_mp%tvw (is:ie, j, kmp:km), &
@@ -414,6 +442,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
                      inline_mp%prefluxs(is:ie, j, kmp:km), inline_mp%prefluxg(is:ie, j, kmp:km), &
                      inline_mp%cond (is:ie, j), inline_mp%dep (is:ie, j), inline_mp%reevap (is:ie, j), &
                      inline_mp%sub (is:ie, j), last_step, do_inline_mp)
+
+            ! update non-microphyiscs tracers due to mass change
+            if (adj_mass_vmr) then
+                do m = 1, nq
+                    if (conv_vmr_mmr (m)) then
+                        q (is:ie, j, kmp:km, m) = q (is:ie, j, kmp:km, m) * adj_vmr (is:ie, kmp:km)
+                    endif
+                enddo
+            endif
 
             ! update vertical velocity
             if (.not. hydrostatic) then

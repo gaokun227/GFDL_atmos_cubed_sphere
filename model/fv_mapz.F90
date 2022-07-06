@@ -68,11 +68,12 @@ contains
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
-                      w_limiter, do_am4_remap)
+                      w_limiter, do_am4_remap, adj_mass_vmr)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
   logical, intent(in):: w_limiter
   logical, intent(in):: do_am4_remap
+  logical, intent(in):: adj_mass_vmr
   real,    intent(in):: mdt                   ! remap time step
   real,    intent(in):: pdt                   ! phys time step
   integer, intent(in):: npx, npy
@@ -833,11 +834,11 @@ contains
 ! Fast Physics >>>
 !-----------------------------------------------------------------------
 
-    call fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, &
+    call fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
              c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
              v, w, pt, delp, delz, q_con, cappa, q, pkz, &
              inline_mp, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-             do_inline_mp, do_sat_adj, last_step)
+             do_inline_mp, do_sat_adj, last_step, adj_mass_vmr)
 
 !-----------------------------------------------------------------------
 ! <<< Fast Physics
