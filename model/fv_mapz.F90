@@ -1067,7 +1067,7 @@ contains
                        consv>consv_min, &
                        te(is:ie,j,:), inline_mp%cond(is:ie,j), inline_mp%dep(is:ie,j), &
                        inline_mp%reevap(is:ie,j), inline_mp%sub(is:ie,j), last_step, &
-                       do_inline_mp, phys_hydrostatic, phys_cp, nwat)
+                       do_inline_mp, phys_hydrostatic, phys_cp)
 
         if (.not. hydrostatic) then
            w(is:ie,j,:) = wa(is:ie,:)
@@ -1076,7 +1076,7 @@ contains
 
         !Tracer adjustment
         if (nwat > 0) then
-           do iq=7,nq
+           do iq=nwat+1,nq
               if (iq /= cld_amt .and. iq /= w_diff .and. adjust_mass(MODEL_ATMOS,IQ)) then
                  q(is:ie,j,:,iq) = q(is:ie,j,:,iq)/delp(is:ie,j,:)
               endif
