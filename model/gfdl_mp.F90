@@ -279,8 +279,6 @@ module gfdl_mp_mod
     real :: vg_max = 8.0 ! max fall speed for graupel
     real :: vr_max = 12. ! max fall speed for rain
 
-    logical :: disable_fall = .false. ! switch to disable sedimentation
-
     real :: xr_a = 0.25 ! p value in xu and randall, 1996
     real :: xr_b = 100. ! alpha_0 value in xu and randall, 1996
     real :: xr_c = 0.49 ! gamma value in xu and randall, 1996
@@ -329,7 +327,7 @@ module gfdl_mp_mod
     namelist / gfdl_mp_nml / &
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
-        vs_max, vg_max, vr_max, disable_fall, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
+        vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
         qi0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
         const_vs, const_vg, const_vr, use_ccn, rthresh, ccn_l, ccn_o, qc_crt, &
         tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
@@ -345,7 +343,7 @@ module gfdl_mp_mod
     public &
         t_min, t_sub, tau_r2g, tau_smlt, tau_g2r, dw_land, dw_ocean, &
         vi_fac, vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vi_max, &
-        vs_max, vg_max, vr_max, disable_fall, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
+        vs_max, vg_max, vr_max, qs_mlt, qs0_crt, qi_gen, ql0_max, qi0_max, &
         qi0_crt, do_sat_adj, rh_inc, rh_ins, rh_inr, const_vi, &
         const_vs, const_vg, const_vr, use_ccn, rthresh, ccn_l, ccn_o, qc_crt, &
         tau_g2v, tau_v2g, sat_adj0, tau_imlt, tau_v2l, tau_l2v, &
@@ -368,7 +366,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
         graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
         te, condensation, deposition, evaporation, sublimation, &
-        last_step, do_inline_mp, phys_hydrostatic, phys_cp, nwat)
+        last_step, do_inline_mp, phys_hydrostatic, phys_cp)
 
     implicit none
 
@@ -380,7 +378,6 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
 
     integer, intent (in) :: is, ie ! physics window
     integer, intent (in) :: ks, ke ! vertical dimension
-    integer, intent (in) :: nwat
 
     real, intent (in) :: dts ! physics time step
 
@@ -417,9 +414,6 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         c_air = cp_air
         c_vap = cp_vap
         do_sedi_w = .false.
-    else if (phys_hydrostatic .or. phys_cp) then
-       c_air = cp_air
-       c_vap = cp_vap
     else
         c_air = cv_air
         c_vap = cv_vap
@@ -460,7 +454,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
         condensation, deposition, evaporation, sublimation, last_step, &
-        do_inline_mp, phys_hydrostatic, phys_cp, nwat)
+        do_inline_mp, phys_hydrostatic, phys_cp)
 
 end subroutine gfdl_mp_driver
 
@@ -484,7 +478,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
         condensation, deposition, evaporation, sublimation, last_step, &
-        do_inline_mp, phys_hydrostatic, phys_cp, nwat)
+        do_inline_mp, phys_hydrostatic, phys_cp)
 
     implicit none
 
@@ -492,7 +486,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     logical, intent (in) :: last_step
     logical, intent (in) :: consv_te
     logical, intent (in) :: do_inline_mp
-    integer, intent (in) :: is, ie, ks, ke, nwat
+    integer, intent (in) :: is, ie, ks, ke
     logical, intent (in) :: phys_hydrostatic, phys_cp
     real, intent (in) :: dt_in
     real, intent (in), dimension (is:ie) :: gsize
@@ -605,27 +599,19 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! save moist ratios for te:
             q_liq (k) = qlz (k) + qrz (k)
             q_sol (k) = qiz (k) + qsz (k) + qgz (k)
+            q_cond = q_liq (k) + q_sol (k)
             qaz (k) = 0.
             dz1 (k) = dz (i, k)
-            if (nwat > 0) then
-               con_r8 = one_r8 - qvz (k)
-               if (nwat >= 2) con_r8 = con_r8 - qlz(k)
-               if (nwat >= 3) con_r8 = con_r8 - qrz(k)
-               if (nwat >= 4) con_r8 = con_r8 - qiz(k)
-               if (nwat >= 5) con_r8 = con_r8 - qsz(k)
-               if (nwat >= 6) con_r8 = con_r8 - qgz(k)
-               ! dp1 is dry mass (no change during mp)
-               dp1 (k) = dp0 (k) * con_r8
-               con_r8 = one_r8 / con_r8
-               qvz (k) = qvz (k) * con_r8
-               qlz (k) = qlz (k) * con_r8
-               qrz (k) = qrz (k) * con_r8
-               qiz (k) = qiz (k) * con_r8
-               qsz (k) = qsz (k) * con_r8
-               qgz (k) = qgz (k) * con_r8
-            else
-               dp1 (k) = dp0 (k)
-            endif
+            con_r8 = one_r8 - (qvz (k) + q_cond)
+            ! dp1 is dry mass (no change during mp)
+            dp1 (k) = dp0 (k) * con_r8
+            con_r8 = one_r8 / con_r8
+            qvz (k) = qvz (k) * con_r8
+            qlz (k) = qlz (k) * con_r8
+            qrz (k) = qrz (k) * con_r8
+            qiz (k) = qiz (k) * con_r8
+            qsz (k) = qsz (k) * con_r8
+            qgz (k) = qgz (k) * con_r8
 
             den (k) = - dp1 (k) / (grav * dz1 (k)) ! density of dry air
             p1 (k) = den (k) * rdgas * tz (k) ! dry air pressure
@@ -770,19 +756,15 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             ! sedimentation of cloud ice, snow, and graupel
             ! -----------------------------------------------------------------------
 
-            if (.not. disable_fall) then
+            call fall_speed (ks, ke, den, qsz, qiz, qgz, qlz, tz, vtsz, vtiz, vtgz)
 
-               call fall_speed (ks, ke, den, qsz, qiz, qgz, qlz, tz, vtsz, vtiz, vtgz)
+            call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
+                dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, dte (i))
 
-               call terminal_fall (dts, ks, ke, tz, qvz, qlz, qrz, qgz, qsz, qiz, &
-                    dz1, dp1, den, vtgz, vtsz, vtiz, r1, g1, s1, i1, m1_sol, w1, dte (i))
-
-               rain (i) = rain (i) + r1 * convt ! from melted snow & ice that reached the ground
-               snow (i) = snow (i) + s1 * convt
-               graupel (i) = graupel (i) + g1 * convt
-               ice (i) = ice (i) + i1 * convt
-
-            end if
+            rain (i) = rain (i) + r1 * convt ! from melted snow & ice that reached the ground
+            snow (i) = snow (i) + s1 * convt
+            graupel (i) = graupel (i) + g1 * convt
+            ice (i) = ice (i) + i1 * convt
 
             ! -----------------------------------------------------------------------
             ! energy loss during sedimentation heating
@@ -923,24 +905,16 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
 
         do k = ks, ke
             ! total mass changed due to sedimentation !!!
-            !con_r8 = one_r8 + qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
-            if (nwat > 0) then
-              con_r8 = one_r8 + qvz(k)
-              if (nwat >= 2) con_r8 = con_r8 + qlz(k)
-              if (nwat >= 3) con_r8 = con_r8 + qrz(k)
-              if (nwat >= 4) con_r8 = con_r8 + qiz(k)
-              if (nwat >= 5) con_r8 = con_r8 + qsz(k)
-              if (nwat >= 6) con_r8 = con_r8 + qgz(k)
-              delp (i, k) = dp1 (k) * con_r8
-              ! convert back to moist mixing ratios
-              con_r8 = one_r8 / con_r8
-              qvz (k) = qvz (k) * con_r8
-              qlz (k) = qlz (k) * con_r8
-              qrz (k) = qrz (k) * con_r8
-              qiz (k) = qiz (k) * con_r8
-              qsz (k) = qsz (k) * con_r8
-              qgz (k) = qgz (k) * con_r8
-            endif
+            con_r8 = one_r8 + qvz (k) + qlz (k) + qrz (k) + qiz (k) + qsz (k) + qgz (k)
+            delp (i, k) = dp1 (k) * con_r8
+            ! convert back to moist mixing ratios
+            con_r8 = one_r8 / con_r8
+            qvz (k) = qvz (k) * con_r8
+            qlz (k) = qlz (k) * con_r8
+            qrz (k) = qrz (k) * con_r8
+            qiz (k) = qiz (k) * con_r8
+            qsz (k) = qsz (k) * con_r8
+            qgz (k) = qgz (k) * con_r8
             ! all are moist mixing ratios at this point on:
             qv (i, k) = qvz (k)
             ql (i, k) = qlz (k)
@@ -958,14 +932,14 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             cappa (i, k) = tmp / (tmp + cvm (k))
 #endif
             if (do_inline_mp) then
-               if (phys_hydrostatic) then
-                  dz(i,k) = dz(i,k)/pt(i,k)
+               if (phys_hydrostatic .or. phys_cp) then
+                  if (.not. phys_cp) dz(i,k) = dz(i,k)/pt(i,k)
 #ifdef MOIST_CAPPA
-                  pt (i, k) = tz (k) * (1. + zvir * qvz (k)) * (1. - q_cond)
+                  pt (i, k) = pt(i,k) + (tz (k) * (1. + zvir * qvz (k)) * (1. - q_cond) - pt(i,k)) * cvm(k) / cp_air
 #else
-                  pt (i, k) = tz (k) * (1. + zvir * qvz (k))
+                  pt (i, k) = pt(i,k) + (tz (k) * (1. + zvir * qvz (k)) - pt(i,k)) * cvm(k) / cp_air
 #endif
-                  dz(i,k) = dz(i,k)*pt(i,k)
+                  if (.not. phys_cp) dz(i,k) = dz(i,k)*pt(i,k)
                else
 #ifdef MOIST_CAPPA
                   pt (i, k) = tz (k) * (1. + zvir * qvz (k)) * (1. - q_cond)
@@ -1186,21 +1160,20 @@ subroutine warm_rain (dt, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
         ! -----------------------------------------------------------------------
         ! mass flux induced by falling rain
         ! -----------------------------------------------------------------------
-        if (.not. disable_fall) then
-           if (use_ppm) then
-              zt (ks) = ze (ks)
-              do k = ks + 1, ke
-                 zt (k) = ze (k) - dt5 * (vtr (k - 1) + vtr (k))
-              enddo
-              zt (ke + 1) = zs - dt * vtr (ke)
 
-              do k = ks, ke
-                 if (zt (k + 1) >= zt (k)) zt (k + 1) = zt (k) - dz_min
-              enddo
-              call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qr, r1, m1_rain, mono_prof)
-           else
-              call implicit_fall (dt, ks, ke, ze, vtr, dp, qr, r1, m1_rain)
-           endif
+        if (use_ppm) then
+            zt (ks) = ze (ks)
+            do k = ks + 1, ke
+                zt (k) = ze (k) - dt5 * (vtr (k - 1) + vtr (k))
+            enddo
+            zt (ke + 1) = zs - dt * vtr (ke)
+
+            do k = ks, ke
+                if (zt (k + 1) >= zt (k)) zt (k + 1) = zt (k) - dz_min
+            enddo
+            call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qr, r1, m1_rain, mono_prof)
+        else
+            call implicit_fall (dt, ks, ke, ze, vtr, dp, qr, r1, m1_rain)
         endif
 
         ! -----------------------------------------------------------------------
@@ -2737,15 +2710,12 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             enddo
         endif
 
-        if (.not. disable_fall) then
-
-           if (use_ppm_ice) then
-              call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qi, i1, m1_sol, mono_prof)
-           else
-              call implicit_fall (dtm, ks, ke, ze, vti, dp, qi, i1, m1_sol)
-           endif
-
+        if (use_ppm_ice) then
+            call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qi, i1, m1_sol, mono_prof)
+        else
+            call implicit_fall (dtm, ks, ke, ze, vti, dp, qi, i1, m1_sol)
         endif
+
         ! -----------------------------------------------------------------------
         ! energy loss during sedimentation
         ! -----------------------------------------------------------------------
@@ -2830,14 +2800,10 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             enddo
         endif
 
-        if (.not. disable_fall) then
-
-           if (use_ppm) then
-              call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qs, s1, m1, mono_prof)
-           else
-              call implicit_fall (dtm, ks, ke, ze, vts, dp, qs, s1, m1)
-           endif
-
+        if (use_ppm) then
+            call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qs, s1, m1, mono_prof)
+        else
+            call implicit_fall (dtm, ks, ke, ze, vts, dp, qs, s1, m1)
         endif
 
         ! -----------------------------------------------------------------------
@@ -2925,14 +2891,10 @@ subroutine terminal_fall (dtm, ks, ke, tz, qv, ql, qr, qg, qs, qi, dz, dp, &
             enddo
         endif
 
-        if (.not. disable_fall) then
-
-           if (use_ppm) then
-              call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qg, g1, m1, mono_prof)
-           else
-              call implicit_fall (dtm, ks, ke, ze, vtg, dp, qg, g1, m1)
-           endif
-
+        if (use_ppm) then
+            call lagrangian_fall_ppm (ks, ke, zs, ze, zt, dp, qg, g1, m1, mono_prof)
+        else
+            call implicit_fall (dtm, ks, ke, ze, vtg, dp, qg, g1, m1)
         endif
 
         ! -----------------------------------------------------------------------
