@@ -592,7 +592,9 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             plyr (i, k) = 0.01 * prsl (i, k) ! pa to mb (hpa)
             ! compute relative humidity
             es = 0.01 * mqs (t1 (i, k)) ! mqs in pa
-            qs = max (qmin, eps * es / (plyr (i, k) + epsm1 * es))
+            ! revise it to a stable format -- Linjiong Zhou, 7/19/2022
+            ! qs = max (qmin, eps * es / (plyr (i, k) + epsm1 * es))
+            qs = max (qmin, es / plyr (i, k) * eps * (1 + zvir * q1g (i, k, 1)))
             rhly (i, k) = max (0.0, min (1.0, max (qmin, q1g (i, k, 1)) / qs))
             qstl (i, k) = qs
         enddo
