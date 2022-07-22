@@ -1109,9 +1109,9 @@ contains
        
           call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, flagstruct%nwat, &
              flagstruct%c2l_ord, dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
-             delp, delz, q_con, cappa, q, pkz, zvir, inline_edmf, inline_gwd, &
+             delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, inline_edmf, inline_gwd, &
              gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-             flagstruct%do_inline_edmf, flagstruct%do_inline_gwd, flagstruct%adj_mass_vmr)
+             flagstruct%do_inline_edmf, flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 
           call timing_on('COMM_TOTAL')
           call start_group_halo_update(i_pack(1), delp, domain, complete=.false.)

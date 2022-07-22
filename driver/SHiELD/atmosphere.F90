@@ -296,7 +296,7 @@ contains
 !--- allocate pref
    allocate(pref(npz+1,2), dum1d(npz+1))
 
-   call gfdl_mp_init(input_nml_file, stdlog())
+   call gfdl_mp_init(input_nml_file, stdlog(), Atm(mygrid)%flagstruct%hydrostatic)
    call sa_tke_edmf_init(input_nml_file, stdlog())
    call sa_sas_init(input_nml_file, stdlog())
    call sa_gwd_init(input_nml_file, stdlog())

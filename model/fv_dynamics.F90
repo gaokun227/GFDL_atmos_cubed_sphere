@@ -598,7 +598,7 @@ contains
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
                      pkz, pk, mdt, bdt, npx, npy, npz, is,ie,js,je, isd,ied,jsd,jed,       &
                      nr, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
-                     zvir, cp_air, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
+                     zvir, cp_air, flagstruct%te_err, flagstruct%tw_err, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
                      kord_tracer, flagstruct%kord_tm, flagstruct%remap_te, peln, te_2d, &
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
                      ptop, ak, bk, pfull, gridstruct, domain,   &
@@ -608,7 +608,7 @@ contains
                      flagstruct%do_inline_edmf, flagstruct%do_inline_sas, flagstruct%do_inline_gwd, &
                      inline_mp, inline_edmf, inline_sas, inline_gwd, flagstruct%c2l_ord, bd, &
                      flagstruct%fv_debug, flagstruct%w_limiter, flagstruct%do_am4_remap, &
-                     flagstruct%do_fast_phys, flagstruct%adj_mass_vmr)
+                     flagstruct%do_fast_phys, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split

@@ -35,7 +35,7 @@ module fast_phys_mod
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
-    use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap
+    use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap, mtetw
     use sa_tke_edmf_mod, only: sa_tke_edmf_sfc, sa_tke_edmf_pbl
     use sa_gwd_mod, only: sa_gwd_oro
     
@@ -47,13 +47,19 @@ module fast_phys_mod
 
     public :: fast_phys
 
+    ! -----------------------------------------------------------------------
+    ! precision definition
+    ! -----------------------------------------------------------------------
+    
+    integer, parameter :: r8 = 8 ! double precision
+    
 contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                c2l_ord, mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
-               delp, delz, q_con, cappa, q, pkz, r_vir, inline_edmf, inline_gwd, &
+               delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_edmf, inline_gwd, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_edmf, do_inline_gwd, adj_mass_vmr)
+               do_inline_edmf, do_inline_gwd, consv_checker, adj_mass_vmr)
     
     implicit none
     
@@ -63,13 +69,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord, nwat
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_edmf, do_inline_gwd, adj_mass_vmr
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_edmf, do_inline_gwd
+    logical, intent (in) :: adj_mass_vmr, consv_checker
 
-    real, intent (in) :: consv, mdt, akap, r_vir, ptop
+    real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
-    real, intent (in), dimension (is:, js:, 1:) :: delz
+    real, intent (inout), dimension (is:, js:, 1:) :: delz
     
     real, intent (inout), dimension (isd:, jsd:, 1:) :: q_con, cappa, w
     
@@ -118,11 +125,17 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     integer, allocatable, dimension (:) :: kinver, vegtype
 
-    real, allocatable, dimension (:) :: rn, rb, u10m, v10m, sigmaf, stress, wind, tmp
+    real, allocatable, dimension (:) :: rn, rb, u10m, v10m, sigmaf, stress, wind, tmp, wz
 
     real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql, ta, uu, vv, ww, radh
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
+    
+    real (kind = r8), allocatable, dimension (:) :: tz
+
+    real (kind = r8), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
+
+    real (kind = r8), dimension (is:ie, 1:km) :: te_beg, te_end, tw_beg, tw_end
     
     character (len = 32) :: tracer_units, tracer_name
 
@@ -205,6 +218,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         allocate (sigmaf (is:ie))
         allocate (vegtype (is:ie))
 
+        allocate (tz (1:km))
+        allocate (wz (1:km))
+
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
@@ -236,18 +252,21 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             dp0 = delp
         endif
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, w, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
 !$OMP                                    ptop, ntke, inline_edmf, safety_check, nwat, &
-!$OMP                                    adj_mass_vmr, conv_vmr_mmr) &
+!$OMP                                    adj_mass_vmr, conv_vmr_mmr, consv_checker, &
+!$OMP                                    te_err, tw_err) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, adj_vmr, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
 !$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
-!$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt)
+!$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, &
+!$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
+!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)
 
         do j = js, je
  
@@ -269,6 +288,31 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     q (is:ie, j, 1:km, sphum) * cv_vap + qliq * c_liq + qsol * c_ice
                 te (is:ie, j, 1:km) = - cvm * pt (is:ie, j, 1:km) / ((1. + r_vir * q (is:ie, j, 1:km, sphum)) * &
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
+            endif
+
+            ! total energy checker
+            if (consv_checker) then
+                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
+                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
+                te_beg (is:ie, 1:km) = 0.0
+                tw_beg (is:ie, 1:km) = 0.0
+                te_b_beg (is:ie) = 0.0
+                tw_b_beg (is:ie) = 0.0
+                do i = is, ie
+                    tz = pt (i, j, 1:km) / ((1. + r_vir * q (i, j, 1:km, sphum)) * (1. - (qliq (i, 1:km) + qsol (i, 1:km))))
+                    if (hydrostatic) then
+                        wz = 0.0
+                    else
+                        wz = w (i, j, 1:km)
+                    endif
+                    dte (i) = 0.0
+                    call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
+                        q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
+                        q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
+                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
+                        0.0, abs (mdt), te_beg (i, :), tw_beg (i, :), &
+                        te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
+                enddo
             endif
 
             ! calculate pe, peln
@@ -445,6 +489,31 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 #endif
             endif
  
+            ! total energy checker
+            if (consv_checker) then
+                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
+                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
+                te_end (is:ie, 1:km) = 0.0
+                tw_end (is:ie, 1:km) = 0.0
+                te_b_end (is:ie) = 0.0
+                tw_b_end (is:ie) = 0.0
+                do i = is, ie
+                    tz = pt (i, j, 1:km) / ((1. + r_vir * q (i, j, 1:km, sphum)) * (1. - (qliq (i, 1:km) + qsol (i, 1:km))))
+                    if (hydrostatic) then
+                        wz = 0.0
+                    else
+                        wz = w (i, j, 1:km)
+                    endif
+                    dte (i) = 0.0
+                    call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
+                        q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
+                        q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
+                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
+                        0.0, abs (mdt), te_end (i, :), tw_end (i, :), &
+                        te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
+                enddo
+            endif
+
             ! total energy after parameterization, add total energy change to te0_2d
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
@@ -456,6 +525,29 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
                 do k = 1, km
                     te0_2d (is:ie, j) = te0_2d (is:ie, j) + te (is:ie, j, k)
+                enddo
+            endif
+
+            ! total energy checker
+            if (consv_checker) then
+                do i = is, ie
+                    if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                         (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
+                        print*, "SA-TKE-EDMF-FAST TE: ", &
+                            !(sum (te_beg (i, :)) + te_b_beg (i)) / (gsize (i) ** 2), &
+                            !(sum (te_end (i, :)) + te_b_end (i)) / (gsize (i) ** 2), &
+                            (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                            (sum (te_beg (i, :)) + te_b_beg (i))
+                    endif
+                    if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                         (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
+                        print*, "SA-TKE-EDMF-FAST TW: ", &
+                            !(sum (tw_beg (i, :)) + tw_b_beg (i)) / (gsize (i) ** 2), &
+                            !(sum (tw_end (i, :)) + tw_b_end (i)) / (gsize (i) ** 2), &
+                            (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                            (sum (tw_beg (i, :)) + tw_b_beg (i))
+                    endif
+                    !print*, "SA-TKE-EDMF-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
                 enddo
             endif
 
@@ -485,6 +577,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         deallocate (wind)
         deallocate (sigmaf)
         deallocate (vegtype)
+
+        deallocate (tz)
+        deallocate (wz)
 
         ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
         if ( gridstruct%square_domain ) then
@@ -590,6 +685,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
+        allocate (tz (1:km))
+        allocate (wz (1:km))
+
         ! initialize wind tendencies
         do k = 1, km
             do j = jsd, jed
@@ -618,16 +716,19 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             dp0 = delp
         endif
 
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, ua, va, &
+!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, ua, va, w, &
 !$OMP                                    te, delp, hydrostatic, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_gwd, &
 !$OMP                                    ptop, inline_edmf, u_dt, v_dt, safety_check, &
-!$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq) &
+!$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq, consv_checker, &
+!$OMP                                    te_err, tw_err) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, pe, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
-!$OMP                                    cvm, kr, dqv, ps_dt, c_moist, peln, adj_vmr)
+!$OMP                                    cvm, kr, dqv, ps_dt, c_moist, peln, adj_vmr, &
+!$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
+!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)
 
         do j = js, je
  
@@ -646,6 +747,31 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     q (is:ie, j, 1:km, sphum) * cv_vap + qliq * c_liq + qsol * c_ice
                 te (is:ie, j, 1:km) = - cvm * pt (is:ie, j, 1:km) / ((1. + r_vir * q (is:ie, j, 1:km, sphum)) * &
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
+            endif
+
+            ! total energy checker
+            if (consv_checker) then
+                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
+                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
+                te_beg (is:ie, 1:km) = 0.0
+                tw_beg (is:ie, 1:km) = 0.0
+                te_b_beg (is:ie) = 0.0
+                tw_b_beg (is:ie) = 0.0
+                do i = is, ie
+                    tz = pt (i, j, 1:km) / ((1. + r_vir * q (i, j, 1:km, sphum)) * (1. - (qliq (i, 1:km) + qsol (i, 1:km))))
+                    if (hydrostatic) then
+                        wz = 0.0
+                    else
+                        wz = w (i, j, 1:km)
+                    endif
+                    dte (i) = 0.0
+                    call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
+                        q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
+                        q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
+                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
+                        0.0, abs (mdt), te_beg (i, :), tw_beg (i, :), &
+                        te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
+                enddo
             endif
 
             ! calculate pe, peln
@@ -782,6 +908,31 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 #endif
             endif
  
+            ! total energy checker
+            if (consv_checker) then
+                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
+                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
+                te_end (is:ie, 1:km) = 0.0
+                tw_end (is:ie, 1:km) = 0.0
+                te_b_end (is:ie) = 0.0
+                tw_b_end (is:ie) = 0.0
+                do i = is, ie
+                    tz = pt (i, j, 1:km) / ((1. + r_vir * q (i, j, 1:km, sphum)) * (1. - (qliq (i, 1:km) + qsol (i, 1:km))))
+                    if (hydrostatic) then
+                        wz = 0.0
+                    else
+                        wz = w (i, j, 1:km)
+                    endif
+                    dte (i) = 0.0
+                    call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
+                        q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
+                        q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
+                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
+                        0.0, abs (mdt), te_end (i, :), tw_end (i, :), &
+                        te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
+                enddo
+            endif
+
             ! total energy after parameterization, add total energy change to te0_2d
             if (consv .gt. consv_min) then
                 qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
@@ -793,6 +944,29 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     (1. - (qliq + qsol))) * delp (is:ie, j, 1:km)
                 do k = 1, km
                     te0_2d (is:ie, j) = te0_2d (is:ie, j) + te (is:ie, j, k)
+                enddo
+            endif
+
+            ! total energy checker
+            if (consv_checker) then
+                do i = is, ie
+                    if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                         (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
+                        print*, "SA-GWD-FAST TE: ", &
+                            !(sum (te_beg (i, :)) + te_b_beg (i)) / (gsize (i) ** 2), &
+                            !(sum (te_end (i, :)) + te_b_end (i)) / (gsize (i) ** 2), &
+                            (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                            (sum (te_beg (i, :)) + te_b_beg (i))
+                    endif
+                    if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                         (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
+                        print*, "SA-GWD-FAST TW: ", &
+                            !(sum (tw_beg (i, :)) + tw_b_beg (i)) / (gsize (i) ** 2), &
+                            !(sum (tw_end (i, :)) + tw_b_end (i)) / (gsize (i) ** 2), &
+                            (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                            (sum (tw_beg (i, :)) + tw_b_beg (i))
+                    endif
+                    !print*, "SA-GWD-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
                 enddo
             endif
 
@@ -809,6 +983,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         deallocate (qv)
         deallocate (uu)
         deallocate (vv)
+
+        deallocate (tz)
+        deallocate (wz)
 
         ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
         if ( gridstruct%square_domain ) then

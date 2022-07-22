@@ -63,19 +63,20 @@ contains
 
  subroutine Lagrangian_to_Eulerian(last_step, consv, ps, pe, delp, pkz, pk,   &
                                    mdt, pdt, npx, npy, km, is,ie,js,je, isd,ied,jsd,jed,       &
-                      nq, nwat, sphum, q_con, u, v, w, delz, pt, q, hs, r_vir, cp,  &
+                      nq, nwat, sphum, q_con, u, v, w, delz, pt, q, hs, r_vir, cp, te_err, tw_err, &
                       akap, cappa, kord_mt, kord_wz, kord_tr, kord_tm, remap_te, peln, te0_2d,        &
                       ng, ua, va, omga, te, ws, fill, reproduce_sum,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, &
                       inline_mp, inline_edmf, inline_sas, inline_gwd, c2l_ord, bd, &
-                      fv_debug, w_limiter, do_am4_remap, do_fast_phys, adj_mass_vmr)
+                      fv_debug, w_limiter, do_am4_remap, do_fast_phys, consv_checker, adj_mass_vmr)
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
   logical, intent(in):: w_limiter
   logical, intent(in):: do_am4_remap
   logical, intent(in):: do_fast_phys
+  logical, intent(in):: consv_checker
   logical, intent(in):: adj_mass_vmr
   real,    intent(in):: mdt                   ! remap time step
   real,    intent(in):: pdt                   ! phys time step
@@ -96,6 +97,8 @@ contains
   real, intent(in):: consv                 ! factor for TE conservation
   real, intent(in):: r_vir
   real, intent(in):: cp
+  real, intent(in):: te_err
+  real, intent(in):: tw_err
   real, intent(in):: akap
   real, intent(in):: hs(isd:ied,jsd:jed)  ! surface geopotential
   real, intent(inout):: te0_2d(is:ie,js:je)
@@ -845,10 +848,10 @@ contains
 
     call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
              c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
-             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, &
+             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
              inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, &
              hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf, do_inline_sas, &
-             do_inline_gwd, do_sat_adj, last_step, do_fast_phys, adj_mass_vmr)
+             do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr)
 
 !-----------------------------------------------------------------------
 ! <<< Intermediate Physics
