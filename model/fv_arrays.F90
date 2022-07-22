@@ -361,6 +361,10 @@ module fv_arrays_mod
    logical :: do_sat_adj= .false.   !< Controls split GFDL Microphysics. .false. by default. Must have the same
                                     !< value as do_sat_adj in gfdl_mp_nml. Not compatible with other microphysics
                                     !< schemes. Also requires GFDL microphysics be installed within the physics driver.
+   logical :: consv_checker = .false.!< turn on energy and water conservation checker
+   logical :: do_fast_phys = .false.!< Controls fast physics, in which the SA-TKE-EDMF and part of the GWD are 
+                                    !< within the acoustic time step of FV3. If .true. disabling the SA-TKE-EDMF 
+                                    !< and part of the GWD in the intermediate physics.
    logical :: do_inline_mp = .false.!< Controls Inline GFDL cloud microphysics, in which the full microphysics is
                                     !< called entirely within FV3. If .true. disabling microphysics within the physics
                                     !< is very strongly recommended. .false. by default.
@@ -691,6 +695,8 @@ module fv_arrays_mod
                          !< considered; and for non-hydrostatic models values of 10 or less should be
                          !< considered, with smaller values for higher-resolution.
    real    :: rf_cutoff = 30.E2   !< Pressure below which no Rayleigh damping is applied if tau > 0.
+   real    :: te_err = 1.e-5 !< 64bit: 1.e-14, 32bit: 1.e-7; turn off to save computer time
+   real    :: tw_err = 1.e-8 !< 64bit: 1.e-14, 32bit: 1.e-7; turn off to save computer time
    logical :: filter_phys = .false.
    logical :: dwind_2d = .false.   !< Whether to use a simpler & faster algorithm for interpolating
                                    !< the A-grid (cell-centered) wind tendencies computed from the physics
@@ -1034,6 +1040,7 @@ module fv_arrays_mod
   end type fv_nest_type
 
   type inline_mp_type
+
     real, _ALLOCATABLE :: prew(:,:)     _NULL
     real, _ALLOCATABLE :: prer(:,:)     _NULL
     real, _ALLOCATABLE :: prei(:,:)     _NULL
@@ -1086,6 +1093,7 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: t_dt(:,:,:)
     real, _ALLOCATABLE :: u_dt(:,:,:)
     real, _ALLOCATABLE :: v_dt(:,:,:)
+
   end type inline_mp_type
 
   type phys_diag_type

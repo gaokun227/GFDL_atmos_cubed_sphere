@@ -293,7 +293,7 @@ contains
 !--- allocate pref
    allocate(pref(npz+1,2), dum1d(npz+1))
 
-   call gfdl_mp_init(input_nml_file, stdlog())
+   call gfdl_mp_init(input_nml_file, stdlog(), Atm(mygrid)%flagstruct%hydrostatic)
 
    call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, &
                    Atm(mygrid)%gridstruct%grid_type, mygrid, IAU_Data)

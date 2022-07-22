@@ -29,12 +29,12 @@ module fast_phys_mod
 
     use constants_mod, only: rdgas, grav
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
-    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type
+    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
-    use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj
+    use gfdl_mp_mod, only: mtetw
     
     implicit none
     
@@ -44,13 +44,19 @@ module fast_phys_mod
 
     public :: fast_phys
 
+    ! -----------------------------------------------------------------------
+    ! precision definition
+    ! -----------------------------------------------------------------------
+    
+    integer, parameter :: r8 = 8 ! double precision
+    
 contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
-               c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, pt, &
-               delp, delz, q_con, cappa, q, pkz, inline_mp, &
+               c2l_ord, mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
+               delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_mp, do_sat_adj, last_step, adj_mass_vmr)
+               consv_checker, adj_mass_vmr)
     
     implicit none
     
@@ -60,11 +66,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_sat_adj, last_step, adj_mass_vmr
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, consv_checker, adj_mass_vmr
 
-    real, intent (in) :: consv, mdt, akap, ptop
-
-    real, intent (in), dimension (km) :: pfull
+    real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
@@ -90,7 +94,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     type (domain2d), intent (inout) :: domain
 
-    type (inline_mp_type), intent (inout) :: inline_mp
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -105,15 +108,23 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     real, dimension (is:ie) :: gsize
 
-    real, dimension (is:ie, km) :: q2, q3, adj_vmr
+    real, dimension (is:ie, km) :: q2, q3, qliq, qsol, adj_vmr
 
     real, dimension (is:ie, km+1) :: phis, pe, peln
 
     real, dimension (isd:ied, jsd:jed, km) :: te, ua, va
 
+    real, allocatable, dimension (:) :: wz
+
     real, allocatable, dimension (:,:) :: dz, wa
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0
+    
+    real (kind = r8), allocatable, dimension (:) :: tz
+
+    real (kind = r8), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
+
+    real (kind = r8), dimension (is:ie, 1:km) :: te_beg, te_end, tw_beg, tw_end
     
     character (len = 32) :: tracer_units, tracer_name
 
@@ -130,16 +141,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     rrg = - rdgas / grav
 
-    ! time saving trick
-    if (last_step) then
-        kmp = 1
-    else
-        do k = 1, km
-            kmp = k
-            if (pfull (k) .gt. 50.E2) exit
-        enddo
-    endif
-
     ! decide which tracer needs adjustment
     if (.not. allocated (conv_vmr_mmr)) allocate (conv_vmr_mmr (nq))
     conv_vmr_mmr (:) = .false.
@@ -155,448 +156,43 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     endif
 
     !-----------------------------------------------------------------------
-    ! Fast Saturation Adjustment >>>
+    ! pt conversion
     !-----------------------------------------------------------------------
 
-    ! Note: pt at this stage is T_v
-    if (do_adiabatic_init .or. (.not. do_inline_mp) .or. do_sat_adj) then
-
-        call timing_on ('fast_sat_adj')
-
-        allocate (dz (is:ie, kmp:km))
-
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, kmp, km, te, ptop, &
-!$OMP                                    delp, hydrostatic, hs, pt, delz, rainwat, &
-!$OMP                                    liq_wat, ice_wat, snowwat, graupel, q_con, &
-!$OMP                                    sphum, pkz, last_step, consv, te0_2d, gridstruct, &
-!$OMP                                    q, mdt, cld_amt, cappa, rrg, akap, ccn_cm3, &
-!$OMP                                    cin_cm3, aerosol, inline_mp, do_sat_adj, &
-!$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq) &
-!$OMP                           private (q2, q3, gsize, dz, pe, peln, adj_vmr)
-
+    do k = 1, km
         do j = js, je
-
-            ! grid size
-            gsize (is:ie) = sqrt (gridstruct%area_64 (is:ie, j))
-
-            ! aerosol
-            if (aerosol .gt. 0) then
-                q2 (is:ie, kmp:km) = q (is:ie, j, kmp:km, aerosol)
-            elseif (ccn_cm3 .gt. 0) then
-                q2 (is:ie, kmp:km) = q (is:ie, j, kmp:km, ccn_cm3)
-            else
-                q2 (is:ie, kmp:km) = 0.0
-            endif
-            if (cin_cm3 .gt. 0) then
-                q3 (is:ie, kmp:km) = q (is:ie, j, kmp:km, cin_cm3)
-            else
-                q3 (is:ie, kmp:km) = 0.0
-            endif
- 
-            ! calculate pe, peln
-            pe (is:ie, 1) = ptop
-            peln (is:ie, 1) = log (ptop)
-            do k = 2, km + 1
-                pe (is:ie, k) = pe (is:ie, k-1) + delp (is:ie, j, k-1)
-                peln (is:ie, k) = log (pe (is:ie, k))
-            enddo
-
-            ! layer thickness
-            if (.not. hydrostatic) then
-                dz (is:ie, kmp:km) = delz (is:ie, j, kmp:km)
-            else
-                dz (is:ie, kmp:km) = (peln (is:ie, kmp+1:km+1) - peln (is:ie, kmp:km)) * &
-                    rrg * pt (is:ie, j, kmp:km)
-            endif
-
-            ! fast saturation adjustment
-            call fast_sat_adj (abs (mdt), is, ie, kmp, km, hydrostatic, consv .gt. consv_min, &
-                     adj_vmr (is:ie, kmp:km), te (is:ie, j, kmp:km), q (is:ie, j, kmp:km, sphum), &
-                     q (is:ie, j, kmp:km, liq_wat), q (is:ie, j, kmp:km, rainwat), &
-                     q (is:ie, j, kmp:km, ice_wat), q (is:ie, j, kmp:km, snowwat), &
-                     q (is:ie, j, kmp:km, graupel), q (is:ie, j, kmp:km, cld_amt), &
-                     q2 (is:ie, kmp:km), q3 (is:ie, kmp:km), hs (is:ie, j), &
-                     dz (is:ie, kmp:km), pt (is:ie, j, kmp:km), delp (is:ie, j, kmp:km), &
-#ifdef USE_COND
-                     q_con (is:ie, j, kmp:km), &
-#else
-                     q_con (isd:, jsd, 1:), &
-#endif
+            do i = is, ie
 #ifdef MOIST_CAPPA
-                     cappa (is:ie, j, kmp:km), &
+                pt (i, j, k) = pt (i, j, k) * exp (cappa (i, j, k) / (1. - cappa (i, j, k)) * &
+                    log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
 #else
-                     cappa (isd:, jsd, 1:), &
+                pt (i, j, k) = pt (i, j, k) * exp (akap / (1 - akap) * &
+                    log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
 #endif
-                     gsize, last_step, inline_mp%cond (is:ie, j), inline_mp%reevap (is:ie, j), &
-                     inline_mp%dep (is:ie, j), inline_mp%sub (is:ie, j), do_sat_adj)
-
-            ! update non-microphyiscs tracers due to mass change
-            if (adj_mass_vmr) then
-                do m = 1, nq
-                    if (conv_vmr_mmr (m)) then
-                        q (is:ie, j, kmp:km, m) = q (is:ie, j, kmp:km, m) * adj_vmr (is:ie, kmp:km)
-                    endif
-                enddo
-            endif
-
-            ! update pkz
-            if (.not. hydrostatic) then
-#ifdef MOIST_CAPPA
-                pkz (is:ie, j, kmp:km) = exp (cappa (is:ie, j, kmp:km) * &
-                    log (rrg * delp (is:ie, j, kmp:km) / &
-                    delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
-#else
-                pkz (is:ie, j, kmp:km) = exp (akap * log (rrg * delp (is:ie, j, kmp:km) / &
-                    delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
-#endif
-            endif
- 
-            ! add total energy change to te0_2d
-            if (consv .gt. consv_min) then
-                do i = is, ie
-                    do k = kmp, km
-                        te0_2d (i, j) = te0_2d (i, j) + te (i, j, k)
-                    enddo
-                enddo
-            endif
-
-        enddo
-
-        deallocate (dz)
-
-        call timing_off ('fast_sat_adj')
-
-    endif
-
-    !-----------------------------------------------------------------------
-    ! <<< Fast Saturation Adjustment
-    !-----------------------------------------------------------------------
-
-    !-----------------------------------------------------------------------
-    ! Inline GFDL MP >>>
-    !-----------------------------------------------------------------------
-
-    if ((.not. do_adiabatic_init) .and. do_inline_mp) then
-
-        call timing_on ('gfdl_mp')
-
-        allocate (u_dt (isd:ied, jsd:jed, km))
-        allocate (v_dt (isd:ied, jsd:jed, km))
-
-        ! initialize wind tendencies
-        do k = 1, km
-            do j = jsd, jed
-                do i = isd, ied
-                    u_dt (i, j, k) = 0.
-                    v_dt (i, j, k) = 0.
-                enddo
             enddo
         enddo
+    enddo
 
-        ! save D grid u and v
-        if (consv .gt. consv_min) then
-            allocate (u0 (isd:ied, jsd:jed+1, km))
-            allocate (v0 (isd:ied+1, jsd:jed, km))
-            u0 = u
-            v0 = v
-        endif
+    !-----------------------------------------------------------------------
+    ! pt conversion
+    !-----------------------------------------------------------------------
 
-        ! D grid wind to A grid wind remap
-        call cubed_to_latlon (u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
-                 domain, gridstruct%bounded_domain, c2l_ord, bd)
-
-        ! save delp
-        if (consv .gt. consv_min) then
-            allocate (dp0 (isd:ied, jsd:jed, km))
-            dp0 = delp
-        endif
-
-        allocate (dz (is:ie, kmp:km))
-        allocate (wa (is:ie, kmp:km))
-
-!$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, kmp, km, ua, va, &
-!$OMP                                    te, delp, hydrostatic, hs, pt, delz, ptop, &
-!$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, q_con, &
-!$OMP                                    sphum, w, pkz, last_step, consv, te0_2d, &
-!$OMP                                    gridstruct, q, mdt, cld_amt, cappa, rrg, akap, &
-!$OMP                                    ccn_cm3, cin_cm3, inline_mp, do_inline_mp, &
-!$OMP                                    u_dt, v_dt, aerosol, adj_mass_vmr, conv_vmr_mmr, nq) &
-!$OMP                           private (q2, q3, gsize, dz, wa, pe, peln, adj_vmr)
-
+    do k = 1, km
         do j = js, je
-
-            ! grid size
-            gsize (is:ie) = sqrt (gridstruct%area_64 (is:ie, j))
-
-            ! aerosol
-            if (aerosol .gt. 0) then
-                q2 (is:ie, kmp:km) = q (is:ie, j, kmp:km, aerosol)
-            elseif (ccn_cm3 .gt. 0) then
-                q2 (is:ie, kmp:km) = q (is:ie, j, kmp:km, ccn_cm3)
-            else
-                q2 (is:ie, kmp:km) = 0.0
-            endif
-            if (cin_cm3 .gt. 0) then
-                q3 (is:ie, kmp:km) = q (is:ie, j, kmp:km, cin_cm3)
-            else
-                q3 (is:ie, kmp:km) = 0.0
-            endif
- 
-            ! note: ua and va are A-grid variables
-            ! note: pt is virtual temperature at this point
-            ! note: w is vertical velocity (m/s)
-            ! note: delz is negative, delp is positive, delz doesn't change in constant volume situation
-            ! note: hs is geopotential height (m^2/s^2)
-            ! note: the unit of q2 or q3 is #/cm^3
-            ! note: the unit of area is m^2
-            ! note: the unit of prew, prer, prei, pres, preg is mm/day
-            ! note: the unit of prefluxw, prefluxr, prefluxi, prefluxs, prefluxg is mm/day
-            ! note: the unit of cond, dep, reevap, sub is mm/day
-
-            ! save ua, va for wind tendency calculation
-            u_dt (is:ie, j, kmp:km) = ua (is:ie, j, kmp:km)
-            v_dt (is:ie, j, kmp:km) = va (is:ie, j, kmp:km)
-
-            ! initialize tendencies diagnostic
-            if (allocated (inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt (is:ie, j, kmp:km) = &
-                inline_mp%liq_wat_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, liq_wat)
-            if (allocated (inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt (is:ie, j, kmp:km) = &
-                inline_mp%ice_wat_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, ice_wat)
-            if (allocated (inline_mp%qv_dt)) inline_mp%qv_dt (is:ie, j, kmp:km) = &
-                inline_mp%qv_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, sphum)
-            if (allocated (inline_mp%ql_dt)) inline_mp%ql_dt (is:ie, j, kmp:km) = &
-                inline_mp%ql_dt (is:ie, j, kmp:km) - (q (is:ie, j, kmp:km, liq_wat) + &
-                q (is:ie, j, kmp:km, rainwat))
-            if (allocated (inline_mp%qi_dt)) inline_mp%qi_dt (is:ie, j, kmp:km) = &
-                inline_mp%qi_dt (is:ie, j, kmp:km) - (q (is:ie, j, kmp:km, ice_wat) + &
-                q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel))
-            if (allocated (inline_mp%qr_dt)) inline_mp%qr_dt (is:ie, j, kmp:km) = &
-                inline_mp%qr_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, rainwat)
-            if (allocated (inline_mp%qs_dt)) inline_mp%qs_dt (is:ie, j, kmp:km) = &
-                inline_mp%qs_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, snowwat)
-            if (allocated (inline_mp%qg_dt)) inline_mp%qg_dt (is:ie, j, kmp:km) = &
-                inline_mp%qg_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, graupel)
-            if (allocated (inline_mp%t_dt)) inline_mp%t_dt (is:ie, j, kmp:km) = &
-                inline_mp%t_dt (is:ie, j, kmp:km) - pt (is:ie, j, kmp:km)
-            if (allocated (inline_mp%u_dt)) inline_mp%u_dt (is:ie, j, kmp:km) = &
-                inline_mp%u_dt (is:ie, j, kmp:km) - ua (is:ie, j, kmp:km)
-            if (allocated (inline_mp%v_dt)) inline_mp%v_dt (is:ie, j, kmp:km) = &
-                inline_mp%v_dt (is:ie, j, kmp:km) - va (is:ie, j, kmp:km)
-
-            ! calculate pe, peln
-            pe (is:ie, 1) = ptop
-            peln (is:ie, 1) = log (ptop)
-            do k = 2, km + 1
-                pe (is:ie, k) = pe (is:ie, k-1) + delp (is:ie, j, k-1)
-                peln (is:ie, k) = log (pe (is:ie, k))
+            do i = is, ie
+#ifdef MOIST_CAPPA
+                pkz (i, j, k) = exp (cappa (i, j, k) * &
+                    log (rrg * delp (i, j, k) / &
+                    delz (i, j, k) * pt (i, j, k)))
+#else
+                pkz (i, j, k) = exp (akap * &
+                    log (rrg * delp (i, j, k) / &
+                    delz (i, j, k) * pt (i, j, k)))
+#endif
+                pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
             enddo
-
-            ! vertical velocity and layer thickness
-            if (.not. hydrostatic) then
-                wa (is:ie, kmp:km) = w (is:ie, j, kmp:km)
-                dz (is:ie, kmp:km) = delz (is:ie, j, kmp:km)
-            else
-                dz (is:ie, kmp:km) = (peln (is:ie, kmp+1:km+1) - peln (is:ie, kmp:km)) * &
-                    rrg * pt (is:ie, j, kmp:km)
-            endif
-
-            ! GFDL cloud microphysics main program
-            call gfdl_mp_driver (q (is:ie, j, kmp:km, sphum), q (is:ie, j, kmp:km, liq_wat), &
-                     q (is:ie, j, kmp:km, rainwat), q (is:ie, j, kmp:km, ice_wat), &
-                     q (is:ie, j, kmp:km, snowwat), q (is:ie, j, kmp:km, graupel), &
-                     q (is:ie, j, kmp:km, cld_amt), q2 (is:ie, kmp:km), &
-                     q3 (is:ie, kmp:km), pt (is:ie, j, kmp:km), wa (is:ie, kmp:km), &
-                     ua (is:ie, j, kmp:km), va (is:ie, j, kmp:km), dz (is:ie, kmp:km), &
-                     delp (is:ie, j, kmp:km), gsize, abs (mdt), hs (is:ie, j), &
-                     inline_mp%prew (is:ie, j), inline_mp%prer (is:ie, j), &
-                     inline_mp%prei (is:ie, j), inline_mp%pres (is:ie, j), &
-                     inline_mp%preg (is:ie, j), hydrostatic, is, ie, kmp, km, &
-#ifdef USE_COND
-                     q_con (is:ie, j, kmp:km), &
-#else
-                     q_con (isd:, jsd, 1:), &
-#endif
-#ifdef MOIST_CAPPA
-                     cappa (is:ie, j, kmp:km), &
-#else
-                     cappa (isd:, jsd, 1:), &
-#endif
-                     consv .gt. consv_min, adj_vmr (is:ie, kmp:km), te (is:ie, j, kmp:km), &
-                     inline_mp%pcw (is:ie, j, kmp:km), inline_mp%edw (is:ie, j, kmp:km), &
-                     inline_mp%oew (is:ie, j, kmp:km), &
-                     inline_mp%rrw (is:ie, j, kmp:km), inline_mp%tvw (is:ie, j, kmp:km), &
-                     inline_mp%pci (is:ie, j, kmp:km), inline_mp%edi (is:ie, j, kmp:km), &
-                     inline_mp%oei (is:ie, j, kmp:km), &
-                     inline_mp%rri (is:ie, j, kmp:km), inline_mp%tvi (is:ie, j, kmp:km), &
-                     inline_mp%pcr (is:ie, j, kmp:km), inline_mp%edr (is:ie, j, kmp:km), &
-                     inline_mp%oer (is:ie, j, kmp:km), &
-                     inline_mp%rrr (is:ie, j, kmp:km), inline_mp%tvr (is:ie, j, kmp:km), &
-                     inline_mp%pcs (is:ie, j, kmp:km), inline_mp%eds (is:ie, j, kmp:km), &
-                     inline_mp%oes (is:ie, j, kmp:km), &
-                     inline_mp%rrs (is:ie, j, kmp:km), inline_mp%tvs (is:ie, j, kmp:km), &
-                     inline_mp%pcg (is:ie, j, kmp:km), inline_mp%edg (is:ie, j, kmp:km), &
-                     inline_mp%oeg (is:ie, j, kmp:km), &
-                     inline_mp%rrg (is:ie, j, kmp:km), inline_mp%tvg (is:ie, j, kmp:km), &
-                     inline_mp%prefluxw(is:ie, j, kmp:km), &
-                     inline_mp%prefluxr(is:ie, j, kmp:km), inline_mp%prefluxi(is:ie, j, kmp:km), &
-                     inline_mp%prefluxs(is:ie, j, kmp:km), inline_mp%prefluxg(is:ie, j, kmp:km), &
-                     inline_mp%cond (is:ie, j), inline_mp%dep (is:ie, j), inline_mp%reevap (is:ie, j), &
-                     inline_mp%sub (is:ie, j), last_step, do_inline_mp)
-
-            ! update non-microphyiscs tracers due to mass change
-            if (adj_mass_vmr) then
-                do m = 1, nq
-                    if (conv_vmr_mmr (m)) then
-                        q (is:ie, j, kmp:km, m) = q (is:ie, j, kmp:km, m) * adj_vmr (is:ie, kmp:km)
-                    endif
-                enddo
-            endif
-
-            ! update vertical velocity
-            if (.not. hydrostatic) then
-                w (is:ie, j, kmp:km) = wa (is:ie, kmp:km)
-            endif
-
-            ! compute wind tendency at A grid fori D grid wind update
-            u_dt (is:ie, j, kmp:km) = (ua (is:ie, j, kmp:km) - u_dt (is:ie, j, kmp:km)) / abs (mdt)
-            v_dt (is:ie, j, kmp:km) = (va (is:ie, j, kmp:km) - v_dt (is:ie, j, kmp:km)) / abs (mdt)
-
-            ! update layer thickness
-            if (.not. hydrostatic) then
-                delz (is:ie, j, kmp:km) = dz (is:ie, kmp:km)
-            endif
-
-            ! tendencies diagnostic
-            if (allocated (inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt (is:ie, j, kmp:km) = &
-                inline_mp%liq_wat_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, liq_wat)
-            if (allocated (inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt (is:ie, j, kmp:km) = &
-                inline_mp%ice_wat_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, ice_wat)
-            if (allocated (inline_mp%qv_dt)) inline_mp%qv_dt (is:ie, j, kmp:km) = &
-                inline_mp%qv_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, sphum)
-            if (allocated (inline_mp%ql_dt)) inline_mp%ql_dt (is:ie, j, kmp:km) = &
-                inline_mp%ql_dt (is:ie, j, kmp:km) + (q (is:ie, j, kmp:km, liq_wat) + &
-                q (is:ie, j, kmp:km, rainwat))
-            if (allocated (inline_mp%qi_dt)) inline_mp%qi_dt (is:ie, j, kmp:km) = &
-                inline_mp%qi_dt (is:ie, j, kmp:km) + (q (is:ie, j, kmp:km, ice_wat) + &
-                q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel))
-            if (allocated (inline_mp%qr_dt)) inline_mp%qr_dt (is:ie, j, kmp:km) = &
-                inline_mp%qr_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, rainwat)
-            if (allocated (inline_mp%qs_dt)) inline_mp%qs_dt (is:ie, j, kmp:km) = &
-                inline_mp%qs_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, snowwat)
-            if (allocated (inline_mp%qg_dt)) inline_mp%qg_dt (is:ie, j, kmp:km) = &
-                inline_mp%qg_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, graupel)
-            if (allocated (inline_mp%t_dt)) inline_mp%t_dt (is:ie, j, kmp:km) = &
-                inline_mp%t_dt (is:ie, j, kmp:km) + pt (is:ie, j, kmp:km)
-            if (allocated (inline_mp%u_dt)) inline_mp%u_dt (is:ie, j, kmp:km) = &
-                inline_mp%u_dt (is:ie, j, kmp:km) + ua (is:ie, j, kmp:km)
-            if (allocated (inline_mp%v_dt)) inline_mp%v_dt (is:ie, j, kmp:km) = &
-                inline_mp%v_dt (is:ie, j, kmp:km) + va (is:ie, j, kmp:km)
-
-            ! update pkz
-            if (.not. hydrostatic) then
-#ifdef MOIST_CAPPA
-                pkz (is:ie, j, kmp:km) = exp (cappa (is:ie, j, kmp:km) * &
-                    log (rrg * delp (is:ie, j, kmp:km) / &
-                    delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
-#else
-                pkz (is:ie, j, kmp:km) = exp (akap * log (rrg * delp (is:ie, j, kmp:km) / &
-                    delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
-#endif
-            endif
- 
-            ! add total energy change to te0_2d
-            if (consv .gt. consv_min) then
-                do i = is, ie
-                    do k = kmp, km
-                        te0_2d (i, j) = te0_2d (i, j) + te (i, j, k)
-                    enddo
-                enddo
-            endif
-
         enddo
-
-        deallocate (dz)
-        deallocate (wa)
-
-        ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
-        if ( gridstruct%square_domain ) then
-            call mpp_update_domains (u_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.false.)
-            call mpp_update_domains (v_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.true.)
-        else
-            call mpp_update_domains (u_dt, domain, complete=.false.)
-            call mpp_update_domains (v_dt, domain, complete=.true.)
-        endif
-        ! update u_dt and v_dt in halo
-        call mpp_update_domains (u_dt, v_dt, domain)
-
-        ! update D grid wind
-        call update_dwinds_phys (is, ie, js, je, isd, ied, jsd, jed, abs (mdt), u_dt, v_dt, u, v, &
-                 gridstruct, npx, npy, km, domain)
-
-        deallocate (u_dt)
-        deallocate (v_dt)
-
-        ! update dry total energy
-        if (consv .gt. consv_min) then
-!$OMP parallel do default (none) shared (is, ie, js, je, km, te0_2d, hydrostatic, delp, &
-!$OMP                                    gridstruct, u, v, dp0, u0, v0, hs, delz, w) &
-!$OMP                           private (phis)
-            do j = js, je
-                if (hydrostatic) then
-                    do k = 1, km
-                        do i = is, ie
-                            te0_2d (i, j) = te0_2d (i, j) + delp (i, j, k) * &
-                                (0.25 * gridstruct%rsin2 (i, j) * (u (i, j, k) ** 2 + &
-                                u (i, j+1, k) ** 2 + v (i, j, k) ** 2 + v (i+1, j, k) ** 2 - &
-                                (u (i, j, k) + u (i, j+1, k)) * (v (i, j, k) + v (i+1, j, k)) * &
-                                gridstruct%cosa_s (i, j))) - dp0 (i, j, k) * &
-                                (0.25 * gridstruct%rsin2 (i, j) * (u0 (i, j, k) ** 2 + &
-                                u0 (i, j+1, k) ** 2 + v0 (i, j, k) ** 2 + v0 (i+1, j, k) ** 2 - &
-                                (u0 (i, j, k) + u0 (i, j+1, k)) * (v0 (i, j, k) + v0 (i+1, j, k)) * &
-                                gridstruct%cosa_s (i, j)))
-                        enddo
-                    enddo
-                else
-                    do i = is, ie
-                        phis (i, km+1) = hs (i, j)
-                    enddo
-                    do k = km, 1, -1
-                        do i = is, ie
-                            phis (i, k) = phis (i, k+1) - grav * delz (i, j, k)
-                        enddo
-                    enddo
-                    do k = 1, km
-                        do i = is, ie
-                            te0_2d (i, j) = te0_2d (i, j) + delp (i, j, k) * &
-                                (0.5 * (phis (i, k) + phis (i, k+1) + w (i, j, k) ** 2 + 0.5 * &
-                                gridstruct%rsin2 (i, j) * (u (i, j, k) ** 2 + u (i, j+1, k) ** 2 + &
-                                v (i, j, k) ** 2 + v (i+1, j, k) ** 2 - (u (i, j, k) + &
-                                u (i, j+1, k)) * (v (i, j, k) + v (i+1, j, k)) * &
-                                gridstruct%cosa_s (i, j)))) - dp0 (i, j, k) * &
-                                (0.5 * (phis (i, k) + phis (i, k+1) + w (i, j, k) ** 2 + &
-                                0.5 * gridstruct%rsin2 (i, j) * (u0 (i, j, k) ** 2 + &
-                                u0 (i, j+1, k) ** 2 + v0 (i, j, k) ** 2 + v0 (i+1, j, k) ** 2 - &
-                                (u0 (i, j, k) + u0 (i, j+1, k)) * (v0 (i, j, k) + v0 (i+1, j, k)) * &
-                                gridstruct%cosa_s (i, j))))
-                        enddo
-                    enddo
-                endif
-            enddo
-        end if
-
-        if (consv .gt. consv_min) then
-            deallocate (u0)
-            deallocate (v0)
-            deallocate (dp0)
-        endif
-
-        call timing_off ('gfdl_mp')
-
-    endif
-
-    !-----------------------------------------------------------------------
-    ! <<< Inline GFDL MP
-    !-----------------------------------------------------------------------
+    enddo
 
 end subroutine fast_phys
 

@@ -44,7 +44,8 @@ module fv_dynamics_mod
    use fv_regional_mod,     only: a_step, p_step, k_step
    use fv_regional_mod,     only: current_time_in_seconds
    use boundary_mod,        only: nested_grid_BC_apply_intT
-   use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, fv_diag_type, fv_grid_bounds_type, inline_mp_type
+   use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, &
+                                  fv_diag_type, fv_grid_bounds_type, inline_mp_type
    use fv_nwp_nudge_mod,    only: do_adiabatic_init
 
 implicit none
@@ -481,7 +482,8 @@ contains
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
-                    domain, n_map==1, i_pack, last_step, diss_est, time_total)
+                    domain, n_map==1, i_pack, last_step, diss_est, &
+                    consv_te, te_2d, time_total)
                                            call timing_off('DYN_CORE')
 
 
@@ -588,7 +590,7 @@ contains
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
                      pkz, pk, mdt, bdt, npx, npy, npz, is,ie,js,je, isd,ied,jsd,jed,       &
                      nr, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
-                     zvir, cp_air, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
+                     zvir, cp_air, flagstruct%te_err, flagstruct%tw_err, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
                      kord_tracer, flagstruct%kord_tm, flagstruct%remap_te, peln, te_2d, &
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
                      ptop, ak, bk, pfull, gridstruct, domain,   &
@@ -596,7 +598,8 @@ contains
                      hybrid_z,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      inline_mp, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
-                     flagstruct%w_limiter, flagstruct%do_am4_remap, flagstruct%adj_mass_vmr)
+                     flagstruct%w_limiter, flagstruct%do_am4_remap, &
+                     flagstruct%do_fast_phys, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split
