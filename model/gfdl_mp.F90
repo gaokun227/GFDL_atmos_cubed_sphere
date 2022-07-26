@@ -249,7 +249,7 @@ module gfdl_mp_mod
 
     real :: qi0_crt = 1.0e-4 ! cloud ice to snow autoconversion threshold (was 1.e-4)
     ! qi0_crt if negative, its magnitude is used as the mixing ration threshold; otherwise, used as density
-    real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold
+    real :: qr0_crt = 1.0e-4 ! rain to snow or graupel / hail threshold (not used)
     ! lin et al. (1983) used * mixing ratio * = 1.e-4 (hail)
     real :: qs0_crt = 1.0e-3 ! snow to graupel density threshold (0.6e-3 in purdue lin scheme)
 
