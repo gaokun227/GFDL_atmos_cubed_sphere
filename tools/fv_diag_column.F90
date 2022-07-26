@@ -30,6 +30,7 @@ module fv_diag_column_mod
   use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, &
                                 mpp_max, NOTE, input_nml_file, get_unit
   use fv_sg_mod,          only: qsmith
+  use fv_mp_mod,          only: is_master
 
   implicit none
   private
@@ -175,6 +176,7 @@ contains
              print*, ' read_column_table: error on line ', nline
              call mpp_error(FATAL,'error in column_table format')
           endif
+
        else !debug or sonde record with specified lat-lon
           if (index(lowercase(record), "debug") .ne. 0 ) then
           if (num_diag_debug >= MAX_DIAG_COLUMN) continue
@@ -241,7 +243,7 @@ contains
        !Index specified
        if (diag_i(m) >= -10 .and. diag_j(m) >= -10) then
 
-          if ((diag_tile(m) < 0 .or. diag_tile(m) > ntiles)) then
+          if ((diag_tile(m) < 0)) then
              if (ntiles > 1) then
                 call mpp_error(FATAL, ' find_diagnostic_column: diag_tile must be specified for '//trim(diag_class)//' point '//trim(diag_names(m))//' since ntiles > 1')
              else
