@@ -35,7 +35,7 @@ module intermediate_phys_mod
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
-    use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, cv_vap, mtetw
+    use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, cv_vap, hlv, mtetw
     use sa_tke_edmf_mod, only: sa_tke_edmf_sfc, sa_tke_edmf_pbl
     use sa_sas_mod, only: sa_sas_deep, sa_sas_shal
     use sa_gwd_mod, only: sa_gwd_oro, sa_gwd_cnv
@@ -507,8 +507,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
-                        0.0, abs (mdt), te_beg (i, :), tw_beg (i, :), &
+                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
+                        0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -706,8 +706,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
-                        0.0, abs (mdt), te_end (i, :), tw_end (i, :), &
+                        delp (i, j, 1:km), gsize (i), dte (i), - inline_edmf%dqsfc (i, j) / hlv * 86400, 0.0, 0.0, 0.0, 0.0, &
+                        0.0, - inline_edmf%dtsfc (i, j), abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -976,8 +976,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
-                        0.0, abs (mdt), te_beg (i, :), tw_beg (i, :), &
+                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, inline_sas%prec (i, j) / abs (mdt) * 1.e3 * 86400, 0.0, 0.0, &
+                        0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -1158,8 +1158,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
-                        0.0, abs (mdt), te_end (i, :), tw_end (i, :), &
+                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, inline_sas%prec (i, j) / abs (mdt) * 1.e3 * 86400, 0.0, 0.0, &
+                        0.0, 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -1410,8 +1410,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
-                        0.0, abs (mdt), te_beg (i, :), tw_beg (i, :), &
+                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
+                        0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -1577,8 +1577,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
-                        0.0, abs (mdt), te_end (i, :), tw_end (i, :), &
+                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
+                        0.0, 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
