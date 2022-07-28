@@ -199,8 +199,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
         allocate (dz (is:ie, kmp:km))
 
-        allocate (tz (1:km))
-        allocate (wz (1:km))
+        allocate (tz (kmp:km))
+        allocate (wz (kmp:km))
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, kmp, km, te, ptop, w, &
 !$OMP                                    delp, hydrostatic, hs, pt, delz, rainwat, ua, va, &
@@ -235,25 +235,23 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
  
             ! total energy checker
             if (consv_checker) then
-                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
-                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
-                te_beg (is:ie, 1:km) = 0.0
-                tw_beg (is:ie, 1:km) = 0.0
+                qliq (is:ie, kmp:km) = q (is:ie, j, kmp:km, liq_wat) + q (is:ie, j, kmp:km, rainwat)
+                qsol (is:ie, kmp:km) = q (is:ie, j, kmp:km, ice_wat) + q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel)
+                te_beg (is:ie, kmp:km) = 0.0
+                tw_beg (is:ie, kmp:km) = 0.0
                 te_b_beg (is:ie) = 0.0
                 tw_b_beg (is:ie) = 0.0
                 do i = is, ie
-                    tz = pt (i, j, 1:km) / ((1. + r_vir * q (i, j, 1:km, sphum)) * (1. - (qliq (i, 1:km) + qsol (i, 1:km))))
-                    if (hydrostatic) then
-                        wz = 0.0
-                    else
-                        wz = w (i, j, 1:km)
-                    endif
+                    tz (kmp:km) = pt (i, j, kmp:km) / ((1. + r_vir * q (i, j, kmp:km, sphum)) * (1. - (qliq (i, kmp:km) + qsol (i, kmp:km))))
                     dte (i) = 0.0
-                    call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
-                        q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
-                        q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
-                        0.0, abs (mdt), te_beg (i, :), tw_beg (i, :), &
+                    wz (kmp:km) = 0.0
+                    ua (i, j, kmp:km) = 0.0
+                    va (i, j, kmp:km) = 0.0
+                    call mtetw (kmp, km, q (i, j, kmp:km, sphum), q (i, j, kmp:km, liq_wat), &
+                        q (i, j, kmp:km, rainwat), q (i, j, kmp:km, ice_wat), q (i, j, kmp:km, snowwat), &
+                        q (i, j, kmp:km, graupel), tz (kmp:km), ua (i, j, kmp:km), va (i, j, kmp:km), wz (kmp:km), &
+                        delp (i, j, kmp:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
+                        0.0, 0.0, abs (mdt), te_beg (i, kmp:km), tw_beg (i, kmp:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -318,24 +316,22 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
  
             ! total energy checker
             if (consv_checker) then
-                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
-                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
-                te_end (is:ie, 1:km) = 0.0
-                tw_end (is:ie, 1:km) = 0.0
+                qliq (is:ie, kmp:km) = q (is:ie, j, kmp:km, liq_wat) + q (is:ie, j, kmp:km, rainwat)
+                qsol (is:ie, kmp:km) = q (is:ie, j, kmp:km, ice_wat) + q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel)
+                te_end (is:ie, kmp:km) = 0.0
+                tw_end (is:ie, kmp:km) = 0.0
                 te_b_end (is:ie) = 0.0
                 tw_b_end (is:ie) = 0.0
                 do i = is, ie
-                    tz = pt (i, j, 1:km) / ((1. + r_vir * q (i, j, 1:km, sphum)) * (1. - (qliq (i, 1:km) + qsol (i, 1:km))))
-                    if (hydrostatic) then
-                        wz = 0.0
-                    else
-                        wz = w (i, j, 1:km)
-                    endif
-                    call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
-                        q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
-                        q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, &
-                        0.0, abs (mdt), te_end (i, :), tw_end (i, :), &
+                    tz (kmp:km) = pt (i, j, kmp:km) / ((1. + r_vir * q (i, j, kmp:km, sphum)) * (1. - (qliq (i, kmp:km) + qsol (i, kmp:km))))
+                    wz (kmp:km) = 0.0
+                    ua (i, j, kmp:km) = 0.0
+                    va (i, j, kmp:km) = 0.0
+                    call mtetw (kmp, km, q (i, j, kmp:km, sphum), q (i, j, kmp:km, liq_wat), &
+                        q (i, j, kmp:km, rainwat), q (i, j, kmp:km, ice_wat), q (i, j, kmp:km, snowwat), &
+                        q (i, j, kmp:km, graupel), tz (kmp:km), ua (i, j, kmp:km), va (i, j, kmp:km), wz (kmp:km), &
+                        delp (i, j, kmp:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
+                        0.0, 0.0, abs (mdt), te_end (i, kmp:km), tw_end (i, kmp:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -352,23 +348,23 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! total energy checker
             if (consv_checker) then
                 do i = is, ie
-                    if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                         (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
+                    if (abs (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
+                         (sum (te_beg (i, kmp:km)) + te_b_beg (i)) .gt. te_err) then
                         print*, "FAST_SAT_ADJ TE: ", &
-                            !(sum (te_beg (i, :)) + te_b_beg (i)) / (gsize (i) ** 2), &
-                            !(sum (te_end (i, :)) + te_b_end (i)) / (gsize (i) ** 2), &
-                            (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                            (sum (te_beg (i, :)) + te_b_beg (i))
+                            !(sum (te_beg (i, kmp:km)) + te_b_beg (i)) / (gsize (i) ** 2), &
+                            !(sum (te_end (i, kmp:km)) + te_b_end (i)) / (gsize (i) ** 2), &
+                            (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
+                            (sum (te_beg (i, kmp:km)) + te_b_beg (i))
                     endif
-                    if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                         (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
+                    if (abs (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
+                         (sum (tw_beg (i, kmp:km)) + tw_b_beg (i)) .gt. tw_err) then
                         print*, "FAST_SAT_ADJ TW: ", &
-                            !(sum (tw_beg (i, :)) + tw_b_beg (i)) / (gsize (i) ** 2), &
-                            !(sum (tw_end (i, :)) + tw_b_end (i)) / (gsize (i) ** 2), &
-                            (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                            (sum (tw_beg (i, :)) + tw_b_beg (i))
+                            !(sum (tw_beg (i, kmp:km)) + tw_b_beg (i)) / (gsize (i) ** 2), &
+                            !(sum (tw_end (i, kmp:km)) + tw_b_end (i)) / (gsize (i) ** 2), &
+                            (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
+                            (sum (tw_beg (i, kmp:km)) + tw_b_beg (i))
                     endif
-                    !print*, "FAST_SAT_ADJ LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
+                    !print*, "FAST_SAT_ADJ LOSS (%) : ", te_loss (i) / (sum (te_beg (i, kmp:km)) + te_b_beg (i)) * 100.0
                 enddo
             endif
 
@@ -1732,8 +1728,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
-        allocate (tz (1:km))
-        allocate (wz (1:km))
+        allocate (tz (kmp:km))
+        allocate (wz (kmp:km))
 
         ! initialize wind tendencies
         do k = 1, km
@@ -1840,26 +1836,26 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
             ! total energy checker
             if (consv_checker) then
-                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
-                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
-                te_beg (is:ie, 1:km) = 0.0
-                tw_beg (is:ie, 1:km) = 0.0
+                qliq (is:ie, kmp:km) = q (is:ie, j, kmp:km, liq_wat) + q (is:ie, j, kmp:km, rainwat)
+                qsol (is:ie, kmp:km) = q (is:ie, j, kmp:km, ice_wat) + q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel)
+                te_beg (is:ie, kmp:km) = 0.0
+                tw_beg (is:ie, kmp:km) = 0.0
                 te_b_beg (is:ie) = 0.0
                 tw_b_beg (is:ie) = 0.0
                 do i = is, ie
-                    tz = pt (i, j, 1:km) / ((1. + r_vir * q (i, j, 1:km, sphum)) * (1. - (qliq (i, 1:km) + qsol (i, 1:km))))
+                    tz (kmp:km) = pt (i, j, kmp:km) / ((1. + r_vir * q (i, j, kmp:km, sphum)) * (1. - (qliq (i, kmp:km) + qsol (i, kmp:km))))
                     if (hydrostatic) then
-                        wz = 0.0
+                        wz (kmp:km) = 0.0
                     else
-                        wz = w (i, j, 1:km)
+                        wz (kmp:km) = w (i, j, kmp:km)
                     endif
                     dte (i) = 0.0
-                    call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
-                        q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
-                        q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), inline_mp%prew (i, j), &
+                    call mtetw (kmp, km, q (i, j, kmp:km, sphum), q (i, j, kmp:km, liq_wat), &
+                        q (i, j, kmp:km, rainwat), q (i, j, kmp:km, ice_wat), q (i, j, kmp:km, snowwat), &
+                        q (i, j, kmp:km, graupel), tz (kmp:km), ua (i, j, kmp:km), va (i, j, kmp:km), wz (kmp:km), &
+                        delp (i, j, kmp:km), gsize (i), dte (i), 0.0, inline_mp%prew (i, j), &
                         inline_mp%prer (i, j), inline_mp%prei (i, j), inline_mp%pres (i, j), &
-                        inline_mp%preg (i, j), abs (mdt), te_beg (i, :), tw_beg (i, :), &
+                        inline_mp%preg (i, j), 0.0, abs (mdt), te_beg (i, kmp:km), tw_beg (i, kmp:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -1987,25 +1983,25 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
  
             ! total energy checker
             if (consv_checker) then
-                qliq = q (is:ie, j, 1:km, liq_wat) + q (is:ie, j, 1:km, rainwat)
-                qsol = q (is:ie, j, 1:km, ice_wat) + q (is:ie, j, 1:km, snowwat) + q (is:ie, j, 1:km, graupel)
-                te_end (is:ie, 1:km) = 0.0
-                tw_end (is:ie, 1:km) = 0.0
+                qliq (is:ie, kmp:km) = q (is:ie, j, kmp:km, liq_wat) + q (is:ie, j, kmp:km, rainwat)
+                qsol (is:ie, kmp:km) = q (is:ie, j, kmp:km, ice_wat) + q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel)
+                te_end (is:ie, kmp:km) = 0.0
+                tw_end (is:ie, kmp:km) = 0.0
                 te_b_end (is:ie) = 0.0
                 tw_b_end (is:ie) = 0.0
                 do i = is, ie
-                    tz = pt (i, j, 1:km) / ((1. + r_vir * q (i, j, 1:km, sphum)) * (1. - (qliq (i, 1:km) + qsol (i, 1:km))))
+                    tz (kmp:km) = pt (i, j, kmp:km) / ((1. + r_vir * q (i, j, kmp:km, sphum)) * (1. - (qliq (i, kmp:km) + qsol (i, kmp:km))))
                     if (hydrostatic) then
-                        wz = 0.0
+                        wz (kmp:km) = 0.0
                     else
-                        wz = w (i, j, 1:km)
+                        wz (kmp:km) = w (i, j, kmp:km)
                     endif
-                    call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
-                        q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
-                        q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), inline_mp%prew (i, j), &
+                    call mtetw (kmp, km, q (i, j, kmp:km, sphum), q (i, j, kmp:km, liq_wat), &
+                        q (i, j, kmp:km, rainwat), q (i, j, kmp:km, ice_wat), q (i, j, kmp:km, snowwat), &
+                        q (i, j, kmp:km, graupel), tz (kmp:km), ua (i, j, kmp:km), va (i, j, kmp:km), wz (kmp:km), &
+                        delp (i, j, kmp:km), gsize (i), dte (i), 0.0, inline_mp%prew (i, j), &
                         inline_mp%prer (i, j), inline_mp%prei (i, j), inline_mp%pres (i, j), &
-                        inline_mp%preg (i, j), abs (mdt), te_end (i, :), tw_end (i, :), &
+                        inline_mp%preg (i, j), 0.0, abs (mdt), te_end (i, kmp:km), tw_end (i, kmp:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -2022,23 +2018,23 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! total energy checker
             if (consv_checker) then
                 do i = is, ie
-                    if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                         (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
+                    if (abs (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
+                         (sum (te_beg (i, kmp:km)) + te_b_beg (i)) .gt. te_err) then
                         print*, "GFDL-MP-INTM TE: ", &
-                            !(sum (te_beg (i, :)) + te_b_beg (i)) / (gsize (i) ** 2), &
-                            !(sum (te_end (i, :)) + te_b_end (i)) / (gsize (i) ** 2), &
-                            (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                            (sum (te_beg (i, :)) + te_b_beg (i))
+                            !(sum (te_beg (i, kmp:km)) + te_b_beg (i)) / (gsize (i) ** 2), &
+                            !(sum (te_end (i, kmp:km)) + te_b_end (i)) / (gsize (i) ** 2), &
+                            (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
+                            (sum (te_beg (i, kmp:km)) + te_b_beg (i))
                     endif
-                    if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                         (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
+                    if (abs (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
+                         (sum (tw_beg (i, kmp:km)) + tw_b_beg (i)) .gt. tw_err) then
                         print*, "GFDL-MP-INTM TW: ", &
-                            !(sum (tw_beg (i, :)) + tw_b_beg (i)) / (gsize (i) ** 2), &
-                            !(sum (tw_end (i, :)) + tw_b_end (i)) / (gsize (i) ** 2), &
-                            (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                            (sum (tw_beg (i, :)) + tw_b_beg (i))
+                            !(sum (tw_beg (i, kmp:km)) + tw_b_beg (i)) / (gsize (i) ** 2), &
+                            !(sum (tw_end (i, kmp:km)) + tw_b_end (i)) / (gsize (i) ** 2), &
+                            (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
+                            (sum (tw_beg (i, kmp:km)) + tw_b_beg (i))
                     endif
-                    !print*, "GFDL-MP-INTM LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
+                    !print*, "GFDL-MP-INTM LOSS (%) : ", te_loss (i) / (sum (te_beg (i, kmp:km)) + te_b_beg (i)) * 100.0
                 enddo
             endif
 
