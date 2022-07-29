@@ -1306,33 +1306,29 @@ subroutine sa_gwd_oro (im, km, u1, v1, t1, q1, delt, gsize, &
             taud (i, k) = taud (i, k) * dtfac (i)
             dtaux = taud (i, k) * xn (i)
             dtauy = taud (i, k) * yn (i)
-            eng0 = 0.5 * (u1 (j, k) * u1 (j, k) + v1 (j, k) * v1 (j, k))
+            eng0 = 0.5 * (u1 (j, k) ** 2 + v1 (j, k) ** 2)
             ! --- lm mb (* j *) changes overwrite gwd
             if (k .lt. idxzb (i) .and. idxzb (i) .ne. 0) then
                 dbim = db (i, k) / (1. + db (i, k) * delt)
                 if (present (vtgwd)) vtgwd (j, k) = - dbim * v1 (j, k)
                 if (present (utgwd)) utgwd (j, k) = - dbim * u1 (j, k)
-                eng1 = eng0 * (1.0 - dbim * delt) * (1.0 - dbim * delt)
-                ! if (abs (dbim * u1 (j, k)) .gt. .01) &
-                ! print *, ' in gwdps_lmi.f kdt = ', kdt, i, k, db (i, k), &
-                ! dbim, idxzb (i), u1 (j, k), v1 (j, k), me
                 if (present (dusfc)) dusfc (j) = dusfc (j) - dbim * u1 (j, k) * del (j, k)
                 if (present (dvsfc)) dvsfc (j) = dvsfc (j) - dbim * v1 (j, k) * del (j, k)
                 v1 (j, k) = v1 (j, k) - dbim * v1 (j, k) * delt
                 u1 (j, k) = u1 (j, k) - dbim * u1 (j, k) * delt
+                !eng1 = eng0 * (1.0 - dbim * delt) * (1.0 - dbim * delt)
+                eng1 = 0.5 * (u1 (j, k) ** 2 + v1 (j, k) ** 2)
             else
                 if (present (vtgwd)) vtgwd (j, k) = dtauy
                 if (present (utgwd)) utgwd (j, k) = dtaux
-                eng1 = 0.5 * (&
-                     (u1 (j, k) + dtaux * delt) * (u1 (j, k) + dtaux * delt) &
-                     + (v1 (j, k) + dtauy * delt) * (v1 (j, k) + dtauy * delt))
                 if (present (dusfc)) dusfc (j) = dusfc (j) + dtaux * del (j, k)
                 if (present (dvsfc)) dvsfc (j) = dvsfc (j) + dtauy * del (j, k)
                 v1 (j, k) = v1 (j, k) + dtauy * delt
                 u1 (j, k) = u1 (j, k) + dtaux * delt
+                eng1 = 0.5 * (u1 (j, k) ** 2 + v1 (j, k) ** 2)
             endif
-            if (present (ttgwd)) ttgwd (j, k) = max (eng0 - eng1, 0.) / cp_air / delt
-            t1 (j, k) = t1 (j, k) + max (eng0 - eng1, 0.) / cp_air
+            if (present (ttgwd)) ttgwd (j, k) = (eng0 - eng1) / cp_air / delt
+            t1 (j, k) = t1 (j, k) + (eng0 - eng1) / cp_air
         enddo
     enddo
     ! if (lprnt) then
@@ -2695,7 +2691,7 @@ subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
         k1 = km - k + 1
         do i = 1, npt
             ii = ipt (i)
-            eng0 = 0.5 * (u1 (ii, k1) * u1 (ii, k1) + v1 (ii, k1) * v1 (ii, k1))
+            eng0 = 0.5 * (u1 (ii, k1) ** 2 + v1 (ii, k1) ** 2)
             if (present (utgwc)) utgwc (ii, k1) = utgwcl (i, k)
             if (present (vtgwc)) vtgwc (ii, k1) = vtgwcl (i, k)
             
@@ -2705,9 +2701,9 @@ subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
             ! rhom (ii, kk) = rhom (i, k)
             u1 (ii, k1) = u1 (ii, k1) + utgwcl (i, k) * delt
             v1 (ii, k1) = v1 (ii, k1) + vtgwcl (i, k) * delt
-            eng1 = 0.5 * (u1 (ii, k1) * u1 (ii, k1) + v1 (ii, k1) * v1 (ii, k1))
-            if (present (ttgwc)) ttgwc (ii, k1) = max (eng0 - eng1, 0.) / cp_air / delt
-            t1 (ii, k1) = t1 (ii, k1) + max (eng0 - eng1, 0.) / cp_air
+            eng1 = 0.5 * (u1 (ii, k1) ** 2 + v1 (ii, k1) ** 2)
+            if (present (ttgwc)) ttgwc (ii, k1) = (eng0 - eng1) / cp_air / delt
+            t1 (ii, k1) = t1 (ii, k1) + (eng0 - eng1) / cp_air
         enddo
         ! if (lprnt) write (7000, *) ' k = ', k, ' k1 = ', k1, ' utgwc = ', &
         ! utgwc (ipr, k1), ' vtgwc = ', vtgwc (ipr, k1)
@@ -2736,7 +2732,7 @@ subroutine sa_gwd_cnv (im, km, u1, v1, t1, q1, delt, gsize, qmax, &
     deallocate (kcldtop, kcldbot, do_gwc)
     deallocate (tauctxl, tauctyl, dtfac, &
         ! gwdcloc, break, critic, cosphi, &
-    gwdcloc, break, cosphi, &
+        gwdcloc, break, cosphi, &
         sinphi, xstress, ystress, &
         dlen, ucltop, vcltop, gqmcldlen, wrk)
     

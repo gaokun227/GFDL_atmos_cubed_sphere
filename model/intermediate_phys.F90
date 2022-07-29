@@ -1368,7 +1368,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    te_err, tw_err) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, pe, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
-!$OMP                                    cvm, kr, dqv, ps_dt, c_moist, peln, adj_vmr, &
+!$OMP                                    cvm, kr, c_moist, peln, &
 !$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
 !$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)
 
@@ -1501,21 +1501,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
                 kr = km - k + 1
-                dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
-                ps_dt = 1 + dqv
-                adj_vmr (is:ie, kr) = (ps_dt - (qv (is:ie, k) + q (is:ie, j, kr, liq_wat) + &
-                    q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, rainwat) + &
-                    q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel))) / &
-                    (1. - (qv (is:ie, k) + q (is:ie, j, kr, liq_wat) + &
-                    q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, rainwat) + &
-                    q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel))) / ps_dt
-                q (is:ie, j, kr, sphum) = qv (is:ie, k) / ps_dt
-                q (is:ie, j, kr, liq_wat) = q (is:ie, j, kr, liq_wat) / ps_dt
-                q (is:ie, j, kr, ice_wat) = q (is:ie, j, kr, ice_wat) / ps_dt
-                q (is:ie, j, kr, rainwat) = q (is:ie, j, kr, rainwat) / ps_dt
-                q (is:ie, j, kr, snowwat) = q (is:ie, j, kr, snowwat) / ps_dt
-                q (is:ie, j, kr, graupel) = q (is:ie, j, kr, graupel) / ps_dt
-                delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
 #ifdef USE_COND
@@ -1533,15 +1518,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 va (is:ie, j, kr) = vv (is:ie, k)
             enddo
  
-            ! update non-microphyiscs tracers due to mass change
-            if (adj_mass_vmr) then
-                do m = 1, nq
-                    if (conv_vmr_mmr (m)) then
-                        q (is:ie, j, 1:km, m) = q (is:ie, j, 1:km, m) * adj_vmr (is:ie, 1:km)
-                    endif
-                enddo
-            endif
-
             ! compute wind tendency at A grid fori D grid wind update
             u_dt (is:ie, j, 1:km) = (ua (is:ie, j, 1:km) - u_dt (is:ie, j, 1:km)) / abs (mdt)
             v_dt (is:ie, j, 1:km) = (va (is:ie, j, 1:km) - v_dt (is:ie, j, 1:km)) / abs (mdt)
