@@ -35,7 +35,8 @@ module intermediate_phys_mod
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
-    use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, cv_vap, hlv, mtetw
+    use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, &
+                           cv_vap, hlv, hlf, mtetw, tice
     use sa_tke_edmf_mod, only: sa_tke_edmf_sfc, sa_tke_edmf_pbl
     use sa_sas_mod, only: sa_sas_deep, sa_sas_shal
     use sa_gwd_mod, only: sa_gwd_oro, sa_gwd_cnv
@@ -126,9 +127,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real :: rrg
 
-    real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c_moist
+    real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c_moist, k1, k2
 
-    real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm, adj_vmr
+    real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm, adj_vmr, t3
 
     real, dimension (is:ie, km+1) :: phis, pe, peln
 
@@ -146,7 +147,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real (kind = r8), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
 
-    real (kind = r8), dimension (is:ie, 1:km) :: te_beg, te_end, tw_beg, tw_end
+    real (kind = r8), dimension (is:ie, 1:km) :: te_beg, te_end, tw_beg, tw_end, te8
     
     character (len = 32) :: tracer_units, tracer_name
 
@@ -927,9 +928,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    te_err, tw_err) &
 !$OMP                           private (gsize, dz, pi, rn, tmp, q_liq, q_sol, pe, peln, &
 !$OMP                                    zm, dp, pm, qv, ql, ta, uu, vv, ww, ncld, qliq, qsol, &
-!$OMP                                    cvm, kr, dqv, dql, ps_dt, c_moist, adj_vmr, &
-!$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
-!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)
+!$OMP                                    cvm, kr, dqv, dql, ps_dt, c_moist, adj_vmr, k1, k2, &
+!$OMP                                    tz, t3, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
+!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss, te8)
 
         do j = js, je
  
@@ -1021,9 +1022,15 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * &
                     (1. - (q_liq + q_sol)))
+                t3 (is:ie, k) = ta (is:ie, k)
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 ww (is:ie, k) = omga (is:ie, j, kr)
+                c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
+                    q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+                te8 (is:ie, k) = (c_moist * ta (is:ie, k) + &
+                    (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
+                    (hlf - (c_liq - c_ice) * tice) * q_sol) * delp (is:ie, j, kr)
             enddo
   
             ! check if pressure or height cross over
@@ -1081,6 +1088,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
                 kr = km - k + 1
+                k1 = 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr)
                 dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
                 dql = ql (is:ie, k) - q (is:ie, j, kr, liq_wat)
                 ps_dt = 1 + dqv + dql
@@ -1107,11 +1115,16 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 #ifdef MOIST_CAPPA
                 cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
 #endif
-                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
-                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
-                    pt (is:ie, j, kr)) * cp_air / c_moist
+                pt (is:ie, j, kr) = (te8 (is:ie, k) / delp (is:ie, j, kr) + &
+                    (ta (is:ie, k) - t3 (is:ie, k)) * cp_air / ps_dt + hlv * dqv / ps_dt - &
+                    (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) + &
+                    (hlf - (c_liq - c_ice) * tice) * q_sol) / c_moist * &
+                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
+                k2 = 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr)
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (k1 - k2) / c_moist / delp (is:ie, j, kr) * &
+                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
             enddo
  
             ! update non-microphyiscs tracers due to mass change
@@ -1369,7 +1382,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, pe, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
 !$OMP                                    cvm, kr, c_moist, peln, &
-!$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
+!$OMP                                    tz, t3, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
 !$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)
 
         do j = js, je
@@ -1457,6 +1470,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * &
                     (1. - (q_liq + q_sol)))
+                t3 (is:ie, k) = ta (is:ie, k)
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
             enddo
@@ -1511,9 +1525,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 #ifdef MOIST_CAPPA
                 cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
 #endif
-                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
-                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
-                    pt (is:ie, j, kr)) * cp_air / c_moist
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - t3 (is:ie, k)) * &
+                    cp_air / c_moist * ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
             enddo
