@@ -252,7 +252,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                         q (i, j, kmp:km, rainwat), q (i, j, kmp:km, ice_wat), q (i, j, kmp:km, snowwat), &
                         q (i, j, kmp:km, graupel), tz (kmp:km), ua (i, j, kmp:km), va (i, j, kmp:km), wz (kmp:km), &
                         delp (i, j, kmp:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_beg (i, kmp:km), tw_beg (i, kmp:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_beg (i, kmp:km), tw_beg (i, kmp:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -332,7 +332,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                         q (i, j, kmp:km, rainwat), q (i, j, kmp:km, ice_wat), q (i, j, kmp:km, snowwat), &
                         q (i, j, kmp:km, graupel), tz (kmp:km), ua (i, j, kmp:km), va (i, j, kmp:km), wz (kmp:km), &
                         delp (i, j, kmp:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_end (i, kmp:km), tw_end (i, kmp:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_end (i, kmp:km), tw_end (i, kmp:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -464,7 +464,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
 !$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, &
-!$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
+!$OMP                                    tz, t3, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
 !$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)
 
         do j = js, je
@@ -509,7 +509,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
                         delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -526,6 +526,11 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             zi (is:ie, 1) = 0.0
             pi (is:ie, 1) = pe (is:ie, km+1)
             pik (is:ie, 1) = exp (kappa * log (pi (is:ie, 1) * 1.e-5))
+            inline_edmf%dtsfc (is:ie, j) = 0.0
+            inline_edmf%dqsfc (is:ie, j) = 0.0
+            inline_edmf%dusfc (is:ie, j) = 0.0
+            inline_edmf%dvsfc (is:ie, j) = 0.0
+            inline_edmf%dksfc (is:ie, j) = 0.0
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
@@ -556,10 +561,18 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * &
                     (1. - (q_liq + q_sol)))
+                t3 (is:ie, k) = ta (is:ie, k)
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
                 radh (is:ie, k) = inline_edmf%radh (is:ie, j, kr)
+                c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
+                    q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+                inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) - (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) - ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) - va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) - 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             do i = is, ie
@@ -617,9 +630,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
                 inline_edmf%evap (is:ie, j), stress, wind, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j), &
-                inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
-                inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
+                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j))
 
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
@@ -656,11 +667,15 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 #ifdef MOIST_CAPPA
                 cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
 #endif
-                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
-                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
-                    pt (is:ie, j, kr)) * cp_air / c_moist
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - t3 (is:ie, k)) * &
+                    cp_air / c_moist * ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
+                inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) + (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) + ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) + va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) + 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             ! update non-microphyiscs tracers due to mass change
@@ -707,8 +722,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), - inline_edmf%dqsfc (i, j) / hlv * 86400, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, - inline_edmf%dtsfc (i, j), abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
+                        delp (i, j, 1:km), gsize (i), dte (i), - inline_edmf%dqsfc (i, j) / (hlv - (cv_vap - c_liq) * tice) * 86400, 0.0, 0.0, 0.0, 0.0, &
+                        0.0, - inline_edmf%dtsfc (i, j), - inline_edmf%dksfc (i, j), abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -978,7 +993,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
                         delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, inline_sas%prec (i, j) / abs (mdt) * 1.e3 * 86400, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -1172,7 +1187,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
                         delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, inline_sas%prec (i, j) / abs (mdt) * 1.e3 * 86400, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -1424,7 +1439,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
                         delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -1567,7 +1582,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
                         delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -1844,7 +1859,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                         q (i, j, kmp:km, graupel), tz (kmp:km), ua (i, j, kmp:km), va (i, j, kmp:km), wz (kmp:km), &
                         delp (i, j, kmp:km), gsize (i), dte (i), 0.0, inline_mp%prew (i, j), &
                         inline_mp%prer (i, j), inline_mp%prei (i, j), inline_mp%pres (i, j), &
-                        inline_mp%preg (i, j), 0.0, abs (mdt), te_beg (i, kmp:km), tw_beg (i, kmp:km), &
+                        inline_mp%preg (i, j), 0.0, 0.0, abs (mdt), te_beg (i, kmp:km), tw_beg (i, kmp:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -1990,7 +2005,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                         q (i, j, kmp:km, graupel), tz (kmp:km), ua (i, j, kmp:km), va (i, j, kmp:km), wz (kmp:km), &
                         delp (i, j, kmp:km), gsize (i), dte (i), 0.0, inline_mp%prew (i, j), &
                         inline_mp%prer (i, j), inline_mp%prei (i, j), inline_mp%pres (i, j), &
-                        inline_mp%preg (i, j), 0.0, abs (mdt), te_end (i, kmp:km), tw_end (i, kmp:km), &
+                        inline_mp%preg (i, j), 0.0, 0.0, abs (mdt), te_end (i, kmp:km), tw_end (i, kmp:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif

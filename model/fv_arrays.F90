@@ -1142,6 +1142,7 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: dqsfc(:,:)     _NULL
     real, _ALLOCATABLE :: dusfc(:,:)     _NULL
     real, _ALLOCATABLE :: dvsfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dksfc(:,:)     _NULL
 
   end type inline_edmf_type
 
@@ -1690,6 +1691,7 @@ contains
     allocate ( Atm%inline_edmf%dqsfc(is:ie,js:je) )
     allocate ( Atm%inline_edmf%dusfc(is:ie,js:je) )
     allocate ( Atm%inline_edmf%dvsfc(is:ie,js:je) )
+    allocate ( Atm%inline_edmf%dksfc(is:ie,js:je) )
 
     allocate ( Atm%inline_sas%prec(is:ie,js:je) )
     allocate ( Atm%inline_sas%cumabs(is:ie,js:je) )
@@ -1860,6 +1862,7 @@ contains
            Atm%inline_edmf%dqsfc(i,j) = real_big
            Atm%inline_edmf%dusfc(i,j) = real_big
            Atm%inline_edmf%dvsfc(i,j) = real_big
+           Atm%inline_edmf%dksfc(i,j) = real_big
 
            Atm%inline_sas%prec(i,j) = real_big
            Atm%inline_sas%cumabs(i,j) = real_big
@@ -2200,6 +2203,7 @@ contains
     deallocate ( Atm%inline_edmf%dqsfc )
     deallocate ( Atm%inline_edmf%dusfc )
     deallocate ( Atm%inline_edmf%dvsfc )
+    deallocate ( Atm%inline_edmf%dksfc )
 
     deallocate ( Atm%inline_sas%prec )
     deallocate ( Atm%inline_sas%cumabs )

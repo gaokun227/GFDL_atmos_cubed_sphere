@@ -35,7 +35,7 @@ module fast_phys_mod
     use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
-    use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap, hlv, mtetw
+    use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap, hlv, mtetw, tice
     use sa_tke_edmf_mod, only: sa_tke_edmf_sfc, sa_tke_edmf_pbl
     use sa_gwd_mod, only: sa_gwd_oro
     
@@ -265,7 +265,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
 !$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, &
-!$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
+!$OMP                                    tz, t3, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
 !$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)
 
         do j = js, je
@@ -310,7 +310,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
                         delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -327,6 +327,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             zi (is:ie, 1) = 0.0
             pi (is:ie, 1) = pe (is:ie, km+1)
             pik (is:ie, 1) = exp (kappa * log (pi (is:ie, 1) * 1.e-5))
+            inline_edmf%dtsfc (is:ie, j) = 0.0
+            inline_edmf%dqsfc (is:ie, j) = 0.0
+            inline_edmf%dusfc (is:ie, j) = 0.0
+            inline_edmf%dvsfc (is:ie, j) = 0.0
+            inline_edmf%dksfc (is:ie, j) = 0.0
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
@@ -357,10 +362,18 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
                 ta (is:ie, k) = pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * &
                     (1. - (q_liq + q_sol)))
+                t3 (is:ie, k) = ta (is:ie, k)
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
                 radh (is:ie, k) = inline_edmf%radh (is:ie, j, kr)
+                c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
+                    q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+                inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) - (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) - ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) - va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) - 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             do i = is, ie
@@ -418,9 +431,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
                 inline_edmf%evap (is:ie, j), stress, wind, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j), &
-                inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
-                inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
+                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j))
 
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
@@ -457,11 +468,15 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 #ifdef MOIST_CAPPA
                 cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
 #endif
-                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
-                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
-                    pt (is:ie, j, kr)) * cp_air / c_moist
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - t3 (is:ie, k)) * &
+                    cp_air / c_moist * ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
+                inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) + (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) + ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) + va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) + 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             ! update non-microphyiscs tracers due to mass change
@@ -508,8 +523,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), - inline_edmf%dqsfc (i, j) / hlv * 86400, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, - inline_edmf%dtsfc (i, j), abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
+                        delp (i, j, 1:km), gsize (i), dte (i), - inline_edmf%dqsfc (i, j) / (hlv - (cv_vap - c_liq) * tice) * 86400, 0.0, 0.0, 0.0, 0.0, &
+                        0.0, - inline_edmf%dtsfc (i, j), - inline_edmf%dksfc (i, j), abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -769,7 +784,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
                         delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
             endif
@@ -904,7 +919,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
                         delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
+                        0.0, 0.0, 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
