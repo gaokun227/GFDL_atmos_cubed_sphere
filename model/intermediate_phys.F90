@@ -1131,7 +1131,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
 #endif
                 pt (is:ie, j, kr) = (te8 (is:ie, k) / delp (is:ie, j, kr) + &
-                    (ta (is:ie, k) - t3 (is:ie, k)) * cp_air / ps_dt + hlv * dqv / ps_dt - &
+                    ((ta (is:ie, k) - t3 (is:ie, k)) * cp_air + hlv * dqv) / ps_dt - &
                     (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) + &
                     (hlf - (c_liq - c_ice) * tice) * q_sol) / c_moist * &
                     ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
