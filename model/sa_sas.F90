@@ -152,7 +152,7 @@ end subroutine sa_sas_init
 ! =======================================================================
 
 subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, rn, kbot, ktop, kcnv, islimsk, gsize, &
+        q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, gsize, &
         dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc)
     
     implicit none
@@ -174,7 +174,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     integer, intent (out) :: kbot (im), ktop (im)
 
-    real, intent (out) :: rn (im)
+    real, intent (out) :: rn (im), qr (im, km)
     real, intent (out), optional :: cnvw (im, km), cnvc (im, km), &
         ud_mf (im, km), dd_mf (im, km), dt_mf (im, km)
     
@@ -373,6 +373,12 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         do i = 1, im
             if (present (cnvw)) cnvw (i, k) = 0.
             if (present (cnvc)) cnvc (i, k) = 0.
+        enddo
+    enddo
+
+    do k = 1, km
+        do i = 1, im
+            qr (i, k) = 0.
         enddo
     enddo
 
@@ -2390,6 +2396,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                     if (k >= jmin (i)) adw = 0.
                     rain = aup * pwo (i, k) + adw * edto (i) * pwdo (i, k)
                     rn (i) = rn (i) + rain * xmb (i) * .001 * dt2
+                    qr (i, k) = qr (i, k) + rain * xmb (i) * .001 * dt2
                 endif
                 if (flg (i) .and. k < ktcon (i)) then
                     evef = edt (i) * evfact_deep
@@ -2412,6 +2419,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                         q1 (i, k) = q1 (i, k) + qevap (i)
                         t1 (i, k) = t1 (i, k) - elocp * qevap (i)
                         rn (i) = rn (i) - .001 * qevap (i) * dp / g
+                        qr (i, k) = qr (i, k) - .001 * qevap (i) * dp / g
                         deltv (i) = - elocp * qevap (i) / dt2
                         delq (i) = + qevap (i) / dt2
                         delqev (i) = delqev (i) + .001 * dp * qevap (i) / g
@@ -2448,10 +2456,10 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
             ! heating and the moistening
             ! -----------------------------------------------------------------------
             
-            if (rn (i) < 0. .and. .not.flg (i)) rn (i) = 0.
-            if (rn (i) <= 0.) then
-                rn (i) = 0.
-            else
+            !if (rn (i) < 0. .and. .not.flg (i)) rn (i) = 0.
+            if (rn (i) > 0.) then
+            !    rn (i) = 0.
+            !else
                 ktop (i) = ktcon (i)
                 kbot (i) = kbcon (i)
                 kcnv (i) = 1
@@ -2556,7 +2564,7 @@ end subroutine sa_sas_deep
 ! =======================================================================
 
 subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, rn, kbot, ktop, kcnv, islimsk, gsize, &
+        q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, gsize, &
         dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc)
     
     implicit none
@@ -2576,7 +2584,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     real, intent (inout) :: ql (im, km), q1 (im, km), t1 (im, km), &
         u1 (im, km), v1 (im, km)
 
-    real, intent (out) :: rn (im)
+    real, intent (out) :: rn (im), qr (im, km)
     real, intent (out), optional :: cnvw (im, km), cnvc (im, km), &
         ! hchuang code change mass flux output
         ud_mf (im, km), dt_mf (im, km)
@@ -2746,6 +2754,12 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         do i = 1, im
             if (present (cnvw)) cnvw (i, k) = 0.
             if (present (cnvc)) cnvc (i, k) = 0.
+        enddo
+    enddo
+
+    do k = 1, km
+        do i = 1, im
+            qr (i, k) = 0.
         enddo
     enddo
 
@@ -3966,6 +3980,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
                 if (cnvflg (i)) then
                     if (k < ktcon (i) .and. k > kb (i)) then
                         rn (i) = rn (i) + pwo (i, k) * xmb (i) * .001 * dt2
+                        qr (i, k) = qr (i, k) + pwo (i, k) * xmb (i) * .001 * dt2
                     endif
                 endif
                 if (flg (i) .and. k < ktcon (i)) then
@@ -3994,6 +4009,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
                         else
                             rn (i) = rn (i) - tem1
                         endif
+                        qr (i, k) = qr (i, k) - qevap (i) * tem
                         q1 (i, k) = q1 (i, k) + qevap (i)
                         t1 (i, k) = t1 (i, k) - elocp * qevap (i)
                         deltv (i) = - elocp * qevap (i) / dt2
@@ -4020,7 +4036,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do i = 1, im
         if (cnvflg (i)) then
-            if (rn (i) < 0. .or. .not.flg (i)) rn (i) = 0.
+            !if (rn (i) < 0. .or. .not.flg (i)) rn (i) = 0.
             ktop (i) = ktcon (i)
             kbot (i) = kbcon (i)
             kcnv (i) = 2
