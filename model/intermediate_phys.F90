@@ -1134,6 +1134,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 #endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + &
                     ((ta (is:ie, k) - t3 (is:ie, k)) * cp_air + hlv * dqv) / c_moist * &
+                    !(ta (is:ie, k) - t3 (is:ie, k) - hlv * (dql + dqr) / cp_air) * &
                     ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
                 te8 (is:ie, k) = (c_moist * pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) + &
                     (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
