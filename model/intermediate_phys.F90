@@ -147,7 +147,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real (kind = r8), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
 
-    real (kind = r8), dimension (is:ie, 1:km) :: te_beg, te_end, tw_beg, tw_end, te0, te8, dte8
+    real (kind = r8), dimension (is:ie, 1:km) :: te_beg, te_end, tw_beg, tw_end, te8, dte8
     
     character (len = 32) :: tracer_units, tracer_name
 
@@ -568,11 +568,11 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 radh (is:ie, k) = inline_edmf%radh (is:ie, j, kr)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) - (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) - ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) - va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) - 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) - (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) - ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) - va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) - 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             do i = is, ie
@@ -630,7 +630,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
                 inline_edmf%evap (is:ie, j), stress, wind, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j))
+                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j), &
+                inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
+                inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
 
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
@@ -671,11 +673,11 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     cp_air / c_moist * ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
-                inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) + (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) + ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) + va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) + 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) + (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) + ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) + va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) + 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             ! update non-microphyiscs tracers due to mass change
@@ -944,9 +946,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    te_err, tw_err) &
 !$OMP                           private (gsize, dz, pi, rn, tmp, q_liq, q_sol, pe, peln, &
 !$OMP                                    zm, dp, pm, qv, ql, qr, ta, uu, vv, ww, ncld, qliq, qsol, &
-!$OMP                                    cvm, kr, dqv, dql, dqr, ps_dt, c_moist, adj_vmr, k1, k2, &
+!$OMP                                    cvm, kr, dqv, dql, ps_dt, c_moist, adj_vmr, k1, k2, &
 !$OMP                                    tz, t3, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
-!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss, te0, te8, dte8)
+!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss, te8, dte8)
 
         do j = js, je
  
@@ -1044,9 +1046,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 ww (is:ie, k) = omga (is:ie, j, kr)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                te0 (is:ie, k) = (c_moist * ta (is:ie, k) + &
+                te8 (is:ie, k) = (c_moist * ta (is:ie, k) + &
                     (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
                     (hlf - (c_liq - c_ice) * tice) * q_sol) * delp (is:ie, j, kr) / grav
+                dte8 (is:ie, k) = 0.0
             enddo
   
             ! check if pressure or height cross over
@@ -1105,18 +1108,17 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             do k = 1, km
                 kr = km - k + 1
                 k1 = 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr)
+                dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum)
                 dql = ql (is:ie, k) - q (is:ie, j, kr, liq_wat)
-                dqr = qr (is:ie, k) * grav / delp (is:ie, j, kr) * 1.e3
-                dqv = qv (is:ie, k) - q (is:ie, j, kr, sphum) + dql + dqr
-                ps_dt = 1 + dqv
+                ps_dt = 1 + dqv + dql
                 adj_vmr (is:ie, kr) = (ps_dt - (qv (is:ie, k) + ql (is:ie, k) + &
                     q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, rainwat) + &
                     q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel))) / &
                     (1. - (qv (is:ie, k) + ql (is:ie, k) + q (is:ie, j, kr, ice_wat) + &
                     q (is:ie, j, kr, rainwat) + q (is:ie, j, kr, snowwat) + &
                     q (is:ie, j, kr, graupel))) / ps_dt
-                q (is:ie, j, kr, sphum) = (qv (is:ie, k) + dql + dqr) / ps_dt
-                q (is:ie, j, kr, liq_wat) = q (is:ie, j, kr, liq_wat) / ps_dt
+                q (is:ie, j, kr, sphum) = qv (is:ie, k) / ps_dt
+                q (is:ie, j, kr, liq_wat) = ql (is:ie, k) / ps_dt
                 q (is:ie, j, kr, ice_wat) = q (is:ie, j, kr, ice_wat) / ps_dt
                 q (is:ie, j, kr, rainwat) = q (is:ie, j, kr, rainwat) / ps_dt
                 q (is:ie, j, kr, snowwat) = q (is:ie, j, kr, snowwat) / ps_dt
@@ -1132,42 +1134,13 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 #ifdef MOIST_CAPPA
                 cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
 #endif
-                pt (is:ie, j, kr) = pt (is:ie, j, kr) + &
-                    ((ta (is:ie, k) - t3 (is:ie, k)) * cp_air + hlv * dqv) / c_moist * &
-                    !(ta (is:ie, k) - t3 (is:ie, k) - hlv * (dql + dqr) / cp_air) * &
+                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) - &
+                    t3 (is:ie, k)) * cp_air / c_moist * &
                     ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
-                te8 (is:ie, k) = (c_moist * pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) + &
-                    (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
-                    (hlf - (c_liq - c_ice) * tice) * q_sol) * delp (is:ie, j, kr) / grav
-                dqv = (- dql - dqr) / ps_dt
-                q (is:ie, j, kr, sphum) = q (is:ie, j, kr, sphum) + dqv
-                q (is:ie, j, kr, liq_wat) = q (is:ie, j, kr, liq_wat) + dql / ps_dt
-                ps_dt = 1 + dqv + dql / ps_dt
-                q (is:ie, j, kr, sphum) = q (is:ie, j, kr, sphum) / ps_dt
-                q (is:ie, j, kr, liq_wat) = q (is:ie, j, kr, liq_wat) / ps_dt
-                q (is:ie, j, kr, ice_wat) = q (is:ie, j, kr, ice_wat) / ps_dt
-                q (is:ie, j, kr, rainwat) = q (is:ie, j, kr, rainwat) / ps_dt
-                q (is:ie, j, kr, snowwat) = q (is:ie, j, kr, snowwat) / ps_dt
-                q (is:ie, j, kr, graupel) = q (is:ie, j, kr, graupel) / ps_dt
-                delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
-                q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
-                q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
-#ifdef USE_COND
-                q_con (is:ie, j, kr) = q_liq + q_sol
-#endif
-                c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
-                    q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-#ifdef MOIST_CAPPA
-                cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
-#endif
-                pt (is:ie, j, kr) = (te8 (is:ie, k) * grav / delp (is:ie, j, kr) - &
-                    (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) + &
-                    (hlf - (c_liq - c_ice) * tice) * q_sol) / c_moist * &
-                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
-                dte8 (is:ie, k) = te0 (is:ie, k) - (c_moist * pt (is:ie, j, kr) / &
-                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) + &
-                    (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
-                    (hlf - (c_liq - c_ice) * tice) * q_sol) * delp (is:ie, j, kr) / grav
+                !dte8 (is:ie, k) = te8 (is:ie, k) - (c_moist * pt (is:ie, j, kr) / &
+                !    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) + &
+                !    (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
+                !    (hlf - (c_liq - c_ice) * tice) * q_sol) * delp (is:ie, j, kr) / grav
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
                 k2 = 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr)

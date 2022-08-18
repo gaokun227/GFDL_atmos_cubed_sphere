@@ -2456,10 +2456,10 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
             ! heating and the moistening
             ! -----------------------------------------------------------------------
             
-            !if (rn (i) < 0. .and. .not.flg (i)) rn (i) = 0.
-            if (rn (i) > 0.) then
-            !    rn (i) = 0.
-            !else
+            if (rn (i) < 0. .and. .not.flg (i)) rn (i) = 0.
+            if (rn (i) <= 0.) then
+                rn (i) = 0.
+            else
                 ktop (i) = ktcon (i)
                 kbot (i) = kbcon (i)
                 kcnv (i) = 1
@@ -4036,7 +4036,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do i = 1, im
         if (cnvflg (i)) then
-            !if (rn (i) < 0. .or. .not.flg (i)) rn (i) = 0.
+            if (rn (i) < 0. .or. .not.flg (i)) rn (i) = 0.
             ktop (i) = ktcon (i)
             kbot (i) = kbcon (i)
             kcnv (i) = 2

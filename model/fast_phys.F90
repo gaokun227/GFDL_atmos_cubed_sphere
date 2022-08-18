@@ -369,11 +369,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 radh (is:ie, k) = inline_edmf%radh (is:ie, j, kr)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) - (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) - ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) - va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) - 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) - (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) - ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) - va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) - 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             do i = is, ie
@@ -431,7 +431,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
                 inline_edmf%evap (is:ie, j), stress, wind, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j))
+                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j), &
+                inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
+                inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
 
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
@@ -472,11 +474,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     cp_air / c_moist * ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
-                inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) + (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) + ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) + va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) + 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) + (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) + ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) + va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) + 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             ! update non-microphyiscs tracers due to mass change
