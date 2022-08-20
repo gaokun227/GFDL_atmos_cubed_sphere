@@ -1870,7 +1870,7 @@ contains
       jsd = Atm%bd%jsd
       jed = Atm%bd%jed
 
-      call open_ncfile( trim(inputdir)//'/'//trim(fn_gfs_ctl), ncid )
+      call open_ncfile( trim(fn_gfs_ctl), ncid )
       call get_ncdim1( ncid, 'levsp', levsp )
       call close_ncfile( ncid )
       levp_gfs = levsp-1
@@ -1955,7 +1955,7 @@ contains
         call register_axis(GFS_restart, "levp", size(zh_gfs,3))
         call register_restart_field(GFS_restart, 'o3mr', o3mr_gfs, dim_names_3d3, is_optional=.true.)
         call register_restart_field(GFS_restart, 'ps', ps_gfs, dim_names_2d)
-        call register_restart_field(GFS_restart, 'ZH', zh_gfs, dim_names_3d4)
+        call register_restart_field(GFS_restart, 'zh', zh_gfs, dim_names_3d4)
         call read_restart(GFS_restart)
         call close_file(GFS_restart)
       endif
