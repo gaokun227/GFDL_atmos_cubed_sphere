@@ -9,7 +9,7 @@ module w_forcing_mod
   public
 
   !settings
-  integer :: w_forcing_type = 101 ! half-ellipse acceleration (Ziegler et al., 2010; Prein et al. 2021)
+  integer :: w_forcing_type = 101
   real :: w_forcing_L = 40000. !m
   real :: w_forcing_R = 2000.  !m --- ?!?
   real :: w_forcing_D = 4000.  !m, depth
@@ -40,7 +40,7 @@ contains
    if (grid_type == 4) then
 
       select case (w_forcing_type)
-      case(1)
+      case(1)  ! half-ellipse acceleration (Ziegler et al., 2010; Prein et al. 2021)
          w_forcing_i0 = real(npx-1)*0.5
          w_forcing_j0 = real(npy-1)*0.5
       case default
