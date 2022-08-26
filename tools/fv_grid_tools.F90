@@ -1184,7 +1184,7 @@ contains
          dy_const=dx_const
          if (is_master()) print*,"Warning: Recalculating dx:", dx_const
          if (is_master()) print*,"Creating a square doubly periodic domain of size", &
-          domain_deg, "degrees, a dx:", dx_const, ", left corner at lonlat (deg): ", lon_rad, deglat
+          domain_deg, "degrees, a dx:", dx_const, ", centered at lonlat (deg): ", lon_rad, deglat
        endif
 
        dx(:,:)  = dx_const
@@ -1218,8 +1218,8 @@ contains
           if (is_master())then  !! compute the grids as a function of !!npx&npy!! on master then broadcast to other pes
              do j=1,npy
                 do i=1,npx
-                   grid_global(i,j,1,1) = lon_rad  + real(i-1)/real(npx-1)*domain_rad
-                   grid_global(i,j,2,1) = lat_rad  + real(j-1)/real(npy-1)*domain_rad
+                   grid_global(i,j,1,1) = lon_rad  - 0.5*domain_rad + real(i-1)/real(npx-1)*domain_rad
+                   grid_global(i,j,2,1) = lat_rad  - 0.5*domain_rad + real(j-1)/real(npy-1)*domain_rad
                    ! for long between 0 and 2pi
                !    if (grid_global(i,j,1,1) > 2.*pi) grid_global(i,j,1,1) = grid_global(i,j,1,1) - 2.*pi
                 !   if (grid_global(i,j,1,1) < 0.) grid_global(i,j,1,1) = grid_global(i,j,1,1) + 2.*pi

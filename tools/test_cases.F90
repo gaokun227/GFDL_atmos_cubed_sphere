@@ -5227,8 +5227,8 @@ end subroutine terminator_tracers
 ! adapted from case 55 - Joseph M.
 !---------------------------------------------------------
 
-         p0(1) = (0. + 0.5*flagstruct%domain_deg) * pi / 180. 
-         p0(2) = (flagstruct%deglat + 0.5*flagstruct%domain_deg) * pi / 180. 
+         p0(1) = (0.) * pi / 180. 
+         p0(2) = (flagstruct%deglat) * pi / 180. 
 
          !original
          !dp = 1115.
