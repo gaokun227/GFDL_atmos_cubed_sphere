@@ -123,7 +123,8 @@
       logical :: no_wind = .false.
       logical :: gaussian_dt = .false.
       logical :: do_marine_sounding = .false.
-      real    :: dt_amp = 2.1
+      real    :: dt_amp = 2.1   ! K
+      real    :: dt_rad = 2000. !m
       real    :: alpha = 0.0
       integer :: Nsolitons = 2
       real    :: soliton_size = 750.e3, soliton_Umax = 50.
@@ -4572,8 +4573,8 @@ end subroutine terminator_tracers
         real, dimension(1:npz):: ts1, qs1
         real, dimension(npz+1):: pk1, pe1
         real :: us0 = 30.
-        real :: dist, r0, f0_const, prf, rgrav
-        real :: ptmp, ze, zc, zm, utmp, vtmp, xr, yr
+        real :: dist, dist0, r0, f0_const, prf, rgrav
+        real :: ptmp, ze, zc, zm, utmp, vtmp, xr, yr, tmp
         real :: t00, p00, xmax, xc, xx, yy, pk0, pturb, ztop
         real :: ze1(npz+1)
         real:: dz1(npz), qc1(npz), qv1(npz)
@@ -4717,27 +4718,6 @@ end subroutine terminator_tracers
            call hydro_eq(npz, is, ie, js, je, ps, phis, dry_mass,      &
                          delp, ak, bk, pt, delz, area, ng, .false., hydrostatic, hybrid_z, domain)
 
-           ! *** Add Initial perturbation ***
-           if (bubble_do) then
-               r0 = 100.*sqrt(dx_const**2 + dy_const**2)
-               icenter = npx/2
-               jcenter = npy/2
-
-               do j=js,je
-                  do i=is,ie
-                     dist = (i-icenter)*dx_const*(i-icenter)*dx_const   &
-                           +(j-jcenter)*dy_const*(j-jcenter)*dy_const
-                     dist = min(r0, sqrt(dist))
-                     do k=1,npz
-                        prf = ak(k) + ps(i,j)*bk(k)
-                        if ( prf > 100.E2 ) then
-                             pt(i,j,k) = pt(i,j,k) + 2.0*(1. - (dist/r0)) * prf/ps(i,j)
-!                             pt(i,j,k) = pt(i,j,k) + 0.01*(1. - (dist/r0)) * prf/ps(i,j)
-                        endif
-                     enddo
-                  enddo
-               enddo
-           endif
           if ( hydrostatic ) then
           call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
@@ -4748,6 +4728,44 @@ end subroutine terminator_tracers
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
                      moist_phys, hydrostatic, nwat, domain, flagstruct%adiabatic, .true. )
           endif
+
+           ! *** Add Initial perturbation ***
+           if (bubble_do) then
+              !r0 = 100.*sqrt(dx_const**2 + dy_const**2)
+               icenter = (npx-1)/2
+               jcenter = (npy-1)/2
+               zc = 1500. !1500 m center AGL
+
+               do j=js,je
+                  do i=is,ie
+                     dist0 = (real(i-icenter)*dx_const/dt_rad)**2 + (real(j-jcenter)*dy_const/dt_rad)**2
+                     ze = 0.
+                     do k=npz,1,-1
+                        zm = ze - 0.5*delz(i,j,k)   ! layer center
+                        ze = ze - delz(i,j,k)
+                        dist = dist0 + ((zm-zc)/zc)**2 !1500 m height
+                        dist = min(1.0,dist)
+                        pt(i,j,k) = pt(i,j,k) + dt_amp*cos(0.5*pi*dist)
+!!! DEBUG CODE
+!!$                        if (abs(zm - zc) < 50. .and. abs(i-icenter) < 4 .and. abs(j-jcenter) < 4) then
+!!$                           write(*,'(3I4, 3F)') i, j, k, dist0, dist, dt_rad
+!!$                        endif
+                        if (i == icenter .and. j == jcenter) then
+                           write(*,'(A, 3I, 4F)') "Bubble:", i,j,k, zm, dist0, dist, delz(i,j,k)
+                        endif
+!!! END DEBUG CODE
+                     enddo
+!!$                     do k=1,npz
+!!$                        prf = ak(k) + ps(i,j)*bk(k)
+!!$                        if ( prf > 100.E2 ) then
+!!$                             pt(i,j,k) = pt(i,j,k) + dt_amp*(1. - (dist/dt_rad)) * prf/ps(i,j)
+!!$                             !pt(i,j,k) = pt(i,j,k) + dt_amp*(1. - (dist/dt_rad)) * prf/ps(i,j)
+!!$!                             pt(i,j,k) = pt(i,j,k) + 0.01*(1. - (dist/dt_rad)) * prf/ps(i,j)
+!!$                        endif
+!!$                     enddo
+                  enddo
+               enddo
+           endif
 
          q = 0.
          do k=1,npz
@@ -4793,7 +4811,7 @@ end subroutine terminator_tracers
 
         case ( 15 )
 !---------------------------
-! Doubly periodic bubble
+! Doubly periodic warm bubble
 !---------------------------
            t00 = 250.
 
@@ -4914,6 +4932,10 @@ end subroutine terminator_tracers
                 enddo
              enddo
           enddo
+
+          call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                     pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                     moist_phys, .false., nwat, domain, flagstruct%adiabatic, .true.)
 
           pturb = 15.
            xmax = 51.2E3
@@ -5217,7 +5239,7 @@ end subroutine terminator_tracers
 
 ! *** Add Initial perturbation (Gaussian) ***
         pturb = dt_amp
-        r0 = 10.e3
+        r0 = dt_rad ! 10.e3
         zc = 1.4e3         ! center of bubble  from surface
         icenter = (npx-1)/2 + 1
         jcenter = (npy-1)/2 + 1
@@ -5238,7 +5260,7 @@ end subroutine terminator_tracers
 
 ! *** Add Initial perturbation (Ellipse) ***
         pturb = dt_amp
-        r0 = 10.e3
+        r0 = dt_rad ! 10.e3
         zc = 1.4e3         ! center of bubble  from surface
         icenter = (npx-1)/2 + 1
         jcenter = (npy-1)/2 + 1
@@ -5254,6 +5276,7 @@ end subroutine terminator_tracers
         enddo
 
         endif
+
 
         case ( 21 )
 !---------------------------------------------------------
@@ -5883,7 +5906,7 @@ end subroutine terminator_tracers
         character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
-             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, &
+             no_wind, gaussian_dt, dt_amp, dt_rad, do_marine_sounding, checker_tr, small_earth_scale, &
              Umean, Vmean, w_forcing
 
 #include<file_version.h>
