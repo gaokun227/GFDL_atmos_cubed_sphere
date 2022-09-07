@@ -1176,7 +1176,8 @@ contains
        domain_rad = pi/180. * domain_deg 
 
        lat_rad = deglat * pi/180.
-       lon_rad = 0.          ! arbitrary
+       !lon_rad = 0.          ! arbitrary
+       lon_rad = - 50.  * pi /180.         ! arbitrary !carefull: weird physics IC (tsc) when this is around 0
 
        !added by Joseph
        if (domain_deg /= 0.05) then
@@ -1184,7 +1185,7 @@ contains
          dy_const=dx_const
          if (is_master()) print*,"Warning: Recalculating dx:", dx_const
          if (is_master()) print*,"Creating a square doubly periodic domain of size", &
-          domain_deg, "degrees, a dx:", dx_const, ", centered at lonlat (deg): ", lon_rad, deglat
+          domain_deg, "degrees, a dx:", dx_const, ", centered at lonlat (deg): ", lon_rad *180./pi, deglat
        endif
 
        dx(:,:)  = dx_const
