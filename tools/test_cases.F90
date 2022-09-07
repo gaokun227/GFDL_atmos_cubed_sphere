@@ -5227,7 +5227,8 @@ end subroutine terminator_tracers
 ! adapted from case 55 - Joseph M.
 !---------------------------------------------------------
 
-         p0(1) = (0.) * pi / 180. 
+         !p0(1) = (0.) * pi / 180. 
+         p0(1) = (-50.) * pi / 180. !weird physics IC (tsc) when this is around 0
          p0(2) = (flagstruct%deglat) * pi / 180. 
 
          !original
