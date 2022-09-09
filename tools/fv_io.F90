@@ -291,14 +291,14 @@ contains
        endif
 
        if (Atm%flagstruct%restart_from_agrid_winds) then
-          call register_restart_field(Atm%Fv_restart_tile, fname, 'ua', Atm%ua, &
+          call register_restart_field(Atm%Fv_restart_tile, 'ua', Atm%ua, &
                dim_names_4d3)
-          call register_restart_field(Atm%Fv_restart_tile, fname, 'va', Atm%va, &
+          call register_restart_field(Atm%Fv_restart_tile, 'va', Atm%va, &
                dim_names_4d3)
        else
-          call register_restart_field(Atm%Fv_restart_tile, fname, 'u', Atm%u, &
+          call register_restart_field(Atm%Fv_restart_tile, 'u', Atm%u, &
                dim_names_4d)
-          call register_restart_field(Atm%Fv_restart_tile, fname, 'v', Atm%v, &
+          call register_restart_field(Atm%Fv_restart_tile, 'v', Atm%v, &
                dim_names_4d2)
        endif
 
