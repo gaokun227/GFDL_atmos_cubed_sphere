@@ -366,7 +366,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         pt, w, ua, va, dz, delp, gsize, dts, hs, rain, snow, ice, &
         graupel, hydrostatic, is, ie, ks, ke, q_con, cappa, consv_te, &
         te, condensation, deposition, evaporation, sublimation, &
-        last_step, do_inline_mp, phys_hydrostatic, phys_cp)
+        last_step, do_inline_mp, phys_hydrostatic)
 
     implicit none
 
@@ -374,7 +374,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
     logical, intent (in) :: last_step
     logical, intent (in) :: consv_te
     logical, intent (in) :: do_inline_mp
-    logical, intent (in) :: phys_hydrostatic, phys_cp
+    logical, intent (in) :: phys_hydrostatic
 
     integer, intent (in) :: is, ie ! physics window
     integer, intent (in) :: ks, ke ! vertical dimension
@@ -454,7 +454,7 @@ subroutine gfdl_mp_driver (qv, ql, qr, qi, qs, qg, qa, qnl, qni, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
         condensation, deposition, evaporation, sublimation, last_step, &
-        do_inline_mp, phys_hydrostatic, phys_cp)
+        do_inline_mp, phys_hydrostatic)
 
 end subroutine gfdl_mp_driver
 
@@ -478,7 +478,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
         rain, snow, graupel, ice, m2_rain, m2_sol, gsize, hs, &
         w_var, vt_r, vt_s, vt_g, vt_i, q_con, cappa, consv_te, te, &
         condensation, deposition, evaporation, sublimation, last_step, &
-        do_inline_mp, phys_hydrostatic, phys_cp)
+        do_inline_mp, phys_hydrostatic)
 
     implicit none
 
@@ -487,7 +487,7 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
     logical, intent (in) :: consv_te
     logical, intent (in) :: do_inline_mp
     integer, intent (in) :: is, ie, ks, ke
-    logical, intent (in) :: phys_hydrostatic, phys_cp
+    logical, intent (in) :: phys_hydrostatic
     real, intent (in) :: dt_in
     real, intent (in), dimension (is:ie) :: gsize
     real, intent (in), dimension (is:ie) :: hs
@@ -932,21 +932,17 @@ subroutine mpdrv (hydrostatic, ua, va, w, delp, pt, qv, ql, qr, qi, qs, &
             cappa (i, k) = tmp / (tmp + cvm (k))
 #endif
             if (do_inline_mp) then
-               if (phys_hydrostatic .or. phys_cp) then
-                  if (.not. phys_cp) dz(i,k) = dz(i,k)/pt(i,k)
 #ifdef MOIST_CAPPA
+               if (phys_hydrostatic) then
+                  dz(i,k) = dz(i,k)/pt(i,k)
                   pt (i, k) = pt(i,k) + (tz (k) * (1. + zvir * qvz (k)) * (1. - q_cond) - pt(i,k)) * cvm(k) / cp_air
-#else
-                  pt (i, k) = pt(i,k) + (tz (k) * (1. + zvir * qvz (k)) - pt(i,k)) * cvm(k) / cp_air
-#endif
-                  if (.not. phys_cp) dz(i,k) = dz(i,k)*pt(i,k)
+                  dz(i,k) = dz(i,k)*pt(i,k)
                else
-#ifdef MOIST_CAPPA
                   pt (i, k) = tz (k) * (1. + zvir * qvz (k)) * (1. - q_cond)
-#else
-                  pt (i, k) = tz (k) * (1. + zvir * qvz (k))
-#endif
                endif
+#else
+                pt (i, k) = tz (k) * (1. + zvir * qvz (k))
+#endif
             else
                 pt (i, k) = pt (i, k) + (tz (k) - pt (i, k)) * cvm (k) / cp_air
             endif
