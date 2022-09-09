@@ -1183,7 +1183,8 @@ module fv_arrays_mod
      type(coarse_restart_type) :: restart  !< container for coarse restart data
      logical :: write_coarse_dgrid_vel_rst = .true.  !< Whether to write D-grid winds to coarse restart files
      logical :: write_coarse_agrid_vel_rst = .false.  !< Whether to write A-grid winds to coarse restart files
-
+     logical :: restart_from_agrid_winds = .false.  !< Whether to restart from A-grid winds
+     logical :: write_optional_dgrid_vel_rst = .false. !< Whether to write out optional D-grid winds when restart_from_agrid_winds is active
   end type fv_coarse_graining_type
 
   interface allocate_fv_nest_BC_type
