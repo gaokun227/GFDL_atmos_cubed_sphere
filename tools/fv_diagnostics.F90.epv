@@ -10,7 +10,7 @@
 !* (at your option) any later version.
 !*
 !* The FV3 dynamical core is distributed in the hope that it will be
-!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+!* useful, but WITHOUT ANYWARRANTY; without even the implied warranty
 !* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 !* See the GNU General Public License for more details.
 !*
@@ -24,33 +24,39 @@
 
 module fv_diagnostics_mod
 
- use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, kappa, WTMAIR, WTMCO2, &
-                               hlv, cp_air, cp_vapor, TFREEZE
- use fv_arrays_mod,      only: radius ! scaled for small earth
- use fms_mod,            only: write_version_number
- use time_manager_mod,   only: time_type, get_date, get_time
+ use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, radius, kappa, WTMAIR, WTMCO2, &
+                               omega, hlv, cp_air, cp_vapor, TFREEZE
+ use fms_mod,            only: write_version_number, lowercase
+ use fms_io_mod,         only: set_domain, nullify_domain
+ use time_manager_mod,   only: time_type, get_date, get_time, month_name
  use mpp_domains_mod,    only: domain2d, mpp_update_domains, DGRID_NE, NORTH, EAST
  use diag_manager_mod,   only: diag_axis_init, register_diag_field, &
-                               register_static_field, send_data, diag_grid_init, &
-                               diag_field_add_attribute
+                               register_static_field, send_data, diag_grid_init
  use fv_arrays_mod,      only: fv_atmos_type, fv_grid_type, fv_diag_type, fv_grid_bounds_type, &
                                R_GRID
- use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp, mappm
+ use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp
  use fv_mp_mod,          only: mp_reduce_sum, mp_reduce_min, mp_reduce_max, is_master
  use fv_eta_mod,         only: get_eta_level, gw_1d
- use fv_grid_utils_mod,  only: g_sum
+ use fv_grid_utils_mod,  only: g_sum, v_prod, latlon2xyz, great_circle_dist, vect_cross
  use a2b_edge_mod,       only: a2b_ord2, a2b_ord4
  use fv_surf_map_mod,    only: zs_g
 
  use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
  use field_manager_mod,  only: MODEL_ATMOS
- use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, mpp_max, NOTE, input_nml_file
+ use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, mpp_max, NOTE, input_nml_file, get_unit
+ use mpp_io_mod,         only: mpp_flush
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
  use fv_arrays_mod, only: max_step 
- use gfdl_mp_mod, only: wqs, mqs3d, qs_init, c_liq, rad_ref
+ use gfdl_mp_mod, only: wqs, mqs3d, qs_init, c_liq
 
- use fv_diag_column_mod, only: fv_diag_column_init, sounding_column, debug_column
+ use column_diagnostics_mod, only:  column_diagnostics_init, &
+                                    initialize_diagnostic_columns, &
+                                    column_diagnostics_header, &
+                                    close_column_diagnostics_units
+
+ use rad_ref_mod, only: rad_ref
+ use fv_coarse_graining_mod, only: fv_coarse_grained_diagnostics_init, fv_coarse_grained_diagnostics
 
  implicit none
  private
@@ -81,9 +87,6 @@ module fv_diagnostics_mod
  integer :: istep, mp_top
  real    :: ptop
  real, parameter    ::     rad2deg = 180./pi
- logical :: do_diag_sonde, do_diag_debug
- integer :: sound_freq
- logical :: prt_sounding = .false.
 
 ! tracers
  character(len=128)   :: tname
@@ -91,35 +94,56 @@ module fv_diagnostics_mod
  real :: sphum_ll_fix = 0.
  real :: qcly0 ! initial value for terminator test
 
- logical :: is_ideal_case = .false.
- public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, range_check
-
+ public :: fv_diag_init, fv_time, fv_diag, prt_mxm, prt_maxmin, range_check!, id_divg, id_te
  public :: prt_mass, prt_minmax, ppme, fv_diag_init_gn, z_sum, sphum_ll_fix, eqv_pot, qcly0, gn
  public :: prt_height, prt_gb_nh_sh, interpolate_vertical, rh_calc, get_height_field, get_height_given_pressure
- public :: cs3_interpolator, get_vorticity, is_ideal_case
-! needed by fv_nggps_diag
- public :: max_vv, max_uh, bunkers_vector, helicity_relative_CAPS
+ public :: do_diag_debug_dyn, debug_column_dyn
 
  integer, parameter :: MAX_PLEVS = 31
 #ifdef FEWER_PLEVS
- integer :: nplev = 11 !< # of levels in plev interpolated standard level output, with levels given by levs. 11 by default
+ integer :: nplev = 11 ! 31 ! lmh
 #else
- integer :: nplev = 31 !< # of levels in plev interpolated standard level output, with levels given by levs. 31 by default
+ integer :: nplev = 31
 #endif
- integer :: levs(MAX_PLEVS) !< levels for plev interpolated standard level output, in hPa (mb) in increasing order. Extended GFS std levels by default.
+ integer :: levs(MAX_PLEVS)
  integer :: k100, k200, k300, k500
- integer :: nplev_ave
- integer :: levs_ave(MAX_PLEVS) !< Interfaces of layer averages for nplev_ave regridded output, in hPa (mb) in increasing order. 50,400,850,1000 by default.
 
+ integer, parameter :: MAX_DIAG_COLUMN = 100
+ integer, parameter :: diag_name_len = 16
+ integer, allocatable, dimension(:) :: diag_debug_units
+ character(diag_name_len), dimension(MAX_DIAG_COLUMN) :: diag_debug_names
+ real, dimension(MAX_DIAG_COLUMN) :: diag_debug_lon, diag_debug_lat
+ integer :: diag_debug_kbottom, diag_debug_nlevels
+
+ integer, allocatable, dimension(:) :: diag_sonde_units
+ character(diag_name_len), dimension(MAX_DIAG_COLUMN) :: diag_sonde_names
+ real, dimension(MAX_DIAG_COLUMN) :: diag_sonde_lon, diag_sonde_lat
+ integer, dimension(MAX_DIAG_COLUMN) :: diag_debug_i, diag_debug_j, diag_debug_tile
+ integer, dimension(MAX_DIAG_COLUMN) :: diag_sonde_i, diag_sonde_j, diag_sonde_tile
+
+ logical :: do_diag_debug = .false.
+ logical :: do_diag_debug_dyn = .false.
+ logical :: do_diag_sonde = .false.
+ logical :: prt_sounding = .false.
+ integer :: sound_freq = 3
+ integer :: num_diag_debug = 0
+ integer :: num_diag_sonde = 0
+ character(100) :: runname = 'test'
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
  integer :: id_dx, id_dy
 
- real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2), psrange(2), skrange(2)
+ real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2)
 
  ! integer :: id_d_grid_ucomp, id_d_grid_vcomp   ! D grid winds
  ! integer :: id_c_grid_ucomp, id_c_grid_vcomp   ! C grid winds
 
- namelist /fv_diag_plevs_nml/ nplev, levs, levs_ave, k100, k200, k500
+ namelist /fv_diag_column_nml/ do_diag_debug, do_diag_debug_dyn, do_diag_sonde, &
+      sound_freq, runname, diag_debug_kbottom, diag_debug_nlevels
+      !diag_debug_lon, diag_debug_lat, diag_debug_names, 
+      !diag_debug_i, diag_debug_j, diag_debug_tile, &
+      !diag_sonde_lon, diag_sonde_lat, diag_sonde_names
+
+ namelist /fv_diag_plevs_nml/ nplev, levs, k100, k200, k500
 
 ! version number of this module
 ! Include variable "version" to be written to log file.
@@ -127,7 +151,7 @@ module fv_diagnostics_mod
 
 !Constants
 #include<fv_diagnostics.h>
-
+ 
 contains
 
  subroutine fv_diag_init(Atm, axes, Time, npx, npy, npz, p_ref)
@@ -146,9 +170,9 @@ contains
     !These id_* are not needed later since they are for static data which is not used elsewhere
     integer :: id_bk, id_pk, id_area, id_lon, id_lat, id_lont, id_latt, id_phalf, id_pfull
     integer :: id_hyam, id_hybm
-    integer :: id_plev, id_plev_ave_edges, id_plev_ave
+    integer :: id_plev
     integer :: i, j, k, m, n, ntileMe, id_xt, id_yt, id_x, id_y, id_xe, id_ye, id_xn, id_yn
-    integer :: isd, ied, jsd, jed, isc, iec, jsc, jec
+    integer :: isc, iec, jsc, jec
 
     logical :: used
 
@@ -159,14 +183,8 @@ contains
 
     integer :: ncnst
     integer :: axe2(3)
-    integer :: axe_ave(3)
 
     character(len=64) :: errmsg
-#ifdef GFS_PHYS
-    character(len=*), parameter :: massdef_str = " (GFS moist-mass)"
-#else
-    character(len=*), parameter :: massdef_str = ""
-#endif
     logical :: exists
     integer :: nlunit, ios
 
@@ -183,6 +201,8 @@ contains
 
     ncnst = Atm(1)%ncnst
     m_calendar = Atm(1)%flagstruct%moist_phys
+
+    call set_domain(Atm(1)%domain)  ! Set domain so that diag_manager can access tile information
 
     sphum   = get_tracer_index (MODEL_ATMOS, 'sphum')
     liq_wat = get_tracer_index (MODEL_ATMOS, 'liq_wat')
@@ -209,12 +229,6 @@ contains
     trange = (/  100.,  350. /)  ! temperature
 #endif
     slprange = (/800.,  1200./)  ! sea-level-pressure
-    skrange  = (/ -10000000.0,  10000000.0 /)  ! dissipation estimate for SKEB
-#ifdef SW_DYNAMICS
-    psrange = (/.01, 1.e7 /)
-#else
-    psrange = (/40000.0, 110000.0/)
-#endif
 
     ginv = 1./GRAV
      if (Atm(1)%grid_number == 1) fv_time = Time
@@ -247,9 +261,6 @@ contains
     n=1
     isc = Atm(n)%bd%isc; iec = Atm(n)%bd%iec
     jsc = Atm(n)%bd%jsc; jec = Atm(n)%bd%jec
-
-    isd = Atm(n)%bd%isd; ied = Atm(n)%bd%ied
-    jsd = Atm(n)%bd%jsd; jed = Atm(n)%bd%jed
 
     ! Send diag_manager the grid informtaion
     call diag_grid_init(DOMAIN=Atm(n)%domain, &
@@ -333,8 +344,7 @@ contains
 
 ! Selected pressure levels
 ! SJL note: 31 is enough here; if you need more levels you should do it OFF line
-    ! do not add more to prevent the model from slowing down too much.
-    levs = 0
+! do not add more to prevent the model from slowing down too much.
 #ifdef FEWER_PLEVS
     levs(1:nplev) = (/50,70,100,200,250,300,500,750,850,925,1000/) ! lmh mini-levs for MJO simulations
     k100 = 2
@@ -348,8 +358,6 @@ contains
     k300 = 15
     k500 = 19
 #endif
-    levs_ave = 0
-    levs_ave(1:4) = (/50,400,850,1000/)
 #ifdef INTERNAL_FILE_NML
     read(input_nml_file, nml=fv_diag_plevs_nml,iostat=ios)
 #else
@@ -389,19 +397,7 @@ contains
        call mpp_error(NOTE, "fv_diag_plevs_nml: k500 set incorrectly, finding closest entry in plevs")
        k500 = minloc(abs(levs(1:nplev)-500),1)
     endif
-
-    nplev_ave = 0
-    if (levs_ave(1) > 0 ) then
-       do i=1,MAX_PLEVS-1
-          if (levs_ave(i+1) <= 0) then
-             exit
-          endif
-          if (levs_ave(i) >= levs_ave(i+1)) then
-             call mpp_error(FATAL, "fv_diag_plevs_nml: levs_ave is not monotonically increasing.")
-          end if
-          nplev_ave = nplev_ave + 1
-       enddo
-    end if
+    !
 
     id_plev = diag_axis_init('plev', levs(1:nplev)*1.0, 'mb', 'z', &
             'actual pressure level', direction=-1, set_name="dynamics")
@@ -409,15 +405,6 @@ contains
     axe2(1) = id_xt
     axe2(2) = id_yt
     axe2(3) = id_plev
-
-    id_plev_ave_edges = diag_axis_init('plev_ave_edges', levs_ave(1:nplev_ave+1)*1.0, 'mb', 'z', &
-            'averaging layer pressure interface', direction=-1, set_name="dynamics")
-    id_plev_ave = diag_axis_init('plev_ave', (levs_ave(1:nplev_ave)+levs_ave(2:nplev_ave+1))*0.5, 'mb', 'z', &
-            'averaging layer pressure level', direction=-1, set_name="dynamics", edges=id_plev_ave_edges)
-
-    axe_ave(1) = id_xt
-    axe_ave(2) = id_yt
-    axe_ave(3) = id_plev_ave
 
 !---- register time independent fields -------
 
@@ -434,12 +421,9 @@ contains
                                          'latitude', 'degrees_N' )
        id_area = register_static_field ( trim(field), 'area', axes(1:2),  &
                                          'cell area', 'm**2' )
-       if (id_area > 0) then
-         call diag_field_add_attribute (id_area, 'cell_methods', 'area: sum')
-       endif
-       id_dx = register_static_field( trim(field), 'dx', (/id_xt,id_y/), &
+       id_dx = register_static_field( trim(field), 'dx', (/id_x,id_y/), &
             'dx', 'm')
-       id_dy = register_static_field( trim(field), 'dy', (/id_x,id_yt/), &
+       id_dy = register_static_field( trim(field), 'dy', (/id_x,id_y/), &
             'dy', 'm')
 #ifndef DYNAMICS_ZS
        id_zsurf = register_static_field ( trim(field), 'zsurf', axes(1:2),  &
@@ -568,24 +552,12 @@ contains
     allocate(id_t(nplev))
     allocate(id_h(nplev))
     allocate(id_q(nplev))
-    allocate(id_ql(nplev))
-    allocate(id_qi(nplev))
-    allocate(id_qr(nplev))
-    allocate(id_qs(nplev))
-    allocate(id_qg(nplev))
-    allocate(id_cf(nplev))
     allocate(id_omg(nplev))
     id_u(:)   = 0
     id_v(:)   = 0
     id_t(:)   = 0
     id_h(:)   = 0
     id_q(:)   = 0
-    id_ql(:)   = 0
-    id_qi(:)   = 0
-    id_qr(:)   = 0
-    id_qs(:)   = 0
-    id_qg(:)   = 0
-    id_cf(:)   = 0
     id_omg(:) = 0
 
 !    do n = 1, ntileMe
@@ -600,7 +572,7 @@ contains
 ! Surface pressure
 !-------------------
        id_ps = register_diag_field ( trim(field), 'ps', axes(1:2), Time,           &
-            'surface pressure', 'Pa', missing_value=missing_value, range=psrange)
+            'surface pressure', 'Pa', missing_value=missing_value, range=(/40000.0, 110000.0/))
 
 !-------------------
 ! Mountain torque
@@ -618,8 +590,6 @@ contains
 !-------------------
 ! Precipitation from GFDL MP
 !-------------------
-       id_pret = register_diag_field ( trim(field), 'pret', axes(1:2), Time,           &
-            'total precipitation', 'mm/day', missing_value=missing_value )
        id_prew = register_diag_field ( trim(field), 'prew', axes(1:2), Time,           &
             'water precipitation', 'mm/day', missing_value=missing_value )
        id_prer = register_diag_field ( trim(field), 'prer', axes(1:2), Time,           &
@@ -648,56 +618,6 @@ contains
             'evaporation', 'mm/day', missing_value=missing_value )
        id_sub = register_diag_field ( trim(field), 'sub', axes(1:2), Time,           &
             'sublimation', 'mm/day', missing_value=missing_value )
-       id_pcw = register_diag_field ( trim(field), 'pcw', axes(1:3), Time,           &
-            'water particle concentration', '1/m^3', missing_value=missing_value )
-       id_edw = register_diag_field ( trim(field), 'edw', axes(1:3), Time,           &
-            'water effective diameter', 'm', missing_value=missing_value )
-       id_oew = register_diag_field ( trim(field), 'oew', axes(1:3), Time,           &
-            'water optical extinction', '1/m', missing_value=missing_value )
-       id_rrw = register_diag_field ( trim(field), 'rrw', axes(1:3), Time,           &
-            'water radar reflectivity factor', 'm^3', missing_value=missing_value )
-       id_tvw = register_diag_field ( trim(field), 'tvw', axes(1:3), Time,           &
-            'water terminal velocity', 'm/s', missing_value=missing_value )
-       id_pci = register_diag_field ( trim(field), 'pci', axes(1:3), Time,           &
-            'ice particle concentration', '1/m^3', missing_value=missing_value )
-       id_edi = register_diag_field ( trim(field), 'edi', axes(1:3), Time,           &
-            'ice effective diameter', 'm', missing_value=missing_value )
-       id_oei = register_diag_field ( trim(field), 'oei', axes(1:3), Time,           &
-            'ice optical extinction', '1/m', missing_value=missing_value )
-       id_rri = register_diag_field ( trim(field), 'rri', axes(1:3), Time,           &
-            'ice radar reflectivity factor', 'm^3', missing_value=missing_value )
-       id_tvi = register_diag_field ( trim(field), 'tvi', axes(1:3), Time,           &
-            'ice terminal velocity', 'm/s', missing_value=missing_value )
-       id_pcr = register_diag_field ( trim(field), 'pcr', axes(1:3), Time,           &
-            'rain particle concentration', '1/m^3', missing_value=missing_value )
-       id_edr = register_diag_field ( trim(field), 'edr', axes(1:3), Time,           &
-            'rain effective diameter', 'm', missing_value=missing_value )
-       id_oer = register_diag_field ( trim(field), 'oer', axes(1:3), Time,           &
-            'rain optical extinction', '1/m', missing_value=missing_value )
-       id_rrr = register_diag_field ( trim(field), 'rrr', axes(1:3), Time,           &
-            'rain radar reflectivity factor', 'm^3', missing_value=missing_value )
-       id_tvr = register_diag_field ( trim(field), 'tvr', axes(1:3), Time,           &
-            'rain terminal velocity', 'm/s', missing_value=missing_value )
-       id_pcs = register_diag_field ( trim(field), 'pcs', axes(1:3), Time,           &
-            'snow particle concentration', '1/m^3', missing_value=missing_value )
-       id_eds = register_diag_field ( trim(field), 'eds', axes(1:3), Time,           &
-            'snow effective diameter', 'm', missing_value=missing_value )
-       id_oes = register_diag_field ( trim(field), 'oes', axes(1:3), Time,           &
-            'snow optical extinction', '1/m', missing_value=missing_value )
-       id_rrs = register_diag_field ( trim(field), 'rrs', axes(1:3), Time,           &
-            'snow radar reflectivity factor', 'm^3', missing_value=missing_value )
-       id_tvs = register_diag_field ( trim(field), 'tvs', axes(1:3), Time,           &
-            'snow terminal velocity', 'm/s', missing_value=missing_value )
-       id_pcg = register_diag_field ( trim(field), 'pcg', axes(1:3), Time,           &
-            'graupel particle concentration', '1/m^3', missing_value=missing_value )
-       id_edg = register_diag_field ( trim(field), 'edg', axes(1:3), Time,           &
-            'graupel effective diameter', 'm', missing_value=missing_value )
-       id_oeg = register_diag_field ( trim(field), 'oeg', axes(1:3), Time,           &
-            'graupel optical extinction', '1/m', missing_value=missing_value )
-       id_rrg = register_diag_field ( trim(field), 'rrg', axes(1:3), Time,           &
-            'graupel radar reflectivity factor', 'm^3', missing_value=missing_value )
-       id_tvg = register_diag_field ( trim(field), 'tvg', axes(1:3), Time,           &
-            'graupel terminal velocity', 'm/s', missing_value=missing_value )
 !-------------------
 !! 3D Tendency terms from GFDL MP and physics
 !-------------------
@@ -716,7 +636,7 @@ contains
           id_liq_wat_dt_gfdlmp = register_diag_field ( trim(field), 'liq_wat_dt_gfdlmp', axes(1:3), Time,           &
                'liquid water tracer tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
           if (id_liq_wat_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%liq_wat_dt(isc:iec,jsc:jec,npz))
-          id_ice_wat_dt_gfdlmp = register_diag_field ( trim(field), 'ice_wat_dt_gfdlmp', axes(1:3), Time,           &
+          id_ice_wat_dt_gfdlmp = register_diag_field ( trim(field), 'ice_dt_wat_gfdlmp', axes(1:3), Time,           &
                'ice water tracer tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
           if (id_ice_wat_dt_gfdlmp > 0) allocate(Atm(n)%inline_mp%ice_wat_dt(isc:iec,jsc:jec,npz))
 
@@ -777,73 +697,16 @@ contains
           id_qs_dt_phys = register_diag_field ( trim(field), 'qs_dt_phys', axes(1:3), Time,           &
                'snow water tendency from physics', 'kg/kg/s', missing_value=missing_value )
           if (id_qs_dt_phys > 0) allocate (Atm(n)%phys_diag%phys_qs_dt(isc:iec,jsc:jec,npz))
-
+          
           idiag%id_T_dt_sg = register_diag_field ( trim(field), 'T_dt_sg', axes(1:3), Time,           &
                'temperature tendency from 2dz subgrid mixing', 'K/s', missing_value=missing_value )
-          if ((idiag%id_t_dt_sg > 0) .and. (.not. allocated(Atm(n)%sg_diag%t_dt))) then
-             allocate (Atm(n)%sg_diag%t_dt(isc:iec,jsc:jec,1:npz))
-             Atm(n)%sg_diag%t_dt = 0.0
-          endif
           idiag%id_u_dt_sg = register_diag_field ( trim(field), 'u_dt_sg', axes(1:3), Time,           &
                'zonal wind tendency from 2dz subgrid mixing', 'm/s/s', missing_value=missing_value )
-          if ((idiag%id_u_dt_sg > 0) .and. (.not. allocated(Atm(n)%sg_diag%u_dt))) then
-             allocate (Atm(n)%sg_diag%u_dt(isc:iec,jsc:jec,1:npz))
-             Atm(n)%sg_diag%u_dt = 0.0
-          endif
           idiag%id_v_dt_sg = register_diag_field ( trim(field), 'v_dt_sg', axes(1:3), Time,           &
                'meridional wind tendency from 2dz subgrid mixing', 'm/s/s', missing_value=missing_value )
-          if ((idiag%id_v_dt_sg > 0) .and. (.not. allocated(Atm(n)%sg_diag%v_dt))) then
-             allocate (Atm(n)%sg_diag%v_dt(isc:iec,jsc:jec,1:npz))
-             Atm(n)%sg_diag%v_dt = 0.0
-          endif
           idiag%id_qv_dt_sg = register_diag_field ( trim(field), 'qv_dt_sg', axes(1:3), Time,           &
                'water vapor tendency from 2dz subgrid mixing', 'kg/kg/s', missing_value=missing_value )
-          if ((idiag%id_qv_dt_sg > 0) .and. (.not. allocated(Atm(n)%sg_diag%qv_dt))) then
-             allocate (Atm(n)%sg_diag%qv_dt(isc:iec,jsc:jec,1:npz))
-             Atm(n)%sg_diag%qv_dt = 0.0
-          endif
 
-          ! Nudging tendencies
-          id_t_dt_nudge = register_diag_field('dynamics', &
-               't_dt_nudge', axes(1:3), Time, &
-               'temperature tendency from nudging', &
-               'K/s', missing_value=missing_value)
-          if ((id_t_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_t_dt))) then
-             allocate (Atm(n)%nudge_diag%nudge_t_dt(isc:iec,jsc:jec,npz))
-             Atm(n)%nudge_diag%nudge_t_dt(isc:iec,jsc:jec,1:npz) = 0.0
-          endif
-          id_ps_dt_nudge = register_diag_field('dynamics', &
-               'ps_dt_nudge', axes(1:2), Time, &
-               'surface pressure tendency from nudging', &
-               'Pa/s', missing_value=missing_value)
-          if ((id_ps_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_ps_dt))) then
-             allocate (Atm(n)%nudge_diag%nudge_ps_dt(isc:iec,jsc:jec))
-             Atm(n)%nudge_diag%nudge_ps_dt(isc:iec,jsc:jec) = 0.0
-          endif
-          id_delp_dt_nudge = register_diag_field('dynamics', &
-               'delp_dt_nudge', axes(1:3), Time, &
-               'pressure thickness tendency from nudging', &
-               'Pa/s', missing_value=missing_value)
-          if ((id_delp_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_delp_dt))) then
-             allocate (Atm(n)%nudge_diag%nudge_delp_dt(isc:iec,jsc:jec,npz))
-             Atm(n)%nudge_diag%nudge_delp_dt(isc:iec,jsc:jec,1:npz) = 0.0
-          endif
-          id_u_dt_nudge = register_diag_field('dynamics', &
-               'u_dt_nudge', axes(1:3), Time, &
-               'zonal wind tendency from nudging', &
-               'm/s/s', missing_value=missing_value)
-          if ((id_u_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_u_dt))) then
-             allocate (Atm(n)%nudge_diag%nudge_u_dt(isc:iec,jsc:jec,npz))
-             Atm(n)%nudge_diag%nudge_u_dt(isc:iec,jsc:jec,1:npz) = 0.0
-          endif
-          id_v_dt_nudge = register_diag_field('dynamics', &
-               'v_dt_nudge', axes(1:3), Time, &
-               'meridional wind tendency from nudging', &
-               'm/s/s', missing_value=missing_value)
-          if ((id_v_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_v_dt))) then
-             allocate (Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,npz))
-             Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,1:npz) = 0.0
-          endif
 
        endif
 
@@ -865,25 +728,7 @@ contains
 ! specific humidity:
         id_q(i)   = register_diag_field(trim(field), 'q'//trim(adjustl(plev)), axes(1:2), Time, &
                                     trim(adjustl(plev))//'-mb specific humidity', 'kg/kg', missing_value=missing_value)
-! cloud water mass mixing ratio:
-        id_ql(i)   = register_diag_field(trim(field), 'ql'//trim(adjustl(plev)), axes(1:2), Time, &
-                                    trim(adjustl(plev))//'-mb cloud water mass mixing ratio', 'kg/kg', missing_value=missing_value)
-! cloud ice mass mixing ratio:
-        id_qi(i)   = register_diag_field(trim(field), 'qi'//trim(adjustl(plev)), axes(1:2), Time, &
-                                    trim(adjustl(plev))//'-mb cloud ice mass mixing ratio', 'kg/kg', missing_value=missing_value)
-! rain mass mixing ratio:
-        id_qr(i)   = register_diag_field(trim(field), 'qr'//trim(adjustl(plev)), axes(1:2), Time, &
-                                    trim(adjustl(plev))//'-mb rain mass mixing ratio', 'kg/kg', missing_value=missing_value)
-! snow mass mixing ratio:
-        id_qs(i)   = register_diag_field(trim(field), 'qs'//trim(adjustl(plev)), axes(1:2), Time, &
-                                    trim(adjustl(plev))//'-mb snow mass mixing ratio', 'kg/kg', missing_value=missing_value)
-! graupel mass mixing ratio:
-        id_qg(i)   = register_diag_field(trim(field), 'qg'//trim(adjustl(plev)), axes(1:2), Time, &
-                                    trim(adjustl(plev))//'-mb graupel mass mixing ratio', 'kg/kg', missing_value=missing_value)
-! cloud fraction:
-        id_cf(i)   = register_diag_field(trim(field), 'cf'//trim(adjustl(plev)), axes(1:2), Time, &
-                                    trim(adjustl(plev))//'-mb cloud fraction', '1', missing_value=missing_value)
-! Omega (Pa/sec):
+! Omega (Pa/sec)
         id_omg(i) = register_diag_field(trim(field), 'omg'//trim(adjustl(plev)), axes(1:2), Time, &
                                     trim(adjustl(plev))//'-mb omega', 'Pa/s', missing_value=missing_value)
       enddo
@@ -893,52 +738,23 @@ contains
                'zonal wind', 'm/sec', missing_value=missing_value, range=vrange )
           id_v_plev = register_diag_field ( trim(field), 'v_plev', axe2(1:3), Time,        &
                'meridional wind', 'm/sec', missing_value=missing_value, range=vrange )
-          if (is_ideal_case) then
-             id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
-                  'temperature', 'K', missing_value=missing_value )
-          else
-             id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
-                  'temperature', 'K', missing_value=missing_value, range=trange )
-          endif
+          id_t_plev = register_diag_field ( trim(field), 't_plev', axe2(1:3), Time,        &
+               'temperature', 'K', missing_value=missing_value, range=trange )
           id_h_plev = register_diag_field ( trim(field), 'h_plev', axe2(1:3), Time,        &
                'height', 'm', missing_value=missing_value )
           id_q_plev = register_diag_field ( trim(field), 'q_plev', axe2(1:3), Time,        &
                'specific humidity', 'kg/kg', missing_value=missing_value )
-          id_ql_plev = register_diag_field ( trim(field), 'ql_plev', axe2(1:3), Time,        &
-               'cloud water mass mixing ratio', 'kg/kg', missing_value=missing_value )
-          id_qi_plev = register_diag_field ( trim(field), 'qi_plev', axe2(1:3), Time,        &
-               'cloud ice mass mixing ratio', 'kg/kg', missing_value=missing_value )
-          id_qr_plev = register_diag_field ( trim(field), 'qr_plev', axe2(1:3), Time,        &
-               'rain mass mixing ratio', 'kg/kg', missing_value=missing_value )
-          id_qs_plev = register_diag_field ( trim(field), 'qs_plev', axe2(1:3), Time,        &
-               'snow mass mixing ratio', 'kg/kg', missing_value=missing_value )
-          id_qg_plev = register_diag_field ( trim(field), 'qg_plev', axe2(1:3), Time,        &
-               'graupel mass mixing ratio', 'kg/kg', missing_value=missing_value )
-          id_cf_plev = register_diag_field ( trim(field), 'cf_plev', axe2(1:3), Time,        &
-               'cloud fraction', '1', missing_value=missing_value )
           id_omg_plev = register_diag_field ( trim(field), 'omg_plev', axe2(1:3), Time,        &
                'omega', 'Pa/s', missing_value=missing_value )
        endif
 
-      !Layer averages for temperature, moisture, etc.
-        id_t_plev_ave   = register_diag_field(trim(field), 't_plev_ave', axe_ave(1:3), Time, &
-                                    'layer-averaged temperature', 'K', missing_value=missing_value)
-        id_q_plev_ave   = register_diag_field(trim(field), 'q_plev_ave', axe_ave(1:3), Time, &
-                                    'layer-averaged specific humidity', 'kg/kg', missing_value=missing_value)
-        id_qv_dt_gfdlmp_plev_ave = register_diag_field ( trim(field), 'qv_dt_gfdlmp_plev_ave', axe_ave(1:3), Time,           &
-               'layer-averaged water vapor specific humidity tendency from GFDL MP', 'kg/kg/s', missing_value=missing_value )
-        if (id_qv_dt_gfdlmp_plev_ave > 0 .and. .not. allocated(Atm(n)%inline_mp%qv_dt) ) allocate(Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,npz))
-        id_t_dt_gfdlmp_plev_ave = register_diag_field ( trim(field), 't_dt_gfdlmp_plev_ave', axe_ave(1:3), Time,           &
-               'layer-averaged temperature tendency from GFDL MP', 'K/s', missing_value=missing_value )
-        if (id_t_dt_gfdlmp_plev_ave > 0 .and. .not. allocated(Atm(n)%inline_mp%t_dt) ) allocate(Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,npz))
-        id_qv_dt_phys_plev_ave = register_diag_field ( trim(field), 'qv_dt_phys_plev_ave', axe_ave(1:3), Time,           &
-               'layer-averaged water vapor specific humidity tendency from physics', 'kg/kg/s', missing_value=missing_value )
-        if (id_qv_dt_phys_plev_ave > 0 .and. .not. allocated(Atm(n)%phys_diag%phys_qv_dt) ) allocate(Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,npz))
-        id_t_dt_phys_plev_ave = register_diag_field ( trim(field), 't_dt_phys_plev_ave', axe_ave(1:3), Time,           &
-               'layer-averaged temperature tendency from physics', 'K/s', missing_value=missing_value )
-        if (id_t_dt_phys_plev_ave > 0 .and. .not. allocated(Atm(n)%phys_diag%phys_t_dt) ) allocate(Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,npz))
 
       ! flag for calculation of geopotential
+!!$      if ( all(id_h(minloc(abs(levs-10)))>0)  .or. all(id_h(minloc(abs(levs-50)))>0)  .or. &
+!!$           all(id_h(minloc(abs(levs-100)))>0) .or. all(id_h(minloc(abs(levs-200)))>0) .or. &
+!!$           all(id_h(minloc(abs(levs-250)))>0) .or. all(id_h(minloc(abs(levs-300)))>0) .or. &
+!!$           all(id_h(minloc(abs(levs-500)))>0) .or. all(id_h(minloc(abs(levs-700)))>0) .or. &
+!!$           all(id_h(minloc(abs(levs-850)))>0) .or. all(id_h(minloc(abs(levs-1000)))>0).or. &
       if ( any(id_h > 0) .or. id_h_plev>0 .or. id_hght3d>0) then
            id_any_hght = 1
       else
@@ -1000,13 +816,9 @@ contains
           if ( .not. Atm(n)%flagstruct%hydrostatic )                                        &
                id_w = register_diag_field ( trim(field), 'w', axes(1:3), Time,        &
                'vertical wind', 'm/sec', missing_value=missing_value, range=wrange )
-          if (is_ideal_case) then
-             id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
-                  'temperature', 'K', missing_value=missing_value )
-          else
-             id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
-                  'temperature', 'K', missing_value=missing_value, range=trange )
-          endif
+
+          id_pt   = register_diag_field ( trim(field), 'temp', axes(1:3), Time,       &
+               'temperature', 'K', missing_value=missing_value, range=trange )
           id_ppt  = register_diag_field ( trim(field), 'ppt', axes(1:3), Time,       &
                'potential temperature perturbation', 'K', missing_value=missing_value )
           id_theta_e = register_diag_field ( trim(field), 'theta_e', axes(1:3), Time,       &
@@ -1015,9 +827,6 @@ contains
                'omega', 'Pa/s', missing_value=missing_value )
           idiag%id_divg  = register_diag_field ( trim(field), 'divg', axes(1:3), Time,      &
                'mean divergence', '1/s', missing_value=missing_value )
-! diagnotic output for skeb testing
-          id_diss = register_diag_field ( trim(field), 'diss_est', axes(1:3), Time,    &
-               'random', 'none', missing_value=missing_value, range=skrange )
 
           id_hght3d  = register_diag_field( trim(field), 'hght', axes(1:3), Time, &
                'height', 'm', missing_value=missing_value )
@@ -1026,16 +835,16 @@ contains
                'Relative Humidity', '%', missing_value=missing_value )
           !            'Relative Humidity', '%', missing_value=missing_value, range=rhrange )
           id_delp = register_diag_field ( trim(field), 'delp', axes(1:3), Time,        &
-               'pressure thickness'//massdef_str, 'pa', missing_value=missing_value )
+               'pressure thickness', 'pa', missing_value=missing_value )
           if ( .not. Atm(n)%flagstruct%hydrostatic )                                        &
                id_delz = register_diag_field ( trim(field), 'delz', axes(1:3), Time,        &
                'height thickness', 'm', missing_value=missing_value )
           if( Atm(n)%flagstruct%hydrostatic ) then
              id_pfhy = register_diag_field ( trim(field), 'pfhy', axes(1:3), Time,        &
-                  'hydrostatic pressure'//massdef_str, 'pa', missing_value=missing_value )
+                  'hydrostatic pressure', 'pa', missing_value=missing_value )
           else
              id_pfnh = register_diag_field ( trim(field), 'pfnh', axes(1:3), Time,        &
-                  'non-hydrostatic pressure'//massdef_str, 'pa', missing_value=missing_value )
+                  'non-hydrostatic pressure', 'pa', missing_value=missing_value )
              id_ppnh = register_diag_field ( trim(field), 'ppnh', axes(1:3), Time,        &
                   'non-hydrostatic pressure perturbation', 'pa', missing_value=missing_value )
           endif
@@ -1062,10 +871,28 @@ contains
           !--------------------
           id_pv = register_diag_field ( trim(field), 'pv', axes(1:3), Time,       &
                'potential vorticity', '1/s', missing_value=missing_value )
-          id_pv350K = register_diag_field ( trim(field), 'pv350K', axes(1:2), Time,       &
-                '350-K potential vorticity; needs x350 scaling', '(K m**2) / (kg s)', missing_value=missing_value)
-          id_pv550K = register_diag_field ( trim(field), 'pv550K', axes(1:2), Time,       &
-                '550-K potential vorticity; needs x550 scaling', '(K m**2) / (kg s)', missing_value=missing_value)
+          id_epv = register_diag_field ( trim(field), 'epv', axes(1:3), Time,       &
+               'Ertel''s potential vorticity', 'PVU', missing_value=missing_value )
+
+          ! -------------------
+          ! Vertical flux correlation terms (good for averages)
+          ! -------------------
+          id_uw = register_diag_field ( trim(field), 'uw', axes(1:3), Time, &
+               'vertical zonal momentum flux', 'N/m**2', missing_value=missing_value )
+          id_vw = register_diag_field ( trim(field), 'vw', axes(1:3), Time, &
+               'vertical meridional momentum flux', 'N/m**', missing_value=missing_value )
+          id_hw = register_diag_field ( trim(field), 'hw', axes(1:3), Time, &
+               'vertical heat flux', 'W/m**2', missing_value=missing_value )
+          id_qvw = register_diag_field ( trim(field), 'qvw', axes(1:3), Time, &
+               'vertical water vapor flux', 'kg/m**2/s', missing_value=missing_value )
+          id_qlw = register_diag_field ( trim(field), 'qlw', axes(1:3), Time, &
+               'vertical liquid water flux', 'kg/m**2/s', missing_value=missing_value )
+          id_qiw = register_diag_field ( trim(field), 'qiw', axes(1:3), Time, &
+               'vertical ice water flux', 'kg/m**2/s', missing_value=missing_value )
+          id_o3w = register_diag_field ( trim(field), 'o3w', axes(1:3), Time, &
+               'vertical ozone flux', 'kg/m**2/s', missing_value=missing_value )
+          id_mw = register_diag_field ( trim(field), 'mw', axes(1:3), Time, &
+               'vertical mass flux', 'kg/m**2/s', missing_value=missing_value )
 
 !--------------------
 ! 3D flux terms
@@ -1088,16 +915,12 @@ contains
             'meridional flux of meridional wind', '(m/sec)^2', missing_value=missing_value )
 
        if(.not.Atm(n)%flagstruct%hydrostatic) then
-          id_uw = register_diag_field ( trim(field), 'uw', axes(1:3), Time, &
-               'vertical zonal momentum flux', 'N/m**2', missing_value=missing_value )
-          id_vw = register_diag_field ( trim(field), 'vw', axes(1:3), Time, &
-               'vertical meridional momentum flux', 'N/m**', missing_value=missing_value )
-          id_wq = register_diag_field ( trim(field), 'wq', axes(1:3), Time,        &
-               'vertical moisture flux', 'Kg/Kg*m/sec', missing_value=missing_value )
-          id_wt = register_diag_field ( trim(field), 'wt', axes(1:3), Time,        &
-               'vertical heat flux', 'K*m/sec', missing_value=missing_value )
-          id_ww = register_diag_field ( trim(field), 'ww', axes(1:3), Time,        &
-               'vertical flux of vertical wind', '(m/sec)^2', missing_value=missing_value )
+       id_wq = register_diag_field ( trim(field), 'wq', axes(1:3), Time,        &
+            'vertical moisture flux', 'Kg/Kg*m/sec', missing_value=missing_value )
+       id_wt = register_diag_field ( trim(field), 'wt', axes(1:3), Time,        &
+            'vertical heat flux', 'K*m/sec', missing_value=missing_value )
+       id_ww = register_diag_field ( trim(field), 'ww', axes(1:3), Time,        &
+            'vertical flux of vertical wind', '(m/sec)^2', missing_value=missing_value )
        endif
 
 !--------------------
@@ -1121,16 +944,16 @@ contains
             'vertical integral of vv', '(m/sec)^2*Pa', missing_value=missing_value )
 
        if(.not.Atm(n)%flagstruct%hydrostatic) then
-          id_iwq = register_diag_field ( trim(field), 'wq_vi', axes(1:2), Time,        &
-               'vertical integral of wq', 'Kg/Kg*m/sec*Pa', missing_value=missing_value )
-          id_iwt = register_diag_field ( trim(field), 'wt_vi', axes(1:2), Time,        &
-               'vertical integral of wt', 'K*m/sec*Pa', missing_value=missing_value )
-          id_iuw = register_diag_field ( trim(field), 'uw_vi', axes(1:2), Time,        &
-               'vertical integral of uw', '(m/sec)^2*Pa', missing_value=missing_value )
-          id_ivw = register_diag_field ( trim(field), 'vw_vi', axes(1:2), Time,        &
-               'vertical integral of vw', '(m/sec)^2*Pa', missing_value=missing_value )
-          id_iww = register_diag_field ( trim(field), 'ww_vi', axes(1:2), Time,        &
-               'vertical integral of ww', '(m/sec)^2*Pa', missing_value=missing_value )
+       id_iwq = register_diag_field ( trim(field), 'wq_vi', axes(1:2), Time,        &
+            'vertical integral of wq', 'Kg/Kg*m/sec*Pa', missing_value=missing_value )
+       id_iwt = register_diag_field ( trim(field), 'wt_vi', axes(1:2), Time,        &
+            'vertical integral of wt', 'K*m/sec*Pa', missing_value=missing_value )
+       id_iuw = register_diag_field ( trim(field), 'uw_vi', axes(1:2), Time,        &
+            'vertical integral of uw', '(m/sec)^2*Pa', missing_value=missing_value )
+       id_ivw = register_diag_field ( trim(field), 'vw_vi', axes(1:2), Time,        &
+            'vertical integral of vw', '(m/sec)^2*Pa', missing_value=missing_value )
+       id_iww = register_diag_field ( trim(field), 'ww_vi', axes(1:2), Time,        &
+            'vertical integral of ww', '(m/sec)^2*Pa', missing_value=missing_value )
        endif
 
        endif
@@ -1184,10 +1007,6 @@ contains
                                         'Convective available potential energy (surface-based)', 'J/kg' , missing_value=missing_value )
        id_cin = register_diag_field( trim(field), 'cin', axes(1:2), Time,  &
                                         'Convective inhibition (surface-based)', 'J/kg' , missing_value=missing_value )
-       id_brn = register_diag_field( trim(field), 'BRN', axes(1:2), Time,  &
-                                        'Bulk Richardson Number', 'nondim' , missing_value=missing_value )
-       id_shear06 = register_diag_field( trim(field), 'shear06', axes(1:2), Time,  &
-                                        '0--6 km shear', 'm/s' , missing_value=missing_value )
 !--------------------------
 ! Vertically integrated tracers for GFDL MP
 !--------------------------
@@ -1434,8 +1253,70 @@ contains
 !    end do
 
 
+#ifdef TEST_TRACER
+    call prt_mass(npz, Atm(n)%ncnst, isc, iec, jsc, jec, Atm(n)%ng, max(1,Atm(n)%flagstruct%nwat),    &
+                      Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+#else
     call prt_mass(npz, Atm(n)%ncnst, isc, iec, jsc, jec, Atm(n)%ng, Atm(n)%flagstruct%nwat,    &
                       Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+#endif
+
+
+    !Set up debug column diagnostics, if desired
+    !Start by hard-coding one diagnostic column then add options for more later
+
+    diag_debug_names(:) = ''
+    diag_debug_lon(:) = -999.
+    diag_debug_lat(:) = -999.
+    diag_debug_i(:) = -999
+    diag_debug_j(:) = -999
+    diag_debug_tile(:) = -999
+    diag_debug_kbottom = npz
+    diag_debug_nlevels = npz/3
+
+    !diag_debug_names(1:2) = (/'ORD','Princeton'/)
+    !diag_debug_lon(1:2) = (/272.,285.33/)
+    !diag_debug_lat(1:2) = (/42.,40.36/)
+
+    diag_sonde_names(:) = ''
+    diag_sonde_lon(:) = -999.
+    diag_sonde_lat(:) = -999.
+    diag_sonde_i(:) = -999
+    diag_sonde_j(:) = -999
+    diag_sonde_tile(:) = -99
+
+    !diag_sonde_names(1:4) = (/'OUN','MYNN','PIT', 'ORD'/)
+    !diag_sonde_lon(1:4) = (/285.33,282.54,279.78,272./)
+    !diag_sonde_lat(1:4) = (/35.18,25.05,40.53,42./)
+
+
+#ifdef INTERNAL_FILE_NML
+    read(input_nml_file, nml=fv_diag_column_nml,iostat=ios)
+#else
+    inquire (file=trim(Atm(n)%nml_filename), exist=exists)
+    if (.not. exists) then
+      write(errmsg,*) 'fv_diag_column_nml: namelist file ',trim(Atm(n)%nml_filename),' does not exist'
+      call mpp_error(FATAL, errmsg)
+    else
+      open (unit=nlunit, file=Atm(n)%nml_filename, READONLY, status='OLD', iostat=ios)
+    endif
+    rewind(nlunit)
+    read (nlunit, nml=fv_diag_column_nml, iostat=ios)
+    close (nlunit)
+#endif
+
+    if (do_diag_debug .or. do_diag_sonde) then
+       call read_column_table
+    endif
+
+    if (do_diag_debug) then
+       allocate(diag_debug_units(num_diag_debug))       
+       call find_diagnostic_column("DEBUG", diag_debug_names, diag_debug_i, diag_debug_j, diag_debug_tile, diag_debug_lat, diag_debug_lon, diag_debug_units, Atm(n)%gridstruct%grid_64, Atm(n)%gridstruct%agrid_64, num_diag_debug, Atm(n)%gridstruct%ntiles_g, Atm(n)%bd, Atm(n)%global_tile, npx, npy)
+    endif
+    if (do_diag_sonde) then
+       allocate(diag_sonde_units(num_diag_sonde))
+       call find_diagnostic_column("Sonde ", diag_sonde_names, diag_sonde_i, diag_sonde_j, diag_sonde_tile, diag_sonde_lat, diag_sonde_lon, diag_sonde_units, Atm(n)%gridstruct%grid_64, Atm(n)%gridstruct%agrid_64, num_diag_sonde, Atm(n)%gridstruct%ntiles_g, Atm(n)%bd, Atm(n)%global_tile, npx, npy)
+    endif
 
     !Model initialization time (not necessarily the time this simulation is started,
     ! conceivably a restart could be done
@@ -1446,13 +1327,35 @@ contains
        yr_init = 0 ; mo_init = 0 ; hr_init = 0 ; mn_init = 0
     endif
 
+    call nullify_domain()  ! Nullify  set_domain info
+
     module_is_initialized=.true.
     istep = 0
 #ifndef GFS_PHYS
     if(id_theta_e >0 ) call qs_init
 #endif
 
-    call fv_diag_column_init(Atm(n), yr_init, mo_init, dy_init, hr_init, do_diag_debug, do_diag_sonde, sound_freq, m_calendar)
+    ! These diagnostics do not work, because of an FMS issue.  Maybe we could
+    ! implement them by outputting them on the grid corners (and filling the
+    ! empty rows or columns with missing value flags)?
+    ! ---------------
+    ! id_d_grid_ucomp = register_diag_field('dynamics', &
+    !      'd_grid_ucomp', (/ id_xt, id_y, id_pfull /), &
+    !      Time, 'D grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    ! id_d_grid_vcomp = register_diag_field('dynamics', &
+    !      'd_grid_vcomp', (/ id_x, id_yt, id_pfull /), &
+    !      Time, 'D grid meridional velocity', 'm/s', missing_value=missing_value)
+
+    ! id_c_grid_ucomp = register_diag_field('dynamics', &
+    !      'c_grid_ucomp', (/ id_x, id_yt, id_pfull /), &
+    !      Time, 'C grid zonal velocity', 'm/s', missing_value=missing_value)
+
+    ! id_c_grid_vcomp = register_diag_field('dynamics', &
+    !      'c_grid_vcomp', (/ id_xt, id_y, id_pfull /), &
+    !      Time, 'C grid meridional velocity', 'm/s', missing_value=missing_value)
+
+    call fv_coarse_grained_diagnostics_init(Atm, Time, id_pfull)
 
  end subroutine fv_diag_init
 
@@ -1600,6 +1503,7 @@ contains
     endif
 
     fv_time = Time
+    call set_domain(Atm(1)%domain)
 
     if ( m_calendar ) then
          call get_date(fv_time, yr, mon, dd, hr, mn, seconds)
@@ -1648,11 +1552,10 @@ contains
 
     if( prt_minmax ) then
 
-        call prt_mxm('ZS (m): ', zsurf,     isc, iec, jsc, jec, 0,   1, 1.0, Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('PS (Pa): ', Atm(n)%ps, isc, iec, jsc, jec, ngc, 1, 0.01, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+        call prt_mxm('ZS', zsurf,     isc, iec, jsc, jec, 0,   1, 1.0, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+        call prt_maxmin('PS', Atm(n)%ps, isc, iec, jsc, jec, ngc, 1, 0.01)
 
 #ifdef HIWPP
-        if (.not. Atm(n)%gridstruct%bounded_domain ) then
         allocate(var2(isc:iec,jsc:jec))
         !hemispheric max/min pressure
         do j=jsc,jec
@@ -1667,15 +1570,19 @@ contains
            endif
         enddo
         enddo
-        call prt_mxm('NH PS', a2, isc, iec, jsc, jec, 0, 1, 0.01, Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('SH PS', var2, isc, iec, jsc, jec, 0, 1, 0.01, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+        call prt_maxmin('NH PS', a2, isc, iec, jsc, jec, 0, 1, 0.01)
+        call prt_maxmin('SH PS', var2, isc, iec, jsc, jec, 0, 1, 0.01)
 
         deallocate(var2)
-        endif
 #endif
 
+#ifdef TEST_TRACER
+        call prt_mass(npz, nq, isc, iec, jsc, jec, ngc, max(1,Atm(n)%flagstruct%nwat),    &
+                      Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+#else
         call prt_mass(npz, nq, isc, iec, jsc, jec, ngc, Atm(n)%flagstruct%nwat,    &
                       Atm(n)%ps, Atm(n)%delp, Atm(n)%q, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+#endif
 
 #ifndef SW_DYNAMICS
         if (Atm(n)%flagstruct%consv_te > 1.e-5) then
@@ -1683,7 +1590,7 @@ contains
            idiag%efx_sum = idiag%efx_sum + E_Flux
            if ( idiag%steps <= max_step ) idiag%efx(idiag%steps) = E_Flux
            if (master)  then
-              write(*,*) 'Energy_Deficit (W/m**2)', trim(gn), ' = ', E_Flux
+              write(*,*) 'ENG Deficit (W/m**2)', trim(gn), '=', E_Flux
            endif
 
 
@@ -1695,43 +1602,36 @@ contains
                                sphum, liq_wat, rainwat, ice_wat, snowwat, graupel, Atm(n)%flagstruct%nwat,     &
                                Atm(n)%ua, Atm(n)%va, Atm(n)%flagstruct%moist_phys, a2)
 #endif
-        call prt_mxm('UA_Top (m/s): ', Atm(n)%ua(isc:iec,jsc:jec,1),    &
-                        isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('UA_Bottom (m/s): ', Atm(n)%ua(isc:iec,jsc:jec,npz),    &
-                        isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('UA (m/s): ', Atm(n)%ua, isc, iec, jsc, jec, ngc, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('VA_Top (m/s): ', Atm(n)%va(isc:iec,jsc:jec,1),    &
-                        isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('VA_Bottom (m/s): ', Atm(n)%va(isc:iec,jsc:jec,npz),    &
-                        isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('VA (m/s): ', Atm(n)%va, isc, iec, jsc, jec, ngc, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+        call prt_maxmin('UA_top', Atm(n)%ua(isc:iec,jsc:jec,1),    &
+                        isc, iec, jsc, jec, 0, 1, 1.)
+        call prt_maxmin('UA', Atm(n)%ua, isc, iec, jsc, jec, ngc, npz, 1.)
+        call prt_maxmin('VA', Atm(n)%va, isc, iec, jsc, jec, ngc, npz, 1.)
 
         if ( .not. Atm(n)%flagstruct%hydrostatic ) then
-          call prt_mxm('W_Top (m/s): ', Atm(n)%w(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-          call prt_mxm('W_Bottom (m/s): ', Atm(n)%w(isc:iec,jsc:jec,npz), isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-          call prt_mxm('W (m/s): ', Atm(n)%w , isc, iec, jsc, jec, ngc, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+          call prt_maxmin('W ', Atm(n)%w , isc, iec, jsc, jec, ngc, npz, 1.)
+          call prt_maxmin('Bottom w', Atm(n)%w(isc:iec,jsc:jec,npz), isc, iec, jsc, jec, 0, 1, 1.)
           do j=jsc,jec
              do i=isc,iec
                 a2(i,j) = -Atm(n)%w(i,j,npz)/Atm(n)%delz(i,j,npz)
              enddo
           enddo
-          call prt_mxm('W/dz_Bottom (1/s): ', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+          call prt_maxmin('Bottom: w/dz', a2, isc, iec, jsc, jec, 0, 1, 1.)
 
-          if ( Atm(n)%flagstruct%hybrid_z ) call prt_mxm('Hybrid_ZTOP (km)', Atm(n)%ze0(isc:iec,jsc:jec,1), &
-                                                 isc, iec, jsc, jec, 0, 1, 1.E-3, Atm(n)%gridstruct%area_64, Atm(n)%domain)
-          call prt_mxm('DZ_Top (m): ', Atm(n)%delz(isc:iec,jsc:jec,1),    &
-                          isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-          call prt_mxm('DZ_Bottom (m): ', Atm(n)%delz(isc:iec,jsc:jec,npz),    &
-                          isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-          call prt_mxm('DZ (m): ', Atm(n)%delz(isc:iec,jsc:jec,1:npz),    &
-                          isc, iec, jsc, jec, 0, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+          if ( Atm(n)%flagstruct%hybrid_z ) call prt_maxmin('Hybrid_ZTOP (km)', Atm(n)%ze0(isc:iec,jsc:jec,1), &
+                                                 isc, iec, jsc, jec, 0, 1, 1.E-3)
+          call prt_maxmin('DZ (m)', Atm(n)%delz(isc:iec,jsc:jec,1:npz),    &
+                          isc, iec, jsc, jec, 0, npz, 1.)
+          call prt_maxmin('Bottom DZ (m)', Atm(n)%delz(isc:iec,jsc:jec,npz),    &
+                          isc, iec, jsc, jec, 0, 1, 1.)
+!         call prt_maxmin('Top DZ (m)', Atm(n)%delz(isc:iec,jsc:jec,1),    &
+!                         isc, iec, jsc, jec, 0, 1, 1.)
         endif
 
 #ifndef SW_DYNAMICS
-        call prt_mxm('TA_Top (K): ', Atm(n)%pt(isc:iec,jsc:jec,  1), isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('TA_Bottom (K): ', Atm(n)%pt(isc:iec,jsc:jec,npz), isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('TA (K): ', Atm(n)%pt,   isc, iec, jsc, jec, ngc, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-        call prt_mxm('OM (pa/s): ', Atm(n)%omga, isc, iec, jsc, jec, ngc, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+        call prt_maxmin('TA', Atm(n)%pt,   isc, iec, jsc, jec, ngc, npz, 1.)
+!       call prt_maxmin('Top: TA', Atm(n)%pt(isc:iec,jsc:jec,  1), isc, iec, jsc, jec, 0, 1, 1.)
+!       call prt_maxmin('Bot: TA', Atm(n)%pt(isc:iec,jsc:jec,npz), isc, iec, jsc, jec, 0, 1, 1.)
+        call prt_maxmin('OM', Atm(n)%omga, isc, iec, jsc, jec, ngc, npz, 1.)
 #endif
 
     elseif ( Atm(n)%flagstruct%range_warn ) then
@@ -1742,16 +1642,15 @@ contains
          call range_check('VA', Atm(n)%va, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
                            -250., 250., bad_range, Time)
 #ifndef SW_DYNAMICS
-         if (is_ideal_case) then
-            call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
-                           100., 500., bad_range, Time) !DCMIP ICs have very wide range of temperatures
-         else
-            call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
+         call range_check('TA', Atm(n)%pt, isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
+#ifdef HIWPP
+                           130., 350., bad_range, Time) !DCMIP ICs have very low temperatures
+#else
                            150., 350., bad_range, Time)
-         endif
+#endif
+#endif
          call range_check('Qv', Atm(n)%q(:,:,:,sphum), isc, iec, jsc, jec, ngc, npz, Atm(n)%gridstruct%agrid,   &
                           -1.e-8, 1.e20, bad_range, Time)
-#endif
 
       endif
 
@@ -1775,23 +1674,10 @@ contains
     ! if (id_c_grid_vcomp > 0) used = send_data(id_c_grid_vcomp, Atm(n)%vc(isc:iec,jsc:jec+1,1:npz), Time)
 
 #ifdef DYNAMICS_ZS
-    !This is here for idealized test cases that modify the topography in time
-       do j=jsc,jec
-       do i=isc,iec
-          zsurf(i,j) = ginv * Atm(n)%phis(i,j)
-       enddo
-       enddo
-
        if(id_zsurf > 0)  used=send_data(id_zsurf, zsurf, Time)
 #endif
        if(id_ps > 0) used=send_data(id_ps, Atm(n)%ps(isc:iec,jsc:jec), Time)
 
-       if(id_pret > 0) used=send_data(id_pret, &
-            Atm(n)%inline_mp%prew(isc:iec,jsc:jec)+&
-            Atm(n)%inline_mp%prer(isc:iec,jsc:jec)+&
-            Atm(n)%inline_mp%prei(isc:iec,jsc:jec)+&
-            Atm(n)%inline_mp%pres(isc:iec,jsc:jec)+&
-            Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
        if(id_prew > 0) used=send_data(id_prew, Atm(n)%inline_mp%prew(isc:iec,jsc:jec), Time)
        if(id_prer > 0) used=send_data(id_prer, Atm(n)%inline_mp%prer(isc:iec,jsc:jec), Time)
        if(id_prei > 0) used=send_data(id_prei, Atm(n)%inline_mp%prei(isc:iec,jsc:jec), Time)
@@ -1806,31 +1692,6 @@ contains
        if(id_dep > 0) used=send_data(id_dep, Atm(n)%inline_mp%dep(isc:iec,jsc:jec), Time)
        if(id_reevap > 0) used=send_data(id_reevap, Atm(n)%inline_mp%reevap(isc:iec,jsc:jec), Time)
        if(id_sub > 0) used=send_data(id_sub, Atm(n)%inline_mp%sub(isc:iec,jsc:jec), Time)
-       if(id_pcw > 0) used=send_data(id_pcw, Atm(n)%inline_mp%pcw(isc:iec,jsc:jec,1:npz), Time)
-       if(id_edw > 0) used=send_data(id_edw, Atm(n)%inline_mp%edw(isc:iec,jsc:jec,1:npz), Time)
-       if(id_oew > 0) used=send_data(id_oew, Atm(n)%inline_mp%oew(isc:iec,jsc:jec,1:npz), Time)
-       if(id_rrw > 0) used=send_data(id_rrw, Atm(n)%inline_mp%rrw(isc:iec,jsc:jec,1:npz), Time)
-       if(id_tvw > 0) used=send_data(id_tvw, Atm(n)%inline_mp%tvw(isc:iec,jsc:jec,1:npz), Time)
-       if(id_pci > 0) used=send_data(id_pci, Atm(n)%inline_mp%pci(isc:iec,jsc:jec,1:npz), Time)
-       if(id_edi > 0) used=send_data(id_edi, Atm(n)%inline_mp%edi(isc:iec,jsc:jec,1:npz), Time)
-       if(id_oei > 0) used=send_data(id_oei, Atm(n)%inline_mp%oei(isc:iec,jsc:jec,1:npz), Time)
-       if(id_rri > 0) used=send_data(id_rri, Atm(n)%inline_mp%rri(isc:iec,jsc:jec,1:npz), Time)
-       if(id_tvi > 0) used=send_data(id_tvi, Atm(n)%inline_mp%tvi(isc:iec,jsc:jec,1:npz), Time)
-       if(id_pcr > 0) used=send_data(id_pcr, Atm(n)%inline_mp%pcr(isc:iec,jsc:jec,1:npz), Time)
-       if(id_edr > 0) used=send_data(id_edr, Atm(n)%inline_mp%edr(isc:iec,jsc:jec,1:npz), Time)
-       if(id_oer > 0) used=send_data(id_oer, Atm(n)%inline_mp%oer(isc:iec,jsc:jec,1:npz), Time)
-       if(id_rrr > 0) used=send_data(id_rrr, Atm(n)%inline_mp%rrr(isc:iec,jsc:jec,1:npz), Time)
-       if(id_tvr > 0) used=send_data(id_tvr, Atm(n)%inline_mp%tvr(isc:iec,jsc:jec,1:npz), Time)
-       if(id_pcs > 0) used=send_data(id_pcs, Atm(n)%inline_mp%pcs(isc:iec,jsc:jec,1:npz), Time)
-       if(id_eds > 0) used=send_data(id_eds, Atm(n)%inline_mp%eds(isc:iec,jsc:jec,1:npz), Time)
-       if(id_oes > 0) used=send_data(id_oes, Atm(n)%inline_mp%oes(isc:iec,jsc:jec,1:npz), Time)
-       if(id_rrs > 0) used=send_data(id_rrs, Atm(n)%inline_mp%rrs(isc:iec,jsc:jec,1:npz), Time)
-       if(id_tvs > 0) used=send_data(id_tvs, Atm(n)%inline_mp%tvs(isc:iec,jsc:jec,1:npz), Time)
-       if(id_pcg > 0) used=send_data(id_pcg, Atm(n)%inline_mp%pcg(isc:iec,jsc:jec,1:npz), Time)
-       if(id_edg > 0) used=send_data(id_edg, Atm(n)%inline_mp%edg(isc:iec,jsc:jec,1:npz), Time)
-       if(id_oeg > 0) used=send_data(id_oeg, Atm(n)%inline_mp%oeg(isc:iec,jsc:jec,1:npz), Time)
-       if(id_rrg > 0) used=send_data(id_rrg, Atm(n)%inline_mp%rrg(isc:iec,jsc:jec,1:npz), Time)
-       if(id_tvg > 0) used=send_data(id_tvg, Atm(n)%inline_mp%tvg(isc:iec,jsc:jec,1:npz), Time)
 
        if (id_qv_dt_gfdlmp > 0) used=send_data(id_qv_dt_gfdlmp, Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_ql_dt_gfdlmp > 0) used=send_data(id_ql_dt_gfdlmp, Atm(n)%inline_mp%ql_dt(isc:iec,jsc:jec,1:npz), Time)
@@ -1849,23 +1710,11 @@ contains
        if (id_qi_dt_phys > 0) used=send_data(id_qi_dt_phys, Atm(n)%phys_diag%phys_qi_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_liq_wat_dt_phys > 0) used=send_data(id_liq_wat_dt_phys, Atm(n)%phys_diag%phys_liq_wat_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_ice_wat_dt_phys > 0) used=send_data(id_ice_wat_dt_phys, Atm(n)%phys_diag%phys_ice_wat_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (id_qr_dt_phys > 0) used=send_data(id_qr_dt_phys, Atm(n)%phys_diag%phys_qr_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (id_qs_dt_phys > 0) used=send_data(id_qs_dt_phys, Atm(n)%phys_diag%phys_qs_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (id_qg_dt_phys > 0) used=send_data(id_qg_dt_phys, Atm(n)%phys_diag%phys_qg_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_t_dt_phys > 0)  used=send_data(id_t_dt_phys,  Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_u_dt_phys > 0)  used=send_data(id_u_dt_phys,  Atm(n)%phys_diag%phys_u_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_v_dt_phys > 0)  used=send_data(id_v_dt_phys,  Atm(n)%phys_diag%phys_v_dt(isc:iec,jsc:jec,1:npz), Time)
 
-       if (id_t_dt_nudge > 0) used=send_data(id_t_dt_nudge,  Atm(n)%nudge_diag%nudge_t_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (id_ps_dt_nudge > 0) used=send_data(id_ps_dt_nudge,  Atm(n)%nudge_diag%nudge_ps_dt(isc:iec,jsc:jec), Time)
-       if (id_delp_dt_nudge > 0) used=send_data(id_delp_dt_nudge,  Atm(n)%nudge_diag%nudge_delp_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (id_u_dt_nudge > 0) used=send_data(id_u_dt_nudge,  Atm(n)%nudge_diag%nudge_u_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (id_v_dt_nudge > 0) used=send_data(id_v_dt_nudge,  Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,1:npz), Time)
 
-       if (idiag%id_t_dt_sg > 0) used=send_data(idiag%id_t_dt_sg,  Atm(n)%sg_diag%t_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (idiag%id_u_dt_sg > 0) used=send_data(idiag%id_u_dt_sg,  Atm(n)%sg_diag%u_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (idiag%id_v_dt_sg > 0) used=send_data(idiag%id_v_dt_sg,  Atm(n)%sg_diag%v_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (idiag%id_qv_dt_sg > 0) used=send_data(idiag%id_qv_dt_sg,  Atm(n)%sg_diag%qv_dt(isc:iec,jsc:jec,1:npz), Time)
 
        if(id_c15>0 .or. id_c25>0 .or. id_c35>0 .or. id_c45>0) then
           call wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, Atm(n)%ua(isc:iec,jsc:jec,npz),   &
@@ -1883,8 +1732,8 @@ contains
        endif
 
        if ( id_vort200>0 .or. id_vort500>0 .or. id_vort850>0 .or. id_vorts>0   &
-            .or. id_vort>0 .or. id_pv>0 .or. id_pv350k>0 .or. id_pv550k>0 &
-            .or. id_rh>0 .or. id_x850>0 .or. id_uh03>0 .or. id_uh25>0) then
+            .or. id_vort>0 .or. id_pv>0 .or. id_rh>0 .or. id_x850>0 .or.  &
+            id_uh03>0 .or. id_uh25>0) then
           call get_vorticity(isc, iec, jsc, jec, isd, ied, jsd, jed, npz, Atm(n)%u, Atm(n)%v, wk, &
                Atm(n)%gridstruct%dx, Atm(n)%gridstruct%dy, Atm(n)%gridstruct%rarea)
 
@@ -1948,7 +1797,7 @@ contains
                          endif
                       enddo
                    enddo
-                   call prt_mxm('UH over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                   call prt_maxmin('UH over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
                 endif
              endif
              if ( id_uh25 > 0 ) then
@@ -1990,7 +1839,7 @@ contains
                           endif
                        enddo
                     enddo
-                    call prt_mxm('SRH (0-1 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                    call prt_maxmin('SRH (0-1 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
                  endif
               endif
 
@@ -2010,7 +1859,7 @@ contains
                           endif
                        enddo
                     enddo
-                    call prt_mxm('SRH (0-3 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                    call prt_maxmin('SRH (0-3 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
                  endif
               endif
 
@@ -2030,7 +1879,7 @@ contains
                           endif
                        enddo
                     enddo
-                    call prt_mxm('SRH (2-5 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                    call prt_maxmin('SRH (2-5 km) over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
                  endif
               endif
 
@@ -2038,40 +1887,45 @@ contains
           endif
 
 
-          if ( id_pv > 0 .or. id_pv350K >0 .or. id_pv550K >0 ) then
-              if (allocated(a3)) deallocate(a3)
-              allocate ( a3(isc:iec,jsc:jec,npz+1) )
-            ! Modified pv_entropy to get potential temperature at layer interfaces (last variable)
-            ! The values are needed for interpolate_z
+          if ( id_pv > 0 ) then
              ! Note: this is expensive computation.
               call pv_entropy(isc, iec, jsc, jec, ngc, npz, wk,    &
-                              Atm(n)%gridstruct%f0, Atm(n)%pt, Atm(n)%pkz, Atm(n)%delp, grav, a3)
-              if ( id_pv > 0) then
-                used = send_data ( id_pv, wk, Time )
-              endif
-              if( id_pv350K > 0 .or. id_pv550K >0 ) then
-                !"pot temp" from pv_entropy is only semi-finished; needs p0^kappa (pk0)
-                do k=1,npz+1
-                  do j=jsc,jec
-                    do i=isc,iec
-                      a3(i,j,k) = a3(i,j,k) * pk0
-                    enddo
-                  enddo
-                enddo
-                !wk as input, which stores pv from pv_entropy;
-                !use z interpolation, both potential temp and z increase monotonically with height
-                !interpolate_vertical will apply log operation to 350, and also assumes a different vertical order
-                call interpolate_z(isc, iec, jsc, jec, npz, 350., a3, wk, a2)
-                used = send_data( id_pv350K, a2, Time)
-                !interpolate_vertical will apply log operation to 350, and also assumes a different vertical order
-                call interpolate_z(isc, iec, jsc, jec, npz, 550., a3, wk, a2)
-                used = send_data( id_pv550K, a2, Time)
-              endif
-                deallocate ( a3 )
-              if (prt_minmax) call prt_mxm('PV', wk, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                              Atm(n)%gridstruct%f0, Atm(n)%pt, Atm(n)%pkz, Atm(n)%delp, grav)
+              used = send_data ( id_pv, wk, Time )
+              if (prt_minmax) call prt_maxmin('PV', wk, isc, iec, jsc, jec, 0, 1, 1.)
           endif
 
        endif
+
+
+
+!!$       if ( id_srh > 0 ) then
+!!$          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
+!!$               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+!!$               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 0., 3.e3)
+!!$          used = send_data ( id_srh, a2, Time )
+!!$          if(prt_minmax) then
+!!$             do j=jsc,jec
+!!$                do i=isc,iec
+!!$                   tmp = rad2deg * Atm(n)%gridstruct%agrid(i,j,1)
+!!$                   tmp2 = rad2deg * Atm(n)%gridstruct%agrid(i,j,2)
+!!$                   if (  tmp2<25. .or. tmp2>50.    &
+!!$                        .or. tmp<235. .or. tmp>300. ) then
+!!$                      a2(i,j) = 0.
+!!$                   endif
+!!$                enddo
+!!$             enddo
+!!$             call prt_maxmin('SRH over CONUS', a2, isc, iec, jsc, jec, 0,   1, 1.)
+!!$          endif
+!!$       endif
+
+!!$       if ( id_srh25 > 0 ) then
+!!$          call helicity_relative(isc, iec, jsc, jec, ngc, npz, zvir, sphum, a2, &
+!!$               Atm(n)%ua, Atm(n)%va, Atm(n)%delz, Atm(n)%q,   &
+!!$               Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%peln, Atm(n)%phis, grav, 2.e3, 5.e3)
+!!$          used = send_data ( id_srh25, a2, Time )
+!!$       endif
+
 
        ! Relative Humidity
        if ( id_rh > 0 ) then
@@ -2082,8 +1936,8 @@ contains
                    a2(i,j) = Atm(n)%delp(i,j,k)/(Atm(n)%peln(i,k+1,j)-Atm(n)%peln(i,k,j))
                 enddo
              enddo
-             call mqs3d(iec-isc+1, jec-jsc+1, 1, Atm(n)%pt(isc:iec,jsc:jec,k), a2, &
-                        Atm(n)%q(isc:iec,jsc:jec,k,sphum), wk(isc:iec,jsc:jec,k))
+             call mqs3d(iec-isc+1, jec-jsc+1, 1, Atm(n)%pt(isc:iec,jsc:jec,k),   &
+                  a2, Atm(n)%q(isc:iec,jsc:jec,k,sphum), wk(isc,jsc,k))
              do j=jsc,jec
                 do i=isc,iec
                    wk(i,j,k) = 100.*Atm(n)%q(i,j,k,sphum)/wk(i,j,k)
@@ -2092,9 +1946,8 @@ contains
           enddo
           used = send_data ( id_rh, wk, Time )
           if(prt_minmax) then
-             call prt_mxm('RH_Top (%): ', wk(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-             call prt_mxm('RH_Bottom (%): ', wk(isc:iec,jsc:jec,npz), isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-             call prt_mxm('RH (%): ', wk, isc, iec, jsc, jec, 0, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+             call prt_maxmin('RH_sf (%)', wk(isc:iec,jsc:jec,npz), isc, iec, jsc, jec, 0,   1, 1.)
+             call prt_maxmin('RH_3D (%)', wk, isc, iec, jsc, jec, 0, npz, 1.)
              call interpolate_vertical(isc, iec, jsc, jec, npz, 200.e2, Atm(n)%peln, wk(isc:iec,jsc:jec,:), a2)
              if (.not. Atm(n)%gridstruct%bounded_domain) then
                 tmp = 0.
@@ -2109,7 +1962,7 @@ contains
                 call mp_reduce_sum(sar)
                 call mp_reduce_sum(tmp)
                 if ( sar > 0. ) then
-                   if (master) write(*,*) 'RH200 = ', tmp/sar
+                   if (master) write(*,*) 'RH200 =', tmp/sar
                 endif
              endif
           endif
@@ -2323,7 +2176,8 @@ contains
           call get_height_field(isc, iec, jsc, jec, ngc, npz, Atm(n)%flagstruct%hydrostatic, Atm(n)%delz,  &
                                 wz, Atm(n)%pt, Atm(n)%q, Atm(n)%peln, zvir)
           if( prt_minmax )   &
-          call prt_mxm('ZTOP (m): ',wz(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0, 1, 1.E-3, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+          call prt_mxm('ZTOP',wz(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0, 1, 1.E-3, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+!         call prt_maxmin('ZTOP', wz(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0, 1, 1.E-3)
 
           if (id_hght3d > 0) then
              used = send_data(id_hght3d, 0.5*(wz(isc:iec,jsc:jec,1:npz)+wz(isc:iec,jsc:jec,2:npz+1)), Time)
@@ -2341,7 +2195,7 @@ contains
           endif
           used = send_data (id_slp, slp, Time)
              if( prt_minmax ) then
-             call prt_mxm('SLP (Pa): ', slp, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+             call prt_maxmin('SLP', slp, isc, iec, jsc, jec, 0, 1, 1.)
 ! US Potential Landfall TCs (PLT):
                  do j=jsc,jec
                     do i=isc,iec
@@ -2353,7 +2207,7 @@ contains
                        endif
                     enddo
                  enddo
-                 call prt_mxm('SLP_ATL (Pa): ', a2, isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                 call prt_maxmin('ATL SLP', a2, isc, iec, jsc, jec, 0,   1, 1.)
              endif
           endif
 
@@ -2391,13 +2245,13 @@ contains
              if( prt_minmax ) then
 
                 if(id_h(k100)>0 .or. (id_h_plev>0 .and. k100>0))  &
-                call prt_mxm('Z100 (m): ',a3(isc:iec,jsc:jec,k100),isc,iec,jsc,jec,0,1,1.E-3,Atm(n)%gridstruct%area_64,Atm(n)%domain)
+                call prt_mxm('Z100',a3(isc:iec,jsc:jec,k100),isc,iec,jsc,jec,0,1,1.E-3,Atm(n)%gridstruct%area_64,Atm(n)%domain)
 
                 if(id_h(k500)>0 .or. (id_h_plev>0 .and. k500>0))  then
                    if (Atm(n)%gridstruct%bounded_domain) then
-                      call prt_mxm('Z500 (m): ',a3(isc:iec,jsc:jec,k500),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
+                      call prt_mxm('Z500',a3(isc:iec,jsc:jec,k500),isc,iec,jsc,jec,0,1,1.,Atm(n)%gridstruct%area_64,Atm(n)%domain)
                    else
-                      call prt_gb_nh_sh('fv_GFS Z500 (m): ', isc,iec, jsc,jec, a3(isc,jsc,k500), Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
+                      call prt_gb_nh_sh('fv_GFS Z500', isc,iec, jsc,jec, a3(isc,jsc,k500), Atm(n)%gridstruct%area_64(isc:iec,jsc:jec),   &
                                         Atm(n)%gridstruct%agrid_64(isc:iec,jsc:jec,2))
                    endif
                 endif
@@ -2456,7 +2310,7 @@ contains
                       endif
                    enddo
                 enddo
-                call prt_mxm('Depress', depress, isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                call prt_maxmin('Depress', depress, isc, iec, jsc, jec, 0,   1, 1.)
                 do j=jsc,jec
                    do i=isc,iec
                       if ( Atm(n)%gridstruct%agrid(i,j,2)<0.) then
@@ -2465,7 +2319,7 @@ contains
                       endif
                    enddo
                 enddo
-                call prt_mxm('NH Deps', depress, isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                call prt_maxmin('NH Deps', depress, isc, iec, jsc, jec, 0,   1, 1.)
 
 ! ATL basin cyclones
                 do j=jsc,jec
@@ -2476,7 +2330,7 @@ contains
                       endif
                    enddo
                 enddo
-                call prt_mxm('ATL Deps', depress, isc, iec, jsc, jec, 0,   1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                call prt_maxmin('ATL Deps', depress, isc, iec, jsc, jec, 0,   1, 1.)
              endif
           endif
 
@@ -2571,7 +2425,7 @@ contains
              if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
           enddo
           if ( id_t(k100)>0 .and. prt_minmax ) then
-             call prt_mxm('T100 (K): ', a3(isc:iec,jsc:jec,k100), isc, iec, jsc, jec, 0, 1, 1.,   &
+             call prt_mxm('T100:', a3(isc:iec,jsc:jec,k100), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
              if (.not. Atm(n)%gridstruct%bounded_domain)  then
                 tmp = 0.
@@ -2589,14 +2443,14 @@ contains
                 call mp_reduce_sum(sar)
                 call mp_reduce_sum(tmp)
                 if ( sar > 0. ) then
-                   if (master) write(*,*) 'Tropical [10s,10n] mean T100 = ', tmp/sar
+                   if (master) write(*,*) 'Tropical [10s,10n] mean T100 =', tmp/sar
                 else
                    if (master) write(*,*) 'Warning: problem computing tropical mean T100'
                 endif
              endif
           endif
           if ( id_t(k200) > 0 .and. prt_minmax ) then
-             call prt_mxm('T200 (K): ', a3(isc:iec,jsc:jec,k200), isc, iec, jsc, jec, 0, 1, 1.,   &
+             call prt_mxm('T200:', a3(isc:iec,jsc:jec,k200), isc, iec, jsc, jec, 0, 1, 1.,   &
                           Atm(n)%gridstruct%area_64, Atm(n)%domain)
              if (.not. Atm(n)%gridstruct%bounded_domain) then
                 tmp = 0.
@@ -2613,7 +2467,7 @@ contains
                 call mp_reduce_sum(sar)
                 call mp_reduce_sum(tmp)
                 if ( sar > 0. ) then
-                   if (master) write(*,*) 'Tropical [-20.,20.] mean T200 = ', tmp/sar
+                   if (master) write(*,*) 'Tropical [-20.,20.] mean T200 =', tmp/sar
                 endif
              endif
           endif
@@ -2915,22 +2769,24 @@ contains
                         a2(i,j) = missing_value3
                         var1(i,j) = missing_value3
                         var2(i,j) = missing_value2
+!!$                           a2(i,j) = Atm(n)%pt(i,j,k)
+!!$                         var1(i,j) = 0.01*Atm(n)%pe(i,k+1,j)   ! surface pressure
                      endif
                   enddo
                enddo
             enddo
           if ( id_ctt>0 ) then
                used = send_data(id_ctt, a2, Time)
-               if(prt_minmax) call prt_mxm('Cloud_top_T (K): ', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+               if(prt_minmax) call prt_maxmin('Cloud_top_T (K)', a2, isc, iec, jsc, jec, 0, 1, 1.)
           endif
           if ( id_ctp>0 ) then
                used = send_data(id_ctp, var1, Time)
-               if(prt_minmax) call prt_mxm('Cloud_top_P (mb): ', var1, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+               if(prt_minmax) call prt_maxmin('Cloud_top_P (mb)', var1, isc, iec, jsc, jec, 0, 1, 1.)
           endif
           deallocate ( var1 )
           if ( id_ctz>0 ) then
                used = send_data(id_ctz, var2, Time)
-               if(prt_minmax) call prt_mxm('Cloud_top_Z (m): ', var2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+               if(prt_minmax) call prt_maxmin('Cloud_top_z (m)', var2, isc, iec, jsc, jec, 0, 1, 1.)
           endif
           deallocate ( var2 )
        endif
@@ -3032,18 +2888,128 @@ contains
           enddo
           used=send_data(id_us, u2, Time)
           used=send_data(id_vs, v2, Time)
-          if(prt_minmax) call prt_mxm('Surf_Wind_Speed (m/s): ', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+          if(prt_minmax) call prt_maxmin('Surf_wind_speed', a2, isc, iec, jsc, jec, 0, 1, 1.)
        endif
 
        if(id_tb > 0) then
           a2(:,:) = Atm(n)%pt(isc:iec,jsc:jec,npz)
           used=send_data(id_tb, a2, Time)
           if( prt_minmax )   &
-          call prt_mxm('T_Bottom (K): ', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+          call prt_mxm('T_bot:', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
        endif
 
        if(id_ua > 0) used=send_data(id_ua, Atm(n)%ua(isc:iec,jsc:jec,:), Time)
        if(id_va > 0) used=send_data(id_va, Atm(n)%va(isc:iec,jsc:jec,:), Time)
+
+       if(id_uw > 0 .or. id_vw > 0 .or. id_hw > 0 .or. id_qvw > 0 .or. &
+            id_qlw > 0 .or. id_qiw > 0 .or. id_o3w > 0 .or. id_mw > 0 ) then
+          allocate( a3(isc:iec,jsc:jec,npz) )
+
+          do k=1,npz
+          do j=jsc,jec
+          do i=isc,iec
+             wk(i,j,k) = Atm(n)%w(i,j,k)*Atm(n)%delp(i,j,k)*ginv
+          enddo
+          enddo
+          enddo
+
+          if (id_mw > 0) then
+             used = send_data(id_mw, wk, Time)
+          endif
+
+          if (id_uw > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = Atm(n)%ua(i,j,k)*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(id_uw, a3, Time)
+          endif
+          if (id_vw > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = Atm(n)%va(i,j,k)*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(id_vw, a3, Time)
+          endif
+
+          if (id_hw > 0) then
+             allocate(cvm(isc:iec))
+             do k=1,npz
+             do j=jsc,jec
+#ifdef USE_COND
+                call moist_cv(isc,iec,isd,ied,jsd,jed,npz,j,k,Atm(n)%flagstruct%nwat,sphum,liq_wat,rainwat, &
+                     ice_wat,snowwat,graupel,Atm(n)%q,Atm(n)%q_con(isc:iec,j,k),cvm)
+                do i=isc,iec
+                   a3(i,j,k) = Atm(n)%pt(i,j,k)*cvm(i)*wk(i,j,k)
+                enddo
+#else
+                cv_vapor = cp_vapor - rvgas
+                do i=isc,iec
+                   a3(i,j,k) = Atm(n)%pt(i,j,k)*cv_vapor*wk(i,j,k)
+                enddo
+#endif
+             enddo
+             enddo
+             used = send_data(id_hw, a3, Time)
+             deallocate(cvm)
+          endif
+
+          if (id_qvw > 0) then
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = Atm(n)%q(i,j,k,sphum)*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(id_qvw, a3, Time)
+          endif
+          if (id_qlw > 0) then
+             if (liq_wat < 0 .or. rainwat < 0) call mpp_error(FATAL, 'qlw does not work without liq_wat and rainwat defined')
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = (Atm(n)%q(i,j,k,liq_wat)+Atm(n)%q(i,j,k,rainwat))*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(id_qlw, a3, Time)
+          endif
+          if (id_qiw > 0) then
+             if (ice_wat < 0 .or. snowwat < 0 .or. graupel < 0) then
+                call mpp_error(FATAL, 'qiw does not work without ice_wat, snowwat, and graupel defined')
+             endif
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = (Atm(n)%q(i,j,k,ice_wat)+Atm(n)%q(i,j,k,snowwat)+Atm(n)%q(i,j,k,graupel))*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(id_qiw, a3, Time)
+          endif
+          if (id_o3w > 0) then
+             if (o3mr < 0) then
+                call mpp_error(FATAL, 'o3w does not work without o3mr defined')
+             endif
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a3(i,j,k) = Atm(n)%q(i,j,k,o3mr)*wk(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(id_o3w, a3, Time)
+          endif
+
+          deallocate(a3)
+       endif
 
        if(id_ke > 0) then
           a2(:,:) = 0.
@@ -3069,9 +3035,7 @@ contains
 
 
 #ifdef GFS_PHYS
-       if(id_delp > 0 .or. id_cape > 0 .or. id_cin > 0 .or. &
-            ((.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0)) .or. &
-            id_brn > 0 .or. id_shear06 > 0) then
+       if(id_delp > 0 .or. id_cape > 0 .or. id_cin > 0 .or. ((.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0))) then
           do k=1,npz
             do j=jsc,jec
             do i=isc,iec
@@ -3080,29 +3044,53 @@ contains
             enddo
           enddo
           if (id_delp > 0) used=send_data(id_delp, wk, Time)
+
        endif
-#else
-       if(id_delp > 0) used=send_data(id_delp, Atm(n)%delp(isc:iec,jsc:jec,:), Time)
-#endif
-       if( ( (.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0)) .or. id_cape > 0 .or. id_cin > 0  .or. &
-            id_brn > 0 .or. id_shear06 > 0) then
+
+       if( ( (.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0)) .or. id_cape > 0 .or. id_cin > 0) then
+
+!!$          if (id_ppnh > 0) then
+!!$             if (allocated(a3)) deallocate(a3)
+!!$             allocate(a3(isc:iec,jsc:jec,1:npz+1))
+!!$                do j=jsc,jec
+!!$                do i=isc,iec
+!!$                    a3(i,j,1) = ptop
+!!$                enddo
+!!$                enddo
+!!$              do k=2,npz+1
+!!$                do j=jsc,jec
+!!$                do i=isc,iec
+!!$                   a3(i,j,k) = a3(i,j,k-1) + wk(i,j,k) !interface pressure
+!!$                enddo
+!!$                enddo
+!!$              enddo
+!!$              do k=1,npz+1
+!!$                do j=jsc,jec
+!!$                do i=isc,iec
+!!$                   a3(i,j,k) = log(a3(i,j,k)) !log pressure
+!!$                enddo
+!!$                enddo
+!!$             enddo
+!!$             do k=1,npz
+!!$                do j=jsc,jec
+!!$                do i=isc,iec
+!!$                   a3(i,j,k) = wk(i,j,k)/(a3(i,j,k+1)-a3(i,j,k)) !hydro layer-mean pressure
+!!$                enddo
+!!$                enddo
+!!$             enddo
+!!$             
+!!$          endif
 
           do k=1,npz
              do j=jsc,jec
              do i=isc,iec
-#ifdef GFS_PHYS
-                wk(i,j,k) = -wk(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
-                     Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum))
-#else
-                 wk(i,j,k) = -Atm(n)%delp(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
-                              Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum))
-
-#endif
+                 wk(i,j,k) = -wk(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
+                             Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum))
              enddo
              enddo
            enddo
 !           if (prt_minmax) then
-!              call prt_mxm(' PFNH (mb)', wk(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0, npz, 1.E-2, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+!              call prt_maxmin(' PFNH (mb)', wk(isc:iec,jsc:jec,1), isc, iec, jsc, jec, 0, npz, 1.E-2)
 !           endif
            used=send_data(id_pfnh, wk, Time)
            if (id_ppnh > 0) then
@@ -3110,11 +3098,7 @@ contains
                do j=jsc,jec
                do i=isc,iec
                   !wk(i,j,k) = wk(i,j,k) - a3(i,j,k)
-#ifdef GFS_PHYS
-                  wk(i,j,k) = wk(i,j,k)/(1.-sum(Atm(n)%q(i,j,k,2:Atm(n)%flagstruct%nwat))) !Need to correct
-#endif
-                  tmp = Atm(n)%delp(i,j,k)/(Atm(n)%peln(i,k+1,j)-Atm(n)%peln(i,k,j))
-                  wk(i,j,k) = wk(i,j,k) - tmp
+                  wk(i,j,k) = wk(i,j,k) - 0.5 *(Atm(n)%pe(i,k,j)+Atm(n)%pe(i,k+1,j)) !STUPID: testing only!!
                enddo
                enddo
              enddo
@@ -3124,23 +3108,34 @@ contains
 !           if (allocated(a3)) deallocate(a3)
 
         endif
+#else
+       if(id_delp > 0) used=send_data(id_delp, Atm(n)%delp(isc:iec,jsc:jec,:), Time)
 
-        if( Atm(n)%flagstruct%hydrostatic .and. (id_pfhy > 0 .or. id_cape > 0 .or. id_cin > 0 .or. id_brn > 0 .or. id_shear06 > 0) ) then
+       if( (.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or.  id_cape > 0 .or. id_cin > 0)) then
+           do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                 wk(i,j,k) = -Atm(n)%delp(i,j,k)/(Atm(n)%delz(i,j,k)*grav)*rdgas*          &
+                              Atm(n)%pt(i,j,k)*(1.+zvir*Atm(n)%q(i,j,k,sphum))
+             enddo
+             enddo
+           enddo
+           used=send_data(id_pfnh, wk, Time)
+       endif
+#endif
+
+      if( Atm(n)%flagstruct%hydrostatic .and. (id_pfhy > 0 .or. id_cape > 0 .or. id_cin > 0) ) then
           do k=1,npz
             do j=jsc,jec
             do i=isc,iec
-#ifdef GFS_PHYS
-               wk(i,j,k) = 0.5 *(Atm(n)%pe(i,k,j)+Atm(n)%pe(i,k+1,j))
-#else
-               wk(i,j,k) = Atm(n)%delp(i,j,k)/(Atm(n)%peln(i,k+1,j)-Atm(n)%peln(i,k,j))
-#endif
+                wk(i,j,k) = 0.5 *(Atm(n)%pe(i,k,j)+Atm(n)%pe(i,k+1,j))
             enddo
             enddo
           enddo
           used=send_data(id_pfhy, wk, Time)
       endif
 
-       if (id_cape > 0 .or. id_cin > 0 .or. id_brn > 0 .or. id_shear06 > 0) then
+       if (id_cape > 0 .or. id_cin > 0) then
           !wk here contains layer-mean pressure
 
           allocate(var2(isc:iec,jsc:jec))
@@ -3161,19 +3156,15 @@ contains
 
           if (id_cape > 0) then
              if (prt_minmax) then
-                call prt_mxm(' CAPE (J/kg)', a2, isc,iec,jsc,jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                call prt_maxmin(' CAPE (J/kg)', a2, isc,iec,jsc,jec, 0, 1, 1.)
              endif
              used=send_data(id_cape, a2, Time)
           endif
           if (id_cin > 0) then
              if (prt_minmax) then
-                call prt_mxm(' CIN (J/kg)', var2, isc,iec,jsc,jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                call prt_maxmin(' CIN (J/kg)', var2, isc,iec,jsc,jec, 0, 1, 1.)
              endif
              used=send_data(id_cin, var2, Time)
-          endif
-
-          if (id_brn > 0 .or. id_shear06 > 0) then
-             call compute_brn(Atm(n)%ua,Atm(n)%va,Atm(n)%delp,Atm(n)%delz,a2,Atm(n)%bd,npz,Time)
           endif
 
           deallocate(var2)
@@ -3249,44 +3240,44 @@ contains
             enddo
          endif
             if( prt_minmax )   &
-                 call prt_mxm('ZTOP', wz(isc:iec,jsc:jec,1)+Atm(n)%phis(isc:iec,jsc:jec)/grav, isc, iec, jsc, jec, 0, 1, 1.E-3, Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                 call prt_maxmin('ZTOP', wz(isc:iec,jsc:jec,1)+Atm(n)%phis(isc:iec,jsc:jec)/grav, isc, iec, jsc, jec, 0, 1, 1.E-3)
        endif
 
        if ( id_rain5km>0 ) then
             rainwat = get_tracer_index (MODEL_ATMOS, 'rainwat')
             call interpolate_z(isc, iec, jsc, jec, npz, 5.e3, wz, Atm(n)%q(isc:iec,jsc:jec,:,rainwat), a2)
             used=send_data(id_rain5km, a2, Time)
-            if(prt_minmax) call prt_mxm('rain5km', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            if(prt_minmax) call prt_maxmin('rain5km', a2, isc, iec, jsc, jec, 0, 1, 1.)
        endif
        if ( id_w5km>0 ) then
             call interpolate_z(isc, iec, jsc, jec, npz, 5.e3, wz, Atm(n)%w(isc:iec,jsc:jec,:), a2)
             used=send_data(id_w5km, a2, Time)
-            if(prt_minmax) call prt_mxm('W5km', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            if(prt_minmax) call prt_maxmin('W5km', a2, isc, iec, jsc, jec, 0, 1, 1.)
        endif
        if ( id_w2500m>0 ) then
             call interpolate_z(isc, iec, jsc, jec, npz, 2.5e3, wz, Atm(n)%w(isc:iec,jsc:jec,:), a2)
             used=send_data(id_w2500m, a2, Time)
-            if(prt_minmax) call prt_mxm('W2500m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            if(prt_minmax) call prt_maxmin('W2500m', a2, isc, iec, jsc, jec, 0, 1, 1.)
        endif
        if ( id_w1km>0 ) then
             call interpolate_z(isc, iec, jsc, jec, npz, 1.e3, wz, Atm(n)%w(isc:iec,jsc:jec,:), a2)
             used=send_data(id_w1km, a2, Time)
-            if(prt_minmax) call prt_mxm('W1km', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            if(prt_minmax) call prt_maxmin('W1km', a2, isc, iec, jsc, jec, 0, 1, 1.)
        endif
        if ( id_w100m>0 ) then
             call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%w(isc:iec,jsc:jec,:), a2)
             used=send_data(id_w100m, a2, Time)
-            if(prt_minmax) call prt_mxm('w100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            if(prt_minmax) call prt_maxmin('w100m', a2, isc, iec, jsc, jec, 0, 1, 1.)
        endif
        if ( id_u100m>0 ) then
             call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%ua(isc:iec,jsc:jec,:), a2)
             used=send_data(id_u100m, a2, Time)
-            if(prt_minmax) call prt_mxm('u100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            if(prt_minmax) call prt_maxmin('u100m', a2, isc, iec, jsc, jec, 0, 1, 1.)
        endif
        if ( id_v100m>0 ) then
             call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%va(isc:iec,jsc:jec,:), a2)
             used=send_data(id_v100m, a2, Time)
-            if(prt_minmax) call prt_mxm('v100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            if(prt_minmax) call prt_maxmin('v100m', a2, isc, iec, jsc, jec, 0, 1, 1.)
        endif
 
        if ( rainwat > 0 .and. (id_dbz>0 .or. id_maxdbz>0 .or. id_basedbz>0 .or. id_dbz4km>0 &
@@ -3295,11 +3286,9 @@ contains
           if (.not. allocated(a3)) allocate(a3(isc:iec,jsc:jec,npz))
 
 !          call dbzcalc_smithxue(Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
-          call rad_ref(Atm(n)%bd%is, Atm(n)%bd%ie, Atm(n)%bd%js, Atm(n)%bd%je, &
-               Atm(n)%bd%isd, Atm(n)%bd%ied, Atm(n)%bd%jsd, Atm(n)%bd%jed, &
-               Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
-               a3, a2, allmax, npz, Atm(n)%ncnst, Atm(n)%flagstruct%hydrostatic, &
-               zvir, Atm(n)%flagstruct%do_inline_mp, &
+          call rad_ref(Atm(n)%q, Atm(n)%pt, Atm(n)%delp, Atm(n)%peln, Atm(n)%delz, &
+               a3, a2, allmax, Atm(n)%bd, npz, Atm(n)%ncnst, Atm(n)%flagstruct%hydrostatic, &
+               zvir, .false., .false., .false., .true., Atm(n)%flagstruct%do_inline_mp, &
                sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, mp_top) ! GFDL MP has constant N_0 intercept
 
           if (id_dbz > 0) used=send_data(id_dbz, a3, time)
@@ -3309,7 +3298,7 @@ contains
              !interpolate to 1km dbz
              call cs_interpolator(isc, iec, jsc, jec, npz, a3, 1000., wz, a2, -20.)
              used=send_data(id_basedbz, a2, time)
-             if(prt_minmax) call prt_mxm('Base_dBz', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+             if(prt_minmax) call prt_maxmin('Base_dBz', a2, isc, iec, jsc, jec, 0, 1, 1.)
           endif
 
           if (id_dbz4km > 0) then
@@ -3441,168 +3430,6 @@ contains
          used=send_data(id_q_plev, a3(isc:iec,jsc:jec,:), Time)
        endif
 
-! cloud water mass mixing ratio
-       idg(:) = id_ql(:)
-
-       do_cs_intp = .false.
-       do i=1,nplev
-          if ( idg(i)>0 ) then
-               do_cs_intp = .true.
-               exit
-          endif
-       enddo
-
-       if ( do_cs_intp ) then
-          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,liq_wat), nplev, &
-                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
-!                              plevs(1:nplev), Atm(n)%peln, idg, a3, 0)
-          do i=1,nplev
-             if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
-          enddo
-       endif
-
-       if (id_ql_plev>0) then
-         id1(:) = 1
-         call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,liq_wat), nplev, &
-                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
-         used=send_data(id_ql_plev, a3(isc:iec,jsc:jec,:), Time)
-       endif
-
-! cloud ice mass mixing ratio
-       idg(:) = id_qi(:)
-
-       do_cs_intp = .false.
-       do i=1,nplev
-          if ( idg(i)>0 ) then
-               do_cs_intp = .true.
-               exit
-          endif
-       enddo
-
-       if ( do_cs_intp ) then
-          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,ice_wat), nplev, &
-                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
-!                              plevs(1:nplev), Atm(n)%peln, idg, a3, 0)
-          do i=1,nplev
-             if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
-          enddo
-       endif
-
-       if (id_qi_plev>0) then
-         id1(:) = 1
-         call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,ice_wat), nplev, &
-                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
-         used=send_data(id_qi_plev, a3(isc:iec,jsc:jec,:), Time)
-       endif
-
-! rain mass mixing ratio
-       idg(:) = id_qr(:)
-
-       do_cs_intp = .false.
-       do i=1,nplev
-          if ( idg(i)>0 ) then
-               do_cs_intp = .true.
-               exit
-          endif
-       enddo
-
-       if ( do_cs_intp ) then
-          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,rainwat), nplev, &
-                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
-!                              plevs(1:nplev), Atm(n)%peln, idg, a3, 0)
-          do i=1,nplev
-             if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
-          enddo
-       endif
-
-       if (id_qr_plev>0) then
-         id1(:) = 1
-         call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,rainwat), nplev, &
-                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
-         used=send_data(id_qr_plev, a3(isc:iec,jsc:jec,:), Time)
-       endif
-
-! snow mass mixing ratio
-       idg(:) = id_qs(:)
-
-       do_cs_intp = .false.
-       do i=1,nplev
-          if ( idg(i)>0 ) then
-               do_cs_intp = .true.
-               exit
-          endif
-       enddo
-
-       if ( do_cs_intp ) then
-          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,snowwat), nplev, &
-                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
-!                              plevs(1:nplev), Atm(n)%peln, idg, a3, 0)
-          do i=1,nplev
-             if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
-          enddo
-       endif
-
-       if (id_qs_plev>0) then
-         id1(:) = 1
-         call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,snowwat), nplev, &
-                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
-         used=send_data(id_qs_plev, a3(isc:iec,jsc:jec,:), Time)
-       endif
-
-! graupel mass mixing ratio
-       idg(:) = id_qg(:)
-
-       do_cs_intp = .false.
-       do i=1,nplev
-          if ( idg(i)>0 ) then
-               do_cs_intp = .true.
-               exit
-          endif
-       enddo
-
-       if ( do_cs_intp ) then
-          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,graupel), nplev, &
-                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
-!                              plevs(1:nplev), Atm(n)%peln, idg, a3, 0)
-          do i=1,nplev
-             if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
-          enddo
-       endif
-
-       if (id_qg_plev>0) then
-         id1(:) = 1
-         call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,graupel), nplev, &
-                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
-         used=send_data(id_qg_plev, a3(isc:iec,jsc:jec,:), Time)
-       endif
-
-! cloud fraction
-       idg(:) = id_cf(:)
-
-       do_cs_intp = .false.
-       do i=1,nplev
-          if ( idg(i)>0 ) then
-               do_cs_intp = .true.
-               exit
-          endif
-       enddo
-
-       if ( do_cs_intp ) then
-          call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,cld_amt), nplev, &
-                               pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), idg, a3, 0)
-!                              plevs(1:nplev), Atm(n)%peln, idg, a3, 0)
-          do i=1,nplev
-             if (idg(i)>0) used=send_data(idg(i), a3(isc:iec,jsc:jec,i), Time)
-          enddo
-       endif
-
-       if (id_cf_plev>0) then
-         id1(:) = 1
-         call cs3_interpolator(isc,iec,jsc,jec,npz, Atm(n)%q(isc:iec,jsc:jec,:,cld_amt), nplev, &
-                              pout(1:nplev), wz, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), id1, a3, 0)
-         used=send_data(id_cf_plev, a3(isc:iec,jsc:jec,:), Time)
-       endif
-
 ! Omega
        idg(:) = id_omg(:)
 
@@ -3631,65 +3458,6 @@ contains
 
        if( allocated(a3) ) deallocate (a3)
 ! *** End cs_intp
-
-       !!! BEGIN LAYER-AVERAGED DIAGNOSTICS
-       allocate(a3(isc:iec,jsc:jec,nplev_ave))
-       if (allocated(a2)) deallocate(a2)
-       allocate(a2(isc:iec,nplev_ave+1))
-
-       !Use logp to interpolate temperature
-       do k=1,nplev_ave+1
-          a2(:,k) = log(real(levs_ave(k))*100.)
-       enddo
-       if ( id_t_plev_ave > 0) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%pt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4)
-          enddo
-          if (id_t_plev_ave > 0) used=send_data(id_t_plev_ave, a3, Time)
-       endif
-       if ( id_t_dt_gfdlmp_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%inline_mp%t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4)
-          enddo
-          if (id_t_dt_gfdlmp_plev_ave > 0) used=send_data(id_t_dt_gfdlmp_plev_ave, a3, Time)
-       endif
-       if ( id_t_dt_phys_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%peln(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_t_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 1, 4)
-          enddo
-          if (id_t_dt_phys_plev_ave > 0) used=send_data(id_t_dt_phys_plev_ave, a3, Time)
-       endif
-
-       !Using full pressure to interpolate other scalars
-       do k=1,nplev_ave+1
-          a2(:,k) = real(levs_ave(k))*100.
-       enddo
-       if ( id_q_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%q(isc:iec,j,:,sphum), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8)
-          enddo
-          if (id_q_plev_ave > 0) used=send_data(id_q_plev_ave, a3, Time)
-       endif
-       if ( id_qv_dt_gfdlmp_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%inline_mp%qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8)
-          enddo
-          if (id_qv_dt_gfdlmp_plev_ave > 0) used=send_data(id_qv_dt_gfdlmp_plev_ave, a3, Time)
-       endif
-       if ( id_qv_dt_phys_plev_ave > 0 ) then
-          do j=jsc,jec
-             call mappm(npz, Atm(n)%pe(isc:iec,1:npz+1,j), Atm(n)%phys_diag%phys_qv_dt(isc:iec,j,:), nplev_ave, a2, a3(isc:iec,j,:), isc, iec, 0, 8)
-          enddo
-          if (id_qv_dt_phys_plev_ave > 0) used=send_data(id_qv_dt_phys_plev_ave, a3, Time)
-       endif
-
-
-       deallocate(a2)
-       deallocate(a3)
-       !!! END LAYER AVERAGED DIAGNOSTICS
-
-       if (allocated(a2)) deallocate(a2)
-       allocate ( a2(isc:iec,jsc:jec) )
 
        if ( id_sl12>0 ) then   ! 13th level wind speed (~ 222 mb for the 32L setup)
             do j=jsc,jec
@@ -3764,7 +3532,6 @@ contains
 
        if(id_pt   > 0) used=send_data(id_pt  , Atm(n)%pt  (isc:iec,jsc:jec,:), Time)
        if(id_omga > 0) used=send_data(id_omga, Atm(n)%omga(isc:iec,jsc:jec,:), Time)
-       if(id_diss > 0) used=send_data(id_diss, Atm(n)%diss_est(isc:iec,jsc:jec,:), Time)
 
        allocate( a3(isc:iec,jsc:jec,npz) )
        if(id_theta_e > 0 ) then
@@ -3783,7 +3550,7 @@ contains
           endif
 
           if (id_theta_e > 0) then
-             if( prt_minmax ) call prt_mxm('Theta_E', a3, isc, iec, jsc, jec, 0, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+             if( prt_minmax ) call prt_maxmin('Theta_E', a3, isc, iec, jsc, jec, 0, npz, 1.)
              used=send_data(id_theta_e, a3, Time)
           end if
           theta_d = get_tracer_index (MODEL_ATMOS, 'theta_d')
@@ -3807,7 +3574,7 @@ contains
                 enddo
                 enddo
                 enddo
-                call prt_mxm('Theta_Err (%)', a3, isc, iec, jsc, jec, 0, npz, 100., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                call prt_maxmin('Theta_Err (%)', a3, isc, iec, jsc, jec, 0, npz, 100.)
                 !           if ( master ) write(*,*) 'PK0=', pk0, 'KAPPA=', kappa
              endif
           endif
@@ -3847,13 +3614,26 @@ contains
           used=send_data(id_ppt, wk, Time)
 
           if( prt_minmax ) then
-              call prt_mxm('PoTemp', wk, isc, iec, jsc, jec, 0, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+              call prt_maxmin('PoTemp', wk, isc, iec, jsc, jec, 0, npz, 1.)
           endif
 
           if( allocated(a3) ) deallocate ( a3 )
           deallocate ( pt1 )
        endif
 
+       if (id_epv > 0 .and. .not. Atm(n)%flagstruct%hydrostatic) then
+          if (allocated(a3)) deallocate(a3)
+          allocate(a3(isc:iec,jsc:jec,npz))
+          do k=1,npz
+             a1d(k) = Atm(n)%ak(k+1)-Atm(n)%ak(k) + (Atm(n)%bk(k+1)-Atm(n)%bk(k))*1.E5
+          enddo
+          call ertel_pv(Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%pt, Atm(n)%delp, Atm(n)%delz, Atm(n)%pkz, a3, a1d ,Atm(n)%gridstruct, Atm(n)%domain, Atm(n)%bd, Atm(n)%npx, Atm(n)%npy, npz)
+          used = send_data (id_epv, a3, Time)
+          deallocate(a3)
+       endif
+
+       
+#ifndef SW_DYNAMICS
         do itrac=1, Atm(n)%ncnst
           call get_tracer_names (MODEL_ATMOS, itrac, tname)
           if (id_tracer(itrac) > 0 .and. itrac.gt.nq) then
@@ -3862,11 +3642,11 @@ contains
             used = send_data (id_tracer(itrac), Atm(n)%q(isc:iec,jsc:jec,:,itrac), Time )
           endif
           if (itrac .le. nq) then
-            if( prt_minmax ) call prt_mxm(trim(tname)//": ", Atm(n)%q(:,:,1,itrac),     &
-                              isc, iec, jsc, jec, ngc, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            if( prt_minmax ) call prt_maxmin(trim(tname), Atm(n)%q(:,:,1,itrac),     &
+                              isc, iec, jsc, jec, ngc, npz, 1.)
           else
-            if( prt_minmax ) call prt_mxm(trim(tname)//": ", Atm(n)%qdiag(:,:,1,itrac), &
-                              isc, iec, jsc, jec, ngc, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            if( prt_minmax ) call prt_maxmin(trim(tname), Atm(n)%qdiag(:,:,1,itrac), &
+                              isc, iec, jsc, jec, ngc, npz, 1.)
           endif
 !-------------------------------
 ! ESM TRACER diagnostics output:
@@ -3887,10 +3667,10 @@ contains
               used = send_data (id_tracer_dmmr(itrac), dmmr, Time )
               used = send_data (id_tracer_dvmr(itrac), dvmr, Time )
               if( prt_minmax ) then
-                 call prt_mxm(trim(tname)//'_dmmr', dmmr, &
-                    isc, iec, jsc, jec, 0, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-                 call prt_mxm(trim(tname)//'_dvmr', dvmr, &
-                    isc, iec, jsc, jec, 0, npz, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+                 call prt_maxmin(trim(tname)//'_dmmr', dmmr, &
+                    isc, iec, jsc, jec, 0, npz, 1.)
+                 call prt_maxmin(trim(tname)//'_dvmr', dvmr, &
+                    isc, iec, jsc, jec, 0, npz, 1.)
             endif
           endif
         enddo
@@ -4007,11 +3787,10 @@ contains
        endif
      endif
 
-#ifndef SW_DYNAMICS
 ! terms related with vertical wind ( Atm(n)%w ):
      if(.not.Atm(n)%flagstruct%hydrostatic) then
        ! vertical moisture flux
-       if(id_wq > 0 .or. id_iwq > 0) then
+       if(id_wq > 0) then
          do k=1,npz
             do j=jsc,jec
                do i=isc,iec
@@ -4019,14 +3798,14 @@ contains
                enddo
             enddo
          enddo
-         if(id_wq > 0) used=send_data(id_wq, a4, Time)
+         used=send_data(id_wq, a4, Time)
          if(id_iwq > 0) then
            call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
            used=send_data(id_iwq, a2, Time)
          endif
        endif
        ! vertical heat flux
-       if(id_wt > 0 .or. id_iwt > 0) then
+       if(id_wt > 0) then
          do k=1,npz
             do j=jsc,jec
                do i=isc,iec
@@ -4034,14 +3813,14 @@ contains
                enddo
             enddo
          enddo
-         if(id_wt > 0) used=send_data(id_wt, a4, Time)
+         used=send_data(id_wt, a4, Time)
          if(id_iwt > 0) then
            call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
            used=send_data(id_iwt, a2, Time)
          endif
        endif
       ! zonal flux of w
-       if(id_uw > 0 .or. id_iuw > 0) then
+       if(id_uw > 0) then
          do k=1,npz
             do j=jsc,jec
                do i=isc,iec
@@ -4049,14 +3828,14 @@ contains
                enddo
             enddo
          enddo
-         if (id_uw > 0) used=send_data(id_uw, a4, Time)
+         used=send_data(id_uw, a4, Time)
          if(id_iuw > 0) then
            call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
            used=send_data(id_iuw, a2, Time)
          endif
        endif
        ! meridional flux of w
-       if(id_vw > 0 .or. id_ivw > 0) then
+       if(id_vw > 0) then
          do k=1,npz
             do j=jsc,jec
                do i=isc,iec
@@ -4064,14 +3843,14 @@ contains
                enddo
             enddo
          enddo
-         if (id_vw > 0) used=send_data(id_vw, a4, Time)
+         used=send_data(id_vw, a4, Time)
          if(id_ivw > 0) then
            call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
            used=send_data(id_ivw, a2, Time)
          endif
        endif
        ! vertical flux of w
-       if(id_ww > 0 .or. id_iww > 0) then
+       if(id_ww > 0) then
          do k=1,npz
             do j=jsc,jec
                do i=isc,iec
@@ -4079,7 +3858,7 @@ contains
                enddo
             enddo
          enddo
-         if (id_ww > 0) used=send_data(id_ww, a4, Time)
+         used=send_data(id_ww, a4, Time)
          if(id_iww > 0) then
            call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
            used=send_data(id_iww, a2, Time)
@@ -4088,7 +3867,6 @@ contains
      endif
 
      deallocate ( a4 )
-#endif
 
 ! Maximum overlap cloud fraction
       if ( .not. Atm(n)%gridstruct%bounded_domain )  then
@@ -4106,20 +3884,17 @@ contains
         endif
       endif
 
+#endif
 
       if (do_diag_debug) then
          call debug_column(Atm(n)%pt, Atm(n)%delp, Atm(n)%delz, Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%q, &
-              Atm(n)%npz, Atm(n)%ncnst, sphum, Atm(n)%flagstruct%nwat, zvir, ptop, Atm(n)%flagstruct%hydrostatic, Atm(n)%bd, Time)
+              Atm(n)%npz, Atm(n)%ncnst, sphum, Atm(n)%flagstruct%nwat, zvir, Atm(n)%flagstruct%hydrostatic, Atm(n)%bd, Time)
       endif
 
       if (prt_sounding) then
-         if (allocated(a3)) deallocate(a3)
-         allocate(a3(isc:iec,jsc:jec,npz))
-         call eqv_pot(a3, Atm(n)%pt, Atm(n)%delp, Atm(n)%delz, Atm(n)%peln, Atm(n)%pkz, Atm(n)%q(isd,jsd,1,sphum),    &
-              isc, iec, jsc, jec, ngc, npz, Atm(n)%flagstruct%hydrostatic, Atm(n)%flagstruct%moist_phys)
-         call sounding_column(Atm(n)%pt, Atm(n)%delp, Atm(n)%delz, Atm(n)%u, Atm(n)%v, Atm(n)%q, Atm(n)%peln, Atm(n)%pkz, a3, Atm(n)%phis, &
-              Atm(n)%npz, Atm(n)%ncnst, sphum, Atm(n)%flagstruct%nwat, Atm(n)%flagstruct%hydrostatic, zvir, Atm(n)%ng, Atm(n)%bd, Time)
-         deallocate(a3)
+         call sounding_column(Atm(n)%pt, Atm(n)%delp, Atm(n)%delz, Atm(n)%u, Atm(n)%v, Atm(n)%q, Atm(n)%peln, Atm(n)%pkz, Atm(n)%phis, &
+              Atm(n)%npz, Atm(n)%ncnst, sphum, Atm(n)%flagstruct%nwat, Atm(n)%flagstruct%hydrostatic, Atm(n)%flagstruct%moist_phys, &
+              zvir, Atm(n)%ng, Atm(n)%bd, Time)
       endif
 
 
@@ -4134,6 +3909,10 @@ contains
     if (allocated(wz)) deallocate(wz)
     if (allocated(dmmr)) deallocate(dmmr)
     if (allocated(dvmr)) deallocate(dvmr)
+
+    call nullify_domain()
+
+    call fv_coarse_grained_diagnostics(Atm, Time, zvir)
 
  end subroutine fv_diag
 
@@ -4278,16 +4057,9 @@ contains
       if( qmin<q_low .or. qmax>q_hi ) then
           if(master) write(*,*) 'Range_check Warning:', qname, ' max = ', qmax, ' min = ', qmin
           if (present(Time)) then
-             if (m_calendar) then
-                call get_date(Time, year, month, day, hour, minute, second)
-                if (master) write(*,999) year, month, day, hour, minute, second
-999             format(' Range violation on: ', I4, '/', I02, '/', I02, ' ', I02, ':', I02, ':', I02)
-             else
-                call get_time(Time, second, day)
-                year = 0 ; month = 0 ; hour = 0 ; minute = 0
-                if (master) write(*,996) day, second
-996             format(' Range violation on: ', I6, ' days ', I05, ' seconds')
-             endif
+             call get_date(Time, year, month, day, hour, minute, second)
+             if (master) write(*,999) year, month, day, hour, minute, second
+999          format(' Range violation on: ', I4, '/', I02, '/', I02, ' ', I02, ':', I02, ':', I02)
           endif
           if ( present(bad_range) ) then
                bad_range = .true.
@@ -4519,7 +4291,7 @@ contains
  call z_sum(is, ie, js, je, kstrat, n_g, delp, q(is-n_g,js-n_g,1,sphum), q_strat(is,js))
  psmo = g_sum(domain, q_strat(is,js), is, ie, js, je, n_g, area, 1) * 1.e6           &
       / p_sum(is, ie, js, je, kstrat, n_g, delp, area, domain)
- if(master) write(*,*) 'Mean_Specific_Humidity (mg/kg) above 75 mb', trim(gn), ' = ', psmo
+ if(master) write(*,*) 'Mean specific humidity (mg/kg) above 75 mb', trim(gn), '=', psmo
  endif
 
 
@@ -4536,23 +4308,23 @@ contains
  psdry = psmo - totw
 
  if( master ) then
-     write(*,*) 'Total_Surface_Pressure (mb)', trim(gn), ' = ',  0.01*psmo
-     write(*,*) 'Mean_Dry_Surface_Pressure (mb)', trim(gn), ' = ',    0.01*psdry
-     write(*,*) 'Total_Water_Vapor (kg/m**2)', trim(gn), ' = ',  qtot(sphum)*ginv
+     write(*,*) 'Total surface pressure (mb)', trim(gn), ' = ',  0.01*psmo
+     write(*,*) 'mean dry surface pressure', trim(gn), ' = ',    0.01*psdry
+     write(*,*) 'Total Water Vapor (kg/m**2)', trim(gn), ' =',  qtot(sphum)*ginv
      if ( nwat> 2 ) then
           write(*,*) '--- Micro Phys water substances (kg/m**2) ---'
-          write(*,*) 'Total_Cloud_Water', trim(gn), ' = ', qtot(liq_wat)*ginv
+          write(*,*) 'Total cloud water', trim(gn), '=', qtot(liq_wat)*ginv
           if (rainwat > 0) &
-               write(*,*) 'Total_Rain_Water ', trim(gn), ' = ', qtot(rainwat)*ginv
+               write(*,*) 'Total rain  water', trim(gn), '=', qtot(rainwat)*ginv
           if (ice_wat > 0) &
-               write(*,*) 'Total_Cloud_Ice  ', trim(gn), ' = ', qtot(ice_wat)*ginv
+               write(*,*) 'Total cloud ice  ', trim(gn), '=', qtot(ice_wat)*ginv
           if (snowwat > 0) &
-               write(*,*) 'Total_Snow       ', trim(gn), ' = ', qtot(snowwat)*ginv
+               write(*,*) 'Total snow       ', trim(gn), '=', qtot(snowwat)*ginv
           if (graupel > 0) &
-               write(*,*) 'Total_Graupel    ', trim(gn), ' = ', qtot(graupel)*ginv
+               write(*,*) 'Total graupel    ', trim(gn), '=', qtot(graupel)*ginv
           write(*,*) '---------------------------------------------'
      elseif ( nwat==2 ) then
-          write(*,*) 'GFS_Condensate (kg/m^2)', trim(gn), ' = ', qtot(liq_wat)*ginv
+          write(*,*) 'GFS condensate (kg/m^2)', trim(gn), '=', qtot(liq_wat)*ginv
      endif
   endif
 
@@ -4701,7 +4473,6 @@ contains
                  go to 1000
              endif
           enddo
-       a2(i,j,n) = missing_value
 1000   continue
     enddo
  enddo
@@ -5405,8 +5176,8 @@ contains
  end subroutine updraft_helicity
 
 
-
- subroutine pv_entropy(is, ie, js, je, ng, km, vort, f_d, pt, pkz, delp, grav, te)
+!Needs MPP Updates fixed (see Gan's fix)
+ subroutine pv_entropy(is, ie, js, je, ng, km, vort, f_d, pt, pkz, delp, grav)
 
 ! !INPUT PARAMETERS:
    integer, intent(in)::  is, ie, js, je, ng, km
@@ -5417,9 +5188,7 @@ contains
    real, intent(in):: f_d(is-ng:ie+ng,js-ng:je+ng)
 
 ! vort is relative vorticity as input. Becomes PV on output
-   real, intent(inout):: vort(is:ie,js:je,km)
-! output potential temperature at the interface so it can be used for diagnostics
-   real, intent(out):: te(is:ie,js:je,km+1)
+      real, intent(inout):: vort(is:ie,js:je,km)
 
 ! !DESCRIPTION:
 !        EPV = 1/r * (vort+f_d) * d(S)/dz; where S is a conservative scalar
@@ -5430,12 +5199,10 @@ contains
 ! z-surface is not that different from the hybrid sigma-p coordinate.
 ! See page 39, Pedlosky 1979: Geophysical Fluid Dynamics
 !
-! The following simplified form is strictly correct only if vort is computed on
+! The follwoing simplified form is strictly correct only if vort is computed on
 ! constant z surfaces. In addition hydrostatic approximation is made.
 !        EPV = - GRAV * (vort+f_d) / del(p) * del(pt) / pt
 ! where del() is the vertical difference operator.
-!
-! Note that this differs by a factor of pk0/theta from the usual definition of PV
 !
 ! programmer: S.-J. Lin, shian-jiann.lin@noaa.gov
 !
@@ -5443,7 +5210,7 @@ contains
 !---------------------------------------------------------------------
 !BOC
       real w3d(is:ie,js:je,km)
-      real t2(is:ie,km), delp2(is:ie,km)
+      real te(is:ie,js:je,km+1), t2(is:ie,km), delp2(is:ie,km)
       real te2(is:ie,km+1)
       integer i, j, k
 
@@ -5508,29 +5275,25 @@ contains
 
       km1 = km - 1
 
-      do k=2,km
-       do i=1,im
-         a6(i,k) = delp(i,k-1) + delp(i,k)
-       enddo
-      enddo
+      do 500 k=2,km
+      do 500 i=1,im
+500   a6(i,k) = delp(i,k-1) + delp(i,k)
 
-      do k=1,km1
-       do i=1,im
-         delq(i,k) = p(i,k+1) - p(i,k)
-       enddo
-      enddo
+      do 1000 k=1,km1
+      do 1000 i=1,im
+      delq(i,k) = p(i,k+1) - p(i,k)
+1000  continue
 
-      do k=2,km1
-       do i=1,im
-         c1 = (delp(i,k-1)+0.5*delp(i,k))/a6(i,k+1)
-         c2 = (delp(i,k+1)+0.5*delp(i,k))/a6(i,k)
-         tmp = delp(i,k)*(c1*delq(i,k) + c2*delq(i,k-1)) /    &
+      do 1220 k=2,km1
+      do 1220 i=1,im
+      c1 = (delp(i,k-1)+0.5*delp(i,k))/a6(i,k+1)
+      c2 = (delp(i,k+1)+0.5*delp(i,k))/a6(i,k)
+      tmp = delp(i,k)*(c1*delq(i,k) + c2*delq(i,k-1)) /    &
                                     (a6(i,k)+delp(i,k+1))
-         qmax = max(p(i,k-1),p(i,k),p(i,k+1)) - p(i,k)
-         qmin = p(i,k) - min(p(i,k-1),p(i,k),p(i,k+1))
-         dc(i,k) = sign(min(abs(tmp),qmax,qmin), tmp)
-       enddo
-      enddo
+      qmax = max(p(i,k-1),p(i,k),p(i,k+1)) - p(i,k)
+      qmin = p(i,k) - min(p(i,k-1),p(i,k),p(i,k+1))
+      dc(i,k) = sign(min(abs(tmp),qmax,qmin), tmp)
+1220  continue
 
 !****6***0*********0*********0*********0*********0*********0**********72
 ! 4th order interpolation of the provisional cell edge value
@@ -5869,233 +5632,11 @@ end subroutine eqv_pot
   enddo
 
   psm = g_sum(domain, te, is, ie, js, je, 3, area_l, 1)
-  if( master ) write(*,*) 'Total_Energy (J/m**2 * E9) = ',  psm * 1.E-9
+  if( master ) write(*,*) 'TE ( Joule/m^2 * E9) =',  psm * 1.E-9
 
   end subroutine nh_total_energy
 
-  subroutine compute_brn(ua, va, delp, delz, cape, bd, npz, Time)
 
-    type(fv_grid_bounds_type), intent(IN) :: bd
-    integer, intent(IN) :: npz
-    type(time_type), intent(in) :: Time
-    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed, npz), intent(IN) :: ua, va, delp
-    real, dimension(bd%isc:bd%iec,bd%jsc:bd%jec, npz), intent(IN) :: delz
-    real, dimension(bd%isc:bd%iec,bd%jsc:bd%jec), intent(IN) :: cape
-    real, dimension(bd%isc:bd%iec,bd%jsc:bd%jec) :: brn, shear06
-
-    real, dimension(bd%isc:bd%iec,bd%jsc:bd%jec) :: u06, u005, v06, v005, ht, m06, m005
-    real :: tmp1, tmp2
-    logical :: used
-
-    integer :: i,j,k
-
-    integer :: isc,  iec,  jsc,  jec
-    integer :: isd, ied, jsd, jed
-
-    isc  = bd%is
-    iec  = bd%ie
-    jsc  = bd%js
-    jec  = bd%je
-    isd = bd%isd
-    ied = bd%ied
-    jsd = bd%jsd
-    jed = bd%jed
-
-
-    !Bulk-Richardson number: CAPE / 0.5* (U_{0--6km} - U_{0--500m})**2
-    do j=jsc,jec
-       do i=isc,iec
-          u06(i,j) = 0.
-          u005(i,j) = 0.
-          v06(i,j) = 0.
-          v005(i,j) = 0.
-          m06(i,j) = 0.
-          m005(i,j) = 0.
-          ht(i,j) = -delz(i,j,npz)*0.5
-       enddo
-    enddo
-    do k=npz,2,-1
-    do j=jsc,jec
-    do i=isc,iec
-       if (ht(i,j) <= 6000.) then
-          u06(i,j) = u06(i,j) + delp(i,j,k)*ua(i,j,k)
-          v06(i,j) = v06(i,j) + delp(i,j,k)*va(i,j,k)
-          m06(i,j) = m06(i,j) + delp(i,j,k)
-       endif
-       if (ht(i,j) <= 500.) then
-          u005(i,j) = u005(i,j) + delp(i,j,k)*ua(i,j,k)
-          v005(i,j) = v005(i,j) + delp(i,j,k)*va(i,j,k)
-          m005(i,j) = m005(i,j) + delp(i,j,k)
-       endif
-       ht(i,j) = ht(i,j) - 0.5*(delz(i,j,k) + delz(i,j,k-1))
-    enddo
-    enddo
-    enddo
-    do j=jsc,jec
-    do i=isc,iec
-       tmp1 = u005(i,j)/m005(i,j) - u06(i,j)/m06(i,j)
-       tmp2 = v005(i,j)/m005(i,j) - v06(i,j)/m06(i,j)
-       shear06(i,j) = sqrt(tmp1*tmp1 + tmp2*tmp2)
-       brn(i,j) = cape(i,j)/(0.5*max(0.1,shear06(i,j)*shear06(i,j)))
-    enddo
-    enddo
-
-    if (id_brn > 0) used=send_data(id_brn, brn, Time)
-    if (id_shear06 > 0) used=send_data(id_shear06, shear06, Time)
-
-
-  end subroutine compute_brn
-
- subroutine max_vorticity(is, ie, js, je, ng, km, zvir, sphum, delz, q, hydrostatic, &
-                          pt, peln, phis, grav, vort, maxvort, z_bot, z_top)
-   integer, intent(in):: is, ie, js, je, ng, km, sphum
-   real, intent(in):: grav, zvir, z_bot, z_top
-   real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt
-   real, intent(in), dimension(is:ie,js:je,km):: vort
-   real, intent(in):: delz(is:ie,js:je,km)
-   real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
-   real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
-   real, intent(in):: peln(is:ie,km+1,js:je)
-   logical, intent(in):: hydrostatic
-   real, intent(inout), dimension(is:ie,js:je):: maxvort
-
-   real:: rdg
-   real, dimension(is:ie):: zh, dz, zh0
-   integer i, j, k,klevel
-   logical below(is:ie)
-
-   rdg = rdgas / grav
-
-   do j=js,je
-
-      do i=is,ie
-         zh(i) = 0.
-         below(i) = .true.
-         zh0(i) = 0.
-
-     K_LOOP:do k=km,1,-1
-            if ( hydrostatic ) then
-#ifdef MULTI_GASES
-                 dz(i) = rdg*pt(i,j,k)*virq(q(i,j,k,1:num_gas))*(peln(i,k+1,j)-peln(i,k,j))
-#else
-                 dz(i) = rdg*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))*(peln(i,k+1,j)-peln(i,k,j))
-#endif
-            else
-                 dz(i) = - delz(i,j,k)
-            endif
-            zh(i) = zh(i) + dz(i)
-            if (zh(i) <= z_bot ) continue
-            if (zh(i) > z_bot .and. below(i)) then
-               maxvort(i,j) = max(maxvort(i,j),vort(i,j,k))
-               below(i) = .false.
-            elseif ( zh(i) < z_top ) then
-               maxvort(i,j) = max(maxvort(i,j),vort(i,j,k))
-            else
-               maxvort(i,j) = max(maxvort(i,j),vort(i,j,k))
-               EXIT K_LOOP
-            endif
-         enddo K_LOOP
-!      maxvorthy1(i,j)=max(maxvorthy1(i,j),vort(i,j,km))
-      enddo  ! i-loop
-   enddo   ! j-loop
-
-
- end subroutine max_vorticity
-
- subroutine max_uh(is, ie, js, je, ng, km, zvir, sphum, uphmax,uphmin,   &
-                  w, vort, delz, q, hydrostatic, pt, peln, phis, grav, z_bot, z_top)
-! !INPUT PARAMETERS:
-   integer, intent(in):: is, ie, js, je, ng, km, sphum
-   real, intent(in):: grav, zvir, z_bot, z_top
-   real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, w
-   real, intent(in), dimension(is:ie,js:je,km):: vort
-   real, intent(in):: delz(is:ie,js:je,km)
-   real, intent(in):: q(is-ng:ie+ng,js-ng:je+ng,km,*)
-   real, intent(in):: phis(is-ng:ie+ng,js-ng:je+ng)
-   real, intent(in):: peln(is:ie,km+1,js:je)
-   logical, intent(in):: hydrostatic
-   real :: uh(is:ie,js:je)   ! unit: (m/s)**2
-   real, intent(inout), dimension(is:ie,js:je):: uphmax,uphmin
-! Coded by S.-J. Lin for CONUS regional climate simulations
-! Modified for UH by LMH
-!
-   real:: rdg
-   real, dimension(is:ie):: zh, dz, zh0
-   integer i, j, k
-   logical below(is:ie)
-
-   rdg = rdgas / grav
-   do j=js,je
-
-      do i=is,ie
-         zh(i) = 0.
-         uh(i,j) = 0.
-         below(i) = .true.
-         zh0(i) = 0.
-
-  K_LOOP:do k=km,1,-1
-            if ( hydrostatic ) then
-#ifdef MULTI_GASES
-                 dz(i) = rdg*pt(i,j,k)*virq(q(i,j,k,1:num_gas))*(peln(i,k+1,j)-peln(i,k,j))
-#else
-                 dz(i) = rdg*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))*(peln(i,k+1,j)-peln(i,k,j))
-#endif
-            else
-                 dz(i) = - delz(i,j,k)
-            endif
-            zh(i) = zh(i) + dz(i)
-            if (zh(i) <= z_bot ) continue
-            if (zh(i) > z_bot .and. below(i)) then
-               if(w(i,j,k).lt.0)then
-                  uh(i,j) = 0.
-                  EXIT K_LOOP
-               endif
-               uh(i,j) = vort(i,j,k)*w(i,j,k)*(zh(i) - z_bot)
-               below(i) = .false.
-! Compute mean winds below z_top
-            elseif ( zh(i) < z_top ) then
-               if(w(i,j,k).lt.0)then
-                  uh(i,j) = 0.
-                  EXIT K_LOOP
-               endif
-               uh(i,j) = uh(i,j) + vort(i,j,k)*w(i,j,k)*dz(i)
-            else
-               if(w(i,j,k).lt.0)then
-                  uh(i,j) = 0.
-                  EXIT K_LOOP
-               endif
-               uh(i,j) = uh(i,j) + vort(i,j,k)*w(i,j,k)*(z_top - (zh(i)-dz(i)) )
-               EXIT K_LOOP
-            endif
-         enddo K_LOOP
-        if (uh(i,j) > uphmax(i,j)) then
-           uphmax(i,j) = uh(i,j)
-        elseif (uh(i,j) < uphmin(i,j)) then
-           uphmin(i,j) = uh(i,j)
-        endif
-      enddo  ! i-loop
-   enddo   ! j-loop
-
- end subroutine max_uh
-
- subroutine max_vv(is,ie,js,je,npz,ng,up2,dn2,pe,w)
-! !INPUT PARAMETERS:
-   integer, intent(in):: is, ie, js, je, ng, npz
-   integer :: i,j,k
-   real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,npz):: w
-   real, intent(in):: pe(is-1:ie+1,npz+1,js-1:je+1)
-   real, intent(inout), dimension(is:ie,js:je):: up2,dn2
-      do j=js,je
-         do i=is,ie
-            do k=3,npz
-              if (pe(i,k,j) >= 100.e2) then
-                  up2(i,j) = max(up2(i,j),w(i,j,k))
-                  dn2(i,j) = min(dn2(i,j),w(i,j,k))
-              endif
-             enddo
-         enddo
-      enddo
- end subroutine max_vv
 
 !#######################################################################
 
@@ -6272,6 +5813,65 @@ end subroutine eqv_pot
       enddo
     ENDIF
     if(debug_level.ge.100) print *,'  kmin,maxthe = ',kmin,maxthe
+
+!!$  ELSEIF(source.eq.3)THEN
+!!$    ! use mixed layer
+!!$
+!!$    IF( dz(nk).gt.ml_depth )THEN
+!!$      ! the second level is above the mixed-layer depth:  just use the
+!!$      ! lowest level
+!!$
+!!$      avgth = th(nk)
+!!$      avgqv = q(nk)
+!!$      kmin = nk
+!!$
+!!$    ELSEIF( z(1).lt.ml_depth )THEN
+!!$      ! the top-most level is within the mixed layer:  just use the
+!!$      ! upper-most level (not
+!!$
+!!$      avgth = th(1)
+!!$      avgqv = q(1)
+!!$      kmin = 1
+!!$
+!!$    ELSE
+!!$      ! calculate the mixed-layer properties:
+!!$
+!!$      avgth = 0.0
+!!$      avgqv = 0.0
+!!$      k = nk-1
+!!$      if(debug_level.ge.100) print *,'  ml_depth = ',ml_depth
+!!$      if(debug_level.ge.100) print *,'  k,z,th,q:'
+!!$      if(debug_level.ge.100) print *,nk,z(nk),th(nk),q(nk)
+!!$
+!!$      do while( (z(k).le.ml_depth) .and. (k.ge.1) )
+!!$
+!!$        if(debug_level.ge.100) print *,k,z(k),th(k),q(k)
+!!$
+!!$        avgth = avgth + dz(k)*th(k)
+!!$        avgqv = avgqv + dz(k)*q(k)
+!!$
+!!$        k = k - 1
+!!$
+!!$      enddo
+!!$
+!!$      th2 = th(k+1)+(th(k)-th(k+1))*(ml_depth-z(k-1))/dz(k)
+!!$      qv2 =  q(k+1)+( q(k)- q(k+1))*(ml_depth-z(k-1))/dz(k)
+!!$
+!!$      if(debug_level.ge.100) print *,999,ml_depth,th2,qv2
+!!$
+!!$      avgth = avgth + 0.5*(ml_depth-z(k-1))*(th2+th(k-1))
+!!$      avgqv = avgqv + 0.5*(ml_depth-z(k-1))*(qv2+q(k-1))
+!!$
+!!$      if(debug_level.ge.100) print *,k,z(k),th(k),q(k)
+!!$
+!!$      avgth = avgth/ml_depth
+!!$      avgqv = avgqv/ml_depth
+!!$
+!!$      kmin = nk
+!!$
+!!$    ENDIF
+!!$
+!!$    if(debug_level.ge.100) print *,avgth,avgqv
 
   ELSE
 
@@ -6487,6 +6087,19 @@ end subroutine eqv_pot
     return
   end subroutine getcape
 
+!!$  subroutine divg_diagnostics(divg, ..., idiag, bd, npz,gridstruct%area_64, domain, fv_time))
+!!$    real, INPUT(IN) :: divg(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+!!$    ....
+!!$
+!!$    if (id_divg>0) then
+!!$       used = send_data(id_divg, divg, fv_time)
+!!$
+!!$    endif
+!!$
+!!$
+!!$             if(flagstruct%fv_debug) call prt_mxm('divg',  dp1, is, ie, js, je, 0, npz, 1.,gridstruct%area_64, domain)
+!!$  end subroutine divg_diagnostics
+!!$
 !-----------------------------------------------------------------------
 !ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 !-----------------------------------------------------------------------
@@ -6521,4 +6134,756 @@ end subroutine eqv_pot
     return
   end function getqvi
 
+!-----------------------------------------------------------------------
+!use diag_debug_[ij] for everything
+
+  subroutine read_column_table
+!EXAMPLE COLUMN_TABLE file:
+!#Use space-delineated fields (no commas)
+!DEBUG index  ORD  2 30 5
+!DEBUG index  Princeton 2 37 5
+!DEBUG latlon ORD2 272. 42.
+!DEBUG index  Princeton 285.33 40.36
+!DEBUG latlon NP 0. 90.
+!DEBUG latlon SP 0. -90.
+!sonde latlon OUN          -97.47 35.22
+!sonde latlon Amarillo    -101.70 35.22
+!sonde latlon DelRio      -100.92 29.37
+!sonde latlon Jackson      -90.08 32.32
+!sonde latlon ILX          -89.34 40.15
+!sonde latlon AtlanticCity -74.56 39.45
+!sonde latlon DodgeCity    -99.97 37.77
+
+    integer :: iunit, io, nline
+    character(len=256)    :: record
+    character(len=10)     :: dum1, dum2
+
+    iunit = get_unit()    
+    open(iunit, file='column_table', action='READ', iostat=io)
+    if(io/=0) call mpp_error(FATAL, ' find_diagnostic_column: Error in opening column_table')
+
+    num_diag_debug=0
+    num_diag_sonde=0
+    nline=0
+    do while (num_diag_debug < MAX_DIAG_COLUMN .and. num_diag_sonde < MAX_DIAG_COLUMN .and. nline < MAX_DIAG_COLUMN*4)
+       nline = nline + 1
+       read(iunit,'(a)',end=100) record
+       if (record(1:1) == '#') cycle
+       if (record(1:10) == '          ') cycle
+       
+       !Debug record with index point (index point not supported for sonde output)
+       !if (is_master()) print*, index(lowercase(record), "debug"), index(lowercase(record), "index"), trim(record)
+       if (index(lowercase(record), "debug") .ne. 0 .and. index(lowercase(record), "index") .ne. 0) then
+          if (num_diag_debug >= MAX_DIAG_COLUMN) continue
+          num_diag_debug = num_diag_debug + 1
+          read(record,*,iostat=io) dum1, dum2, diag_debug_names(num_diag_debug), diag_debug_i(num_diag_debug), diag_debug_j(num_diag_debug), diag_debug_tile(num_diag_debug)
+          if (io/=0) then
+             print*, ' read_column_table: error on line ', nline
+             call mpp_error(FATAL,'error in column_table format')
+          endif
+       else !debug or sonde record with specified lat-lon
+          if (index(lowercase(record), "debug") .ne. 0 ) then
+          if (num_diag_debug >= MAX_DIAG_COLUMN) continue
+             num_diag_debug = num_diag_debug + 1
+             read(record,*,iostat=io) dum1, dum2, diag_debug_names(num_diag_debug), diag_debug_lon(num_diag_debug), diag_debug_lat(num_diag_debug)
+             if (io/=0) then
+                print*, ' read_column_table: error on line ', nline
+                call mpp_error(FATAL,'error in column_table format')
+             endif
+          else
+          if (num_diag_sonde >= MAX_DIAG_COLUMN) continue
+             num_diag_sonde = num_diag_sonde + 1
+             read(record,*,iostat=io) dum1, dum2, diag_sonde_names(num_diag_sonde), diag_sonde_lon(num_diag_sonde), diag_sonde_lat(num_diag_sonde)
+             if (io/=0) then
+                print*, ' read_column_table: error on line ', nline
+                call mpp_error(FATAL,'error in column_table format')
+             endif
+          endif
+          
+       endif
+       
+    enddo
+100 continue
+    
+  end subroutine read_column_table
+  
+ !Note that output lat-lon are in degrees but input is in radians
+  subroutine find_diagnostic_column(diag_class, diag_names, diag_i, diag_j, diag_tile, diag_lat, diag_lon, diag_units, grid, agrid, num_diag, ntiles, bd, tile, npx, npy)
+
+    implicit none
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: num_diag, tile, ntiles, npx, npy
+    character(*), intent(IN) :: diag_class
+    character(diag_name_len), intent(IN) :: diag_names(MAX_DIAG_COLUMN)
+    integer, dimension(MAX_DIAG_COLUMN), intent(INOUT) :: diag_i, diag_j, diag_tile
+    real, dimension(MAX_DIAG_COLUMN), intent(INOUT) :: diag_lat, diag_lon
+    integer, dimension(num_diag), intent(OUT) :: diag_units
+    real(kind=R_GRID), intent(IN) :: grid(bd%isd+1:bd%ied+1,bd%jsd+1:bd%jed+1,2)
+    real(kind=R_GRID), intent(IN) :: agrid(bd%isd:bd%ied,bd%jsd:bd%jed,2)
+    
+    integer :: i,j,m,io
+    character(80) :: filename
+    real(kind=R_GRID), dimension(2):: pp
+    real(kind=R_GRID), dimension(3):: vp_12, vp_23, vp_34, vp_14
+    real :: dmin, dist
+    integer :: isc, iec, jsc, jec
+    integer :: isd, ied, jsd, jed
+    logical :: point_found
+    
+    isd = bd%isd
+    ied = bd%ied
+    jsd = bd%jsd
+    jed = bd%jed
+    isc = bd%isc
+    iec = bd%iec
+    jsc = bd%jsc
+    jec = bd%jec
+
+    
+    do m=1,num_diag
+
+       point_found = .false.
+       
+       !Index specified
+       if (diag_i(m) >= -10 .and. diag_j(m) >= -10) then
+
+          if ((diag_tile(m) < 0 .or. diag_tile(m) > ntiles)) then
+             if (ntiles > 1) then
+                call mpp_error(FATAL, ' find_diagnostic_column: diag_tile must be specified for '//trim(diag_class)//' point '//trim(diag_names(m))//' since ntiles > 1')
+             else
+                diag_tile(m) = 1
+             endif
+          endif
+
+          i=diag_i(m)
+          j=diag_j(m)
+          
+          if (diag_tile(m) == tile .and. i >= isc .and. i <= iec .and. &
+               j >= jsc .and. j <= jec) then
+             diag_lon(m) = agrid(i,j,1)*rad2deg
+             diag_lat(m) = agrid(i,j,2)*rad2deg
+             point_found = .true.
+          else
+             diag_i(m) = -999
+             diag_j(m) = -999
+             diag_lon(m) = -999.
+             diag_lat(m) = -999.
+             diag_tile(m) = -1
+             point_found = .false.
+          endif
+
+       else ! lat-lon specified: find nearest grid cell center
+
+          !diag_lon and diag_lat are in degrees
+          ! great_circle_dist wants radians
+          pp = (/ diag_lon(m)/rad2deg, diag_lat(m)/rad2deg /)
+          !find nearest grid cell: if it is in the halo skip
+          dmin = 9.e20
+          diag_i(m) = -999
+          diag_j(m) = -999
+          do j=jsd,jed
+             do i=isd,ied
+                !no corners
+                if ( i < 1    .and. j < 1 ) cycle
+                if ( i >= npx .and. j < 1 ) cycle
+                if ( i < 1    .and. j >= npy ) cycle
+                if ( i >= npx .and. j >= npy ) cycle
+                dist =  great_circle_dist(pp, agrid(i,j,:))
+                if (dmin >= dist) then
+                   diag_i(m) = i
+                   diag_j(m) = j
+                   dmin = dist
+                endif
+             enddo
+          enddo
+          !print*, 'lat-lon point:', mpp_pe(), dmin, diag_i(m), diag_j(m), isc, iec, jsc, jec
+          
+          if ( diag_i(m) < isc .or. diag_i(m) > iec .or. diag_j(m) < jsc .or. diag_j(m) > jec ) then
+             diag_i(m) = -999
+             diag_j(m) = -999
+             diag_lon(m) = -999.
+             diag_lat(m) = -999.
+             diag_tile(m) = -1
+             point_found = .false.
+          else
+             diag_lon(m) = agrid(diag_i(m), diag_j(m), 1)*rad2deg
+             diag_lat(m) = agrid(diag_i(m), diag_j(m), 2)*rad2deg
+             diag_tile(m) = tile
+             point_found = .true.
+          endif
+          
+       endif
+
+       if (point_found) then
+          
+          !Initialize output file
+          diag_units(m) = get_unit()
+          write(filename, 202) trim(diag_names(m)), trim(diag_class)
+202       format(A, '.', A, '.out')
+          open(diag_units(m), file=trim(filename), action='WRITE', position='rewind', iostat=io)
+          if(io/=0) call mpp_error(FATAL, ' find_diagnostic_column: Error in opening file '//trim(filename))
+          !Print debug message
+          write(*,'(A, 1x, A, 1x, 1x, A, 2F8.3, 2I5, I3, I04)') trim(diag_class), 'point: ', diag_names(m), diag_lon(m), diag_lat(m), diag_i(m), diag_j(m), diag_tile(m), mpp_pe()
+
+       endif
+
+    enddo
+    
+  end subroutine find_diagnostic_column
+
+  subroutine debug_column(pt, delp, delz, u, v, w, q, npz, ncnst, sphum, nwat, zvir, hydrostatic, bd, Time)
+
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: npz, ncnst, sphum, nwat
+    real, intent(IN) :: zvir
+    logical, intent(IN) :: hydrostatic
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w
+    real, dimension(bd%is:, bd%js:,1:), intent(IN) :: delz
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz), intent(IN) :: u
+    real, dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz), intent(IN) :: v
+    real, dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst), intent(IN) :: q
+
+
+    type(time_type), intent(IN) :: Time
+    integer :: i,j,k,n,l, unit
+    real cond, pres, rdg, preshyd(npz), pehyd(npz+1), presdry, preshyddry(npz), pehyddry(npz+1)
+    integer :: yr, mon, dd, hr, mn, days, seconds
+
+    rdg = -rdgas/grav
+
+    do n=1,size(diag_debug_i)
+
+       i=diag_debug_i(n)
+       j=diag_debug_j(n)
+       unit=diag_debug_units(n)
+
+       !Sanity check
+       if (i < bd%is .or. i > bd%ie) cycle
+       if (j < bd%js .or. j > bd%je) cycle
+
+!!$ EXAMPLE FORMAT
+!!$               PRINTING ORD               DIAGNOSTICS
+!!$
+!!$ time stamp:  2016  August   6   0   7  30
+!!$ DIAGNOSTIC POINT COORDINATES, point #   1
+!!$
+!!$ longitude =  271.354 latitude  =   42.063
+!!$ on processor #    162 :   processor i =     2 ,   processor j =    30
+       
+       write(unit, *) "DEBUG POINT ",  diag_debug_names(n)
+       write(unit, *)
+       call get_date(Time, yr, mon, dd, hr, mn, seconds)
+       write(unit, '(A, I6, A12, 4I4)') " Time: ", yr, month_name(mon), dd, hr, mn, seconds
+       write(unit, *)
+       write(unit, '(A, F8.3, A, F8.3)') ' longitude = ', diag_debug_lon(n), ' latitude = ', diag_debug_lat(n)
+       write(unit, '(A, I8, A, I6, A, I6, A, I3)') ' on processor # ', mpp_pe(), ' :  local i = ', i, ',   local j = ', j, ' tile = ', diag_debug_tile(n)
+       write(unit, *)
+       
+       write(unit,500) 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres', 'NHprime'!, 'pdry', 'NHpdry'
+       write(unit,500) ' ', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb',   'mb'!,    !  'mb',   'mb'
+500    format(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A9)
+       if (hydrostatic) then
+          call mpp_error(NOTE, 'Hydrostatic debug sounding not yet supported')
+       else
+          pehyd = ptop
+          pehyddry = ptop
+          do k=1,npz
+             pehyd(k+1) = pehyd(k) + delp(i,j,k)
+             preshyd(k) = (pehyd(k+1) - pehyd(k))/log(pehyd(k+1)/pehyd(k))
+             !pehyddry(k+1) = pehyddry(k) + delp(i,j,k)*(1.-sum(q(i,j,k,1:nwat)))
+             !preshyddry(k) = (pehyddry(k+1) - pehyddry(k))/log(pehyddry(k+1)/pehyddry(k))
+          enddo
+          
+          !do k=2*npz/3,npz
+          do k=max(diag_debug_kbottom-diag_debug_nlevels,1),min(diag_debug_kbottom,npz)
+             cond = 0.
+             do l=2,nwat
+                cond = cond + q(i,j,k,l)
+             enddo
+             pres = rdg*delp(i,j,k)*(1.-cond)/delz(i,j,k)*pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))
+             !presdry = rdg*delp(i,j,k)*(1.-cond-q(i,j,k,sphum))/delz(i,j,k)*pt(i,j,k)
+             write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, F9.3)') &
+                  k, pt(i,j,k), delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
+                  q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, (pres-preshyd(k))*1.e-2!, presdry*1.e-2, (presdry-preshyddry(k))*1.e-2
+          enddo
+       endif
+       
+       write(unit, *) '==================================================================='
+       write(unit, *)
+       
+       call mpp_flush(unit)
+
+
+    enddo
+
+  end subroutine debug_column
+
+  subroutine debug_column_dyn(pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
+       use_heat_source, npz, ncnst, sphum, nwat, zvir, hydrostatic, bd, Time, k_step, n_step)
+
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: npz, ncnst, sphum, nwat, k_step, n_step
+    real, intent(IN) :: akap, zvir
+    logical, intent(IN) :: hydrostatic, use_heat_source
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w, heat_source
+    real, dimension(bd%is:, bd%js:,1:), intent(IN) :: delz
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz), intent(IN) :: u
+    real, dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz), intent(IN) :: v
+    real, dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst), intent(IN) :: q
+    real, dimension(bd%isd:,bd%jsd:,1:), intent(IN) :: cappa
+
+    !Will need to convert variables from internal dyn_core values into logical external values
+    ! esp. pt from theta_v to T
+
+    type(time_type), intent(IN) :: Time
+    integer :: i,j,k,n,l, unit
+    real cond, pres, rdg, Tv, temp, heats, virt, pk, cv_air
+    real preshyd(npz), pehyd(npz+1)
+    integer yr, mon, dd, hr, mn, seconds
+
+    rdg = -rdgas/grav
+    cv_air = cp_air - rdgas
+
+    do n=1,size(diag_debug_i)
+
+       i=diag_debug_i(n)
+       j=diag_debug_j(n)
+       unit=diag_debug_units(n)
+       
+       if (i < bd%is .or. i > bd%ie) cycle
+       if (j < bd%js .or. j > bd%je) cycle
+
+       write(unit, *) "DEBUG POINT ",  diag_debug_names(n)
+       write(unit, *)
+       call get_date(Time, yr, mon, dd, hr, mn, seconds)
+       write(unit, '(A, I6, A12, 4I4)') " Time: ", yr, month_name(mon), dd, hr, mn, seconds
+       write(unit,*) 'k_split = ', k_step, ', n_split = ', n_step
+       write(unit, *)
+       write(unit, '(A, F8.3, A, F8.3)') ' longitude = ', diag_debug_lon(n), ' latitude = ', diag_debug_lat(n)
+       write(unit, '(A, I8, A, I6, A, I6)') ' on processor # ', mpp_pe(), ' :  local i = ', i, ',   local j = ', j
+       write(unit, *)
+       
+       write(unit,500) 'k', 'T', 'delp', 'delz',   'u',   'v',   'w', 'sphum', 'cond', 'pres', 'NHprime', 'heat'
+       write(unit,500)  ' ', 'K',   'mb',    'm', 'm/s', 'm/s', 'm/s',  'g/kg', 'g/kg', 'mb', 'mb', 'K'
+500    format(A4, A7, A8, A6, A8, A8, A8, A8, A9, A9, A9, A8)
+          if (hydrostatic) then
+             call mpp_error(NOTE, 'Hydrostatic debug sounding not yet supported')
+          else
+             pehyd = ptop
+             do k=1,npz
+                pehyd(k+1) = pehyd(k) + delp(i,j,k)
+                preshyd(k) = (pehyd(k+1) - pehyd(k))/log(pehyd(k+1)/pehyd(k))
+             enddo
+             !do k=2*npz/3,npz
+             do k=max(diag_debug_kbottom-diag_debug_nlevels,1),min(diag_debug_kbottom,npz)
+                cond = 0.
+                do l=2,nwat
+                   cond = cond + q(i,j,k,l)
+                enddo
+                virt = (1.+zvir*q(i,j,k,sphum))
+#ifdef MOIST_CAPPA
+                pres = exp(1./(1.-cappa(i,j,k))*log(rdg*(delp(i,j,k)-cond)/delz(i,j,k)*pt(i,j,k)) )
+                pk = exp(cappa(i,j,k)*log(pres))
+#else
+                pres = exp(1./(1.-akap)*log(rdg*(delp(i,j,k))/delz(i,j,k)*pt(i,j,k)) )
+                pk = exp(akap*log(pres))
+#endif
+                temp = pt(i,j,k)*pk/virt
+                if (use_heat_source) then
+                   heats = heat_source(i,j,k) / (cv_air*delp(i,j,k))
+                else
+                   heats = 0.0
+                endif
+                write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, F9.3, G )') &
+                     k, temp, delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
+                     q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, (pres-preshyd(k))*1.e-2, heats
+             enddo
+          endif
+
+       write(unit, *) '==================================================================='
+       write(unit, *)
+       
+       call mpp_flush(unit)
+
+    enddo
+
+  end subroutine debug_column_dyn
+
+  subroutine sounding_column( pt, delp, delz, u, v, q, peln, pkz, phis, &
+       npz, ncnst, sphum, nwat, hydrostatic, moist_phys, zvir, ng, bd, Time )
+
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: npz, ncnst, sphum, nwat, ng
+    real,    intent(IN) :: zvir
+    logical, intent(IN) :: hydrostatic, moist_phys
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp
+    real, dimension(bd%is:, bd%js:, 1:), intent(IN) :: delz
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz), intent(IN) :: u
+    real, dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz), intent(IN) :: v
+    real, dimension(bd%isd:bd%ied, bd%jsd:bd%jed, npz, ncnst), intent(IN) :: q
+    real, dimension(bd%is:bd%ie,npz+1,bd%js:bd%je), intent(in):: peln
+    real, dimension(bd%is:bd%ie,bd%js:bd%je,npz),   intent(in):: pkz
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed),   intent(IN) :: phis
+    type(time_type), intent(IN) :: Time
+
+    real :: Tv, pres, hght(npz), dewpt, rh, mixr, tmp, qs(1), wspd, wdir, rpk, theta, thetav
+    real :: thetae(bd%is:bd%ie,bd%js:bd%je,npz)
+
+    real, PARAMETER :: rgrav = 1./grav
+    real, PARAMETER :: rdg = -rdgas*rgrav
+    real, PARAMETER :: sounding_top = 10.e2
+    real, PARAMETER :: ms_to_knot = 1.9438445
+    real, PARAMETER :: p0 = 1000.e2
+
+    integer :: i, j, k, n, unit
+    integer :: yr_v, mo_v, dy_v, hr_v, mn_v, sec_v ! need to get numbers for these
+
+    call get_date(Time, yr_v, mo_v, dy_v, hr_v, mn_v, sec_v)
+    call eqv_pot(thetae, pt, delp, delz, peln, pkz, q(bd%isd,bd%jsd,1,sphum), &
+         bd%is, bd%ie, bd%js, bd%je, ng, npz, hydrostatic, moist_phys)
+
+    do n=1,size(diag_sonde_i)
+
+       i=diag_sonde_i(n)
+       j=diag_sonde_j(n)
+       unit=diag_sonde_units(n)
+
+       if (i < bd%is .or. i > bd%ie) cycle
+       if (j < bd%js .or. j > bd%je) cycle
+
+
+          write(unit,600)        &
+               trim(diag_sonde_names(n)), yr_v, mo_v, dy_v, hr_v, yr_init, mo_init, dy_init, hr_init, trim(runname)
+600       format(A,'.v', I4, I2.2, I2.2, I2.2, '.i', I4, I2.2, I2.2, I2.2, '.', A, '.dat########################################################')
+          write(unit,601) trim(diag_sonde_names(n)), yr_v, mo_v, dy_v, hr_v, yr_init, mo_init, dy_init, hr_init
+601       format(3x, A16, ' Valid ', I4, I2.2, I2.2, '.', I2.2, 'Z  Init ', I4, I2.2, I2.2, '.', I2.2, 'Z')
+          write(unit,'(5x, A, 2F8.3)') trim(runname), diag_sonde_lon(n), diag_sonde_lat(n)
+          write(unit,*)
+          write(unit,*)        '-------------------------------------------------------------------------------'
+          write(unit,'(11A7)') 'PRES', 'HGHT', "TEMP", "DWPT", "RELH", "MIXR", "DRCT", "SKNT", "THTA", "THTE", "THTV"
+          write(unit,'(11A7)') 'hPa', 'm', 'C', 'C', '%', 'g/kg', 'deg', 'knot', 'K', 'K', 'K'
+          write(unit,*)        '-------------------------------------------------------------------------------'
+
+          if (hydrostatic) then
+             call mpp_error(NOTE, 'Hydrostatic diagnostic sounding not yet supported')
+          else
+             hght(npz) = phis(i,j)*rgrav - 0.5*delz(i,j,npz)
+             do k=npz-1,1,-1
+                hght(k) = hght(k+1) - 0.5*(delz(i,j,k)+delz(i,j,k+1))
+             enddo
+
+             do k=npz,1,-1
+
+                Tv = pt(i,j,k)*(1.+zvir*q(i,j,k,sphum))
+                pres = delp(i,j,k)/delz(i,j,k)*rdg*Tv
+                !if (pres < sounding_top) cycle
+
+                call mqs3d(1, 1, 1, pt(i,j,k:k),   &
+                     (/pres/), q(i,j,k:k,sphum), qs)
+
+                mixr = q(i,j,k,sphum)/(1.-sum(q(i,j,k,1:nwat))) ! convert from sphum to mixing ratio
+                rh = q(i,j,k,sphum)/qs(1)
+                tmp = ( log(max(rh,1.e-2))/ 17.27  + ( pt(i,j,k) - 273.14 )/ ( -35.84 + pt(i,j,k)) )
+                dewpt = 237.3* tmp/ ( 1. - tmp ) ! deg C
+                wspd = 0.5*sqrt((u(i,j,k)+u(i,j+1,k))*(u(i,j,k)+u(i,j+1,k)) + (v(i,j,k)+v(i+1,j,k))*(v(i,j,k)+v(i+1,j,k)))*ms_to_knot ! convert to knots
+                if (wspd > 0.01) then
+                   !https://www.eol.ucar.edu/content/wind-direction-quick-reference
+                   wdir = atan2(u(i,j,k)+u(i,j+1,k),v(i,j,k)+v(i+1,j,k)) * rad2deg
+                else
+                   wdir = 0.
+                endif
+                rpk = exp(-kappa*log(pres/p0))
+                theta = pt(i,j,k)*rpk
+                thetav = Tv*rpk
+
+                write(unit,'(F7.1, I7, F7.1, F7.1, I7, F7.2, I7, F7.2, F7.1, F7.1, F7.1)') &
+                     pres*1.e-2, int(hght(k)), pt(i,j,k)-TFREEZE, dewpt, int(rh*100.), mixr*1.e3, int(wdir), wspd, theta, thetae(i,j,k), thetav
+             enddo
+          endif
+
+          call mpp_flush(unit)
+
+    enddo
+
+
+  end subroutine sounding_column
+
+  !Still needs some bugs sorted out
+  subroutine ertel_pv(u, v, w, pt, delp, delz, pkz, epv, dp0, gridstruct, domain, bd, npx, npy, npz)
+
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    integer, intent(IN) :: npx, npy, npz
+    real, intent(IN)  :: u(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz)
+    real, intent(IN)  :: v(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz)
+    real, intent(INOUT)  :: w(bd%isd:bd%ied,bd%jsd:bd%jed,npz) !a2b demands an inout directive
+    real, intent(IN)  :: pt(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real, intent(IN)  :: delp(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real, intent(IN)  :: delz(bd%is:bd%ie,bd%js:bd%je,npz)
+    real, intent(IN)  :: pkz(bd%is:bd%ie,bd%js:bd%je,npz)
+    real, intent(IN)  :: dp0(npz)
+    real, intent(OUT)  ::  epv(bd%is:bd%ie,bd%js:bd%je,npz)
+    type(fv_grid_type), intent(IN) :: gridstruct
+    type(domain2d), intent(INOUT) :: domain
+    
+
+    real :: ue(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz+1), ve(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz+1), wb(bd%isd:bd%ied,bd%jsd:bd%jed,npz), delz_h(bd%isd:bd%ied,bd%jsd:bd%jed,npz), dzb(bd%isd:bd%ied,bd%jsd:bd%jed,npz), xi(bd%is:bd%ie,bd%js:bd%je+1,npz), eta(bd%is:bd%ie+1,bd%js:bd%je,npz), vortz(bd%is:bd%ie,bd%js:bd%je,npz+1), theta(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+
+    integer :: i, j, k
+    real :: th1, th2, rrho, rvol
+    real, PARAMETER :: p0 = 1000.e2
+    real, PARAMETER :: rpk = exp(kappa*log(p0))
+    integer :: is,  ie,  js,  je
+    integer :: isd, ied, jsd, jed
+    integer :: ng
+    
+    is  = bd%is
+    ie  = bd%ie
+    js  = bd%js
+    je  = bd%je
+    isd = bd%isd
+    ied = bd%ied
+    jsd = bd%jsd
+    jed = bd%jed
+
+    ng = bd%ng
+    
+    !1. Compute top/bottom edge horizontal velocities (need to update routines for non-uniform grid)
+    !   Use dp0 (reference height) to compute edge values
+    !   Use ppme to compute this?? requires full delp and thus a halo update
+    !    Want to multiply in dx and dy as appropriate
+    !do j=js,je+1
+    !   call edge_scalar(u(is,j,1), ue(is,j,1), bd%is, bd%ie, npz, 1)
+    !enddo
+    k=1
+       do j=js,je+1
+          do i=is,ie
+             ue(i,j,k) = u(i,j,k) !* gridstruct%dy(i,j)
+          enddo
+       enddo
+    do k=2,npz
+       do j=js,je+1
+          do i=is,ie
+             ue(i,j,k) = 0.5*(u(i,j,k-1)+u(i,j,k)) !* gridstruct%dy(i,j)
+          enddo
+       enddo
+    enddo
+    k=npz+1
+       do j=js,je+1
+          do i=is,ie
+             ue(i,j,k) = u(i,j,npz) !* gridstruct%dy(i,j)
+          enddo
+       enddo
+    !do j=js,je
+    !   call edge_scalar(v(is,j,1), ve(is,j,1), bd%is, bd%ie+1, npz, 1)
+    !enddo
+    k=1
+       do j=js,je
+          do i=is,ie+1
+             ve(i,j,k) = v(i,j,k) !* gridstruct%dx(i,j)
+          enddo
+       enddo
+    do k=2,npz
+       do j=js,je
+          do i=is,ie+1
+             ve(i,j,k) = 0.5*(v(i,j,k-1)+v(i,j,k)) !* gridstruct%dx(i,j)
+          enddo
+       enddo
+    enddo
+    k=npz+1
+       do j=js,je
+          do i=is,ie+1
+             ve(i,j,k) = v(i,j,npz) !* gridstruct%dx(i,j)
+          enddo
+       enddo
+    
+
+    !2. Compute corner vertical velocities and edge distances
+    do k=1,npz
+       call a2b_ord4(w(isd,ied,k), wb(isd,ied,k), gridstruct, npx, npy, is, ie, js, je, ng)
+    enddo
+    do k=1,npz
+       do j=js,je
+          do i=is,ie
+             delz_h(i,j,k) = delz(i,j,k)
+          enddo
+       enddo
+    enddo
+    call mpp_update_domains(delz_h, domain)
+    do k=1,npz
+       call a2b_ord4(delz_h(isd,ied,k), dzb(isd,ied,k), gridstruct, npx, npy, is, ie, js, je, ng)
+       do j=js,je+1
+          do i=is,ie+1
+             wb(i,j,k) = wb(i,j,k)!*dzb(i,j,k)
+          enddo
+       enddo
+    enddo
+    
+    !3. Compute face-mean normal vorticity components using Stokes's theorem
+    do k=1,npz
+       do j=js,je
+          do i=is,ie+1
+             !rarea_side = 1./( 0.5*gridstruct%dy(i,j)*(dzb(i,j,k)+dzb(i,j+1,k)) ) ! unnecessary because we multiply by the area again later anyway??
+             xi(i,j,k) = ( ue(i,j,k) + wb(i,j+1,k) - ue(i,j,k+1) - wb(i,j,k))
+          enddo
+       enddo
+       do j=js,je+1
+          do i=is,ie
+             !rarea_side = 1./( 0.5*gridstruct%dx(i,j)*(dzb(i,j,k)+dzb(i+1,j,k)) )
+             eta(i,j,k) = ( ve(i,j,k) + wb(i+1,j,k) - ve(i,j,k+1) - wb(i,j,k))
+          enddo
+       enddo
+    enddo
+    do k=1,npz+1
+       do j=js,je
+          do i=is,ie
+             vortz(i,j,k) = (ue(i,j,k) + ve(i+1,j,k) - ue(i,j+1,k) - ve(i,j,k))
+             vortz(i,j,k) = vortz(i,j,k) + gridstruct%area(i,j)*gridstruct%f0(i,j) ! absolute vertical vorticity; assuming shallow atmosphere
+          enddo
+       enddo
+    enddo
+    
+    
+    !4. Compute theta on all faces ( requires a more accurate calculation for top and bottom edges)
+    ! Compute using dry kappa (for now) since this is what is usually expected?
+    do k=1,npz
+       do j=js,je
+          do i=is,ie
+             theta(i,j,k) = pt(i,j,k)/pkz(i,j,k)*rpk
+          enddo
+       enddo
+    enddo
+    call mpp_update_domains(theta, domain, whalo=1, ehalo=1, shalo=1, nhalo=1)
+    
+    !5. Sum 
+    k=1
+        do j=js,je
+          do i=is,ie
+!!$             th1 = 0.5*(theta(i-1,j,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i+1,j,k))
+!!$             epv(i,j,k) = xi(i+1,j,k)*th2 - xi(i,j,k)*th1
+!!$
+!!$             th1 = 0.5*(theta(i,j-1,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i,j-1,k))
+!!$             epv(i,j,k) = epv(i,j,k) + eta(i,j+1,k)*th2 - eta(i,j,k)*th1
+
+             th1 = theta(i,j,k)
+             th2 = 0.5*(theta(i,j,k) + theta(i,j,k+1))
+             epv(i,j,k) = vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+!             epv(i,j,k) = epv(i,j,k) + vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+          enddo
+       enddo
+    do k=2,npz-1
+       do j=js,je
+          do i=is,ie
+!!$             th1 = 0.5*(theta(i-1,j,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i+1,j,k))
+!!$             epv(i,j,k) = xi(i+1,j,k)*th2 - xi(i,j,k)*th1
+!!$
+!!$             th1 = 0.5*(theta(i,j-1,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i,j-1,k))
+!!$             epv(i,j,k) = epv(i,j,k) + eta(i,j+1,k)*th2 - eta(i,j,k)*th1
+
+             th1 = 0.5*(theta(i,j,k-1) + theta(i,j,k))
+             th2 = 0.5*(theta(i,j,k) + theta(i,j,k+1))
+             epv(i,j,k) = vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+!             epv(i,j,k) = epv(i,j,k) + vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+          enddo
+       enddo
+    enddo
+    k=npz
+       do j=js,je
+          do i=is,ie
+!!$             th1 = 0.5*(theta(i-1,j,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i+1,j,k))
+!!$             epv(i,j,k) = xi(i+1,j,k)*th2 - xi(i,j,k)*th1
+!!$
+!!$             th1 = 0.5*(theta(i,j-1,k) + theta(i,j,k))
+!!$             th2 = 0.5*(theta(i,j,k) + theta(i,j-1,k))
+!!$             epv(i,j,k) = epv(i,j,k) + eta(i,j+1,k)*th2 - eta(i,j,k)*th1
+
+             th1 = 0.5*(theta(i,j,k-1) + theta(i,j,k))
+             th2 = theta(i,j,k) 
+             epv(i,j,k) = vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+!             epv(i,j,k) = epv(i,j,k) + vortz(i,j,k+1)*th2 - vortz(i,j,k)*th1
+          enddo
+       enddo
+
+   do k=1,npz
+      do j=js,je
+         do i=is,ie
+            rrho = grav/delp(i,j,k)
+            rvol = gridstruct%rarea(i,j) !delz drops out
+            epv(i,j,k) = epv(i,j,k) * rrho * rvol * 1.e6 ! PVU
+         enddo
+      enddo
+   enddo
+
+!!!DEBUG CODE!!!
+   if (is_master()) then
+      i = 1; j = 1 ; k = npz/2
+      print*, 'u: ', ue(i,j,k), u(i,j,k), ue(i,j,k+1)
+      print*, 'v: ', ve(i,j,k), v(i,j,k), ve(i,j,k+1)
+      print*, 'delz: ', dzb(i,j,k), delz(i,j,k), dzb(i+1,j+1,k)
+      print*, 'wb: ', wb(i,j,k), w(i,j,k), wb(i+1,j+1,k)
+      print*, 'xi: ', xi(i,j,k), xi(i+1,j,k)
+      print*, 'eta: ', eta(i,j,k), eta(i,j+1,k)
+      print*, 'vortz: ', vortz(i,j,k), vortz(i,j,k+1)
+      print*, 'theta: ', theta(i-1:i+1,j,k)
+      print*, 'EPV: ', epv(i:i+1,j,k)
+   endif
+   
+!!!END DEBUG CODE!!!
+   
+  end subroutine ertel_pv
+
+ subroutine edge_scalar(q1, qe, i1, i2, km, id)
+! Optimized for wind profile reconstruction:
+ integer, intent(in):: i1, i2, km
+ integer, intent(in):: id                       ! 0: pp 1: wind
+ real, intent(in ), dimension(i1:i2,km):: q1
+ real, intent(out), dimension(i1:i2,km+1):: qe
+!-----------------------------------------------------------------------
+ real, parameter:: r2o3 = 2./3.
+ real, parameter:: r4o3 = 4./3.
+ real  gak(km)
+ real  bet
+ integer i, k
+
+!------------------------------------------------
+! Optimized coding for uniform grid: SJL Apr 2007
+!------------------------------------------------
+
+   if ( id==1 ) then
+      do i=i1,i2
+         qe(i,1) = r4o3*q1(i,1) + r2o3*q1(i,2)
+      enddo
+   else
+      do i=i1,i2
+         qe(i,1) = 1.E30
+      enddo
+   endif
+
+   gak(1) = 7./3.
+   do k=2,km
+      gak(k) =  1. / (4. - gak(k-1))
+      do i=i1,i2
+         qe(i,k) = (3.*(q1(i,k-1) + q1(i,k)) - qe(i,k-1)) * gak(k)
+      enddo
+   enddo
+
+   bet = 1. / (1.5 - 3.5*gak(km))
+   do i=i1,i2
+      qe(i,km+1) = (4.*q1(i,km) + q1(i,km-1) - 3.5*qe(i,km)) * bet
+   enddo
+
+   do k=km,1,-1
+      do i=i1,i2
+         qe(i,k) = qe(i,k) - gak(k)*qe(i,k+1)
+      enddo
+   enddo
+
+ end subroutine edge_scalar
+
+
+  
 end module fv_diagnostics_mod
