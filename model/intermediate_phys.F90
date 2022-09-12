@@ -456,30 +456,17 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             v_dt (is:ie, j, kmp:km) = va (is:ie, j, kmp:km)
 
             ! initialize tendencies diagnostic
-            if (allocated (inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt (is:ie, j, kmp:km) = &
-                inline_mp%liq_wat_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, liq_wat)
-            if (allocated (inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt (is:ie, j, kmp:km) = &
-                inline_mp%ice_wat_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, ice_wat)
-            if (allocated (inline_mp%qv_dt)) inline_mp%qv_dt (is:ie, j, kmp:km) = &
-                inline_mp%qv_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, sphum)
-            if (allocated (inline_mp%ql_dt)) inline_mp%ql_dt (is:ie, j, kmp:km) = &
-                inline_mp%ql_dt (is:ie, j, kmp:km) - (q (is:ie, j, kmp:km, liq_wat) + &
-                q (is:ie, j, kmp:km, rainwat))
-            if (allocated (inline_mp%qi_dt)) inline_mp%qi_dt (is:ie, j, kmp:km) = &
-                inline_mp%qi_dt (is:ie, j, kmp:km) - (q (is:ie, j, kmp:km, ice_wat) + &
-                q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel))
-            if (allocated (inline_mp%qr_dt)) inline_mp%qr_dt (is:ie, j, kmp:km) = &
-                inline_mp%qr_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, rainwat)
-            if (allocated (inline_mp%qs_dt)) inline_mp%qs_dt (is:ie, j, kmp:km) = &
-                inline_mp%qs_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, snowwat)
-            if (allocated (inline_mp%qg_dt)) inline_mp%qg_dt (is:ie, j, kmp:km) = &
-                inline_mp%qg_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, graupel)
-            if (allocated (inline_mp%t_dt)) inline_mp%t_dt (is:ie, j, kmp:km) = &
-                inline_mp%t_dt (is:ie, j, kmp:km) - pt (is:ie, j, kmp:km)
-            if (allocated (inline_mp%u_dt)) inline_mp%u_dt (is:ie, j, kmp:km) = &
-                inline_mp%u_dt (is:ie, j, kmp:km) - ua (is:ie, j, kmp:km)
-            if (allocated (inline_mp%v_dt)) inline_mp%v_dt (is:ie, j, kmp:km) = &
-                inline_mp%v_dt (is:ie, j, kmp:km) - va (is:ie, j, kmp:km)
+            inline_mp%liq_wat_dt (is:ie, j, kmp:km) = inline_mp%liq_wat_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, liq_wat)
+            inline_mp%ice_wat_dt (is:ie, j, kmp:km) = inline_mp%ice_wat_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, ice_wat)
+            inline_mp%qv_dt (is:ie, j, kmp:km) = inline_mp%qv_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, sphum)
+            inline_mp%ql_dt (is:ie, j, kmp:km) = inline_mp%ql_dt (is:ie, j, kmp:km) - (q (is:ie, j, kmp:km, liq_wat) + q (is:ie, j, kmp:km, rainwat))
+            inline_mp%qi_dt (is:ie, j, kmp:km) = inline_mp%qi_dt (is:ie, j, kmp:km) - (q (is:ie, j, kmp:km, ice_wat) + q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel))
+            inline_mp%qr_dt (is:ie, j, kmp:km) = inline_mp%qr_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, rainwat)
+            inline_mp%qs_dt (is:ie, j, kmp:km) = inline_mp%qs_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, snowwat)
+            inline_mp%qg_dt (is:ie, j, kmp:km) = inline_mp%qg_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, graupel)
+            inline_mp%t_dt (is:ie, j, kmp:km) = inline_mp%t_dt (is:ie, j, kmp:km) - pt (is:ie, j, kmp:km)
+            inline_mp%u_dt (is:ie, j, kmp:km) = inline_mp%u_dt (is:ie, j, kmp:km) - ua (is:ie, j, kmp:km)
+            inline_mp%v_dt (is:ie, j, kmp:km) = inline_mp%v_dt (is:ie, j, kmp:km) - va (is:ie, j, kmp:km)
 
             ! total energy checker
             if (consv_checker) then
@@ -591,30 +578,17 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             endif
 
             ! tendencies diagnostic
-            if (allocated (inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt (is:ie, j, kmp:km) = &
-                inline_mp%liq_wat_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, liq_wat)
-            if (allocated (inline_mp%ice_wat_dt)) inline_mp%ice_wat_dt (is:ie, j, kmp:km) = &
-                inline_mp%ice_wat_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, ice_wat)
-            if (allocated (inline_mp%qv_dt)) inline_mp%qv_dt (is:ie, j, kmp:km) = &
-                inline_mp%qv_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, sphum)
-            if (allocated (inline_mp%ql_dt)) inline_mp%ql_dt (is:ie, j, kmp:km) = &
-                inline_mp%ql_dt (is:ie, j, kmp:km) + (q (is:ie, j, kmp:km, liq_wat) + &
-                q (is:ie, j, kmp:km, rainwat))
-            if (allocated (inline_mp%qi_dt)) inline_mp%qi_dt (is:ie, j, kmp:km) = &
-                inline_mp%qi_dt (is:ie, j, kmp:km) + (q (is:ie, j, kmp:km, ice_wat) + &
-                q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel))
-            if (allocated (inline_mp%qr_dt)) inline_mp%qr_dt (is:ie, j, kmp:km) = &
-                inline_mp%qr_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, rainwat)
-            if (allocated (inline_mp%qs_dt)) inline_mp%qs_dt (is:ie, j, kmp:km) = &
-                inline_mp%qs_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, snowwat)
-            if (allocated (inline_mp%qg_dt)) inline_mp%qg_dt (is:ie, j, kmp:km) = &
-                inline_mp%qg_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, graupel)
-            if (allocated (inline_mp%t_dt)) inline_mp%t_dt (is:ie, j, kmp:km) = &
-                inline_mp%t_dt (is:ie, j, kmp:km) + pt (is:ie, j, kmp:km)
-            if (allocated (inline_mp%u_dt)) inline_mp%u_dt (is:ie, j, kmp:km) = &
-                inline_mp%u_dt (is:ie, j, kmp:km) + ua (is:ie, j, kmp:km)
-            if (allocated (inline_mp%v_dt)) inline_mp%v_dt (is:ie, j, kmp:km) = &
-                inline_mp%v_dt (is:ie, j, kmp:km) + va (is:ie, j, kmp:km)
+            inline_mp%liq_wat_dt (is:ie, j, kmp:km) = inline_mp%liq_wat_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, liq_wat)
+            inline_mp%ice_wat_dt (is:ie, j, kmp:km) = inline_mp%ice_wat_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, ice_wat)
+            inline_mp%qv_dt (is:ie, j, kmp:km) = inline_mp%qv_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, sphum)
+            inline_mp%ql_dt (is:ie, j, kmp:km) = inline_mp%ql_dt (is:ie, j, kmp:km) + (q (is:ie, j, kmp:km, liq_wat) + q (is:ie, j, kmp:km, rainwat))
+            inline_mp%qi_dt (is:ie, j, kmp:km) = inline_mp%qi_dt (is:ie, j, kmp:km) + (q (is:ie, j, kmp:km, ice_wat) + q (is:ie, j, kmp:km, snowwat) + q (is:ie, j, kmp:km, graupel))
+            inline_mp%qr_dt (is:ie, j, kmp:km) = inline_mp%qr_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, rainwat)
+            inline_mp%qs_dt (is:ie, j, kmp:km) = inline_mp%qs_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, snowwat)
+            inline_mp%qg_dt (is:ie, j, kmp:km) = inline_mp%qg_dt (is:ie, j, kmp:km) + q (is:ie, j, kmp:km, graupel)
+            inline_mp%t_dt (is:ie, j, kmp:km) = inline_mp%t_dt (is:ie, j, kmp:km) + pt (is:ie, j, kmp:km)
+            inline_mp%u_dt (is:ie, j, kmp:km) = inline_mp%u_dt (is:ie, j, kmp:km) + ua (is:ie, j, kmp:km)
+            inline_mp%v_dt (is:ie, j, kmp:km) = inline_mp%v_dt (is:ie, j, kmp:km) + va (is:ie, j, kmp:km)
 
             ! update pkz
             if (.not. hydrostatic) then
