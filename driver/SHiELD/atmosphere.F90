@@ -307,7 +307,8 @@ contains
    if (Atm(mygrid)%flagstruct%do_aerosol) then
      call load_aero(Atm(mygrid), Time)
      call read_aero(isc, iec, jsc, jec, npz, nq, Time, Atm(mygrid)%pe(isc:iec,:,jsc:jec), &
-       Atm(mygrid)%peln(isc:iec,:,jsc:jec), Atm(mygrid)%q(isc:iec,jsc:jec,:,:))
+       Atm(mygrid)%peln(isc:iec,:,jsc:jec), Atm(mygrid)%q(isc:iec,jsc:jec,:,:), &
+       Atm(mygrid)%flagstruct%kord_tr, Atm(mygrid)%flagstruct%fill)
    endif
 
    if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
@@ -466,7 +467,8 @@ contains
 
    if (Atm(mygrid)%flagstruct%do_aerosol) then
      call read_aero(isc, iec, jsc, jec, npz, nq, Time, Atm(mygrid)%pe(isc:iec,:,jsc:jec), &
-	     Atm(mygrid)%peln(isc:iec,:,jsc:jec), Atm(mygrid)%q(isc:iec,jsc:jec,:,:))
+	     Atm(mygrid)%peln(isc:iec,:,jsc:jec), Atm(mygrid)%q(isc:iec,jsc:jec,:,:), &
+         Atm(mygrid)%flagstruct%kord_tr, Atm(mygrid)%flagstruct%fill)
    endif
 
 !save ps to ps_dt before dynamics update
