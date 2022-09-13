@@ -30,6 +30,8 @@ module external_aero_mod
 	use fms_mod, only: file_exist, mpp_error, FATAL
 	use mpp_mod, only: mpp_pe, mpp_root_pe
 	use time_manager_mod, only: time_type
+	use fv_mapz_mod, only: map1_q2
+	use fv_fill_mod, only: fillz
 
 	public :: load_aero, read_aero, clean_aero
 
@@ -40,6 +42,7 @@ module external_aero_mod
 	! share arrays for time and level interpolation
 	real, allocatable, dimension(:,:,:) :: aero_ps
 	real, allocatable, dimension(:,:,:,:) :: aero_p
+	real, allocatable, dimension(:,:,:,:) :: aero_pe
 	real, allocatable, dimension(:,:,:,:) :: aero_dp
 	real, allocatable, dimension(:,:,:,:) :: aerosol
 
@@ -65,7 +68,6 @@ subroutine load_aero(Atm, Time)
 	integer :: is, ie, js, je
 	integer :: id_res
 
-	real, allocatable, dimension(:,:,:,:) :: aero_pe
 	real, allocatable, dimension(:,:,:,:) :: aero_lndp
 
 	character(len=64) :: file_name = "MERRA2_400.inst3_3d_aer_Nv.climatology.nc"
@@ -87,6 +89,7 @@ subroutine load_aero(Atm, Time)
 		! allocate share arrays
 		if (.not. allocated(aero_ps)) allocate(aero_ps(is:ie,js:je,nmon))
 		if (.not. allocated(aero_p)) allocate(aero_p(is:ie,js:je,nlev,nmon))
+		if (.not. allocated(aero_pe)) allocate(aero_pe(is:ie,js:je,nlev+1,nmon))
 		if (.not. allocated(aero_dp)) allocate(aero_dp(is:ie,js:je,nlev,nmon))
 		if (.not. allocated(aerosol)) allocate(aerosol(is:ie,js:je,nlev,nmon))
 
@@ -111,7 +114,6 @@ subroutine load_aero(Atm, Time)
 	! calculate layer mean pressure
 
 	! allocate local array
-	if (.not. allocated(aero_pe)) allocate(aero_pe(is:ie,js:je,nlev+1,nmon))
 	if (.not. allocated(aero_lndp)) allocate(aero_lndp(is:ie,js:je,nlev,nmon))
 
 	! calcuate edge pressure
@@ -138,7 +140,6 @@ subroutine load_aero(Atm, Time)
 	endif
 
 	! deallocate local array
-	if (allocated(aero_pe)) deallocate(aero_pe)
 	if (allocated(aero_lndp)) deallocate(aero_lndp)
 
 	! -----------------------------------------------------------------------
@@ -154,7 +155,7 @@ end subroutine load_aero
 ! =======================================================================
 ! read aerosol climatological dataset
 
-subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
+subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa, kord_tr, fill)
 
 	use constants_mod, only: grav
 	use diag_manager_mod, only: send_data
@@ -169,7 +170,7 @@ subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 	type(time_type) :: Time_after
 
 	integer :: i, j, k, n
-	integer, intent(in) :: is, ie, js, je, npz, nq
+	integer, intent(in) :: is, ie, js, je, npz, nq, kord_tr
 	integer :: year, month, day, hour, minute, second
 	integer :: seconds, days01, days21, month1, month2
 	integer :: aero_id
@@ -181,10 +182,12 @@ subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 	real, allocatable, dimension(:,:) :: vi_aero_now
 	real, allocatable, dimension(:,:,:) :: aero_now_a
 	real, allocatable, dimension(:,:,:) :: aero_now_p
+	real, allocatable, dimension(:,:,:) :: aero_now_pe
 	real, allocatable, dimension(:,:,:) :: aero_now_dp
 	real, allocatable, dimension(:,:,:) :: pm
 
-	logical :: used
+	logical :: used, use_fv3_interp = .true.
+	logical, intent (in) :: fill
 
 	! -----------------------------------------------------------------------
 	! diagnostic output of annual mean vertical integral aerosol
@@ -217,6 +220,7 @@ subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 	! allocate local array
 	if (.not. allocated(aero_now_a)) allocate(aero_now_a(is:ie,js:je,nlev))
 	if (.not. allocated(aero_now_p)) allocate(aero_now_p(is:ie,js:je,nlev))
+	if (.not. allocated(aero_now_pe)) allocate(aero_now_pe(is:ie,js:je,nlev+1))
 
 	! get current date information
 	call get_date(Time, year, month, day, hour, minute, second)
@@ -250,6 +254,8 @@ subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 	aero_now_a = 1.0 * days01 / days21 * aero_now_a + aerosol(:,:,:,month1)
 	aero_now_p = aero_p(:,:,:,month2) - aero_p(:,:,:,month1)
 	aero_now_p = 1.0 * days01 / days21 * aero_now_p + aero_p(:,:,:,month1)
+	aero_now_pe = aero_pe(:,:,:,month2) - aero_pe(:,:,:,month1)
+	aero_now_pe = 1.0 * days01 / days21 * aero_now_pe + aero_pe(:,:,:,month1)
 
 	! -----------------------------------------------------------------------
 	! diagnostic output of current vertical integral aerosol
@@ -300,35 +306,46 @@ subroutine read_aero(is, ie, js, je, npz, nq, Time, pe, peln, qa)
 	aero_id = get_tracer_index(MODEL_ATMOS, 'aerosol')
 
 	! vertically interpolation
-	do j = js, je
-		do i = is, ie
-			do k = 1, npz
-				if (pm(i,j,k) .lt. aero_now_p(i,j,1)) then
-					qa(i,j,k,aero_id) = aero_now_a(i,j,1)
-					!qa(i,j,k,aero_id) = aero_now_a(i,j,1) + &
-					!	(log(pm(i,j,k)) - log(aero_now_p(i,j,1))) / &
-					!	(log(aero_now_p(i,j,2)) - log(aero_now_p(i,j,1))) * &
-					!	(aero_now_a(i,j,2) - aero_now_a(i,j,1))
-				else if (pm(i,j,k) .ge. aero_now_p(i,j,nlev)) then
-					qa(i,j,k,aero_id) = aero_now_a(i,j,nlev)
-					!qa(i,j,k,aero_id) = aero_now_a(i,j,nlev-1) + &
-					!	(log(pm(i,j,k)) - log(aero_now_p(i,j,nlev-1))) / &
-					!	(log(aero_now_p(i,j,nlev)) - log(aero_now_p(i,j,nlev-1))) * &
-					!	(aero_now_a(i,j,nlev) - aero_now_a(i,j,nlev-1))
-				else
-					do n = 1, nlev-1
-						if (pm(i,j,k) .ge. aero_now_p(i,j,n) .and. &
-							pm(i,j,k) .lt. aero_now_p(i,j,n+1)) then
-							qa(i,j,k,aero_id) = aero_now_a(i,j,n) + &
-								(log(pm(i,j,k)) - log(aero_now_p(i,j,n))) / &
-								(log(aero_now_p(i,j,n+1)) - log(aero_now_p(i,j,n))) * &
-								(aero_now_a(i,j,n+1) - aero_now_a(i,j,n))
-						endif
-					enddo
-				endif
+	if (use_fv3_interp) then
+		do j = js, je
+			call map1_q2 (nlev, aero_now_pe (is:ie, j, :), aero_now_a (is:ie, js:je, :), &
+				npz, pe (is:ie, :, j), qa (is:ie, j, :, aero_id), &
+				pe (is:ie, 2:npz+1, j) - pe (is:ie, 1:npz, j), &
+				is, ie, 0, kord_tr, j, is, ie, js, je, 0., .false.)
+			if (fill) call fillz (ie-is+1, npz, 1, qa (is:ie, j, :, aero_id), &
+				pe (is:ie, 2:npz+1, j) - pe (is:ie, 1:npz, j))
+		enddo
+	else
+		do j = js, je
+			do i = is, ie
+				do k = 1, npz
+					if (pm(i,j,k) .lt. aero_now_p(i,j,1)) then
+						qa(i,j,k,aero_id) = aero_now_a(i,j,1)
+						!qa(i,j,k,aero_id) = aero_now_a(i,j,1) + &
+						!	(log(pm(i,j,k)) - log(aero_now_p(i,j,1))) / &
+						!	(log(aero_now_p(i,j,2)) - log(aero_now_p(i,j,1))) * &
+						!	(aero_now_a(i,j,2) - aero_now_a(i,j,1))
+					else if (pm(i,j,k) .ge. aero_now_p(i,j,nlev)) then
+						qa(i,j,k,aero_id) = aero_now_a(i,j,nlev)
+						!qa(i,j,k,aero_id) = aero_now_a(i,j,nlev-1) + &
+						!	(log(pm(i,j,k)) - log(aero_now_p(i,j,nlev-1))) / &
+						!	(log(aero_now_p(i,j,nlev)) - log(aero_now_p(i,j,nlev-1))) * &
+						!	(aero_now_a(i,j,nlev) - aero_now_a(i,j,nlev-1))
+					else
+						do n = 1, nlev-1
+							if (pm(i,j,k) .ge. aero_now_p(i,j,n) .and. &
+								pm(i,j,k) .lt. aero_now_p(i,j,n+1)) then
+								qa(i,j,k,aero_id) = aero_now_a(i,j,n) + &
+									(log(pm(i,j,k)) - log(aero_now_p(i,j,n))) / &
+									(log(aero_now_p(i,j,n+1)) - log(aero_now_p(i,j,n))) * &
+									(aero_now_a(i,j,n+1) - aero_now_a(i,j,n))
+							endif
+						enddo
+					endif
+				enddo
 			enddo
 		enddo
-	enddo
+	endif
 
 	! deallocate local array
 	if (allocated(pm)) deallocate(pm)
@@ -350,6 +367,7 @@ subroutine clean_aero()
 
 	if (allocated(aero_ps)) deallocate(aero_ps)
 	if (allocated(aero_p)) deallocate(aero_p)
+	if (allocated(aero_pe)) deallocate(aero_pe)
 	if (allocated(aero_dp)) deallocate(aero_dp)
 	if (allocated(aerosol)) deallocate(aerosol)
 
