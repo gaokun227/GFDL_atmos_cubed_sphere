@@ -289,13 +289,16 @@ contains
           call register_restart_field(Atm%Fv_restart_tile, 'v', Atm%v, &
                dim_names_4d2, is_optional=.true.)
        endif
-
-       if (Atm%flagstruct%restart_from_agrid_winds) then
+       
+       !--- include agrid winds in restarts for use in data assimilation or for restarting
+       if (Atm%flagstruct%agrid_vel_rst .or. Atm%flagstruct%restart_from_agrid_winds) then
           call register_restart_field(Atm%Fv_restart_tile, 'ua', Atm%ua, &
                dim_names_4d3)
           call register_restart_field(Atm%Fv_restart_tile, 'va', Atm%va, &
                dim_names_4d3)
-       else
+       endif
+       
+       if (.not. Atm%flagstruct%restart_from_agrid_winds) then
           call register_restart_field(Atm%Fv_restart_tile, 'u', Atm%u, &
                dim_names_4d)
           call register_restart_field(Atm%Fv_restart_tile, 'v', Atm%v, &
@@ -320,12 +323,6 @@ contains
        call register_restart_field(Atm%Fv_restart_tile,  'T', Atm%pt, dim_names_4d3)
        call register_restart_field(Atm%Fv_restart_tile,  'delp', Atm%delp, dim_names_4d3)
        call register_restart_field(Atm%Fv_restart_tile,  'phis', Atm%phis, dim_names_3d)
-
-       !--- include agrid winds in restarts for use in data assimilation
-       if (Atm%flagstruct%agrid_vel_rst .and. .not. Atm%flagstruct%restart_from_agrid_winds) then
-          call register_restart_field(Atm%Fv_restart_tile,  'ua', Atm%ua, dim_names_4d3)
-          call register_restart_field(Atm%Fv_restart_tile,  'va', Atm%va, dim_names_4d3)
-       endif
 
        if (.not. Atm%Fv_restart_tile%is_readonly) then !if writing file
          if (variable_exists(Atm%Fv_restart_tile, 'u')) then
