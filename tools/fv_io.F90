@@ -328,10 +328,14 @@ contains
        endif
 
        if (.not. Atm%Fv_restart_tile%is_readonly) then !if writing file
-         call register_variable_attribute(Atm%Fv_restart_tile, 'u', "long_name", "u", str_len=len("u"))
-         call register_variable_attribute(Atm%Fv_restart_tile, 'u', "units", "none", str_len=len("none"))
-         call register_variable_attribute(Atm%Fv_restart_tile, 'v', "long_name", "v", str_len=len("v"))
-         call register_variable_attribute(Atm%Fv_restart_tile, 'v', "units", "none", str_len=len("none"))
+         if (variable_exists(Atm%Fv_restart_tile, 'u')) then
+           call register_variable_attribute(Atm%Fv_restart_tile, 'u', "long_name", "u", str_len=len("u"))
+           call register_variable_attribute(Atm%Fv_restart_tile, 'u', "units", "none", str_len=len("none"))
+         endif
+         if (variable_exists(Atm%Fv_restart_tile, 'v')) then
+           call register_variable_attribute(Atm%Fv_restart_tile, 'v', "long_name", "v", str_len=len("v"))
+           call register_variable_attribute(Atm%Fv_restart_tile, 'v', "units", "none", str_len=len("none"))
+         endif
          if (variable_exists(Atm%Fv_restart_tile, 'W')) then
            call register_variable_attribute(Atm%Fv_restart_tile, 'W', "long_name", "W", str_len=len("W"))
            call register_variable_attribute(Atm%Fv_restart_tile, 'W', "units", "none", str_len=len("none"))
@@ -350,9 +354,11 @@ contains
          call register_variable_attribute(Atm%Fv_restart_tile, 'delp', "units", "none", str_len=len("none"))
          call register_variable_attribute(Atm%Fv_restart_tile, 'phis', "long_name", "phis", str_len=len("phis"))
          call register_variable_attribute(Atm%Fv_restart_tile, 'phis', "units", "none", str_len=len("none"))
-         if (Atm%flagstruct%agrid_vel_rst) then
+         if (variable_exists(Atm%Fv_restart_tile, 'ua')) then
            call register_variable_attribute(Atm%Fv_restart_tile, 'ua', "long_name", "ua", str_len=len("ua"))
            call register_variable_attribute(Atm%Fv_restart_tile, 'ua', "units", "none", str_len=len("none"))
+         endif
+         if (variable_exists(Atm%Fv_restart_tile, 'va')) then
            call register_variable_attribute(Atm%Fv_restart_tile, 'va', "long_name", "va", str_len=len("va"))
            call register_variable_attribute(Atm%Fv_restart_tile, 'va', "units", "none", str_len=len("none"))
          endif
