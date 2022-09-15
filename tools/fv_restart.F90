@@ -756,6 +756,8 @@ contains
       write(unit,*)
       write(unit,*) 'fv_restart u   ', trim(gn),' = ', mpp_chksum(Atm(n)%u(isc:iec,jsc:jec,:))
       write(unit,*) 'fv_restart v   ', trim(gn),' = ', mpp_chksum(Atm(n)%v(isc:iec,jsc:jec,:))
+      write(unit,*) 'fv_restart ua   ', trim(gn),' = ', mpp_chksum(Atm(n)%ua(isc:iec,jsc:jec,:))
+      write(unit,*) 'fv_restart va   ', trim(gn),' = ', mpp_chksum(Atm(n)%va(isc:iec,jsc:jec,:))
       if ( .not.Atm(n)%flagstruct%hydrostatic )   &
         write(unit,*) 'fv_restart w   ', trim(gn),' = ', mpp_chksum(Atm(n)%w(isc:iec,jsc:jec,:))
       write(unit,*) 'fv_restart delp', trim(gn),' = ', mpp_chksum(Atm(n)%delp(isc:iec,jsc:jec,:))
@@ -1447,6 +1449,8 @@ contains
     write(unit,*)
     write(unit,*) 'fv_restart_end u   ', trim(gn),' = ', mpp_chksum(Atm%u(isc:iec,jsc:jec,:))
     write(unit,*) 'fv_restart_end v   ', trim(gn),' = ', mpp_chksum(Atm%v(isc:iec,jsc:jec,:))
+    write(unit,*) 'fv_restart_end ua   ', trim(gn),' = ', mpp_chksum(Atm%ua(isc:iec,jsc:jec,:))
+    write(unit,*) 'fv_restart_end va   ', trim(gn),' = ', mpp_chksum(Atm%va(isc:iec,jsc:jec,:))
     if ( .not. Atm%flagstruct%hydrostatic )    &
          write(unit,*) 'fv_restart_end w   ', trim(gn),' = ', mpp_chksum(Atm%w(isc:iec,jsc:jec,:))
     write(unit,*) 'fv_restart_end delp', trim(gn),' = ', mpp_chksum(Atm%delp(isc:iec,jsc:jec,:))
