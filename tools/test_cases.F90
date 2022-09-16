@@ -5830,9 +5830,8 @@ end subroutine terminator_tracers
 
       end subroutine init_double_periodic
 
-      subroutine read_namelist_test_case_nml(nml_filename)
+      subroutine read_namelist_test_case_nml()
 
-        character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
              no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, Umean, dp_TC, rp_TC, Ts_TC
