@@ -927,7 +927,8 @@ module fv_arrays_mod
   logical :: write_restart_with_bcs = .false.   !< Default setting for using DA-updated BC files
   logical :: regional_bcs_from_gsi = .false.    !< Default setting for writing restart files with boundary rows.
   logical :: pass_full_omega_to_physics_in_non_hydrostatic_mode = .false.  !< Default to passing local omega to physics in non-hydrostatic mode
-
+  logical :: restart_from_agrid_winds = .false.  !< Whether to restart from A-grid winds
+  logical :: write_optional_dgrid_vel_rst = .true. !< Whether to write out optional D-grid winds when restart_from_agrid_winds is active
   end type fv_flags_type
 
   type fv_nest_BC_type_3D
