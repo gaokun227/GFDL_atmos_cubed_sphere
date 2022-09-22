@@ -297,9 +297,9 @@ contains
    allocate(pref(npz+1,2), dum1d(npz+1))
 
    call gfdl_mp_init(input_nml_file, stdlog(), Atm(mygrid)%flagstruct%hydrostatic)
-   call sa_tke_edmf_init(input_nml_file, stdlog())
-   call sa_sas_init(input_nml_file, stdlog())
-   call sa_gwd_init(input_nml_file, stdlog())
+   if (Atm(mygrid)%flagstruct%do_inline_edmf) call sa_tke_edmf_init(input_nml_file, stdlog())
+   if (Atm(mygrid)%flagstruct%do_inline_sas) call sa_sas_init(input_nml_file, stdlog())
+   if (Atm(mygrid)%flagstruct%do_inline_gwd) call sa_gwd_init(input_nml_file, stdlog())
 
    call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, &
                    Atm(mygrid)%gridstruct%grid_type, mygrid, IAU_Data)
