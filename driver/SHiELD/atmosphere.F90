@@ -71,7 +71,7 @@ use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time, prt_maxmin, prt_he
 use fv_nggps_diags_mod, only: fv_nggps_diag_init, fv_nggps_diag
 use fv_restart_mod,     only: fv_restart, fv_write_restart
 use fv_timing_mod,      only: timing_on, timing_off
-use fv_mp_mod,          only: is_master, tile_fine
+use fv_mp_mod,          only: is_master
 use fv_sg_mod,          only: fv_subgrid_z
 use fv_update_phys_mod, only: fv_update_phys
 use fv_io_mod,          only: fv_io_register_nudge_restart
@@ -679,13 +679,8 @@ contains
 
    if (present(p_hydro)) p_hydro = Atm(mygrid)%flagstruct%phys_hydrostatic
    if (present(  hydro))   hydro = Atm(mygrid)%flagstruct%hydrostatic
-   if (present(tile_num)) then
-     if (Atm(mygrid)%gridstruct%nested) then
-       tile_num = tile_fine(mygrid)
-     else
-       tile_num = Atm(mygrid)%tile_of_mosaic
-     endif
-   endif
+   if (present(tile_num)) tile_num = Atm(mygrid)%global_tile
+
  end subroutine atmosphere_control_data
 
 
