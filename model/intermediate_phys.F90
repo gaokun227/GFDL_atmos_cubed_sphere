@@ -174,7 +174,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     !-----------------------------------------------------------------------
 
     ! Note: pt at this stage is T_v
-    if (do_adiabatic_init .or. ((.not. do_inline_mp) .and. nwat .gt. 0) .or. do_sat_adj) then
+    if ((do_adiabatic_init .or. (.not. do_inline_mp) .or. do_sat_adj) .and. nwat .eq. 6) then
 
         call timing_on ('fast_sat_adj')
 
@@ -368,7 +368,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     ! Inline GFDL MP >>>
     !-----------------------------------------------------------------------
 
-    if ((.not. do_adiabatic_init) .and. do_inline_mp) then
+    if ((.not. do_adiabatic_init) .and. do_inline_mp .and. nwat .eq. 6) then
 
         call timing_on ('gfdl_mp')
 
