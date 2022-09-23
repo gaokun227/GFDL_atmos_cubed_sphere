@@ -22,7 +22,7 @@
 module qs_tables_mod
 
 use constants_mod,         only: rdgas, rvgas, cp_air, cp_vapor, hlv
-use gfdl_cld_mp_mod,       only: c_liq
+use gfdl_mp_mod,           only: c_liq
 
 implicit none
 logical:: qs_table_is_initialized = .false.
