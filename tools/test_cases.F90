@@ -163,6 +163,7 @@
      ! case 20 -doubly periodic- idealized TC
      real :: dp_TC = 1115.
      real :: rp_TC = 100000.
+     real :: Ts_TC = 300.
 
      !  Validating fields used in statistics
      real  , allocatable :: phi0(:,:,:) ! Validating Field
@@ -5237,6 +5238,7 @@ end subroutine terminator_tracers
 
          dp = dp_TC
          rp = rp_TC
+         Ts0 = Ts_TC
 
          if (is_master()) print*, "Initializing TC (dp,rp):", dp, rp, &
          "in a doubly periodic domain at: lon/lat (deg)", p0(1) * 180./pi, p0(2)*180. /pi
@@ -5328,13 +5330,12 @@ end subroutine terminator_tracers
          exppr = 1.5
          exppz = 2.
          gamma = 0.007
-         Ts0 = 302.15
+         !Ts0 = 302.15
          q00 = 0.021
          t00 = Ts0*(1.+zvir*q00)
          exponent = rdgas*gamma/grav
          ztrop = 15000.
          zp = 7000.
-         dp = 1115.
          cor = 2.*omega*sin(p0(2)) !Coriolis at vortex center
 
          !Initialize winds separately on the D-grid
@@ -5911,7 +5912,7 @@ end subroutine terminator_tracers
         character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
-             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, Umean, dp_TC, rp_TC
+             no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, Umean, dp_TC, rp_TC, Ts_TC
 
 #include<file_version.h>
 
