@@ -838,7 +838,7 @@ contains
 ! Intermediate Physics >>>
 !-----------------------------------------------------------------------
 
-    call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
+    call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
              c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
              v, w, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
              inline_mp, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
