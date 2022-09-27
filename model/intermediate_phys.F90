@@ -52,7 +52,7 @@ module intermediate_phys_mod
     
 contains
 
-subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
+subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_mp, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
@@ -64,7 +64,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     ! input / output arguments
     ! -----------------------------------------------------------------------
 
-    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord
+    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord, nwat
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, consv_checker
     logical, intent (in) :: do_sat_adj, last_step, do_fast_phys, adj_mass_vmr
@@ -174,7 +174,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     !-----------------------------------------------------------------------
 
     ! Note: pt at this stage is T_v
-    if (do_adiabatic_init .or. (.not. do_inline_mp) .or. do_sat_adj) then
+    if ((do_adiabatic_init .or. (.not. do_inline_mp) .or. do_sat_adj) .and. nwat .eq. 6) then
 
         call timing_on ('fast_sat_adj')
 
@@ -368,7 +368,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     ! Inline GFDL MP >>>
     !-----------------------------------------------------------------------
 
-    if ((.not. do_adiabatic_init) .and. do_inline_mp) then
+    if ((.not. do_adiabatic_init) .and. do_inline_mp .and. nwat .eq. 6) then
 
         call timing_on ('gfdl_mp')
 
