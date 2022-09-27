@@ -1180,7 +1180,8 @@ contains
 
        !added by Joseph
        if (domain_deg > 0.05) then
-         dx_const = domain_deg*100000/(npx-1) 
+         dx_const = domain_deg*100000/(npx-1)
+         dy_const = dx_const 
          if (is_master()) print*,"Warning: Recalculating dx:", dx_const
          if (is_master()) print*,"Creating a square doubly periodic domain of size", &
           domain_deg, "degrees, a dx:", dx_const, ", centered at lonlat (deg): ", lon_rad *180./pi, deglat
