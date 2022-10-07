@@ -3877,7 +3877,7 @@ end subroutine terminator_tracers
 
   real, intent(in):: ubar ! max wind (m/s)
   real, intent(in):: r0   ! Radius of max wind (m)
-  real, intent(in):: p1(2)   ! center position (longitude, latitude) in radian
+  real(kind=R_GRID), intent(in):: p1(2)   ! center position (longitude, latitude) in radian
   real, intent(inout):: u(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
   real, intent(inout):: v(bd%isd:bd%ied+1,bd%jsd:bd%jed)
   real(kind=R_GRID), intent(IN) :: grid(bd%isd:bd%ied+1,bd%jsd:bd%jed+1,2)
@@ -3962,8 +3962,9 @@ end subroutine terminator_tracers
 
      real function gh_jet(npy, lat_in)
      integer, intent(in):: npy
-     real, intent(in):: lat_in
-     real lat, lon, dp, uu
+     real(kind=R_GRID), intent(in):: lat_in
+     real(kind=R_GRID) lat, lon, dp
+     real uu
      real h0, ft
      integer j,jm
 
@@ -4008,7 +4009,7 @@ end subroutine terminator_tracers
      end function gh_jet
 
      real function u_jet(lat)
-      real lat, lon, dp
+      real(kind=R_GRID) lat, lon, dp
       real umax, en, ph0, ph1
 
       umax = 80.
@@ -4026,7 +4027,7 @@ end subroutine terminator_tracers
       subroutine get_case9_B(B, agrid, isd, ied, jsd, jed)
       integer, intent(IN) :: isd, ied, jsd, jed
       real, intent(OUT) :: B(isd:ied,jsd:jed)
-      real, intent(IN) :: agrid(isd:ied,jsd:jed,2)
+      real(kind=R_GRID), intent(IN) :: agrid(isd:ied,jsd:jed,2)
       real :: myC,yy,myB
       integer :: i,j
 ! Generate B forcing function
