@@ -26,7 +26,7 @@
       use init_hydro_mod,    only: p_var, hydro_eq, hydro_eq_ext
       use fv_mp_mod,         only: is_master,        &
                                    domain_decomp, fill_corners, XDir, YDir, &
-                                   mp_stop, mp_reduce_sum, mp_reduce_max, mp_gather, mp_bcst
+                                   mp_stop, mp_reduce_sum, mp_reduce_max, mp_gather
       use fv_grid_utils_mod, only: cubed_to_latlon, great_circle_dist, mid_pt_sphere,    &
                                    ptop_min, inner_prod, get_latlon_vector, get_unit_vect2, &
                                    g_sum, latlon2xyz, cart_to_latlon, make_eta_level, f_p, project_sphere_v
@@ -808,8 +808,6 @@
      ! call mpp_update_domains( vor0, domain )
      ! call mpp_update_domains( divg, domain )
      ! call mpp_update_domains( vort, domain )
-!!$      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
-!!$                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
  200  format(i4.4,'x',i4.4,'x',i4.4,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14)
  201  format('          ',A,e21.14,' ',e21.14)
  202  format('          ',A,i4.4,'x',i4.4,'x',i4.4)
@@ -841,8 +839,6 @@
         ua0 = ua
         va0 = va
         div0(:,:) = 1.e-20
-!!$      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
-!!$                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
       if ( is_master() ) then
           write(*,*) ' Error Norms of Analytical Divergence field A-Winds initialized'
           write(*,201) 'Divergence MAX error     : ', pmax
@@ -871,8 +867,6 @@
            enddo
         enddo
         div0(:,:) = 1.e-20
-!!$      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
-!!$                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
       if ( is_master() ) then
           write(*,*) ' Error Norms of Analytical Divergence field D-Winds initialized'
           write(*,201) 'Divergence MAX error     : ', pmax
@@ -1236,11 +1230,6 @@
                pt8 = gh_jet(npy, grid(i+1,j+1,2))
                pt9 = gh_jet(npy, grid(i  ,j+1,2))
                ftmp = 0.25*pt1 + 0.125*(pt2+pt3+pt4+pt5) + 0.0625*(pt6+pt7+pt8+pt9)
-!!$               delp(i,j,1) = ftmp + 120.*grav*cos(agrid(i,j,2)) *  &
-!!$               exp( -(3.*(agrid(i,j,1)-pi))**2 ) * exp( -(15.*(agrid(i,j,2)-pi/4.))**2 )
-!!$!              phis(i,j) = ftmp
-!!$!              delp(i,j,1) = 10.E3*grav + 120.*grav*cos(agrid(i,j,2)) *  &
-!!$!              exp( -(3.*(agrid(i,j,1)-pi))**2 ) * exp( -(15.*(agrid(i,j,2)-pi/4.))**2 )
 ! Using great circle dist:
                p1(:) = agrid(i,j,1:2)
                delp(i,j,1) = ftmp
@@ -1577,24 +1566,6 @@
          !For consistency with earlier single-grid simulations use gh0 = 1.0e-6 and p1(1) = 195.*pi/180.
          q(:,:,:,:) = 0.
 
-!!$         gh0  = 1.0e-3
-!!$         r0 = radius/3. !RADIUS radius/3.
-!!$         p1(2) = 51.*pi/180.
-!!$         p1(1) = 205.*pi/180. !231.*pi/180.
-!!$         do k=1,npz
-!!$         do j=jsd,jed
-!!$         do i=isd,ied
-!!$            p2(1) = agrid(i,j,1)
-!!$            p2(2) = agrid(i,j,2)
-!!$            r = great_circle_dist( p1, p2, radius )
-!!$            if (r < r0 .and. .not.( abs(p1(2)-p2(2)) < 1./18. .and. p2(1)-p1(1) < 5./36.) .and. k > 16) then
-!!$               q(i,j,k,1) = gh0
-!!$            else
-!!$               q(i,j,k,1) = 0.
-!!$            endif
-!!$         enddo
-!!$         enddo
-!!$         enddo
 
     ! Initialize surface Pressure
          ps(:,:) = 1.e5
@@ -4792,14 +4763,6 @@ end subroutine terminator_tracers
            enddo
 
 
-!!$           do k=1,npz
-!!$              do j=jsd,jed
-!!$                 do i=isd,ied
-!!$                         ptmp = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
-!!$!                   pt(i,j,k) = t00
-!!$                 enddo
-!!$              enddo
-!!$           enddo
 
           call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
@@ -5898,9 +5861,8 @@ end subroutine terminator_tracers
 
       end subroutine init_double_periodic
 
-      subroutine read_namelist_test_case_nml(nml_filename)
+      subroutine read_namelist_test_case_nml()
 
-        character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
              no_wind, gaussian_dt, dt_amp, do_marine_sounding, checker_tr, small_earth_scale, Umean, dp_TC, rp_TC, Ts_TC
