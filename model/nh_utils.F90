@@ -24,10 +24,11 @@ module nh_utils_mod
 ! To do list:
 ! include moisture effect in pt
 !------------------------------
-   use constants_mod,     only: rdgas, cp_air, grav
+   use constants_mod,     only: rdgas, cp_air, grav, pi
    use tp_core_mod,       only: fv_tp_2d
    use sw_core_mod,       only: fill_4corners, del6_vt_flux
    use fv_arrays_mod,     only: fv_grid_bounds_type, fv_grid_type, fv_nest_BC_type_3d
+   use mpp_mod,           only: mpp_pe
 
    implicit none
    private
@@ -395,7 +396,7 @@ CONTAINS
                        dm, pm2, w2, dz2, pt(is1:ie1,j,1:km), ws(is1,j), .true.)
       else
            call SIM1_solver(dt, is1, ie1, km, rdgas, gama, gm2, cp2, akap, pe2,  &
-                            dm, pm2, pem, w2, dz2, pt(is1:ie1,j,1:km), ws(is1,j), p_fac)
+                            dm, pm2, pem, w2, dz2, pt(is1:ie1,j,1:km), ws(is1,j), p_fac, j, .false.,ptop)
       endif
 
       do k=2,km+1
@@ -529,11 +530,11 @@ CONTAINS
                        dm, pm2, w2, dz2, pt(is:ie,j,1:km), ws(is,j), .false.)
       elseif ( a_imp > 0.999 ) then
            call SIM1_solver(dt, is, ie, km, rdgas, gama, gm2, cp2, akap, pe2, dm,   &
-                            pm2, pem, w2, dz2, pt(is:ie,j,1:km), ws(is,j), p_fac)
+                            pm2, pem, w2, dz2, pt(is:ie,j,1:km), ws(is,j), p_fac, j, .false., ptop)
       else
            call SIM_solver(dt, is, ie, km, rdgas, gama, gm2, cp2, akap, pe2, dm,  &
                            pm2, pem, w2, dz2, pt(is:ie,j,1:km), ws(is,j), &
-                           a_imp, p_fac, scale_m)
+                           a_imp, p_fac, scale_m, j, .false., ptop)
       endif
 
       do k=1, km
@@ -1191,20 +1192,27 @@ CONTAINS
 
 
  subroutine SIM1_solver(dt,  is,  ie, km, rgas, gama, gm2, cp2, kappa, pe, dm2,   &
-                        pm2, pem, w2, dz2, pt2, ws, p_fac)
+                        pm2, pem, w2, dz2, pt2, ws, p_fac, j, debug, ptop)
    integer, intent(in):: is, ie, km
-   real,    intent(in):: dt, rgas, gama, kappa, p_fac
+   real,    intent(in):: dt, rgas, gama, kappa, p_fac, ptop
    real, intent(in), dimension(is:ie,km):: dm2, pt2, pm2, gm2, cp2
    real, intent(in )::  ws(is:ie)
    real, intent(in ), dimension(is:ie,km+1):: pem
    real, intent(out)::  pe(is:ie,km+1)
    real, intent(inout), dimension(is:ie,km):: dz2, w2
+   integer, intent(in) :: j ! DEBUG
+   logical, intent(in) :: debug ! debug
 ! Local
    real, dimension(is:ie,km  ):: aa, bb, dd, w1, g_rat, gam
    real, dimension(is:ie,km+1):: pp
    real, dimension(is:ie):: p1, bet
    real t1g, rdt, capa1
    integer i, k
+
+   !for RF on W
+   real, parameter :: tau_w = 0.2
+   real, parameter :: rf_cutoff = 150.e2
+   real :: rff
 
 #ifdef MOIST_CAPPA
       t1g = 2.*dt*dt
@@ -1292,6 +1300,33 @@ CONTAINS
        enddo
     enddo
 
+!!! Try Rayleigh damping of w
+    if (tau_w > 1.e-5) then
+       !setup damping parameters in-situ for now (save later)
+       !tau_w hard coded to 0.2 for now and rf_cutoff to 150.e2
+       !currently not damping to heat
+       do k=1,km
+          do i=is,ie
+             if ( pm2(i,k) < rf_cutoff) then
+                rff = dt/tau_w * sin(0.5*pi*log(rf_cutoff/pm2(i,k))/log(rf_cutoff/ptop))**2
+                rff = 1.0d0 / ( 1.0d0+rff)
+                w2(i,k) = w2(i,k)*rff
+             endif
+          enddo
+       enddo
+    endif
+
+!!! DEBUG CODE
+    do i=is,ie
+       if (debug .and. ANY(w2(i,:) < -50)) then
+          print*, ' EXTREME DOWNDRAFT (SIM1_SOLVER)', i, j, mpp_pe(), ws(i)
+          do k=1,km
+             write(*,*) k, w2(i,k), w1(i,k), pe(i,k), dm2(i,k), dz2(i,k), pem(i,k)
+          enddo
+       endif
+    enddo
+!!! END DEBUG CODE
+
     do i=is, ie
        pe(i,1) = 0.
     enddo
@@ -1321,23 +1356,30 @@ CONTAINS
        enddo
     enddo
 
- end subroutine SIM1_solver
+  end subroutine SIM1_solver
 
  subroutine SIM_solver(dt,  is,  ie, km, rgas, gama, gm2, cp2, kappa, pe2, dm2,   &
-                       pm2, pem, w2, dz2, pt2, ws, alpha, p_fac, scale_m)
+                       pm2, pem, w2, dz2, pt2, ws, alpha, p_fac, scale_m, j, debug, ptop)
    integer, intent(in):: is, ie, km
-   real, intent(in):: dt, rgas, gama, kappa, p_fac, alpha, scale_m
+   real, intent(in):: dt, rgas, gama, kappa, p_fac, alpha, scale_m, ptop
    real, intent(in), dimension(is:ie,km):: dm2, pt2, pm2, gm2, cp2
    real, intent(in )::  ws(is:ie)
    real, intent(in ), dimension(is:ie,km+1):: pem
    real, intent(out):: pe2(is:ie,km+1)
    real, intent(inout), dimension(is:ie,km):: dz2, w2
+   integer, intent(in) :: j ! DEBUG
+   logical, intent(in) :: debug ! debug
 ! Local
    real, dimension(is:ie,km  ):: aa, bb, dd, w1, wk, g_rat, gam
    real, dimension(is:ie,km+1):: pp
    real, dimension(is:ie):: p1, wk1, bet
    real  beta, t2, t1g, rdt, ra, capa1
    integer i, k
+
+   !for RF on W
+   real, parameter :: tau_w = 0.2
+   real, parameter :: rf_cutoff = 150.e2
+   real :: rff
 
     beta = 1. - alpha
       ra = 1. / alpha
@@ -1441,6 +1483,33 @@ CONTAINS
          w2(i,k) = w2(i,k) - gam(i,k+1)*w2(i,k+1)
       enddo
     enddo
+
+!!! Try Rayleigh damping of w
+    if (tau_w > 1.e-5) then
+       !setup damping parameters in-situ for now (save later)
+       !tau_w hard coded to 0.2 for now and rf_cutoff to 150.e2
+       !currently not damping to heat
+       do k=1,km
+          do i=is,ie
+             if ( pm2(i,k) < rf_cutoff) then
+                rff = dt/tau_w * sin(0.5*pi*log(rf_cutoff/pm2(i,k))/log(rf_cutoff/ptop))**2 !ptop??
+                rff = 1.0d0 / ( 1.0d0+rff)
+                w2(i,k) = w2(i,k)*rff
+             endif
+          enddo
+       enddo
+    endif
+
+!!! DEBUG CODE
+    do i=is,ie
+       if (debug .and. ANY(w2(i,:) < -50)) then
+          print*, ' EXTREME DOWNDRAFT (SIM_SOLVER)', i, j, mpp_pe(), ws(i)
+          do k=1,km
+             write(*,*) k, w2(i,k), w1(i,k), pe2(i,k), dm2(i,k), dz2(i,k), pem(i,k)
+          enddo
+       endif
+    enddo
+!!! END DEBUG CODE
 
     do i=is, ie
        pe2(i,1) = 0.
