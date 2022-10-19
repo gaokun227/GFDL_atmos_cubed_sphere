@@ -45,6 +45,10 @@ module nh_utils_mod
 #endif
    real, parameter:: r3 = 1./3.
 
+   real, allocatable :: rff(:)
+   logical :: RFw_initialized = .false.
+   integer :: k_rf = 0
+
 CONTAINS
 
   subroutine update_dz_c(is, ie, js, je, km, ng, dt, dp0, zs, area, ut, vt, gz, ws, &
@@ -313,16 +317,18 @@ CONTAINS
 
   subroutine Riem_Solver_c(ms,   dt,  is,   ie,   js, je, km,   ng,  &
                            akap, cappa, cp,  ptop, hs, w3,  pt, q_con, &
-                           delp, gz,  pef,  ws, p_fac, a_imp, scale_m)
+                           delp, gz,  pef,  ws, p_fac, a_imp, scale_m, &
+                           pfull, tau_w, rf_cutoff)
 
    integer, intent(in):: is, ie, js, je, ng, km
    integer, intent(in):: ms
-   real, intent(in):: dt,  akap, cp, ptop, p_fac, a_imp, scale_m
+   real, intent(in):: dt,  akap, cp, ptop, p_fac, a_imp, scale_m, tau_w, rf_cutoff
    real, intent(in):: ws(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, delp
    real, intent(in), dimension(is-ng:,js-ng:,1:):: q_con, cappa
    real, intent(in)::   hs(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: w3
+   real, intent(in) :: pfull(km)
 ! OUTPUT PARAMETERS
    real, intent(inout), dimension(is-ng:ie+ng,js-ng:je+ng,km+1):: gz
    real, intent(  out), dimension(is-ng:ie+ng,js-ng:je+ng,km+1):: pef
@@ -339,8 +345,21 @@ CONTAINS
    is1 = is - 1
    ie1 = ie + 1
 
+   !Set up rayleigh damping
+   if (tau_w > 1.e-5 .and. .not. RFw_initialized) then
+      allocate(rff(km))
+      RFw_initialized = .true.
+      do k=1,km
+         if (pfull(k) > rf_cutoff) exit
+         k_rf = k
+         rff(k) = dt/tau_w * sin(0.5*pi*log(rf_cutoff/pfull(k))/log(rf_cutoff/ptop))**2
+         rff(k) = 1.0d0 / ( 1.0d0+rff(k) )
+      enddo
+   endif
+
+
 !$OMP parallel do default(none) shared(js,je,is1,ie1,km,delp,pef,ptop,gz,rgrav,w3,pt, &
-!$OMP                                  a_imp,dt,gama,akap,ws,p_fac,scale_m,ms,hs,q_con,cappa) &
+!$OMP                                  a_imp,dt,gama,akap,ws,p_fac,scale_m,ms,hs,q_con,cappa,tau_w) &
 !$OMP                          private(cp2,gm2, dm, dz2, w2, pm2, pe2, pem, peg)
    do 2000 j=js-1, je+1
 
@@ -396,7 +415,7 @@ CONTAINS
                        dm, pm2, w2, dz2, pt(is1:ie1,j,1:km), ws(is1,j), .true.)
       else
            call SIM1_solver(dt, is1, ie1, km, rdgas, gama, gm2, cp2, akap, pe2,  &
-                            dm, pm2, pem, w2, dz2, pt(is1:ie1,j,1:km), ws(is1,j), p_fac, j, .false.,ptop)
+                            dm, pm2, pem, w2, dz2, pt(is1:ie1,j,1:km), ws(is1,j), p_fac, j, .false., tau_w)
       endif
 
       do k=2,km+1
@@ -530,11 +549,11 @@ CONTAINS
                        dm, pm2, w2, dz2, pt(is:ie,j,1:km), ws(is,j), .false.)
       elseif ( a_imp > 0.999 ) then
            call SIM1_solver(dt, is, ie, km, rdgas, gama, gm2, cp2, akap, pe2, dm,   &
-                            pm2, pem, w2, dz2, pt(is:ie,j,1:km), ws(is,j), p_fac, j, .false., ptop)
+                            pm2, pem, w2, dz2, pt(is:ie,j,1:km), ws(is,j), p_fac, j, .false., -1.)
       else
            call SIM_solver(dt, is, ie, km, rdgas, gama, gm2, cp2, akap, pe2, dm,  &
                            pm2, pem, w2, dz2, pt(is:ie,j,1:km), ws(is,j), &
-                           a_imp, p_fac, scale_m, j, .false., ptop)
+                           a_imp, p_fac, scale_m, j, .false., -1.)
       endif
 
       do k=1, km
@@ -1192,9 +1211,9 @@ CONTAINS
 
 
  subroutine SIM1_solver(dt,  is,  ie, km, rgas, gama, gm2, cp2, kappa, pe, dm2,   &
-                        pm2, pem, w2, dz2, pt2, ws, p_fac, j, debug, ptop)
+                        pm2, pem, w2, dz2, pt2, ws, p_fac, j, debug, tau_w)
    integer, intent(in):: is, ie, km
-   real,    intent(in):: dt, rgas, gama, kappa, p_fac, ptop
+   real,    intent(in):: dt, rgas, gama, kappa, p_fac, tau_w
    real, intent(in), dimension(is:ie,km):: dm2, pt2, pm2, gm2, cp2
    real, intent(in )::  ws(is:ie)
    real, intent(in ), dimension(is:ie,km+1):: pem
@@ -1208,11 +1227,6 @@ CONTAINS
    real, dimension(is:ie):: p1, bet
    real t1g, rdt, capa1
    integer i, k
-
-   !for RF on W
-   real, parameter :: tau_w = 0.2
-   real, parameter :: rf_cutoff = 150.e2
-   real :: rff
 
 #ifdef MOIST_CAPPA
       t1g = 2.*dt*dt
@@ -1302,16 +1316,10 @@ CONTAINS
 
 !!! Try Rayleigh damping of w
     if (tau_w > 1.e-5) then
-       !setup damping parameters in-situ for now (save later)
-       !tau_w hard coded to 0.2 for now and rf_cutoff to 150.e2
        !currently not damping to heat
-       do k=1,km
+       do k=1,k_rf
           do i=is,ie
-             if ( pm2(i,k) < rf_cutoff) then
-                rff = dt/tau_w * sin(0.5*pi*log(rf_cutoff/pm2(i,k))/log(rf_cutoff/ptop))**2
-                rff = 1.0d0 / ( 1.0d0+rff)
-                w2(i,k) = w2(i,k)*rff
-             endif
+             w2(i,k) = w2(i,k)*rff(k)
           enddo
        enddo
     endif
@@ -1359,9 +1367,9 @@ CONTAINS
   end subroutine SIM1_solver
 
  subroutine SIM_solver(dt,  is,  ie, km, rgas, gama, gm2, cp2, kappa, pe2, dm2,   &
-                       pm2, pem, w2, dz2, pt2, ws, alpha, p_fac, scale_m, j, debug, ptop)
+                       pm2, pem, w2, dz2, pt2, ws, alpha, p_fac, scale_m, j, debug, tau_w)
    integer, intent(in):: is, ie, km
-   real, intent(in):: dt, rgas, gama, kappa, p_fac, alpha, scale_m, ptop
+   real, intent(in):: dt, rgas, gama, kappa, p_fac, alpha, scale_m, tau_w
    real, intent(in), dimension(is:ie,km):: dm2, pt2, pm2, gm2, cp2
    real, intent(in )::  ws(is:ie)
    real, intent(in ), dimension(is:ie,km+1):: pem
@@ -1375,11 +1383,6 @@ CONTAINS
    real, dimension(is:ie):: p1, wk1, bet
    real  beta, t2, t1g, rdt, ra, capa1
    integer i, k
-
-   !for RF on W
-   real, parameter :: tau_w = 0.2
-   real, parameter :: rf_cutoff = 150.e2
-   real :: rff
 
     beta = 1. - alpha
       ra = 1. / alpha
@@ -1486,16 +1489,10 @@ CONTAINS
 
 !!! Try Rayleigh damping of w
     if (tau_w > 1.e-5) then
-       !setup damping parameters in-situ for now (save later)
-       !tau_w hard coded to 0.2 for now and rf_cutoff to 150.e2
        !currently not damping to heat
-       do k=1,km
+       do k=1,k_rf
           do i=is,ie
-             if ( pm2(i,k) < rf_cutoff) then
-                rff = dt/tau_w * sin(0.5*pi*log(rf_cutoff/pm2(i,k))/log(rf_cutoff/ptop))**2 !ptop??
-                rff = 1.0d0 / ( 1.0d0+rff)
-                w2(i,k) = w2(i,k)*rff
-             endif
+             w2(i,k) = w2(i,k)*rff(k)
           enddo
        enddo
     endif
