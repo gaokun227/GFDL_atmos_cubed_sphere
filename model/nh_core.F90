@@ -45,7 +45,7 @@ CONTAINS
                           ptop, zs, q_con, w,  delz, pt,  &
                           delp, zh, pe, ppe, pk3, pk, peln, &
                           ws, scale_m,  p_fac, a_imp, &
-                          use_logp, last_call, fp_out, w_diff, debug)
+                          use_logp, last_call, fp_out, w_diff, debug, tau_w)
 !--------------------------------------------
 ! !OUTPUT PARAMETERS
 ! Ouput: gz: grav*height at edges
@@ -55,7 +55,7 @@ CONTAINS
    integer, intent(in):: ms, is, ie, js, je, km, ng
    integer, intent(in):: isd, ied, jsd, jed
    real, intent(in):: dt         ! the BIG horizontal Lagrangian time step
-   real, intent(in):: akap, cp, ptop, p_fac, a_imp, scale_m, w_diff
+   real, intent(in):: akap, cp, ptop, p_fac, a_imp, scale_m, w_diff, tau_w
    real, intent(in):: zs(isd:ied,jsd:jed)
    logical, intent(in):: last_call, use_logp, fp_out, debug
    real, intent(in):: ws(is:ie,js:je)
@@ -82,7 +82,7 @@ CONTAINS
 
 !$OMP parallel do default(none) shared(is,ie,js,je,km,delp,ptop,peln1,pk3,ptk,akap,rgrav,zh,pt, &
 !$OMP                                  w,a_imp,dt,gama,ws,p_fac,scale_m,ms,delz,last_call,  &
-!$OMP                                  peln,pk,fp_out,ppe,use_logp,zs,pe,cappa,q_con,w_diff,debug )     &
+!$OMP                                  peln,pk,fp_out,ppe,use_logp,zs,pe,cappa,q_con,w_diff,debug,tau_w)     &
 !$OMP                          private(cp2, gm2, dm, dz2, pm2, pem, peg, pelng, pe2, peln2, w2)
    do 2000 j=js, je
 
