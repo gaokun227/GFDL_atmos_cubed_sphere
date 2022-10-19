@@ -26,7 +26,7 @@
       use init_hydro_mod,    only: p_var, hydro_eq, hydro_eq_ext
       use fv_mp_mod,         only: is_master,        &
                                    domain_decomp, fill_corners, XDir, YDir, &
-                                   mp_stop, mp_reduce_sum, mp_reduce_max, mp_gather, mp_bcst
+                                   mp_stop, mp_reduce_sum, mp_reduce_max, mp_gather
       use fv_grid_utils_mod, only: cubed_to_latlon, great_circle_dist, mid_pt_sphere,    &
                                    ptop_min, inner_prod, get_latlon_vector, get_unit_vect2, &
                                    g_sum, latlon2xyz, cart_to_latlon, make_eta_level, f_p, project_sphere_v
@@ -42,7 +42,7 @@
       use mpp_domains_mod,   only: mpp_update_domains, domain2d
       use mpp_parameter_mod, only: AGRID_PARAM=>AGRID,CGRID_NE_PARAM=>CGRID_NE, &
                                    SCALAR_PAIR
-      use fv_sg_mod,         only: qsmith
+      use gfdl_mp_mod,       only: mqs3d
       use fv_diagnostics_mod, only: prt_maxmin, ppme, eqv_pot, qcly0, is_ideal_case
       use mpp_mod,            only: mpp_pe, mpp_chksum, stdout
       use fv_arrays_mod,         only: fv_grid_type, fv_flags_type, fv_grid_bounds_type, R_GRID
@@ -164,6 +164,10 @@
      real  , allocatable :: case9_B(:,:)
      real   :: AofT(2)
 
+     ! case 20 -doubly periodic- idealized TC
+     real :: dp_TC = 1115.
+     real :: rp_TC = 100000.
+     real :: Ts_TC = 300.
 
      !  Validating fields used in statistics
      real  , allocatable :: phi0(:,:,:) ! Validating Field
@@ -807,8 +811,6 @@
      ! call mpp_update_domains( vor0, domain )
      ! call mpp_update_domains( divg, domain )
      ! call mpp_update_domains( vort, domain )
-!!$      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
-!!$                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
  200  format(i4.4,'x',i4.4,'x',i4.4,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14,' ',e21.14)
  201  format('          ',A,e21.14,' ',e21.14)
  202  format('          ',A,i4.4,'x',i4.4,'x',i4.4)
@@ -840,8 +842,6 @@
         ua0 = ua
         va0 = va
         div0(:,:) = 1.e-20
-!!$      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
-!!$                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
       if ( is_master() ) then
           write(*,*) ' Error Norms of Analytical Divergence field A-Winds initialized'
           write(*,201) 'Divergence MAX error     : ', pmax
@@ -870,8 +870,6 @@
            enddo
         enddo
         div0(:,:) = 1.e-20
-!!$      call get_scalar_stats( divg, div0, npx, npy, ndims, nregions, &
-!!$                             pmin, pmax, L1_norm, L2_norm, Linf_norm, gridstruct, tile)
       if ( is_master() ) then
           write(*,*) ' Error Norms of Analytical Divergence field D-Winds initialized'
           write(*,201) 'Divergence MAX error     : ', pmax
@@ -1235,11 +1233,6 @@
                pt8 = gh_jet(npy, grid(i+1,j+1,2))
                pt9 = gh_jet(npy, grid(i  ,j+1,2))
                ftmp = 0.25*pt1 + 0.125*(pt2+pt3+pt4+pt5) + 0.0625*(pt6+pt7+pt8+pt9)
-!!$               delp(i,j,1) = ftmp + 120.*grav*cos(agrid(i,j,2)) *  &
-!!$               exp( -(3.*(agrid(i,j,1)-pi))**2 ) * exp( -(15.*(agrid(i,j,2)-pi/4.))**2 )
-!!$!              phis(i,j) = ftmp
-!!$!              delp(i,j,1) = 10.E3*grav + 120.*grav*cos(agrid(i,j,2)) *  &
-!!$!              exp( -(3.*(agrid(i,j,1)-pi))**2 ) * exp( -(15.*(agrid(i,j,2)-pi/4.))**2 )
 ! Using great circle dist:
                p1(:) = agrid(i,j,1:2)
                delp(i,j,1) = ftmp
@@ -1576,24 +1569,6 @@
          !For consistency with earlier single-grid simulations use gh0 = 1.0e-6 and p1(1) = 195.*pi/180.
          q(:,:,:,:) = 0.
 
-!!$         gh0  = 1.0e-3
-!!$         r0 = radius/3. !RADIUS radius/3.
-!!$         p1(2) = 51.*pi/180.
-!!$         p1(1) = 205.*pi/180. !231.*pi/180.
-!!$         do k=1,npz
-!!$         do j=jsd,jed
-!!$         do i=isd,ied
-!!$            p2(1) = agrid(i,j,1)
-!!$            p2(2) = agrid(i,j,2)
-!!$            r = great_circle_dist( p1, p2, radius )
-!!$            if (r < r0 .and. .not.( abs(p1(2)-p2(2)) < 1./18. .and. p2(1)-p1(1) < 5./36.) .and. k > 16) then
-!!$               q(i,j,k,1) = gh0
-!!$            else
-!!$               q(i,j,k,1) = 0.
-!!$            endif
-!!$         enddo
-!!$         enddo
-!!$         enddo
 
     ! Initialize surface Pressure
          ps(:,:) = 1.e5
@@ -3928,7 +3903,7 @@ end subroutine terminator_tracers
 
   real, intent(in):: ubar ! max wind (m/s)
   real, intent(in):: r0   ! Radius of max wind (m)
-  real, intent(in):: p1(2)   ! center position (longitude, latitude) in radian
+  real(kind=R_GRID), intent(in):: p1(2)   ! center position (longitude, latitude) in radian
   real, intent(inout):: u(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
   real, intent(inout):: v(bd%isd:bd%ied+1,bd%jsd:bd%jed)
   real(kind=R_GRID), intent(IN) :: grid(bd%isd:bd%ied+1,bd%jsd:bd%jed+1,2)
@@ -4013,8 +3988,9 @@ end subroutine terminator_tracers
 
      real function gh_jet(npy, lat_in)
      integer, intent(in):: npy
-     real, intent(in):: lat_in
-     real lat, lon, dp, uu
+     real(kind=R_GRID), intent(in):: lat_in
+     real(kind=R_GRID) lat, lon, dp
+     real uu
      real h0, ft
      integer j,jm
 
@@ -4059,7 +4035,7 @@ end subroutine terminator_tracers
      end function gh_jet
 
      real function u_jet(lat)
-      real lat, lon, dp
+      real(kind=R_GRID) lat, lon, dp
       real umax, en, ph0, ph1
 
       umax = 80.
@@ -4077,7 +4053,7 @@ end subroutine terminator_tracers
       subroutine get_case9_B(B, agrid, isd, ied, jsd, jed)
       integer, intent(IN) :: isd, ied, jsd, jed
       real, intent(OUT) :: B(isd:ied,jsd:jed)
-      real, intent(IN) :: agrid(isd:ied,jsd:jed,2)
+      real(kind=R_GRID), intent(IN) :: agrid(isd:ied,jsd:jed,2)
       real :: myC,yy,myB
       integer :: i,j
 ! Generate B forcing function
@@ -4583,6 +4559,24 @@ end subroutine terminator_tracers
         real :: sigma, mu, amp, zint, zmid, qsum, pint, pmid
         real :: N2, N2b, th0, ths, pks, rkap, ampb, thl
         real :: dz, thp, pp, zt, p_t, pkp, dlogp, logpb, lcl, tl, qt
+
+!Test case 20
+        real, dimension(npz+1) :: pe0, gz0, ue, ve, we, pte, qe
+        real :: d, dp, cor, exppr, exppz, gamma, Ts0, q00, exponent, ztrop, height, zp, rp
+        real :: qtrop, ttrop, zq1, zq2, r
+        real :: dum, dum1, dum2, dum3, dum4, dum5, dum6, uetmp, vetmp
+        real ::   pe_u(bd%is:bd%ie,npz+1,bd%js:bd%je+1)
+        real ::   pe_v(bd%is:bd%ie+1,npz+1,bd%js:bd%je)
+        real ::   ps_u(bd%is:bd%ie,bd%js:bd%je+1)
+        real ::   ps_v(bd%is:bd%ie+1,bd%js:bd%je)
+
+        real(kind=R_GRID) :: p1(2), p2(2), p3(2), p4(2)
+        real(kind=R_GRID) :: e1(3), e2(3), ex(3), ey(3)
+        integer :: z
+        real(kind=R_GRID)   :: p0(2)       ! Temporary Point
+        real :: d1, d2
+
+
         integer :: o3mr, liq_wat
         integer :: i, j, k, m, icenter, jcenter
         real, parameter :: hlv = 2.5e6 ! gfs: latent heat of evaporation
@@ -4773,7 +4767,7 @@ end subroutine terminator_tracers
                do i=is,ie
                   pm(i) = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
                enddo
-               call qsmith(ie-is+1, 1, 1, pt(is:ie,j,k), pm, q(is:ie,j,k,1), qs)
+               call mqs3d(ie-is+1, 1, 1, pt(is:ie,j,k), pm, q(is:ie,j,k,1), qs)
                do i=is,ie
                   q(i,j,k,1) = max(2.E-6, 0.8*pm(i)/ps(i,j)*qs(i) )
                enddo
@@ -4838,14 +4832,6 @@ end subroutine terminator_tracers
            enddo
 
 
-!!$           do k=1,npz
-!!$              do j=jsd,jed
-!!$                 do i=isd,ied
-!!$                         ptmp = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
-!!$!                   pt(i,j,k) = t00
-!!$                 enddo
-!!$              enddo
-!!$           enddo
 
           call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
                      pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
@@ -5278,6 +5264,246 @@ end subroutine terminator_tracers
         endif
 
 
+        case ( 20 )
+!---------------------------------------------------------
+! Tropical cyclone
+! adapted from case 55 - Joseph M.
+!---------------------------------------------------------
+
+         !p0(1) = (0.) * pi / 180.
+         p0(1) = (-50.) * pi / 180. !weird physics IC (tsc) when this is around 0
+         p0(2) = (flagstruct%deglat) * pi / 180.
+
+         !original
+         !dp = 1115.
+         !rp = 100000.
+
+         dp = dp_TC
+         rp = rp_TC
+         Ts0 = Ts_TC
+
+         if (is_master()) print*, "Initializing TC (dp,rp):", dp, rp, &
+         "in a doubly periodic domain at: lon/lat (deg)", p0(1) * 180./pi, p0(2)*180. /pi
+
+         p00 = 101500.
+
+         ps = p00
+
+         do j=js,je
+         do i=is,ie
+            p2(:) = agrid(i,j,1:2)
+            r = great_circle_dist( p0, p2, radius )
+            ps(i,j) = p00 - dp*exp(-(r/rp)**1.5)
+            phis(i,j) = 0.
+         enddo
+         enddo
+
+        call prt_maxmin('PS', ps(is:ie,js:je), is, ie, js, je, 0, 1, 0.01)
+
+         ! Initialize delta-P
+         do z=1,npz
+         do j=js,je
+         do i=is,ie
+            delp(i,j,z) = ak(z+1)-ak(z) + ps(i,j)*(bk(z+1)-bk(z))
+         enddo
+         enddo
+         enddo
+
+         !Pressure
+         do j=js,je
+            do i=is,ie
+               pe(i,1,j) = ptop
+            enddo
+            do k=2,npz+1
+            do i=is,ie
+               pe(i,k,j) = pe(i,k-1,j) + delp(i,j,k-1)
+            enddo
+            enddo
+         enddo
+
+         !Pressure on v-grid and u-grid points
+         do j=js,je
+         do i=is,ie+1
+            p2(:) = 0.5*(grid(i,j,1:2)+grid(i,j+1,1:2))
+            r = great_circle_dist( p0, p2, radius )
+            ps_v(i,j) = p00 - dp*exp(-(r/rp)**1.5)
+         enddo
+         enddo
+         do j=js,je+1
+         do i=is,ie
+            p2(:) = 0.5*(grid(i,j,1:2)+grid(i+1,j,1:2))
+            r = great_circle_dist( p0, p2, radius )
+            ps_u(i,j) = p00 - dp*exp(-(r/rp)**1.5)
+         enddo
+         enddo
+
+         !Pressure
+         do j=js,je
+            do i=is,ie+1
+               pe_v(i,1,j) = ptop
+            enddo
+            do k=2,npz+1
+            do i=is,ie+1
+               pe_v(i,k,j) = ak(k) + ps_v(i,j)*bk(k)
+            enddo
+            enddo
+         enddo
+         do j=js,je+1
+            do i=is,ie
+               pe_u(i,1,j) = ptop
+            enddo
+            do k=2,npz+1
+            do i=is,ie
+               pe_u(i,k,j) = ak(k) + ps_u(i,j)*bk(k)
+            enddo
+            enddo
+         enddo
+
+         !Everything else
+         !if (adiabatic) then
+         !   zvir = 0.
+         !else
+            zvir = rvgas/rdgas - 1.
+         !endif
+
+         ! Use p0 from above
+         !p0 = (/ pi, pi/18. /)
+
+         exppr = 1.5
+         exppz = 2.
+         gamma = 0.007
+         !Ts0 = 302.15
+         q00 = 0.021
+         t00 = Ts0*(1.+zvir*q00)
+         exponent = rdgas*gamma/grav
+         ztrop = 15000.
+         zp = 7000.
+         cor = 2.*omega*sin(p0(2)) !Coriolis at vortex center
+
+         !Initialize winds separately on the D-grid
+         do j=js,je
+            do i=is,ie+1
+               p1(:) = grid(i  ,j ,1:2)
+               p2(:) = grid(i,j+1 ,1:2)
+               call mid_pt_sphere(p1, p2, p3)
+               call get_unit_vect2(p1, p2, e2)
+               call get_latlon_vector(p3, ex, ey)
+
+               d1 = sin(p0(2))*cos(p3(2)) - cos(p0(2))*sin(p3(2))*cos(p3(1)-p0(1))
+               d2 = cos(p0(2))*sin(p3(1)-p0(1))
+               d = max(1.e-15,sqrt(d1**2+d2**2))
+
+               r = great_circle_dist( p0, p3, radius )
+
+               do k=1,npz
+                  ptmp = 0.5*(pe_v(i,k,j)+pe_v(i,k+1,j))
+                  height = (t00/gamma)*(1.-(ptmp/ps_v(i,j))**exponent)
+                  if (height > ztrop) then
+                     v(i,j,k) = 0.
+                  else
+                     utmp = 1.d0/d*(-cor*r/2.d0+sqrt((cor*r/2.d0)**(2.d0) &
+                          - exppr*(r/rp)**exppr*rdgas*(t00-gamma*height) &
+                          /(exppz*height*rdgas*(t00-gamma*height)/(grav*zp**exppz) &
+                          +(1.d0-p00/dp*exp((r/rp)**exppr)*exp((height/zp)**exppz)))))
+                     vtmp = utmp*d2
+                     utmp = utmp*d1
+
+                     v(i,j,k) = utmp*inner_prod(e2,ex) + vtmp*inner_prod(e2,ey)
+
+                  endif
+               enddo
+            enddo
+         enddo
+         do j=js,je+1
+            do i=is,ie
+               p1(:) = grid(i,  j,1:2)
+               p2(:) = grid(i+1,j,1:2)
+               call mid_pt_sphere(p1, p2, p3)
+               call get_unit_vect2(p1, p2, e1)
+               call get_latlon_vector(p3, ex, ey)
+
+               d1 = sin(p0(2))*cos(p3(2)) - cos(p0(2))*sin(p3(2))*cos(p3(1)-p0(1))
+               d2 = cos(p0(2))*sin(p3(1)-p0(1))
+               d = max(1.e-15,sqrt(d1**2+d2**2))
+
+               r = great_circle_dist( p0, p3, radius )
+
+               do k=1,npz
+                  ptmp = 0.5*(pe_u(i,k,j)+pe_u(i,k+1,j))
+                  height = (t00/gamma)*(1.-(ptmp/ps_u(i,j))**exponent)
+                  if (height > ztrop) then
+                     v(i,j,k) = 0.
+                  else
+                     utmp = 1.d0/d*(-cor*r/2.d0+sqrt((cor*r/2.d0)**(2.d0) &
+                          - exppr*(r/rp)**exppr*rdgas*(t00-gamma*height) &
+                          /(exppz*height*rdgas*(t00-gamma*height)/(grav*zp**exppz) &
+                          +(1.d0-p00/dp*exp((r/rp)**exppr)*exp((height/zp)**exppz)))))
+                     vtmp = utmp*d2
+                     utmp = utmp*d1
+
+                     u(i,j,k) = utmp*inner_prod(e1,ex) + vtmp*inner_prod(e1,ey)
+                  endif
+               enddo
+
+            enddo
+         enddo
+
+         qtrop = 1.e-11
+         ttrop = t00 - gamma*ztrop
+         zq1 = 3000.
+         zq2 = 8000.
+
+         q(:,:,:,:) = 0.
+
+         do k=1,npz
+         do j=js,je
+         do i=is,ie
+               ptmp = 0.5*(pe(i,k,j)+pe(i,k+1,j))
+               height = (t00/gamma)*(1.-(ptmp/ps(i,j))**exponent)
+               if (height > ztrop) then
+                  q(i,j,k,1) = qtrop
+                  pt(i,j,k) = Ttrop
+               else
+                  q(i,j,k,1) = q00*exp(-height/zq1)*exp(-(height/zq2)**exppz)
+                  p2(:) = agrid(i,j,1:2)
+                  r = great_circle_dist( p0, p2, radius )
+                  pt(i,j,k) = (T00-gamma*height)/(1.d0+zvir*q(i,j,k,1))/(1.d0+exppz*Rdgas*(T00-gamma*height)*height &
+                       /(grav*zp**exppz*(1.d0-p00/dp*exp((r/rp)**exppr)*exp((height/zp)**exppz))))
+               end if
+         enddo
+         enddo
+         enddo
+
+
+         !Note that this is already the moist pressure
+         do j=js,je
+         do i=is,ie
+            ps(i,j) = pe(i,npz+1,j)
+         enddo
+         enddo
+
+         if (.not.hydrostatic) then
+             do k=1,npz
+                do j=js,je
+                   do i=is,ie
+                      delz(i,j,k) = rdgas*pt(i,j,k)*(1.+zvir*q(i,j,k,1))/grav*log(pe(i,k,j)/pe(i,k+1,j))
+                         w(i,j,k) = 0.0
+                   enddo
+                enddo
+             enddo
+         endif
+
+         call dtoa(u , v , ua, va, dx,dy,dxa,dya,dxc,dyc,npx, npy, ng, bd)
+
+         call prt_maxmin('PS end', ps(is:ie,js:je), is, ie, js, je, 0, 1, 0.01)
+         call prt_maxmin('Delz', delz(is:ie,js:je,:), is, ie, js, je, 0, 1, 0.01)
+
+         call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                   pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                   .true., hydrostatic, nwat, domain, flagstruct%adiabatic)
+
+
+
         case ( 21 )
 !---------------------------------------------------------
 ! Mountain wave
@@ -5611,7 +5837,7 @@ end subroutine terminator_tracers
                do i=is,ie
                   pm(i) = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
                enddo
-               call qsmith(ie-is+1, 1, 1, pt(is:ie,j,k), pm, q(is:ie,j,k,1), qs)
+               call mqs3d(ie-is+1, 1, 1, pt(is:ie,j,k), pm, q(is:ie,j,k,1), qs)
                do i=is,ie
                   if ( pm(i) > 100.E2 ) then
                        q(i,j,k,1) = 0.9*qs(i)
@@ -5901,13 +6127,12 @@ end subroutine terminator_tracers
 
       end subroutine init_double_periodic
 
-      subroutine read_namelist_test_case_nml(nml_filename)
+      subroutine read_namelist_test_case_nml()
 
-        character(*), intent(IN) :: nml_filename
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
              no_wind, gaussian_dt, dt_amp, dt_rad, do_marine_sounding, checker_tr, small_earth_scale, &
-             Umean, Vmean, w_forcing
+             Umean, Vmean, w_forcing, dp_TC, rp_TC, Ts_TC
 
 #include<file_version.h>
 
@@ -6254,7 +6479,7 @@ end subroutine terminator_tracers
 
 
  subroutine SuperCell_Sounding(km, ps, pk1, tp, qp)
- use gfdl_mp_mod, only: wqsat_moist, qsmith_init, qs_blend
+ use gfdl_mp_mod, only: qs_init, wqs, mqs
 ! Morris Weisman & J. Klemp 2002 sounding
 ! Output sounding on pressure levels:
  integer, intent(in):: km
@@ -6284,7 +6509,7 @@ end subroutine terminator_tracers
      write(*,*) 'Computing sounding for super-cell test'
  endif
 
- call qsmith_init
+ call qs_init
 
  dz0 = 50.
  zs(ns) = 0.
@@ -6329,7 +6554,7 @@ end subroutine terminator_tracers
 !      if ( (is_master()) ) write(*,*) k, temp1, rh(k)
        if ( pk(k) > 0. ) then
             pp(k) = exp(log(pk(k))/kappa)
-            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
+            qs(k) = min(qv0, rh(k)*wqs(temp1, pp(k), qs(k)))
             !qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
             !if ( (is_master()) ) write(*,*) 0.001*pp(k), qs(k)
        else
@@ -6368,7 +6593,7 @@ end subroutine terminator_tracers
 
 ! added by Linjiong Zhou
  subroutine SuperCell_Sounding_Marine(km, ps, pk1, tp, qp)
- use gfdl_mp_mod, only: wqsat_moist, qsmith_init, qs_blend
+ use gfdl_mp_mod, only: qs_init, wqs, mqs
 ! Morris Weisman & J. Klemp 2002 sounding
 ! Output sounding on pressure levels:
  integer, intent(in):: km
@@ -6398,7 +6623,7 @@ end subroutine terminator_tracers
      write(*,*) 'Computing sounding for super-cell test'
  endif
 
- !call qsmith_init
+ !call qs_init
 
  dz0 = 50.
  zs(ns) = 0.
@@ -6450,9 +6675,9 @@ end subroutine terminator_tracers
 !#else
 !
 !#ifdef USE_MIXED_TABLE
-!            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+!            qs(k) = min(qv0, rh(k)*mqs(temp1, pp(k), qs(k)))
 !#else
-!            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
+!            qs(k) = min(qv0, rh(k)*wqs(temp1, pp(k), qs(k)))
 !#endif
 !
 !#endif
@@ -6492,7 +6717,7 @@ end subroutine terminator_tracers
 
  ! added by Linjiong Zhou
  subroutine Marine_Sounding(km, ps, pk1, tp, qp)
- use gfdl_mp_mod, only: wqsat_moist, qsmith_init, qs_blend
+ use gfdl_mp_mod, only: qs_init, wqs, mqs
 ! JASMINE CETRONE AND ROBERT A. HOUZE JR. MWR 225
 ! Output sounding on pressure levels:
  integer, intent(in):: km
@@ -6523,7 +6748,7 @@ end subroutine terminator_tracers
      write(*,*) 'Computing sounding for super-cell test'
  endif
 
- call qsmith_init
+ call qs_init
 
  dz0 = 50.
  zs(ns) = 0.
@@ -6577,9 +6802,9 @@ end subroutine terminator_tracers
 #else
 
 #ifdef USE_MIXED_TABLE
-            qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+            qs(k) = min(qv0, rh(k)*mqs(temp1, pp(k), qs(k)))
 #else
-            qs(k) = min(qv0, rh(k)*wqsat_moist(temp1, qs(k), pp(k)))
+            qs(k) = min(qv0, rh(k)*wqs(temp1, pp(k), qs(k)))
 #endif
 
 #endif

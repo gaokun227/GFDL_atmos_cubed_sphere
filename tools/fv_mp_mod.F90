@@ -33,6 +33,7 @@
       use mpp_mod,         only : mpp_declare_pelist, mpp_set_current_pelist, mpp_sync
       use mpp_mod,         only : mpp_clock_begin, mpp_clock_end, mpp_clock_id
       use mpp_mod,         only : mpp_chksum, stdout, stderr, mpp_broadcast
+      use mpp_mod,         only : mpp_min, mpp_max, mpp_sum
       use mpp_mod,         only : mpp_send, mpp_recv, mpp_sync_self, EVENT_RECV, mpp_gather
       use mpp_domains_mod, only : GLOBAL_DATA_DOMAIN, BITWISE_EXACT_SUM, BGRID_NE, FOLD_NORTH_EDGE, CGRID_NE
       use mpp_domains_mod, only : MPP_DOMAIN_TIME, CYCLIC_GLOBAL_DOMAIN, NUPDATE,EUPDATE, XUPDATE, YUPDATE, SCALAR_PAIR
@@ -94,7 +95,7 @@
       type(nest_domain_type) :: global_nest_domain !ONE structure for ALL levels of nesting
 
       public mp_start, mp_assign_gid, mp_barrier, mp_stop!, npes
-      public domain_decomp, mp_bcst, mp_reduce_max, mp_reduce_sum, mp_gather
+      public domain_decomp, mp_reduce_max, mp_reduce_sum, mp_gather
       public mp_reduce_min
       public fill_corners, XDir, YDir
       public switch_current_domain, switch_current_Atm, broadcast_domains
@@ -133,24 +134,6 @@
       INTERFACE fill_corners_dgrid
         MODULE PROCEDURE fill_corners_dgrid_r4
         MODULE PROCEDURE fill_corners_dgrid_r8
-      END INTERFACE
-
-      INTERFACE mp_bcst
-        MODULE PROCEDURE mp_bcst_i4
-        MODULE PROCEDURE mp_bcst_r4
-        MODULE PROCEDURE mp_bcst_r8
-        MODULE PROCEDURE mp_bcst_1d_r4
-        MODULE PROCEDURE mp_bcst_1d_r8
-        MODULE PROCEDURE mp_bcst_2d_r4
-        MODULE PROCEDURE mp_bcst_2d_r8
-        MODULE PROCEDURE mp_bcst_3d_r4
-        MODULE PROCEDURE mp_bcst_3d_r8
-        MODULE PROCEDURE mp_bcst_4d_r4
-        MODULE PROCEDURE mp_bcst_4d_r8
-        MODULE PROCEDURE mp_bcst_1d_i
-        MODULE PROCEDURE mp_bcst_2d_i
-        MODULE PROCEDURE mp_bcst_3d_i8
-        MODULE PROCEDURE mp_bcst_4d_i8
       END INTERFACE
 
       INTERFACE mp_reduce_min
@@ -1486,7 +1469,6 @@ end subroutine switch_current_Atm
             Ldispl(l) = 5*(l-1)
          enddo
          call mpp_gather(Ldims, Gdims)
-!         call MPI_GATHERV(Ldims, 5, MPI_INTEGER, Gdims, cnts, Ldispl, MPI_INTEGER, masterproc, commglobal, ierror)
 
          Lsize = ( (i2 - i1 + 1) * (j2 - j1 + 1) ) * kdim
          do l=1,npes_this_grid
@@ -1496,7 +1478,6 @@ end subroutine switch_current_Atm
          LsizeS(:)=1
          Lsize_buf(1) = Lsize
          call mpp_gather(Lsize_buf, LsizeS)
-!         call MPI_GATHERV(Lsize, 1, MPI_INTEGER, LsizeS, cnts, Ldispl, MPI_INTEGER, masterproc, commglobal, ierror)
 
          allocate ( larr(Lsize) )
          icnt = 1
@@ -1509,18 +1490,15 @@ end subroutine switch_current_Atm
             enddo
          enddo
          Ldispl(1) = 0.0
-!         call mp_bcst(LsizeS(1))
          call mpp_broadcast(LsizeS, npes_this_grid, masterproc)
          Gsize = LsizeS(1)
          do l=2,npes_this_grid
-!            call mp_bcst(LsizeS(l))
             Ldispl(l) = Ldispl(l-1) + LsizeS(l-1)
             Gsize = Gsize + LsizeS(l)
          enddo
          allocate ( garr(Gsize) )
 
          call mpp_gather(larr, Lsize, garr, LsizeS)
-!         call MPI_GATHERV(larr, Lsize, MPI_REAL, garr, LsizeS, Ldispl, MPI_REAL, masterproc, commglobal, ierror)
 
          if (gid==masterproc) then
             do n=2,npes_this_grid
@@ -1571,7 +1549,6 @@ end subroutine switch_current_Atm
             cnts(l) = 5
             Ldispl(l) = 5*(l-1)
          enddo
-!         call MPI_GATHERV(Ldims, 5, MPI_INTEGER, Gdims, cnts, Ldispl, MPI_INTEGER, masterproc, commglobal, ierror)
          call mpp_gather(Ldims, Gdims)
 
          Lsize = ( (i2 - i1 + 1) * (j2 - j1 + 1) )
@@ -1582,7 +1559,6 @@ end subroutine switch_current_Atm
          LsizeS(:)=1
          Lsize_buf(1) = Lsize
          call mpp_gather(Lsize_buf, LsizeS)
-!         call MPI_GATHERV(Lsize, 1, MPI_INTEGER, LsizeS, cnts, Ldispl, MPI_INTEGER, masterproc, commglobal, ierror)
 
          allocate ( larr(Lsize) )
          icnt = 1
@@ -1593,17 +1569,14 @@ end subroutine switch_current_Atm
             enddo
          enddo
          Ldispl(1) = 0.0
-!         call mp_bcst(LsizeS(1))
          call mpp_broadcast(LsizeS, npes_this_grid, masterproc)
          Gsize = LsizeS(1)
          do l=2,npes_this_grid
-!            call mp_bcst(LsizeS(l))
             Ldispl(l) = Ldispl(l-1) + LsizeS(l-1)
             Gsize = Gsize + LsizeS(l)
          enddo
          allocate ( garr(Gsize) )
          call mpp_gather(larr, Lsize, garr, LsizeS)
-!         call MPI_GATHERV(larr, Lsize, MPI_REAL, garr, LsizeS, Ldispl, MPI_REAL, masterproc, commglobal, ierror)
          if (gid==masterproc) then
             do n=2,npes_this_grid
                icnt=1
@@ -1659,7 +1632,6 @@ end subroutine switch_current_Atm
          enddo
          LsizeS(:)=0.
 
-!         call MPI_GATHERV(Lsize, 1, MPI_INTEGER, LsizeS, cnts, Ldispl, MPI_INTEGER, masterproc, commglobal, ierror)
          Lsize_buf(1) = Lsize
          call mpp_gather(Lsize_buf, LsizeS)
 
@@ -1673,17 +1645,14 @@ end subroutine switch_current_Atm
          enddo
          Ldispl(1) = 0.0
          call mpp_broadcast(LsizeS, npes_this_grid, masterproc)
-!         call mp_bcst(LsizeS(1))
          Gsize = LsizeS(1)
          do l=2,npes_this_grid
-!            call mp_bcst(LsizeS(l))
             Ldispl(l) = Ldispl(l-1) + LsizeS(l-1)
             Gsize = Gsize + LsizeS(l)
          enddo
 
          allocate ( garr(Gsize) )
          call mpp_gather(larr, Lsize, garr, LsizeS)
-!         call MPI_GATHERV(larr, Lsize, MPI_DOUBLE_PRECISION, garr, LsizeS, Ldispl, MPI_DOUBLE_PRECISION, masterproc, commglobal, ierror)
          if (gid==masterproc) then
             do n=2,npes_this_grid
                icnt=1
@@ -1705,243 +1674,6 @@ end subroutine switch_current_Atm
 ! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
 !-------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_i4 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_i4(q)
-         integer, intent(INOUT)  :: q
-
-         call MPI_BCAST(q, 1, MPI_INTEGER, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_i4
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_r4 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_r4(q)
-         real(kind=4), intent(INOUT)  :: q
-
-         call MPI_BCAST(q, 1, MPI_REAL, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_r4
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_r8 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_r8(q)
-         real(kind=8), intent(INOUT)  :: q
-
-         call MPI_BCAST(q, 1, MPI_DOUBLE_PRECISION, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_r8
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_1d_r4 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_1d_r4(q, idim)
-         integer, intent(IN)  :: idim
-         real(kind=4), intent(INOUT)  :: q(idim)
-
-         call MPI_BCAST(q, idim, MPI_REAL, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_1d_r4
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_1d_r8 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_1d_r8(q, idim)
-         integer, intent(IN)  :: idim
-         real(kind=8), intent(INOUT)  :: q(idim)
-
-         call MPI_BCAST(q, idim, MPI_DOUBLE_PRECISION, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_1d_r8
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_2d_r4 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_2d_r4(q, idim, jdim)
-         integer, intent(IN)  :: idim, jdim
-         real(kind=4), intent(INOUT)  :: q(idim,jdim)
-
-         call MPI_BCAST(q, idim*jdim, MPI_REAL, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_2d_r4
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_2d_r8 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_2d_r8(q, idim, jdim)
-         integer, intent(IN)  :: idim, jdim
-         real(kind=8), intent(INOUT)  :: q(idim,jdim)
-
-         call MPI_BCAST(q, idim*jdim, MPI_DOUBLE_PRECISION, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_2d_r8
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_3d_r4 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_3d_r4(q, idim, jdim, kdim)
-         integer, intent(IN)  :: idim, jdim, kdim
-         real(kind=4), intent(INOUT)  :: q(idim,jdim,kdim)
-
-         call MPI_BCAST(q, idim*jdim*kdim, MPI_REAL, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_3d_r4
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_3d_r8 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_3d_r8(q, idim, jdim, kdim)
-         integer, intent(IN)  :: idim, jdim, kdim
-         real(kind=8), intent(INOUT)  :: q(idim,jdim,kdim)
-
-         call MPI_BCAST(q, idim*jdim*kdim, MPI_DOUBLE_PRECISION, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_3d_r8
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_4d_r4 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_4d_r4(q, idim, jdim, kdim, ldim)
-         integer, intent(IN)  :: idim, jdim, kdim, ldim
-         real(kind=4), intent(INOUT)  :: q(idim,jdim,kdim,ldim)
-
-         call MPI_BCAST(q, idim*jdim*kdim*ldim, MPI_REAL, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_4d_r4
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_4d_r8 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_4d_r8(q, idim, jdim, kdim, ldim)
-         integer, intent(IN)  :: idim, jdim, kdim, ldim
-         real(kind=8), intent(INOUT)  :: q(idim,jdim,kdim,ldim)
-
-         call MPI_BCAST(q, idim*jdim*kdim*ldim, MPI_DOUBLE_PRECISION, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_4d_r8
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_1d_i :: Call SPMD broadcast
-!
-      subroutine mp_bcst_1d_i(q, idim)
-         integer, intent(IN)  :: idim
-         integer, intent(INOUT)  :: q(idim)
-
-         call MPI_BCAST(q, idim, MPI_INTEGER, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_1d_i
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_2d_i :: Call SPMD broadcast
-!
-      subroutine mp_bcst_2d_i(q, idim, jdim)
-         integer, intent(IN)  :: idim, jdim
-         integer, intent(INOUT)  :: q(idim,jdim)
-
-         call MPI_BCAST(q, idim*jdim, MPI_INTEGER, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_2d_i
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_3d_i8 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_3d_i8(q, idim, jdim, kdim)
-         integer, intent(IN)  :: idim, jdim, kdim
-         integer, intent(INOUT)  :: q(idim,jdim,kdim)
-
-         call MPI_BCAST(q, idim*jdim*kdim, MPI_INTEGER, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_3d_i8
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
-!-------------------------------------------------------------------------------
-! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
-!
-!     mp_bcst_4d_i8 :: Call SPMD broadcast
-!
-      subroutine mp_bcst_4d_i8(q, idim, jdim, kdim, ldim)
-         integer, intent(IN)  :: idim, jdim, kdim, ldim
-         integer, intent(INOUT)  :: q(idim,jdim,kdim,ldim)
-
-         call MPI_BCAST(q, idim*jdim*kdim*ldim, MPI_INTEGER, masterproc, commglobal, ierror)
-
-      end subroutine mp_bcst_4d_i8
-!
-! ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ !
-!-------------------------------------------------------------------------------
-
 
 !-------------------------------------------------------------------------------
 ! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
@@ -1954,10 +1686,11 @@ end subroutine switch_current_Atm
 
          real(kind=4) :: gmax(npts)
 
-         call MPI_ALLREDUCE( mymax, gmax, npts, MPI_REAL, MPI_MAX, &
-                             commglobal, ierror )
-
-         mymax = gmax
+         call mpp_max (mymax, npts)
+!         call MPI_ALLREDUCE( mymax, gmax, npts, MPI_REAL, MPI_MAX, &
+!                             commglobal, ierror )
+!
+!         mymax = gmax
 
       end subroutine mp_reduce_max_r4_1d
 !
@@ -1976,10 +1709,11 @@ end subroutine switch_current_Atm
 
          real(kind=8) :: gmax(npts)
 
-         call MPI_ALLREDUCE( mymax, gmax, npts, MPI_DOUBLE_PRECISION, MPI_MAX, &
-                             commglobal, ierror )
-
-         mymax = gmax
+         call mpp_max (mymax, npts)
+!         call MPI_ALLREDUCE( mymax, gmax, npts, MPI_DOUBLE_PRECISION, MPI_MAX, &
+!                             commglobal, ierror )
+!
+!         mymax = gmax
 
       end subroutine mp_reduce_max_r8_1d
 !
@@ -1997,10 +1731,11 @@ end subroutine switch_current_Atm
 
          real(kind=4) :: gmax
 
-         call MPI_ALLREDUCE( mymax, gmax, 1, MPI_REAL, MPI_MAX, &
-                             commglobal, ierror )
-
-         mymax = gmax
+         call mpp_max (mymax)
+!         call MPI_ALLREDUCE( mymax, gmax, 1, MPI_REAL, MPI_MAX, &
+!                             commglobal, ierror )
+!
+!         mymax = gmax
 
       end subroutine mp_reduce_max_r4
 
@@ -2014,10 +1749,11 @@ end subroutine switch_current_Atm
 
          real(kind=8) :: gmax
 
-         call MPI_ALLREDUCE( mymax, gmax, 1, MPI_DOUBLE_PRECISION, MPI_MAX, &
-                             commglobal, ierror )
-
-         mymax = gmax
+         call mpp_max (mymax)
+!         call MPI_ALLREDUCE( mymax, gmax, 1, MPI_DOUBLE_PRECISION, MPI_MAX, &
+!                             commglobal, ierror )
+!
+!         mymax = gmax
 
       end subroutine mp_reduce_max_r8
 
@@ -2026,10 +1762,11 @@ end subroutine switch_current_Atm
 
          real(kind=4) :: gmin
 
-         call MPI_ALLREDUCE( mymin, gmin, 1, MPI_REAL, MPI_MIN, &
-                             commglobal, ierror )
-
-         mymin = gmin
+         call mpp_min (mymin)
+!         call MPI_ALLREDUCE( mymin, gmin, 1, MPI_REAL, MPI_MIN, &
+!                             commglobal, ierror )
+!
+!         mymin = gmin
 
       end subroutine mp_reduce_min_r4
 
@@ -2038,10 +1775,11 @@ end subroutine switch_current_Atm
 
          real(kind=8) :: gmin
 
-         call MPI_ALLREDUCE( mymin, gmin, 1, MPI_DOUBLE_PRECISION, MPI_MIN, &
-                             commglobal, ierror )
-
-         mymin = gmin
+         call mpp_min (mymin)
+!         call MPI_ALLREDUCE( mymin, gmin, 1, MPI_DOUBLE_PRECISION, MPI_MIN, &
+!                             commglobal, ierror )
+!
+!         mymin = gmin
 
       end subroutine mp_reduce_min_r8
 !
@@ -2051,17 +1789,18 @@ end subroutine switch_current_Atm
 !-------------------------------------------------------------------------------
 ! vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv !
 !
-!     mp_bcst_4d_i4 :: Call SPMD REDUCE_MAX
+!     mp_reduce_max_i4 :: Call SPMD REDUCE_MAX
 !
       subroutine mp_reduce_max_i4(mymax)
          integer, intent(INOUT)  :: mymax
 
          integer :: gmax
 
-         call MPI_ALLREDUCE( mymax, gmax, 1, MPI_INTEGER, MPI_MAX, &
-                             commglobal, ierror )
-
-         mymax = gmax
+         call mpp_max(mymax)
+!         call MPI_ALLREDUCE( mymax, gmax, 1, MPI_INTEGER, MPI_MAX, &
+!                             commglobal, ierror )
+!
+!         mymax = gmax
 
       end subroutine mp_reduce_max_i4
 !
@@ -2078,10 +1817,11 @@ end subroutine switch_current_Atm
 
          real(kind=4) :: gsum
 
-         call MPI_ALLREDUCE( mysum, gsum, 1, MPI_REAL, MPI_SUM, &
-                             commglobal, ierror )
-
-         mysum = gsum
+         call mpp_sum(mysum)
+!         call MPI_ALLREDUCE( mysum, gsum, 1, MPI_REAL, MPI_SUM, &
+!                             commglobal, ierror )
+!
+!         mysum = gsum
 
       end subroutine mp_reduce_sum_r4
 !
@@ -2098,10 +1838,11 @@ end subroutine switch_current_Atm
 
          real(kind=8) :: gsum
 
-         call MPI_ALLREDUCE( mysum, gsum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, &
-                             commglobal, ierror )
-
-         mysum = gsum
+         call mpp_sum (mysum)
+!         call MPI_ALLREDUCE( mysum, gsum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, &
+!                             commglobal, ierror )
+!
+!         mysum = gsum
 
       end subroutine mp_reduce_sum_r8
 !
@@ -2126,10 +1867,11 @@ end subroutine switch_current_Atm
             mysum = mysum + sum1d(i)
          enddo
 
-         call MPI_ALLREDUCE( mysum, gsum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, &
-                             commglobal, ierror )
-
-         mysum = gsum
+         call mpp_sum (mysum)
+!         call MPI_ALLREDUCE( mysum, gsum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, &
+!                             commglobal, ierror )
+!
+!         mysum = gsum
 
       end subroutine mp_reduce_sum_r4_1d
 !
@@ -2154,10 +1896,11 @@ end subroutine switch_current_Atm
             mysum = mysum + sum1d(i)
          enddo
 
-         call MPI_ALLREDUCE( mysum, gsum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, &
-                             commglobal, ierror )
-
-         mysum = gsum
+         call mpp_sum (mysum)
+!         call MPI_ALLREDUCE( mysum, gsum, 1, MPI_DOUBLE_PRECISION, MPI_SUM, &
+!                             commglobal, ierror )
+!
+!         mysum = gsum
 
       end subroutine mp_reduce_sum_r8_1d
 !
@@ -2174,11 +1917,12 @@ end subroutine switch_current_Atm
          real(kind=4), intent(inout)  :: mysum(npts)
          real(kind=4)                 :: gsum(npts)
 
-         gsum = 0.0
-         call MPI_ALLREDUCE( mysum, gsum, npts, MPI_REAL, MPI_SUM, &
-                             commglobal, ierror )
-
-         mysum = gsum
+         call mpp_sum (mysum, npts)
+!         gsum = 0.0
+!         call MPI_ALLREDUCE( mysum, gsum, npts, MPI_REAL, MPI_SUM, &
+!                             commglobal, ierror )
+!
+!         mysum = gsum
 
       end subroutine mp_reduce_sum_r4_1darr
 !
@@ -2195,11 +1939,12 @@ end subroutine switch_current_Atm
          real(kind=4), intent(inout)  :: mysum(npts1,npts2)
          real(kind=4)                 :: gsum(npts1,npts2)
 
-         gsum = 0.0
-         call MPI_ALLREDUCE( mysum, gsum, npts1*npts2, MPI_REAL, MPI_SUM, &
-                             commglobal, ierror )
-
-         mysum = gsum
+         call mpp_sum (mysum, npts1*npts2)
+!         gsum = 0.0
+!         call MPI_ALLREDUCE( mysum, gsum, npts1*npts2, MPI_REAL, MPI_SUM, &
+!                             commglobal, ierror )
+!
+!         mysum = gsum
 
       end subroutine mp_reduce_sum_r4_2darr
 !
@@ -2216,13 +1961,13 @@ end subroutine switch_current_Atm
          real(kind=8), intent(inout)  :: mysum(npts)
          real(kind=8)                 :: gsum(npts)
 
-         gsum = 0.0
-
-         call MPI_ALLREDUCE( mysum, gsum, npts, MPI_DOUBLE_PRECISION, &
-                             MPI_SUM,                                 &
-                             commglobal, ierror )
-
-         mysum = gsum
+         call mpp_sum (mysum, npts)
+!         gsum = 0.0
+!         call MPI_ALLREDUCE( mysum, gsum, npts, MPI_DOUBLE_PRECISION, &
+!                             MPI_SUM,                                 &
+!                             commglobal, ierror )
+!
+!         mysum = gsum
 
       end subroutine mp_reduce_sum_r8_1darr
 !
@@ -2239,13 +1984,13 @@ end subroutine switch_current_Atm
          real(kind=8), intent(inout)  :: mysum(npts1,npts2)
          real(kind=8)                 :: gsum(npts1,npts2)
 
-         gsum = 0.0
-
-         call MPI_ALLREDUCE( mysum, gsum, npts1*npts2,      &
-                             MPI_DOUBLE_PRECISION, MPI_SUM, &
-                             commglobal, ierror )
-
-         mysum = gsum
+         call mpp_sum (mysum, npts1*npts2)
+!         gsum = 0.0
+!         call MPI_ALLREDUCE( mysum, gsum, npts1*npts2,      &
+!                             MPI_DOUBLE_PRECISION, MPI_SUM, &
+!                             commglobal, ierror )
+!
+!         mysum = gsum
 
       end subroutine mp_reduce_sum_r8_2darr
 !
