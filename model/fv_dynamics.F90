@@ -421,10 +421,6 @@ contains
       inline_mp%prefluxi = 0.0
       inline_mp%prefluxs = 0.0
       inline_mp%prefluxg = 0.0
-      inline_mp%cond = 0.0
-      inline_mp%dep = 0.0
-      inline_mp%reevap = 0.0
-      inline_mp%sub = 0.0
       if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt = 0.0
       if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt = 0.0
       if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt = 0.0
@@ -657,10 +653,6 @@ contains
       inline_mp%prefluxi = inline_mp%prefluxi / k_split
       inline_mp%prefluxs = inline_mp%prefluxs / k_split
       inline_mp%prefluxg = inline_mp%prefluxg / k_split
-      inline_mp%cond = inline_mp%cond / k_split
-      inline_mp%dep = inline_mp%dep / k_split
-      inline_mp%reevap = inline_mp%reevap / k_split
-      inline_mp%sub = inline_mp%sub / k_split
       if (allocated(inline_mp%qv_dt)) inline_mp%qv_dt = inline_mp%qv_dt / bdt
       if (allocated(inline_mp%ql_dt)) inline_mp%ql_dt = inline_mp%ql_dt / bdt
       if (allocated(inline_mp%qi_dt)) inline_mp%qi_dt = inline_mp%qi_dt / bdt

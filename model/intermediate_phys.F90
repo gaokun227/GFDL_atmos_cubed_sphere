@@ -271,8 +271,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 #else
                      cappa (isd:, jsd, 1:), &
 #endif
-                     gsize, last_step, inline_mp%cond (is:ie, j), inline_mp%reevap (is:ie, j), &
-                     inline_mp%dep (is:ie, j), inline_mp%sub (is:ie, j), do_sat_adj)
+                     gsize, last_step, do_sat_adj)
 
             ! update non-microphyiscs tracers due to mass change
             if (adj_mass_vmr) then
@@ -449,7 +448,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! note: the unit of area is m^2
             ! note: the unit of prew, prer, prei, pres, preg is mm/day
             ! note: the unit of prefluxw, prefluxr, prefluxi, prefluxs, prefluxg is mm/day
-            ! note: the unit of cond, dep, reevap, sub is mm/day
 
             ! save ua, va for wind tendency calculation
             u_dt (is:ie, j, kmp:km) = ua (is:ie, j, kmp:km)
@@ -546,26 +544,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      cappa (isd:, jsd, 1:), &
 #endif
                      consv .gt. consv_min, adj_vmr (is:ie, kmp:km), te (is:ie, j, kmp:km), dte (is:ie), &
-                     inline_mp%pcw (is:ie, j, kmp:km), inline_mp%edw (is:ie, j, kmp:km), &
-                     inline_mp%oew (is:ie, j, kmp:km), &
-                     inline_mp%rrw (is:ie, j, kmp:km), inline_mp%tvw (is:ie, j, kmp:km), &
-                     inline_mp%pci (is:ie, j, kmp:km), inline_mp%edi (is:ie, j, kmp:km), &
-                     inline_mp%oei (is:ie, j, kmp:km), &
-                     inline_mp%rri (is:ie, j, kmp:km), inline_mp%tvi (is:ie, j, kmp:km), &
-                     inline_mp%pcr (is:ie, j, kmp:km), inline_mp%edr (is:ie, j, kmp:km), &
-                     inline_mp%oer (is:ie, j, kmp:km), &
-                     inline_mp%rrr (is:ie, j, kmp:km), inline_mp%tvr (is:ie, j, kmp:km), &
-                     inline_mp%pcs (is:ie, j, kmp:km), inline_mp%eds (is:ie, j, kmp:km), &
-                     inline_mp%oes (is:ie, j, kmp:km), &
-                     inline_mp%rrs (is:ie, j, kmp:km), inline_mp%tvs (is:ie, j, kmp:km), &
-                     inline_mp%pcg (is:ie, j, kmp:km), inline_mp%edg (is:ie, j, kmp:km), &
-                     inline_mp%oeg (is:ie, j, kmp:km), &
-                     inline_mp%rrg (is:ie, j, kmp:km), inline_mp%tvg (is:ie, j, kmp:km), &
                      inline_mp%prefluxw(is:ie, j, kmp:km), &
                      inline_mp%prefluxr(is:ie, j, kmp:km), inline_mp%prefluxi(is:ie, j, kmp:km), &
                      inline_mp%prefluxs(is:ie, j, kmp:km), inline_mp%prefluxg(is:ie, j, kmp:km), &
-                     inline_mp%cond (is:ie, j), inline_mp%dep (is:ie, j), inline_mp%reevap (is:ie, j), &
-                     inline_mp%sub (is:ie, j), last_step, do_inline_mp)
+                     last_step, do_inline_mp)
 
             ! update non-microphyiscs tracers due to mass change
             if (adj_mass_vmr) then
