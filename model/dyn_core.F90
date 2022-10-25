@@ -1091,43 +1091,23 @@ contains
 
       if (flagstruct%do_fast_phys) then
 
-          call timing_on('COMM_TOTAL')
-          call start_group_halo_update(i_pack(1), delp, domain, complete=.false.)
-          call start_group_halo_update(i_pack(1), pt, domain, complete=.true.)
-          call start_group_halo_update(i_pack(7), w, domain)
-          call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
-          call start_group_halo_update(i_pack(10), q, domain)
-          call start_group_halo_update(i_pack(11), q_con, domain)
-          call start_group_halo_update(i_pack(12), cappa, domain)
-          call complete_group_halo_update(i_pack(1), domain)
-          call complete_group_halo_update(i_pack(7), domain)
-          call complete_group_halo_update(i_pack(8), domain)
-          call complete_group_halo_update(i_pack(10), domain)
-          call complete_group_halo_update(i_pack(11), domain)
-          call complete_group_halo_update(i_pack(12), domain)
-          call timing_off('COMM_TOTAL')
-       
           call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, flagstruct%nwat, &
              flagstruct%c2l_ord, dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
              delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, inline_edmf, inline_gwd, &
              gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
              flagstruct%do_inline_edmf, flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 
-          call timing_on('COMM_TOTAL')
-          call start_group_halo_update(i_pack(1), delp, domain, complete=.false.)
-          call start_group_halo_update(i_pack(1), pt, domain, complete=.true.)
-          call start_group_halo_update(i_pack(7), w, domain)
-          call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
-          call start_group_halo_update(i_pack(10), q, domain)
-          call start_group_halo_update(i_pack(11), q_con, domain)
-          call start_group_halo_update(i_pack(12), cappa, domain)
-          call complete_group_halo_update(i_pack(1), domain)
-          call complete_group_halo_update(i_pack(7), domain)
-          call complete_group_halo_update(i_pack(8), domain)
-          call complete_group_halo_update(i_pack(10), domain)
-          call complete_group_halo_update(i_pack(11), domain)
-          call complete_group_halo_update(i_pack(12), domain)
-          call timing_off('COMM_TOTAL')
+          call timing_on ('COMM_TOTAL')
+          call mpp_update_domains (u, v, domain, gridtype=DGRID_NE)
+          call mpp_update_domains (delp, domain, complete=.false.)
+          call mpp_update_domains (pt, domain, complete=.false.)
+          call mpp_update_domains (w, domain, complete=.false.)
+          do iq = 1, nq
+             call mpp_update_domains (q (:,:,:,iq), domain, complete=.false.)
+          enddo
+          call mpp_update_domains (q_con, domain, complete=.false.)
+          call mpp_update_domains (cappa, domain, complete=.true.)
+          call timing_off ('COMM_TOTAL')
 
           if (remap_step) then
               pe (is:ie, 1, js:je) = ptop
