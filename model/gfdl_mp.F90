@@ -560,6 +560,8 @@ subroutine gfdl_mp_init (input_nml_file, logunit, hydrostatic)
     ! read namelist
     ! -----------------------------------------------------------------------
 
+    !TODO Check if namelist exists,
+    !     but *don't* crash if it doesn't
     read (input_nml_file, nml = gfdl_mp_nml)
 
     ! -----------------------------------------------------------------------
