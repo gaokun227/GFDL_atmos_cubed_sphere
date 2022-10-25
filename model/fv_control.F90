@@ -460,6 +460,7 @@ module fv_control_mod
      call read_namelist_fv_grid_nml
      call read_namelist_fv_core_nml(Atm(this_grid)) ! do options processing here too?
      call read_namelist_test_case_nml
+     call read_namelist_integ_phys_nml
      call mpp_get_current_pelist(Atm(this_grid)%pelist, commID=commID) ! for commID
      call mp_start(commID,halo_update_type)
 
@@ -932,8 +933,8 @@ module fv_control_mod
             do_schmidt, do_cube_transform, &
             hord_mt, hord_vt, hord_tm, hord_dp, hord_tr, shift_fac, stretch_fac, target_lat, target_lon, &
             kord_mt, kord_wz, kord_tm, kord_tr, remap_te, fv_debug, fv_land, consv_checker, &
-            do_am4_remap, nudge, do_sat_adj, do_fast_phys, do_inline_mp, do_aerosol, do_f3d, &
-            external_ic, is_ideal_case, read_increment, ncep_ic, nggps_ic, hrrrv3_ic, ecmwf_ic, use_new_ncep, use_ncep_phy, fv_diag_ic, &
+            do_am4_remap, nudge, do_f3d, external_ic, is_ideal_case, read_increment, &
+            ncep_ic, nggps_ic, hrrrv3_ic, ecmwf_ic, use_new_ncep, use_ncep_phy, fv_diag_ic, &
             external_eta, res_latlon_dynamics, res_latlon_tracers, scale_z, w_max, z_min, lim_fac, &
             dddmp, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
             warm_start, adjust_dry_mass, mountain, d_con, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
@@ -1071,6 +1072,21 @@ module fv_control_mod
        target_lat = target_lat * pi/180.
 
      end subroutine read_namelist_fv_core_nml
+
+     subroutine read_namelist_integ_phys_nml
+
+       integer :: ios, ierr
+       namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_inline_mp, do_aerosol
+
+       read (input_nml_file,integ_phys_nml,iostat=ios)
+       ierr = check_nml_error(ios,'integ_phys_nml')
+
+       call write_version_number ( 'FV_CONTROL_MOD', version )
+       unit = stdlog()
+       write(unit, nml=integ_phys_nml)
+
+       !Basic option processing
+     end subroutine read_namelist_integ_phys_nml
 
      subroutine setup_update_regions
 
