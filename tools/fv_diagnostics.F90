@@ -1706,19 +1706,21 @@ contains
 #endif
        if(id_ps > 0) used=send_data(id_ps, Atm(n)%ps(isc:iec,jsc:jec), Time)
 
-       if(id_pret > 0) used=send_data(id_pret, &
-            Atm(n)%inline_sas%prec(isc:iec,jsc:jec)+&
-            Atm(n)%inline_mp%prew(isc:iec,jsc:jec)+&
-            Atm(n)%inline_mp%prer(isc:iec,jsc:jec)+&
-            Atm(n)%inline_mp%prei(isc:iec,jsc:jec)+&
-            Atm(n)%inline_mp%pres(isc:iec,jsc:jec)+&
-            Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
-       if(id_prec > 0) used=send_data(id_prec, Atm(n)%inline_sas%prec(isc:iec,jsc:jec), Time)
-       if(id_prew > 0) used=send_data(id_prew, Atm(n)%inline_mp%prew(isc:iec,jsc:jec), Time)
-       if(id_prer > 0) used=send_data(id_prer, Atm(n)%inline_mp%prer(isc:iec,jsc:jec), Time)
-       if(id_prei > 0) used=send_data(id_prei, Atm(n)%inline_mp%prei(isc:iec,jsc:jec), Time)
-       if(id_pres > 0) used=send_data(id_pres, Atm(n)%inline_mp%pres(isc:iec,jsc:jec), Time)
-       if(id_preg > 0) used=send_data(id_preg, Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
+       if (Atm(n)%flagstruct%do_inline_mp) then
+          if(id_pret > 0) used=send_data(id_pret, &
+             Atm(n)%inline_sas%prec(isc:iec,jsc:jec)+&
+             Atm(n)%inline_mp%prew(isc:iec,jsc:jec)+&
+             Atm(n)%inline_mp%prer(isc:iec,jsc:jec)+&
+             Atm(n)%inline_mp%prei(isc:iec,jsc:jec)+&
+             Atm(n)%inline_mp%pres(isc:iec,jsc:jec)+&
+             Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
+          if(id_prec > 0) used=send_data(id_prec, Atm(n)%inline_sas%prec(isc:iec,jsc:jec), Time)
+          if(id_prew > 0) used=send_data(id_prew, Atm(n)%inline_mp%prew(isc:iec,jsc:jec), Time)
+          if(id_prer > 0) used=send_data(id_prer, Atm(n)%inline_mp%prer(isc:iec,jsc:jec), Time)
+          if(id_prei > 0) used=send_data(id_prei, Atm(n)%inline_mp%prei(isc:iec,jsc:jec), Time)
+          if(id_pres > 0) used=send_data(id_pres, Atm(n)%inline_mp%pres(isc:iec,jsc:jec), Time)
+          if(id_preg > 0) used=send_data(id_preg, Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
+       endif
 
        if (id_qv_dt_gfdlmp > 0) used=send_data(id_qv_dt_gfdlmp, Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_ql_dt_gfdlmp > 0) used=send_data(id_ql_dt_gfdlmp, Atm(n)%inline_mp%ql_dt(isc:iec,jsc:jec,1:npz), Time)

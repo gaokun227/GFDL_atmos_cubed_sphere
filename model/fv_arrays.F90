@@ -1600,68 +1600,76 @@ contains
     allocate (  Atm%ak(npz_2d+1) )
     allocate (  Atm%bk(npz_2d+1) )
 
-    allocate ( Atm%inline_mp%prew(is:ie,js:je) )
-    allocate ( Atm%inline_mp%prer(is:ie,js:je) )
-    allocate ( Atm%inline_mp%prei(is:ie,js:je) )
-    allocate ( Atm%inline_mp%pres(is:ie,js:je) )
-    allocate ( Atm%inline_mp%preg(is:ie,js:je) )
-    allocate ( Atm%inline_mp%prefluxw(is:ie,js:je,npz) )
-    allocate ( Atm%inline_mp%prefluxr(is:ie,js:je,npz) )
-    allocate ( Atm%inline_mp%prefluxi(is:ie,js:je,npz) )
-    allocate ( Atm%inline_mp%prefluxs(is:ie,js:je,npz) )
-    allocate ( Atm%inline_mp%prefluxg(is:ie,js:je,npz) )
+    if (Atm%flagstruct%do_inline_mp) then
+       allocate ( Atm%inline_mp%prew(is:ie,js:je) )
+       allocate ( Atm%inline_mp%prer(is:ie,js:je) )
+       allocate ( Atm%inline_mp%prei(is:ie,js:je) )
+       allocate ( Atm%inline_mp%pres(is:ie,js:je) )
+       allocate ( Atm%inline_mp%preg(is:ie,js:je) )
+       allocate ( Atm%inline_mp%prefluxw(is:ie,js:je,npz) )
+       allocate ( Atm%inline_mp%prefluxr(is:ie,js:je,npz) )
+       allocate ( Atm%inline_mp%prefluxi(is:ie,js:je,npz) )
+       allocate ( Atm%inline_mp%prefluxs(is:ie,js:je,npz) )
+       allocate ( Atm%inline_mp%prefluxg(is:ie,js:je,npz) )
+    endif
 
-    allocate ( Atm%inline_edmf%lsm(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%zorl(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%ffmm(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%ffhh(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%tsfc(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%shdmax(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%vtype(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%vfrac(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%snowd(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%uustar(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%radh(is:ie,js:je,npz) )
-    allocate ( Atm%inline_edmf%hflx(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%evap(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%sfcemis(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%dlwflx(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%sfcnsw(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%sfcdsw(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%srflag(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%hice(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%fice(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%tice(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%weasd(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%tprcp(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%stc(is:ie,js:je,4) )
-    allocate ( Atm%inline_edmf%qsurf(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%cmm(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%chh(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%gflux(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%ep(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%hpbl(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%kpbl(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%dtsfc(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%dqsfc(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%dusfc(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%dvsfc(is:ie,js:je) )
-    allocate ( Atm%inline_edmf%dksfc(is:ie,js:je) )
+    if (Atm%flagstruct%do_inline_edmf) then
+       allocate ( Atm%inline_edmf%lsm(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%zorl(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%ffmm(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%ffhh(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%tsfc(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%shdmax(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%vtype(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%vfrac(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%snowd(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%uustar(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%radh(is:ie,js:je,npz) )
+       allocate ( Atm%inline_edmf%hflx(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%evap(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%sfcemis(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%dlwflx(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%sfcnsw(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%sfcdsw(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%srflag(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%hice(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%fice(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%tice(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%weasd(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%tprcp(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%stc(is:ie,js:je,4) )
+       allocate ( Atm%inline_edmf%qsurf(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%cmm(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%chh(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%gflux(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%ep(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%hpbl(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%kpbl(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%dtsfc(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%dqsfc(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%dusfc(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%dvsfc(is:ie,js:je) )
+       allocate ( Atm%inline_edmf%dksfc(is:ie,js:je) )
+    endif
 
-    allocate ( Atm%inline_sas%prec(is:ie,js:je) )
-    allocate ( Atm%inline_sas%cumabs(is:ie,js:je) )
-    allocate ( Atm%inline_sas%ktop(is:ie,js:je) )
-    allocate ( Atm%inline_sas%kbot(is:ie,js:je) )
-    allocate ( Atm%inline_sas%kcnv(is:ie,js:je) )
+    if (Atm%flagstruct%do_inline_sas) then
+       allocate ( Atm%inline_sas%prec(is:ie,js:je) )
+       allocate ( Atm%inline_sas%cumabs(is:ie,js:je) )
+       allocate ( Atm%inline_sas%ktop(is:ie,js:je) )
+       allocate ( Atm%inline_sas%kbot(is:ie,js:je) )
+       allocate ( Atm%inline_sas%kcnv(is:ie,js:je) )
+    endif
 
-    allocate ( Atm%inline_gwd%hprime(is:ie,js:je) )
-    allocate ( Atm%inline_gwd%oc(is:ie,js:je) )
-    allocate ( Atm%inline_gwd%oa(is:ie,js:je,4) )
-    allocate ( Atm%inline_gwd%ol(is:ie,js:je,4) )
-    allocate ( Atm%inline_gwd%theta(is:ie,js:je) )
-    allocate ( Atm%inline_gwd%sigma(is:ie,js:je) )
-    allocate ( Atm%inline_gwd%gamma(is:ie,js:je) )
-    allocate ( Atm%inline_gwd%elvmax(is:ie,js:je) )
+    if (Atm%flagstruct%do_inline_gwd) then
+       allocate ( Atm%inline_gwd%hprime(is:ie,js:je) )
+       allocate ( Atm%inline_gwd%oc(is:ie,js:je) )
+       allocate ( Atm%inline_gwd%oa(is:ie,js:je,4) )
+       allocate ( Atm%inline_gwd%ol(is:ie,js:je,4) )
+       allocate ( Atm%inline_gwd%theta(is:ie,js:je) )
+       allocate ( Atm%inline_gwd%sigma(is:ie,js:je) )
+       allocate ( Atm%inline_gwd%gamma(is:ie,js:je) )
+       allocate ( Atm%inline_gwd%elvmax(is:ie,js:je) )
+    endif
 
     !--------------------------
     ! Non-hydrostatic dynamics:
@@ -1742,71 +1750,95 @@ contains
         enddo
         enddo
      enddo
+     if (Atm%flagstruct%do_inline_mp) then
+        do j=js, je
+           do i=is, ie
+              Atm%inline_mp%prew(i,j) = real_big
+              Atm%inline_mp%prer(i,j) = real_big
+              Atm%inline_mp%prei(i,j) = real_big
+              Atm%inline_mp%pres(i,j) = real_big
+              Atm%inline_mp%preg(i,j) = real_big
+              Atm%inline_mp%prefluxw(i,j,:) = real_big
+              Atm%inline_mp%prefluxr(i,j,:) = real_big
+              Atm%inline_mp%prefluxi(i,j,:) = real_big
+              Atm%inline_mp%prefluxs(i,j,:) = real_big
+              Atm%inline_mp%prefluxg(i,j,:) = real_big
+           enddo
+        enddo
+     endif
+
+     if (Atm%flagstruct%do_inline_edmf) then
+        do j=js, je
+           do i=is, ie
+              Atm%inline_edmf%lsm(i,j) = 0
+              Atm%inline_edmf%zorl(i,j) = real_big
+              Atm%inline_edmf%ffmm(i,j) = real_big
+              Atm%inline_edmf%ffhh(i,j) = real_big
+              Atm%inline_edmf%tsfc(i,j) = real_big
+              Atm%inline_edmf%shdmax(i,j) = real_big
+              Atm%inline_edmf%vtype(i,j) = real_big
+              Atm%inline_edmf%vfrac(i,j) = real_big
+              Atm%inline_edmf%snowd(i,j) = real_big
+              Atm%inline_edmf%uustar(i,j) = real_big
+              Atm%inline_edmf%radh(i,j,:) = 0.0
+              Atm%inline_edmf%hflx(i,j) = 0.0
+              Atm%inline_edmf%evap(i,j) = 0.0
+              Atm%inline_edmf%sfcemis(i,j) = 0.0
+              Atm%inline_edmf%dlwflx(i,j) = 0.0
+              Atm%inline_edmf%sfcnsw(i,j) = 0.0
+              Atm%inline_edmf%sfcdsw(i,j) = 0.0
+              Atm%inline_edmf%srflag(i,j) = real_big
+              Atm%inline_edmf%hice(i,j) = real_big
+              Atm%inline_edmf%fice(i,j) = real_big
+              Atm%inline_edmf%tice(i,j) = real_big
+              Atm%inline_edmf%weasd(i,j) = real_big
+              Atm%inline_edmf%tprcp(i,j) = real_big
+              Atm%inline_edmf%stc(i,j,:) = real_big
+              Atm%inline_edmf%qsurf(i,j) = real_big
+              Atm%inline_edmf%cmm(i,j) = real_big
+              Atm%inline_edmf%chh(i,j) = real_big
+              Atm%inline_edmf%gflux(i,j) = real_big
+              Atm%inline_edmf%ep(i,j) = real_big
+              Atm%inline_edmf%hpbl(i,j) = real_big
+              Atm%inline_edmf%kpbl(i,j) = 1
+              Atm%inline_edmf%dtsfc(i,j) = real_big
+              Atm%inline_edmf%dqsfc(i,j) = real_big
+              Atm%inline_edmf%dusfc(i,j) = real_big
+              Atm%inline_edmf%dvsfc(i,j) = real_big
+              Atm%inline_edmf%dksfc(i,j) = real_big
+           enddo
+        enddo
+     endif
+
+     if (Atm%flagstruct%do_inline_sas) then
+        do j=js, je
+           do i=is, ie
+              Atm%inline_sas%prec(i,j) = real_big
+              Atm%inline_sas%cumabs(i,j) = real_big
+              Atm%inline_sas%ktop(i,j) = 1
+              Atm%inline_sas%kbot(i,j) = npz
+              Atm%inline_sas%kcnv(i,j) = 0
+           enddo
+        enddo
+     endif
+
+     if (Atm%flagstruct%do_inline_gwd) then
+        do j=js, je
+           do i=is, ie
+              Atm%inline_gwd%hprime(i,j) = real_big
+              Atm%inline_gwd%oc(i,j) = real_big
+              Atm%inline_gwd%oa(i,j,4) = real_big
+              Atm%inline_gwd%ol(i,j,4) = real_big
+              Atm%inline_gwd%theta(i,j) = real_big
+              Atm%inline_gwd%sigma(i,j) = real_big
+              Atm%inline_gwd%gamma(i,j) = real_big
+              Atm%inline_gwd%elvmax(i,j) = real_big
+           enddo
+        enddo
+     endif
+
      do j=js, je
         do i=is, ie
-           Atm%inline_mp%prew(i,j) = real_big
-           Atm%inline_mp%prer(i,j) = real_big
-           Atm%inline_mp%prei(i,j) = real_big
-           Atm%inline_mp%pres(i,j) = real_big
-           Atm%inline_mp%preg(i,j) = real_big
-           Atm%inline_mp%prefluxw(i,j,:) = real_big
-           Atm%inline_mp%prefluxr(i,j,:) = real_big
-           Atm%inline_mp%prefluxi(i,j,:) = real_big
-           Atm%inline_mp%prefluxs(i,j,:) = real_big
-           Atm%inline_mp%prefluxg(i,j,:) = real_big
-
-           Atm%inline_edmf%lsm(i,j) = 0
-           Atm%inline_edmf%zorl(i,j) = real_big
-           Atm%inline_edmf%ffmm(i,j) = real_big
-           Atm%inline_edmf%ffhh(i,j) = real_big
-           Atm%inline_edmf%tsfc(i,j) = real_big
-           Atm%inline_edmf%shdmax(i,j) = real_big
-           Atm%inline_edmf%vtype(i,j) = real_big
-           Atm%inline_edmf%vfrac(i,j) = real_big
-           Atm%inline_edmf%snowd(i,j) = real_big
-           Atm%inline_edmf%uustar(i,j) = real_big
-           Atm%inline_edmf%radh(i,j,:) = 0.0
-           Atm%inline_edmf%hflx(i,j) = 0.0
-           Atm%inline_edmf%evap(i,j) = 0.0
-           Atm%inline_edmf%sfcemis(i,j) = 0.0
-           Atm%inline_edmf%dlwflx(i,j) = 0.0
-           Atm%inline_edmf%sfcnsw(i,j) = 0.0
-           Atm%inline_edmf%sfcdsw(i,j) = 0.0
-           Atm%inline_edmf%srflag(i,j) = real_big
-           Atm%inline_edmf%hice(i,j) = real_big
-           Atm%inline_edmf%fice(i,j) = real_big
-           Atm%inline_edmf%tice(i,j) = real_big
-           Atm%inline_edmf%weasd(i,j) = real_big
-           Atm%inline_edmf%tprcp(i,j) = real_big
-           Atm%inline_edmf%stc(i,j,:) = real_big
-           Atm%inline_edmf%qsurf(i,j) = real_big
-           Atm%inline_edmf%cmm(i,j) = real_big
-           Atm%inline_edmf%chh(i,j) = real_big
-           Atm%inline_edmf%gflux(i,j) = real_big
-           Atm%inline_edmf%ep(i,j) = real_big
-           Atm%inline_edmf%hpbl(i,j) = real_big
-           Atm%inline_edmf%kpbl(i,j) = 1
-           Atm%inline_edmf%dtsfc(i,j) = real_big
-           Atm%inline_edmf%dqsfc(i,j) = real_big
-           Atm%inline_edmf%dusfc(i,j) = real_big
-           Atm%inline_edmf%dvsfc(i,j) = real_big
-           Atm%inline_edmf%dksfc(i,j) = real_big
-
-           Atm%inline_sas%prec(i,j) = real_big
-           Atm%inline_sas%cumabs(i,j) = real_big
-           Atm%inline_sas%ktop(i,j) = 1
-           Atm%inline_sas%kbot(i,j) = npz
-           Atm%inline_sas%kcnv(i,j) = 0
-
-           Atm%inline_gwd%hprime(i,j) = real_big
-           Atm%inline_gwd%oc(i,j) = real_big
-           Atm%inline_gwd%oa(i,j,4) = real_big
-           Atm%inline_gwd%ol(i,j,4) = real_big
-           Atm%inline_gwd%theta(i,j) = real_big
-           Atm%inline_gwd%sigma(i,j) = real_big
-           Atm%inline_gwd%gamma(i,j) = real_big
-           Atm%inline_gwd%elvmax(i,j) = real_big
-
            Atm%ts(i,j) = 300.
 
            Atm%phis(i,j) = real_big
@@ -2058,68 +2090,76 @@ contains
     deallocate (  Atm%bk )
     deallocate ( Atm%diss_est )
 
-    deallocate ( Atm%inline_mp%prew )
-    deallocate ( Atm%inline_mp%prer )
-    deallocate ( Atm%inline_mp%prei )
-    deallocate ( Atm%inline_mp%pres )
-    deallocate ( Atm%inline_mp%preg )
-    deallocate ( Atm%inline_mp%prefluxw )
-    deallocate ( Atm%inline_mp%prefluxr )
-    deallocate ( Atm%inline_mp%prefluxi )
-    deallocate ( Atm%inline_mp%prefluxs )
-    deallocate ( Atm%inline_mp%prefluxg )
+    if (Atm%flagstruct%do_inline_mp) then
+       deallocate ( Atm%inline_mp%prew )
+       deallocate ( Atm%inline_mp%prer )
+       deallocate ( Atm%inline_mp%prei )
+       deallocate ( Atm%inline_mp%pres )
+       deallocate ( Atm%inline_mp%preg )
+       deallocate ( Atm%inline_mp%prefluxw )
+       deallocate ( Atm%inline_mp%prefluxr )
+       deallocate ( Atm%inline_mp%prefluxi )
+       deallocate ( Atm%inline_mp%prefluxs )
+       deallocate ( Atm%inline_mp%prefluxg )
+    endif
 
-    deallocate ( Atm%inline_edmf%lsm )
-    deallocate ( Atm%inline_edmf%zorl )
-    deallocate ( Atm%inline_edmf%ffmm )
-    deallocate ( Atm%inline_edmf%ffhh )
-    deallocate ( Atm%inline_edmf%tsfc )
-    deallocate ( Atm%inline_edmf%shdmax )
-    deallocate ( Atm%inline_edmf%vtype )
-    deallocate ( Atm%inline_edmf%vfrac )
-    deallocate ( Atm%inline_edmf%snowd )
-    deallocate ( Atm%inline_edmf%uustar )
-    deallocate ( Atm%inline_edmf%radh )
-    deallocate ( Atm%inline_edmf%hflx )
-    deallocate ( Atm%inline_edmf%evap )
-    deallocate ( Atm%inline_edmf%sfcemis )
-    deallocate ( Atm%inline_edmf%dlwflx )
-    deallocate ( Atm%inline_edmf%sfcnsw )
-    deallocate ( Atm%inline_edmf%sfcdsw )
-    deallocate ( Atm%inline_edmf%srflag )
-    deallocate ( Atm%inline_edmf%hice )
-    deallocate ( Atm%inline_edmf%fice )
-    deallocate ( Atm%inline_edmf%tice )
-    deallocate ( Atm%inline_edmf%weasd )
-    deallocate ( Atm%inline_edmf%tprcp )
-    deallocate ( Atm%inline_edmf%stc )
-    deallocate ( Atm%inline_edmf%qsurf )
-    deallocate ( Atm%inline_edmf%cmm )
-    deallocate ( Atm%inline_edmf%chh )
-    deallocate ( Atm%inline_edmf%gflux )
-    deallocate ( Atm%inline_edmf%ep )
-    deallocate ( Atm%inline_edmf%hpbl )
-    deallocate ( Atm%inline_edmf%kpbl )
-    deallocate ( Atm%inline_edmf%dtsfc )
-    deallocate ( Atm%inline_edmf%dqsfc )
-    deallocate ( Atm%inline_edmf%dusfc )
-    deallocate ( Atm%inline_edmf%dvsfc )
-    deallocate ( Atm%inline_edmf%dksfc )
+    if (Atm%flagstruct%do_inline_edmf) then
+       deallocate ( Atm%inline_edmf%lsm )
+       deallocate ( Atm%inline_edmf%zorl )
+       deallocate ( Atm%inline_edmf%ffmm )
+       deallocate ( Atm%inline_edmf%ffhh )
+       deallocate ( Atm%inline_edmf%tsfc )
+       deallocate ( Atm%inline_edmf%shdmax )
+       deallocate ( Atm%inline_edmf%vtype )
+       deallocate ( Atm%inline_edmf%vfrac )
+       deallocate ( Atm%inline_edmf%snowd )
+       deallocate ( Atm%inline_edmf%uustar )
+       deallocate ( Atm%inline_edmf%radh )
+       deallocate ( Atm%inline_edmf%hflx )
+       deallocate ( Atm%inline_edmf%evap )
+       deallocate ( Atm%inline_edmf%sfcemis )
+       deallocate ( Atm%inline_edmf%dlwflx )
+       deallocate ( Atm%inline_edmf%sfcnsw )
+       deallocate ( Atm%inline_edmf%sfcdsw )
+       deallocate ( Atm%inline_edmf%srflag )
+       deallocate ( Atm%inline_edmf%hice )
+       deallocate ( Atm%inline_edmf%fice )
+       deallocate ( Atm%inline_edmf%tice )
+       deallocate ( Atm%inline_edmf%weasd )
+       deallocate ( Atm%inline_edmf%tprcp )
+       deallocate ( Atm%inline_edmf%stc )
+       deallocate ( Atm%inline_edmf%qsurf )
+       deallocate ( Atm%inline_edmf%cmm )
+       deallocate ( Atm%inline_edmf%chh )
+       deallocate ( Atm%inline_edmf%gflux )
+       deallocate ( Atm%inline_edmf%ep )
+       deallocate ( Atm%inline_edmf%hpbl )
+       deallocate ( Atm%inline_edmf%kpbl )
+       deallocate ( Atm%inline_edmf%dtsfc )
+       deallocate ( Atm%inline_edmf%dqsfc )
+       deallocate ( Atm%inline_edmf%dusfc )
+       deallocate ( Atm%inline_edmf%dvsfc )
+       deallocate ( Atm%inline_edmf%dksfc )
+    endif
 
-    deallocate ( Atm%inline_sas%prec )
-    deallocate ( Atm%inline_sas%cumabs )
-    deallocate ( Atm%inline_sas%ktop )
-    deallocate ( Atm%inline_sas%kbot )
-    deallocate ( Atm%inline_sas%kcnv )
+    if (Atm%flagstruct%do_inline_sas) then
+       deallocate ( Atm%inline_sas%prec )
+       deallocate ( Atm%inline_sas%cumabs )
+       deallocate ( Atm%inline_sas%ktop )
+       deallocate ( Atm%inline_sas%kbot )
+       deallocate ( Atm%inline_sas%kcnv )
+    endif
 
-    deallocate ( Atm%inline_gwd%hprime )
-    deallocate ( Atm%inline_gwd%oc )
-    deallocate ( Atm%inline_gwd%oa )
-    deallocate ( Atm%inline_gwd%ol )
-    deallocate ( Atm%inline_gwd%theta )
-    deallocate ( Atm%inline_gwd%sigma )
-    deallocate ( Atm%inline_gwd%gamma )
-    deallocate ( Atm%inline_gwd%elvmax )
+    if (Atm%flagstruct%do_inline_gwd) then
+       deallocate ( Atm%inline_gwd%hprime )
+       deallocate ( Atm%inline_gwd%oc )
+       deallocate ( Atm%inline_gwd%oa )
+       deallocate ( Atm%inline_gwd%ol )
+       deallocate ( Atm%inline_gwd%theta )
+       deallocate ( Atm%inline_gwd%sigma )
+       deallocate ( Atm%inline_gwd%gamma )
+       deallocate ( Atm%inline_gwd%elvmax )
+    endif
 
     deallocate ( Atm%u_srf )
     deallocate ( Atm%v_srf )
