@@ -126,7 +126,7 @@ contains
     character(len=10) :: inputdir
     character(len=6) :: gnn
 
-    integer :: npts, sphum
+    integer :: npts, sphum, aero_id
     integer, allocatable :: pelist(:), global_pelist(:), smoothed_topo(:)
     real    :: sumpertn
     real    :: zvir, nbg_inv
@@ -451,7 +451,7 @@ contains
 
 
              !5. Idealized test case
-          else
+          elseif (Atm(n)%flagstruct%is_ideal_case) then
 
              ideal_test_case(n) = 1
 
@@ -505,6 +505,10 @@ contains
                    enddo
                 enddo
              endif
+
+          else
+
+                call mpp_error(FATAL, "If there is no restart file, either external_ic or is_ideal_case must be set true.")
 
           endif !external_ic vs. restart vs. idealized
 
@@ -712,6 +716,13 @@ contains
      endif
 !---------------------------------------------------------------------------------------------
 
+     if (Atm(n)%flagstruct%do_aerosol) then
+       aero_id = get_tracer_index(MODEL_ATMOS, 'aerosol')
+       if (aero_id .gt. 0) then
+         Atm(n)%q(isc:iec,jsc:jec,:,aero_id) = 0.0
+       endif
+     endif
+
      if (Atm(n)%flagstruct%add_noise > 0.) then
         write(errstring,'(A, E16.9)') "Adding thermal noise of amplitude ", Atm(n)%flagstruct%add_noise
         call mpp_error(NOTE, errstring)
@@ -757,6 +768,8 @@ contains
       write(unit,*)
       write(unit,*) 'fv_restart u   ', trim(gn),' = ', mpp_chksum(Atm(n)%u(isc:iec,jsc:jec,:))
       write(unit,*) 'fv_restart v   ', trim(gn),' = ', mpp_chksum(Atm(n)%v(isc:iec,jsc:jec,:))
+      write(unit,*) 'fv_restart ua   ', trim(gn),' = ', mpp_chksum(Atm(n)%ua(isc:iec,jsc:jec,:))
+      write(unit,*) 'fv_restart va   ', trim(gn),' = ', mpp_chksum(Atm(n)%va(isc:iec,jsc:jec,:))
       if ( .not.Atm(n)%flagstruct%hydrostatic )   &
         write(unit,*) 'fv_restart w   ', trim(gn),' = ', mpp_chksum(Atm(n)%w(isc:iec,jsc:jec,:))
       write(unit,*) 'fv_restart delp', trim(gn),' = ', mpp_chksum(Atm(n)%delp(isc:iec,jsc:jec,:))
@@ -842,14 +855,6 @@ contains
          enddo
          Atm(n)%flagstruct%srf_init = .true.
       endif
-
-      !if (n==this_grid) then
-      !  if (Atm(n)%flagstruct%external_ic) then
-      !    call fv_io_write_atminput(Atm(n))
-      !  else
-      !    call fv_io_write_atminput(Atm(n),'atmrst','ATMRST')
-      !  endif
-      !endif
 
     end do   ! n_tile
 
@@ -1456,6 +1461,8 @@ contains
     write(unit,*)
     write(unit,*) 'fv_restart_end u   ', trim(gn),' = ', mpp_chksum(Atm%u(isc:iec,jsc:jec,:))
     write(unit,*) 'fv_restart_end v   ', trim(gn),' = ', mpp_chksum(Atm%v(isc:iec,jsc:jec,:))
+    write(unit,*) 'fv_restart_end ua   ', trim(gn),' = ', mpp_chksum(Atm%ua(isc:iec,jsc:jec,:))
+    write(unit,*) 'fv_restart_end va   ', trim(gn),' = ', mpp_chksum(Atm%va(isc:iec,jsc:jec,:))
     if ( .not. Atm%flagstruct%hydrostatic )    &
          write(unit,*) 'fv_restart_end w   ', trim(gn),' = ', mpp_chksum(Atm%w(isc:iec,jsc:jec,:))
     write(unit,*) 'fv_restart_end delp', trim(gn),' = ', mpp_chksum(Atm%delp(isc:iec,jsc:jec,:))

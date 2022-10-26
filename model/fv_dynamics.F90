@@ -32,7 +32,7 @@ module fv_dynamics_mod
    use fv_mp_mod,           only: start_group_halo_update, complete_group_halo_update
    use fv_timing_mod,       only: timing_on, timing_off
    use diag_manager_mod,    only: send_data
-   use fv_diagnostics_mod,  only: fv_time, prt_mxm, range_check, prt_minmax, is_ideal_case
+   use fv_diagnostics_mod,  only: fv_time, prt_mxm, range_check, prt_minmax
    use mpp_domains_mod,     only: DGRID_NE, CGRID_NE, mpp_update_domains, domain2D
    use mpp_mod,             only: mpp_pe
    use field_manager_mod,   only: MODEL_ATMOS
@@ -44,7 +44,8 @@ module fv_dynamics_mod
    use fv_regional_mod,     only: a_step, p_step, k_step
    use fv_regional_mod,     only: current_time_in_seconds
    use boundary_mod,        only: nested_grid_BC_apply_intT
-   use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, fv_diag_type, fv_grid_bounds_type, inline_mp_type
+   use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, &
+                                  fv_diag_type, fv_grid_bounds_type, inline_mp_type
    use fv_nwp_nudge_mod,    only: do_adiabatic_init
 
 implicit none
@@ -157,7 +158,7 @@ contains
       real:: m_fac(bd%is:bd%ie,bd%js:bd%je)
       real:: pfull(npz)
       real, dimension(bd%is:bd%ie):: cvm
-      real, allocatable :: dp1(:,:,:), dtdt_m(:,:,:), cappa(:,:,:)
+      real, allocatable :: dp1(:,:,:), cappa(:,:,:)
       real:: akap, rdg, ph1, ph2, mdt, gam, amdt, u0
       real:: recip_k_split,reg_bc_update_time
       integer:: kord_tracer(ncnst)
@@ -375,14 +376,14 @@ contains
       endif
 
       if( .not.flagstruct%RF_fast .and. flagstruct%tau > 0. ) then
-        if ( gridstruct%grid_type<4 .or. gridstruct%bounded_domain .or. is_ideal_case ) then
+        if ( gridstruct%grid_type<4 .or. gridstruct%bounded_domain .or. flagstruct%is_ideal_case ) then
 !         if ( flagstruct%RF_fast ) then
 !            call Ray_fast(abs(dt), npx, npy, npz, pfull, flagstruct%tau, u, v, w,  &
 !                          dp_ref, ptop, hydrostatic, flagstruct%rf_cutoff, bd)
 !         else
              call Rayleigh_Super(abs(bdt), npx, npy, npz, ks, pfull, phis, flagstruct%tau, u, v, w, pt,  &
                   ua, va, delz, gridstruct%agrid, cp_air, rdgas, ptop, hydrostatic,    &
-                 .not. (gridstruct%bounded_domain .or. is_ideal_case), flagstruct%rf_cutoff, gridstruct, domain, bd)
+                 .not. (gridstruct%bounded_domain .or. flagstruct%is_ideal_case), flagstruct%rf_cutoff, gridstruct, domain, bd, flagstruct%is_ideal_case)
 !         endif
         else
              call Rayleigh_Friction(abs(bdt), npx, npy, npz, ks, pfull, flagstruct%tau, u, v, w, pt,  &
@@ -408,24 +409,18 @@ contains
   last_step = .false.
   mdt = bdt / real(k_split)
 
-  if ( idiag%id_mdt > 0 .and. (.not. do_adiabatic_init) ) then
-       allocate ( dtdt_m(is:ie,js:je,npz) )
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,dtdt_m)
-       do k=1,npz
-          do j=js,je
-             do i=is,ie
-                dtdt_m(i,j,k) = 0.
-             enddo
-          enddo
-       enddo
-  endif
-
   ! Initialize rain, ice, snow and graupel precipitaiton
   if (flagstruct%do_inline_mp) then
+      inline_mp%prew = 0.0
       inline_mp%prer = 0.0
       inline_mp%prei = 0.0
       inline_mp%pres = 0.0
       inline_mp%preg = 0.0
+      inline_mp%prefluxw = 0.0
+      inline_mp%prefluxr = 0.0
+      inline_mp%prefluxi = 0.0
+      inline_mp%prefluxs = 0.0
+      inline_mp%prefluxg = 0.0
       inline_mp%cond = 0.0
       inline_mp%dep = 0.0
       inline_mp%reevap = 0.0
@@ -487,7 +482,8 @@ contains
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
-                    domain, n_map==1, i_pack, last_step, diss_est, time_total)
+                    domain, n_map==1, i_pack, last_step, diss_est, &
+                    consv_te, te_2d, time_total)
                                            call timing_off('DYN_CORE')
 
 
@@ -594,16 +590,16 @@ contains
          call Lagrangian_to_Eulerian(last_step, consv_te, ps, pe, delp,          &
                      pkz, pk, mdt, bdt, npx, npy, npz, is,ie,js,je, isd,ied,jsd,jed,       &
                      nr, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
-                     zvir, cp_air, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
+                     zvir, cp_air, flagstruct%te_err, flagstruct%tw_err, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
                      kord_tracer, flagstruct%kord_tm, flagstruct%remap_te, peln, te_2d, &
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
-                     idiag%id_mdt>0, dtdt_m, ptop, ak, bk, pfull, gridstruct, domain,   &
+                     ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, &
                      hybrid_z,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      inline_mp, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
-                     flagstruct%moist_phys, flagstruct%phys_hydrostatic, &
-                     flagstruct%w_limiter, flagstruct%do_am4_remap)
+                     flagstruct%w_limiter, flagstruct%do_am4_remap, &
+                     flagstruct%do_fast_phys, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split
@@ -651,10 +647,16 @@ contains
 
   ! Initialize rain, ice, snow and graupel precipitaiton
   if (flagstruct%do_inline_mp) then
+      inline_mp%prew = inline_mp%prew / k_split
       inline_mp%prer = inline_mp%prer / k_split
       inline_mp%prei = inline_mp%prei / k_split
       inline_mp%pres = inline_mp%pres / k_split
       inline_mp%preg = inline_mp%preg / k_split
+      inline_mp%prefluxw = inline_mp%prefluxw / k_split
+      inline_mp%prefluxr = inline_mp%prefluxr / k_split
+      inline_mp%prefluxi = inline_mp%prefluxi / k_split
+      inline_mp%prefluxs = inline_mp%prefluxs / k_split
+      inline_mp%prefluxg = inline_mp%prefluxg / k_split
       inline_mp%cond = inline_mp%cond / k_split
       inline_mp%dep = inline_mp%dep / k_split
       inline_mp%reevap = inline_mp%reevap / k_split
@@ -673,20 +675,6 @@ contains
   endif
 
                                                   call timing_off('FV_DYN_LOOP')
-  if ( idiag%id_mdt > 0 .and. (.not.do_adiabatic_init) ) then
-! Output temperature tendency due to inline moist physics:
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,dtdt_m,bdt)
-       do k=1,npz
-          do j=js,je
-             do i=is,ie
-                dtdt_m(i,j,k) = dtdt_m(i,j,k) / bdt * 86400.
-             enddo
-          enddo
-       enddo
-!      call prt_mxm('Fast DTDT (deg/Day)', dtdt_m, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
-       used = send_data(idiag%id_mdt, dtdt_m, fv_time)
-       deallocate ( dtdt_m )
-  endif
 
   if( nwat==6 ) then
      if (cld_amt > 0) then
@@ -920,7 +908,7 @@ contains
 
  subroutine Rayleigh_Super(dt, npx, npy, npz, ks, pm, phis, tau, u, v, w, pt,  &
                            ua, va, delz, agrid, cp, rg, ptop, hydrostatic,     &
-                           conserve, rf_cutoff, gridstruct, domain, bd)
+                           conserve, rf_cutoff, gridstruct, domain, bd, is_ideal_case)
     real, intent(in):: dt
     real, intent(in):: tau              ! time scale (days)
     real, intent(in):: cp, rg, ptop, rf_cutoff
@@ -928,6 +916,7 @@ contains
     integer, intent(in):: npx, npy, npz, ks
     logical, intent(in):: hydrostatic
     logical, intent(in):: conserve
+    logical, intent(in):: is_ideal_case
     type(fv_grid_bounds_type), intent(IN) :: bd
     real, intent(inout):: u(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz) ! D grid zonal wind (m/s)
     real, intent(inout):: v(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz) ! D grid meridional wind (m/s)
