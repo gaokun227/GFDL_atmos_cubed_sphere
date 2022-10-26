@@ -75,7 +75,7 @@ use fv_nesting_mod,     only: twoway_nesting
 use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time, prt_maxmin, prt_height
 use fv_cmip_diag_mod,   only: fv_cmip_diag_init, fv_cmip_diag, fv_cmip_diag_end
 use fv_restart_mod,     only: fv_restart, fv_write_restart
-use fv_timing_mod,      only: timing_on, timing_off
+use fv_timing_mod,      only: timing_on, timing_off, timing_init, timing_prt
 use fv_mp_mod,          only: is_master
 use fv_sg_mod,          only: fv_subgrid_z
 use fv_update_phys_mod, only: fv_update_phys
@@ -198,12 +198,15 @@ contains
    integer :: nlunit = 9999
    character (len = 64) :: fn_nml = 'input.nml'
 
+   call timing_init
+   call timing_on('ATMOS_TOTAL')
+   call timing_on('ATMOS_INIT')
+
    !For regional
    a_step = 0
    current_time_in_seconds = time_type_to_real( Time - Time_init )
    if (mpp_pe() == 0) write(0,"('atmosphere_init: current_time_seconds = ',f9.1)")current_time_in_seconds
 
-                    call timing_on('ATMOS_INIT')
    allocate(pelist(mpp_npes()))
    call mpp_get_current_pelist(pelist)
 
@@ -313,7 +316,9 @@ contains
      call cloud_diagnosis_init(nlunit, input_nml_file, stdlog(), fn_nml)
    endif
 
+   call timing_on('FV_RESTART')
    call fv_restart(Atm(mygrid)%domain, Atm, dt_atmos, seconds, days, cold_start, Atm(mygrid)%gridstruct%grid_type, mygrid)
+   call timing_off('FV_RESTART')
 
    fv_time = Time
 
@@ -474,7 +479,7 @@ contains
    id_subgridz  = mpp_clock_id ('FV subgrid_z',flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
    id_fv_diag   = mpp_clock_id ('FV Diag',     flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
 
-                    call timing_off('ATMOS_INIT')
+   call timing_off('ATMOS_INIT')
 
  end subroutine atmosphere_init
 
@@ -546,6 +551,8 @@ contains
    real :: rdt
 !---- Call FV dynamics -----
 
+   call timing_on('ATMOS_DYNAMICS')
+
    call mpp_clock_begin (id_dynam)
 
    Surf_diff%ddp_dyn(:,:,:) = Atm(mygrid)%delp(isc:iec, jsc:jec, :)
@@ -576,7 +583,8 @@ contains
    endif
    do psc=1,abs(p_split)
       p_step = psc
-                    call timing_on('fv_dynamics')
+
+     call timing_on('FV_DYNAMICS')
 !uc/vc only need be same on coarse grid? However BCs do need to be the same
      call fv_dynamics(npx, npy, npz, nq, Atm(n)%ng, dt_atmos/real(abs(p_split)),&
                       Atm(n)%flagstruct%consv_te, Atm(n)%flagstruct%fill,  &
@@ -595,8 +603,7 @@ contains
                       Atm(n)%gridstruct, Atm(n)%flagstruct,                &
                       Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
                       Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp)
-
-     call timing_off('fv_dynamics')
+    call timing_off('FV_DYNAMICS')
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
        call timing_on('TWOWAY_UPDATE')
@@ -640,6 +647,7 @@ contains
 !--- COMPUTE SUBGRID Z
 !-----------------------------------------------------
 !--- zero out tendencies
+    call timing_on('FV_SUBGRID_Z')
     call mpp_clock_begin (id_subgridz)
     u_dt(:,:,:)   = 0. ! These are updated by fv_subgrid_z
     v_dt(:,:,:)   = 0.
@@ -699,6 +707,9 @@ contains
     t_dt = 0.
 
    call mpp_clock_end (id_subgridz)
+   call timing_off('FV_SUBGRID_Z')
+
+   call timing_off('ATMOS_DYNAMICS')
 
  end subroutine atmosphere_dynamics
 
@@ -706,6 +717,8 @@ contains
  subroutine atmosphere_end (Time, Grid_box )
    type (time_type),      intent(in)    :: Time
    type(grid_box_type),   intent(inout) :: Grid_box
+
+   call timing_on('ATMOS_END')
 
 !--- end nudging module ---
 #if defined (ATMOS_NUDGE)
@@ -722,14 +735,18 @@ contains
      call gfdl_mp_end ( )
    endif
 
-      call timing_on('FV_DIAG')
+   call timing_on('FV_DIAG')
    call atmos_global_diag_end
    call fv_cmip_diag_end
    call fv_end(Atm, mygrid)
-      call timing_off('FV_DIAG')
+   call timing_off('FV_DIAG')
 
    deallocate ( Atm )
    deallocate ( u_dt, v_dt, t_dt, qv_dt, q_dt, pref, dum1d )
+
+   call timing_off('ATMOS_END')
+   call timing_off('ATMOS_TOTAL')
+   call timing_prt( mpp_pe() )
 
  end subroutine atmosphere_end
 
@@ -1016,6 +1033,8 @@ contains
    integer :: nb, ibs, ibe, jbs, jbe
    real ::  rcp
 
+   call timing_on('ATMOS_UPDATE')
+
    Time_prev = Time
    Time_next = Time + Time_step_atmos
 
@@ -1068,7 +1087,8 @@ contains
 #endif
 
    call mpp_clock_begin (id_dynam)
-       call timing_on('FV_UPDATE_PHYS')
+
+    call timing_on('FV_UPDATE_PHYS')
     call fv_update_phys( dt_atmos, isc, iec, jsc, jec, isd, ied, jsd, jed, Atm(n)%ng, nt_dyn, &
                          Atm(n)%u,  Atm(n)%v,   Atm(n)%w,  Atm(n)%delp, Atm(n)%pt,         &
                          Atm(n)%q,  Atm(n)%qdiag,                                          &
@@ -1081,7 +1101,8 @@ contains
                          Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%flagstruct,            &
                          Atm(n)%neststruct, Atm(n)%bd, Atm(n)%domain, &
                          Atm(n)%ptop, Atm(n)%phys_diag, Atm(n)%nudge_diag, q_dt)
-       call timing_off('FV_UPDATE_PHYS')
+    call timing_off('FV_UPDATE_PHYS')
+
    call mpp_clock_end (id_dynam)
 
 !--- nesting update after updating atmospheric variables with
@@ -1101,20 +1122,22 @@ contains
   !---- diagnostics for FV dynamics -----
    if (Atm(mygrid)%flagstruct%print_freq /= -99) then
      call mpp_clock_begin(id_fv_diag)
-     call timing_on('FV_DIAG')
 
      fv_time = Time_next
      call get_time (fv_time, seconds,  days)
 
+     call timing_on('FV_DIAG')
      call fv_diag(Atm(mygrid:mygrid), zvir, fv_time, Atm(mygrid)%flagstruct%print_freq)
       if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
          call fv_coarse_diag(Atm(mygrid:mygrid), fv_time)
       endif
      call fv_cmip_diag(Atm(mygrid:mygrid), zvir, fv_time)
-
      call timing_off('FV_DIAG')
+
      call mpp_clock_end(id_fv_diag)
    endif
+
+   call timing_off('ATMOS_UPDATE')
 
  end subroutine atmosphere_state_update
 
@@ -1159,7 +1182,6 @@ contains
     jsd = jsc - ngc
     jed = jec + ngc
 
-     call timing_on('adiabatic_init')
      do_adiabatic_init = .true.
 
      allocate ( u0(isc:iec,  jsc:jec+1, npz) )
@@ -1361,7 +1383,6 @@ contains
      if ( allocated(dz0) ) deallocate ( dz0 )
 
      do_adiabatic_init = .false.
-     call timing_off('adiabatic_init')
 
  end subroutine adiabatic_init
 

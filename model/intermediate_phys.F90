@@ -31,7 +31,6 @@ module intermediate_phys_mod
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
-    use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, mtetw
@@ -175,8 +174,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     ! Note: pt at this stage is T_v
     if ((do_adiabatic_init .or. (.not. do_inline_mp) .or. do_sat_adj) .and. nwat .eq. 6) then
-
-        call timing_on ('fast_sat_adj')
 
         allocate (dz (is:ie, kmp:km))
 
@@ -354,8 +351,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         deallocate (tz)
         deallocate (wz)
 
-        call timing_off ('fast_sat_adj')
-
     endif
 
     !-----------------------------------------------------------------------
@@ -367,8 +362,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_mp .and. nwat .eq. 6) then
-
-        call timing_on ('gfdl_mp')
 
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
@@ -745,8 +738,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             deallocate (v0)
             deallocate (dp0)
         endif
-
-        call timing_off ('gfdl_mp')
 
     endif
 

@@ -838,11 +838,13 @@ contains
 ! Intermediate Physics >>>
 !-----------------------------------------------------------------------
 
+    call timing_on('INTERMEDIATE_PHYS')
     call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
              c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
              v, w, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
              inline_mp, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
              do_inline_mp, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr)
+    call timing_off('INTERMEDIATE_PHYS')
 
 !-----------------------------------------------------------------------
 ! <<< Intermediate Physics
