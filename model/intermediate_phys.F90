@@ -188,9 +188,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    liq_wat, ice_wat, snowwat, graupel, q_con, r_vir, &
 !$OMP                                    sphum, pkz, last_step, consv, te0_2d, gridstruct, &
 !$OMP                                    q, mdt, cld_amt, cappa, rrg, akap, ccn_cm3, &
-!$OMP                                    cin_cm3, aerosol, inline_mp, do_sat_adj, &
-!$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq, consv_checker, &
-!$OMP                                    te_err, tw_err) &
+!$OMP                                    cin_cm3, aerosol, do_sat_adj, adj_mass_vmr, &
+!$OMP                                    conv_vmr_mmr, nq, consv_checker, te_err, tw_err) &
 !$OMP                           private (q2, q3, gsize, dz, pe, peln, adj_vmr, qliq, qsol, &
 !$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
 !$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)

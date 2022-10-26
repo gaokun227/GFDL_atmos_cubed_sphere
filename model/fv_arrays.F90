@@ -1519,16 +1519,18 @@ contains
     allocate (  Atm%ak(npz_2d+1) )
     allocate (  Atm%bk(npz_2d+1) )
 
-    allocate ( Atm%inline_mp%prew(is:ie,js:je) )
-    allocate ( Atm%inline_mp%prer(is:ie,js:je) )
-    allocate ( Atm%inline_mp%prei(is:ie,js:je) )
-    allocate ( Atm%inline_mp%pres(is:ie,js:je) )
-    allocate ( Atm%inline_mp%preg(is:ie,js:je) )
-    allocate ( Atm%inline_mp%prefluxw(is:ie,js:je,npz) )
-    allocate ( Atm%inline_mp%prefluxr(is:ie,js:je,npz) )
-    allocate ( Atm%inline_mp%prefluxi(is:ie,js:je,npz) )
-    allocate ( Atm%inline_mp%prefluxs(is:ie,js:je,npz) )
-    allocate ( Atm%inline_mp%prefluxg(is:ie,js:je,npz) )
+    if (Atm%flagstruct%do_inline_mp) then
+       allocate ( Atm%inline_mp%prew(is:ie,js:je) )
+       allocate ( Atm%inline_mp%prer(is:ie,js:je) )
+       allocate ( Atm%inline_mp%prei(is:ie,js:je) )
+       allocate ( Atm%inline_mp%pres(is:ie,js:je) )
+       allocate ( Atm%inline_mp%preg(is:ie,js:je) )
+       allocate ( Atm%inline_mp%prefluxw(is:ie,js:je,npz) )
+       allocate ( Atm%inline_mp%prefluxr(is:ie,js:je,npz) )
+       allocate ( Atm%inline_mp%prefluxi(is:ie,js:je,npz) )
+       allocate ( Atm%inline_mp%prefluxs(is:ie,js:je,npz) )
+       allocate ( Atm%inline_mp%prefluxg(is:ie,js:je,npz) )
+    endif
 
     !--------------------------
     ! Non-hydrostatic dynamics:
@@ -1609,19 +1611,25 @@ contains
         enddo
         enddo
      enddo
+     if (Atm%flagstruct%do_inline_mp) then
+        do j=js, je
+           do i=is, ie
+              Atm%inline_mp%prew(i,j) = real_big
+              Atm%inline_mp%prer(i,j) = real_big
+              Atm%inline_mp%prei(i,j) = real_big
+              Atm%inline_mp%pres(i,j) = real_big
+              Atm%inline_mp%preg(i,j) = real_big
+              Atm%inline_mp%prefluxw(i,j,:) = real_big
+              Atm%inline_mp%prefluxr(i,j,:) = real_big
+              Atm%inline_mp%prefluxi(i,j,:) = real_big
+              Atm%inline_mp%prefluxs(i,j,:) = real_big
+              Atm%inline_mp%prefluxg(i,j,:) = real_big
+           enddo
+        enddo
+     endif
+
      do j=js, je
         do i=is, ie
-           Atm%inline_mp%prew(i,j) = real_big
-           Atm%inline_mp%prer(i,j) = real_big
-           Atm%inline_mp%prei(i,j) = real_big
-           Atm%inline_mp%pres(i,j) = real_big
-           Atm%inline_mp%preg(i,j) = real_big
-           Atm%inline_mp%prefluxw(i,j,:) = real_big
-           Atm%inline_mp%prefluxr(i,j,:) = real_big
-           Atm%inline_mp%prefluxi(i,j,:) = real_big
-           Atm%inline_mp%prefluxs(i,j,:) = real_big
-           Atm%inline_mp%prefluxg(i,j,:) = real_big
-
            Atm%ts(i,j) = 300.
 
            Atm%phis(i,j) = real_big
@@ -1873,16 +1881,18 @@ contains
     deallocate (  Atm%bk )
     deallocate ( Atm%diss_est )
 
-    deallocate ( Atm%inline_mp%prew )
-    deallocate ( Atm%inline_mp%prer )
-    deallocate ( Atm%inline_mp%prei )
-    deallocate ( Atm%inline_mp%pres )
-    deallocate ( Atm%inline_mp%preg )
-    deallocate ( Atm%inline_mp%prefluxw )
-    deallocate ( Atm%inline_mp%prefluxr )
-    deallocate ( Atm%inline_mp%prefluxi )
-    deallocate ( Atm%inline_mp%prefluxs )
-    deallocate ( Atm%inline_mp%prefluxg )
+    if (Atm%flagstruct%do_inline_mp) then
+       deallocate ( Atm%inline_mp%prew )
+       deallocate ( Atm%inline_mp%prer )
+       deallocate ( Atm%inline_mp%prei )
+       deallocate ( Atm%inline_mp%pres )
+       deallocate ( Atm%inline_mp%preg )
+       deallocate ( Atm%inline_mp%prefluxw )
+       deallocate ( Atm%inline_mp%prefluxr )
+       deallocate ( Atm%inline_mp%prefluxi )
+       deallocate ( Atm%inline_mp%prefluxs )
+       deallocate ( Atm%inline_mp%prefluxg )
+    endif
 
     deallocate ( Atm%u_srf )
     deallocate ( Atm%v_srf )
