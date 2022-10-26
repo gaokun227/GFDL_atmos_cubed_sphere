@@ -270,7 +270,7 @@
         print *,                                  &
         '  ---------------------------------------------------------------------'
         print *,                                  &
-        '     Block                    User time  System Time   Total Time   GID '
+        '  Block                     User time  System Time   Total Time     GID'
         print *,                                  &
         '  ---------------------------------------------------------------------'
 

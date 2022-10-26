@@ -132,7 +132,7 @@ character(len=20)   :: mod_name = 'SHiELD/atmosphere_mod'
   integer :: isd, ied, jsd, jed
   integer :: nq                       ! transported tracers
   integer :: sec, seconds, days
-  integer :: id_dynam, id_fv_diag, id_subgridz
+  integer :: id_dycore, id_fv_diag, id_update, id_dynam, id_subgrid
   logical :: cold_start = .false.       ! read in initial condition
 
   integer, dimension(:), allocatable :: id_tracerdt_dyn
@@ -338,9 +338,11 @@ contains
     call get_eta_level ( npz, ps2, pref(1,2), dum1d, Atm(mygrid)%ak, Atm(mygrid)%bk )
 
 !  --- initialize clocks for dynamics, physics_down and physics_up
-   id_dynam     = mpp_clock_id ('FV dy-core',  flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
-   id_subgridz  = mpp_clock_id ('FV subgrid_z',flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
-   id_fv_diag   = mpp_clock_id ('FV Diag',     flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
+   id_dycore  = mpp_clock_id ('---FV Dycore',flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
+   id_update  = mpp_clock_id ('---FV Update',flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
+   id_fv_diag = mpp_clock_id ('---FV Diag',  flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
+   id_dynam   = mpp_clock_id ('----FV Dynamics',flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
+   id_subgrid = mpp_clock_id ('----FV Subgrid_z',flags = clock_flag_default, grain=CLOCK_SUBCOMPONENT )
 
 !  --- initiate the start for a restarted regional forecast
    if ( Atm(mygrid)%gridstruct%regional .and. Atm(mygrid)%flagstruct%warm_start ) then
@@ -459,6 +461,7 @@ contains
 
    call timing_on('ATMOS_DYNAMICS')
 
+   call mpp_clock_begin (id_dycore)
    call mpp_clock_begin (id_dynam)
 
    n = mygrid
@@ -531,14 +534,16 @@ contains
         endif
     endif
 
-    call mpp_clock_end (id_dynam)
+   call mpp_clock_end (id_dynam)
+   call mpp_clock_begin (id_subgrid)
 
 !-----------------------------------------------------
 !--- COMPUTE SUBGRID Z
 !-----------------------------------------------------
 !--- zero out tendencies
+
     call timing_on('FV_SUBGRID_Z')
-    call mpp_clock_begin (id_subgridz)
+
     u_dt(:,:,:)   = 0. ! These are updated by fv_subgrid_z
     v_dt(:,:,:)   = 0.
 ! t_dt is used for two different purposes:
@@ -594,8 +599,10 @@ contains
 ! zero out t_dt for use as an accumulator
    t_dt = 0.
 
-   call mpp_clock_end (id_subgridz)
    call timing_off('FV_SUBGRID_Z')
+
+   call mpp_clock_end (id_subgrid)
+   call mpp_clock_end (id_dycore)
 
    call timing_off('ATMOS_DYNAMICS')
 
@@ -1196,6 +1203,8 @@ contains
 
    call timing_on('ATMOS_UPDATE')
 
+   call mpp_clock_begin (id_update)
+
    Time_prev = Time
    Time_next = Time + Time_step_atmos
    rdt = 1.d0 / dt_atmos
@@ -1390,8 +1399,6 @@ contains
     endif
 #endif
 
-   call mpp_clock_begin (id_dynam)
-
     call timing_on('FV_UPDATE_PHYS')
     call fv_update_phys( dt_atmos, isc, iec, jsc, jec, isd, ied, jsd, jed, Atm(n)%ng, nt_dyn, &
                          Atm(n)%u,  Atm(n)%v,   Atm(n)%w,  Atm(n)%delp, Atm(n)%pt,         &
@@ -1406,8 +1413,6 @@ contains
                          Atm(n)%neststruct, Atm(n)%bd, Atm(n)%domain, &
                          Atm(n)%ptop, Atm(n)%phys_diag, Atm(n)%nudge_diag)
     call timing_off('FV_UPDATE_PHYS')
-
-   call mpp_clock_end (id_dynam)
 
 !MT surface pressure tendency (hPa/3hr)
    ps_dt(:,:)=(Atm(n)%ps(:,:)-ps_dt(:,:))*rdt*108.
@@ -1469,9 +1474,12 @@ contains
        call timing_off('TWOWAY_UPDATE')
     endif
 
+  call mpp_clock_end (id_update)
+
+  call mpp_clock_begin(id_fv_diag)
+
   !---- diagnostics for FV dynamics -----
    if (Atm(mygrid)%flagstruct%print_freq /= -99) then
-     call mpp_clock_begin(id_fv_diag)
 
      fv_time = Time_next
      call get_time (fv_time, seconds,  days)
@@ -1484,8 +1492,9 @@ contains
      first_diag = .false.
      call timing_off('FV_DIAG')
 
-     call mpp_clock_end(id_fv_diag)
    endif
+
+   call mpp_clock_end(id_fv_diag)
 
    call timing_off('ATMOS_UPDATE')
 
