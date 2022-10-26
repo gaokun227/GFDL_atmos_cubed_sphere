@@ -3708,8 +3708,8 @@ else ! all others
   type(domain2d), intent(INOUT) :: domain
 ! Output:
   real, intent(out):: delp(isd:ied,jsd:jed,kn) ! pressure thickness
-  real, intent(out):: u0(isd:ied  ,jsd:jed+1,kn)   ! initial (t=0) u-wind (m/s)
-  real, intent(out):: v0(isd:ied+1,jsd:jed  ,kn)   ! initial (t=0) v-wind (m/s)
+  real, intent(out):: u0(isd:,jsd:,1:)   ! initial (t=0) u-wind (m/s)
+  real, intent(out):: v0(isd:,jsd:,1:)   ! initial (t=0) v-wind (m/s)
   real, intent(out)::  u(isd:ied  ,jsd:jed+1,kn)   ! u-wind (m/s)
   real, intent(out)::  v(isd:ied+1,jsd:jed  ,kn)   ! v-wind (m/s)
   real, intent(out)::  w(isd:     ,jsd:     ,1:)   ! vertical velocity (m/s)

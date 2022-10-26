@@ -100,8 +100,8 @@ contains
     logical, intent(IN) :: hybrid_z       ! Using hybrid_z for remapping
 
     type(fv_grid_bounds_type), intent(IN) :: bd
-    real, intent(inout), dimension(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz) :: u0 ! initial (t=0) D grid zonal wind (m/s)
-    real, intent(inout), dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) :: v0 ! initial (t=0) D grid meridional wind (m/s)
+    real, intent(inout), dimension(bd%isd:,bd%jsd:,1:) :: u0 ! initial (t=0) D grid zonal wind (m/s)
+    real, intent(inout), dimension(bd%isd:,bd%jsd:,1:) :: v0 ! initial (t=0) D grid meridional wind (m/s)
     real, intent(inout), dimension(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz) :: u ! D grid zonal wind (m/s)
     real, intent(inout), dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) :: v ! D grid meridional wind (m/s)
     real, intent(inout) :: w(   bd%isd:  ,bd%jsd:  ,1:)  !  W (m/s)

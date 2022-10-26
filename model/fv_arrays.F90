@@ -1471,8 +1471,13 @@ contains
 
     Atm%flagstruct%ndims = ndims_in
 
-    allocate (   Atm%u0(isd:ied  ,jsd:jed+1,npz) )
-    allocate (   Atm%v0(isd:ied+1,jsd:jed  ,npz) )
+    if (Atm%flagstruct%is_ideal_case) then
+       allocate (   Atm%u0(isd:ied  ,jsd:jed+1,npz) )
+       allocate (   Atm%v0(isd:ied+1,jsd:jed  ,npz) )
+    else
+       allocate (   Atm%u0(isd:isd,jsd:jsd,1) )
+       allocate (   Atm%v0(isd:isd,jsd:jsd,1) )
+    endif
     allocate (    Atm%u(isd:ied  ,jsd:jed+1,npz) )
     allocate (    Atm%v(isd:ied+1,jsd:jed  ,npz) )
 
@@ -1572,14 +1577,18 @@ contains
         enddo
         do j=jsd, jed+1
            do i=isd, ied
-              Atm%u0(i,j,k) = 0.
+              if (Atm%flagstruct%is_ideal_case) then
+                 Atm%u0(i,j,k) = 0.
+              endif
                Atm%u(i,j,k) = 0.
               Atm%vc(i,j,k) = real_big
            enddo
         enddo
         do j=jsd, jed
            do i=isd, ied+1
-              Atm%v0(i,j,k) = 0.
+              if (Atm%flagstruct%is_ideal_case) then
+                 Atm%v0(i,j,k) = 0.
+              endif
                Atm%v(i,j,k) = 0.
               Atm%uc(i,j,k) = real_big
            enddo
