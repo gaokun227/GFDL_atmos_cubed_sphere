@@ -1098,13 +1098,15 @@ contains
              flagstruct%do_inline_edmf, flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 
           call timing_on ('COMM_TOTAL')
-          call mpp_update_domains (u, v, domain, gridtype=DGRID_NE)
+          !some mpp domains updates are commented out at this moment -- Linjiong
+          !future visit is needed if the model is not reprodicible using fast physics
+          !call mpp_update_domains (u, v, domain, gridtype=DGRID_NE)
           call mpp_update_domains (delp, domain, complete=.false.)
           call mpp_update_domains (pt, domain, complete=.false.)
-          call mpp_update_domains (w, domain, complete=.false.)
-          do iq = 1, nq
-             call mpp_update_domains (q (:,:,:,iq), domain, complete=.false.)
-          enddo
+          !call mpp_update_domains (w, domain, complete=.false.)
+          !do iq = 1, nq
+          !   call mpp_update_domains (q (:,:,:,iq), domain, complete=.false.)
+          !enddo
           call mpp_update_domains (q_con, domain, complete=.false.)
           call mpp_update_domains (cappa, domain, complete=.true.)
           call timing_off ('COMM_TOTAL')

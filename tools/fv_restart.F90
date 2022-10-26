@@ -499,6 +499,9 @@ contains
                 enddo
              endif
 
+             Atm(n)%u0 = Atm(n)%u
+             Atm(n)%v0 = Atm(n)%v
+
           else
 
                 call mpp_error(FATAL, "If there is no restart file, either external_ic or is_ideal_case must be set true.")
