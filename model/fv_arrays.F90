@@ -1110,6 +1110,8 @@ module fv_arrays_mod
 
   type coarse_restart_type
 
+     real, _ALLOCATABLE :: u0(:,:,:)
+     real, _ALLOCATABLE :: v0(:,:,:)
      real, _ALLOCATABLE :: u(:,:,:)
      real, _ALLOCATABLE :: v(:,:,:)
      real, _ALLOCATABLE :: w(:,:,:)
@@ -1231,6 +1233,8 @@ module fv_arrays_mod
 !
 ! The C grid component is "diagnostic" in that it is predicted every time step
 ! from the D grid variables.
+    real, _ALLOCATABLE :: u0(:,:,:)   _NULL  ! initial (t=0) D grid zonal wind (m/s)
+    real, _ALLOCATABLE :: v0(:,:,:)   _NULL  ! initial (t=0) D grid meridional wind (m/s)
     real, _ALLOCATABLE :: u(:,:,:)    _NULL  ! D grid zonal wind (m/s)
     real, _ALLOCATABLE :: v(:,:,:)    _NULL  ! D grid meridional wind (m/s)
     real, _ALLOCATABLE :: pt(:,:,:)   _NULL  ! temperature (K)
@@ -1467,6 +1471,10 @@ contains
 
     Atm%flagstruct%ndims = ndims_in
 
+    if (Atm%flagstruct%is_ideal_case) then
+       allocate ( Atm%u0(isd:ied  ,jsd:jed+1,npz) )
+       allocate ( Atm%v0(isd:ied+1,jsd:jed  ,npz) )
+    endif
     allocate (    Atm%u(isd:ied  ,jsd:jed+1,npz) )
     allocate (    Atm%v(isd:ied+1,jsd:jed  ,npz) )
 
@@ -1564,12 +1572,18 @@ contains
         enddo
         do j=jsd, jed+1
            do i=isd, ied
+              if (Atm%flagstruct%is_ideal_case) then
+                 Atm%u0(i,j,k) = 0.
+              endif
                Atm%u(i,j,k) = 0.
               Atm%vc(i,j,k) = real_big
            enddo
         enddo
         do j=jsd, jed
            do i=isd, ied+1
+              if (Atm%flagstruct%is_ideal_case) then
+                 Atm%v0(i,j,k) = 0.
+              endif
                Atm%v(i,j,k) = 0.
               Atm%uc(i,j,k) = real_big
            enddo
@@ -1837,6 +1851,10 @@ contains
     integer :: n
 
     if (.not.Atm%allocated) return
+    if (Atm%flagstruct%is_ideal_case) then
+       deallocate ( Atm%u0 )
+       deallocate ( Atm%v0 )
+    endif
     deallocate (    Atm%u )
     deallocate (    Atm%v )
     deallocate (   Atm%pt )
