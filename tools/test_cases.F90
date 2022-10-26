@@ -6080,7 +6080,7 @@ end subroutine terminator_tracers
            call init_w_forcing(bd, npx, npy, npz, flagstruct%grid_type, agrid, flagstruct)
         endif
 
-        is_ideal_case = .true.
+        flagstruct%is_ideal_case = .true.
 
         nullify(grid)
         nullify(agrid)
