@@ -1471,10 +1471,8 @@ contains
 
     Atm%flagstruct%ndims = ndims_in
 
-    if (Atm%flagstruct%is_ideal_case) then
-       allocate ( Atm%u0(isd:ied  ,jsd:jed+1,npz) )
-       allocate ( Atm%v0(isd:ied+1,jsd:jed  ,npz) )
-    endif
+    allocate (   Atm%u0(isd:ied  ,jsd:jed+1,npz) )
+    allocate (   Atm%v0(isd:ied+1,jsd:jed  ,npz) )
     allocate (    Atm%u(isd:ied  ,jsd:jed+1,npz) )
     allocate (    Atm%v(isd:ied+1,jsd:jed  ,npz) )
 
@@ -1572,18 +1570,14 @@ contains
         enddo
         do j=jsd, jed+1
            do i=isd, ied
-              if (Atm%flagstruct%is_ideal_case) then
-                 Atm%u0(i,j,k) = 0.
-              endif
+              Atm%u0(i,j,k) = 0.
                Atm%u(i,j,k) = 0.
               Atm%vc(i,j,k) = real_big
            enddo
         enddo
         do j=jsd, jed
            do i=isd, ied+1
-              if (Atm%flagstruct%is_ideal_case) then
-                 Atm%v0(i,j,k) = 0.
-              endif
+              Atm%v0(i,j,k) = 0.
                Atm%v(i,j,k) = 0.
               Atm%uc(i,j,k) = real_big
            enddo
@@ -1851,10 +1845,8 @@ contains
     integer :: n
 
     if (.not.Atm%allocated) return
-    if (Atm%flagstruct%is_ideal_case) then
-       deallocate ( Atm%u0 )
-       deallocate ( Atm%v0 )
-    endif
+    deallocate (   Atm%u0 )
+    deallocate (   Atm%v0 )
     deallocate (    Atm%u )
     deallocate (    Atm%v )
     deallocate (   Atm%pt )

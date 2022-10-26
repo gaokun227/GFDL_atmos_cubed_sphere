@@ -3677,7 +3677,7 @@ else ! all others
                       delp_r, u0_r, v0_r, u_r, v_r, w_r, delz_r, pt_r, q_r, qdiag_r, &
                       delp,   u0,   v0,   u,   v,   w,   delz,   pt,   q,   qdiag,   &
                       ak_r, bk_r, ptop, ak, bk, hydrostatic, make_nh, &
-                      domain, square_domain)
+                      domain, square_domain, is_ideal_case)
 !------------------------------------
 ! Assuming hybrid sigma-P coordinate:
 !------------------------------------
@@ -3687,7 +3687,7 @@ else ! all others
   integer, intent(in):: nq, ntp               ! number of tracers (including h2o)
   integer, intent(in):: is,ie,isd,ied         ! starting & ending X-Dir index
   integer, intent(in):: js,je,jsd,jed         ! starting & ending Y-Dir index
-  logical, intent(in):: hydrostatic, make_nh, square_domain
+  logical, intent(in):: hydrostatic, make_nh, square_domain, is_ideal_case
   real, intent(IN) :: ptop
   real, intent(in) :: ak_r(km+1)
   real, intent(in) :: bk_r(km+1)
@@ -3789,7 +3789,7 @@ else ! all others
 
 !$OMP parallel do default(none) shared(is,ie,js,je,km,ak_r,bk_r,ps,kn,ak,bk,u0_r,u_r,u0,u,delp, &
 !$OMP                                  ntp,nq,hydrostatic,make_nh,w_r,w,delz_r,delp_r,delz, &
-!$OMP                                  pt_r,pt,v0_r,v_r,v0,v,q,q_r,qdiag,qdiag_r) &
+!$OMP                                  pt_r,pt,v0_r,v_r,v0,v,q,q_r,qdiag,qdiag_r,is_ideal_case) &
 !$OMP                          private(pe1,  pe2, pv1, pv2)
   do 1000 j=js,je+1
 !------
@@ -3807,9 +3807,11 @@ else ! all others
         enddo
      enddo
 
-     call remap_2d(km, pe1, u0_r(is:ie,j:j,1:km),      &
-                   kn, pe2,   u0(is:ie,j:j,1:kn),      &
-                   is, ie, -1, kord)
+     if (is_ideal_case) then
+        call remap_2d(km, pe1, u0_r(is:ie,j:j,1:km),      &
+                      kn, pe2,   u0(is:ie,j:j,1:kn),      &
+                      is, ie, -1, kord)
+     endif
 
      call remap_2d(km, pe1, u_r(is:ie,j:j,1:km),       &
                    kn, pe2,   u(is:ie,j:j,1:kn),       &
@@ -3939,9 +3941,11 @@ else ! all others
           enddo
        enddo
 
-       call remap_2d(km, pv1, v0_r(is:ie+1,j:j,1:km),      &
-                     kn, pv2,   v0(is:ie+1,j:j,1:kn),      &
-                     is, ie+1, -1, kord)
+       if (is_ideal_case) then
+          call remap_2d(km, pv1, v0_r(is:ie+1,j:j,1:km),      &
+                        kn, pv2,   v0(is:ie+1,j:j,1:kn),      &
+                        is, ie+1, -1, kord)
+       endif
 
        call remap_2d(km, pv1, v_r(is:ie+1,j:j,1:km),       &
                      kn, pv2,   v(is:ie+1,j:j,1:kn),       &

@@ -800,7 +800,7 @@ contains
                       Atm(1)%u0, Atm(1)%v0, Atm(1)%u, Atm(1)%v, Atm(1)%w, Atm(1)%delz, Atm(1)%pt,  &
                       Atm(1)%q, Atm(1)%qdiag, ak_r,  bk_r, Atm(1)%ptop, Atm(1)%ak, Atm(1)%bk,      &
                       Atm(1)%flagstruct%hydrostatic, Atm(1)%flagstruct%make_nh, Atm(1)%domain,     &
-                      Atm(1)%gridstruct%square_domain)
+                      Atm(1)%gridstruct%square_domain, Atm(1)%flagstruct%is_ideal_case)
     !end do
 
     deallocate( ak_r )
