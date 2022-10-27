@@ -333,20 +333,20 @@ contains
      endif
 
      if ( nq > 0 ) then
-                                    call timing_on('COMM_TOTAL')
-                                        call timing_on('COMM_TRACER')
+         call timing_on('COMM_TOTAL')
+         call timing_on('COMM_TRACER')
          if ( flagstruct%inline_q ) then
                       call start_group_halo_update(i_pack(10), q, domain)
          endif
-                                       call timing_off('COMM_TRACER')
-                                   call timing_off('COMM_TOTAL')
+         call timing_off('COMM_TRACER')
+         call timing_off('COMM_TOTAL')
      endif
 
 #ifndef SW_DYNAMICS
      if ( .not. hydrostatic ) then
-                             call timing_on('COMM_TOTAL')
+         call timing_on('COMM_TOTAL')
          call start_group_halo_update(i_pack(7), w, domain)
-                             call timing_off('COMM_TOTAL')
+         call timing_off('COMM_TOTAL')
 
       if ( it==1 ) then
          if (gridstruct%bounded_domain) then
@@ -381,9 +381,9 @@ contains
                enddo
             enddo
          enddo
-                             call timing_on('COMM_TOTAL')
+         call timing_on('COMM_TOTAL')
          call start_group_halo_update(i_pack(5), gz,  domain)
-                             call timing_off('COMM_TOTAL')
+         call timing_off('COMM_TOTAL')
       endif
 
    endif
@@ -396,9 +396,9 @@ contains
 
 
      if ( it==1 ) then
-                                       call timing_on('COMM_TOTAL')
+          call timing_on('COMM_TOTAL')
           call complete_group_halo_update(i_pack(1), domain)
-                                      call timing_off('COMM_TOTAL')
+          call timing_off('COMM_TOTAL')
           beta_d = 0.
      else
           beta_d = beta
@@ -424,13 +424,13 @@ contains
           last_step = .false.
      endif
 
-                                                     call timing_on('COMM_TOTAL')
+     call timing_on('COMM_TOTAL')
      call complete_group_halo_update(i_pack(8), domain)
      if( .not. hydrostatic )  &
           call complete_group_halo_update(i_pack(7), domain)
-                                                     call timing_off('COMM_TOTAL')
+     call timing_off('COMM_TOTAL')
 
-                                                     call timing_on('c_sw')
+      call timing_on('C_SW')
 !$OMP parallel do default(none) shared(npz,isd,jsd,delpc,delp,ptc,pt,u,v,w,uc,vc,ua,va, &
 !$OMP                                  omga,ut,vt,divgd,flagstruct,dt2,hydrostatic,bd,  &
 !$OMP                                  gridstruct)
@@ -443,11 +443,11 @@ contains
                       flagstruct%nord,   dt2,  hydrostatic,  .true., bd,  &
                       gridstruct, flagstruct)
       enddo
-                                                     call timing_off('c_sw')
+      call timing_off('C_SW')
       if ( flagstruct%nord > 0 ) then
-                                                   call timing_on('COMM_TOTAL')
+          call timing_on('COMM_TOTAL')
           call start_group_halo_update(i_pack(3), divgd, domain, position=CORNER)
-                                                  call timing_off('COMM_TOTAL')
+          call timing_off('COMM_TOTAL')
       endif
 
       if (gridstruct%nested) then
@@ -482,9 +482,9 @@ contains
 #ifndef SW_DYNAMICS
            if ( it == 1 ) then
 
-                                      call timing_on('COMM_TOTAL')
+              call timing_on('COMM_TOTAL')
               call complete_group_halo_update(i_pack(5), domain)
-                                     call timing_off('COMM_TOTAL')
+              call timing_off('COMM_TOTAL')
 
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,zh,gz)
            do k=1,npz+1
@@ -519,18 +519,18 @@ contains
            enddo
 
         endif
-                                            call timing_on('UPDATE_DZ_C')
+         call timing_on('UPDATE_DZ_C')
          call update_dz_c(is, ie, js, je, npz, ng, dt2, dp_ref, zs, gridstruct%area, ut, vt, gz, ws3, &
              npx, npy, gridstruct%sw_corner, gridstruct%se_corner, &
              gridstruct%ne_corner, gridstruct%nw_corner, bd, gridstruct%grid_type)
-                                            call timing_off('UPDATE_DZ_C')
+         call timing_off('UPDATE_DZ_C')
 
-                                               call timing_on('Riem_Solver')
+           call timing_on('Riem_Solver')
            call Riem_Solver_C( ms, dt2,   is,  ie,   js,   je,   npz,   ng,   &
                                akap, cappa,  cp,  ptop, phis, omga, ptc,  &
                                q_con,  delpc, gz,  pkc, ws3, flagstruct%p_fac, &
                                 flagstruct%a_imp, flagstruct%scale_z )
-                                               call timing_off('Riem_Solver')
+           call timing_off('Riem_Solver')
 
            if (gridstruct%nested) then
            call nh_bc(ptop, grav, akap, cp, delpc, neststruct%delz_BC, ptc, phis, &
@@ -567,15 +567,15 @@ contains
 
       call p_grad_c(dt2, npz, delpc, pkc, gz, uc, vc, bd, gridstruct%rdxc, gridstruct%rdyc, hydrostatic)
 
-                                                                   call timing_on('COMM_TOTAL')
+      call timing_on('COMM_TOTAL')
       call start_group_halo_update(i_pack(9), uc, vc, domain, gridtype=CGRID_NE)
-                                                     call timing_off('COMM_TOTAL')
+      call timing_off('COMM_TOTAL')
 #ifdef SW_DYNAMICS
       if (test_case==9) call case9_forcing2(phis, isd, ied, jsd, jed)
       endif !test_case>1
 #endif
 
-                                                                   call timing_on('COMM_TOTAL')
+    call timing_on('COMM_TOTAL')
     if (flagstruct%inline_q .and. nq>0) call complete_group_halo_update(i_pack(10), domain)
 #ifdef SW_DYNAMICS
     if (test_case > 1) then
@@ -585,8 +585,8 @@ contains
 #ifdef SW_DYNAMICS
     endif
 #endif
+    call timing_off('COMM_TOTAL')
 
-                                                                   call timing_off('COMM_TOTAL')
       if (gridstruct%nested) then
          !On a nested grid we have to do SOMETHING with uc and vc in
          ! the boundary halo, particularly at the corners of the
@@ -660,7 +660,7 @@ contains
     endif
 
 
-                                                     call timing_on('d_sw')
+    call timing_on('D_SW')
 !$OMP parallel do default(none) shared(npz,flagstruct,nord_v,pfull,damp_vt,hydrostatic,last_step, &
 !$OMP                                  is,ie,js,je,isd,ied,jsd,jed,omga,delp,gridstruct,npx,npy,  &
 !$OMP                                  ng,zh,vt,ptc,pt,u,v,w,uc,vc,ua,va,divgd,mfx,mfy,cx,cy,     &
@@ -805,17 +805,17 @@ contains
        call mpp_update_domains(uc, vc, domain, gridtype=CGRID_NE)
        call mpp_update_domains(u , v , domain, gridtype=DGRID_NE)
     endif
-                                                     call timing_off('d_sw')
+    call timing_off('D_SW')
 
     if( flagstruct%fill_dp ) call mix_dp(hydrostatic, w, delp, pt, npz, ak, bk, .false., flagstruct%fv_debug, bd, gridstruct)
 
-                                                             call timing_on('COMM_TOTAL')
+    call timing_on('COMM_TOTAL')
     call start_group_halo_update(i_pack(1), delp, domain, complete=.false.)
     call start_group_halo_update(i_pack(1), pt,   domain, complete=.true.)
 #ifdef USE_COND
     call start_group_halo_update(i_pack(11), q_con, domain)
 #endif
-                                                             call timing_off('COMM_TOTAL')
+    call timing_off('COMM_TOTAL')
 
     if ( flagstruct%d_ext > 0. ) then
           d2_divg = flagstruct%d_ext * gridstruct%da_min_c
@@ -839,12 +839,12 @@ contains
         divg2(:,:) = 0.
     endif
 
-                                       call timing_on('COMM_TOTAL')
+     call timing_on('COMM_TOTAL')
      call complete_group_halo_update(i_pack(1), domain)
 #ifdef USE_COND
      call complete_group_halo_update(i_pack(11), domain)
 #endif
-                                       call timing_off('COMM_TOTAL')
+     call timing_off('COMM_TOTAL')
     if ( flagstruct%fv_debug ) then
          if ( .not. flagstruct%hydrostatic )    &
          call prt_mxm('delz',  delz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
@@ -900,10 +900,10 @@ contains
                      gridstruct%bounded_domain, .true., npx, npy, flagstruct%a2b_ord, bd)
        else
 #ifndef SW_DYNAMICS
-                                            call timing_on('UPDATE_DZ')
+        call timing_on('UPDATE_DZ')
         call update_dz_d(nord_v, damp_vt, flagstruct%hord_tm, is, ie, js, je, npz, ng, npx, npy, gridstruct%area,  &
                          gridstruct%rarea, dp_ref, zs, zh, crx, cry, xfx, yfx, ws, rdt, gridstruct, bd, flagstruct%lim_fac)
-                                            call timing_off('UPDATE_DZ')
+        call timing_off('UPDATE_DZ')
     if ( flagstruct%fv_debug ) then
          if ( .not. flagstruct%hydrostatic )    then
             call prt_mxm('delz updated',  delz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
@@ -920,16 +920,16 @@ contains
 
 
 
-                                                         call timing_on('Riem_Solver')
+        call timing_on('Riem_Solver')
         call Riem_Solver3(flagstruct%m_split, dt,  is,  ie,   js,   je, npz, ng,     &
                          isd, ied, jsd, jed, &
                          akap, cappa, cp,  ptop, zs, q_con, w, delz, pt, delp, zh,   &
                          pe, pkc, pk3, pk, peln, ws, &
                          flagstruct%scale_z, flagstruct%p_fac, flagstruct%a_imp, &
                          flagstruct%use_logp, remap_step, beta<-0.1)
-                                                         call timing_off('Riem_Solver')
+        call timing_off('Riem_Solver')
 
-                                       call timing_on('COMM_TOTAL')
+        call timing_on('COMM_TOTAL')
         if ( gridstruct%square_domain ) then
           call start_group_halo_update(i_pack(4), zh ,  domain)
           call start_group_halo_update(i_pack(5), pkc,  domain, whalo=2, ehalo=2, shalo=2, nhalo=2)
@@ -937,7 +937,7 @@ contains
           call start_group_halo_update(i_pack(4), zh ,  domain, complete=.false.)
           call start_group_halo_update(i_pack(4), pkc,  domain, complete=.true.)
         endif
-                                       call timing_off('COMM_TOTAL')
+        call timing_off('COMM_TOTAL')
         if ( remap_step )  &
         call pe_halo(is, ie, js, je, isd, ied, jsd, jed, npz, ptop, pe, delp)
 
@@ -989,7 +989,7 @@ contains
         if ( gridstruct%square_domain ) then
            call timing_on('COMM_TOTAL')
            call complete_group_halo_update(i_pack(5), domain)
-                                       call timing_off('COMM_TOTAL')
+           call timing_off('COMM_TOTAL')
         endif
 #endif SW_DYNAMICS
      endif    ! end hydro check
@@ -1012,7 +1012,7 @@ contains
 !----------------------------
 ! Compute pressure gradient:
 !----------------------------
-                                       call timing_on('PG_D')
+    call timing_on('PG_D')
     if ( hydrostatic ) then
        if ( beta > 0. ) then
           call grad1_p_update(divg2, u, v, pkc, gz, dt, ng, gridstruct, bd, npx, npy, npz, ptop, beta_d, flagstruct%a2b_ord)
@@ -1051,7 +1051,7 @@ contains
        endif
 #endif
    endif
-                                       call timing_off('PG_D')
+   call timing_off('PG_D')
 
 ! *** Inline Rayleigh friction here?
    if( flagstruct%RF_fast .and. flagstruct%tau > 0. )  &
@@ -1091,25 +1091,28 @@ contains
 
       if (flagstruct%do_fast_phys) then
 
+          call timing_on('FAST_PHYS')
+
           call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, flagstruct%nwat, &
              flagstruct%c2l_ord, dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
              delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, inline_edmf, inline_gwd, &
              gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
              flagstruct%do_inline_edmf, flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 
-          call timing_on ('COMM_TOTAL')
+          call timing_on('COMM_TOTAL')
           !some mpp domains updates are commented out at this moment -- Linjiong
           !future visit is needed if the model is not reprodicible using fast physics
+          !--- the following performs a staggered vector update with appropriate rotations
           !call mpp_update_domains (u, v, domain, gridtype=DGRID_NE)
+          !--- the following is a 4D update for all the tracers
+          !call mpp_update_domains(q, domain)
+          !--- the following will be buffered into a single update
           call mpp_update_domains (delp, domain, complete=.false.)
           call mpp_update_domains (pt, domain, complete=.false.)
           !call mpp_update_domains (w, domain, complete=.false.)
-          !do iq = 1, nq
-          !   call mpp_update_domains (q (:,:,:,iq), domain, complete=.false.)
-          !enddo
           call mpp_update_domains (q_con, domain, complete=.false.)
           call mpp_update_domains (cappa, domain, complete=.true.)
-          call timing_off ('COMM_TOTAL')
+          call timing_off('COMM_TOTAL')
 
           if (remap_step) then
               pe (is:ie, 1, js:je) = ptop
@@ -1127,13 +1130,15 @@ contains
               call pe_halo (is, ie, js, je, isd, ied, jsd, jed, npz, ptop, pe, delp)
           endif
 
+          call timing_off('FAST_PHYS')
+
       endif
 
 !-----------------------------------------------------------------------
 ! <<< Fast Physics
 !-----------------------------------------------------------------------
 
-                                                     call timing_on('COMM_TOTAL')
+    call timing_on('COMM_TOTAL')
     if( it==n_split .and. gridstruct%grid_type<4 .and. .not. gridstruct%bounded_domain) then
 ! Prevent accumulation of rounding errors at overlapped domain edges:
        call mpp_get_boundary(u, v, domain, ebuffery=ebuffer,  &
@@ -1154,8 +1159,7 @@ contains
     if ( .not. flagstruct%regional .and. it/=n_split)   &
          call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
 #endif
-
-                                                     call timing_off('COMM_TOTAL')
+    call timing_off('COMM_TOTAL')
 
 #ifdef SW_DYNAMICS
     endif

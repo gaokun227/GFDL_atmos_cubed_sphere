@@ -32,7 +32,6 @@ module fast_phys_mod
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, &
                              inline_edmf_type, inline_gwd_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
-    use fv_timing_mod, only: timing_on, timing_off
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap, hlv, mtetw, tice

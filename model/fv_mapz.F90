@@ -846,12 +846,14 @@ contains
 ! Intermediate Physics >>>
 !-----------------------------------------------------------------------
 
+    call timing_on('INTERMEDIATE_PHYS')
     call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
              c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
              v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
              inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, &
              hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf, do_inline_sas, &
              do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr)
+    call timing_off('INTERMEDIATE_PHYS')
 
 !-----------------------------------------------------------------------
 ! <<< Intermediate Physics
@@ -3715,8 +3717,8 @@ else ! all others
   type(domain2d), intent(INOUT) :: domain
 ! Output:
   real, intent(out):: delp(isd:ied,jsd:jed,kn) ! pressure thickness
-  real, intent(out):: u0(isd:ied  ,jsd:jed+1,kn)   ! initial (t=0) u-wind (m/s)
-  real, intent(out):: v0(isd:ied+1,jsd:jed  ,kn)   ! initial (t=0) v-wind (m/s)
+  real, intent(out):: u0(isd:,jsd:,1:)   ! initial (t=0) u-wind (m/s)
+  real, intent(out):: v0(isd:,jsd:,1:)   ! initial (t=0) v-wind (m/s)
   real, intent(out)::  u(isd:ied  ,jsd:jed+1,kn)   ! u-wind (m/s)
   real, intent(out)::  v(isd:ied+1,jsd:jed  ,kn)   ! v-wind (m/s)
   real, intent(out)::  w(isd:     ,jsd:     ,1:)   ! vertical velocity (m/s)

@@ -102,8 +102,8 @@ contains
     logical, intent(IN) :: hybrid_z       ! Using hybrid_z for remapping
 
     type(fv_grid_bounds_type), intent(IN) :: bd
-    real, intent(inout), dimension(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz) :: u0 ! initial (t=0) D grid zonal wind (m/s)
-    real, intent(inout), dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) :: v0 ! initial (t=0) D grid meridional wind (m/s)
+    real, intent(inout), dimension(bd%isd:,bd%jsd:,1:) :: u0 ! initial (t=0) D grid zonal wind (m/s)
+    real, intent(inout), dimension(bd%isd:,bd%jsd:,1:) :: v0 ! initial (t=0) D grid meridional wind (m/s)
     real, intent(inout), dimension(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz) :: u ! D grid zonal wind (m/s)
     real, intent(inout), dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz) :: v ! D grid meridional wind (m/s)
     real, intent(inout) :: w(   bd%isd:  ,bd%jsd:  ,1:)  !  W (m/s)
@@ -211,7 +211,8 @@ contains
       !We call this BEFORE converting pt to virtual potential temperature,
       !since we interpolate on (regular) temperature rather than theta.
       if (gridstruct%nested .or. ANY(neststruct%child_grids)) then
-                                           call timing_on('NEST_BCs')
+         call timing_on('NEST_BCs')
+
          call setup_nested_grid_BCs(npx, npy, npz, zvir, ncnst, &
               u, v, w, pt, delp, delz, q, uc, vc, &
 #ifdef USE_COND
@@ -225,7 +226,7 @@ contains
               neststruct%nest_timestep, neststruct%tracer_nest_timestep, &
               domain, parent_grid, bd, nwat, ak, bk)
 
-                                           call timing_off('NEST_BCs')
+         call timing_off('NEST_BCs')
       endif
 
     ! For the regional domain set values valid the beginning of the
@@ -444,10 +445,11 @@ contains
       inline_sas%prec = 0.0
   endif
 
-                                                  call timing_on('FV_DYN_LOOP')
+  call timing_on('FV_DYN_LOOP')
+
   do n_map=1, k_split   ! first level of time-split
       k_step = n_map
-                                           call timing_on('COMM_TOTAL')
+      call timing_on('COMM_TOTAL')
 #ifdef USE_COND
       call start_group_halo_update(i_pack(11), q_con, domain)
 #ifdef MOIST_CAPPA
@@ -459,7 +461,7 @@ contains
 #ifndef ROT3
       call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
 #endif
-                                           call timing_off('COMM_TOTAL')
+      call timing_off('COMM_TOTAL')
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,dp1,delp)
       do k=1,npz
          do j=jsd,jed
@@ -475,22 +477,22 @@ contains
       if ( n_map==k_split ) last_step = .true.
 
 #ifdef USE_COND
-                                           call timing_on('COMM_TOTAL')
+     call timing_on('COMM_TOTAL')
      call complete_group_halo_update(i_pack(11), domain)
 #ifdef MOIST_CAPPA
      call complete_group_halo_update(i_pack(12), domain)
 #endif
-                                           call timing_off('COMM_TOTAL')
+     call timing_off('COMM_TOTAL')
 #endif
 
-                                           call timing_on('DYN_CORE')
+      call timing_on('DYN_CORE')
       call dyn_core(npx, npy, npz, ng, sphum, nq, mdt, n_map, n_split, zvir, cp_air, akap, cappa, grav, hydrostatic, &
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
                     domain, n_map==1, i_pack, last_step, diss_est, &
                     consv_te, te_2d, inline_edmf, inline_gwd, time_total)
-                                           call timing_off('DYN_CORE')
+      call timing_off('DYN_CORE')
 
 
 #ifdef SW_DYNAMICS
@@ -505,7 +507,7 @@ contains
 !--------------------------------------------------------
 ! Perform large-time-step scalar transport using the accumulated CFL and
 ! mass fluxes
-                                              call timing_on('tracer_2d')
+       call timing_on('tracer_2d')
        !!! CLEANUP: merge these two calls?
        if (gridstruct%bounded_domain) then
          call tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
@@ -523,11 +525,11 @@ contains
                  flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac)
          endif
        endif
-                                             call timing_off('tracer_2d')
+       call timing_off('tracer_2d')
 
 #ifdef FILL2D
      if ( flagstruct%hord_tr<8 .and. flagstruct%moist_phys ) then
-                                                  call timing_on('Fill2D')
+       call timing_on('Fill2D')
        if ( liq_wat > 0 )  &
         call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,liq_wat), delp, gridstruct%area, domain, gridstruct%bounded_domain, npx, npy)
        if ( rainwat > 0 )  &
@@ -538,7 +540,7 @@ contains
         call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,snowwat), delp, gridstruct%area, domain, gridstruct%bounded_domain, npx, npy)
        if ( graupel > 0 )  &
         call fill2D(is, ie, js, je, ng, npz, q(isd,jsd,1,graupel), delp, gridstruct%area, domain, gridstruct%bounded_domain, npx, npy)
-                                                  call timing_off('Fill2D')
+       call timing_off('Fill2D')
      endif
 #endif
 
@@ -561,7 +563,8 @@ contains
             if ( iq==cld_amt )  kord_tracer(iq) = 9      ! monotonic
          enddo
 
-                                                  call timing_on('Remapping')
+     call timing_on('Remapping')
+
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'before remap k_split ', n_map, '/', k_split
        call prt_mxm('T_ldyn',    pt, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
@@ -624,7 +627,9 @@ contains
        if ( graupel > 0 )  &
       call prt_mxm('graupel_dyn', q(isd,jsd,1,graupel), is, ie, js, je, ng, npz, 1.,gridstruct%area_64, domain)
      endif
-                                                  call timing_off('Remapping')
+
+     call timing_off('Remapping')
+
 #ifdef MOIST_CAPPA
          if ( neststruct%nested .and. .not. last_step) then
             call nested_grid_BC_apply_intT(cappa, &
@@ -652,6 +657,8 @@ contains
 #endif !endif SW_DYNAMICS
   enddo    ! n_map loop
 
+  call timing_off('FV_DYN_LOOP')
+
   ! Initialize rain, ice, snow and graupel precipitaiton
   if (flagstruct%do_inline_mp) then
       inline_mp%prew = inline_mp%prew / k_split
@@ -676,8 +683,6 @@ contains
       if (allocated(inline_mp%u_dt)) inline_mp%u_dt = inline_mp%u_dt / bdt
       if (allocated(inline_mp%v_dt)) inline_mp%v_dt = inline_mp%v_dt / bdt
   endif
-
-                                                  call timing_off('FV_DYN_LOOP')
 
   if( nwat==6 ) then
      if (cld_amt > 0) then
@@ -1009,9 +1014,9 @@ contains
           u2f(:,:,k) = 1.
        endif
     enddo
-                                        call timing_on('COMM_TOTAL')
+    call timing_on('COMM_TOTAL')
     call mpp_update_domains(u2f, domain)
-                                        call timing_off('COMM_TOTAL')
+    call timing_off('COMM_TOTAL')
 
 !$OMP parallel do default(none) shared(is,ie,js,je,kmax,pm,rf_cutoff,w,rf,u,v, &
 !$OMP                                  u00,v00,is_ideal_case, &
@@ -1159,9 +1164,9 @@ contains
         endif
     enddo
 
-                                        call timing_on('COMM_TOTAL')
+    call timing_on('COMM_TOTAL')
     call mpp_update_domains(u2f, domain)
-                                        call timing_off('COMM_TOTAL')
+    call timing_off('COMM_TOTAL')
 
 !$OMP parallel do default(none) shared(is,ie,js,je,kmax,conserve,hydrostatic,pt,u2f,cp,rg, &
 !$OMP                                  ptop,pm,rf,delz,rcv,u,v,w)

@@ -55,7 +55,6 @@ module fv_control_mod
    use fv_mp_mod,           only: broadcast_domains, mp_barrier, is_master, setup_master, grids_master_procs, tile_fine
    use fv_mp_mod,           only: MAX_NNEST, MAX_NTILE
    use test_cases_mod,      only: read_namelist_test_case_nml
-   use fv_timing_mod,       only: timing_on, timing_off, timing_init, timing_prt
    use mpp_domains_mod,     only: domain2D
    use mpp_domains_mod,     only: mpp_define_nest_domains, nest_domain_type, mpp_get_global_domain
    use mpp_domains_mod,     only: mpp_get_C2F_index, mpp_get_F2C_index
@@ -451,10 +450,6 @@ module fv_control_mod
            call mpp_error(FATAL, 'grid_pes in fv_nest_Nml does not assign all of the available PEs')
         endif
      endif
-
-     ! 3pre.
-     call timing_init
-     call timing_on('TOTAL')
 
      ! 3. Read namelists, do option processing and I/O
 
@@ -1219,9 +1214,6 @@ module fv_control_mod
     integer, intent(IN) :: this_grid
 
     integer :: n
-
-    call timing_off('TOTAL')
-    call timing_prt( mpp_pe() )
 
     call fv_restart_end(Atm(this_grid))
     call fv_io_exit()
