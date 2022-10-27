@@ -47,7 +47,7 @@ use fv_arrays_mod,      only: fv_atmos_type
 use fv_control_mod,     only: fv_control_init, fv_end, ngrids
 use fv_phys_mod,        only: fv_phys, fv_nudge, fv_phys_init
 use fv_diagnostics_mod, only: fv_diag_init, fv_diag, fv_time, eqv_pot
-use fv_timing_mod,      only: timing_on, timing_off
+use fv_timing_mod,      only: timing_on, timing_off, timing_init, timing_prt
 use fv_restart_mod,     only: fv_restart
 use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
@@ -105,7 +105,10 @@ contains
     integer :: nlunit = 9999
     character (len = 64) :: fn_nml = 'input.nml'
 
-                                           call timing_on('ATMOS_INIT')
+   call timing_init
+   call timing_on('ATMOS_TOTAL')
+   call timing_on('ATMOS_INIT')
+
   !----- write version and namelist to log file -----
 
     call write_version_number ( 'SOLO/ATMOSPHERE_MOD', version )
@@ -125,10 +128,10 @@ contains
        if (grids_on_this_pe(n)) mytile = n
     enddo
 
-                   call timing_on('fv_restart')
+   call timing_on('FV_RESTART')
     call fv_restart(Atm(1)%domain, Atm, dt_atmos, seconds, days, cold_start, &
          Atm(1)%flagstruct%grid_type, mytile)
-                   call timing_off('fv_restart')
+   call timing_off('FV_RESTART')
 
      fv_time = time
 
@@ -192,7 +195,8 @@ contains
 
      enddo
 
-                                           call timing_off('ATMOS_INIT')
+   call timing_off('ATMOS_INIT')
+
   end subroutine atmosphere_init
 
  subroutine adiabatic_init(zvir, n)
@@ -229,7 +233,6 @@ contains
     jsd = jsc - ngc
     jed = jec + ngc
 
-     call timing_on('adiabatic_init')
      do_adiabatic_init = .true.
 
      allocate ( u0(isc:iec,  jsc:jec+1, npz) )
@@ -266,8 +269,8 @@ contains
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
                      Atm(n)%ptop, Atm(n)%ks, Atm(n)%ncnst, Atm(n)%flagstruct%n_split,        &
-                     Atm(n)%flagstruct%q_split, Atm(n)%u, Atm(n)%v, Atm(n)%w,         &
-                     Atm(n)%delz, Atm(n)%flagstruct%hydrostatic,                      &
+                     Atm(n)%flagstruct%q_split, Atm(n)%u0, Atm(n)%v0, Atm(n)%u,       &
+                     Atm(n)%v, Atm(n)%w, Atm(n)%delz, Atm(n)%flagstruct%hydrostatic,  &
                      Atm(n)%pt, Atm(n)%delp, Atm(n)%q, Atm(n)%ps,                     &
                      Atm(n)%pe, Atm(n)%pk, Atm(n)%peln, Atm(n)%pkz, Atm(n)%phis,      &
                      Atm(n)%q_con, Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc, Atm(n)%vc, &
@@ -280,8 +283,8 @@ contains
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, -dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
                      Atm(n)%ptop, Atm(n)%ks, Atm(n)%ncnst, Atm(n)%flagstruct%n_split,        &
-                     Atm(n)%flagstruct%q_split, Atm(n)%u, Atm(n)%v, Atm(n)%w,         &
-                     Atm(n)%delz, Atm(n)%flagstruct%hydrostatic,                      &
+                     Atm(n)%flagstruct%q_split, Atm(n)%u0, Atm(n)%v0, Atm(n)%u,       &
+                     Atm(n)%v, Atm(n)%w, Atm(n)%delz, Atm(n)%flagstruct%hydrostatic,  &
                      Atm(n)%pt, Atm(n)%delp, Atm(n)%q, Atm(n)%ps,                     &
                      Atm(n)%pe, Atm(n)%pk, Atm(n)%peln, Atm(n)%pkz, Atm(n)%phis,      &
                      Atm(n)%q_con, Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc, Atm(n)%vc, &
@@ -327,8 +330,8 @@ contains
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, -dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
                      Atm(n)%ptop, Atm(n)%ks, Atm(n)%ncnst, Atm(n)%flagstruct%n_split,        &
-                     Atm(n)%flagstruct%q_split, Atm(n)%u, Atm(n)%v, Atm(n)%w,         &
-                     Atm(n)%delz, Atm(n)%flagstruct%hydrostatic,                      &
+                     Atm(n)%flagstruct%q_split, Atm(n)%u0, Atm(n)%v0, Atm(n)%u,       &
+                     Atm(n)%v, Atm(n)%w, Atm(n)%delz, Atm(n)%flagstruct%hydrostatic,  &
                      Atm(n)%pt, Atm(n)%delp, Atm(n)%q, Atm(n)%ps,                     &
                      Atm(n)%pe, Atm(n)%pk, Atm(n)%peln, Atm(n)%pkz, Atm(n)%phis,      &
                      Atm(n)%q_con, Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc, Atm(n)%vc, &
@@ -341,8 +344,8 @@ contains
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
                      Atm(n)%ptop, Atm(n)%ks, Atm(n)%ncnst, Atm(n)%flagstruct%n_split,        &
-                     Atm(n)%flagstruct%q_split, Atm(n)%u, Atm(n)%v, Atm(n)%w,         &
-                     Atm(n)%delz, Atm(n)%flagstruct%hydrostatic,                      &
+                     Atm(n)%flagstruct%q_split, Atm(n)%u0, Atm(n)%v0, Atm(n)%u,       &
+                     Atm(n)%v, Atm(n)%w, Atm(n)%delz, Atm(n)%flagstruct%hydrostatic,  &
                      Atm(n)%pt, Atm(n)%delp, Atm(n)%q, Atm(n)%ps,                     &
                      Atm(n)%pe, Atm(n)%pk, Atm(n)%peln, Atm(n)%pkz, Atm(n)%phis,      &
                      Atm(n)%q_con, Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc, Atm(n)%vc, &
@@ -392,7 +395,6 @@ contains
      deallocate (dp0 )
 
      do_adiabatic_init = .false.
-     call timing_off('adiabatic_init')
 
  end subroutine adiabatic_init
 
@@ -406,8 +408,8 @@ contains
     integer :: n, sphum, p, nc
     integer :: psc ! p_split counter
 
+    call timing_on('ATMOS_DYNAMICS')
 
-                                           call timing_on('ATMOSPHERE')
     fv_time = Time + Time_step_atmos
     call get_time (fv_time, seconds,  days)
 
@@ -435,13 +437,13 @@ contains
           zvir = rvgas/rdgas - 1.
        endif
 
-                                              call timing_on('fv_dynamics')
+       call timing_on('FV_DYNAMICS')
        call fv_dynamics(Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%ncnst, Atm(n)%ng,   &
             dt_atmos/real(abs(p_split)), Atm(n)%flagstruct%consv_te, Atm(n)%flagstruct%fill, &
             Atm(n)%flagstruct%reproduce_sum, kappa,   &
             cp_air, zvir, Atm(n)%ptop, Atm(n)%ks, Atm(n)%ncnst, &
             Atm(n)%flagstruct%n_split, Atm(n)%flagstruct%q_split, &
-            Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%delz,       &
+            Atm(n)%u0, Atm(n)%v0, Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%delz, &
             Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%delp, Atm(n)%q, Atm(n)%ps, &
             Atm(n)%pe, Atm(n)%pk, Atm(n)%peln, Atm(n)%pkz,             &
             Atm(n)%phis, Atm(n)%q_con, Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc, Atm(n)%vc,  &
@@ -449,7 +451,7 @@ contains
             Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z, Atm(n)%gridstruct, Atm(n)%flagstruct, &
             Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid, Atm(n)%domain, &
             Atm(n)%inline_mp, Atm(n)%diss_est, time_total=time_total)
-                                              call timing_off('fv_dynamics')
+       call timing_off('FV_DYNAMICS')
     end do
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
@@ -468,7 +470,7 @@ contains
 
        if(Atm(n)%npz /=1 .and. .not. Atm(n)%flagstruct%adiabatic)then
 
-                                                         call timing_on('FV_PHYS')
+           call timing_on('FV_PHYS')
            call fv_phys(Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%bd%isc, Atm(n)%bd%iec, &
                     Atm(n)%bd%jsc, Atm(n)%bd%jec, Atm(n)%ng, Atm(n)%ncnst,                &
                     Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%pt, Atm(n)%q, Atm(n)%pe,   &
@@ -482,7 +484,7 @@ contains
                     Atm(n)%gridstruct, Atm(n)%flagstruct, Atm(n)%neststruct,        &
                     Atm(n)%flagstruct%nwat, Atm(n)%bd,                              &
                     Atm(n)%domain, fv_time, Atm(n)%phys_diag, Atm(n)%nudge_diag, time_total)
-                                                        call timing_off('FV_PHYS')
+           call timing_off('FV_PHYS')
        endif
 
        call nullify_domain()
@@ -513,17 +515,20 @@ contains
        call nullify_domain()
        call timing_on('FV_DIAG')
        call fv_diag(Atm(n:n), zvir, fv_time, Atm(n)%flagstruct%print_freq)
-
        call timing_off('FV_DIAG')
+
     end do
 
-                                           call timing_off('ATMOSPHERE')
+    call timing_off('ATMOS_DYNAMICS')
+
  end subroutine atmosphere
 
 
  subroutine atmosphere_end
 
    integer n
+
+    call timing_on('ATMOS_END')
 
     call get_time (fv_time, seconds,  days)
 
@@ -533,6 +538,10 @@ contains
 
     call fv_end(Atm, mytile)
     deallocate(Atm)
+
+    call timing_off('ATMOS_END')
+    call timing_off('ATMOS_TOTAL')
+    call timing_prt( mpp_pe() )
 
   end subroutine atmosphere_end
 
