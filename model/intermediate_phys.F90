@@ -383,8 +383,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     if ((.not. do_adiabatic_init) .and. do_inline_edmf .and. (.not. do_fast_phys)) then
 
-        call timing_on ('sa_tke_edmf')
-
         allocate (kinver (is:ie))
 
         allocate (dz (is:ie, 1:km))
@@ -862,8 +860,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             deallocate (dp0)
         endif
 
-        call timing_off ('sa_tke_edmf')
-
     endif
 
     !-----------------------------------------------------------------------
@@ -875,8 +871,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_sas) then
-
-        call timing_on ('sa_sas')
 
         allocate (rn (is:ie))
         allocate (tmp (is:ie))
@@ -1321,8 +1315,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             deallocate (dp0)
         endif
 
-        call timing_off ('sa_sas')
-
     endif
 
     !-----------------------------------------------------------------------
@@ -1334,8 +1326,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_gwd) then
-
-        call timing_on ('sa_gwd')
 
         allocate (dz (is:ie, 1:km))
         allocate (zm (is:ie, 1:km))
@@ -1711,8 +1701,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             deallocate (v0)
             deallocate (dp0)
         endif
-
-        call timing_off ('sa_gwd')
 
     endif
 

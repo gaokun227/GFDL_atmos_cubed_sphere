@@ -190,8 +190,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     if ((.not. do_adiabatic_init) .and. do_inline_edmf) then
 
-        call timing_on ('sa_tke_edmf')
-
         allocate (kinver (is:ie))
 
         allocate (dz (is:ie, 1:km))
@@ -669,8 +667,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             deallocate (dp0)
         endif
 
-        call timing_off ('sa_tke_edmf')
-
     endif
 
     !-----------------------------------------------------------------------
@@ -682,8 +678,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_gwd) then
-
-        call timing_on ('sa_gwd')
 
         allocate (dz (is:ie, 1:km))
         allocate (zm (is:ie, 1:km))
@@ -1050,8 +1044,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             deallocate (v0)
             deallocate (dp0)
         endif
-
-        call timing_off ('sa_gwd')
 
     endif
 
