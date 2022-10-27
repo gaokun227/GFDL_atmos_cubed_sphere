@@ -508,8 +508,8 @@ contains
                       Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
                       Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp, &
                       Atm(n)%diss_est,time_total=time_total)
-     
-    call timing_off('FV_DYNAMICS')
+
+     call timing_off('FV_DYNAMICS')
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
        call mpp_sync()
