@@ -32,7 +32,8 @@ module dyn_core_mod
   use fv_mp_mod,          only: group_halo_update_type
   use sw_core_mod,        only: c_sw, d_sw
   use a2b_edge_mod,       only: a2b_ord2, a2b_ord4
-  use nh_core_mod,        only: Riem_Solver3, Riem_Solver_C, update_dz_c, update_dz_d, nh_bc
+  use nh_core_mod,        only: Riem_Solver3, Riem_Solver_C, update_dz_c, update_dz_d
+  use nh_core_mod,        only: nh_bc, edge_profile1
   use tp_core_mod,        only: copy_corners
   use fv_timing_mod,      only: timing_on, timing_off
   use fv_diagnostics_mod, only: prt_maxmin, fv_time, prt_mxm
@@ -196,6 +197,9 @@ contains
     logical :: last_step, remap_step
     logical used
     real :: split_timestep_bc
+
+    real dudz(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz)
+    real dvdz(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz)
 
     integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed
@@ -584,7 +588,10 @@ contains
 #ifdef SW_DYNAMICS
     endif
 #endif
-    call timing_off('COMM_TOTAL')
+    if (flagstruct%smag2d > 1.e-3) then
+       call compute_dudz(bd, npz, u, v, dudz, dvdz, zh, dp_ref)
+       call mpp_update_domains(dudz, dvdz, domain, gridtype=DGRID_NE, complete=.true.)
+    endif
 
       if (gridstruct%nested) then
          !On a nested grid we have to do SOMETHING with uc and vc in
@@ -2663,5 +2670,67 @@ do 1000 j=jfirst,jlast
 
  end subroutine gz_bc
 
+ !routine to compute vertical gradients in winds
+ ! for 2D smag damping
+ ! Call AFTER updating gz
+ subroutine compute_dudz(bd, npz, u, v, dudz, dvdz, gz, dp_ref)
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   integer, intent(IN) :: npz
+   real, intent(in) :: u(bd%isd:bd%ied,  bd%jsd:bd%jed+1,npz)
+   real, intent(in) :: v(bd%isd:bd%ied+1,bd%jsd:bd%jed,  npz)
+   real, intent(in) :: gz(bd%isd:bd%ied, bd%jsd:bd%jed,  npz+1)
+   real, intent(IN) :: dp_ref(npz)
+   real, intent(OUT) :: dudz(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz)
+   real, intent(OUT) :: dvdz(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz)
+
+   real :: dz
+   real :: ue(bd%isd:bd%ied  ,npz+1)
+   real :: ve(bd%isd:bd%ied+1,npz+1)
+   integer :: i,j,k
+   integer :: is,  ie,  js,  je
+   integer :: isd, ied, jsd, jed
+
+   is  = bd%is
+   ie  = bd%ie
+   js  = bd%js
+   je  = bd%je
+   isd  = bd%isd
+   ied  = bd%ied
+   jsd  = bd%jsd
+   jed  = bd%jed
+
+   dudz = -1.e50
+   dvdz = -1.e50
+
+   do j=jsd,jed
+
+      !TODO: pass by reference and not copy
+      call edge_profile1(v(isd:ied+1,j,:), ve, isd,  ied+1, npz, dp_ref, 0)
+      !vertical gradient
+      do k=1,npz
+         do i=isd+1,ied
+            dz = gz(i,j,k) + gz(i-1,j,k)
+            dz = dz - (gz(i,j,k+1) + gz(i-1,j,k+1))
+            dz = 0.5*dz*rgrav
+            dvdz(i,j,k) = (ve(i,k)-ve(i,k+1))/dz
+         enddo
+      enddo
+
+      if (j > jsd) then
+         call edge_profile1(u(isd:ied,j,:), ue, isd, ied, npz, dp_ref, 0)
+         !vertical gradient
+         do k=1,npz
+            do i=isd,ied
+               dz = gz(i,j,k) + gz(i,j-1,k)
+               dz = dz - (gz(i,j,k+1) + gz(i,j-1,k+1))
+               dz = 0.5*dz
+               dudz(i,j,k) = (ue(i,k)-ue(i,k+1))/dz
+            enddo
+         enddo
+      endif
+  enddo
+
+
+ end subroutine compute_dudz
 
 end module dyn_core_mod
