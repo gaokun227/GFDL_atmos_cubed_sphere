@@ -72,7 +72,8 @@ public :: dyn_core, del2_cubed, init_ijk_mem
   real :: ptk, peln1, rgrav
   real :: d3_damp
   real, allocatable, dimension(:,:,:) ::  ut, vt, crx, cry, xfx, yfx, divgd, &
-                                          zh, du, dv, pkc, delpc, pk3, ptc, gz
+                                          zh, du, dv, pkc, delpc, pk3, ptc, gz, &
+                                          dudz, dvdz
 ! real, parameter:: delt_max = 1.e-1   ! Max dissipative heating/cooling rate
                                        ! 6 deg per 10-min
   real(kind=R_GRID), parameter :: cnst_0p20=0.20d0
@@ -198,9 +199,6 @@ contains
     logical used
     real :: split_timestep_bc
 
-    real dudz(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz)
-    real dvdz(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz)
-
     integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed
 
@@ -267,6 +265,11 @@ contains
 !                    call init_ijk_mem(isd,ied, jsd,jed, npz, ut, 0.)
            allocate( vt(isd:ied, jsd:jed, npz) )
 !                    call init_ijk_mem(isd,ied, jsd,jed, npz, vt, 0.)
+           if (flagstruct%smag2d > 1.e-3) then
+              allocate(dudz(isd:ied,  jsd:jed+1,npz))
+              allocate(dvdz(isd:ied+1,jsd:jed,  npz))
+           endif
+
 
           if ( .not. hydrostatic ) then
                allocate( zh(isd:ied, jsd:jed, npz+1) )
@@ -588,6 +591,8 @@ contains
 #ifdef SW_DYNAMICS
     endif
 #endif
+    call timing_off('COMM_TOTAL')
+
     if (flagstruct%smag2d > 1.e-3) then
        call compute_dudz(bd, npz, u, v, dudz, dvdz, zh, dp_ref)
        call mpp_update_domains(dudz, dvdz, domain, gridtype=DGRID_NE, complete=.true.)
@@ -2674,6 +2679,7 @@ do 1000 j=jfirst,jlast
  !routine to compute vertical gradients in winds
  ! for 2D smag damping
  ! Call AFTER updating gz
+ !TODO needs cubed-sphere support (don't compute in corners)
  subroutine compute_dudz(bd, npz, u, v, dudz, dvdz, gz, dp_ref)
    type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: npz
@@ -2703,33 +2709,32 @@ do 1000 j=jfirst,jlast
    dudz = -1.e50
    dvdz = -1.e50
 
-   do j=jsd,jed
+   do j=jsd,jed+1
 
       !TODO: pass by reference and not copy
-      call edge_profile1(v(isd:ied+1,j,:), ve, isd,  ied+1, npz, dp_ref, 0)
-      !vertical gradient
-      do k=1,npz
-         do i=isd+1,ied
-            dz = gz(i,j,k) + gz(i-1,j,k)
-            dz = dz - (gz(i,j,k+1) + gz(i-1,j,k+1))
-            dz = 0.5*dz*rgrav
-            dvdz(i,j,k) = (ve(i,k)-ve(i,k+1))/dz
-         enddo
-      enddo
-
-      if (j > jsd) then
-         call edge_profile1(u(isd:ied,j,:), ue, isd, ied, npz, dp_ref, 0)
-         !vertical gradient
+      if (j <= jed) then
+         call edge_profile1(v(isd:ied+1,j,:), ve, isd,  ied+1, npz, dp_ref, 0)
          do k=1,npz
-            do i=isd,ied
-               dz = gz(i,j,k) + gz(i,j-1,k)
-               dz = dz - (gz(i,j,k+1) + gz(i,j-1,k+1))
-               dz = 0.5*dz
-               dudz(i,j,k) = (ue(i,k)-ue(i,k+1))/dz
+            do i=isd+1,ied
+               dz = gz(i,j,k) + gz(i-1,j,k)
+               dz = dz - (gz(i,j,k+1) + gz(i-1,j,k+1))
+               dz = 0.5*dz*rgrav
+               dvdz(i,j,k) = (ve(i,k)-ve(i,k+1))/dz
             enddo
          enddo
       endif
-  enddo
+
+      call edge_profile1(u(isd:ied,j,:), ue, isd, ied, npz, dp_ref, 0)
+      do k=1,npz
+         do i=isd,ied
+            dz = gz(i,j,k) + gz(i,j-1,k)
+            dz = dz - (gz(i,j,k+1) + gz(i,j-1,k+1))
+            dz = 0.5*dz*rgrav
+            dudz(i,j,k) = (ue(i,k)-ue(i,k+1))/dz
+         enddo
+      enddo
+
+   enddo
 
 
  end subroutine compute_dudz
