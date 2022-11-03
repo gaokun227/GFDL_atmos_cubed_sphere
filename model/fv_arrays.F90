@@ -378,6 +378,9 @@ module fv_arrays_mod
    logical :: do_inline_gwd = .false.!< Controls inline gravity wave drag, in which the gravity wave drag is
                                     !< called entirely within FV3. If .true. disabling gravity wave drag within the physics
                                     !< is very strongly recommended. .false. by default.
+   integer :: inline_cnv_flag = 1   !< inline convection scheme
+                                    !< 1: Scale-Aware Simplified-Arakawa-Schubert (SA-SAS) Convection Scheme
+                                    !< 2: Scale-Aware Aerosol-Aware Mass-Flux (SA-AAMP) Convection Scheme
    logical :: do_aerosol = .false.  !< Controls climatological aerosol data used in the GFDL cloud microphyiscs.
                                     !< .false. by default.
    logical :: do_cosp = .false.     !< Controls COSP

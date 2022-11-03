@@ -28,6 +28,7 @@
 
 module sa_sas_mod
 
+    use fms_mod, only: check_nml_error
     use gfdl_mp_mod, only: mqs
 
     implicit none
@@ -132,10 +133,17 @@ subroutine sa_sas_init (input_nml_file, logunit)
     character (len = *), intent (in) :: input_nml_file (:)
     
     ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: ios, ierr
+
+    ! -----------------------------------------------------------------------
     ! read namelist
     ! -----------------------------------------------------------------------
     
-    read (input_nml_file, nml = sa_sas_nml)
+    read (input_nml_file, nml = sa_sas_nml, iostat = ios)
+    ierr = check_nml_error (ios, 'sa_sas_nml')
     
     ! -----------------------------------------------------------------------
     ! write namelist to log file

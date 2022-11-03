@@ -70,7 +70,8 @@ contains
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
                       inline_mp, inline_pbl, inline_cnv, inline_gwd, c2l_ord, bd, &
-                      fv_debug, w_limiter, do_am4_remap, do_fast_phys, consv_checker, adj_mass_vmr)
+                      fv_debug, w_limiter, do_am4_remap, do_fast_phys, consv_checker, &
+                      adj_mass_vmr, inline_cnv_flag)
 
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
@@ -94,6 +95,7 @@ contains
   integer, intent(in):: kord_tr(nq)           ! Mapping order for tracers
   integer, intent(in):: kord_tm               ! Mapping order for thermodynamics
   integer, intent(in):: c2l_ord
+  integer, intent(in):: inline_cnv_flag
 
   real, intent(in):: consv                 ! factor for TE conservation
   real, intent(in):: r_vir
@@ -854,7 +856,8 @@ contains
              v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
              inline_mp, inline_pbl, inline_cnv, inline_gwd, gridstruct, domain, bd, &
              hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, do_inline_cnv, &
-             do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr)
+             do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr, &
+             inline_cnv_flag)
     call timing_off('INTERMEDIATE_PHYS')
 
 !-----------------------------------------------------------------------

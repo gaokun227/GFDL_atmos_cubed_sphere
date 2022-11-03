@@ -185,7 +185,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     enddo
 
     !-----------------------------------------------------------------------
-    ! Inline SA-TKE-EDMF >>>
+    ! Inline Planetary Boundary Layer >>>
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_pbl) then
@@ -547,7 +547,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 do i = is, ie
                     if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
                          (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
-                        print*, "SA-TKE-EDMF-FAST TE: ", &
+                        print*, "PBL-FAST TE: ", &
                             !(sum (te_beg (i, :)) + te_b_beg (i)) / (gsize (i) ** 2), &
                             !(sum (te_end (i, :)) + te_b_end (i)) / (gsize (i) ** 2), &
                             (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
@@ -555,13 +555,13 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     endif
                     if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
                          (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
-                        print*, "SA-TKE-EDMF-FAST TW: ", &
+                        print*, "PBL-FAST TW: ", &
                             !(sum (tw_beg (i, :)) + tw_b_beg (i)) / (gsize (i) ** 2), &
                             !(sum (tw_end (i, :)) + tw_b_end (i)) / (gsize (i) ** 2), &
                             (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
                             (sum (tw_beg (i, :)) + tw_b_beg (i))
                     endif
-                    !print*, "SA-TKE-EDMF-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
+                    !print*, "PBL-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
                 enddo
             endif
 
@@ -670,11 +670,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     endif
 
     !-----------------------------------------------------------------------
-    ! <<< Inline SA-TKE-EDMF
+    ! <<< Inline Planetary Boundary Layer
     !-----------------------------------------------------------------------
 
     !-----------------------------------------------------------------------
-    ! Inline SA-GWD >>>
+    ! Inline Gravity Wave Drag >>>
     !-----------------------------------------------------------------------
 
     if ((.not. do_adiabatic_init) .and. do_inline_gwd) then
@@ -938,7 +938,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 do i = is, ie
                     if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
                          (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
-                        print*, "SA-GWD-FAST TE: ", &
+                        print*, "GWD-FAST TE: ", &
                             !(sum (te_beg (i, :)) + te_b_beg (i)) / (gsize (i) ** 2), &
                             !(sum (te_end (i, :)) + te_b_end (i)) / (gsize (i) ** 2), &
                             (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
@@ -946,13 +946,13 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     endif
                     if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
                          (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
-                        print*, "SA-GWD-FAST TW: ", &
+                        print*, "GWD-FAST TW: ", &
                             !(sum (tw_beg (i, :)) + tw_b_beg (i)) / (gsize (i) ** 2), &
                             !(sum (tw_end (i, :)) + tw_b_end (i)) / (gsize (i) ** 2), &
                             (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
                             (sum (tw_beg (i, :)) + tw_b_beg (i))
                     endif
-                    !print*, "SA-GWD-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
+                    !print*, "GWD-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
                 enddo
             endif
 
@@ -1048,7 +1048,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     endif
 
     !-----------------------------------------------------------------------
-    ! <<< Inline SA-GWD
+    ! <<< Inline Gravity Wave Drag
     !-----------------------------------------------------------------------
 
     !-----------------------------------------------------------------------

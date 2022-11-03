@@ -28,6 +28,7 @@
 
 module sa_aamf_mod
 
+    use fms_mod, only: check_nml_error
     use gfdl_mp_mod, only: mqs
 
     implicit none
@@ -134,10 +135,17 @@ subroutine sa_aamf_init (input_nml_file, logunit)
     character (len = *), intent (in) :: input_nml_file (:)
     
     ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+
+    integer :: ios, ierr
+
+    ! -----------------------------------------------------------------------
     ! read namelist
     ! -----------------------------------------------------------------------
     
-    read (input_nml_file, nml = sa_aamf_nml)
+    read (input_nml_file, nml = sa_aamf_nml, iostat = ios)
+    ierr = check_nml_error (ios, 'sa_aamf_nml')
     
     ! -----------------------------------------------------------------------
     ! write namelist to log file
@@ -269,9 +277,9 @@ end subroutine sa_aamf_init
 !   mass flux and the tendencies calculated per unit cloud base mass flux from the static control.
 ! =======================================================================
 
-subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phil, qtr, &
-        q1, t1, u1, v1, qr, fscav, rn, kbot, ktop, kcnv, islimsk, gsize, &
-        dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc)
+subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
+        prslp, psp, phil, qtr, q1, t1, u1, v1, qr, fscav, rn, kbot, ktop, &
+        kcnv, islimsk, gsize, dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc)
     
     implicit none
     
@@ -279,7 +287,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phi
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    integer, intent (in) :: im, km, itc, ntc, ntk, ntr, ncloud, islimsk (im)
+    integer, intent (in) :: im, km, itc, ntc, ntw, nti, ntk, ntr, ncloud, islimsk (im)
 
     real, intent (in) :: delt
     real, intent (in) :: psp (im), delp (im, km), &
@@ -695,8 +703,10 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phi
     ! initialize tracer variables
     ! -----------------------------------------------------------------------
     
-    do n = 3, ntr + 2
-        kk = n - 2
+    kk = 0
+    do n = 1, ntr + 2
+        if (n .eq. ntw .or. n .eq. nti) cycle
+        kk = kk + 1
         do k = 1, km
             do i = 1, im
                 if (k <= kmax (i)) then
@@ -2899,15 +2909,17 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phi
         enddo
     enddo
 
-    do n = 1, ntr
-        kk = n + 2
+    kk = 0
+    do n = 1, ntr + 2
+        if (n .eq. ntw .or. n .eq. nti) cycle
+        kk = kk + 1
         do k = 1, km
             do i = 1, im
                 if (cnvflg (i) .and. k <= kmax (i)) then
                     if (k <= ktcon (i)) then
-                        ctr (i, k, n) = ctr (i, k, n) + dellae (i, k, n) * xmb (i) * dt2
-                        delebar (i, n) = delebar (i, n) + dellae (i, k, n) * xmb (i) * dp / g
-                        qtr (i, k, kk) = ctr (i, k, n)
+                        ctr (i, k, kk) = ctr (i, k, kk) + dellae (i, k, kk) * xmb (i) * dt2
+                        delebar (i, kk) = delebar (i, kk) + dellae (i, k, kk) * xmb (i) * dp / g
+                        qtr (i, k, n) = ctr (i, k, kk)
                     endif
                 endif
             enddo
@@ -3092,13 +3104,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phi
                     ! if (k > kb (i) .and. k <= ktcon (i)) then
                     if (k >= kbcon (i) .and. k <= ktcon (i)) then
                         tem = dellal (i, k) * xmb (i) * dt2
-                        tem1 = max (0.0, min (1.0, (tcr - t1 (i, k)) * tcrf))
-                        if (qtr (i, k, 2) > - 999.0) then
-                            qtr (i, k, 1) = qtr (i, k, 1) + tem * tem1 ! ice
-                            qtr (i, k, 2) = qtr (i, k, 2) + tem * (1.0 - tem1) ! water
-                        else
-                            qtr (i, k, 1) = qtr (i, k, 1) + tem
-                        endif
+                        qtr (i, k, ntw) = qtr (i, k, ntw) + tem
                     endif
                 endif
             enddo
@@ -3123,14 +3129,16 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phi
         enddo
     enddo
 
-    do n = 1, ntr
-        kk = n + 2
+    kk = 0
+    do n = 1, ntr + 2
+        if (n .eq. ntw .or. n .eq. nti) cycle
+        kk = kk + 1
         do k = 1, km
             do i = 1, im
                 if (cnvflg (i) .and. rn (i) <= 0.) then
                     if (k <= kmax (i)) then
-                        ctr (i, k, n) = ctro (i, k, n)
-                        qtr (i, k, kk) = ctr (i, k, n)
+                        ctr (i, k, kk) = ctro (i, k, kk)
+                        qtr (i, k, n) = ctr (i, k, kk)
                     endif
                 endif
             enddo
@@ -3310,9 +3318,9 @@ end subroutine sa_aamf_deep
 !   mass flux and the tendencies calculated per unit cloud base mass flux from the static control.
 ! =======================================================================
 
-subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phil, qtr, &
-        q1, t1, u1, v1, qr, fscav, rn, kbot, ktop, kcnv, islimsk, gsize, &
-        dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc)
+subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
+        prslp, psp, phil, qtr, q1, t1, u1, v1, qr, fscav, rn, kbot, ktop, &
+        kcnv, islimsk, gsize, dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc)
     
     implicit none
     
@@ -3320,7 +3328,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phi
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    integer, intent (in) :: im, km, itc, ntc, ntk, ntr, ncloud, islimsk (im)
+    integer, intent (in) :: im, km, itc, ntc, ntw, nti, ntk, ntr, ncloud, islimsk (im)
 
     real, intent (in) :: delt
     real, intent (in) :: psp (im), delp (im, km), &
@@ -3691,8 +3699,10 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phi
     ! initialize tracer variables
     ! -----------------------------------------------------------------------
     
-    do n = 3, ntr + 2
-        kk = n - 2
+    kk = 0
+    do n = 1, ntr + 2
+        if (n .eq. ntw .or. n .eq. nti) cycle
+        kk = kk + 1
         do k = 1, km
             do i = 1, im
                 if (cnvflg (i) .and. k <= kmax (i)) then
@@ -4992,15 +5002,17 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phi
         enddo
     enddo
     
-    do n = 1, ntr
-        kk = n + 2
+    kk = 0
+    do n = 1, ntr + 2
+        if (n .eq. ntw .or. n .eq. nti) cycle
+        kk = kk + 1
         do k = 1, km
             do i = 1, im
                 if (cnvflg (i) .and. k <= kmax (i)) then
                     if (k <= ktcon (i)) then
-                        ctr (i, k, n) = ctr (i, k, n) + dellae (i, k, n) * xmb (i) * dt2
-                        delebar (i, n) = delebar (i, n) + dellae (i, k, n) * xmb (i) * dp / g
-                        qtr (i, k, kk) = ctr (i, k, n)
+                        ctr (i, k, kk) = ctr (i, k, kk) + dellae (i, k, kk) * xmb (i) * dt2
+                        delebar (i, kk) = delebar (i, kk) + dellae (i, k, kk) * xmb (i) * dp / g
+                        qtr (i, k, n) = ctr (i, k, kk)
                     endif
                 endif
             enddo
@@ -5177,13 +5189,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phi
                     ! if (k > kb (i) .and. k <= ktcon (i)) then
                     if (k >= kbcon (i) .and. k <= ktcon (i)) then
                         tem = dellal (i, k) * xmb (i) * dt2
-                        tem1 = max (0.0, min (1.0, (tcr - t1 (i, k)) * tcrf))
-                        if (qtr (i, k, 2) > - 999.0) then
-                            qtr (i, k, 1) = qtr (i, k, 1) + tem * tem1 ! ice
-                            qtr (i, k, 2) = qtr (i, k, 2) + tem * (1.0 - tem1) ! water
-                        else
-                            qtr (i, k, 1) = qtr (i, k, 1) + tem
-                        endif
+                        qtr (i, k, ntw) = qtr (i, k, ntw) + tem
                     endif
                 endif
             enddo
