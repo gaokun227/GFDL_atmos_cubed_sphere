@@ -915,7 +915,7 @@ module sw_core_mod
       enddo
 
       if (flagstruct%smag2d > 1.E-3 .and. bounded_domain) then
-         call smag_cell(abs(dt), u, v, ua, va, smag_q, bd, npx, npy, gridstruct, ng, flagstruct%smag2d > 1.E-3, dudz, dvdz)
+         call smag_cell(abs(dt), u, v, ua, va, smag_q, bd, npx, npy, gridstruct, ng, flagstruct%smag2d > 1.E-3, dudz, dvdz, flagstruct%smag2d)
       endif
 
       call fv_tp_2d(delp, crx_adv, cry_adv, npx, npy, hord_dp, fx, fy,  &
@@ -1446,7 +1446,7 @@ module sw_core_mod
              enddo
           enddo
       else  ! Correct form: works only for limited-area domain
-          call smag_corner(abs(dt), u, v, ua, va, vort, bd, npx, npy, gridstruct, ng, flagstruct%smag2d > 1.E-3, dudz, dvdz)
+          call smag_corner(abs(dt), u, v, ua, va, vort, bd, npx, npy, gridstruct, ng, flagstruct%smag2d > 1.E-3, dudz, dvdz, flagstruct%smag2d)
       endif
      endif
 
@@ -1933,13 +1933,13 @@ end subroutine divergence_corner_nest
 
 
 
- subroutine smag_corner(dt, u, v, ua, va, smag_c, bd, npx, npy, gridstruct, ng, do_smag, dudz, dvdz)
+ subroutine smag_corner(dt, u, v, ua, va, smag_c, bd, npx, npy, gridstruct, ng, do_smag, dudz, dvdz, smag2d)
 ! Compute the Tension_Shear strain at cell corners for Smagorinsky diffusion
 !!!  works only if (grid_type==4) (need to add corner handling on cubed sphere)
 !!! Next want to add in vertical shear terms
    !!! To complete the calculation
  type(fv_grid_bounds_type), intent(IN) :: bd
- real, intent(in):: dt
+ real, intent(in):: dt, smag2d
  integer, intent(IN) :: npx, npy, ng
  real, intent(in),  dimension(bd%isd:bd%ied,  bd%jsd:bd%jed+1):: u
  real, intent(in),  dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ):: v
@@ -1957,6 +1957,7 @@ end subroutine divergence_corner_nest
  real:: sh(bd%isd:bd%ied,bd%jsd:bd%jed)
  integer i,j
  integer is2, ie1
+ real :: smag_limit
 
  real, pointer, dimension(:,:) :: dxc, dyc, dx, dy, rarea, rarea_c
 
@@ -1982,7 +1983,14 @@ end subroutine divergence_corner_nest
 
   is2 = max(2,is); ie1 = min(npx-1,ie+1)
 
-! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
+  if (smag2d > 1.e-3) then
+     smag_limit = 0.20/smag2d
+  elseif (do_smag) then
+     smag_c = 0.0
+     return
+  endif
+
+  ! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
 ! where T = du/dx - dv/dy;   S = du/dy + dv/dx
 ! Compute tension strain at corners:
        do j=js,je+1
@@ -2036,18 +2044,19 @@ end subroutine divergence_corner_nest
              do i=is,ie+1
                 sh(i,j) = sh(i,j) - 0.5*(dvdz(i,j)+dvdz(i+1,j))
                 sh(i,j) = sh(i,j) - 0.5*(dudz(i,j)+dudz(i,j+1))
+                smag_c(i,j) = min(dt*sqrt( sh(i,j)**2 + smag_c(i,j)**2 ),smag_limit)
              enddo
           enddo
-       endif
-
-       do j=js,je+1
-          do i=is,ie+1
-             smag_c(i,j) = dt*sqrt( sh(i,j)**2 + smag_c(i,j)**2 )
+       else
+          do j=js,je+1
+             do i=is,ie+1
+                smag_c(i,j) = dt*sqrt( sh(i,j)**2 + smag_c(i,j)**2 )
 !!$             if (abs(smag_c(i,j) > 1.e5)) then
 !!$                print*, i,j, smag_c(i,j), sh(i,j), dudz(i,j:j+1), dvdz(i:i+1,j)
 !!$             endif
+             enddo
           enddo
-       enddo
+       endif
 
 !!! DEBUG CODE
 !!$       if (do_smag) then
@@ -2064,13 +2073,13 @@ end subroutine divergence_corner_nest
  end subroutine smag_corner
 
 
- subroutine smag_cell(dt, u, v, ua, va, smag_q, bd, npx, npy, gridstruct, ng, do_smag, dudz, dvdz)
+ subroutine smag_cell(dt, u, v, ua, va, smag_q, bd, npx, npy, gridstruct, ng, do_smag, dudz, dvdz, smag2d)
 ! Compute the cell-mean Tension_Shear strain for Smagorinsky diffusion
 !!!  works only if (grid_type==4) (need to add corner handling on cubed sphere)
 !!! Next want to add in vertical shear terms
    !!! To complete the calculation
  type(fv_grid_bounds_type), intent(IN) :: bd
- real, intent(in):: dt
+ real, intent(in):: dt, smag2d
  integer, intent(IN) :: npx, npy, ng
  real, intent(in),  dimension(bd%isd:bd%ied,  bd%jsd:bd%jed+1):: u
  real, intent(in),  dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ):: v
@@ -2088,6 +2097,7 @@ end subroutine divergence_corner_nest
  real:: sh(bd%isd:bd%ied,bd%jsd:bd%jed)
  integer i,j
  integer is2, ie1
+ real smag_limit
 
  real, pointer, dimension(:,:) :: dxc, dyc, dx, dy, rarea, rarea_c
 
@@ -2112,6 +2122,13 @@ end subroutine divergence_corner_nest
  rarea_c => gridstruct%rarea_c
 
   is2 = max(2,is); ie1 = min(npx-1,ie+1)
+
+  if (smag2d > 1.e-3) then
+     smag_limit = 0.20/smag2d
+  elseif (do_smag) then
+     smag_q = 0.0
+     return
+  endif
 
 ! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
 ! where T = du/dx - dv/dy;   S = du/dy + dv/dx
@@ -2175,15 +2192,17 @@ end subroutine divergence_corner_nest
              do i=is-1,ie+1
                 wk(i,j) = wk(i,j) - 0.5*(dvdz(i,j)+dvdz(i,j+1))
                 wk(i,j) = wk(i,j) - 0.5*(dudz(i,j)+dudz(i+1,j))
+                smag_q(i,j) = min(dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 ), smag_limit)
+             enddo
+          enddo
+       else
+          do j=js-1,je+1
+             do i=is-1,ie+1
+                smag_q(i,j) = dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 )
              enddo
           enddo
        endif
 
-       do j=js-1,je+1
-          do i=is-1,ie+1
-             smag_q(i,j) = dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 )
-          enddo
-       enddo
 
 !!! DEBUG CODE
 !!$       write(mpp_pe()+2000,*) dudz(is:is+2,js:js+2)
