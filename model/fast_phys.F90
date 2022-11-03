@@ -30,7 +30,7 @@ module fast_phys_mod
     use constants_mod, only: rdgas, grav, kappa, cp_air
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, &
-                             inline_edmf_type, inline_gwd_type
+                             inline_pbl_type, inline_gwd_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
@@ -56,9 +56,9 @@ contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                c2l_ord, mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
-               delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_edmf, inline_gwd, &
+               delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_pbl, inline_gwd, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_edmf, do_inline_gwd, consv_checker, adj_mass_vmr)
+               do_inline_pbl, do_inline_gwd, consv_checker, adj_mass_vmr)
     
     implicit none
     
@@ -68,7 +68,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord, nwat
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_edmf, do_inline_gwd
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_pbl, do_inline_gwd
     logical, intent (in) :: adj_mass_vmr, consv_checker
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
@@ -97,7 +97,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     type (domain2d), intent (inout) :: domain
 
-    type (inline_edmf_type), intent (inout) :: inline_edmf
+    type (inline_pbl_type), intent (inout) :: inline_pbl
 
     type (inline_gwd_type), intent (inout) :: inline_gwd
 
@@ -188,7 +188,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     ! Inline SA-TKE-EDMF >>>
     !-----------------------------------------------------------------------
 
-    if ((.not. do_adiabatic_init) .and. do_inline_edmf) then
+    if ((.not. do_adiabatic_init) .and. do_inline_pbl) then
 
         allocate (kinver (is:ie))
 
@@ -254,7 +254,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
-!$OMP                                    ptop, ntke, inline_edmf, safety_check, nwat, &
+!$OMP                                    ptop, ntke, inline_pbl, safety_check, nwat, &
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, consv_checker, &
 !$OMP                                    te_err, tw_err) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
@@ -324,11 +324,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             zi (is:ie, 1) = 0.0
             pi (is:ie, 1) = pe (is:ie, km+1)
             pik (is:ie, 1) = exp (kappa * log (pi (is:ie, 1) * 1.e-5))
-            inline_edmf%dtsfc (is:ie, j) = 0.0
-            inline_edmf%dqsfc (is:ie, j) = 0.0
-            inline_edmf%dusfc (is:ie, j) = 0.0
-            inline_edmf%dvsfc (is:ie, j) = 0.0
-            inline_edmf%dksfc (is:ie, j) = 0.0
+            inline_pbl%dtsfc (is:ie, j) = 0.0
+            inline_pbl%dqsfc (is:ie, j) = 0.0
+            inline_pbl%dusfc (is:ie, j) = 0.0
+            inline_pbl%dvsfc (is:ie, j) = 0.0
+            inline_pbl%dksfc (is:ie, j) = 0.0
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
@@ -362,19 +362,19 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
-                radh (is:ie, k) = inline_edmf%radh (is:ie, j, kr)
+                radh (is:ie, k) = inline_pbl%radh (is:ie, j, kr)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                !inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
-                !inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) - (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
-                !inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) - ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                !inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) - va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                !inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) - 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) - (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dusfc (is:ie, j) = inline_pbl%dusfc (is:ie, j) - ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dvsfc (is:ie, j) = inline_pbl%dvsfc (is:ie, j) - va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dksfc (is:ie, j) = inline_pbl%dksfc (is:ie, j) - 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             do i = is, ie
-                sigmaf (i) = max (inline_edmf%vfrac (i, j), 0.01)
-                vegtype (i) = int (inline_edmf%vtype (i, j) + 0.5)
+                sigmaf (i) = max (inline_pbl%vfrac (i, j), 0.01)
+                vegtype (i) = int (inline_pbl%vtype (i, j) + 0.5)
             enddo
 
             ! check if pressure or height cross over
@@ -402,34 +402,34 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             ! diagnose surface variables for PBL parameterization
             call sa_tke_edmf_sfc (ie-is+1, lsoil, pi (is:ie, 1), uu (is:ie, 1), &
                 vv (is:ie, 1), ta (is:ie, 1), qa (is:ie, 1, sphum), &
-                abs (mdt), inline_edmf%tsfc (is:ie, j), pm (is:ie, 1), &
-                pik (is:ie, 1) / pmk (is:ie, 1), inline_edmf%evap (is:ie, j), &
-                inline_edmf%hflx (is:ie, j), inline_edmf%ffmm (is:ie, j), &
-                inline_edmf%ffhh (is:ie, j), zm (is:ie, 1) / grav, &
-                inline_edmf%snowd (is:ie, j), inline_edmf%zorl (is:ie, j), &
-                inline_edmf%lsm (is:ie, j), inline_edmf%uustar (is:ie, j), sigmaf, vegtype, &
-                inline_edmf%shdmax (is:ie, j), inline_edmf%sfcemis (is:ie, j), &
-                inline_edmf%dlwflx (is:ie, j), inline_edmf%sfcnsw (is:ie, j), &
-                inline_edmf%sfcdsw (is:ie, j), inline_edmf%srflag (is:ie, j), &
-                inline_edmf%hice (is:ie, j), inline_edmf%fice (is:ie, j), &
-                inline_edmf%tice (is:ie, j), inline_edmf%weasd (is:ie, j), &
-                inline_edmf%tprcp (is:ie, j), inline_edmf%stc (is:ie, j, :), &
-                inline_edmf%qsurf (is:ie, j), inline_edmf%cmm (is:ie, j), &
-                inline_edmf%chh (is:ie, j), inline_edmf%gflux (is:ie, j), &
-                inline_edmf%ep (is:ie, j), u10m_out = u10m, v10m_out = v10m, &
+                abs (mdt), inline_pbl%tsfc (is:ie, j), pm (is:ie, 1), &
+                pik (is:ie, 1) / pmk (is:ie, 1), inline_pbl%evap (is:ie, j), &
+                inline_pbl%hflx (is:ie, j), inline_pbl%ffmm (is:ie, j), &
+                inline_pbl%ffhh (is:ie, j), zm (is:ie, 1) / grav, &
+                inline_pbl%snowd (is:ie, j), inline_pbl%zorl (is:ie, j), &
+                inline_pbl%lsm (is:ie, j), inline_pbl%uustar (is:ie, j), sigmaf, vegtype, &
+                inline_pbl%shdmax (is:ie, j), inline_pbl%sfcemis (is:ie, j), &
+                inline_pbl%dlwflx (is:ie, j), inline_pbl%sfcnsw (is:ie, j), &
+                inline_pbl%sfcdsw (is:ie, j), inline_pbl%srflag (is:ie, j), &
+                inline_pbl%hice (is:ie, j), inline_pbl%fice (is:ie, j), &
+                inline_pbl%tice (is:ie, j), inline_pbl%weasd (is:ie, j), &
+                inline_pbl%tprcp (is:ie, j), inline_pbl%stc (is:ie, j, :), &
+                inline_pbl%qsurf (is:ie, j), inline_pbl%cmm (is:ie, j), &
+                inline_pbl%chh (is:ie, j), inline_pbl%gflux (is:ie, j), &
+                inline_pbl%ep (is:ie, j), u10m_out = u10m, v10m_out = v10m, &
                 rb_out = rb, stress_out = stress, wind_out = wind)
 
             ! SA-TKE-EDMF main program
             call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
-                abs (mdt), uu, vv, ta, qa, gsize, inline_edmf%lsm (is:ie, j), &
-                radh, rb, inline_edmf%zorl (is:ie, j), u10m, v10m, &
-                inline_edmf%ffmm (is:ie, j), inline_edmf%ffhh (is:ie, j), &
-                inline_edmf%tsfc (is:ie, j), inline_edmf%hflx (is:ie, j), &
-                inline_edmf%evap (is:ie, j), stress, wind, kinver, &
+                abs (mdt), uu, vv, ta, qa, gsize, inline_pbl%lsm (is:ie, j), &
+                radh, rb, inline_pbl%zorl (is:ie, j), u10m, v10m, &
+                inline_pbl%ffmm (is:ie, j), inline_pbl%ffhh (is:ie, j), &
+                inline_pbl%tsfc (is:ie, j), inline_pbl%hflx (is:ie, j), &
+                inline_pbl%evap (is:ie, j), stress, wind, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                inline_edmf%hpbl (is:ie, j), inline_edmf%kpbl (is:ie, j), &
-                inline_edmf%dusfc (is:ie, j), inline_edmf%dvsfc (is:ie, j), &
-                inline_edmf%dtsfc (is:ie, j), inline_edmf%dqsfc (is:ie, j))
+                inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j), &
+                inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
+                inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
 
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
@@ -471,11 +471,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
-                !inline_edmf%dtsfc (is:ie, j) = inline_edmf%dtsfc (is:ie, j) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
-                !inline_edmf%dqsfc (is:ie, j) = inline_edmf%dqsfc (is:ie, j) + (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
-                !inline_edmf%dusfc (is:ie, j) = inline_edmf%dusfc (is:ie, j) + ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                !inline_edmf%dvsfc (is:ie, j) = inline_edmf%dvsfc (is:ie, j) + va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
-                !inline_edmf%dksfc (is:ie, j) = inline_edmf%dksfc (is:ie, j) + 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) + (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dusfc (is:ie, j) = inline_pbl%dusfc (is:ie, j) + ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dvsfc (is:ie, j) = inline_pbl%dvsfc (is:ie, j) + va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                !inline_pbl%dksfc (is:ie, j) = inline_pbl%dksfc (is:ie, j) + 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             ! update non-microphyiscs tracers due to mass change
@@ -522,8 +522,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), - inline_edmf%dqsfc (i, j) / (hlv - (cv_vap - c_liq) * tice) * 86400, 0.0, 0.0, 0.0, 0.0, &
-                        0.0, - inline_edmf%dtsfc (i, j), - inline_edmf%dksfc (i, j), abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
+                        delp (i, j, 1:km), gsize (i), dte (i), - inline_pbl%dqsfc (i, j) / (hlv - (cv_vap - c_liq) * tice) * 86400, 0.0, 0.0, 0.0, 0.0, &
+                        0.0, - inline_pbl%dtsfc (i, j), - inline_pbl%dksfc (i, j), abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -731,7 +731,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_gwd, &
-!$OMP                                    ptop, inline_edmf, u_dt, v_dt, safety_check, &
+!$OMP                                    ptop, inline_pbl, u_dt, v_dt, safety_check, &
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq, consv_checker, &
 !$OMP                                    te_err, tw_err) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, pe, &
@@ -853,7 +853,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
             ! orographic gravity wave drag and mountain blocking main program
             call sa_gwd_oro (ie-is+1, km, uu, vv, ta, qv, abs (mdt), gsize, &
-                inline_edmf%kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
+                inline_pbl%kpbl (is:ie, j), pi, dp, pm, pmk, zi, zm, &
                 inline_gwd%hprime (is:ie, j), inline_gwd%oc (is:ie, j), inline_gwd%oa (is:ie, j, :), &
                 inline_gwd%ol (is:ie, j, :), inline_gwd%theta (is:ie, j), inline_gwd%sigma (is:ie, j), &
                 inline_gwd%gamma (is:ie, j), inline_gwd%elvmax (is:ie, j))

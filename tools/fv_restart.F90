@@ -489,7 +489,7 @@ contains
                      Atm(n)%flagstruct%moist_phys, Atm(n)%flagstruct%hydrostatic, &
                      hybrid, Atm(n)%delz, Atm(n)%ze0, Atm(n)%ks, Atm(n)%ptop, &
                      Atm(n)%domain, Atm(n)%tile_of_mosaic, Atm(n)%bd, &
-                     Atm(n)%inline_edmf, Atm(n)%inline_gwd)
+                     Atm(n)%inline_pbl, Atm(n)%inline_gwd)
                 if( is_master() ) write(*,*) 'Doubly Periodic IC generated'
              elseif (grid_type == 5 .or. grid_type == 6) then
                 call mpp_error(FATAL, "Idealized test cases for grid_type == 5,6 (global lat-lon) grid not supported")

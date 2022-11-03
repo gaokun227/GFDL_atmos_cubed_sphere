@@ -168,8 +168,8 @@ module fv_control_mod
      logical , pointer :: consv_checker
      logical , pointer :: do_fast_phys
      logical , pointer :: do_inline_mp
-     logical , pointer :: do_inline_edmf
-     logical , pointer :: do_inline_sas
+     logical , pointer :: do_inline_pbl
+     logical , pointer :: do_inline_cnv
      logical , pointer :: do_inline_gwd
      logical , pointer :: do_aerosol
      logical , pointer :: do_cosp
@@ -710,8 +710,8 @@ module fv_control_mod
        consv_checker                 => Atm%flagstruct%consv_checker
        do_fast_phys                  => Atm%flagstruct%do_fast_phys
        do_inline_mp                  => Atm%flagstruct%do_inline_mp
-       do_inline_edmf                => Atm%flagstruct%do_inline_edmf
-       do_inline_sas                 => Atm%flagstruct%do_inline_sas
+       do_inline_pbl                 => Atm%flagstruct%do_inline_pbl
+       do_inline_cnv                 => Atm%flagstruct%do_inline_cnv
        do_inline_gwd                 => Atm%flagstruct%do_inline_gwd
        do_aerosol                    => Atm%flagstruct%do_aerosol
        do_cosp                       => Atm%flagstruct%do_cosp
@@ -1083,7 +1083,7 @@ module fv_control_mod
      subroutine read_namelist_integ_phys_nml
 
        integer :: ios, ierr
-       namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, &
+       namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
             do_aerosol, do_cosp, consv_checker, te_err, tw_err
 
        read (input_nml_file,integ_phys_nml,iostat=ios)

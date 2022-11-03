@@ -46,7 +46,7 @@ module fv_dynamics_mod
    use boundary_mod,        only: nested_grid_BC_apply_intT
    use fv_arrays_mod,       only: fv_grid_type, fv_flags_type, fv_atmos_type, fv_nest_type, &
                                   fv_diag_type, fv_grid_bounds_type, inline_mp_type, &
-                                  inline_edmf_type, inline_sas_type, inline_gwd_type
+                                  inline_pbl_type, inline_cnv_type, inline_gwd_type
    use fv_nwp_nudge_mod,    only: do_adiabatic_init
 
 implicit none
@@ -78,7 +78,7 @@ contains
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
-                        parent_grid, domain, inline_mp, inline_edmf, inline_sas, &
+                        parent_grid, domain, inline_mp, inline_pbl, inline_cnv, &
                         inline_gwd, diss_est, time_total)
 
     real, intent(IN) :: bdt  ! Large time-step
@@ -139,8 +139,8 @@ contains
     real, intent(in),    dimension(npz+1):: ak, bk
 
     type(inline_mp_type), intent(inout) :: inline_mp
-    type(inline_edmf_type), intent(inout) :: inline_edmf
-    type(inline_sas_type), intent(inout) :: inline_sas
+    type(inline_pbl_type), intent(inout) :: inline_pbl
+    type(inline_cnv_type), intent(inout) :: inline_cnv
     type(inline_gwd_type), intent(inout) :: inline_gwd
 
 ! Accumulated Mass flux arrays: the "Flux Capacitor"
@@ -441,8 +441,8 @@ contains
       if (allocated(inline_mp%u_dt)) inline_mp%u_dt = 0.0
       if (allocated(inline_mp%v_dt)) inline_mp%v_dt = 0.0
   endif
-  if (flagstruct%do_inline_sas) then
-      inline_sas%prec = 0.0
+  if (flagstruct%do_inline_cnv) then
+      inline_cnv%prec = 0.0
   endif
 
   call timing_on('FV_DYN_LOOP')
@@ -491,7 +491,7 @@ contains
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
                     domain, n_map==1, i_pack, last_step, diss_est, &
-                    consv_te, te_2d, inline_edmf, inline_gwd, time_total)
+                    consv_te, te_2d, inline_pbl, inline_gwd, time_total)
       call timing_off('DYN_CORE')
 
 
@@ -606,8 +606,8 @@ contains
                      flagstruct%do_sat_adj, hydrostatic, &
                      hybrid_z,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
-                     flagstruct%do_inline_edmf, flagstruct%do_inline_sas, flagstruct%do_inline_gwd, &
-                     inline_mp, inline_edmf, inline_sas, inline_gwd, flagstruct%c2l_ord, bd, &
+                     flagstruct%do_inline_pbl, flagstruct%do_inline_cnv, flagstruct%do_inline_gwd, &
+                     inline_mp, inline_pbl, inline_cnv, inline_gwd, flagstruct%c2l_ord, bd, &
                      flagstruct%fv_debug, flagstruct%w_limiter, flagstruct%do_am4_remap, &
                      flagstruct%do_fast_phys, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 

@@ -35,7 +35,7 @@ module fv_mapz_mod
   use mpp_domains_mod,   only: mpp_update_domains, domain2d
   use mpp_mod,           only: FATAL, NOTE, mpp_error, get_unit, mpp_root_pe, mpp_pe
   use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID, inline_mp_type, &
-                               inline_edmf_type, inline_sas_type, inline_gwd_type
+                               inline_pbl_type, inline_cnv_type, inline_gwd_type
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
   use intermediate_phys_mod, only: intermediate_phys
@@ -68,8 +68,8 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
-                      do_inline_mp, do_inline_edmf, do_inline_sas, do_inline_gwd, &
-                      inline_mp, inline_edmf, inline_sas, inline_gwd, c2l_ord, bd, &
+                      do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
+                      inline_mp, inline_pbl, inline_cnv, inline_gwd, c2l_ord, bd, &
                       fv_debug, w_limiter, do_am4_remap, do_fast_phys, consv_checker, adj_mass_vmr)
 
   logical, intent(in):: last_step
@@ -107,8 +107,8 @@ contains
 
   logical, intent(in):: do_sat_adj
   logical, intent(in):: do_inline_mp
-  logical, intent(in):: do_inline_edmf
-  logical, intent(in):: do_inline_sas
+  logical, intent(in):: do_inline_pbl
+  logical, intent(in):: do_inline_cnv
   logical, intent(in):: do_inline_gwd
   logical, intent(in):: fill                  ! fill negative tracers
   logical, intent(in):: reproduce_sum
@@ -148,8 +148,8 @@ contains
   real, intent(out)::     te(isd:ied,jsd:jed,km)
 
   type(inline_mp_type), intent(inout):: inline_mp
-  type(inline_edmf_type), intent(inout):: inline_edmf
-  type(inline_sas_type), intent(inout):: inline_sas
+  type(inline_pbl_type), intent(inout):: inline_pbl
+  type(inline_cnv_type), intent(inout):: inline_cnv
   type(inline_gwd_type), intent(inout):: inline_gwd
 
 ! !DESCRIPTION:
@@ -852,8 +852,8 @@ contains
     call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
              c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
              v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
-             inline_mp, inline_edmf, inline_sas, inline_gwd, gridstruct, domain, bd, &
-             hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_edmf, do_inline_sas, &
+             inline_mp, inline_pbl, inline_cnv, inline_gwd, gridstruct, domain, bd, &
+             hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, do_inline_cnv, &
              do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr)
     call timing_off('INTERMEDIATE_PHYS')
 

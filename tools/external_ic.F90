@@ -446,23 +446,23 @@ contains
       call register_axis(SFC_restart, dim_names_alloc(2), "y")
       call register_axis(SFC_restart, dim_names_alloc(1), "x")
       call register_restart_field(SFC_restart, 'tsea', Atm%ts, dim_names_alloc)
-      if ( Atm%flagstruct%do_inline_edmf ) then
-        call register_restart_field(SFC_restart, 'slmsk', Atm%inline_edmf%lsm, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'zorl', Atm%inline_edmf%zorl, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'ffmm', Atm%inline_edmf%ffmm, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'ffhh', Atm%inline_edmf%ffhh, dim_names_alloc)
-        Atm%inline_edmf%tsfc = Atm%ts
-        call register_restart_field(SFC_restart, 'shdmax', Atm%inline_edmf%shdmax, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'vtype', Atm%inline_edmf%vtype, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'vfrac', Atm%inline_edmf%vfrac, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'snwdph', Atm%inline_edmf%snowd, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'uustar', Atm%inline_edmf%uustar, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'srflag', Atm%inline_edmf%srflag, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'hice', Atm%inline_edmf%hice, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'fice', Atm%inline_edmf%fice, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'tisfc', Atm%inline_edmf%tice, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'sheleg', Atm%inline_edmf%weasd, dim_names_alloc)
-        call register_restart_field(SFC_restart, 'tprcp', Atm%inline_edmf%tprcp, dim_names_alloc)
+      if ( Atm%flagstruct%do_inline_pbl ) then
+        call register_restart_field(SFC_restart, 'slmsk', Atm%inline_pbl%lsm, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'zorl', Atm%inline_pbl%zorl, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'ffmm', Atm%inline_pbl%ffmm, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'ffhh', Atm%inline_pbl%ffhh, dim_names_alloc)
+        Atm%inline_pbl%tsfc = Atm%ts
+        call register_restart_field(SFC_restart, 'shdmax', Atm%inline_pbl%shdmax, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'vtype', Atm%inline_pbl%vtype, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'vfrac', Atm%inline_pbl%vfrac, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'snwdph', Atm%inline_pbl%snowd, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'uustar', Atm%inline_pbl%uustar, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'srflag', Atm%inline_pbl%srflag, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'hice', Atm%inline_pbl%hice, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'fice', Atm%inline_pbl%fice, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'tisfc', Atm%inline_pbl%tice, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'sheleg', Atm%inline_pbl%weasd, dim_names_alloc)
+        call register_restart_field(SFC_restart, 'tprcp', Atm%inline_pbl%tprcp, dim_names_alloc)
       endif
       call read_restart(SFC_restart)
       call close_file(SFC_restart)
@@ -471,15 +471,15 @@ contains
       call mpp_error(FATAL,'==> Error in External_ic::get_nggps_ic: tiled file '//trim(fn_sfc_ics)//' for NGGPS IC does not exist')
     endif
 
-    if ( Atm%flagstruct%do_inline_edmf ) then
+    if ( Atm%flagstruct%do_inline_pbl ) then
       if( open_file(SFC_restart, fn_sfc_ics, "read", Atm%domain_for_read, is_restart=.true., dont_add_res_to_filename=.true.) ) then
           naxis_dims = get_variable_num_dimensions(SFC_restart, 'stc')
           allocate (dim_names_alloc(naxis_dims))
           call get_variable_dimension_names(SFC_restart, 'stc', dim_names_alloc)
-          call register_axis(SFC_restart, dim_names_alloc(3), size(Atm%inline_edmf%stc,3))
+          call register_axis(SFC_restart, dim_names_alloc(3), size(Atm%inline_pbl%stc,3))
           call register_axis(SFC_restart, dim_names_alloc(2), "y")
           call register_axis(SFC_restart, dim_names_alloc(1), "x")
-          call register_restart_field(SFC_restart, 'stc', Atm%inline_edmf%stc, dim_names_alloc)
+          call register_restart_field(SFC_restart, 'stc', Atm%inline_pbl%stc, dim_names_alloc)
           call read_restart(SFC_restart)
           call close_file(SFC_restart)
           deallocate (dim_names_alloc)
@@ -1937,29 +1937,29 @@ contains
       dim_names_3d4 = dim_names_3d3
       dim_names_3d4(1) = "levp"
 
-      if ( Atm%flagstruct%do_inline_edmf ) then
+      if ( Atm%flagstruct%do_inline_pbl ) then
          if( open_file(SFC_restart, fn_sfc_ics, "read", Atm%domain_for_read, is_restart=.true., dont_add_res_to_filename=.true.) ) then
             naxis_dims = get_variable_num_dimensions(SFC_restart, 'slmsk')
             allocate (dim_names_alloc(naxis_dims))
             call get_variable_dimension_names(SFC_restart, 'slmsk', dim_names_alloc)
             call register_axis(SFC_restart, dim_names_alloc(2), "y")
             call register_axis(SFC_restart, dim_names_alloc(1), "x")
-            call register_restart_field(SFC_restart, 'slmsk', Atm%inline_edmf%lsm, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'zorl', Atm%inline_edmf%zorl, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'ffmm', Atm%inline_edmf%ffmm, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'ffhh', Atm%inline_edmf%ffhh, dim_names_alloc)
-            Atm%inline_edmf%tsfc = Atm%ts
-            call register_restart_field(SFC_restart, 'shdmax', Atm%inline_edmf%shdmax, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'vtype', Atm%inline_edmf%vtype, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'vfrac', Atm%inline_edmf%vfrac, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'snwdph', Atm%inline_edmf%snowd, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'uustar', Atm%inline_edmf%uustar, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'srflag', Atm%inline_edmf%srflag, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'hice', Atm%inline_edmf%hice, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'fice', Atm%inline_edmf%fice, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'tisfc', Atm%inline_edmf%tice, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'sheleg', Atm%inline_edmf%weasd, dim_names_alloc)
-            call register_restart_field(SFC_restart, 'tprcp', Atm%inline_edmf%tprcp, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'slmsk', Atm%inline_pbl%lsm, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'zorl', Atm%inline_pbl%zorl, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'ffmm', Atm%inline_pbl%ffmm, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'ffhh', Atm%inline_pbl%ffhh, dim_names_alloc)
+            Atm%inline_pbl%tsfc = Atm%ts
+            call register_restart_field(SFC_restart, 'shdmax', Atm%inline_pbl%shdmax, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'vtype', Atm%inline_pbl%vtype, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'vfrac', Atm%inline_pbl%vfrac, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'snwdph', Atm%inline_pbl%snowd, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'uustar', Atm%inline_pbl%uustar, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'srflag', Atm%inline_pbl%srflag, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'hice', Atm%inline_pbl%hice, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'fice', Atm%inline_pbl%fice, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'tisfc', Atm%inline_pbl%tice, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'sheleg', Atm%inline_pbl%weasd, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'tprcp', Atm%inline_pbl%tprcp, dim_names_alloc)
             call read_restart(SFC_restart)
             call close_file(SFC_restart)
             deallocate (dim_names_alloc)
@@ -1968,15 +1968,15 @@ contains
          endif
       endif
 
-      if ( Atm%flagstruct%do_inline_edmf ) then
+      if ( Atm%flagstruct%do_inline_pbl ) then
         if( open_file(SFC_restart, fn_sfc_ics, "read", Atm%domain_for_read, is_restart=.true., dont_add_res_to_filename=.true.) ) then
             naxis_dims = get_variable_num_dimensions(SFC_restart, 'stc')
             allocate (dim_names_alloc(naxis_dims))
             call get_variable_dimension_names(SFC_restart, 'stc', dim_names_alloc)
-            call register_axis(SFC_restart, dim_names_alloc(3), size(Atm%inline_edmf%stc,3))
+            call register_axis(SFC_restart, dim_names_alloc(3), size(Atm%inline_pbl%stc,3))
             call register_axis(SFC_restart, dim_names_alloc(2), "y")
             call register_axis(SFC_restart, dim_names_alloc(1), "x")
-            call register_restart_field(SFC_restart, 'stc', Atm%inline_edmf%stc, dim_names_alloc)
+            call register_restart_field(SFC_restart, 'stc', Atm%inline_pbl%stc, dim_names_alloc)
             call read_restart(SFC_restart)
             call close_file(SFC_restart)
             deallocate (dim_names_alloc)

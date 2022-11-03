@@ -48,7 +48,7 @@ module dyn_core_mod
   use diag_manager_mod,   only: send_data
   use fv_arrays_mod,      only: fv_grid_type, fv_flags_type, fv_nest_type, fv_diag_type, &
                                 fv_grid_bounds_type, R_GRID, fv_nest_BC_type_3d, &
-                                inline_edmf_type, inline_gwd_type
+                                inline_pbl_type, inline_gwd_type
 
   use boundary_mod,         only: extrapolation_BC,  nested_grid_BC_apply_intT
   use fv_regional_mod,      only: regional_boundary_update
@@ -93,7 +93,7 @@ contains
                      u,  v,  w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va, &
                      uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, &
                      ks, gridstruct, flagstruct, neststruct, idiag, bd, domain, &
-                     init_step, i_pack, end_step, diss_est, consv, te0_2d, inline_edmf, inline_gwd, time_total)
+                     init_step, i_pack, end_step, diss_est, consv, te0_2d, inline_pbl, inline_gwd, time_total)
     integer, intent(IN) :: npx
     integer, intent(IN) :: npy
     integer, intent(IN) :: npz
@@ -130,7 +130,7 @@ contains
     real, intent(inout):: peln(bd%is:bd%ie,npz+1,bd%js:bd%je)          ! ln(pe)
     real, intent(inout):: pk(bd%is:bd%ie,bd%js:bd%je, npz+1)        ! pe**kappa
 
-    type(inline_edmf_type), intent(inout):: inline_edmf
+    type(inline_pbl_type), intent(inout):: inline_pbl
     type(inline_gwd_type), intent(inout):: inline_gwd
 
 !-----------------------------------------------------------------------
@@ -1099,9 +1099,9 @@ contains
 
           call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, flagstruct%nwat, &
              flagstruct%c2l_ord, dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
-             delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, inline_edmf, inline_gwd, &
+             delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, inline_pbl, inline_gwd, &
              gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-             flagstruct%do_inline_edmf, flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
+             flagstruct%do_inline_pbl, flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 
           call timing_on('COMM_TOTAL')
           !some mpp domains updates are commented out at this moment -- Linjiong
