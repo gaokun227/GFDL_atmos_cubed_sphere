@@ -20,13 +20,13 @@
 !***********************************************************************
 
 ! =======================================================================
-! Scale-Aware Simplified-Arakawa-Schubert (SA-SAS) Convection Scheme
-! This code was originally from GFS. It was later rewritten as an inline scheme.
+! Scale-Aware Aerosol-Aware Mass-Flux (SA-AAMP) Convection Scheme
+! This code was originally from GFSv16. It was later rewritten as an inline scheme.
 ! Developers: Jongil Han, Linjiong Zhou, and the GFDL FV3 Team
 ! References: Han and Pan (2011), Han et al. (2017), Han and Bretherton (2019)
 ! =======================================================================
 
-module sa_sas_mod
+module sa_aamf_mod
 
     use gfdl_mp_mod, only: mqs
 
@@ -38,9 +38,9 @@ module sa_sas_mod
     ! public subroutines, functions, and variables
     ! -----------------------------------------------------------------------
     
-    public :: sa_sas_init
-    public :: sa_sas_deep
-    public :: sa_sas_shal
+    public :: sa_aamf_init
+    public :: sa_aamf_deep
+    public :: sa_aamf_shal
 
     ! -----------------------------------------------------------------------
     ! physics constants
@@ -64,6 +64,8 @@ module sa_sas_mod
 
     real, parameter :: hlv = 2.5e6 ! latent heat of evaporation at 0 deg C (J/kg): ref: GFDL, GFS
     
+    real, parameter :: qcmin = 1.0e-15 ! min value for cloud condensates (kg/kg)
+
     ! -----------------------------------------------------------------------
     ! namelist parameters
     ! -----------------------------------------------------------------------
@@ -108,7 +110,7 @@ module sa_sas_mod
     ! namelist
     ! -----------------------------------------------------------------------
     
-    namelist / sa_sas_nml / &
+    namelist / sa_aamf_nml / &
         clam_deep, c0s_deep, c1_deep, pgcon_deep, asolfac_deep, evfact_deep, evfactl_deep, &
         clam_shal, c0s_shal, c1_shal, pgcon_shal, asolfac_shal, evfact_shal, evfactl_shal, &
         betal_deep, betas_deep
@@ -116,10 +118,10 @@ module sa_sas_mod
 contains
 
 ! =======================================================================
-! SA-SAS initialization
+! SAMP initialization
 ! =======================================================================
 
-subroutine sa_sas_init (input_nml_file, logunit)
+subroutine sa_aamf_init (input_nml_file, logunit)
     
     implicit none
     
@@ -135,24 +137,140 @@ subroutine sa_sas_init (input_nml_file, logunit)
     ! read namelist
     ! -----------------------------------------------------------------------
     
-    read (input_nml_file, nml = sa_sas_nml)
+    read (input_nml_file, nml = sa_aamf_nml)
     
     ! -----------------------------------------------------------------------
     ! write namelist to log file
     ! -----------------------------------------------------------------------
     
     write (logunit, *) " ================================================================== "
-    write (logunit, *) "sa_sas_mod"
-    write (logunit, nml = sa_sas_nml)
+    write (logunit, *) "sa_aamf_mod"
+    write (logunit, nml = sa_aamf_nml)
     
-end subroutine sa_sas_init
+end subroutine sa_aamf_init
 
 ! =======================================================================
-! deep convection part
+! Scale-Aware Aerosol-Aware Mass-Flux Deep Convection
+
+! The Scale-Aware Mass-Flux (SAMF) deep convection scheme is an updated version of the previous 
+! Simplified Arakawa-Schubert (SAS) scheme with scale and aerosol awareness and parameterizes the 
+! effect of deep convection on the environment (represented by the model state variables) in the 
+! following way.
+!
+! First, a simple cloud model is used to determine the change in model state variables due to one 
+! entraining/detraining cloud type, per unit cloud-base mass flux. Next, the total change in state 
+! variables is retrieved by determining the actual cloud base mass flux using the quasi-equilibrium
+! assumption (for grid sizes larger than a threshold value [currently set to 8 km]) or a mean 
+! updraft velocity (for grid sizes smaller than the threshold value). With a scale-aware 
+! parameterization, the cloud mass flux decreases with increasing grid resolution. A simple 
+! aerosol-aware parameterization is employed, where rain conversion in the convective updraft is 
+! modified by aerosol number concentration. The name SAS is replaced with SAMF as for the smaller 
+! grid sizes, the parameterization does not use Arakawa-Schubert's quasi-equilibrium assumption any 
+! longer where the cloud work function (interpreted as entrainment-moderated Convective Available 
+! Potential Energy [CAPE]) by the large scale dynamics is in balance with the consumption of the 
+! cloud work function by the convection.
+!
+! The SAS scheme uses the working concepts put forth in Arakawa and Schubert (1974) but includes 
+! modifications and simplifications from Grell (1993) such as saturated downdrafts and only one 
+! cloud type (the deepest possible), rather than a spectrum based on cloud top heights or assumed 
+! entrainment rates. The scheme was implemented for the GFS in 1995 by Pan and Wu, with further 
+! modifications discussed in Han and Pan (2011), including the calculation of cloud top, a greater 
+! CFL-criterion-based maximum cloud base mass flux, updated cloud model entrainment and detrainment, 
+! improved convective transport of horizontal momentum, a more general triggering function, and 
+! the inclusion of convective overshooting.
+!
+! The SAMF scheme updates the SAS scheme with scale- and aerosol-aware parameterizations from 
+! Han et al. (2017) based on the studies by Arakawa and Wu (2013) and Grell and Freitas (2014) for 
+! scale awareness and by Lim (2011) for aerosol awareness. The ratio of advective time to 
+! convective turnover time is also taken into account for the scale-aware parameterization. 
+! Along with the scale- and aerosol-aware parameterizations, more changes are made to the SAMF 
+! scheme. The cloud base mass-flux computation is modified to use convective turnover time as the 
+! convective adjustment time scale. The rain conversion rate is modified to decrease with 
+! decreasing air temperature above the freezing level. Convective inhibition in the sub-cloud layer 
+! is used as an additional trigger condition. Convective cloudiness is enhanced by considering 
+! suspended cloud condensate in the updraft. The lateral entrainment is also enhanced to more 
+! strongly suppress convection in a drier environment.
+!
+! In further update for FY19 GFS implementation, interaction with Turbulent Kinetic Energy (TKE), 
+! which is a prognostic variable used in a scale-aware TKE-based moist EDMF vertical turbulent 
+! mixing scheme, is included. Entrainment rates in updrafts and downdrafts are proportional to sub-
+! cloud mean TKE. TKE is transported by cumulus convection. TKE contribution from cumulus 
+! convection is deduced from cumulus mass flux. On the other hand, tracers such as ozone and 
+! aerosol are also transported by cumulus convection.
+!
+! Occasional model crashes have been occurred when stochastic physics is on, due to too much 
+! convective cooling and heating tendencies near the cumulus top which are amplified by stochastic 
+! physics. To reduce too much convective cooling at the cloud top, the convection schemes have been 
+! modified for the rain conversion rate, entrainment and detrainment rates, overshooting layers, 
+! and maximum allowable cloudbase mass flux (as of JUNE 2018) .
+!
+! For grid sizes larger than threshold value, as in Grell (1993) , the SAMF deep convection scheme 
+! can be described in terms of three types of "controls": static, dynamic, and feedback. The static 
+! control component consists of the simple entraining/detraining updraft/downdraft cloud model and 
+! is used to determine the cloud properties, convective precipitation, as well as the convective 
+! cloud top height. The dynamic control is the determination of the potential energy available for 
+! convection to "consume", or how primed the large-scale environment is for convection to occur due 
+! to changes by the dyanmics of the host model. The feedback control is the determination of how the 
+! parameterized convection changes the large-scale environment (the host model state variables) 
+! given the changes to the state variables per unit cloud base mass flux calculated in the static 
+! control portion and the deduced cloud base mass flux determined from the dynamic control.
+!
+! For grid sizes smaller than threshold value, the cloud base mass flux in the SAMF scheme is 
+! determined by the cumulus updraft velocity averaged ove the whole cloud depth (Han et al., 2017), 
+! which in turn, determines changes of the large-scale environment due to the cumulus convection.
+!
+! \param[in] IM      number of used points
+! \param[in] KM      vertical layer dimension
+! \param[in] DELT    physics time step in seconds
+! \param[in] NTK     index for tke
+! \param[in] NTR     total number of tracers including tke
+! \param[in] DELP    pressure difference between level k and k + 1 (pa)
+! \param[in] PRSLP   mean layer presure (pa)
+! \param[in] PSP     surface pressure (pa)
+! \param[in] PHIL    layer geopotential (\f$m^2 / s^2\f$)
+! \param[in] QTR     tracer array including cloud condensate (\f$kg / kg\f$)
+! \param[inout] QL   cloud water or ice (kg / kg)
+! \param[inout] Q1   updated tracers (kg / kg)
+! \param[inout] T1   updated temperature (k)
+! \param[inout] U1   updated zonal wind (\f$m s^{ - 1}\f$)
+! \param[inout] V1   updated meridional wind (\f$m s^{ - 1}\f$)
+! \param[out] RN     convective rain (m)
+! \param[out] KBOT   index for cloud base
+! \param[out] KTOP   index for cloud top
+! \param[out] KCNV   flag to denote deep convection (0 = no, 1 = yes)
+! \param[in] ISLIMSK sea / land / ice mask (= 0 / 1 / 2)
+! \param[in] GSIZE   size of grid box (\f$m\f$)
+! \param[in] DOT     layer mean vertical velocity (pa / s)
+! \param[in] NCLOUD  number of cloud species
+! \param[out] UD_MF  updraft mass flux multiplied by time step (\f$kg / m^2\f$)
+! \param[out] DD_MF  downdraft mass flux multiplied by time step (\f$kg / m^2\f$)
+! \param[out] DT_MF  ud_mf at cloud top (\f$kg / m^2\f$)
+! \param[out] CNVW   convective cloud water (kg / kg)
+! \param[out] CNVC   convective cloud cover (unitless)
+!
+! General Algorithm
+! # Compute preliminary quantities needed for static, dynamic, and feedback control portions of the algorithm.
+! # Perform calculations related to the updraft of the entraining/detraining cloud model ("static control") .
+! # Perform calculations related to the downdraft of the entraining/detraining cloud model ("static control") .
+!
+! # For grid sizes larger than the threshold value (currently 8 km) :
+! 1) Using the updated temperature and moisture profiles that were modified by the convection on a short time-scale, 
+!    recalculate the total cloud work function to determine the change in the cloud work function due to convection, 
+!    or the stabilizing effect of the cumulus.
+! 2) For the "dynamic control", using a reference cloud work function, estimate the change in cloud work function 
+!    due to the large-scale dynamics. following the quasi-equilibrium assumption, calculate the cloud base mass flux 
+!    required to keep the large-scale convective destabilization in balance with the stabilization effect of the convection.
+!
+! # For grid sizes smaller than the threshold value (currently 8 km) :
+! 1) Compute the cloud base mass flux using the cumulus updraft velocity averaged ove the whole cloud depth.
+! # For scale awareness, the updraft fraction (sigma) is obtained as a function of cloud base entrainment. 
+!   Then, the final cloud base mass flux is obtained by the original mass flux multiplied by the (1sigma) 2
+! # For the "feedback control", calculate updated values of the state variables by multiplying the cloud base 
+!   mass flux and the tendencies calculated per unit cloud base mass flux from the static control.
 ! =======================================================================
 
-subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, gsize, &
+subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phil, qtr, &
+        q1, t1, u1, v1, qr, fscav, rn, kbot, ktop, kcnv, islimsk, gsize, &
         dot, ncloud, ud_mf, dd_mf, dt_mf, cnvw, cnvc)
     
     implicit none
@@ -161,15 +279,16 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    integer, intent (in) :: im, km, ncloud, islimsk (im)
+    integer, intent (in) :: im, km, itc, ntc, ntk, ntr, ncloud, islimsk (im)
 
     real, intent (in) :: delt
     real, intent (in) :: psp (im), delp (im, km), &
         prslp (im, km), gsize (im), dot (im, km), phil (im, km)
-    
+    real, intent (in) :: fscav (ntc)
+
     integer, intent (inout) :: kcnv (im)
 
-    real, intent (inout) :: ql (im, km), &
+    real, intent (inout) :: qtr (im, km, ntr + 2), &
         q1 (im, km), t1 (im, km), u1 (im, km), v1 (im, km)
     
     integer, intent (out) :: kbot (im), ktop (im)
@@ -184,8 +303,12 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     integer :: i, indx, jmn, k, kk, km1, n
     
-    real :: cxlamu, cxlamd, xlamde, xlamdd, crtlamu, crtlamd
-    
+    real :: clamd, tkemx, tkemn, dtke, &
+        dbeta, betamx, betamn, &
+        cxlame, cxlamd, &
+        xlamde, xlamdd, &
+        crtlame, crtlamd
+
     ! real :: detad
 
     real :: adw, aup, aafac, beta, d0, &
@@ -221,7 +344,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     ! real :: acrt (im), acrtfct (im),
 
-    real :: aa1 (im), &
+    real :: aa1 (im), tkemean (im), clamt (im), &
         umean (im), tauadv (im), gdx (im), &
         delhbar (im), delq (im), delq2 (im), &
         delqbar (im), delqev (im), deltbar (im), &
@@ -229,13 +352,15 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         edto (im), edtx (im), fld (im), &
         hcdo (im, km), hmax (im), hmin (im), &
         ucdo (im, km), vcdo (im, km), aa2 (im), &
+        ecdo (im, km, ntr), &
         pdot (im), po (im, km), &
         pwavo (im), pwevo (im), mbdt (im), &
         qcdo (im, km), qcond (im), qevap (im), &
         rntot (im), vshear (im), xaa0 (im), &
         xk (im), xlamd (im), cina (im), &
         xmb (im), xmbmax (im), xpwav (im), &
-        xpwev (im), xlamx (im), &
+        xpwev (im), delebar (im, ntr), &
+        ! xlamx (im), &
         delubar (im), delvbar (im)
     
     real :: c0 (im)
@@ -250,17 +375,20 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     ! physical parameters
     parameter (g = grav)
     parameter (elocp = hlv / cp_air, el2orc = hlv * hlv / (rvgas * cp_air))
-    parameter (d0 = .01)
+    parameter (d0 = .001)
     
     ! asolfac_deep: aerosol - aware parameter based on lim & hong (2012)
     ! asolfac_deep = cx / c0s_deep (= .002)
     ! cx = min ([ - 0.7 ln (nccn) + 24] * 1.e-4, c0s_deep)
     ! nccn: ccn number concentration in cm^ (- 3)
     ! until a realistic nccn is provided, typical nccns are assumed
-    ! as nccn = 100 for sea and nccn = 7000 for land
+    ! as nccn = 100 for sea and nccn = 1000 for land
     
     parameter (cm = 1.0, delta = zvir)
     parameter (fact1 = (cp_vap - c_liq) / rvgas, fact2 = hlv / rvgas - fact1 * tice)
+    parameter (clamd = 0.03, tkemx = 0.65, tkemn = 0.05)
+    parameter (dtke = tkemx - tkemn)
+    parameter (dbeta = 0.1)
     parameter (cthk = 200., dthk = 25.)
     parameter (cinpcrmx = 180., cinpcrmn = 120.)
     parameter (cinacrmx = - 120., cinacrmn = - 80.)
@@ -269,7 +397,11 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     ! local variables and arrays
     real :: pfld (im, km), to (im, km), qo (im, km), &
-        uo (im, km), vo (im, km), qeso (im, km)
+        uo (im, km), vo (im, km), qeso (im, km), &
+        ctr (im, km, ntr), ctro (im, km, ntr)
+
+    ! for aerosol transport
+    real :: qaero (im, km, ntc)
 
     ! for updraft velocity calculation
     real :: wu2 (im, km), buo (im, km), drag (im, km)
@@ -281,15 +413,17 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         fent1 (im, km), fent2 (im, km), frh (im, km), &
         heo (im, km), heso (im, km), &
         qrcd (im, km), dellah (im, km), dellaq (im, km), &
+        dellae (im, km, ntr), &
         dellau (im, km), dellav (im, km), hcko (im, km), &
         ucko (im, km), vcko (im, km), qcko (im, km), &
+        ecko (im, km, ntr), &
         eta (im, km), etad (im, km), zi (im, km), &
         qrcko (im, km), qrcdo (im, km), &
         pwo (im, km), pwdo (im, km), c0t (im, km), &
         tx1 (im), sumx (im), cnvwt (im, km)
     ! rhbar (im)
     
-    logical :: totflg, cnvflg (im), asqecflg (im), flg (im)
+    logical :: do_aerosols, totflg, cnvflg (im), asqecflg (im), flg (im)
     
     ! asqecflg: flag for the quasi - equilibrium assumption of arakawa - schubert
     
@@ -306,6 +440,13 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     real :: tf, tcr, tcrf
     parameter (tf = 233.16, tcr = 263.16, tcrf = 1.0 / (tcr - tf))
     
+    ! -----------------------------------------------------------------------
+    ! determine whether to perform aerosol transport
+    ! -----------------------------------------------------------------------
+
+    do_aerosols = (itc > 0) .and. (ntc > 0) .and. (ntr > 0)
+    if (do_aerosols) do_aerosols = (ntr >= itc + ntc - 3)
+
     ! -----------------------------------------------------------------------
     ! compute preliminary quantities needed for static, dynamic, and feedback control portions of the algorithm.
     ! convert input pressure terms to centibar units.
@@ -428,7 +569,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     edtmaxl = .3
     edtmaxs = .3
     ! clam_deep = .1
-    aafac = .1
+    aafac = .05
     ! betal_deep = .15
     ! betas_deep = .15
     ! betal_deep = .05
@@ -437,10 +578,11 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     ! evfact_deep = 0.3
     ! evfactl_deep = 0.3
     
-    crtlamu = 1.0e-4
+    crtlame = 1.0e-4
     crtlamd = 1.0e-4
     
-    cxlamu = 1.0e-3
+    ! cxlame = 1.0e-3
+    cxlame = 1.0e-4
     cxlamd = 1.0e-4
     xlamde = 1.0e-4
     xlamdd = 1.0e-4
@@ -503,8 +645,6 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km1
         do i = 1, im
             zi (i, k) = 0.5 * (zo (i, k) + zo (i, k + 1))
-            xlamue (i, k) = clam_deep / zi (i, k)
-            ! xlamue (i, k) = max (xlamue (i, k), crtlamu)
         enddo
     enddo
 
@@ -551,6 +691,24 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
+    ! -----------------------------------------------------------------------
+    ! initialize tracer variables
+    ! -----------------------------------------------------------------------
+    
+    do n = 3, ntr + 2
+        kk = n - 2
+        do k = 1, km
+            do i = 1, im
+                if (k <= kmax (i)) then
+                    ctr (i, k, kk) = qtr (i, k, n)
+                    ctro (i, k, kk) = qtr (i, k, n)
+                    ecko (i, k, kk) = 0.
+                    ecdo (i, k, kk) = 0.
+                endif
+            enddo
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! column variables
     ! p is pressure of the layer (mb)
@@ -669,6 +827,16 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
+    do n = 1, ntr
+        do k = 1, km1
+            do i = 1, im
+                if (k <= kmax (i) - 1) then
+                    ctro (i, k, n) = .5 * (ctro (i, k, n) + ctro (i, k + 1, n))
+                endif
+            enddo
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! look for the level of free convection as cloud base
     ! search below the index "kbmax" for the level of free convection (lfc) where the condition \f$h_b > h^ * \f$ is first met, where \f$h_b, h^ * \f$ are the state moist static energy at the parcel's starting level and saturation moist static energy, respectively. set "kbcon" to the index of the lfc.
@@ -763,33 +931,102 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     if (totflg) return
 
     ! -----------------------------------------------------------------------
-    ! assume that updraft entrainment rate above cloud base is
-    ! same as that at cloud base
+    ! turbulent entrainment rate assumed to be proportional
+    ! to subcloud mean tke
     ! -----------------------------------------------------------------------
 
-    do i = 1, im
-        if (cnvflg (i)) then
-            xlamx (i) = xlamue (i, kbcon (i))
-        endif
-    enddo
+    if (ntk > 0) then
 
-    do k = 2, km1
         do i = 1, im
-            if (cnvflg (i) .and. (k > kbcon (i) .and. k < kmax (i))) then
-                xlamue (i, k) = xlamx (i)
+            if (cnvflg (i)) then
+                sumx (i) = 0.
+                tkemean (i) = 0.
+            endif
+        enddo
+        do k = 1, km1
+            do i = 1, im
+                if (cnvflg (i)) then
+                    if (k >= kb (i) .and. k < kbcon (i)) then
+                        dz = zo (i, k + 1) - zo (i, k)
+                        tem = 0.5 * (qtr (i, k, ntk) + qtr (i, k + 1, ntk))
+                        tkemean (i) = tkemean (i) + tem * dz
+                        sumx (i) = sumx (i) + dz
+                    endif
+                endif
+            enddo
+        enddo
+
+        do i = 1, im
+            if (cnvflg (i)) then
+                tkemean (i) = tkemean (i) / sumx (i)
+                if (tkemean (i) > tkemx) then
+                    clamt (i) = clam_deep + clamd
+                else if (tkemean (i) < tkemn) then
+                    clamt (i) = clam_deep - clamd
+                else
+                    tem = tkemx - tkemean (i)
+                    tem1 = 1. - 2. * tem / dtke
+                    clamt (i) = clam_deep + clamd * tem1
+                endif
+            endif
+        enddo
+    else
+        do i = 1, im
+            if (cnvflg (i)) then
+                clamt (i) = clam_deep
+            endif
+        enddo
+    endif
+
+    ! -----------------------------------------------------------------------
+    ! also initially assume updraft entrainment rate
+    ! is an inverse function of height
+    ! -----------------------------------------------------------------------
+
+    do k = 1, km1
+        do i = 1, im
+            if (cnvflg (i)) then
+                xlamue (i, k) = clamt (i) / zi (i, k)
+                xlamue (i, k) = max (xlamue (i, k), crtlame)
             endif
         enddo
     enddo
 
     ! -----------------------------------------------------------------------
-    ! specify a background (turbulent) detrainment rate for the updrafts
+    ! assume that updraft entrainment rate above cloud base is
+    ! same as that at cloud base
+    ! -----------------------------------------------------------------------
+
+    ! calculate the entrainment rate according to han and pan (2011), equation 8, after bechtold et al. (2008), equation 2 given by:
+    ! \f[
+    ! \epsilon = \epsilon_0f_0 + d_1\left (1 - rh\right) f_1
+    ! \f]
+    ! where \f$\epsilon_0\f$ is the cloud base entrainment rate, \f$d_1\f$ is a tunable constant, and \f$f_0 = \left (\frac{q_s}{q_{s, b}}\right) ^2\f$ and \f$f_1 = \left (\frac{q_s}{q_{s, b}}\right) ^3\f$ where \f$q_s\f$ and \f$q_{s, b}\f$ are the saturation specific humidities at a given level and cloud base, respectively. the detrainment rate in the cloud is assumed to be equal to the entrainment rate at cloud base.
+    ! do i = 1, im
+    ! if (cnvflg (i)) then
+    ! xlamx (i) = xlamue (i, kbcon (i))
+    ! endif
+    ! enddo
+    ! do k = 2, km1
+    ! do i = 1, im
+    ! if (cnvflg (i) .and. (k > kbcon (i) .and. k < kmax (i))) then
+    ! xlamue (i, k) = xlamx (i)
+    ! endif
+    ! enddo
+    ! enddo
+
+    ! -----------------------------------------------------------------------
+    ! specify detrainment rate for the updrafts
+    ! (the updraft detrainment rate is set constant and equal to the entrainment rate at cloud base.)
+    ! the updraft detrainment rate is vertically constant and proportional to clamt
     ! -----------------------------------------------------------------------
 
     do k = 1, km1
         do i = 1, im
             if (cnvflg (i) .and. k < kmax (i)) then
-                xlamud (i, k) = xlamx (i)
+                ! xlamud (i, k) = xlamx (i)
                 ! xlamud (i, k) = crtlamd
+                xlamud (i, k) = 0.001 * clamt (i)
             endif
         enddo
     enddo
@@ -813,17 +1050,17 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
 
     ! -----------------------------------------------------------------------
     ! final entrainment and detrainment rates as the sum of turbulent part and
-    ! organized entrainment depending on the environmental relative humidity
-    ! (bechtold et al., 2008)
+    ! organized one depending on the environmental relative humidity
+    ! (bechtold et al., 2008; derbyshire et al., 2011)
     ! -----------------------------------------------------------------------
 
     do k = 2, km1
         do i = 1, im
             if (cnvflg (i) .and. (k > kbcon (i) .and. k < kmax (i))) then
-                tem = cxlamu * frh (i, k) * fent2 (i, k)
+                tem = cxlame * frh (i, k) * fent2 (i, k)
                 xlamue (i, k) = xlamue (i, k) * fent1 (i, k) + tem
-                ! tem1 = cxlamd * frh (i, k)
-                ! xlamud (i, k) = xlamud (i, k) + tem1
+                tem1 = cxlamd * frh (i, k)
+                xlamud (i, k) = xlamud (i, k) + tem1
             endif
         enddo
     enddo
@@ -891,6 +1128,16 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         endif
     enddo
 
+    ! for tracers
+    do n = 1, ntr
+        do i = 1, im
+            if (cnvflg (i)) then
+                indx = kb (i)
+                ecko (i, indx, n) = ctro (i, indx, n)
+            endif
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! cloud property is modified by the entrainment process
     ! -----------------------------------------------------------------------
@@ -923,6 +1170,22 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                          + ptem1 * vo (i, k - 1)) / factor
                 endif
             endif
+        enddo
+    enddo
+
+    do n = 1, ntr
+        do k = 2, km1
+            do i = 1, im
+                if (cnvflg (i)) then
+                    if (k > kb (i) .and. k < kmax (i)) then
+                        dz = zi (i, k) - zi (i, k - 1)
+                        tem = 0.25 * (xlamue (i, k) + xlamue (i, k - 1)) * dz
+                        factor = 1. + tem
+                        ecko (i, k, n) = ((1. - tem) * ecko (i, k - 1, n) + tem * &
+                            (ctro (i, k, n) + ctro (i, k - 1, n))) / factor
+                    endif
+                endif
+            enddo
         enddo
     enddo
 
@@ -1129,7 +1392,8 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
             
             k = kbcon (i)
             dp = delp (i, k)
-            xmbmax (i) = dp / (g * dt2)
+            xmbmax (i) = dp / (2. * g * dt2)
+            ! xmbmax (i) = dp / (g * dt2)
             
             ! mbdt (i) = 0.1 * dp / g
             
@@ -1408,18 +1672,18 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     bb1 = 4.0
     bb2 = 0.8
     
-    do i = 1, im
-        if (cnvflg (i)) then
-            k = kbcon1 (i)
-            tem = po (i, k) / (rdgas * to (i, k))
-            wucb = - 0.01 * dot (i, k) / (tem * g)
-            if (wucb > 0.) then
-                wu2 (i, k) = wucb * wucb
-            else
-                wu2 (i, k) = 0.
-            endif
-        endif
-    enddo
+    ! do i = 1, im
+    !     if (cnvflg (i)) then
+    !         k = kbcon1 (i)
+    !         tem = po (i, k) / (rdgas * to (i, k))
+    !         wucb = - 0.01 * dot (i, k) / (tem * g)
+    !         if (wucb > 0.) then
+    !             wu2 (i, k) = wucb * wucb
+    !         else
+    !             wu2 (i, k) = 0.
+    !         endif
+    !     endif
+    ! enddo
 
     do k = 2, km1
         do i = 1, im
@@ -1590,9 +1854,22 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     enddo
 
     do i = 1, im
-        beta = betas_deep
-        if (islimsk (i) == 1) beta = betal_deep
         if (cnvflg (i)) then
+            betamn = betas_deep
+            if (islimsk (i) == 1) betamn = betal_deep
+            if (ntk > 0) then
+                betamx = betamn + dbeta
+                if (tkemean (i) > tkemx) then
+                    beta = betamn
+                else if (tkemean (i) < tkemn) then
+                    beta = betamx
+                else
+                    tem = (betamx - betamn) * (tkemean (i) - tkemn)
+                    beta = betamx - tem / dtke
+                endif
+            else
+                beta = betamn
+            endif
             dz = (sumx (i) + zi (i, 1)) / float (kbcon (i))
             tem = 1. / float (kbcon (i))
             xlamd (i) = (1. - beta ** tem) / dz
@@ -1637,6 +1914,16 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         endif
     enddo
 
+    ! for tracers
+    do n = 1, ntr
+        do i = 1, im
+            if (cnvflg (i)) then
+                jmn = jmin (i)
+                ecdo (i, jmn, n) = ctro (i, jmn, n)
+            endif
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! calculate the cloud properties as a parcel descends, modified by entrainment and detrainment. discretization follows appendix b of grell (1993).
     ! -----------------------------------------------------------------------
@@ -1666,6 +1953,20 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                 vcdo (i, k) = ((1. - tem) * vcdo (i, k + 1) + ptem * vo (i, k + 1) &
                      + ptem1 * vo (i, k)) / factor
             endif
+        enddo
+    enddo
+
+    do n = 1, ntr
+        do k = km1, 1, - 1
+            do i = 1, im
+                if (cnvflg (i) .and. k < jmin (i)) then
+                    dz = zi (i, k + 1) - zi (i, k)
+                    tem = 0.5 * xlamde * dz
+                    factor = 1. + tem
+                    ecdo (i, k, n) = ((1. - tem) * ecdo (i, k + 1, n) + tem * &
+                        (ctro (i, k, n) + ctro (i, k + 1, n))) / factor
+                endif
+            enddo
         enddo
     enddo
 
@@ -1784,6 +2085,16 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
 
+    do n = 1, ntr
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. k <= kmax (i)) then
+                    dellae (i, k, n) = 0.
+                endif
+            enddo
+        enddo
+    enddo
+
     do i = 1, im
         if (cnvflg (i)) then
             dp = delp (i, 1)
@@ -1798,6 +2109,16 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         endif
     enddo
     
+    do n = 1, ntr
+        do i = 1, im
+            if (cnvflg (i)) then
+                dp = delp (i, 1)
+                dellae (i, 1, n) = edto (i) * etad (i, 1) * (ecdo (i, 1, n) &
+                    - ctro (i, 1, n)) * g / dp
+            endif
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! changed due to subsidence and entrainment
     ! -----------------------------------------------------------------------
@@ -1864,6 +2185,26 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
+    do n = 1, ntr
+        do k = 2, km1
+            do i = 1, im
+                if (cnvflg (i) .and. k < ktcon (i)) then
+                    aup = 1.
+                    if (k <= kb (i)) aup = 0.
+                    adw = 1.
+                    if (k > jmin (i)) adw = 0.
+                    dp = delp (i, k)
+                    tem1 = eta (i, k) * (ctro (i, k, n) - ecko (i, k, n))
+                    tem2 = eta (i, k - 1) * (ctro (i, k - 1, n) - ecko (i, k - 1, n))
+                    ptem1 = etad (i, k) * (ctro (i, k, n) - ecdo (i, k, n))
+                    ptem2 = etad (i, k - 1) * (ctro (i, k - 1, n) - ecdo (i, k - 1, n))
+                    dellae (i, k, n) = dellae (i, k, n) + &
+                        (aup * (tem1 - tem2) - adw * edto (i) * (ptem1 - ptem2)) * g / dp
+                endif
+            enddo
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! cloud top
     ! -----------------------------------------------------------------------
@@ -1890,6 +2231,17 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
             dellal (i, indx) = eta (i, indx - 1) * &
                 qlko_ktcon (i) * g / dp
         endif
+    enddo
+
+    do n = 1, ntr
+        do i = 1, im
+            if (cnvflg (i)) then
+                indx = ktcon (i)
+                dp = delp (i, indx)
+                dellae (i, indx, n) = eta (i, indx - 1) * &
+                    (ecko (i, indx - 1, n) - ctro (i, indx - 1, n)) * g / dp
+            endif
+        enddo
     enddo
 
     ! -----------------------------------------------------------------------
@@ -2433,7 +2785,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
 
     do i = 1, im
         if (cnvflg (i)) then
-            tem = min (max (xlamx (i), 7.e-5), 3.e-4)
+            tem = min (max (xlamue (i, kbcon (i)), 7.e-5), 3.e-4)
             tem = 0.2 / tem
             tem1 = 3.14 * tem * tem
             sigmagfm (i) = tem1 / (gsize (i) ** 2.0)
@@ -2461,9 +2813,19 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     enddo
     
     ! -----------------------------------------------------------------------
+    ! transport aerosols if present
+    ! -----------------------------------------------------------------------
+
+    if (do_aerosols) &
+        call sa_aamf_deep_aero (im, km, itc, ntc, ntr, delt, &
+        xlamde, xlamdd, cnvflg, jmin, kb, kmax, kbcon, ktcon, fscav, &
+        edto, xlamd, xmb, c0t, eta, etad, zi, xlamue, xlamud, delp, &
+        qtr, qaero)
+    
+    ! -----------------------------------------------------------------------
     ! restore to, qo, uo, vo to t1, q1, u1, v1 in case convection stops
     ! -----------------------------------------------------------------------
-    
+
     do k = 1, km
         do i = 1, im
             if (cnvflg (i) .and. k <= kmax (i)) then
@@ -2476,6 +2838,16 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                 val = 1.e-8
                 qeso (i, k) = max (qeso (i, k), val)
             endif
+        enddo
+    enddo
+
+    do n = 1, ntr
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. k <= kmax (i)) then
+                    ctro (i, k, n) = ctr (i, k, n)
+                endif
+            enddo
         enddo
     enddo
 
@@ -2498,6 +2870,12 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         qcond (i) = 0.
     enddo
 
+    do n = 1, ntr
+        do i = 1, im
+            delebar (i, n) = 0.
+        enddo
+    enddo
+
     do k = 1, km
         do i = 1, im
             if (cnvflg (i) .and. k <= kmax (i)) then
@@ -2518,6 +2896,21 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                     delvbar (i) = delvbar (i) + dellav (i, k) * xmb (i) * dp / g
                 endif
             endif
+        enddo
+    enddo
+
+    do n = 1, ntr
+        kk = n + 2
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. k <= kmax (i)) then
+                    if (k <= ktcon (i)) then
+                        ctr (i, k, n) = ctr (i, k, n) + dellae (i, k, n) * xmb (i) * dt2
+                        delebar (i, n) = delebar (i, n) + dellae (i, k, n) * xmb (i) * dp / g
+                        qtr (i, k, kk) = ctr (i, k, n)
+                    endif
+                endif
+            enddo
         enddo
     enddo
 
@@ -2699,7 +3092,13 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
                     ! if (k > kb (i) .and. k <= ktcon (i)) then
                     if (k >= kbcon (i) .and. k <= ktcon (i)) then
                         tem = dellal (i, k) * xmb (i) * dt2
-                        ql (i, k) = ql (i, k) + tem
+                        tem1 = max (0.0, min (1.0, (tcr - t1 (i, k)) * tcrf))
+                        if (qtr (i, k, 2) > - 999.0) then
+                            qtr (i, k, 1) = qtr (i, k, 1) + tem * tem1 ! ice
+                            qtr (i, k, 2) = qtr (i, k, 2) + tem * (1.0 - tem1) ! water
+                        else
+                            qtr (i, k, 1) = qtr (i, k, 1) + tem
+                        endif
                     endif
                 endif
             enddo
@@ -2723,7 +3122,38 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
             endif
         enddo
     enddo
+
+    do n = 1, ntr
+        kk = n + 2
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. rn (i) <= 0.) then
+                    if (k <= kmax (i)) then
+                        ctr (i, k, n) = ctro (i, k, n)
+                        qtr (i, k, kk) = ctr (i, k, n)
+                    endif
+                endif
+            enddo
+        enddo
+    enddo
     
+    ! -----------------------------------------------------------------------
+    ! store aerosol concentrations if present
+    ! -----------------------------------------------------------------------
+
+    if (do_aerosols) then
+        do n = 1, ntc
+            kk = n + itc - 1
+            do k = 1, km
+                do i = 1, im
+                    if (cnvflg (i) .and. rn (i) > 0.) then
+                        if (k <= kmax (i)) qtr (i, k, kk) = qaero (i, k, n)
+                    endif
+                enddo
+            enddo
+        enddo
+    endif
+
     ! -----------------------------------------------------------------------
     ! hchuang code change
     ! calculate and retain the updraft and downdraft mass fluxes for dust transport by cumulus convection.
@@ -2765,14 +3195,123 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
-end subroutine sa_sas_deep
+    ! -----------------------------------------------------------------------
+    ! include tke contribution from deep convection
+    ! -----------------------------------------------------------------------
+
+    if (ntk > 0) then
+
+        do k = 2, km1
+            do i = 1, im
+                if (cnvflg (i) .and. rn (i) > 0.) then
+                    if (k > kb (i) .and. k < ktop (i)) then
+                        tem = 0.5 * (eta (i, k - 1) + eta (i, k)) * xmb (i)
+                        tem1 = pfld (i, k) * 100. / (rdgas * t1 (i, k))
+                        sigmagfm (i) = max (sigmagfm (i), betaw)
+                        ptem = tem / (sigmagfm (i) * tem1)
+                        qtr (i, k, ntk) = qtr (i, k, ntk) + 0.5 * sigmagfm (i) * ptem * ptem
+                    endif
+                endif
+            enddo
+        enddo
+
+        do k = 2, km1
+            do i = 1, im
+                if (cnvflg (i) .and. rn (i) > 0.) then
+                    if (k > 1 .and. k <= jmin (i)) then
+                        tem = 0.5 * edto (i) * (etad (i, k - 1) + etad (i, k)) * xmb (i)
+                        tem1 = pfld (i, k) * 100. / (rdgas * t1 (i, k))
+                        sigmagfm (i) = max (sigmagfm (i), betaw)
+                        ptem = tem / (sigmagfm (i) * tem1)
+                        qtr (i, k, ntk) = qtr (i, k, ntk) + 0.5 * sigmagfm (i) * ptem * ptem
+                    endif
+                endif
+            enddo
+        enddo
+
+    endif
+
+end subroutine sa_aamf_deep
 
 ! =======================================================================
-! shallow convection part
+! Scale-Aware Aerosol-Aware Mass-Flux Shallow Convection
+!
+! The Scale-Aware Mass-Flux shallow (SAMF_shal) convection scheme is an updated version of the 
+! previous mass-flux shallow convection scheme with scale and aerosol awareness and parameterizes 
+! the effect of shallow convection on the environment. The SAMF_shal scheme is similar to the SAMF 
+! deep convection scheme but with a few key differences.
+!
+! First, no quasi-equilibrium assumption is used for any grid size and the shallow cloud base mass 
+! flux is parameterized using a mean updraft velocity. Further, there are no convective downdrafts, 
+! the entrainment rate is greater than for deep convection, and the shallow convection is limited 
+! to not extend over the level where \f$p = 0.7p_{sfc}\f$. The paramerization of scale and aerosol 
+! awareness follows that of the samf deep convection scheme.
+!
+! The previous version of the shallow convection scheme (shalcnv.f) is described in Han and Pan 
+! (2011) and differences between the shallow and deep convection schemes are presented in Han and 
+! Pan (2011) and Han et al. (2017). Details of scale- and aerosol-aware parameterizations are 
+! described in Han et al. (2017).
+!
+! In further update for FY19 GFS implementation, interaction with Turbulent Kinetic Energy (TKE), 
+! which is a prognostic variable used in a scale-aware tke-based moist EDMF vertical turbulent 
+! mixing scheme, is included. Entrainment rates in updrafts are proportional to sub-cloud mean TKE. 
+! TKE is transported by cumulus convection. TKE contribution from cumulus convection is deduced 
+! from cumulus mass flux. On the other hand, tracers such as ozone and aerosol are also transported 
+! by cumulus convection.
+!
+! To reduce too much convective cooling at the cloud top, the convection schemes have been modified 
+! for the rain conversion rate, entrainment and detrainment rates, overshooting layers, and maximum 
+! allowable cloudbase mass flux (as of JUNE 2018) .
+!
+! contains the entire samf shallow convection scheme.
+!
+! This routine follows the SAMF deep scheme quite closely, although it can be interpreted as only 
+! having the "static" and "feedback" control portions, since the "dynamic" control is not necessary 
+! to find the cloud base mass flux. The algorithm is simplified from SAMF deep convection by 
+! excluding convective downdrafts and being confined to operate below \f$p = 0.7p_{sfc}\f$. Also, 
+! entrainment is both simpler and stronger in magnitude compared to the deep scheme.
+!
+! \param[in] IM      number of used points
+! \param[in] KM      vertical layer dimension
+! \param[in] DELT    physics time step in seconds
+! \param[in] NTK     index for tke
+! \param[in] NTR     total number of tracers including tke
+! \param[in] DELP    pressure difference between level k and k + 1 (pa)
+! \param[in] PRSLP   mean layer presure (pa)
+! \param[in] PSP     surface pressure (pa)
+! \param[in] PHIL    layer geopotential (\f$m^s / s^2\f$)
+! \param[in] QTR     tracer array including cloud condensate (\f$kg / kg\f$)
+! \param[inout] QL   cloud water or ice (kg / kg)
+! \param[inout] Q1   updated tracers (kg / kg)
+! \param[inout] T1   updated temperature (k)
+! \param[inout] U1   updated zonal wind (\f$m s^{ - 1}\f$)
+! \param[inout] V1   updated meridional wind (\f$m s^{ - 1}\f$)
+! \param[out] RN     convective rain (m)
+! \param[out] KBOT   index for cloud base
+! \param[out] KTOP   index for cloud top
+! \param[out] KCNV   flag to denote deep convection (0 = no, 1 = yes)
+! \param[in] ISLIMSK sea / land / ice mask (= 0 / 1 / 2)
+! \param[in] DOT     layer mean vertical velocity (pa / s)
+! \param[in] NCLOUD  number of cloud species
+! \param[in] HPBL    pbl height (m)
+! \param[in] HEAT    surface sensible heat flux (k m / s)
+! \param[in] EVAP    surface latent heat flux (kg / kg m / s)
+! \param[out] UD_MF  updraft mass flux multiplied by time step (\f$kg / m^2\f$)
+! \param[out] DT_MF  ud_mf at cloud top (\f$kg / m^2\f$)
+! \param[out] CNVW   convective cloud water (kg / kg)
+! \param[out] CNVC   convective cloud cover (unitless)
+!
+! General Algorithm
+! # Compute preliminary quantities needed for the static and feedback control portions of the algorithm.
+! # Perform calculations related to the updraft of the entraining / detraining cloud model ("static control") .
+! # The cloud base mass flux is obtained using the cumulus updraft velocity averaged ove the whole cloud depth.
+! # Calculate the tendencies of the state variables (per unit cloud base mass flux) and the cloud base mass flux.
+! # For the "feedback control", calculate updated values of the state variables by multiplying the cloud base 
+!   mass flux and the tendencies calculated per unit cloud base mass flux from the static control.
 ! =======================================================================
 
-subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
-        q1, t1, u1, v1, qr, rn, kbot, ktop, kcnv, islimsk, gsize, &
+subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntk, ntr, delp, prslp, psp, phil, qtr, &
+        q1, t1, u1, v1, qr, fscav, rn, kbot, ktop, kcnv, islimsk, gsize, &
         dot, ncloud, hpbl, ud_mf, dt_mf, cnvw, cnvc)
     
     implicit none
@@ -2781,15 +3320,16 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
     
-    integer, intent (in) :: im, km, ncloud, islimsk (im)
+    integer, intent (in) :: im, km, itc, ntc, ntk, ntr, ncloud, islimsk (im)
 
     real, intent (in) :: delt
     real, intent (in) :: psp (im), delp (im, km), &
         prslp (im, km), gsize (im), hpbl (im), dot (im, km), phil (im, km)
+    real, intent (in) :: fscav (ntc)
 
     integer, intent (inout) :: kbot (im), ktop (im), kcnv (im)
 
-    real, intent (inout) :: ql (im, km), q1 (im, km), t1 (im, km), &
+    real, intent (inout) :: qtr (im, km, ntr + 2), q1 (im, km), t1 (im, km), &
         u1 (im, km), v1 (im, km)
 
     real, intent (out) :: rn (im), qr (im, km)
@@ -2804,6 +3344,8 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     integer :: i, j, indx, k, kk, km1, n
     integer :: kpbl (im)
     
+    real :: clamd, tkemx, tkemn, dtke
+
     real :: dellat, delta, &
         c0l, d0, &
         desdt, dp, &
@@ -2831,6 +3373,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         kbm (im), kmax (im)
     
     real :: aa1 (im), cina (im), &
+        tkemean (im), clamt (im), &
         umean (im), tauadv (im), gdx (im), &
         delhbar (im), delq (im), delq2 (im), &
         delqbar (im), delqev (im), deltbar (im), &
@@ -2839,6 +3382,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         qcond (im), qevap (im), hmax (im), &
         rntot (im), vshear (im), &
         xlamud (im), xmb (im), xmbmax (im), &
+        delebar (im, ntr), &
         delubar (im), delvbar (im)
     
     real :: c0 (im)
@@ -2856,17 +3400,19 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     parameter (g = grav)
     parameter (elocp = hlv / cp_air, &
         el2orc = hlv * hlv / (rvgas * cp_air))
-    parameter (d0 = .01)
+    parameter (d0 = .001)
     
     ! asolfac_shal: aerosol - aware parameter based on lim & hong (2012)
     ! asolfac_shal = cx / c0s_shal (= .002)
     ! cx = min ([ - 0.7 ln (nccn) + 24] * 1.e-4, c0s_shal)
     ! nccn: ccn number concentration in cm^ (- 3)
     ! until a realistic nccn is provided, typical nccns are assumed
-    ! as nccn = 100 for sea and nccn = 7000 for land
+    ! as nccn = 100 for sea and nccn = 1000 for land
     
     parameter (cm = 1.0, delta = zvir)
     parameter (fact1 = (cp_vap - c_liq) / rvgas, fact2 = hlv / rvgas - fact1 * tice)
+    parameter (clamd = 0.1, tkemx = 0.65, tkemn = 0.05)
+    parameter (dtke = tkemx - tkemn)
     parameter (dthk = 25.)
     parameter (cinpcrmx = 180., cinpcrmn = 120.)
     parameter (cinacrmx = - 120., cinacrmn = - 80.)
@@ -2878,29 +3424,42 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
 
     ! local variables and arrays
     real :: pfld (im, km), to (im, km), qo (im, km), &
-        uo (im, km), vo (im, km), qeso (im, km)
+        uo (im, km), vo (im, km), qeso (im, km), &
+        ctr (im, km, ntr), ctro (im, km, ntr)
+
+    ! for aerosol transport
+    real :: qaero (im, km, ntc)
 
     ! for updraft velocity calculation
     real :: wu2 (im, km), buo (im, km), drag (im, km)
     real :: wc (im), scaldfunc (im), sigmagfm (im)
     
     ! cloud water
-    ! real :: qlko_ktcon (im), dellal (im, km), tvo (im, km),
+    ! real :: tvo (im, km),
     real :: qlko_ktcon (im), dellal (im, km), &
         dbyo (im, km), zo (im, km), xlamue (im, km), &
         heo (im, km), heso (im, km), &
         dellah (im, km), dellaq (im, km), &
+        dellae (im, km, ntr), &
         dellau (im, km), dellav (im, km), hcko (im, km), &
         ucko (im, km), vcko (im, km), qcko (im, km), &
         qrcko (im, km), eta (im, km), &
+        ecko (im, km, ntr), &
         zi (im, km), pwo (im, km), c0t (im, km), &
         sumx (im), tx1 (im), cnvwt (im, km)
     
-    logical :: totflg, cnvflg (im), flg (im)
+    logical :: do_aerosols, totflg, cnvflg (im), flg (im)
     
     real :: tf, tcr, tcrf
     parameter (tf = 233.16, tcr = 263.16, tcrf = 1.0 / (tcr - tf))
     
+    ! -----------------------------------------------------------------------
+    ! determine whether to perform aerosol transport
+    ! -----------------------------------------------------------------------
+
+    do_aerosols = (itc > 0) .and. (ntc > 0) .and. (ntr > 0)
+    if (do_aerosols) do_aerosols = (ntr >= itc + ntc - 3)
+
     ! -----------------------------------------------------------------------
     ! convert input pa terms to cb terms -- moorthi
     ! compute preliminary quantities needed for the static and feedback control portions of the algorithm.
@@ -3010,7 +3569,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     ! -----------------------------------------------------------------------
 
     ! clam_shal = .3
-    aafac = .1
+    aafac = .05
     ! evef = 0.07
     ! evfact_shal = 0.3
     ! evfactl_shal = 0.3
@@ -3069,12 +3628,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     do k = 1, km1
         do i = 1, im
             zi (i, k) = 0.5 * (zo (i, k) + zo (i, k + 1))
-            xlamue (i, k) = clam_shal / zi (i, k)
         enddo
-    enddo
-
-    do i = 1, im
-        xlamue (i, km) = xlamue (i, km1)
     enddo
 
     ! -----------------------------------------------------------------------
@@ -3133,6 +3687,23 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
+    ! -----------------------------------------------------------------------
+    ! initialize tracer variables
+    ! -----------------------------------------------------------------------
+    
+    do n = 3, ntr + 2
+        kk = n - 2
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. k <= kmax (i)) then
+                    ctr (i, k, kk) = qtr (i, k, n)
+                    ctro (i, k, kk) = qtr (i, k, n)
+                    ecko (i, k, kk) = 0.
+                endif
+            enddo
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! column variables
     ! p is pressure of the layer (mb)
@@ -3252,6 +3823,16 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
+    do n = 1, ntr
+        do k = 1, km1
+            do i = 1, im
+                if (cnvflg (i) .and. k <= kmax (i) - 1) then
+                    ctro (i, k, n) = .5 * (ctro (i, k, n) + ctro (i, k + 1, n))
+                endif
+            enddo
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! look for the level of free convection as cloud base
     ! search below the index "kbm" for the level of free convection (lfc) where the condition \f$h_b > h^ * \f$ is first met, where \f$h_b, h^ * \f$ are the state moist static energy at the parcel's starting level and saturation moist static energy, respectively. set "kbcon" to the index of the lfc.
@@ -3348,13 +3929,81 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     if (totflg) return
 
     ! -----------------------------------------------------------------------
+    ! turbulent entrainment rate assumed to be proportional
+    ! to subcloud mean tke
+    ! -----------------------------------------------------------------------
+
+    if (ntk > 0) then
+        do i = 1, im
+            if (cnvflg (i)) then
+                sumx (i) = 0.
+                tkemean (i) = 0.
+            endif
+        enddo
+        do k = 1, km1
+            do i = 1, im
+                if (cnvflg (i)) then
+                    if (k >= kb (i) .and. k < kbcon (i)) then
+                        dz = zo (i, k + 1) - zo (i, k)
+                        tem = 0.5 * (qtr (i, k, ntk) + qtr (i, k + 1, ntk))
+                        tkemean (i) = tkemean (i) + tem * dz
+                        sumx (i) = sumx (i) + dz
+                    endif
+                endif
+            enddo
+        enddo
+        do i = 1, im
+            if (cnvflg (i)) then
+                tkemean (i) = tkemean (i) / sumx (i)
+                if (tkemean (i) > tkemx) then
+                    clamt (i) = clam_shal + clamd
+                else if (tkemean (i) < tkemn) then
+                    clamt (i) = clam_shal - clamd
+                else
+                    tem = tkemx - tkemean (i)
+                    tem1 = 1. - 2. * tem / dtke
+                    clamt (i) = clam_shal + clamd * tem1
+                endif
+            endif
+        enddo
+    else
+        do i = 1, im
+            if (cnvflg (i)) then
+                clamt (i) = clam_shal
+            endif
+        enddo
+    endif
+
+    ! -----------------------------------------------------------------------
+    ! assume updraft entrainment rate
+    ! is an inverse function of height
+    ! -----------------------------------------------------------------------
+
+    do k = 1, km1
+        do i = 1, im
+            if (cnvflg (i)) then
+                xlamue (i, k) = clamt (i) / zi (i, k)
+            endif
+        enddo
+    enddo
+
+    do i = 1, im
+        if (cnvflg (i)) then
+            xlamue (i, km) = xlamue (i, km1)
+        endif
+    enddo
+
+    ! -----------------------------------------------------------------------
     ! specify the detrainment rate for the updrafts
+    ! (the updraft detrainment rate is set constant and equal to the entrainment rate at cloud base.)
+    ! the updraft detrainment rate is vertically constant and proportional to clamt
     ! -----------------------------------------------------------------------
     
     do i = 1, im
         if (cnvflg (i)) then
-            xlamud (i) = xlamue (i, kbcon (i))
+            ! xlamud (i) = xlamue (i, kbcon (i))
             ! xlamud (i) = crtlamd
+            xlamud (i) = 0.001 * clamt (i)
         endif
     enddo
     
@@ -3419,6 +4068,16 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         endif
     enddo
     
+    ! for tracers
+    do n = 1, ntr
+        do i = 1, im
+            if (cnvflg (i)) then
+                indx = kb (i)
+                ecko (i, indx, n) = ctro (i, indx, n)
+            endif
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! cm is an enhancement factor in entrainment rates for momentum
     ! calculate the cloud properties as a parcel ascends, modified by entrainment and detrainment. discretization follows appendix b of grell (1993). following han and pan (2006), the convective momentum transport is reduced by the convection - induced pressure gradient force by the constant "pgcon_shal", currently set to 0.55 after zhang and wu (2003).
@@ -3449,6 +4108,22 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
+    do n = 1, ntr
+        do k = 2, km1
+            do i = 1, im
+                if (cnvflg (i)) then
+                    if (k > kb (i) .and. k < kmax (i)) then
+                        dz = zi (i, k) - zi (i, k - 1)
+                        tem = 0.25 * (xlamue (i, k) + xlamue (i, k - 1)) * dz
+                        factor = 1. + tem
+                        ecko (i, k, n) = ((1. - tem) * ecko (i, k - 1, n) + tem * &
+                            (ctro (i, k, n) + ctro (i, k - 1, n))) / factor
+                    endif
+                endif
+            enddo
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! taking account into convection inhibition due to existence of
     ! dry layers below cloud base
@@ -3600,7 +4275,8 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
             !
             k = kbcon (i)
             dp = delp (i, k)
-            xmbmax (i) = dp / (g * dt2)
+            xmbmax (i) = dp / (2. * g * dt2)
+            ! xmbmax (i) = dp / (g * dt2)
             !
             ! tem = dp / (g * dt2)
             ! xmbmax (i) = min (tem, xmbmax (i))
@@ -3870,18 +4546,18 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     bb1 = 4.0
     bb2 = 0.8
     
-    do i = 1, im
-        if (cnvflg (i)) then
-            k = kbcon1 (i)
-            tem = po (i, k) / (rdgas * to (i, k))
-            wucb = - 0.01 * dot (i, k) / (tem * g)
-            if (wucb > 0.) then
-                wu2 (i, k) = wucb * wucb
-            else
-                wu2 (i, k) = 0.
-            endif
-        endif
-    enddo
+    ! do i = 1, im
+    !     if (cnvflg (i)) then
+    !         k = kbcon1 (i)
+    !         tem = po (i, k) / (rdgas * to (i, k))
+    !         wucb = - 0.01 * dot (i, k) / (tem * g)
+    !         if (wucb > 0.) then
+    !             wu2 (i, k) = wucb * wucb
+    !         else
+    !             wu2 (i, k) = 0.
+    !         endif
+    !     endif
+    ! enddo
 
     do k = 2, km1
         do i = 1, im
@@ -4038,6 +4714,16 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
+    do n = 1, ntr
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. k <= kmax (i)) then
+                    dellae (i, k, n) = 0.
+                endif
+            enddo
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! changed due to subsidence and entrainment
     ! -----------------------------------------------------------------------
@@ -4084,6 +4770,21 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
+    do n = 1, ntr
+        do k = 2, km1
+            do i = 1, im
+                if (cnvflg (i)) then
+                    if (k > kb (i) .and. k < ktcon (i)) then
+                        dp = delp (i, k)
+                        tem1 = eta (i, k) * (ctro (i, k, n) - ecko (i, k, n))
+                        tem2 = eta (i, k - 1) * (ctro (i, k - 1, n) - ecko (i, k - 1, n))
+                        dellae (i, k, n) = dellae (i, k, n) + (tem1 - tem2) * g / dp
+                    endif
+                endif
+            enddo
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! cloud top
     ! -----------------------------------------------------------------------
@@ -4112,6 +4813,17 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         endif
     enddo
     
+    do n = 1, ntr
+        do i = 1, im
+            if (cnvflg (i)) then
+                indx = ktcon (i)
+                dp = delp (i, indx)
+                dellae (i, indx, n) = eta (i, indx - 1) * &
+                    (ecko (i, indx - 1, n) - ctro (i, indx - 1, n)) * g / dp
+            endif
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! compute convective turn - over time
     ! following bechtold et al. (2008), calculate the convective turnover time using the mean updraft velocity (wc) and the cloud depth. it is also proportional to the grid size (gdx) .
@@ -4211,6 +4923,16 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     enddo
 
     ! -----------------------------------------------------------------------
+    ! transport aerosols if present
+    ! -----------------------------------------------------------------------
+
+    if (do_aerosols) &
+        call sa_aamf_shal_aero (im, km, itc, ntc, ntr, delt, &
+        cnvflg, kb, kmax, kbcon, ktcon, fscav, &
+        xmb, c0t, eta, zi, xlamue, xlamud, delp, &
+        qtr, qaero)
+    
+    ! -----------------------------------------------------------------------
     ! for the "feedback control", calculate updated values of the state variables by multiplying the cloud base mass flux and the tendencies calculated per unit cloud base mass flux from the static control.
     ! - recalculate saturation specific humidity.
     ! -----------------------------------------------------------------------
@@ -4241,6 +4963,12 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         qcond (i) = 0.
     enddo
 
+    do n = 1, ntr
+        do i = 1, im
+            delebar (i, n) = 0.
+        enddo
+    enddo
+
     do k = 1, km
         do i = 1, im
             if (cnvflg (i)) then
@@ -4264,6 +4992,21 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         enddo
     enddo
     
+    do n = 1, ntr
+        kk = n + 2
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. k <= kmax (i)) then
+                    if (k <= ktcon (i)) then
+                        ctr (i, k, n) = ctr (i, k, n) + dellae (i, k, n) * xmb (i) * dt2
+                        delebar (i, n) = delebar (i, n) + dellae (i, k, n) * xmb (i) * dp / g
+                        qtr (i, k, kk) = ctr (i, k, n)
+                    endif
+                endif
+            enddo
+        enddo
+    enddo
+
     ! -----------------------------------------------------------------------
     ! recalculate saturation specific humidity using the updated temperature.
     ! -----------------------------------------------------------------------
@@ -4371,6 +5114,14 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     ! print *, 'pdif = ', pfld (i, kbcon (i)) - pfld (i, ktcon (i))
     ! endif
     ! enddo
+    ! do n = 1, ntr
+    ! do i = 1, im
+    ! if (me == 31 .and. cnvflg (i)) then
+    ! if (cnvflg (i)) then
+    ! print *, ' tracer delebar = ', delebar (i, n)
+    ! endif
+    ! enddo
+    ! enddo
     
     do i = 1, im
         if (cnvflg (i)) then
@@ -4426,7 +5177,13 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
                     ! if (k > kb (i) .and. k <= ktcon (i)) then
                     if (k >= kbcon (i) .and. k <= ktcon (i)) then
                         tem = dellal (i, k) * xmb (i) * dt2
-                        ql (i, k) = ql (i, k) + tem
+                        tem1 = max (0.0, min (1.0, (tcr - t1 (i, k)) * tcrf))
+                        if (qtr (i, k, 2) > - 999.0) then
+                            qtr (i, k, 1) = qtr (i, k, 1) + tem * tem1 ! ice
+                            qtr (i, k, 2) = qtr (i, k, 2) + tem * (1.0 - tem1) ! water
+                        else
+                            qtr (i, k, 1) = qtr (i, k, 1) + tem
+                        endif
                     endif
                 endif
             enddo
@@ -4434,6 +5191,23 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         
     endif
     
+    ! -----------------------------------------------------------------------
+    ! store aerosol concentrations if present
+    ! -----------------------------------------------------------------------
+
+    if (do_aerosols) then
+        do n = 1, ntc
+            kk = n + itc - 1
+            do k = 1, km
+                do i = 1, im
+                    if (cnvflg (i) .and. rn (i) > 0.) then
+                        if (k <= kmax (i)) qtr (i, k, kk) = qaero (i, k, n)
+                    endif
+                enddo
+            enddo
+        enddo
+    endif
+
     ! -----------------------------------------------------------------------
     ! hchuang code change
     ! calculate and retain the updraft mass flux for dust transport by cumulus convection.
@@ -4461,6 +5235,1082 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         endif
     enddo
     
-end subroutine sa_sas_shal
+    ! -----------------------------------------------------------------------
+    ! include tke contribution from shallow convection
+    ! -----------------------------------------------------------------------
 
-end module sa_sas_mod
+    if (ntk > 0) then
+
+        do k = 2, km1
+            do i = 1, im
+                if (cnvflg (i)) then
+                    if (k > kb (i) .and. k < ktop (i)) then
+                        tem = 0.5 * (eta (i, k - 1) + eta (i, k)) * xmb (i)
+                        tem1 = pfld (i, k) * 100. / (rdgas * t1 (i, k))
+                        sigmagfm (i) = max (sigmagfm (i), betaw)
+                        ptem = tem / (sigmagfm (i) * tem1)
+                        qtr (i, k, ntk) = qtr (i, k, ntk) + 0.5 * sigmagfm (i) * ptem * ptem
+                    endif
+                endif
+            enddo
+        enddo
+
+    endif
+
+end subroutine sa_aamf_shal
+
+! =======================================================================
+! Aerosol Transportation in Deep Convection
+! =======================================================================
+
+subroutine sa_aamf_deep_aero (im, km, itc, ntc, ntr, delt, &
+        xlamde, xlamdd, cnvflg, jmin, kb, kmax, kbcon, ktcon, fscav, &
+        edto, xlamd, xmb, c0t, eta, etad, zi, xlamue, xlamud, delp, &
+        qtr, qaero)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: im, km, itc, ntc, ntr
+
+    real, intent (in) :: delt, xlamde, xlamdd
+
+    logical, dimension (im), intent (in) :: cnvflg
+
+    integer, dimension (im), intent (in) :: jmin, kb, kmax, kbcon, ktcon
+
+    real, dimension (im), intent (in) :: edto,xlamd, xmb
+
+    real, dimension (ntc), intent (in) :: fscav
+
+    real, dimension (im, km), intent (in) :: c0t, eta, etad, zi, xlamue, xlamud
+
+    real, dimension (im, km), intent (in) :: delp
+
+    real, dimension (im, km, ntr + 2), intent (in) :: qtr
+
+    real, dimension (im, km, ntc), intent (out) :: qaero
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+    
+    ! general variables
+
+    integer :: i, indx, it, k, kk, km1, kp1, n
+
+    real :: adw, aup, dtime_max, dv1q, dv2q, dv3q, dtovdz, dz, factor, ptem, ptem1, qamax, tem, tem1
+
+    real, dimension (im, km) :: xmbp
+
+    ! chemical transport variables
+
+    real, dimension (im, km, ntc) :: ctro2, ecko2, ecdo2, dellae2
+
+    ! additional variables for tracers for wet deposition,
+
+    real, dimension (im, km, ntc) :: chem_c, chem_pw, wet_dep
+
+    ! if reevaporation is enabled, uncomment lines below
+
+    ! real, dimension (im, ntc) :: pwav
+    ! real, dimension (im, km) :: pwdper
+    ! real, dimension (im, km, ntr) :: chem_pwd
+
+    !  additional variables for fct
+
+    real, dimension (im, km) :: flx_lo, totlout, clipout
+    
+    real, parameter :: one = 1.0
+    real, parameter :: half = 0.5
+    real, parameter :: quarter = 0.25
+    real, parameter :: zero = 0.0
+    real, parameter :: epsil = 1.e-22 ! prevent division by zero
+    
+    ! -----------------------------------------------------------------------
+    ! begin
+    ! -----------------------------------------------------------------------
+    
+    ! -----------------------------------------------------------------------
+    ! check if aerosols are present
+    ! -----------------------------------------------------------------------
+
+    if (ntc <= 0 .or. itc <= 0 .or. ntr <= 0) return
+    if (ntr < itc + ntc - 3) return
+    
+    ! -----------------------------------------------------------------------
+    ! initialize work variables
+    ! -----------------------------------------------------------------------
+
+    km1 = km - 1
+    
+    chem_c = zero
+    chem_pw = zero
+    ctro2 = zero
+    dellae2 = zero
+    ecdo2 = zero
+    ecko2 = zero
+    qaero = zero
+    
+    ! -----------------------------------------------------------------------
+    ! set work arrays
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        it = n + itc - 1
+        do k = 1, km
+            do i = 1, im
+                if (k <= kmax (i)) qaero (i, k, n) = max (qcmin, qtr (i, k, it))
+            enddo
+        enddo
+    enddo
+    
+    do k = 1, km
+        do i = 1, im
+            xmbp (i, k) = grav * xmb (i) / delp (i, k)
+        enddo
+    enddo
+    
+    do n = 1, ntc
+ 
+        ! -----------------------------------------------------------------------
+        ! interface level
+        ! -----------------------------------------------------------------------
+
+        do k = 1, km1
+            kp1 = k + 1
+            do i = 1, im
+                if (kp1 <= kmax (i)) ctro2 (i, k, n) = &
+                    half * (qaero (i, k, n) + qaero (i, kp1, n))
+            enddo
+        enddo
+
+        ! -----------------------------------------------------------------------
+        ! top level
+        ! -----------------------------------------------------------------------
+
+        do i = 1, im
+            ctro2 (i, kmax (i), n) = qaero (i, kmax (i), n)
+        enddo
+    enddo
+    
+    do n = 1, ntc
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. (k <= kb (i))) &
+                    ecko2 (i, k, n) = ctro2 (i, k, n)
+            enddo
+        enddo
+    enddo
+    
+    do n = 1, ntc
+        do i = 1, im
+            if (cnvflg (i)) ecdo2 (i, jmin (i), n) = ctro2 (i, jmin (i), n)
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! do chemical tracers, first need to know how much reevaporates
+    ! -----------------------------------------------------------------------
+    
+    ! -----------------------------------------------------------------------
+    ! aerosol re - evaporation is set to zero for now
+    ! uncomment and edit the following code to enable re - evaporation
+    ! chem_pwd = zero
+    ! pwdper = zero
+    ! pwav = zero
+    ! do i = 1, im
+    ! do k = 1, jmin (i)
+    ! pwdper (i, k) = - edto (i) * pwdo (i, k) / pwavo (i)
+    ! enddo
+    ! enddo
+    ! -----------------------------------------------------------------------
+
+    ! -----------------------------------------------------------------------
+    ! calculate include mixing ratio (ecko2), how much goes into
+    ! rainwater to be rained out (chem_pw), and total scavenged,
+    ! if not reevaporated (pwav)
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        do k = 2, km1
+            kk = k - 1
+            do i = 1, im
+                if (cnvflg (i)) then
+                    if ((k > kb (i)) .and. (k < ktcon (i))) then
+                        dz = zi (i, k) - zi (i, kk)
+                        tem = half * (xlamue (i, k) + xlamue (i, kk)) * dz
+                        tem1 = quarter * (xlamud (i, k) + xlamud (i, kk)) * dz
+                        factor = one + tem - tem1
+                        
+                        ! -----------------------------------------------------------------------
+                        ! if conserved (not scavenging) then
+                        ! -----------------------------------------------------------------------
+
+                        ecko2 (i, k, n) = ((one - tem1) * ecko2 (i, kk, n) &
+                            + half * tem * (ctro2 (i, k, n) + ctro2 (i, kk, n))) / factor
+                        
+                        ! -----------------------------------------------------------------------
+                        ! how much will be scavenged
+                        ! -----------------------------------------------------------------------
+
+                        ! -----------------------------------------------------------------------
+                        ! this choice was used in gf, and is also described in a
+                        ! successful implementation into cesm in grl (yu et al. 2019),
+                        ! it uses dimesnsionless scavenging coefficients (fscav),
+                        ! but includes henry coeffs with gas phase chemistry
+                        ! -----------------------------------------------------------------------
+                        
+                        ! -----------------------------------------------------------------------
+                        ! fraction fscav is going into liquid
+                        ! -----------------------------------------------------------------------
+
+                        chem_c (i, k, n) = fscav (n) * ecko2 (i, k, n)
+                        
+                        ! -----------------------------------------------------------------------
+                        ! of that part is going into rain out (chem_pw)
+                        ! -----------------------------------------------------------------------
+
+                        tem = chem_c (i, k, n) / (one + c0t (i, k) * dz)
+                        chem_pw (i, k, n) = c0t (i, k) * dz * tem * eta (i, kk) !etah
+                        ecko2 (i, k, n) = tem + ecko2 (i, k, n) - chem_c (i, k, n)
+                        
+                        ! -----------------------------------------------------------------------
+                        ! pwav needed fo reevaporation in downdraft
+                        ! if including reevaporation, please uncomment code below
+                        ! pwav (i, n) = pwav (i, n) + chem_pw (i, k, n)
+                        ! -----------------------------------------------------------------------
+
+                    endif
+                endif
+            enddo
+        enddo
+        do k = 1, km1
+            do i = 1, im
+                if (k >= ktcon (i)) ecko2 (i, k, n) = ctro2 (i, k, n)
+            enddo
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! reevaporation of some, pw and pwd terms needed later for dellae2
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        do k = km1, 1, - 1
+            kp1 = k + 1
+            do i = 1, im
+                if (cnvflg (i) .and. (k < jmin (i))) then
+                    dz = zi (i, kp1) - zi (i, k)
+                    if (k >= kbcon (i)) then
+                        tem = xlamde * dz
+                        tem1 = half * xlamdd * dz
+                    else
+                        tem = xlamde * dz
+                        tem1 = half * (xlamd (i) + xlamdd) * dz
+                    endif
+                    factor = one + tem - tem1
+                    ecdo2 (i, k, n) = ((one - tem1) * ecdo2 (i, kp1, n) &
+                        + half * tem * (ctro2 (i, k, n) + ctro2 (i, kp1, n))) / factor
+
+                    ! -----------------------------------------------------------------------
+                    ! if including reevaporation, please uncomment code below
+                    ! -----------------------------------------------------------------------
+
+                    ! ecdo2 (i, k, n) = ecdo2 (i, k, n) + pwdper (i, kp1) * pwav (i, n)
+                    ! chem_pwd (i, k, n) = max (zero, pwdper (i, kp1) * pwav (i, n))
+                endif
+            enddo
+        enddo
+    enddo
+    
+    do n = 1, ntc
+        do i = 1, im
+            if (cnvflg (i)) then
+
+                ! -----------------------------------------------------------------------
+                ! subsidence term treated in fct routine
+                ! -----------------------------------------------------------------------
+
+                dellae2 (i, 1, n) = edto (i) * etad (i, 1) * ecdo2 (i, 1, n) * xmbp (i, 1)
+            endif
+        enddo
+    enddo
+    
+    do n = 1, ntc
+        do i = 1, im
+            if (cnvflg (i)) then
+                k = ktcon (i)
+                kk = k - 1
+
+                ! -----------------------------------------------------------------------
+                ! for the subsidence term already is considered
+                ! -----------------------------------------------------------------------
+
+                dellae2 (i, k, n) = eta (i, kk) * ecko2 (i, kk, n) * xmbp (i, k)
+            endif
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! for updraft & downdraft vertical transport
+    ! -----------------------------------------------------------------------
+
+    ! -----------------------------------------------------------------------
+    ! initialize maximum allowed timestep for upstream difference approach
+    ! -----------------------------------------------------------------------
+
+    dtime_max = delt
+    do k = 2, km1
+        kk = k - 1
+        do i = 1, im
+            if (kk < ktcon (i)) dtime_max = min (dtime_max, half * delp (i, kk))
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! now for every chemistry tracer
+    ! -----------------------------------------------------------------------
+
+    do n = 1, ntc
+        do k = 2, km1
+            kk = k - 1
+            do i = 1, im
+                if (cnvflg (i) .and. (k < ktcon (i))) then
+                    dz = zi (i, k) - zi (i, kk)
+                    aup = one
+                    if (k <= kb (i)) aup = zero
+                    adw = one
+                    if (k > jmin (i)) adw = zero
+                    
+                    dv1q = half * (ecko2 (i, k, n) + ecko2 (i, kk, n))
+                    dv2q = half * (ctro2 (i, k, n) + ctro2 (i, kk, n))
+                    dv3q = half * (ecdo2 (i, k, n) + ecdo2 (i, kk, n))
+                    
+                    tem = half * (xlamue (i, k) + xlamue (i, kk))
+                    tem1 = half * (xlamud (i, k) + xlamud (i, kk))
+                    
+                    if (k <= kbcon (i)) then
+                        ptem = xlamde
+                        ptem1 = xlamd (i) + xlamdd
+                    else
+                        ptem = xlamde
+                        ptem1 = xlamdd
+                    endif
+                    dellae2 (i, k, n) = dellae2 (i, k, n) + &
+
+                    ! -----------------------------------------------------------------------
+                    ! detrainment from updraft
+                    ! -----------------------------------------------------------------------
+
+                        (aup * tem1 * eta (i, kk) * dv1q &
+
+                    ! -----------------------------------------------------------------------
+                    ! entrainement into up and downdraft
+                    ! -----------------------------------------------------------------------
+
+                        - (aup * tem * eta (i, kk) + adw * edto (i) * ptem * etad (i, k)) * dv2q &
+
+                    ! -----------------------------------------------------------------------
+                    ! detrainment from downdraft
+                    ! -----------------------------------------------------------------------
+
+                        + (adw * edto (i) * ptem1 * etad (i, k) * dv3q)) * dz * xmbp (i, k)
+                    
+                    wet_dep (i, k, n) = chem_pw (i, k, n) * grav / delp (i, k)
+                    
+                    ! -----------------------------------------------------------------------
+                    ! sinks from where updraft and downdraft start
+                    ! -----------------------------------------------------------------------
+
+                    if (k == jmin (i) + 1) then
+                        dellae2 (i, k, n) = dellae2 (i, k, n) &
+                            - edto (i) * etad (i, kk) * ctro2 (i, kk, n) * xmbp (i, k)
+                    endif
+                    if (k == kb (i)) then
+                        dellae2 (i, k, n) = dellae2 (i, k, n) &
+                            - eta (i, k) * ctro2 (i, k, n) * xmbp (i, k)
+                    endif
+                endif
+            enddo
+        enddo
+        
+        do i = 1, im
+            if (cnvflg (i)) then
+                if (kb (i) == 1) then
+                    k = kb (i)
+                    dellae2 (i, k, n) = dellae2 (i, k, n) &
+                        - eta (i, k) * ctro2 (i, k, n) * xmbp (i, k)
+                endif
+            endif
+        enddo
+        
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! for every tracer...
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        flx_lo = zero
+        totlout = zero
+        clipout = zero
+
+        ! -----------------------------------------------------------------------
+        ! compute low - order mass flux, upstream
+        ! -----------------------------------------------------------------------
+
+        do k = 2, km1
+            kk = k - 1
+            do i = 1, im
+                if (cnvflg (i) .and. (kk < ktcon (i))) then
+                    tem = zero
+                    if (kk >= kb (i)) tem = eta (i, kk)
+                    if (kk <= jmin (i)) tem = tem - edto (i) * etad (i, kk)
+
+                    ! -----------------------------------------------------------------------
+                    ! low - order flux, upstream
+                    ! -----------------------------------------------------------------------
+
+                    if (tem > zero) then
+                        flx_lo (i, k) = - xmb (i) * tem * qaero (i, k, n)
+                    elseif (tem < zero) then
+                        flx_lo (i, k) = - xmb (i) * tem * qaero (i, kk, n)
+                    endif
+                endif
+            enddo
+        enddo
+        
+        ! -----------------------------------------------------------------------
+        ! make sure low - ord fluxes don't violate positive - definiteness
+        ! -----------------------------------------------------------------------
+
+        do k = 1, km1
+            kp1 = k + 1
+            do i = 1, im
+                if (cnvflg (i) .and. (k <= ktcon (i))) then
+
+                    ! -----------------------------------------------------------------------
+                    ! time step / grid spacing
+                    ! -----------------------------------------------------------------------
+
+                    dtovdz = grav * dtime_max / abs (delp (i, k))
+
+                    ! -----------------------------------------------------------------------
+                    ! total flux out
+                    ! -----------------------------------------------------------------------
+
+                    totlout (i, k) = max (zero, flx_lo (i, kp1)) - min (zero, flx_lo (i, k))
+                    clipout (i, k) = min (one, qaero (i, k, n) / max (epsil, totlout (i, k)) &
+                        / (1.0001 * dtovdz))
+                endif
+            enddo
+        enddo
+        
+        ! -----------------------------------------------------------------------
+        ! recompute upstream mass fluxes
+        ! -----------------------------------------------------------------------
+
+        do k = 2, km1
+            kk = k - 1
+            do i = 1, im
+                if (cnvflg (i) .and. (kk < ktcon (i))) then
+                    tem = zero
+                    if (kk >= kb (i)) tem = eta (i, kk)
+                    if (kk <= jmin (i)) tem = tem - edto (i) * etad (i, kk)
+                    if (tem > zero) then
+                        flx_lo (i, k) = flx_lo (i, k) * clipout (i, k)
+                    elseif (tem < zero) then
+                        flx_lo (i, k) = flx_lo (i, k) * clipout (i, kk)
+                    endif
+                endif
+            enddo
+        enddo
+        
+        ! -----------------------------------------------------------------------
+        ! a positive - definite low - order (diffusive) solution for the subsidnce fluxes
+        ! -----------------------------------------------------------------------
+
+        do k = 1, km1
+            kp1 = k + 1
+            do i = 1, im
+                if (cnvflg (i) .and. (k <= ktcon (i))) then
+                    dtovdz = grav * dtime_max / abs (delp (i, k)) ! time step / grid spacing
+                    dellae2 (i, k, n) = dellae2 (i, k, n) &
+                        - (flx_lo (i, kp1) - flx_lo (i, k)) * dtovdz / dtime_max
+                endif
+            enddo
+        enddo
+        
+    enddo ! ctr
+    
+    ! -----------------------------------------------------------------------
+    ! convert wet deposition to total mass deposited over dt and dp
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. (k < ktcon (i))) &
+                    wet_dep (i, k, n) = wet_dep (i, k, n) * xmb (i) * delt * delp (i, k)
+            enddo
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! compute final aerosol concentrations
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. (k <= min (kmax (i), ktcon (i)))) then
+                    qaero (i, k, n) = qaero (i, k, n) + dellae2 (i, k, n) * delt
+                    if (qaero (i, k, n) < zero) then
+
+                        ! -----------------------------------------------------------------------
+                        ! add negative mass to wet deposition
+                        ! -----------------------------------------------------------------------
+
+                        wet_dep (i, k, n) = wet_dep (i, k, n) - qaero (i, k, n) * delp (i, k)
+                        qaero (i, k, n) = qcmin
+                    endif
+                endif
+            enddo
+        enddo
+    enddo
+    
+end subroutine sa_aamf_deep_aero
+    
+! =======================================================================
+! Aerosol Transportation in Shallow Convection
+! =======================================================================
+
+subroutine sa_aamf_shal_aero (im, km, itc, ntc, ntr, delt, &
+        cnvflg, kb, kmax, kbcon, ktcon, fscav, &
+        xmb, c0t, eta, zi, xlamue, xlamud, delp, &
+        qtr, qaero)
+    
+    implicit none
+    
+    ! -----------------------------------------------------------------------
+    ! input / output arguments
+    ! -----------------------------------------------------------------------
+    
+    integer, intent (in) :: im, km, itc, ntc, ntr
+
+    real, intent (in) :: delt
+
+    ! real, intent (in) :: xlamde, xlamdd
+
+    logical, dimension (im), intent (in) :: cnvflg
+
+    ! integer, dimension (im), intent (in) :: jmin
+
+    integer, dimension (im), intent (in) :: kb, kmax, kbcon, ktcon
+
+    real, dimension (im), intent (in) :: xmb, xlamud
+
+    real, dimension (ntc), intent (in) :: fscav
+
+    real, dimension (im, km), intent (in) :: c0t, eta, zi, xlamue
+
+    real, dimension (im, km), intent (in) :: delp
+
+    real, dimension (im, km, ntr + 2), intent (in) :: qtr
+
+    real, dimension (im, km, ntc), intent (out) :: qaero
+    
+    ! -----------------------------------------------------------------------
+    ! local variables
+    ! -----------------------------------------------------------------------
+    
+    ! general variables
+
+    integer :: i, indx, it, k, kk, km1, kp1, n
+
+    ! real :: adw, aup, dtime_max, dv1q, dv2q, dv3q,
+
+    real :: aup, dtime_max, dv1q, dv2q, dv3q, dtovdz, dz, factor, ptem, ptem1, qamax, tem, tem1
+
+    real, dimension (im, km) :: xmbp
+
+    ! chemical transport variables
+
+    real, dimension (im, km, ntc) :: ctro2, ecko2, dellae2
+
+    ! additional variables for tracers for wet deposition,
+
+    real, dimension (im, km, ntc) :: chem_c, chem_pw, wet_dep
+
+    ! if reevaporation is enabled, uncomment lines below
+
+    ! real, dimension (im, ntc) :: pwav
+    ! real, dimension (im, km) :: pwdper
+    ! real, dimension (im, km, ntr) :: chem_pwd
+
+    ! additional variables for fct
+
+    real, dimension (im, km) :: flx_lo, totlout, clipout
+    
+    real, parameter :: one = 1.0
+    real, parameter :: half = 0.5
+    real, parameter :: quarter = 0.25
+    real, parameter :: zero = 0.0
+    real, parameter :: epsil = 1.e-22 ! prevent division by zero
+    real, parameter :: escav = 0.8 ! wet scavenging efficiency
+    
+    ! -----------------------------------------------------------------------
+    ! begin
+    ! -----------------------------------------------------------------------
+    
+    ! -----------------------------------------------------------------------
+    ! check if aerosols are present
+    ! -----------------------------------------------------------------------
+
+    if (ntc <= 0 .or. itc <= 0 .or. ntr <= 0) return
+    if (ntr < itc + ntc - 3) return
+    
+    ! -----------------------------------------------------------------------
+    ! initialize work variables
+    ! -----------------------------------------------------------------------
+
+    km1 = km - 1
+    
+    chem_c = zero
+    chem_pw = zero
+    ctro2 = zero
+    dellae2 = zero
+    !ecdo2 = zero
+    ecko2 = zero
+    qaero = zero
+    
+    ! -----------------------------------------------------------------------
+    ! set work arrays
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        it = n + itc - 1
+        do k = 1, km
+            do i = 1, im
+                if (k <= kmax (i)) qaero (i, k, n) = max (qcmin, qtr (i, k, it))
+            enddo
+        enddo
+    enddo
+    
+    do k = 1, km
+        do i = 1, im
+            xmbp (i, k) = grav * xmb (i) / delp (i, k)
+        enddo
+    enddo
+    
+    do n = 1, ntc
+
+        ! -----------------------------------------------------------------------
+        ! interface level
+        ! -----------------------------------------------------------------------
+
+        do k = 1, km1
+            kp1 = k + 1
+            do i = 1, im
+                if (kp1 <= kmax (i)) ctro2 (i, k, n) = &
+                    half * (qaero (i, k, n) + qaero (i, kp1, n))
+            enddo
+        enddo
+
+        ! -----------------------------------------------------------------------
+        ! top level
+        ! -----------------------------------------------------------------------
+
+        do i = 1, im
+            ctro2 (i, kmax (i), n) = qaero (i, kmax (i), n)
+        enddo
+    enddo
+    
+    do n = 1, ntc
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. (k <= kb (i))) &
+                    ecko2 (i, k, n) = ctro2 (i, k, n)
+            enddo
+        enddo
+    enddo
+    
+    !do n = 1, ntc
+    ! do i = 1, im
+    ! if (cnvflg (i)) ecdo2 (i, jmin (i), n) = ctro2 (i, jmin (i), n)
+    ! enddo
+    !enddo
+    
+    ! -----------------------------------------------------------------------
+    ! do chemical tracers, first need to know how much reevaporates
+    ! -----------------------------------------------------------------------
+    
+    ! -----------------------------------------------------------------------
+    ! aerosol re - evaporation is set to zero for now
+    ! uncomment and edit the following code to enable re - evaporation
+    ! chem_pwd = zero
+    ! pwdper = zero
+    ! pwav = zero
+    ! do i = 1, im
+    ! do k = 1, jmin (i)
+    ! pwdper (i, k) = - edto (i) * pwdo (i, k) / pwavo (i)
+    ! enddo
+    ! enddo
+    ! -----------------------------------------------------------------------
+
+    ! -----------------------------------------------------------------------
+    ! calculate include mixing ratio (ecko2), how much goes into
+    ! rainwater to be rained out (chem_pw), and total scavenged,
+    ! if not reevaporated (pwav)
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        do k = 2, km1
+            kk = k - 1
+            do i = 1, im
+                if (cnvflg (i)) then
+                    if ((k > kb (i)) .and. (k < ktcon (i))) then
+                        dz = zi (i, k) - zi (i, kk)
+                        tem = half * (xlamue (i, k) + xlamue (i, kk)) * dz
+                        ! tem1 = quarter * (xlamud (i, k) + xlamud (i, kk)) * dz
+                        tem1 = quarter * (xlamud (i) + xlamud (i)) * dz
+                        factor = one + tem - tem1
+                        
+                        ! -----------------------------------------------------------------------
+                        ! if conserved (not scavenging) then
+                        ! -----------------------------------------------------------------------
+
+                        ecko2 (i, k, n) = ((one - tem1) * ecko2 (i, kk, n) &
+                            + half * tem * (ctro2 (i, k, n) + ctro2 (i, kk, n))) / factor
+                        
+                        ! -----------------------------------------------------------------------
+                        ! how much will be scavenged
+                        ! -----------------------------------------------------------------------
+
+                        ! -----------------------------------------------------------------------
+                        ! this choice was used in gf, and is also described in a
+                        ! successful implementation into cesm in grl (yu et al. 2019),
+                        ! it uses dimesnsionless scavenging coefficients (fscav),
+                        ! but includes henry coeffs with gas phase chemistry
+                        ! -----------------------------------------------------------------------
+                        
+                        ! -----------------------------------------------------------------------
+                        ! fraction fscav is going into liquid
+                        ! -----------------------------------------------------------------------
+
+                        chem_c (i, k, n) = escav * fscav (n) * ecko2 (i, k, n)
+                        
+                        ! -----------------------------------------------------------------------
+                        ! of that part is going into rain out (chem_pw)
+                        ! -----------------------------------------------------------------------
+
+                        tem = chem_c (i, k, n) / (one + c0t (i, k) * dz)
+                        chem_pw (i, k, n) = c0t (i, k) * dz * tem * eta (i, kk) !etah
+                        ecko2 (i, k, n) = tem + ecko2 (i, k, n) - chem_c (i, k, n)
+                        
+                        ! -----------------------------------------------------------------------
+                        ! pwav needed fo reevaporation in downdraft
+                        ! if including reevaporation, please uncomment code below
+                        ! pwav (i, n) = pwav (i, n) + chem_pw (i, k, n)
+                        ! -----------------------------------------------------------------------
+
+                    endif
+                endif
+            enddo
+        enddo
+        do k = 1, km1
+            do i = 1, im
+                if (k >= ktcon (i)) ecko2 (i, k, n) = ctro2 (i, k, n)
+            enddo
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! reevaporation of some, pw and pwd terms needed later for dellae2
+    ! -----------------------------------------------------------------------
+    
+    ! do n = 1, ntc
+    ! do k = km1, 1, - 1
+    ! kp1 = k + 1
+    ! do i = 1, im
+    ! if (cnvflg (i) .and. (k < jmin (i))) then
+    ! dz = zi (i, kp1) - zi (i, k)
+    ! if (k >= kbcon (i)) then
+    ! tem = xlamde * dz
+    ! tem1 = half * xlamdd * dz
+    ! else
+    ! tem = xlamde * dz
+    ! tem1 = half * (xlamd (i) + xlamdd) * dz
+    ! endif
+    ! factor = one + tem - tem1
+    ! ecdo2 (i, k, n) = ((one - tem1) * ecdo2 (i, kp1, n) &
+    ! + half * tem * (ctro2 (i, k, n) + ctro2 (i, kp1, n))) / factor
+    ! if including reevaporation, please uncomment code below
+    ! ecdo2 (i, k, n) = ecdo2 (i, k, n) + pwdper (i, kp1) * pwav (i, n)
+    ! chem_pwd (i, k, n) = max (zero, pwdper (i, kp1) * pwav (i, n))
+    ! endif
+    ! enddo
+    ! enddo
+    ! enddo
+    
+    ! do n = 1, ntc
+    ! do i = 1, im
+    ! if (cnvflg (i)) then
+    ! subsidence term treated in fct routine
+    ! dellae2 (i, 1, n) = edto (i) * etad (i, 1) * ecdo2 (i, 1, n) * xmbp (i, 1)
+    ! endif
+    ! enddo
+    ! enddo
+    
+    do n = 1, ntc
+        do i = 1, im
+            if (cnvflg (i)) then
+                k = ktcon (i)
+                kk = k - 1
+
+                ! -----------------------------------------------------------------------
+                ! for the subsidence term already is considered
+                ! -----------------------------------------------------------------------
+
+                dellae2 (i, k, n) = eta (i, kk) * ecko2 (i, kk, n) * xmbp (i, k)
+            endif
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! for updraft & downdraft vertical transport
+    ! -----------------------------------------------------------------------
+
+    ! -----------------------------------------------------------------------
+    ! initialize maximum allowed timestep for upstream difference approach
+    ! -----------------------------------------------------------------------
+
+    dtime_max = delt
+    do k = 2, km1
+        kk = k - 1
+        do i = 1, im
+            if (kk < ktcon (i)) dtime_max = min (dtime_max, half * delp (i, kk))
+        enddo
+    enddo
+    
+    ! now for every chemistry tracer
+    do n = 1, ntc
+        do k = 2, km1
+            kk = k - 1
+            do i = 1, im
+                if (cnvflg (i) .and. (k < ktcon (i))) then
+                    dz = zi (i, k) - zi (i, kk)
+                    aup = one
+                    if (k <= kb (i)) aup = zero
+                    ! adw = one
+                    ! if (k > jmin (i)) adw = zero
+                    
+                    dv1q = half * (ecko2 (i, k, n) + ecko2 (i, kk, n))
+                    dv2q = half * (ctro2 (i, k, n) + ctro2 (i, kk, n))
+                    ! dv3q = half * (ecdo2 (i, k, n) + ecdo2 (i, kk, n))
+                    
+                    tem = half * (xlamue (i, k) + xlamue (i, kk))
+                    !tem1 = half * (xlamud (i, k) + xlamud (i, kk))
+                    tem1 = half * (xlamud (i) + xlamud (i))
+                    
+                    ! if (k <= kbcon (i)) then
+                    ! ptem = xlamde
+                    ! ptem1 = xlamd (i) + xlamdd
+                    ! else
+                    ! ptem = xlamde
+                    ! ptem1 = xlamdd
+                    ! endif
+
+                    dellae2 (i, k, n) = dellae2 (i, k, n) + &
+
+                    ! -----------------------------------------------------------------------
+                    ! detrainment from updraft
+                    ! -----------------------------------------------------------------------
+
+                        (aup * tem1 * eta (i, kk) * dv1q &
+
+                    ! -----------------------------------------------------------------------
+                    ! entrainement into up and downdraft
+                    ! -----------------------------------------------------------------------
+
+                        ! - (aup * tem * eta (i, kk) + adw * edto (i) * ptem * etad (i, k)) * dv2q &
+                        - (aup * tem * eta (i, kk)) * dv2q &
+
+                    ! -----------------------------------------------------------------------
+                    ! detrainment from downdraft
+                    ! -----------------------------------------------------------------------
+
+                        ! + (adw * edto (i) * ptem1 * etad (i, k) * dv3q) &
+                        ) * dz * xmbp (i, k)
+                    
+                    wet_dep (i, k, n) = chem_pw (i, k, n) * grav / delp (i, k)
+                    
+                    ! -----------------------------------------------------------------------
+                    ! sinks from where updraft and downdraft start
+                    ! -----------------------------------------------------------------------
+
+                    ! if (k == jmin (i) + 1) then
+                        ! dellae2 (i, k, n) = dellae2 (i, k, n) &
+                            ! - edto (i) * etad (i, kk) * ctro2 (i, kk, n) * xmbp (i, k)
+                    ! endif
+
+                    if (k == kb (i)) then
+                        dellae2 (i, k, n) = dellae2 (i, k, n) &
+                            - eta (i, k) * ctro2 (i, k, n) * xmbp (i, k)
+                    endif
+                endif
+            enddo
+        enddo
+        
+        do i = 1, im
+            if (cnvflg (i)) then
+                if (kb (i) == 1) then
+                    k = kb (i)
+                    dellae2 (i, k, n) = dellae2 (i, k, n) &
+                        - eta (i, k) * ctro2 (i, k, n) * xmbp (i, k)
+                endif
+            endif
+        enddo
+        
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! for every tracer...
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        flx_lo = zero
+        totlout = zero
+        clipout = zero
+
+        ! -----------------------------------------------------------------------
+        ! compute low - order mass flux, upstream
+        ! -----------------------------------------------------------------------
+
+        do k = 2, km1
+            kk = k - 1
+            do i = 1, im
+                if (cnvflg (i) .and. (kk < ktcon (i))) then
+                    tem = zero
+                    if (kk >= kb (i)) tem = eta (i, kk)
+                    ! if (kk <= jmin (i)) tem = tem - edto (i) * etad (i, kk)
+
+                    ! -----------------------------------------------------------------------
+                    ! low - order flux, upstream
+                    ! -----------------------------------------------------------------------
+
+                    if (tem > zero) then
+                        flx_lo (i, k) = - xmb (i) * tem * qaero (i, k, n)
+                    elseif (tem < zero) then
+                        flx_lo (i, k) = - xmb (i) * tem * qaero (i, kk, n)
+                    endif
+                endif
+            enddo
+        enddo
+        
+        ! -----------------------------------------------------------------------
+        ! make sure low - ord fluxes don't violate positive - definiteness
+        ! -----------------------------------------------------------------------
+
+        do k = 1, km1
+            kp1 = k + 1
+            do i = 1, im
+                if (cnvflg (i) .and. (k <= ktcon (i))) then
+
+                    ! -----------------------------------------------------------------------
+                    ! time step / grid spacing
+                    ! -----------------------------------------------------------------------
+
+                    dtovdz = grav * dtime_max / abs (delp (i, k))
+
+                    ! -----------------------------------------------------------------------
+                    ! total flux out
+                    ! -----------------------------------------------------------------------
+
+                    totlout (i, k) = max (zero, flx_lo (i, kp1)) - min (zero, flx_lo (i, k))
+                    clipout (i, k) = min (one, qaero (i, k, n) / max (epsil, totlout (i, k)) &
+                        / (1.0001 * dtovdz))
+                endif
+            enddo
+        enddo
+        
+        ! -----------------------------------------------------------------------
+        ! recompute upstream mass fluxes
+        ! -----------------------------------------------------------------------
+
+        do k = 2, km1
+            kk = k - 1
+            do i = 1, im
+                if (cnvflg (i) .and. (kk < ktcon (i))) then
+                    tem = zero
+                    if (kk >= kb (i)) tem = eta (i, kk)
+                    ! if (kk <= jmin (i)) tem = tem - edto (i) * etad (i, kk)
+                    if (tem > zero) then
+                        flx_lo (i, k) = flx_lo (i, k) * clipout (i, k)
+                    elseif (tem < zero) then
+                        flx_lo (i, k) = flx_lo (i, k) * clipout (i, kk)
+                    endif
+                endif
+            enddo
+        enddo
+        
+        ! -----------------------------------------------------------------------
+        ! a positive - definite low - order (diffusive) solution for the subsidnce fluxes
+        ! -----------------------------------------------------------------------
+
+        do k = 1, km1
+            kp1 = k + 1
+            do i = 1, im
+                if (cnvflg (i) .and. (k <= ktcon (i))) then
+                    dtovdz = grav * dtime_max / abs (delp (i, k)) ! time step / grid spacing
+                    dellae2 (i, k, n) = dellae2 (i, k, n) &
+                        - (flx_lo (i, kp1) - flx_lo (i, k)) * dtovdz / dtime_max
+                endif
+            enddo
+        enddo
+        
+    enddo ! ctr
+    
+    ! -----------------------------------------------------------------------
+    ! convert wet deposition to total mass deposited over dt and dp
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. (k < ktcon (i))) &
+                    wet_dep (i, k, n) = wet_dep (i, k, n) * xmb (i) * delt * delp (i, k)
+            enddo
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! compute final aerosol concentrations
+    ! -----------------------------------------------------------------------
+    
+    do n = 1, ntc
+        do k = 1, km
+            do i = 1, im
+                if (cnvflg (i) .and. (k <= min (kmax (i), ktcon (i)))) then
+                    qaero (i, k, n) = qaero (i, k, n) + dellae2 (i, k, n) * delt
+                    if (qaero (i, k, n) < zero) then
+
+                        ! -----------------------------------------------------------------------
+                        ! add negative mass to wet deposition
+                        ! -----------------------------------------------------------------------
+
+                        wet_dep (i, k, n) = wet_dep (i, k, n) - qaero (i, k, n) * delp (i, k)
+                        qaero (i, k, n) = qcmin
+                    endif
+                endif
+            enddo
+        enddo
+    enddo
+    
+end subroutine sa_aamf_shal_aero
+
+end module sa_aamf_mod
