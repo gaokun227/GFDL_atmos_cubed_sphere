@@ -1376,6 +1376,8 @@ contains
          deallocate( zh )
          if( allocated(pk3) )   deallocate ( pk3 )
     endif
+    if (allocated(dudz)) deallocate(dudz)
+    if (allocated(dvdz)) deallocate(dvdz)
 
   endif
   if( allocated(pem) )   deallocate ( pem )
