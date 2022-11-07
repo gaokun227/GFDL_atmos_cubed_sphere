@@ -1716,7 +1716,7 @@ CONTAINS
  real, intent(in),  dimension(i1:i2,km):: q1
  real, intent(out), dimension(i1:i2,km+1):: q1e
 !-----------------------------------------------------------------------
- real, dimension(i1:i2,km+1):: qe1, qe2, gam  ! edge values
+ real, dimension(i1:i2,km+1):: qe1, gam  ! edge values
  real  gak(km)
  real  bet, r2o3, r4o3
  real  g0, gk, xt1, xt2, a_bot
@@ -1750,7 +1750,6 @@ CONTAINS
   do k=km,1,-1
      do i=i1,i2
         qe1(i,k) = qe1(i,k) - gam(i,k)*qe1(i,k+1)
-        qe2(i,k) = qe2(i,k) - gam(i,k)*qe2(i,k+1)
      enddo
   enddo
 

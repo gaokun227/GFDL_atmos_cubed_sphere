@@ -960,13 +960,13 @@ module sw_core_mod
               damp4 = flagstruct%smag2D*gridstruct%da_min_c
               if ( damp_w > 1.E-5) then
                  call del6_vt_flux(0, npx, npy, damp4, w, wk, fx3, fy3, gridstruct, bd, damp_Km=smag_q)
-                 do j=jsd,jed+1
-                    do i=isd,ied
+                 do j=js,je
+                    do i=is,ie+1
                        fx2(i,j) = fx3(i,j) + fx2(i,j)
                     enddo
                  enddo
-                 do j=jsd,jed
-                    do i=isd,ied+1
+                 do j=js,je+1
+                    do i=is,ie
                        fy2(i,j) = fy3(i,j) + fy2(i,j)
                     enddo
                  enddo
@@ -1528,13 +1528,13 @@ module sw_core_mod
        if ( damp_v > 1.E-5) then
           call del6_vt_flux(0, npx, npy, damp4, wk, vort, fx2, fy2, gridstruct, bd, damp_Km=smag_q)
           !add ut,vt in
-          do j=jsd,jed+1
-             do i=isd,ied
+          do j=js,je
+             do i=is,ie+1
                 ut(i,j) = fx2(i,j) + ut(i,j)
              enddo
           enddo
-          do j=jsd,jed
-             do i=isd,ied+1
+          do j=js,je+1
+             do i=is,ie
                 vt(i,j) = fy2(i,j) + vt(i,j)
              enddo
           enddo
@@ -2012,8 +2012,8 @@ end subroutine divergence_corner_nest
        if (do_smag) then
           do j=js,je+1
              do i=is,ie+1
-                smag_c(i,j) = smag_c(i,j) - 0.5*(dvdz(i,j)+dvdz(i+1,j))
-                smag_c(i,j) = smag_c(i,j) + 0.5*(dudz(i,j)+dudz(i,j+1))
+                smag_c(i,j) = smag_c(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
+                smag_c(i,j) = smag_c(i,j) + 0.5*(dudz(i-1,j)+dudz(i,j))
 !!$                if (abs(smag_c(i,j) > 1.e5)) then
 !!$                   print*, i,j, smag_c(i,j), dudz(i,j:j+1), dvdz(i:i+1,j)
 !!$                endif
@@ -2042,8 +2042,8 @@ end subroutine divergence_corner_nest
        if (do_smag) then
           do j=js,je+1
              do i=is,ie+1
-                sh(i,j) = sh(i,j) - 0.5*(dvdz(i,j)+dvdz(i+1,j))
-                sh(i,j) = sh(i,j) - 0.5*(dudz(i,j)+dudz(i,j+1))
+                sh(i,j) = sh(i,j) - 0.5*(dvdz(i-1,j)+dvdz(i,j))
+                sh(i,j) = sh(i,j) - 0.5*(dudz(i,j-1)+dudz(i,j))
                 smag_c(i,j) = min(dt*sqrt( sh(i,j)**2 + smag_c(i,j)**2 ),smag_limit)
              enddo
           enddo
@@ -2164,8 +2164,8 @@ end subroutine divergence_corner_nest
        if (do_smag) then
           do j=js-1,je+1
              do i=is-1,ie+1
-                smag_q(i,j) = smag_q(i,j) - 0.5*(dvdz(i,j)+dvdz(i,j+1))
-                smag_q(i,j) = smag_q(i,j) + 0.5*(dudz(i,j)+dudz(i+1,j))
+                smag_q(i,j) = smag_q(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
+                smag_q(i,j) = smag_q(i,j) + 0.5*(dudz(i-1,j)+dudz(i,j))
              enddo
           enddo
        endif
@@ -2190,8 +2190,8 @@ end subroutine divergence_corner_nest
        if (do_smag) then
           do j=js-1,je+1
              do i=is-1,ie+1
-                wk(i,j) = wk(i,j) - 0.5*(dvdz(i,j)+dvdz(i,j+1))
-                wk(i,j) = wk(i,j) - 0.5*(dudz(i,j)+dudz(i+1,j))
+                wk(i,j) = wk(i,j) - 0.5*(dvdz(i-1,j)+dvdz(i,j))
+                wk(i,j) = wk(i,j) - 0.5*(dudz(i,j-1)+dudz(i,j))
                 smag_q(i,j) = min(dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 ), smag_limit)
              enddo
           enddo

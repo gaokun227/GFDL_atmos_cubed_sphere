@@ -595,7 +595,7 @@ contains
 
     if (flagstruct%smag2d > 1.e-3) then
        call compute_dudz(bd, npz, u, v, dudz, dvdz, zh, dp_ref)
-       call mpp_update_domains(dudz, dvdz, domain, gridtype=DGRID_NE, complete=.true.)
+       !call mpp_update_domains(dudz, dvdz, domain, gridtype=DGRID_NE, complete=.true.)
     endif
 
       if (gridstruct%nested) then
@@ -2711,21 +2711,21 @@ do 1000 j=jfirst,jlast
    dudz = -1.e50
    dvdz = -1.e50
 
-   do j=jsd,jed+1
+   do j=jsd,jed
 
       !TODO: pass by reference and not copy
-      if (j <= jed) then
-         call edge_profile1(v(isd:ied+1,j,:), ve, isd,  ied+1, npz, dp_ref, 0)
-         do k=1,npz
-            do i=isd+1,ied
-               dz = gz(i,j,k) + gz(i-1,j,k)
-               dz = dz - (gz(i,j,k+1) + gz(i-1,j,k+1))
-               dz = 0.5*dz*rgrav
-               dvdz(i,j,k) = (ve(i,k)-ve(i,k+1))/dz
-            enddo
+      call edge_profile1(v(isd:ied+1,j,:), ve, isd,  ied+1, npz, dp_ref, 0)
+      do k=1,npz
+         do i=isd+1,ied
+            dz = gz(i,j,k) + gz(i-1,j,k)
+            dz = dz - (gz(i,j,k+1) + gz(i-1,j,k+1))
+            dz = 0.5*dz*rgrav
+            dvdz(i,j,k) = (ve(i,k)-ve(i,k+1))/dz
          enddo
-      endif
+      enddo
+   enddo
 
+   do j=jsd+1,jed
       call edge_profile1(u(isd:ied,j,:), ue, isd, ied, npz, dp_ref, 0)
       do k=1,npz
          do i=isd,ied
@@ -2735,7 +2735,6 @@ do 1000 j=jfirst,jlast
             dudz(i,j,k) = (ue(i,k)-ue(i,k+1))/dz
          enddo
       enddo
-
    enddo
 
 
