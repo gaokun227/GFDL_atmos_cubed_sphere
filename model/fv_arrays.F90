@@ -365,8 +365,10 @@ module fv_arrays_mod
                                     !< schemes. Also requires GFDL microphysics be installed within the physics driver.
    logical :: consv_checker = .false.!< turn on energy and water conservation checker
    logical :: do_fast_phys = .false.!< Controls fast physics, in which the SA-TKE-EDMF and part of the GWD are 
-   logical :: do_intermediate_phys = .true.!< Controls fast physics, in which the SA-TKE-EDMF and part of the GWD are 
                                     !< within the acoustic time step of FV3. If .true. disabling the SA-TKE-EDMF 
+                                    !< and part of the GWD in the intermediate physics.
+   logical :: do_intermediate_phys = .true.!< Controls intermediate physics, in which the GFDL MP, SA-SAS and part of the GWD are 
+                                    !< within the remapping time step of FV3. If .false. disabling the GFDL MP, SA-TKE-EDMF 
                                     !< and part of the GWD in the intermediate physics.
    logical :: do_inline_mp = .false.!< Controls Inline GFDL cloud microphysics, in which the full microphysics is
                                     !< called entirely within FV3. If .true. disabling microphysics within the physics
