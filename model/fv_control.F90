@@ -148,6 +148,7 @@ module fv_control_mod
      integer , pointer :: nord
      integer , pointer :: nord_tr
      real    , pointer :: dddmp
+     real    , pointer :: smag2d
      real    , pointer :: d2_bg
      real    , pointer :: d4_bg
      real    , pointer :: vtdm4
@@ -167,6 +168,7 @@ module fv_control_mod
      logical , pointer :: do_sat_adj
      logical , pointer :: consv_checker
      logical , pointer :: do_fast_phys
+     logical , pointer :: do_intermediate_phys
      logical , pointer :: do_inline_mp
      logical , pointer :: do_inline_pbl
      logical , pointer :: do_inline_cnv
@@ -692,6 +694,7 @@ module fv_control_mod
        nord                          => Atm%flagstruct%nord
        nord_tr                       => Atm%flagstruct%nord_tr
        dddmp                         => Atm%flagstruct%dddmp
+       smag2d                        => Atm%flagstruct%smag2d
        d2_bg                         => Atm%flagstruct%d2_bg
        d4_bg                         => Atm%flagstruct%d4_bg
        vtdm4                         => Atm%flagstruct%vtdm4
@@ -710,6 +713,7 @@ module fv_control_mod
        do_sat_adj                    => Atm%flagstruct%do_sat_adj
        consv_checker                 => Atm%flagstruct%consv_checker
        do_fast_phys                  => Atm%flagstruct%do_fast_phys
+       do_intermediate_phys          => Atm%flagstruct%do_intermediate_phys
        do_inline_mp                  => Atm%flagstruct%do_inline_mp
        do_inline_pbl                 => Atm%flagstruct%do_inline_pbl
        do_inline_cnv                 => Atm%flagstruct%do_inline_cnv
@@ -945,7 +949,7 @@ module fv_control_mod
             do_am4_remap, nudge, do_f3d, external_ic, is_ideal_case, read_increment, &
             ncep_ic, nggps_ic, hrrrv3_ic, ecmwf_ic, use_new_ncep, use_ncep_phy, fv_diag_ic, &
             external_eta, res_latlon_dynamics, res_latlon_tracers, scale_z, w_max, z_min, d2bg_zq, lim_fac, &
-            dddmp, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
+            dddmp, smag2d, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
             warm_start, adjust_dry_mass, mountain, d_con, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
             dry_mass, grid_type, do_Held_Suarez, &
             consv_te, fill, filter_phys, fill_dp, fill_wz, fill_gfs, consv_am, RF_fast, &
@@ -1085,7 +1089,7 @@ module fv_control_mod
      subroutine read_namelist_integ_phys_nml
 
        integer :: ios, ierr
-       namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
+       namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_intermediate_phys, do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
             inline_cnv_flag, do_aerosol, do_cosp, consv_checker, te_err, tw_err
 
        read (input_nml_file,integ_phys_nml,iostat=ios)

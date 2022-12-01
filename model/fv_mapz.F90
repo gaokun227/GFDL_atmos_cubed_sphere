@@ -70,7 +70,7 @@ contains
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
                       inline_mp, inline_pbl, inline_cnv, inline_gwd, c2l_ord, bd, &
-                      fv_debug, w_limiter, do_am4_remap, do_fast_phys, consv_checker, &
+                      fv_debug, w_limiter, do_am4_remap, do_fast_phys, do_intermediate_phys, consv_checker, &
                       adj_mass_vmr, inline_cnv_flag)
 
   logical, intent(in):: last_step
@@ -78,6 +78,7 @@ contains
   logical, intent(in):: w_limiter
   logical, intent(in):: do_am4_remap
   logical, intent(in):: do_fast_phys
+  logical, intent(in):: do_intermediate_phys
   logical, intent(in):: consv_checker
   logical, intent(in):: adj_mass_vmr
   real,    intent(in):: mdt                   ! remap time step
@@ -848,17 +849,20 @@ contains
 
 !-----------------------------------------------------------------------
 ! Intermediate Physics >>>
+! Note: if intemediate physics is disable, cloud fraction will be zero at the first time step.
 !-----------------------------------------------------------------------
 
-    call timing_on('INTERMEDIATE_PHYS')
-    call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-             c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
-             v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
-             inline_mp, inline_pbl, inline_cnv, inline_gwd, gridstruct, domain, bd, &
-             hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, do_inline_cnv, &
-             do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr, &
-             inline_cnv_flag)
-    call timing_off('INTERMEDIATE_PHYS')
+    if (do_intermediate_phys) then
+        call timing_on('INTERMEDIATE_PHYS')
+        call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
+                 c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
+                 v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
+                 inline_mp, inline_pbl, inline_cnv, inline_gwd, gridstruct, domain, bd, &
+                 hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, do_inline_cnv, &
+                 do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr, &
+                 inline_cnv_flag)
+        call timing_off('INTERMEDIATE_PHYS')
+    endif
 
 !-----------------------------------------------------------------------
 ! <<< Intermediate Physics

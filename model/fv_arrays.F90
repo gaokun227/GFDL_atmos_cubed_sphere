@@ -295,6 +295,7 @@ module fv_arrays_mod
    real    :: dddmp = 0.0    !< Dimensionless coefficient for the second-order Smagorinsky-type
                              !< divergence damping. The default is value is 0.0. 0.2
                              !< (the Smagorinsky constant) is recommended if ICs are noisy.
+   real    :: smag2d = 0.0   !< Dimensionless coefficient for 2d smag damping. Experimental!!
    real    :: d2_bg = 0.0    !< Coefficient for explicit second-order divergence damping.
                              !< This option remains active even if nord is nonzero. The default
                              !< value is 0.0. The proper range is 0 to 0.02, with 0 strongly recommended
@@ -365,6 +366,9 @@ module fv_arrays_mod
    logical :: consv_checker = .false.!< turn on energy and water conservation checker
    logical :: do_fast_phys = .false.!< Controls fast physics, in which the SA-TKE-EDMF and part of the GWD are 
                                     !< within the acoustic time step of FV3. If .true. disabling the SA-TKE-EDMF 
+                                    !< and part of the GWD in the intermediate physics.
+   logical :: do_intermediate_phys = .true.!< Controls intermediate physics, in which the GFDL MP, SA-SAS and part of the GWD are 
+                                    !< within the remapping time step of FV3. If .false. disabling the GFDL MP, SA-SAS 
                                     !< and part of the GWD in the intermediate physics.
    logical :: do_inline_mp = .false.!< Controls inline microphysics, in which the full microphysics is
                                     !< called entirely within FV3. If .true. disabling microphysics within the physics
