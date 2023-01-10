@@ -62,6 +62,15 @@ module fv_arrays_mod
      real :: efx(max_step), efx_sum, efx_nest(max_step), efx_sum_nest, mtq(max_step), mtq_sum
      integer :: steps
 
+! Integrated physics diagnostics
+     integer :: id_inline_mp_fast_te_a_chg, id_inline_mp_fast_te_b_chg, id_inline_mp_fast_tw_a_chg, id_inline_mp_fast_tw_b_chg,
+     integer :: id_inline_mp_intm_te_a_chg, id_inline_mp_intm_te_b_chg, id_inline_mp_intm_tw_a_chg, id_inline_mp_intm_tw_b_chg,
+     integer :: id_inline_pbl_fast_te_a_chg, id_inline_pbl_fast_te_b_chg, id_inline_pbl_fast_tw_a_chg, id_inline_pbl_fast_tw_b_chg,
+     integer :: id_inline_pbl_intm_te_a_chg, id_inline_pbl_intm_te_b_chg, id_inline_pbl_intm_tw_a_chg, id_inline_pbl_intm_tw_b_chg,
+     integer :: id_inline_cnv_intm_te_a_chg, id_inline_cnv_intm_te_b_chg, id_inline_cnv_intm_tw_a_chg, id_inline_cnv_intm_tw_b_chg,
+     integer :: id_inline_gwd_fast_te_a_chg, id_inline_gwd_fast_te_b_chg, id_inline_gwd_fast_tw_a_chg, id_inline_gwd_fast_tw_b_chg,
+     integer :: id_inline_gwd_intm_te_a_chg, id_inline_gwd_intm_te_b_chg, id_inline_gwd_intm_tw_a_chg, id_inline_gwd_intm_tw_b_chg,
+
   end type fv_diag_type
 
 
@@ -1091,6 +1100,15 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: u_dt(:,:,:)
     real, _ALLOCATABLE :: v_dt(:,:,:)
 
+    real, _ALLOCATABLE :: fast_te_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_tw_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_te_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_tw_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_te_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_tw_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_te_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_tw_b_chg(:,:)     _NULL
+
   end type inline_mp_type
 
   type inline_pbl_type
@@ -1131,6 +1149,14 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: dusfc(:,:)     _NULL
     real, _ALLOCATABLE :: dvsfc(:,:)     _NULL
     real, _ALLOCATABLE :: dksfc(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_te_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_tw_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_te_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_tw_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_te_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_tw_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_te_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_tw_b_chg(:,:)     _NULL
 
   end type inline_pbl_type
 
@@ -1141,6 +1167,10 @@ module fv_arrays_mod
     integer, _ALLOCATABLE :: ktop(:,:)     _NULL
     integer, _ALLOCATABLE :: kbot(:,:)     _NULL
     integer, _ALLOCATABLE :: kcnv(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_te_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_tw_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_te_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_tw_b_chg(:,:)     _NULL
 
   end type inline_cnv_type
 
@@ -1154,6 +1184,14 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: sigma(:,:)
     real, _ALLOCATABLE :: gamma(:,:)
     real, _ALLOCATABLE :: elvmax(:,:)
+    real, _ALLOCATABLE :: fast_te_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_tw_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_te_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: fast_tw_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_te_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_tw_a_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_te_b_chg(:,:)     _NULL
+    real, _ALLOCATABLE :: intm_tw_b_chg(:,:)     _NULL
 
   end type inline_gwd_type
 
@@ -1627,6 +1665,16 @@ contains
        allocate ( Atm%inline_mp%prefluxi(is:ie,js:je,npz) )
        allocate ( Atm%inline_mp%prefluxs(is:ie,js:je,npz) )
        allocate ( Atm%inline_mp%prefluxg(is:ie,js:je,npz) )
+       if (Atm%flagstruct%consv_checker) then
+          allocate ( Atm%inline_mp%fast_te_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_mp%fast_tw_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_mp%fast_te_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_mp%fast_tw_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_mp%intm_te_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_mp%intm_tw_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_mp%intm_te_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_mp%intm_tw_b_chg(is:ie,js:je) )
+       endif
     endif
 
     if (Atm%flagstruct%do_inline_pbl) then
@@ -1666,6 +1714,16 @@ contains
        allocate ( Atm%inline_pbl%dusfc(is:ie,js:je) )
        allocate ( Atm%inline_pbl%dvsfc(is:ie,js:je) )
        allocate ( Atm%inline_pbl%dksfc(is:ie,js:je) )
+       if (Atm%flagstruct%consv_checker) then
+          allocate ( Atm%inline_pbl%fast_te_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_pbl%fast_tw_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_pbl%fast_te_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_pbl%fast_tw_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_pbl%intm_te_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_pbl%intm_tw_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_pbl%intm_te_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_pbl%intm_tw_b_chg(is:ie,js:je) )
+       endif
     endif
 
     if (Atm%flagstruct%do_inline_cnv) then
@@ -1674,6 +1732,12 @@ contains
        allocate ( Atm%inline_cnv%ktop(is:ie,js:je) )
        allocate ( Atm%inline_cnv%kbot(is:ie,js:je) )
        allocate ( Atm%inline_cnv%kcnv(is:ie,js:je) )
+       if (Atm%flagstruct%consv_checker) then
+          allocate ( Atm%inline_cnv%intm_te_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_cnv%intm_tw_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_cnv%intm_te_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_cnv%intm_tw_b_chg(is:ie,js:je) )
+       endif
     endif
 
     if (Atm%flagstruct%do_inline_gwd) then
@@ -1685,6 +1749,16 @@ contains
        allocate ( Atm%inline_gwd%sigma(is:ie,js:je) )
        allocate ( Atm%inline_gwd%gamma(is:ie,js:je) )
        allocate ( Atm%inline_gwd%elvmax(is:ie,js:je) )
+       if (Atm%flagstruct%consv_checker) then
+          allocate ( Atm%inline_gwd%fast_te_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_gwd%fast_tw_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_gwd%fast_te_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_gwd%fast_tw_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_gwd%intm_te_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_gwd%intm_tw_a_chg(is:ie,js:je) )
+          allocate ( Atm%inline_gwd%intm_te_b_chg(is:ie,js:je) )
+          allocate ( Atm%inline_gwd%intm_tw_b_chg(is:ie,js:je) )
+       endif
     endif
 
     !--------------------------
@@ -1785,6 +1859,20 @@ contains
               Atm%inline_mp%prefluxg(i,j,:) = real_big
            enddo
         enddo
+        if (Atm%flagstruct%consv_checker) then
+           do j=js, je
+              do i=is, ie
+                 Atm%inline_mp%fast_te_a_chg(i,j) = real_big
+                 Atm%inline_mp%fast_tw_a_chg(i,j) = real_big
+                 Atm%inline_mp%fast_te_b_chg(i,j) = real_big
+                 Atm%inline_mp%fast_tw_b_chg(i,j) = real_big
+                 Atm%inline_mp%intm_te_a_chg(i,j) = real_big
+                 Atm%inline_mp%intm_tw_a_chg(i,j) = real_big
+                 Atm%inline_mp%intm_te_b_chg(i,j) = real_big
+                 Atm%inline_mp%intm_tw_b_chg(i,j) = real_big
+              enddo
+           enddo
+        endif
      endif
 
      if (Atm%flagstruct%do_inline_pbl) then
@@ -1828,6 +1916,20 @@ contains
               Atm%inline_pbl%dksfc(i,j) = real_big
            enddo
         enddo
+        if (Atm%flagstruct%consv_checker) then
+           do j=js, je
+              do i=is, ie
+                 Atm%inline_pbl%fast_te_a_chg(i,j) = real_big
+                 Atm%inline_pbl%fast_tw_a_chg(i,j) = real_big
+                 Atm%inline_pbl%fast_te_b_chg(i,j) = real_big
+                 Atm%inline_pbl%fast_tw_b_chg(i,j) = real_big
+                 Atm%inline_pbl%intm_te_a_chg(i,j) = real_big
+                 Atm%inline_pbl%intm_tw_a_chg(i,j) = real_big
+                 Atm%inline_pbl%intm_te_b_chg(i,j) = real_big
+                 Atm%inline_pbl%intm_tw_b_chg(i,j) = real_big
+              enddo
+           enddo
+        endif
      endif
 
      if (Atm%flagstruct%do_inline_cnv) then
@@ -1840,6 +1942,16 @@ contains
               Atm%inline_cnv%kcnv(i,j) = 0
            enddo
         enddo
+        if (Atm%flagstruct%consv_checker) then
+           do j=js, je
+              do i=is, ie
+                 Atm%inline_cnv%intm_te_a_chg(i,j) = real_big
+                 Atm%inline_cnv%intm_tw_a_chg(i,j) = real_big
+                 Atm%inline_cnv%intm_te_b_chg(i,j) = real_big
+                 Atm%inline_cnv%intm_tw_b_chg(i,j) = real_big
+              enddo
+           enddo
+        endif
      endif
 
      if (Atm%flagstruct%do_inline_gwd) then
@@ -1855,6 +1967,20 @@ contains
               Atm%inline_gwd%elvmax(i,j) = real_big
            enddo
         enddo
+        if (Atm%flagstruct%consv_checker) then
+           do j=js, je
+              do i=is, ie
+                 Atm%inline_gwd%fast_te_a_chg(i,j) = real_big
+                 Atm%inline_gwd%fast_tw_a_chg(i,j) = real_big
+                 Atm%inline_gwd%fast_te_b_chg(i,j) = real_big
+                 Atm%inline_gwd%fast_tw_b_chg(i,j) = real_big
+                 Atm%inline_gwd%intm_te_a_chg(i,j) = real_big
+                 Atm%inline_gwd%intm_tw_a_chg(i,j) = real_big
+                 Atm%inline_gwd%intm_te_b_chg(i,j) = real_big
+                 Atm%inline_gwd%intm_tw_b_chg(i,j) = real_big
+              enddo
+           enddo
+        endif
      endif
 
      do j=js, je
@@ -2121,6 +2247,16 @@ contains
        deallocate ( Atm%inline_mp%prefluxi )
        deallocate ( Atm%inline_mp%prefluxs )
        deallocate ( Atm%inline_mp%prefluxg )
+       if (Atm%flagstruct%consv_checker) then
+          deallocate ( Atm%inline_mp%fast_te_a_chg )
+          deallocate ( Atm%inline_mp%fast_tw_a_chg )
+          deallocate ( Atm%inline_mp%fast_te_b_chg )
+          deallocate ( Atm%inline_mp%fast_tw_b_chg )
+          deallocate ( Atm%inline_mp%intm_te_a_chg )
+          deallocate ( Atm%inline_mp%intm_tw_a_chg )
+          deallocate ( Atm%inline_mp%intm_te_b_chg )
+          deallocate ( Atm%inline_mp%intm_tw_b_chg )
+       endif
     endif
 
     if (Atm%flagstruct%do_inline_pbl) then
@@ -2160,6 +2296,16 @@ contains
        deallocate ( Atm%inline_pbl%dusfc )
        deallocate ( Atm%inline_pbl%dvsfc )
        deallocate ( Atm%inline_pbl%dksfc )
+       if (Atm%flagstruct%consv_checker) then
+          deallocate ( Atm%inline_pbl%fast_te_a_chg )
+          deallocate ( Atm%inline_pbl%fast_tw_a_chg )
+          deallocate ( Atm%inline_pbl%fast_te_b_chg )
+          deallocate ( Atm%inline_pbl%fast_tw_b_chg )
+          deallocate ( Atm%inline_pbl%intm_te_a_chg )
+          deallocate ( Atm%inline_pbl%intm_tw_a_chg )
+          deallocate ( Atm%inline_pbl%intm_te_b_chg )
+          deallocate ( Atm%inline_pbl%intm_tw_b_chg )
+       endif
     endif
 
     if (Atm%flagstruct%do_inline_cnv) then
@@ -2168,6 +2314,12 @@ contains
        deallocate ( Atm%inline_cnv%ktop )
        deallocate ( Atm%inline_cnv%kbot )
        deallocate ( Atm%inline_cnv%kcnv )
+       if (Atm%flagstruct%consv_checker) then
+          deallocate ( Atm%inline_cnv%intm_te_a_chg )
+          deallocate ( Atm%inline_cnv%intm_tw_a_chg )
+          deallocate ( Atm%inline_cnv%intm_te_b_chg )
+          deallocate ( Atm%inline_cnv%intm_tw_b_chg )
+       endif
     endif
 
     if (Atm%flagstruct%do_inline_gwd) then
@@ -2179,6 +2331,16 @@ contains
        deallocate ( Atm%inline_gwd%sigma )
        deallocate ( Atm%inline_gwd%gamma )
        deallocate ( Atm%inline_gwd%elvmax )
+       if (Atm%flagstruct%consv_checker) then
+          deallocate ( Atm%inline_gwd%fast_te_a_chg )
+          deallocate ( Atm%inline_gwd%fast_tw_a_chg )
+          deallocate ( Atm%inline_gwd%fast_te_b_chg )
+          deallocate ( Atm%inline_gwd%fast_tw_b_chg )
+          deallocate ( Atm%inline_gwd%intm_te_a_chg )
+          deallocate ( Atm%inline_gwd%intm_tw_a_chg )
+          deallocate ( Atm%inline_gwd%intm_te_b_chg )
+          deallocate ( Atm%inline_gwd%intm_tw_b_chg )
+       endif
     endif
 
     deallocate ( Atm%u_srf )

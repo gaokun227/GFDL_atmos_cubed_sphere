@@ -1354,6 +1354,71 @@ contains
                npx, npy, isc, iec, jsc, jec, Atm(n)%ng)
        endif
 
+       if (Atm(1)%flagstruct%do_inline_mp) then
+          idiag%id_inline_mp_fast_te_a_chg = register_diag_field (trim(field), 'inline_mp_fast_te_a_chg', axes(1:2), Time,       &
+                              'Inline MP Fast Total Energy Change in the Atmosphere', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_mp_fast_te_b_chg = register_diag_field (trim(field), 'inline_mp_fast_te_b_chg', axes(1:2), Time,       &
+                              'Inline MP Fast Total Energy Change at the Boundary', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_mp_fast_tw_a_chg = register_diag_field (trim(field), 'inline_mp_fast_tw_a_chg', axes(1:2), Time,       &
+                              'Inline MP Fast Total Mass Change in the Atmosphere', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_mp_fast_tw_b_chg = register_diag_field (trim(field), 'inline_mp_fast_tw_b_chg', axes(1:2), Time,       &
+                              'Inline MP Fast Total Mass Change at the Boundary', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_mp_intm_te_a_chg = register_diag_field (trim(field), 'inline_mp_intm_te_a_chg', axes(1:2), Time,       &
+                              'Inline MP Intermediate Total Energy Change in the Atmosphere', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_mp_intm_te_b_chg = register_diag_field (trim(field), 'inline_mp_intm_te_b_chg', axes(1:2), Time,       &
+                              'Inline MP Intermediate Total Energy Change at the Boundary', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_mp_intm_tw_a_chg = register_diag_field (trim(field), 'inline_mp_intm_tw_a_chg', axes(1:2), Time,       &
+                              'Inline MP Intermediate Total Mass Change in the Atmosphere', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_mp_intm_tw_b_chg = register_diag_field (trim(field), 'inline_mp_intm_tw_b_chg', axes(1:2), Time,       &
+                              'Inline MP Intermediate Total Mass Change at the Boundary', 'kg/m^2', missing_value=missing_value )
+       endif
+       if (Atm(1)%flagstruct%do_inline_pbl) then
+          idiag%id_inline_pbl_fast_te_a_chg = register_diag_field (trim(field), 'inline_pbl_fast_te_a_chg', axes(1:2), Time,       &
+                              'Inline PBL Fast Total Energy Change in the Atmosphere', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_pbl_fast_te_b_chg = register_diag_field (trim(field), 'inline_pbl_fast_te_b_chg', axes(1:2), Time,       &
+                              'Inline PBL Fast Total Energy Change at the Boundary', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_pbl_fast_tw_a_chg = register_diag_field (trim(field), 'inline_pbl_fast_tw_a_chg', axes(1:2), Time,       &
+                              'Inline PBL Fast Total Mass Change in the Atmosphere', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_pbl_fast_tw_b_chg = register_diag_field (trim(field), 'inline_pbl_fast_tw_b_chg', axes(1:2), Time,       &
+                              'Inline PBL Fast Total Mass Change at the Boundary', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_pbl_intm_te_a_chg = register_diag_field (trim(field), 'inline_pbl_intm_te_a_chg', axes(1:2), Time,       &
+                              'Inline PBL Intermediate Total Energy Change in the Atmosphere', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_pbl_intm_te_b_chg = register_diag_field (trim(field), 'inline_pbl_intm_te_b_chg', axes(1:2), Time,       &
+                              'Inline PBL Intermediate Total Energy Change at the Boundary', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_pbl_intm_tw_a_chg = register_diag_field (trim(field), 'inline_pbl_intm_tw_a_chg', axes(1:2), Time,       &
+                              'Inline PBL Intermediate Total Mass Change in the Atmosphere', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_pbl_intm_tw_b_chg = register_diag_field (trim(field), 'inline_pbl_intm_tw_b_chg', axes(1:2), Time,       &
+                              'Inline PBL Intermediate Total Mass Change at the Boundary', 'kg/m^2', missing_value=missing_value )
+       endif
+       if (Atm(1)%flagstruct%do_inline_cnv) then
+          idiag%id_inline_cnv_intm_te_a_chg = register_diag_field (trim(field), 'inline_cnv_intm_te_a_chg', axes(1:2), Time,       &
+                              'Inline CNV Intermediate Total Energy Change in the Atmosphere', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_cnv_intm_te_b_chg = register_diag_field (trim(field), 'inline_cnv_intm_te_b_chg', axes(1:2), Time,       &
+                              'Inline CNV Intermediate Total Energy Change at the Boundary', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_cnv_intm_tw_a_chg = register_diag_field (trim(field), 'inline_cnv_intm_tw_a_chg', axes(1:2), Time,       &
+                              'Inline CNV Intermediate Total Mass Change in the Atmosphere', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_cnv_intm_tw_b_chg = register_diag_field (trim(field), 'inline_cnv_intm_tw_b_chg', axes(1:2), Time,       &
+                              'Inline CNV Intermediate Total Mass Change at the Boundary', 'kg/m^2', missing_value=missing_value )
+       endif
+       if (Atm(1)%flagstruct%do_inline_gwd) then
+          idiag%id_inline_gwd_fast_te_a_chg = register_diag_field (trim(field), 'inline_gwd_fast_te_a_chg', axes(1:2), Time,       &
+                              'Inline GWD Fast Total Energy Change in the Atmosphere', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_gwd_fast_te_b_chg = register_diag_field (trim(field), 'inline_gwd_fast_te_b_chg', axes(1:2), Time,       &
+                              'Inline GWD Fast Total Energy Change at the Boundary', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_gwd_fast_tw_a_chg = register_diag_field (trim(field), 'inline_gwd_fast_tw_a_chg', axes(1:2), Time,       &
+                              'Inline GWD Fast Total Mass Change in the Atmosphere', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_gwd_fast_tw_b_chg = register_diag_field (trim(field), 'inline_gwd_fast_tw_b_chg', axes(1:2), Time,       &
+                              'Inline GWD Fast Total Mass Change at the Boundary', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_gwd_intm_te_a_chg = register_diag_field (trim(field), 'inline_gwd_intm_te_a_chg', axes(1:2), Time,       &
+                              'Inline GWD Intermediate Total Energy Change in the Atmosphere', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_gwd_intm_te_b_chg = register_diag_field (trim(field), 'inline_gwd_intm_te_b_chg', axes(1:2), Time,       &
+                              'Inline GWD Intermediate Total Energy Change at the Boundary', 'J/m^2', missing_value=missing_value )
+          idiag%id_inline_gwd_intm_tw_a_chg = register_diag_field (trim(field), 'inline_gwd_intm_tw_a_chg', axes(1:2), Time,       &
+                              'Inline GWD Intermediate Total Mass Change in the Atmosphere', 'kg/m^2', missing_value=missing_value )
+          idiag%id_inline_gwd_intm_tw_b_chg = register_diag_field (trim(field), 'inline_gwd_intm_tw_b_chg', axes(1:2), Time,       &
+                              'Inline GWD Intermediate Total Mass Change at the Boundary', 'kg/m^2', missing_value=missing_value )
+       endif
+
 !    end do
 
 

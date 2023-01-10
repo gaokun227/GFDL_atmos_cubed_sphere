@@ -601,7 +601,7 @@ contains
                      nr, nwat, sphum, q_con, u,  v, w, delz, pt, q, phis,    &
                      zvir, cp_air, flagstruct%te_err, flagstruct%tw_err, akap, cappa, flagstruct%kord_mt, flagstruct%kord_wz, &
                      kord_tracer, flagstruct%kord_tm, flagstruct%remap_te, peln, te_2d, &
-                     ng, ua, va, omga, dp1, ws, fill, reproduce_sum,             &
+                     ng, ua, va, omga, dp1, ws, fill, reproduce_sum, idiag, &
                      ptop, ak, bk, pfull, gridstruct, domain,   &
                      flagstruct%do_sat_adj, hydrostatic, &
                      hybrid_z,     &

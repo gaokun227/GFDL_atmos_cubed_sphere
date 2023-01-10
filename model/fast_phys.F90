@@ -306,7 +306,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
+                        delp (i, j, 1:km), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
                         0.0, 0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
@@ -522,7 +522,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), - inline_pbl%dqsfc (i, j) / (hlv - (cv_vap - c_liq) * tice) * 86400, 0.0, 0.0, 0.0, 0.0, &
+                        delp (i, j, 1:km), dte (i), - inline_pbl%dqsfc (i, j) / (hlv - (cv_vap - c_liq) * tice) * 86400, 0.0, 0.0, 0.0, 0.0, &
                         0.0, - inline_pbl%dtsfc (i, j), - inline_pbl%dksfc (i, j), abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
@@ -548,19 +548,23 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
                          (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
                         print*, "PBL-FAST TE: ", &
-                            !(sum (te_beg (i, :)) + te_b_beg (i)) / (gsize (i) ** 2), &
-                            !(sum (te_end (i, :)) + te_b_end (i)) / (gsize (i) ** 2), &
+                            !(sum (te_beg (i, :)) + te_b_beg (i)), &
+                            !(sum (te_end (i, :)) + te_b_end (i)), &
                             (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
                             (sum (te_beg (i, :)) + te_b_beg (i))
                     endif
+                    inline_pbl%fast_te_a_chg (i, j) = sum (te_end (i, :)) - sum (te_beg (i, :))
+                    inline_pbl%fast_te_b_chg (i, j) = te_b_end (i) - te_b_beg (i)
                     if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
                          (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
                         print*, "PBL-FAST TW: ", &
-                            !(sum (tw_beg (i, :)) + tw_b_beg (i)) / (gsize (i) ** 2), &
-                            !(sum (tw_end (i, :)) + tw_b_end (i)) / (gsize (i) ** 2), &
+                            !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
+                            !(sum (tw_end (i, :)) + tw_b_end (i)), &
                             (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
                             (sum (tw_beg (i, :)) + tw_b_beg (i))
                     endif
+                    inline_pbl%fast_tw_a_chg (i, j) = sum (tw_end (i, :)) - sum (tw_beg (i, :))
+                    inline_pbl%fast_tw_b_chg (i, j) = tw_b_end (i) - tw_b_beg (i)
                     !print*, "PBL-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
                 enddo
             endif
@@ -778,7 +782,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
+                        delp (i, j, 1:km), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
                         0.0, 0.0, 0.0, abs (mdt), te_beg (i, 1:km), tw_beg (i, 1:km), &
                         te_b_beg (i), tw_b_beg (i), .true., hydrostatic)
                 enddo
@@ -913,7 +917,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), gsize (i), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
+                        delp (i, j, 1:km), dte (i), 0.0, 0.0, 0.0, 0.0, 0.0, &
                         0.0, 0.0, 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
@@ -939,19 +943,23 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
                          (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
                         print*, "GWD-FAST TE: ", &
-                            !(sum (te_beg (i, :)) + te_b_beg (i)) / (gsize (i) ** 2), &
-                            !(sum (te_end (i, :)) + te_b_end (i)) / (gsize (i) ** 2), &
+                            !(sum (te_beg (i, :)) + te_b_beg (i)), &
+                            !(sum (te_end (i, :)) + te_b_end (i)), &
                             (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
                             (sum (te_beg (i, :)) + te_b_beg (i))
                     endif
+                    inline_gwd%fast_te_a_chg (i, j) = sum (te_end (i, :)) - sum (te_beg (i, :))
+                    inline_gwd%fast_te_b_chg (i, j) = te_b_end (i) - te_b_beg (i)
                     if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
                          (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
                         print*, "GWD-FAST TW: ", &
-                            !(sum (tw_beg (i, :)) + tw_b_beg (i)) / (gsize (i) ** 2), &
-                            !(sum (tw_end (i, :)) + tw_b_end (i)) / (gsize (i) ** 2), &
+                            !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
+                            !(sum (tw_end (i, :)) + tw_b_end (i)), &
                             (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
                             (sum (tw_beg (i, :)) + tw_b_beg (i))
                     endif
+                    inline_gwd%fast_tw_a_chg (i, j) = sum (tw_end (i, :)) - sum (tw_beg (i, :))
+                    inline_gwd%fast_tw_b_chg (i, j) = tw_b_end (i) - tw_b_beg (i)
                     !print*, "GWD-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
                 enddo
             endif

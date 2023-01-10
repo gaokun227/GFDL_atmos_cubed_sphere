@@ -35,11 +35,13 @@ module fv_mapz_mod
   use mpp_domains_mod,   only: mpp_update_domains, domain2d
   use mpp_mod,           only: FATAL, NOTE, mpp_error, get_unit, mpp_root_pe, mpp_pe
   use fv_arrays_mod,     only: fv_grid_type, fv_grid_bounds_type, R_GRID, inline_mp_type, &
-                               inline_pbl_type, inline_cnv_type, inline_gwd_type
+                               inline_pbl_type, inline_cnv_type, inline_gwd_type, fv_diag_type
   use fv_timing_mod,     only: timing_on, timing_off
   use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
   use intermediate_phys_mod, only: intermediate_phys
   use gfdl_mp_mod,       only: c_liq, c_ice
+  use diag_manager_mod,   only: send_data
+  use fv_diagnostics_mod, only: fv_time
 
   implicit none
   real, parameter:: consv_min = 0.001   ! below which no correction applies
@@ -65,7 +67,7 @@ contains
                                    mdt, pdt, npx, npy, km, is,ie,js,je, isd,ied,jsd,jed,       &
                       nq, nwat, sphum, q_con, u, v, w, delz, pt, q, hs, r_vir, cp, te_err, tw_err, &
                       akap, cappa, kord_mt, kord_wz, kord_tr, kord_tm, remap_te, peln, te0_2d,        &
-                      ng, ua, va, omga, te, ws, fill, reproduce_sum,      &
+                      ng, ua, va, omga, te, ws, fill, reproduce_sum, idiag, &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
@@ -124,6 +126,7 @@ contains
   type(fv_grid_type), intent(IN), target :: gridstruct
   type(domain2d), intent(INOUT) :: domain
   type(fv_grid_bounds_type), intent(IN) :: bd
+  type(fv_diag_type), intent(IN) :: idiag
 
 ! !INPUT/OUTPUT
   real, intent(inout):: pk(is:ie,js:je,km+1) ! pe to the kappa
@@ -173,6 +176,7 @@ contains
   integer:: i,j,k
   integer:: nt, liq_wat, ice_wat, rainwat, snowwat, cld_amt, graupel, w_diff, iq, n, kmp, kp, k_next
   integer:: ccn_cm3, cin_cm3, aerosol
+  logical used
 
   k1k = rdgas/cv_air   ! akap / (1.-akap) = rg/Cv=0.4
   rg = rdgas
@@ -853,7 +857,9 @@ contains
 !-----------------------------------------------------------------------
 
     if (do_intermediate_phys) then
+
         call timing_on('INTERMEDIATE_PHYS')
+
         call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                  c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
                  v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
@@ -861,7 +867,50 @@ contains
                  hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, do_inline_cnv, &
                  do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr, &
                  inline_cnv_flag)
+
+        if (idiag%id_inline_mp_fast_te_a_chg>0) &
+            used = send_data(idiag%id_inline_mp_fast_te_a_chg, inline_mp%fast_te_a_chg, fv_time)
+        if (idiag%id_inline_mp_fast_te_b_chg>0) &
+            used = send_data(idiag%id_inline_mp_fast_te_b_chg, inline_mp%fast_te_b_chg, fv_time)
+        if (idiag%id_inline_mp_fast_tw_a_chg>0) &
+            used = send_data(idiag%id_inline_mp_fast_tw_a_chg, inline_mp%fast_tw_a_chg, fv_time)
+        if (idiag%id_inline_mp_fast_tw_b_chg>0) &
+            used = send_data(idiag%id_inline_mp_fast_tw_b_chg, inline_mp%fast_tw_b_chg, fv_time)
+        if (idiag%id_inline_pbl_intm_te_a_chg>0) &
+            used = send_data(idiag%id_inline_pbl_intm_te_a_chg, inline_pbl%intm_te_a_chg, fv_time)
+        if (idiag%id_inline_pbl_intm_te_b_chg>0) &
+            used = send_data(idiag%id_inline_pbl_intm_te_b_chg, inline_pbl%intm_te_b_chg, fv_time)
+        if (idiag%id_inline_pbl_intm_tw_a_chg>0) &
+            used = send_data(idiag%id_inline_pbl_intm_tw_a_chg, inline_pbl%intm_tw_a_chg, fv_time)
+        if (idiag%id_inline_pbl_intm_tw_b_chg>0) &
+            used = send_data(idiag%id_inline_pbl_intm_tw_b_chg, inline_pbl%intm_tw_b_chg, fv_time)
+        if (idiag%id_inline_cnv_intm_te_a_chg>0) &
+            used = send_data(idiag%id_inline_cnv_intm_te_a_chg, inline_cnv%intm_te_a_chg, fv_time)
+        if (idiag%id_inline_cnv_intm_te_b_chg>0) &
+            used = send_data(idiag%id_inline_cnv_intm_te_b_chg, inline_cnv%intm_te_b_chg, fv_time)
+        if (idiag%id_inline_cnv_intm_tw_a_chg>0) &
+            used = send_data(idiag%id_inline_cnv_intm_tw_a_chg, inline_cnv%intm_tw_a_chg, fv_time)
+        if (idiag%id_inline_cnv_intm_tw_b_chg>0) &
+            used = send_data(idiag%id_inline_cnv_intm_tw_b_chg, inline_cnv%intm_tw_b_chg, fv_time)
+        if (idiag%id_inline_gwd_intm_te_a_chg>0) &
+            used = send_data(idiag%id_inline_gwd_intm_te_a_chg, inline_gwd%intm_te_a_chg, fv_time)
+        if (idiag%id_inline_gwd_intm_te_b_chg>0) &
+            used = send_data(idiag%id_inline_gwd_intm_te_b_chg, inline_gwd%intm_te_b_chg, fv_time)
+        if (idiag%id_inline_gwd_intm_tw_a_chg>0) &
+            used = send_data(idiag%id_inline_gwd_intm_tw_a_chg, inline_gwd%intm_tw_a_chg, fv_time)
+        if (idiag%id_inline_gwd_intm_tw_b_chg>0) &
+            used = send_data(idiag%id_inline_gwd_intm_tw_b_chg, inline_gwd%intm_tw_b_chg, fv_time)
+        if (idiag%id_inline_mp_intm_te_a_chg>0) &
+            used = send_data(idiag%id_inline_mp_intm_te_a_chg, inline_mp%intm_te_a_chg, fv_time)
+        if (idiag%id_inline_mp_intm_te_b_chg>0) &
+            used = send_data(idiag%id_inline_mp_intm_te_b_chg, inline_mp%intm_te_b_chg, fv_time)
+        if (idiag%id_inline_mp_intm_tw_a_chg>0) &
+            used = send_data(idiag%id_inline_mp_intm_tw_a_chg, inline_mp%intm_tw_a_chg, fv_time)
+        if (idiag%id_inline_mp_intm_tw_b_chg>0) &
+            used = send_data(idiag%id_inline_mp_intm_tw_b_chg, inline_mp%intm_tw_b_chg, fv_time)
+
         call timing_off('INTERMEDIATE_PHYS')
+
     endif
 
 !-----------------------------------------------------------------------

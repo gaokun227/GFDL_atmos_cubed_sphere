@@ -1147,6 +1147,23 @@ contains
               call pe_halo (is, ie, js, je, isd, ied, jsd, jed, npz, ptop, pe, delp)
           endif
 
+          if (idiag%id_inline_pbl_fast_te_a_chg>0) &
+              used = send_data(idiag%id_inline_pbl_fast_te_a_chg, inline_pbl%fast_te_a_chg, fv_time)
+          if (idiag%id_inline_pbl_fast_te_b_chg>0) &
+              used = send_data(idiag%id_inline_pbl_fast_te_b_chg, inline_pbl%fast_te_b_chg, fv_time)
+          if (idiag%id_inline_pbl_fast_tw_a_chg>0) &
+              used = send_data(idiag%id_inline_pbl_fast_tw_a_chg, inline_pbl%fast_tw_a_chg, fv_time)
+          if (idiag%id_inline_pbl_fast_tw_b_chg>0) &
+              used = send_data(idiag%id_inline_pbl_fast_tw_b_chg, inline_pbl%fast_tw_b_chg, fv_time)
+          if (idiag%id_inline_gwd_fast_te_a_chg>0) &
+              used = send_data(idiag%id_inline_gwd_fast_te_a_chg, inline_gwd%fast_te_a_chg, fv_time)
+          if (idiag%id_inline_gwd_fast_te_b_chg>0) &
+              used = send_data(idiag%id_inline_gwd_fast_te_b_chg, inline_gwd%fast_te_b_chg, fv_time)
+          if (idiag%id_inline_gwd_fast_tw_a_chg>0) &
+              used = send_data(idiag%id_inline_gwd_fast_tw_a_chg, inline_gwd%fast_tw_a_chg, fv_time)
+          if (idiag%id_inline_gwd_fast_tw_b_chg>0) &
+              used = send_data(idiag%id_inline_gwd_fast_tw_b_chg, inline_gwd%fast_tw_b_chg, fv_time)
+
           call timing_off('FAST_PHYS')
 
       endif
