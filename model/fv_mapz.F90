@@ -30,6 +30,7 @@ module fv_mapz_mod
   use fv_arrays_mod,     only: radius ! scaled for small earth
   use tracer_manager_mod,only: get_tracer_index, adjust_mass
   use field_manager_mod, only: MODEL_ATMOS
+  use time_manager_mod,  only: time_type
   use fv_grid_utils_mod, only: g_sum, ptop_min, cubed_to_latlon
   use fv_fill_mod,       only: fillz
   use mpp_domains_mod,   only: mpp_update_domains, domain2d
@@ -41,7 +42,6 @@ module fv_mapz_mod
   use intermediate_phys_mod, only: intermediate_phys
   use gfdl_mp_mod,       only: c_liq, c_ice
   use diag_manager_mod,   only: send_data
-  use fv_diagnostics_mod, only: fv_time
 
   implicit none
   real, parameter:: consv_min = 0.001   ! below which no correction applies
@@ -69,7 +69,7 @@ contains
                       akap, cappa, kord_mt, kord_wz, kord_tr, kord_tm, remap_te, peln, te0_2d,        &
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, idiag, &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
-                      hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
+                      fv_time, hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
                       inline_mp, inline_pbl, inline_cnv, inline_gwd, c2l_ord, bd, &
                       fv_debug, w_limiter, do_am4_remap, do_fast_phys, do_intermediate_phys, consv_checker, &
@@ -127,6 +127,7 @@ contains
   type(domain2d), intent(INOUT) :: domain
   type(fv_grid_bounds_type), intent(IN) :: bd
   type(fv_diag_type), intent(IN) :: idiag
+  type(time_type), intent(IN) :: fv_time
 
 ! !INPUT/OUTPUT
   real, intent(inout):: pk(is:ie,js:je,km+1) ! pe to the kappa

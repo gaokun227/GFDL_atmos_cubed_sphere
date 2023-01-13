@@ -603,8 +603,7 @@ contains
                      kord_tracer, flagstruct%kord_tm, flagstruct%remap_te, peln, te_2d, &
                      ng, ua, va, omga, dp1, ws, fill, reproduce_sum, idiag, &
                      ptop, ak, bk, pfull, gridstruct, domain,   &
-                     flagstruct%do_sat_adj, hydrostatic, &
-                     hybrid_z,     &
+                     flagstruct%do_sat_adj, fv_time, hydrostatic, hybrid_z,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      flagstruct%do_inline_pbl, flagstruct%do_inline_cnv, flagstruct%do_inline_gwd, &
                      inline_mp, inline_pbl, inline_cnv, inline_gwd, flagstruct%c2l_ord, bd, &

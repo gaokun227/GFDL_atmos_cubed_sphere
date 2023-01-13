@@ -63,13 +63,13 @@ module fv_arrays_mod
      integer :: steps
 
 ! Integrated physics diagnostics
-     integer :: id_inline_mp_fast_te_a_chg, id_inline_mp_fast_te_b_chg, id_inline_mp_fast_tw_a_chg, id_inline_mp_fast_tw_b_chg,
-     integer :: id_inline_mp_intm_te_a_chg, id_inline_mp_intm_te_b_chg, id_inline_mp_intm_tw_a_chg, id_inline_mp_intm_tw_b_chg,
-     integer :: id_inline_pbl_fast_te_a_chg, id_inline_pbl_fast_te_b_chg, id_inline_pbl_fast_tw_a_chg, id_inline_pbl_fast_tw_b_chg,
-     integer :: id_inline_pbl_intm_te_a_chg, id_inline_pbl_intm_te_b_chg, id_inline_pbl_intm_tw_a_chg, id_inline_pbl_intm_tw_b_chg,
-     integer :: id_inline_cnv_intm_te_a_chg, id_inline_cnv_intm_te_b_chg, id_inline_cnv_intm_tw_a_chg, id_inline_cnv_intm_tw_b_chg,
-     integer :: id_inline_gwd_fast_te_a_chg, id_inline_gwd_fast_te_b_chg, id_inline_gwd_fast_tw_a_chg, id_inline_gwd_fast_tw_b_chg,
-     integer :: id_inline_gwd_intm_te_a_chg, id_inline_gwd_intm_te_b_chg, id_inline_gwd_intm_tw_a_chg, id_inline_gwd_intm_tw_b_chg,
+     integer :: id_inline_mp_fast_te_a_chg, id_inline_mp_fast_te_b_chg, id_inline_mp_fast_tw_a_chg, id_inline_mp_fast_tw_b_chg
+     integer :: id_inline_mp_intm_te_a_chg, id_inline_mp_intm_te_b_chg, id_inline_mp_intm_tw_a_chg, id_inline_mp_intm_tw_b_chg
+     integer :: id_inline_pbl_fast_te_a_chg, id_inline_pbl_fast_te_b_chg, id_inline_pbl_fast_tw_a_chg, id_inline_pbl_fast_tw_b_chg
+     integer :: id_inline_pbl_intm_te_a_chg, id_inline_pbl_intm_te_b_chg, id_inline_pbl_intm_tw_a_chg, id_inline_pbl_intm_tw_b_chg
+     integer :: id_inline_cnv_intm_te_a_chg, id_inline_cnv_intm_te_b_chg, id_inline_cnv_intm_tw_a_chg, id_inline_cnv_intm_tw_b_chg
+     integer :: id_inline_gwd_fast_te_a_chg, id_inline_gwd_fast_te_b_chg, id_inline_gwd_fast_tw_a_chg, id_inline_gwd_fast_tw_b_chg
+     integer :: id_inline_gwd_intm_te_a_chg, id_inline_gwd_intm_te_b_chg, id_inline_gwd_intm_tw_a_chg, id_inline_gwd_intm_tw_b_chg
 
   end type fv_diag_type
 
