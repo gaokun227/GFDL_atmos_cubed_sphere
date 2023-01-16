@@ -545,24 +545,24 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             ! total energy checker
             if (consv_checker) then
                 do i = is, ie
-                    if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                         (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
-                        print*, "PBL-FAST TE: ", &
-                            !(sum (te_beg (i, :)) + te_b_beg (i)), &
-                            !(sum (te_end (i, :)) + te_b_end (i)), &
-                            (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                            (sum (te_beg (i, :)) + te_b_beg (i))
-                    endif
+                    !if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !     (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
+                    !    print*, "PBL-FAST TE: ", &
+                    !        !(sum (te_beg (i, :)) + te_b_beg (i)), &
+                    !        !(sum (te_end (i, :)) + te_b_end (i)), &
+                    !        (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !        (sum (te_beg (i, :)) + te_b_beg (i))
+                    !endif
                     inline_pbl%fast_te_a_chg (i, j) = sum (te_end (i, :)) - sum (te_beg (i, :))
                     inline_pbl%fast_te_b_chg (i, j) = te_b_end (i) - te_b_beg (i)
-                    if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                         (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
-                        print*, "PBL-FAST TW: ", &
-                            !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
-                            !(sum (tw_end (i, :)) + tw_b_end (i)), &
-                            (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                            (sum (tw_beg (i, :)) + tw_b_beg (i))
-                    endif
+                    !if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !     (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
+                    !    print*, "PBL-FAST TW: ", &
+                    !        !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
+                    !        !(sum (tw_end (i, :)) + tw_b_end (i)), &
+                    !        (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !        (sum (tw_beg (i, :)) + tw_b_beg (i))
+                    !endif
                     inline_pbl%fast_tw_a_chg (i, j) = sum (tw_end (i, :)) - sum (tw_beg (i, :))
                     inline_pbl%fast_tw_b_chg (i, j) = tw_b_end (i) - tw_b_beg (i)
                     !print*, "PBL-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
@@ -940,24 +940,24 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             ! total energy checker
             if (consv_checker) then
                 do i = is, ie
-                    if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                         (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
-                        print*, "GWD-FAST TE: ", &
-                            !(sum (te_beg (i, :)) + te_b_beg (i)), &
-                            !(sum (te_end (i, :)) + te_b_end (i)), &
-                            (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                            (sum (te_beg (i, :)) + te_b_beg (i))
-                    endif
+                    !if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !     (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
+                    !    print*, "GWD-FAST TE: ", &
+                    !        !(sum (te_beg (i, :)) + te_b_beg (i)), &
+                    !        !(sum (te_end (i, :)) + te_b_end (i)), &
+                    !        (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !        (sum (te_beg (i, :)) + te_b_beg (i))
+                    !endif
                     inline_gwd%fast_te_a_chg (i, j) = sum (te_end (i, :)) - sum (te_beg (i, :))
                     inline_gwd%fast_te_b_chg (i, j) = te_b_end (i) - te_b_beg (i)
-                    if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                         (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
-                        print*, "GWD-FAST TW: ", &
-                            !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
-                            !(sum (tw_end (i, :)) + tw_b_end (i)), &
-                            (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                            (sum (tw_beg (i, :)) + tw_b_beg (i))
-                    endif
+                    !if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !     (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
+                    !    print*, "GWD-FAST TW: ", &
+                    !        !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
+                    !        !(sum (tw_end (i, :)) + tw_b_end (i)), &
+                    !        (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !        (sum (tw_beg (i, :)) + tw_b_beg (i))
+                    !endif
                     inline_gwd%fast_tw_a_chg (i, j) = sum (tw_end (i, :)) - sum (tw_beg (i, :))
                     inline_gwd%fast_tw_b_chg (i, j) = tw_b_end (i) - tw_b_beg (i)
                     !print*, "GWD-FAST LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0

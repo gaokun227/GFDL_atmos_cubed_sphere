@@ -350,24 +350,24 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! total energy checker
             if (consv_checker) then
                 do i = is, ie
-                    if (abs (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
-                         (sum (te_beg (i, kmp:km)) + te_b_beg (i)) .gt. te_err) then
-                        print*, "FAST_SAT_ADJ TE: ", &
-                            !(sum (te_beg (i, kmp:km)) + te_b_beg (i)), &
-                            !(sum (te_end (i, kmp:km)) + te_b_end (i)), &
-                            (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
-                            (sum (te_beg (i, kmp:km)) + te_b_beg (i))
-                    endif
+                    !if (abs (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
+                    !     (sum (te_beg (i, kmp:km)) + te_b_beg (i)) .gt. te_err) then
+                    !    print*, "FAST_SAT_ADJ TE: ", &
+                    !        !(sum (te_beg (i, kmp:km)) + te_b_beg (i)), &
+                    !        !(sum (te_end (i, kmp:km)) + te_b_end (i)), &
+                    !        (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
+                    !        (sum (te_beg (i, kmp:km)) + te_b_beg (i))
+                    !endif
                     inline_mp%fast_te_a_chg (i, j) = sum (te_end (i, :)) - sum (te_beg (i, :))
                     inline_mp%fast_te_b_chg (i, j) = te_b_end (i) - te_b_beg (i)
-                    if (abs (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
-                         (sum (tw_beg (i, kmp:km)) + tw_b_beg (i)) .gt. tw_err) then
-                        print*, "FAST_SAT_ADJ TW: ", &
-                            !(sum (tw_beg (i, kmp:km)) + tw_b_beg (i)), &
-                            !(sum (tw_end (i, kmp:km)) + tw_b_end (i)), &
-                            (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
-                            (sum (tw_beg (i, kmp:km)) + tw_b_beg (i))
-                    endif
+                    !if (abs (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
+                    !     (sum (tw_beg (i, kmp:km)) + tw_b_beg (i)) .gt. tw_err) then
+                    !    print*, "FAST_SAT_ADJ TW: ", &
+                    !        !(sum (tw_beg (i, kmp:km)) + tw_b_beg (i)), &
+                    !        !(sum (tw_end (i, kmp:km)) + tw_b_end (i)), &
+                    !        (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
+                    !        (sum (tw_beg (i, kmp:km)) + tw_b_beg (i))
+                    !endif
                     inline_mp%fast_tw_a_chg (i, j) = sum (tw_end (i, :)) - sum (tw_beg (i, :))
                     inline_mp%fast_tw_b_chg (i, j) = tw_b_end (i) - tw_b_beg (i)
                     !print*, "FAST_SAT_ADJ LOSS (%) : ", te_loss (i) / (sum (te_beg (i, kmp:km)) + te_b_beg (i)) * 100.0
@@ -748,24 +748,24 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! total energy checker
             if (consv_checker) then
                 do i = is, ie
-                    if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                         (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
-                        print*, "PBL-INTM TE: ", &
-                            !(sum (te_beg (i, :)) + te_b_beg (i)), &
-                            !(sum (te_end (i, :)) + te_b_end (i)), &
-                            (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                            (sum (te_beg (i, :)) + te_b_beg (i))
-                    endif
+                    !if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !     (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
+                    !    print*, "PBL-INTM TE: ", &
+                    !        !(sum (te_beg (i, :)) + te_b_beg (i)), &
+                    !        !(sum (te_end (i, :)) + te_b_end (i)), &
+                    !        (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !        (sum (te_beg (i, :)) + te_b_beg (i))
+                    !endif
                     inline_pbl%intm_te_a_chg (i, j) = sum (te_end (i, :)) - sum (te_beg (i, :))
                     inline_pbl%intm_te_b_chg (i, j) = te_b_end (i) - te_b_beg (i)
-                    if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                         (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
-                        print*, "PBL-INTM TW: ", &
-                            !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
-                            !(sum (tw_end (i, :)) + tw_b_end (i)), &
-                            (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                            (sum (tw_beg (i, :)) + tw_b_beg (i))
-                    endif
+                    !if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !     (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
+                    !    print*, "PBL-INTM TW: ", &
+                    !        !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
+                    !        !(sum (tw_end (i, :)) + tw_b_end (i)), &
+                    !        (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !        (sum (tw_beg (i, :)) + tw_b_beg (i))
+                    !endif
                     inline_pbl%intm_tw_a_chg (i, j) = sum (tw_end (i, :)) - sum (tw_beg (i, :))
                     inline_pbl%intm_tw_b_chg (i, j) = tw_b_end (i) - tw_b_beg (i)
                     !print*, "PBL-INTM LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
@@ -1301,24 +1301,24 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! total energy checker
             if (consv_checker) then
                 do i = is, ie
-                    if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                         (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
-                        print*, "CNV-INTM TE: ", &
-                            !(sum (te_beg (i, :)) + te_b_beg (i)), &
-                            !(sum (te_end (i, :)) + te_b_end (i)), &
-                            (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                            (sum (te_beg (i, :)) + te_b_beg (i))
-                    endif
+                    !if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !     (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
+                    !    print*, "CNV-INTM TE: ", &
+                    !        !(sum (te_beg (i, :)) + te_b_beg (i)), &
+                    !        !(sum (te_end (i, :)) + te_b_end (i)), &
+                    !        (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !        (sum (te_beg (i, :)) + te_b_beg (i))
+                    !endif
                     inline_cnv%intm_te_a_chg (i, j) = sum (te_end (i, :)) - sum (te_beg (i, :))
                     inline_cnv%intm_te_b_chg (i, j) = te_b_end (i) - te_b_beg (i)
-                    if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                         (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
-                        print*, "CNV-INTM TW: ", &
-                            !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
-                            !(sum (tw_end (i, :)) + tw_b_end (i)), &
-                            (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                            (sum (tw_beg (i, :)) + tw_b_beg (i))
-                    endif
+                    !if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !     (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
+                    !    print*, "CNV-INTM TW: ", &
+                    !        !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
+                    !        !(sum (tw_end (i, :)) + tw_b_end (i)), &
+                    !        (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !        (sum (tw_beg (i, :)) + tw_b_beg (i))
+                    !endif
                     inline_cnv%intm_tw_a_chg (i, j) = sum (tw_end (i, :)) - sum (tw_beg (i, :))
                     inline_cnv%intm_tw_b_chg (i, j) = tw_b_end (i) - tw_b_beg (i)
                     !print*, "CNV-INTM LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
@@ -1703,24 +1703,24 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! total energy checker
             if (consv_checker) then
                 do i = is, ie
-                    if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                         (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
-                        print*, "GWD-INTM TE: ", &
-                            !(sum (te_beg (i, :)) + te_b_beg (i)), &
-                            !(sum (te_end (i, :)) + te_b_end (i)), &
-                            (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
-                            (sum (te_beg (i, :)) + te_b_beg (i))
-                    endif
+                    !if (abs (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !     (sum (te_beg (i, :)) + te_b_beg (i)) .gt. te_err) then
+                    !    print*, "GWD-INTM TE: ", &
+                    !        !(sum (te_beg (i, :)) + te_b_beg (i)), &
+                    !        !(sum (te_end (i, :)) + te_b_end (i)), &
+                    !        (sum (te_end (i, :)) + te_b_end (i) - sum (te_beg (i, :)) - te_b_beg (i)) / &
+                    !        (sum (te_beg (i, :)) + te_b_beg (i))
+                    !endif
                     inline_gwd%intm_te_a_chg (i, j) = sum (te_end (i, :)) - sum (te_beg (i, :))
                     inline_gwd%intm_te_b_chg (i, j) = te_b_end (i) - te_b_beg (i)
-                    if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                         (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
-                        print*, "GWD-INTM TW: ", &
-                            !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
-                            !(sum (tw_end (i, :)) + tw_b_end (i)), &
-                            (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
-                            (sum (tw_beg (i, :)) + tw_b_beg (i))
-                    endif
+                    !if (abs (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !     (sum (tw_beg (i, :)) + tw_b_beg (i)) .gt. tw_err) then
+                    !    print*, "GWD-INTM TW: ", &
+                    !        !(sum (tw_beg (i, :)) + tw_b_beg (i)), &
+                    !        !(sum (tw_end (i, :)) + tw_b_end (i)), &
+                    !        (sum (tw_end (i, :)) + tw_b_end (i) - sum (tw_beg (i, :)) - tw_b_beg (i)) / &
+                    !        (sum (tw_beg (i, :)) + tw_b_beg (i))
+                    !endif
                     inline_gwd%intm_tw_a_chg (i, j) = sum (tw_end (i, :)) - sum (tw_beg (i, :))
                     inline_gwd%intm_tw_b_chg (i, j) = tw_b_end (i) - tw_b_beg (i)
                     !print*, "GWD-INTM LOSS (%) : ", te_loss (i) / (sum (te_beg (i, :)) + te_b_beg (i)) * 100.0
@@ -2104,24 +2104,24 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             ! total energy checker
             if (consv_checker) then
                 do i = is, ie
-                    if (abs (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
-                         (sum (te_beg (i, kmp:km)) + te_b_beg (i)) .gt. te_err) then
-                        print*, "MP-INTM TE: ", &
-                            !(sum (te_beg (i, kmp:km)) + te_b_beg (i)), &
-                            !(sum (te_end (i, kmp:km)) + te_b_end (i)), &
-                            (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
-                            (sum (te_beg (i, kmp:km)) + te_b_beg (i))
-                    endif
+                    !if (abs (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
+                    !     (sum (te_beg (i, kmp:km)) + te_b_beg (i)) .gt. te_err) then
+                    !    print*, "MP-INTM TE: ", &
+                    !        !(sum (te_beg (i, kmp:km)) + te_b_beg (i)), &
+                    !        !(sum (te_end (i, kmp:km)) + te_b_end (i)), &
+                    !        (sum (te_end (i, kmp:km)) + te_b_end (i) - sum (te_beg (i, kmp:km)) - te_b_beg (i)) / &
+                    !        (sum (te_beg (i, kmp:km)) + te_b_beg (i))
+                    !endif
                     inline_mp%intm_te_a_chg (i, j) = sum (te_end (i, :)) - sum (te_beg (i, :))
                     inline_mp%intm_te_b_chg (i, j) = te_b_end (i) - te_b_beg (i)
-                    if (abs (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
-                         (sum (tw_beg (i, kmp:km)) + tw_b_beg (i)) .gt. tw_err) then
-                        print*, "MP-INTM TW: ", &
-                            !(sum (tw_beg (i, kmp:km)) + tw_b_beg (i)), &
-                            !(sum (tw_end (i, kmp:km)) + tw_b_end (i)), &
-                            (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
-                            (sum (tw_beg (i, kmp:km)) + tw_b_beg (i))
-                    endif
+                    !if (abs (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
+                    !     (sum (tw_beg (i, kmp:km)) + tw_b_beg (i)) .gt. tw_err) then
+                    !    print*, "MP-INTM TW: ", &
+                    !        !(sum (tw_beg (i, kmp:km)) + tw_b_beg (i)), &
+                    !        !(sum (tw_end (i, kmp:km)) + tw_b_end (i)), &
+                    !        (sum (tw_end (i, kmp:km)) + tw_b_end (i) - sum (tw_beg (i, kmp:km)) - tw_b_beg (i)) / &
+                    !        (sum (tw_beg (i, kmp:km)) + tw_b_beg (i))
+                    !endif
                     inline_mp%intm_tw_a_chg (i, j) = sum (tw_end (i, :)) - sum (tw_beg (i, :))
                     inline_mp%intm_tw_b_chg (i, j) = tw_b_end (i) - tw_b_beg (i)
                     !print*, "MP-INTM LOSS (%) : ", te_loss (i) / (sum (te_beg (i, kmp:km)) + te_b_beg (i)) * 100.0
