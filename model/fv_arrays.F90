@@ -1146,6 +1146,12 @@ module fv_arrays_mod
     integer, _ALLOCATABLE :: kpbl(:,:)     _NULL
     real, _ALLOCATABLE :: dtsfc(:,:)     _NULL
     real, _ALLOCATABLE :: dqsfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dqvsfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dqlsfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dqisfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dqrsfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dqssfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dqgsfc(:,:)     _NULL
     real, _ALLOCATABLE :: dusfc(:,:)     _NULL
     real, _ALLOCATABLE :: dvsfc(:,:)     _NULL
     real, _ALLOCATABLE :: dksfc(:,:)     _NULL
@@ -1711,6 +1717,12 @@ contains
        allocate ( Atm%inline_pbl%kpbl(is:ie,js:je) )
        allocate ( Atm%inline_pbl%dtsfc(is:ie,js:je) )
        allocate ( Atm%inline_pbl%dqsfc(is:ie,js:je) )
+       allocate ( Atm%inline_pbl%dqvsfc(is:ie,js:je) )
+       allocate ( Atm%inline_pbl%dqlsfc(is:ie,js:je) )
+       allocate ( Atm%inline_pbl%dqisfc(is:ie,js:je) )
+       allocate ( Atm%inline_pbl%dqrsfc(is:ie,js:je) )
+       allocate ( Atm%inline_pbl%dqssfc(is:ie,js:je) )
+       allocate ( Atm%inline_pbl%dqgsfc(is:ie,js:je) )
        allocate ( Atm%inline_pbl%dusfc(is:ie,js:je) )
        allocate ( Atm%inline_pbl%dvsfc(is:ie,js:je) )
        allocate ( Atm%inline_pbl%dksfc(is:ie,js:je) )
@@ -1911,6 +1923,12 @@ contains
               Atm%inline_pbl%kpbl(i,j) = 1
               Atm%inline_pbl%dtsfc(i,j) = real_big
               Atm%inline_pbl%dqsfc(i,j) = real_big
+              Atm%inline_pbl%dqvsfc(i,j) = real_big
+              Atm%inline_pbl%dqlsfc(i,j) = real_big
+              Atm%inline_pbl%dqisfc(i,j) = real_big
+              Atm%inline_pbl%dqrsfc(i,j) = real_big
+              Atm%inline_pbl%dqssfc(i,j) = real_big
+              Atm%inline_pbl%dqgsfc(i,j) = real_big
               Atm%inline_pbl%dusfc(i,j) = real_big
               Atm%inline_pbl%dvsfc(i,j) = real_big
               Atm%inline_pbl%dksfc(i,j) = real_big
@@ -2293,6 +2311,12 @@ contains
        deallocate ( Atm%inline_pbl%kpbl )
        deallocate ( Atm%inline_pbl%dtsfc )
        deallocate ( Atm%inline_pbl%dqsfc )
+       deallocate ( Atm%inline_pbl%dqvsfc )
+       deallocate ( Atm%inline_pbl%dqlsfc )
+       deallocate ( Atm%inline_pbl%dqisfc )
+       deallocate ( Atm%inline_pbl%dqrsfc )
+       deallocate ( Atm%inline_pbl%dqssfc )
+       deallocate ( Atm%inline_pbl%dqgsfc )
        deallocate ( Atm%inline_pbl%dusfc )
        deallocate ( Atm%inline_pbl%dvsfc )
        deallocate ( Atm%inline_pbl%dksfc )
