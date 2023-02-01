@@ -114,7 +114,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real :: rrg
 
-    real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c8, c_moist
+    real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c_moist
 
     real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm, adj_vmr
 
@@ -270,7 +270,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, adj_vmr, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
-!$OMP                                    stress, wind, kinver, q_sol, c8, c_moist, peln, &
+!$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, &
 !$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
 !$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss, &
@@ -381,11 +381,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
                 radh (is:ie, k) = inline_pbl%radh (is:ie, j, kr)
-                c8 = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
-                    (q (is:ie, j, kr, sphum) + q_liq + q_sol) * c_liq
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) - c8 * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
                 inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) - (hlv + (cv_vap - c_liq) * (ta (is:ie, k) - tice)) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dtsfc (is:ie) = dtsfc (is:ie) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dqvsfc (is:ie) = dqvsfc (is:ie) - q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
@@ -488,8 +486,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 #ifdef USE_COND
                 q_con (is:ie, j, kr) = q_liq + q_sol
 #endif
-                c8 = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
-                    (q (is:ie, j, kr, sphum) + q_liq + q_sol) * c_liq
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
 #ifdef MOIST_CAPPA
@@ -500,7 +496,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
-                inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) + c8 * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
                 inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) + (hlv + (cv_vap - c_liq) * (ta (is:ie, k) - tice)) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dtsfc (is:ie) = dtsfc (is:ie) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dqvsfc (is:ie) = dqvsfc (is:ie) + q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
