@@ -1282,9 +1282,17 @@ CONTAINS
     do k=2, km
        do i=is, ie
 #ifdef MOIST_CAPPA
+#ifdef LINEAR_SOUND
+          aa(i,k) = t1g*0.5*(gm2(i,k-1)+gm2(i,k))/(dz2(i,k-1)+dz2(i,k)) * (pem(i,k))
+#else
           aa(i,k) = t1g*0.5*(gm2(i,k-1)+gm2(i,k))/(dz2(i,k-1)+dz2(i,k)) * (pem(i,k)+pp(i,k))
+#endif
+#else
+#ifdef LINEAR_SOUND
+          aa(i,k) = t1g/(dz2(i,k-1)+dz2(i,k)) * (pem(i,k))
 #else
           aa(i,k) = t1g/(dz2(i,k-1)+dz2(i,k)) * (pem(i,k)+pp(i,k))
+#endif
 #endif
        enddo
     enddo
@@ -1301,9 +1309,17 @@ CONTAINS
     enddo
     do i=is, ie
 #ifdef MOIST_CAPPA
-           p1(i) = t1g*gm2(i,km)/dz2(i,km)*(pem(i,km+1)+pp(i,km+1))
+#ifdef LINEAR_SOUND
+       p1(i) = t1g*gm2(i,km)/dz2(i,km)*(pem(i,km+1))
 #else
-           p1(i) = t1g/dz2(i,km)*(pem(i,km+1)+pp(i,km+1))
+       p1(i) = t1g*gm2(i,km)/dz2(i,km)*(pem(i,km+1)+pp(i,km+1))
+#endif
+#else
+#ifdef LINEAR_SOUND
+       p1(i) = t1g/dz2(i,km)*(pem(i,km+1))
+#else
+       p1(i) = t1g/dz2(i,km)*(pem(i,km+1)+pp(i,km+1))
+#endif
 #endif
        gam(i,km) = aa(i,km) / bet(i)
           bet(i) =  dm2(i,km) - (aa(i,km)+p1(i) + aa(i,km)*gam(i,km))
@@ -1326,14 +1342,16 @@ CONTAINS
     endif
 
 !!! DEBUG CODE
-    do i=is,ie
-       if (debug .and. ANY(w2(i,:) < -50)) then
-          print*, ' EXTREME DOWNDRAFT (SIM1_SOLVER)', i, j, mpp_pe(), ws(i)
-          do k=1,km
-             write(*,*) k, w2(i,k), w1(i,k), pe(i,k), dm2(i,k), dz2(i,k), pem(i,k)
-          enddo
-       endif
-    enddo
+    if (debug) then
+       do i=is,ie
+          if (ANY(w2(i,:) < -50)) then
+             print*, ' EXTREME DOWNDRAFT (SIM1_SOLVER)', i, j, mpp_pe(), ws(i)
+             do k=1,km
+                write(*,*) k, w2(i,k), w1(i,k), pe(i,k), dm2(i,k), dz2(i,k), pem(i,k)
+             enddo
+          endif
+       enddo
+    endif
 !!! END DEBUG CODE
 
     do i=is, ie
@@ -1440,8 +1458,12 @@ CONTAINS
 
     do k=1, km+1
        do i=is, ie
+#ifdef LINEAR_SOUND
+          pe2(i,k) = pem(i,k)
+#else
 ! pe2 is Full p
           pe2(i,k) = pem(i,k) + pp(i,k)
+#endif
        enddo
     enddo
 
@@ -1499,14 +1521,16 @@ CONTAINS
     endif
 
 !!! DEBUG CODE
-    do i=is,ie
-       if (debug .and. ANY(w2(i,:) < -50)) then
-          print*, ' EXTREME DOWNDRAFT (SIM_SOLVER)', i, j, mpp_pe(), ws(i)
-          do k=1,km
-             write(*,*) k, w2(i,k), w1(i,k), pe2(i,k), dm2(i,k), dz2(i,k), pem(i,k)
-          enddo
-       endif
-    enddo
+    if (debug) then
+       do i=is,ie
+          if (ANY(w2(i,:) < -50)) then
+             print*, ' EXTREME DOWNDRAFT (SIM_SOLVER)', i, j, mpp_pe(), ws(i)
+             do k=1,km
+                write(*,*) k, w2(i,k), w1(i,k), pe2(i,k), dm2(i,k), dz2(i,k), pem(i,k)
+             enddo
+          endif
+       enddo
+    endif
 !!! END DEBUG CODE
 
     do i=is, ie
