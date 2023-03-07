@@ -1906,20 +1906,30 @@ contains
           allocate (o3mr_gfs(is:ie,js:je,levp_gfs))
           allocate (ps_gfs(is:ie,js:je))
           allocate (zh_gfs(is:ie,js:je,levp_gfs+1))
-
-          id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'o3mr', o3mr_gfs, &
-                                           mandatory=.false.,domain=Atm%domain)
-          id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'ps', ps_gfs, domain=Atm%domain)
-          id_res = register_restart_field (GFS_restart, fn_gfs_ics, 'ZH', zh_gfs, domain=Atm%domain)
-          call restore_state (GFS_restart,trim(inputdir))
-          call free_restart_type(GFS_restart)
-
-
+          
+          if( open_file(GFS_restart, fn_gfs_ics, "read", Atm%domain_for_read, is_restart=.true., dont_add_res_to_filename=.true.) ) then
+            call register_axis(GFS_restart, "lat", "y")
+            call register_axis(GFS_restart, "lon", "x")
+            call register_axis(GFS_restart, "lev", size(o3mr_gfs,3))
+            call register_axis(GFS_restart, "levp", size(zh_gfs,3))
+            call register_restart_field(GFS_restart, 'o3mr', o3mr_gfs, dim_names_3d3, is_optional=.true.)
+            call register_restart_field(GFS_restart, 'ps', ps_gfs, dim_names_2d)
+            call register_restart_field(GFS_restart, 'zh', zh_gfs, dim_names_3d4)
+            call read_restart(GFS_restart)
+            call close_file(GFS_restart)
+          endif
+          
           ! Get GFS ak, bk for o3mr vertical interpolation
           allocate (wk2(levp_gfs+1,2))
           allocate (ak_gfs(levp_gfs+1))
           allocate (bk_gfs(levp_gfs+1))
-          call read_data(trim(inputdir)//'/'//trim(fn_gfs_ctl),'vcoord',wk2, no_domain=.TRUE.)
+          allocate(pes(mpp_npes()))
+          call mpp_get_current_pelist(pes)
+          if( open_file(Gfs_ctl, fn_gfs_ctl, "read", pelist=pes) ) then
+            call read_data(Gfs_ctl,'vcoord',wk2)
+            call close_file(Gfs_ctl)
+          endif
+          deallocate(pes)
           ak_gfs(1:levp_gfs+1) = wk2(1:levp_gfs+1,1)
           bk_gfs(1:levp_gfs+1) = wk2(1:levp_gfs+1,2)
           deallocate (wk2)
