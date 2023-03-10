@@ -1156,6 +1156,7 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: dqgsfc(:,:)     _NULL
     real, _ALLOCATABLE :: dusfc(:,:)     _NULL
     real, _ALLOCATABLE :: dvsfc(:,:)     _NULL
+    real, _ALLOCATABLE :: dksfc(:,:)     _NULL
     real, _ALLOCATABLE :: fast_te_a_chg(:,:)     _NULL
     real, _ALLOCATABLE :: fast_tw_a_chg(:,:)     _NULL
     real, _ALLOCATABLE :: fast_te_b_chg(:,:)     _NULL
@@ -1726,6 +1727,7 @@ contains
        allocate ( Atm%inline_pbl%dqgsfc(is:ie,js:je) )
        allocate ( Atm%inline_pbl%dusfc(is:ie,js:je) )
        allocate ( Atm%inline_pbl%dvsfc(is:ie,js:je) )
+       allocate ( Atm%inline_pbl%dksfc(is:ie,js:je) )
        if (Atm%flagstruct%consv_checker) then
           allocate ( Atm%inline_pbl%fast_te_a_chg(is:ie,js:je) )
           allocate ( Atm%inline_pbl%fast_tw_a_chg(is:ie,js:je) )
@@ -1931,6 +1933,7 @@ contains
               Atm%inline_pbl%dqgsfc(i,j) = real_big
               Atm%inline_pbl%dusfc(i,j) = real_big
               Atm%inline_pbl%dvsfc(i,j) = real_big
+              Atm%inline_pbl%dksfc(i,j) = real_big
            enddo
         enddo
         if (Atm%flagstruct%consv_checker) then
@@ -2318,6 +2321,7 @@ contains
        deallocate ( Atm%inline_pbl%dqgsfc )
        deallocate ( Atm%inline_pbl%dusfc )
        deallocate ( Atm%inline_pbl%dvsfc )
+       deallocate ( Atm%inline_pbl%dksfc )
        if (Atm%flagstruct%consv_checker) then
           deallocate ( Atm%inline_pbl%fast_te_a_chg )
           deallocate ( Atm%inline_pbl%fast_tw_a_chg )

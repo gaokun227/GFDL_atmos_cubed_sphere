@@ -98,6 +98,7 @@ module sa_tke_edmf_mod
 
     logical :: cap_k0_land = .true.  ! flag for applying limter on background diff in inversion
     logical :: do_dk_hb19  = .false. ! flag for using hb19 formula for background diff
+    logical :: dspheat     = .false. ! flag for tke dissipative heating
 
     logical :: redrag              = .false. ! flag for reduced drag coeff. over sea
     logical :: do_z0_moon          = .false. ! flag for using z0 scheme in Moon et al. 2007
@@ -134,7 +135,7 @@ module sa_tke_edmf_mod
     namelist / sa_tke_edmf_nml / &
         xkzm_mo, xkzm_ho, xkzm_ml, xkzm_hl, xkzm_mi, xkzm_hi, xkzm_s, &
         xkzm_lim, xkzm_fac, xkzinv, xkgdx, rlmn, rlmx, &
-        cap_k0_land, do_dk_hb19, redrag, do_z0_moon, &
+        cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc
 
@@ -1595,6 +1596,21 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         enddo
     endif
     !endif
+    
+    ! -----------------------------------------------------------------------
+    ! add tke dissipative heating to temperature tendency
+    ! -----------------------------------------------------------------------
+    
+    if (dspheat) then
+        do k = 1, km1
+            do i = 1, im
+                ! tem = min (diss (i, k), dspmax)
+                ! ttend = tem / cp_air
+                ttend = diss (i, k) / cp_air
+                t1 (i, k) = t1 (i, k) + dspfac * ttend * dt2
+            enddo
+        enddo
+    endif
     
     ! -----------------------------------------------------------------------
     ! compute tridiagonal matrix elements for momentum

@@ -129,8 +129,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real :: rrg, tem
 
-    real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c_moist
-    real, dimension (is:ie) :: k1, k2, ql1, ql2, qi1, qi2, qr1, qr2, qs1, qs2, qg1, qg2
+    real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c_moist, k1, k2
 
     real, dimension (is:ie, km) :: q2, q3, qliq, qsol, cvm, adj_vmr
 
@@ -142,7 +141,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real, allocatable, dimension (:) :: rn, rb, u10m, v10m, sigmaf, stress, wind, tmp, wz, fscav
 
-    real, allocatable, dimension (:) :: dtsfc, dqsfc
+    real, allocatable, dimension (:) :: dtsfc, dqvsfc, dqlsfc, dqisfc, dqrsfc, dqssfc, dqgsfc
 
     real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql, qr, ta, uu, vv, ww, radh
 
@@ -422,7 +421,12 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         allocate (vegtype (is:ie))
 
         allocate (dtsfc (is:ie))
-        allocate (dqsfc (is:ie))
+        allocate (dqvsfc (is:ie))
+        allocate (dqlsfc (is:ie))
+        allocate (dqisfc (is:ie))
+        allocate (dqrsfc (is:ie))
+        allocate (dqssfc (is:ie))
+        allocate (dqgsfc (is:ie))
 
         allocate (tz (1:km))
         allocate (wz (1:km))
@@ -472,9 +476,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, &
 !$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
-!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss, k1, k2, &
-!$OMP                                    ql1, ql2, qi1, qi2, qr1, qr2, qs1, qs2, qg1, qg2, &
-!$OMP                                    dtsfc, dqsfc)
+!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss, &
+!$OMP                                    dtsfc, dqvsfc, dqlsfc, dqisfc, dqrsfc, dqssfc, dqgsfc)
 
         do j = js, je
  
@@ -535,8 +538,18 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             zi (is:ie, 1) = 0.0
             pi (is:ie, 1) = pe (is:ie, km+1)
             pik (is:ie, 1) = exp (kappa * log (pi (is:ie, 1) * 1.e-5))
+            inline_pbl%dtsfc (is:ie, j) = 0.0
+            inline_pbl%dqsfc (is:ie, j) = 0.0
             dtsfc (is:ie) = 0.0
-            dqsfc (is:ie) = 0.0
+            dqvsfc (is:ie) = 0.0
+            dqlsfc (is:ie) = 0.0
+            dqisfc (is:ie) = 0.0
+            dqrsfc (is:ie) = 0.0
+            dqssfc (is:ie) = 0.0
+            dqgsfc (is:ie) = 0.0
+            inline_pbl%dusfc (is:ie, j) = 0.0
+            inline_pbl%dvsfc (is:ie, j) = 0.0
+            inline_pbl%dksfc (is:ie, j) = 0.0
             do k = 1, km
                 kr = km - k + 1
                 dp (is:ie, k) = delp (is:ie, j, kr)
@@ -573,8 +586,18 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 radh (is:ie, k) = inline_pbl%radh (is:ie, j, kr)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
+                inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) - cp_air * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) - (hlv + (cv_vap - c_liq) * (ta (is:ie, k) - tice)) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dtsfc (is:ie) = dtsfc (is:ie) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
-                dqsfc (is:ie) = dqsfc (is:ie) - q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqvsfc (is:ie) = dqvsfc (is:ie) - q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqlsfc (is:ie) = dqlsfc (is:ie) - q (is:ie, j, kr, liq_wat) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqisfc (is:ie) = dqisfc (is:ie) - q (is:ie, j, kr, ice_wat) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqrsfc (is:ie) = dqrsfc (is:ie) - q (is:ie, j, kr, rainwat) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqssfc (is:ie) = dqssfc (is:ie) - q (is:ie, j, kr, snowwat) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqgsfc (is:ie) = dqgsfc (is:ie) - q (is:ie, j, kr, graupel) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dusfc (is:ie, j) = inline_pbl%dusfc (is:ie, j) - ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dvsfc (is:ie, j) = inline_pbl%dvsfc (is:ie, j) - va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dksfc (is:ie, j) = inline_pbl%dksfc (is:ie, j) - 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             do i = is, ie
@@ -632,29 +655,13 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 inline_pbl%tsfc (is:ie, j), inline_pbl%hflx (is:ie, j), &
                 inline_pbl%evap (is:ie, j), stress, wind, kinver, &
                 pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j), &
-                inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
-                inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
+                inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j))
+                !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
+                !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
 
             ! update u, v, T, q, and delp, vertical index flip over
-
-            ql1 = 0.
-            qi1 = 0.
-            qr1 = 0.
-            qs1 = 0.
-            qg1 = 0.
-            ql2 = 0.
-            qi2 = 0.
-            qr2 = 0.
-            qs2 = 0.
-            qg2 = 0.
             do k = 1, km
                 kr = km - k + 1
-                ql1 = ql1 + q (is:ie, j, kr, liq_wat) * delp (is:ie, j, kr)
-                qi1 = qi1 + q (is:ie, j, kr, ice_wat) * delp (is:ie, j, kr)
-                qr1 = qr1 + q (is:ie, j, kr, rainwat) * delp (is:ie, j, kr)
-                qs1 = qs1 + q (is:ie, j, kr, snowwat) * delp (is:ie, j, kr)
-                qg1 = qg1 + q (is:ie, j, kr, graupel) * delp (is:ie, j, kr)
                 q (is:ie, j, kr, nwat+1:nq) = qa (is:ie, k, nwat+1:nq)
                 dqv = qa (is:ie, k, sphum) - q (is:ie, j, kr, sphum)
                 dql = qa (is:ie, k, liq_wat) - q (is:ie, j, kr, liq_wat)
@@ -677,27 +684,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 q (is:ie, j, kr, snowwat) = qa (is:ie, k, snowwat) / ps_dt
                 q (is:ie, j, kr, graupel) = qa (is:ie, k, graupel) / ps_dt
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
-                ql2 = ql2 + q (is:ie, j, kr, liq_wat) * delp (is:ie, j, kr)
-                qi2 = qi2 + q (is:ie, j, kr, ice_wat) * delp (is:ie, j, kr)
-                qr2 = qr2 + q (is:ie, j, kr, rainwat) * delp (is:ie, j, kr)
-                qs2 = qs2 + q (is:ie, j, kr, snowwat) * delp (is:ie, j, kr)
-                qg2 = qg2 + q (is:ie, j, kr, graupel) * delp (is:ie, j, kr)
-            enddo
-
-            do k = 1, km
-                kr = km - k + 1
-                do i = is, ie
-                    if (ql2 (i) .gt. 1.e-15) q (i, j, kr, liq_wat) = q (i, j, kr, liq_wat) * ql1 (i) / ql2 (i)
-                    if (qi2 (i) .gt. 1.e-15) q (i, j, kr, ice_wat) = q (i, j, kr, ice_wat) * qi1 (i) / qi2 (i)
-                    if (qr2 (i) .gt. 1.e-15) q (i, j, kr, rainwat) = q (i, j, kr, rainwat) * qr1 (i) / qr2 (i)
-                    if (qs2 (i) .gt. 1.e-15) q (i, j, kr, snowwat) = q (i, j, kr, snowwat) * qs1 (i) / qs2 (i)
-                    if (qg2 (i) .gt. 1.e-15) q (i, j, kr, graupel) = q (i, j, kr, graupel) * qg1 (i) / qg2 (i)
-                enddo
-            enddo
-
-            do k = 1, km
-                kr = km - k + 1
-                k1 = 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr)
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
 #ifdef USE_COND
@@ -713,11 +699,18 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     pt (is:ie, j, kr)) * cp_air / c_moist
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
+                inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) + cp_air * ta (is:ie, k) * delp (is:ie, j, kr) / ps_dt / grav / abs (mdt)
+                inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) + (hlv + (cv_vap - c_liq) * (ta (is:ie, k) - tice)) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dtsfc (is:ie) = dtsfc (is:ie) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
-                dqsfc (is:ie) = dqsfc (is:ie) + q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
-                k2 = 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr)
-                pt (is:ie, j, kr) = pt (is:ie, j, kr) + (k1 - k2) / c_moist / delp (is:ie, j, kr) * &
-                    ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))
+                dqvsfc (is:ie) = dqvsfc (is:ie) + q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqlsfc (is:ie) = dqlsfc (is:ie) + q (is:ie, j, kr, liq_wat) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqisfc (is:ie) = dqisfc (is:ie) + q (is:ie, j, kr, ice_wat) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqrsfc (is:ie) = dqrsfc (is:ie) + q (is:ie, j, kr, rainwat) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqssfc (is:ie) = dqssfc (is:ie) + q (is:ie, j, kr, snowwat) * delp (is:ie, j, kr) / grav / abs (mdt)
+                dqgsfc (is:ie) = dqgsfc (is:ie) + q (is:ie, j, kr, graupel) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dusfc (is:ie, j) = inline_pbl%dusfc (is:ie, j) + ua (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dvsfc (is:ie, j) = inline_pbl%dvsfc (is:ie, j) + va (is:ie, j, kr) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dksfc (is:ie, j) = inline_pbl%dksfc (is:ie, j) + 0.5 * (ua (is:ie, j, kr) ** 2 + va (is:ie, j, kr) ** 2 + w (is:ie, j, kr) ** 2) * delp (is:ie, j, kr) / grav / abs (mdt)
             enddo
 
             ! update non-microphyiscs tracers due to mass change
@@ -764,8 +757,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     call mtetw (1, km, q (i, j, 1:km, sphum), q (i, j, 1:km, liq_wat), &
                         q (i, j, 1:km, rainwat), q (i, j, 1:km, ice_wat), q (i, j, 1:km, snowwat), &
                         q (i, j, 1:km, graupel), tz, ua (i, j, 1:km), va (i, j, 1:km), wz, &
-                        delp (i, j, 1:km), dte (i), - dqsfc (i) * 86400, 0.0, &
-                        0.0, 0.0, 0.0, 0.0, - dtsfc (i), 0.0, abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
+                        delp (i, j, 1:km), dte (i), - dqvsfc (i) * 86400, - dqlsfc (i) * 86400, &
+                        - dqrsfc (i) * 86400, - dqisfc (i) * 86400, - dqssfc (i) * 86400, - dqgsfc (i) * 86400, &
+                        - dtsfc (i), - inline_pbl%dksfc (i, j), abs (mdt), te_end (i, 1:km), tw_end (i, 1:km), &
                         te_b_end (i), tw_b_end (i), .true., hydrostatic, te_loss (i))
                 enddo
             endif
@@ -839,7 +833,12 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         deallocate (vegtype)
 
         deallocate (dtsfc)
-        deallocate (dqsfc)
+        deallocate (dqvsfc)
+        deallocate (dqlsfc)
+        deallocate (dqisfc)
+        deallocate (dqrsfc)
+        deallocate (dqssfc)
+        deallocate (dqgsfc)
 
         deallocate (tz)
         deallocate (wz)
