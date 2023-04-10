@@ -1282,17 +1282,9 @@ CONTAINS
     do k=2, km
        do i=is, ie
 #ifdef MOIST_CAPPA
-#ifdef LINEAR_SOUND
           aa(i,k) = t1g*0.5*(gm2(i,k-1)+gm2(i,k))/(dz2(i,k-1)+dz2(i,k)) * (pem(i,k))
 #else
-          aa(i,k) = t1g*0.5*(gm2(i,k-1)+gm2(i,k))/(dz2(i,k-1)+dz2(i,k)) * (pem(i,k)+pp(i,k))
-#endif
-#else
-#ifdef LINEAR_SOUND
           aa(i,k) = t1g/(dz2(i,k-1)+dz2(i,k)) * (pem(i,k))
-#else
-          aa(i,k) = t1g/(dz2(i,k-1)+dz2(i,k)) * (pem(i,k)+pp(i,k))
-#endif
 #endif
        enddo
     enddo
@@ -1309,17 +1301,9 @@ CONTAINS
     enddo
     do i=is, ie
 #ifdef MOIST_CAPPA
-#ifdef LINEAR_SOUND
        p1(i) = t1g*gm2(i,km)/dz2(i,km)*(pem(i,km+1))
 #else
-       p1(i) = t1g*gm2(i,km)/dz2(i,km)*(pem(i,km+1)+pp(i,km+1))
-#endif
-#else
-#ifdef LINEAR_SOUND
        p1(i) = t1g/dz2(i,km)*(pem(i,km+1))
-#else
-       p1(i) = t1g/dz2(i,km)*(pem(i,km+1)+pp(i,km+1))
-#endif
 #endif
        gam(i,km) = aa(i,km) / bet(i)
           bet(i) =  dm2(i,km) - (aa(i,km)+p1(i) + aa(i,km)*gam(i,km))
@@ -1458,12 +1442,7 @@ CONTAINS
 
     do k=1, km+1
        do i=is, ie
-#ifdef LINEAR_SOUND
           pe2(i,k) = pem(i,k)
-#else
-! pe2 is Full p
-          pe2(i,k) = pem(i,k) + pp(i,k)
-#endif
        enddo
     enddo
 
