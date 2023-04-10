@@ -416,7 +416,7 @@ CONTAINS
                        dm, pm2, w2, dz2, pt(is1:ie1,j,1:km), ws(is1,j), .true.)
       else
            call SIM1_solver(dt, is1, ie1, km, rdgas, gama, gm2, cp2, akap, pe2,  &
-                            dm, pm2, pem, w2, dz2, pt(is1:ie1,j,1:km), ws(is1,j), p_fac, j, .false., tau_w)
+                            dm, pm2, pem, w2, dz2, pt(is1:ie1,j,1:km), ws(is1,j), p_fac, tau_w)
       endif
 
       do k=2,km+1
@@ -550,11 +550,11 @@ CONTAINS
                        dm, pm2, w2, dz2, pt(is:ie,j,1:km), ws(is,j), .false.)
       elseif ( a_imp > 0.999 ) then
            call SIM1_solver(dt, is, ie, km, rdgas, gama, gm2, cp2, akap, pe2, dm,   &
-                            pm2, pem, w2, dz2, pt(is:ie,j,1:km), ws(is,j), p_fac, j, .false., -1.)
+                            pm2, pem, w2, dz2, pt(is:ie,j,1:km), ws(is,j), p_fac, -1.)
       else
            call SIM_solver(dt, is, ie, km, rdgas, gama, gm2, cp2, akap, pe2, dm,  &
                            pm2, pem, w2, dz2, pt(is:ie,j,1:km), ws(is,j), &
-                           a_imp, p_fac, scale_m, j, .false., -1.)
+                           a_imp, p_fac, scale_m, -1.)
       endif
 
       do k=1, km
@@ -1212,7 +1212,7 @@ CONTAINS
 
 
  subroutine SIM1_solver(dt,  is,  ie, km, rgas, gama, gm2, cp2, kappa, pe, dm2,   &
-                        pm2, pem, w2, dz2, pt2, ws, p_fac, j, debug, tau_w)
+                        pm2, pem, w2, dz2, pt2, ws, p_fac, tau_w)
    integer, intent(in):: is, ie, km
    real,    intent(in):: dt, rgas, gama, kappa, p_fac, tau_w
    real, intent(in), dimension(is:ie,km):: dm2, pt2, pm2, gm2, cp2
@@ -1220,8 +1220,6 @@ CONTAINS
    real, intent(in ), dimension(is:ie,km+1):: pem
    real, intent(out)::  pe(is:ie,km+1)
    real, intent(inout), dimension(is:ie,km):: dz2, w2
-   integer, intent(in) :: j ! DEBUG
-   logical, intent(in) :: debug ! debug
 ! Local
    real, dimension(is:ie,km  ):: aa, bb, dd, w1, g_rat, gam
    real, dimension(is:ie,km+1):: pp
@@ -1325,19 +1323,6 @@ CONTAINS
        enddo
     endif
 
-!!! DEBUG CODE
-    if (debug) then
-       do i=is,ie
-          if (ANY(w2(i,:) < -50)) then
-             print*, ' EXTREME DOWNDRAFT (SIM1_SOLVER)', i, j, mpp_pe(), ws(i)
-             do k=1,km
-                write(*,*) k, w2(i,k), w1(i,k), pe(i,k), dm2(i,k), dz2(i,k), pem(i,k)
-             enddo
-          endif
-       enddo
-    endif
-!!! END DEBUG CODE
-
     do i=is, ie
        pe(i,1) = 0.
     enddo
@@ -1370,7 +1355,7 @@ CONTAINS
   end subroutine SIM1_solver
 
  subroutine SIM_solver(dt,  is,  ie, km, rgas, gama, gm2, cp2, kappa, pe2, dm2,   &
-                       pm2, pem, w2, dz2, pt2, ws, alpha, p_fac, scale_m, j, debug, tau_w)
+                       pm2, pem, w2, dz2, pt2, ws, alpha, p_fac, scale_m, tau_w)
    integer, intent(in):: is, ie, km
    real, intent(in):: dt, rgas, gama, kappa, p_fac, alpha, scale_m, tau_w
    real, intent(in), dimension(is:ie,km):: dm2, pt2, pm2, gm2, cp2
@@ -1378,8 +1363,6 @@ CONTAINS
    real, intent(in ), dimension(is:ie,km+1):: pem
    real, intent(out):: pe2(is:ie,km+1)
    real, intent(inout), dimension(is:ie,km):: dz2, w2
-   integer, intent(in) :: j ! DEBUG
-   logical, intent(in) :: debug ! debug
 ! Local
    real, dimension(is:ie,km  ):: aa, bb, dd, w1, wk, g_rat, gam
    real, dimension(is:ie,km+1):: pp
@@ -1498,19 +1481,6 @@ CONTAINS
           enddo
        enddo
     endif
-
-!!! DEBUG CODE
-    if (debug) then
-       do i=is,ie
-          if (ANY(w2(i,:) < -50)) then
-             print*, ' EXTREME DOWNDRAFT (SIM_SOLVER)', i, j, mpp_pe(), ws(i)
-             do k=1,km
-                write(*,*) k, w2(i,k), w1(i,k), pe2(i,k), dm2(i,k), dz2(i,k), pem(i,k)
-             enddo
-          endif
-       enddo
-    endif
-!!! END DEBUG CODE
 
     do i=is, ie
        pe2(i,1) = 0.
