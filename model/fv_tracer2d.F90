@@ -148,7 +148,7 @@ subroutine tracer_2d_1L(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, n
      endif
   enddo  ! k-loop
 
-    if (it == 1 .and. trdm>1.e-4) then
+    if (trdm>1.e-4) then
       call timing_on('COMM_TOTAL')
       call timing_on('COMM_TRACER')
       call complete_group_halo_update(dp1_pack, domain)
@@ -444,7 +444,7 @@ subroutine tracer_2d(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy,
         enddo
     endif
 
-    if (it == 1 .and. trdm>1.e-4) then
+    if (trdm>1.e-4) then
       call timing_on('COMM_TOTAL')
       call timing_on('COMM_TRACER')
       call complete_group_halo_update(dp1_pack, domain)
@@ -693,6 +693,13 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
           enddo
       endif
 
+      if (trdm>1.e-4) then
+         call timing_on('COMM_TOTAL')
+         call timing_on('COMM_TRACER')
+         call complete_group_halo_update(dp1_pack, domain)
+         call timing_off('COMM_TRACER')
+         call timing_off('COMM_TOTAL')
+      endif
 
     do it=1,nsplt
        if ( gridstruct%nested ) then
@@ -726,16 +733,6 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
                                                it, iq )
             enddo
       endif
-
-      if (it == 1 .and. trdm>1.e-4) then
-         call timing_on('COMM_TOTAL')
-         call timing_on('COMM_TRACER')
-         call complete_group_halo_update(dp1_pack, domain)
-         call timing_off('COMM_TRACER')
-         call timing_off('COMM_TOTAL')
-
-      endif
-
 
 !$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,dp1,mfx,mfy,rarea,nq, &
 !$OMP                                  area,xfx,yfx,q,cx,cy,npx,npy,hord,gridstruct,bd,it,nsplt,nord_tr,trdm,lim_fac) &
