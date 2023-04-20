@@ -1699,7 +1699,7 @@ contains
  endif
 
 !Perfectly linear scheme
- if ( abs(kord) > 16 ) then
+ if ( abs(kord) == 17 ) then
   do k=1,km
      do i=i1,i2
         a4(2,i,k) = q(i,k  )
@@ -1790,21 +1790,23 @@ contains
 ! f(s) = AL + s*[(AR-AL) + A6*(1-s)]         ( 0 <= s  <= 1 )
 ! Top 2 and bottom 2 layers always use monotonic mapping
 
-  if ( iv==0 ) then
+  select case (iv)
+
+  case (0)
      do i=i1,i2
         a4(2,i,1) = max(0., a4(2,i,1))
      enddo
-  elseif ( iv==-1 ) then
+  case (-1)
       do i=i1,i2
          if ( a4(2,i,1)*a4(1,i,1) <= 0. ) a4(2,i,1) = 0.
       enddo
-  elseif ( iv==2 ) then
+  case (2)
      do i=i1,i2
         a4(2,i,1) = a4(1,i,1)
         a4(3,i,1) = a4(1,i,1)
         a4(4,i,1) = 0.
      enddo
-  endif
+  end select !iv
 
   if ( iv/=2 ) then
      do i=i1,i2
@@ -1822,8 +1824,10 @@ contains
 !-------------------------------------
 ! Huynh's 2nd constraint for interior:
 !-------------------------------------
-  do k=3,km-2
-     if ( abs(kord)<9 ) then
+   do k=3,km-2
+      select case (abs(kord))
+
+      case (0:8)
        do i=i1,i2
 ! Left  edges
           pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
@@ -1839,7 +1843,7 @@ contains
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
 
-     elseif ( abs(kord)==9 ) then
+     case (9)
        do i=i1,i2
           if ( extm(i,k) .and. extm(i,k-1) ) then
 ! grid-scale 2-delta-z wave detected
@@ -1872,7 +1876,7 @@ contains
             endif
           endif
        enddo
-     elseif ( abs(kord)==10 ) then
+     case(10) !currently new constraint
        do i=i1,i2
           if( ext5(i,k) ) then
               if( ext5(i,k-1) .or. ext5(i,k+1) ) then
@@ -1904,7 +1908,18 @@ contains
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
-     elseif ( abs(kord)==12 ) then
+    case(11)
+       do i=i1,i2
+         if ( ext5(i,k) .and. (ext5(i,k-1).or.ext5(i,k+1).or.a4(1,i,k)<qmin) ) then
+! Noisy region:
+              a4(2,i,k) = a4(1,i,k)
+              a4(3,i,k) = a4(1,i,k)
+              a4(4,i,k) = 0.
+         else
+              a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
+         endif
+       enddo
+    case(12)
        do i=i1,i2
           if( extm(i,k) ) then
               a4(2,i,k) = a4(1,i,k)
@@ -1926,7 +1941,7 @@ contains
             endif
           endif
        enddo
-     elseif ( abs(kord)==13 ) then
+    case(13)
        do i=i1,i2
           if( ext6(i,k) ) then
              if ( ext6(i,k-1) .and. ext6(i,k+1) ) then
@@ -1939,13 +1954,13 @@ contains
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
-     elseif ( abs(kord)==14 ) then
+    case(14)
 
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
 
-     elseif ( abs(kord)==15 ) then   ! Revised abs(kord)=9 scheme
+    case(15)
        do i=i1,i2
           if ( ext5(i,k) .and. ext5(i,k-1) ) then
                a4(2,i,k) = a4(1,i,k)
@@ -1970,7 +1985,7 @@ contains
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
-     elseif ( abs(kord)==16 ) then
+    case(16)
        do i=i1,i2
           if( ext5(i,k) ) then
              if ( ext5(i,k-1) .or. ext5(i,k+1) ) then
@@ -1993,18 +2008,9 @@ contains
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
-     else      ! kord = 11, 13
-       do i=i1,i2
-         if ( ext5(i,k) .and. (ext5(i,k-1).or.ext5(i,k+1).or.a4(1,i,k)<qmin) ) then
-! Noisy region:
-              a4(2,i,k) = a4(1,i,k)
-              a4(3,i,k) = a4(1,i,k)
-              a4(4,i,k) = 0.
-         else
-              a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-         endif
-       enddo
-     endif
+    case default
+       call mpp_error(FATAL, " kord not implemented")
+    end select
 
 ! Additional constraint to ensure positivity
      if ( iv==0 ) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
@@ -2014,15 +2020,16 @@ contains
 !----------------------------------
 ! Bottom layer subgrid constraints:
 !----------------------------------
-  if ( iv==0 ) then
+  select case (iv)
+  case(0)
      do i=i1,i2
         a4(3,i,km) = max(0., a4(3,i,km))
      enddo
-  elseif ( iv .eq. -1 ) then
-      do i=i1,i2
-         if ( a4(3,i,km)*a4(1,i,km) <= 0. )  a4(3,i,km) = 0.
-      enddo
-  endif
+  case(-1)
+     do i=i1,i2
+        if ( a4(3,i,km)*a4(1,i,km) <= 0. )  a4(3,i,km) = 0.
+     enddo
+  end select
 
   do k=km-1,km
      do i=i1,i2
@@ -2135,7 +2142,7 @@ else ! all others
   enddo
  endif
 !----- Perfectly linear scheme --------------------------------
- if ( abs(kord) > 16 ) then
+ if ( abs(kord) == 17 ) then
   do k=1,km
      do i=i1,i2
         a4(2,i,k) = q(i,k  )
@@ -2224,21 +2231,22 @@ else ! all others
 ! f(s) = AL + s*[(AR-AL) + A6*(1-s)]         ( 0 <= s  <= 1 )
 ! Top 2 and bottom 2 layers always use monotonic mapping
 
-  if ( iv==0 ) then
+  select case (iv)
+  case (0)
      do i=i1,i2
         a4(2,i,1) = max(0., a4(2,i,1))
      enddo
-  elseif ( iv==-1 ) then
+  case(-1)
       do i=i1,i2
          if ( a4(2,i,1)*a4(1,i,1) <= 0. ) a4(2,i,1) = 0.
       enddo
-  elseif ( iv==2 ) then
+   case(2)
      do i=i1,i2
         a4(2,i,1) = a4(1,i,1)
         a4(3,i,1) = a4(1,i,1)
         a4(4,i,1) = 0.
      enddo
-  endif
+  end select !iv
 
   if ( iv/=2 ) then
      do i=i1,i2
@@ -2257,7 +2265,8 @@ else ! all others
 ! Huynh's 2nd constraint for interior:
 !-------------------------------------
   do k=3,km-2
-     if ( abs(kord)<9 ) then
+     select case (abs(kord))
+     case (0:8)
        do i=i1,i2
 ! Left  edges
           pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
@@ -2273,7 +2282,7 @@ else ! all others
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
 
-     elseif ( abs(kord)==9 ) then
+    case (9)
        do i=i1,i2
           if ( extm(i,k) .and. extm(i,k-1) ) then  ! c90_mp122
 ! grid-scale 2-delta-z wave detected
@@ -2301,7 +2310,7 @@ else ! all others
             endif
           endif
        enddo
-     elseif ( abs(kord)==10 ) then
+     case(10)
        do i=i1,i2
           if( ext5(i,k) ) then
               if( ext5(i,k-1) .or. ext5(i,k+1) ) then
@@ -2333,7 +2342,18 @@ else ! all others
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
-     elseif ( abs(kord)==12 ) then
+    case (11)
+       do i=i1,i2
+         if ( ext5(i,k) .and. (ext5(i,k-1) .or. ext5(i,k+1)) ) then
+! Noisy region:
+              a4(2,i,k) = a4(1,i,k)
+              a4(3,i,k) = a4(1,i,k)
+              a4(4,i,k) = 0.
+         else
+              a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
+         endif
+       enddo
+    case (12)
        do i=i1,i2
           if( extm(i,k) ) then
 ! grid-scale 2-delta-z wave detected
@@ -2356,7 +2376,7 @@ else ! all others
             endif
           endif
        enddo
-     elseif ( abs(kord)==13 ) then
+    case (13)
        do i=i1,i2
           if( ext6(i,k) ) then
              if ( ext6(i,k-1) .and. ext6(i,k+1) ) then
@@ -2369,13 +2389,13 @@ else ! all others
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
-     elseif ( abs(kord)==14 ) then
+    case (14)
 
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
 
-     elseif ( abs(kord)==15 ) then   ! revised kord=9 scehem
+    case (15)
        do i=i1,i2
           if ( ext5(i,k) ) then  ! c90_mp122
              if ( ext5(i,k-1) .or. ext5(i,k+1) ) then  ! c90_mp122
@@ -2398,7 +2418,7 @@ else ! all others
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
-     elseif ( abs(kord)==16 ) then
+    case (16)
        do i=i1,i2
           if( ext5(i,k) ) then
              if ( ext5(i,k-1) .or. ext5(i,k+1) ) then
@@ -2421,18 +2441,9 @@ else ! all others
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
-     else      ! kord = 11
-       do i=i1,i2
-         if ( ext5(i,k) .and. (ext5(i,k-1) .or. ext5(i,k+1)) ) then
-! Noisy region:
-              a4(2,i,k) = a4(1,i,k)
-              a4(3,i,k) = a4(1,i,k)
-              a4(4,i,k) = 0.
-         else
-              a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-         endif
-       enddo
-     endif
+    case default
+       call mpp_error(FATAL, 'kord not implemented')
+    end select
 
 ! Additional constraint to ensure positivity
      if ( iv==0 ) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
@@ -2442,15 +2453,16 @@ else ! all others
 !----------------------------------
 ! Bottom layer subgrid constraints:
 !----------------------------------
-  if ( iv==0 ) then
+  select case (iv)
+  case (0)
      do i=i1,i2
         a4(3,i,km) = max(0., a4(3,i,km))
      enddo
-  elseif ( iv .eq. -1 ) then
+  case (-1)
       do i=i1,i2
          if ( a4(3,i,km)*a4(1,i,km) <= 0. )  a4(3,i,km) = 0.
       enddo
-  endif
+   end select
 
   do k=km-1,km
      do i=i1,i2
@@ -3731,7 +3743,8 @@ else ! all others
   real  pv2(is:ie+1,kn+1)
 
   integer i,j,k , iq
-  integer, parameter:: kord=4
+  !CS operator replaces original mono PPM 4 --- lmh 19apr23
+  integer, parameter:: kord=4 ! 13
 
 #ifdef HYDRO_DELZ_REMAP
   if (is_master() .and. .not. hydrostatic) then
