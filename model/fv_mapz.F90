@@ -1615,9 +1615,9 @@ contains
 
  end subroutine remap_2d
 
- !Scalar profile and cs_profile differ ONLY in that scalar_profile
+ !scalar_profile and cs_profile differ ONLY in that scalar_profile
  ! accepts a qmin argument. (Unfortunately I was not able to make
- ! qmin an optional argument in scalar_profile.)
+ ! qmin an optional argument in scalar_profile.) --- lmh summer 2020
  subroutine scalar_profile(qs, a4, delp, km, i1, i2, iv, kord, qmin)
 ! Optimized vertical profile reconstruction:
 ! Latest: Apr 2008 S.-J. Lin, NOAA/GFDL
@@ -1729,7 +1729,7 @@ contains
 ! Interior:
   do k=3,km-1
      do i=i1,i2
-        if ( gam(i,k-1)*gam(i,k+1)>0. ) then
+        if ( abs(kord) >= 14 .or. gam(i,k-1)*gam(i,k+1)>0. ) then
 ! Apply large-scale constraint to ALL fields if not local max/min
 !  first guess interface values cannot exceeed values
 !  of adjacent cells
@@ -1919,101 +1919,54 @@ contains
               a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
          endif
        enddo
-    case(12)
-       do i=i1,i2
-          if( extm(i,k) ) then
-              a4(2,i,k) = a4(1,i,k)
-              a4(3,i,k) = a4(1,i,k)
-              a4(4,i,k) = 0.
-          else        ! not a local extremum
-            a4(4,i,k) = 6.*a4(1,i,k) - 3.*(a4(2,i,k)+a4(3,i,k))
-! Check within the smooth region if subgrid profile is non-monotonic
-            if( abs(a4(4,i,k)) > abs(a4(2,i,k)-a4(3,i,k)) ) then
-                  pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
-                  lac_1 = pmp_1 + 1.5*gam(i,k+2)
-              a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),  &
-                                             max(a4(1,i,k), pmp_1, lac_1) )
-                  pmp_2 = a4(1,i,k) + 2.*gam(i,k)
-                  lac_2 = pmp_2 - 1.5*gam(i,k-1)
-              a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),  &
-                                             max(a4(1,i,k), pmp_2, lac_2) )
-              a4(4,i,k) = 6.*a4(1,i,k) - 3.*(a4(2,i,k)+a4(3,i,k))
-            endif
-          endif
-       enddo
-    case(13)
-       do i=i1,i2
-          if( ext6(i,k) ) then
-             if ( ext6(i,k-1) .and. ext6(i,k+1) ) then
-! grid-scale 2-delta-z wave detected
-                 a4(2,i,k) = a4(1,i,k)
-                 a4(3,i,k) = a4(1,i,k)
-             endif
-          endif
-       enddo
-       do i=i1,i2
-          a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-       enddo
-    case(14)
-
-       do i=i1,i2
-          a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-       enddo
-
-    case(15)
-       do i=i1,i2
-          if ( ext5(i,k) .and. ext5(i,k-1) ) then
-               a4(2,i,k) = a4(1,i,k)
-               a4(3,i,k) = a4(1,i,k)
-          else if ( ext5(i,k) .and. ext5(i,k+1) ) then
-               a4(2,i,k) = a4(1,i,k)
-               a4(3,i,k) = a4(1,i,k)
-          else if ( ext5(i,k) .and. a4(1,i,k)<qmin ) then
-               a4(2,i,k) = a4(1,i,k)
-               a4(3,i,k) = a4(1,i,k)
-          elseif( ext6(i,k) ) then
-                  pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
-                  lac_1 = pmp_1 + 1.5*gam(i,k+2)
-              a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),  &
-                                             max(a4(1,i,k), pmp_1, lac_1) )
-                  pmp_2 = a4(1,i,k) + 2.*gam(i,k)
-                  lac_2 = pmp_2 - 1.5*gam(i,k-1)
-              a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),  &
-                                             max(a4(1,i,k), pmp_2, lac_2) )
-          endif
-       enddo
-       do i=i1,i2
-          a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-       enddo
-    case(16)
+    case(12) !post-AM4 case 10
        do i=i1,i2
           if( ext5(i,k) ) then
-             if ( ext5(i,k-1) .or. ext5(i,k+1) ) then
-                 a4(2,i,k) = a4(1,i,k)
-                 a4(3,i,k) = a4(1,i,k)
-             elseif ( ext6(i,k-1) .or. ext6(i,k+1) ) then
-                 ! Left  edges
-                 pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
-                 lac_1 = pmp_1 + 1.5*gam(i,k+2)
-                 a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),   &
-                                     max(a4(1,i,k), pmp_1, lac_1) )
-                 ! Right edges
-                 pmp_2 = a4(1,i,k) + 2.*gam(i,k)
-                 lac_2 = pmp_2 - 1.5*gam(i,k-1)
-                 a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),    &
-                                     max(a4(1,i,k), pmp_2, lac_2) )
-             endif
+              if( ext5(i,k-1) .or. ext5(i,k+1) ) then
+                   a4(2,i,k) = a4(1,i,k)
+                   a4(3,i,k) = a4(1,i,k)
+              elseif ( ext6(i,k-1) .or. ext6(i,k+1) ) then
+                   pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
+                   lac_1 = pmp_1 + 1.5*gam(i,k+2)
+                   a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),  &
+                                                  max(a4(1,i,k), pmp_1, lac_1) )
+                   pmp_2 = a4(1,i,k) + 2.*gam(i,k)
+                   lac_2 = pmp_2 - 1.5*gam(i,k-1)
+                   a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),  &
+                                                  max(a4(1,i,k), pmp_2, lac_2) )
+              endif
+          elseif( ext6(i,k) ) then
+              if( ext5(i,k-1) .or. ext5(i,k+1) ) then
+                  pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
+                  lac_1 = pmp_1 + 1.5*gam(i,k+2)
+                  a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),  &
+                                                 max(a4(1,i,k), pmp_1, lac_1) )
+                  pmp_2 = a4(1,i,k) + 2.*gam(i,k)
+                  lac_2 = pmp_2 - 1.5*gam(i,k-1)
+                  a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),  &
+                                                 max(a4(1,i,k), pmp_2, lac_2) )
+              endif
           endif
        enddo
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
+    case(13) !former 14: no subgrid limiter
+
+       do i=i1,i2
+          a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
+       enddo
+
+    case (14) !strict monotonicity constraint
+       call cs_limiters(im, extm(i1,k), a4(1,i1,k), 2)
+    case (15)
+       call cs_limiters(im, extm(i1,k), a4(1,i1,k), 1)
     case default
        call mpp_error(FATAL, " kord not implemented")
     end select
 
 ! Additional constraint to ensure positivity
-     if ( iv==0 ) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
+     if ( iv==0 .and. abs(kord) < 13) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
 
   enddo      ! k-loop
 
@@ -2174,8 +2127,9 @@ else ! all others
 ! Interior:
   do k=3,km-1
      do i=i1,i2
-        if ( gam(i,k-1)*gam(i,k+1)>0. ) then
+        if ( abs(kord) >= 14 .or. gam(i,k-1)*gam(i,k+1)>0. ) then
 ! Apply large-scale constraint to ALL fields if not local max/min
+! OR for the strictly monotone schemes
              q(i,k) = min( q(i,k), max(a4(1,i,k-1),a4(1,i,k)) )
              q(i,k) = max( q(i,k), min(a4(1,i,k-1),a4(1,i,k)) )
         else
@@ -2353,100 +2307,54 @@ else ! all others
               a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
          endif
        enddo
-    case (12)
-       do i=i1,i2
-          if( extm(i,k) ) then
-! grid-scale 2-delta-z wave detected
-              a4(2,i,k) = a4(1,i,k)
-              a4(3,i,k) = a4(1,i,k)
-              a4(4,i,k) = 0.
-          else        ! not a local extremum
-            a4(4,i,k) = 6.*a4(1,i,k) - 3.*(a4(2,i,k)+a4(3,i,k))
-! Check within the smooth region if subgrid profile is non-monotonic
-            if( abs(a4(4,i,k)) > abs(a4(2,i,k)-a4(3,i,k)) ) then
-                  pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
-                  lac_1 = pmp_1 + 1.5*gam(i,k+2)
-              a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),  &
-                                             max(a4(1,i,k), pmp_1, lac_1) )
-                  pmp_2 = a4(1,i,k) + 2.*gam(i,k)
-                  lac_2 = pmp_2 - 1.5*gam(i,k-1)
-              a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),  &
-                                             max(a4(1,i,k), pmp_2, lac_2) )
-              a4(4,i,k) = 6.*a4(1,i,k) - 3.*(a4(2,i,k)+a4(3,i,k))
-            endif
-          endif
-       enddo
-    case (13)
-       do i=i1,i2
-          if( ext6(i,k) ) then
-             if ( ext6(i,k-1) .and. ext6(i,k+1) ) then
-! grid-scale 2-delta-z wave detected
-                 a4(2,i,k) = a4(1,i,k)
-                 a4(3,i,k) = a4(1,i,k)
-             endif
-          endif
-       enddo
-       do i=i1,i2
-          a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-       enddo
-    case (14)
-
-       do i=i1,i2
-          a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-       enddo
-
-    case (15)
-       do i=i1,i2
-          if ( ext5(i,k) ) then  ! c90_mp122
-             if ( ext5(i,k-1) .or. ext5(i,k+1) ) then  ! c90_mp122
-! grid-scale 2-delta-z wave detected
-                  a4(2,i,k) = a4(1,i,k)
-                  a4(3,i,k) = a4(1,i,k)
-             endif
-          elseif( ext6(i,k) ) then
-! Check within the smooth region if subgrid profile is non-monotonic
-                  pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
-                  lac_1 = pmp_1 + 1.5*gam(i,k+2)
-              a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),  &
-                                             max(a4(1,i,k), pmp_1, lac_1) )
-                  pmp_2 = a4(1,i,k) + 2.*gam(i,k)
-                  lac_2 = pmp_2 - 1.5*gam(i,k-1)
-              a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),  &
-                                             max(a4(1,i,k), pmp_2, lac_2) )
-          endif
-       enddo
-       do i=i1,i2
-          a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
-       enddo
-    case (16)
+    case (12) !post-AM4 case 10
        do i=i1,i2
           if( ext5(i,k) ) then
-             if ( ext5(i,k-1) .or. ext5(i,k+1) ) then
-                 a4(2,i,k) = a4(1,i,k)
-                 a4(3,i,k) = a4(1,i,k)
-             elseif ( ext6(i,k-1) .or. ext6(i,k+1) ) then
-                 ! Left  edges
-                 pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
-                 lac_1 = pmp_1 + 1.5*gam(i,k+2)
-                 a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),   &
-                                     max(a4(1,i,k), pmp_1, lac_1) )
-                 ! Right edges
-                 pmp_2 = a4(1,i,k) + 2.*gam(i,k)
-                 lac_2 = pmp_2 - 1.5*gam(i,k-1)
-                 a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),    &
-                                     max(a4(1,i,k), pmp_2, lac_2) )
-             endif
+              if( ext5(i,k-1) .or. ext5(i,k+1) ) then
+                   a4(2,i,k) = a4(1,i,k)
+                   a4(3,i,k) = a4(1,i,k)
+              elseif ( ext6(i,k-1) .or. ext6(i,k+1) ) then
+                   pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
+                   lac_1 = pmp_1 + 1.5*gam(i,k+2)
+                   a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),  &
+                                                  max(a4(1,i,k), pmp_1, lac_1) )
+                   pmp_2 = a4(1,i,k) + 2.*gam(i,k)
+                   lac_2 = pmp_2 - 1.5*gam(i,k-1)
+                   a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),  &
+                                                  max(a4(1,i,k), pmp_2, lac_2) )
+              endif
+          elseif( ext6(i,k) ) then
+              if( ext5(i,k-1) .or. ext5(i,k+1) ) then
+                  pmp_1 = a4(1,i,k) - 2.*gam(i,k+1)
+                  lac_1 = pmp_1 + 1.5*gam(i,k+2)
+                  a4(2,i,k) = min(max(a4(2,i,k), min(a4(1,i,k), pmp_1, lac_1)),  &
+                                                 max(a4(1,i,k), pmp_1, lac_1) )
+                  pmp_2 = a4(1,i,k) + 2.*gam(i,k)
+                  lac_2 = pmp_2 - 1.5*gam(i,k-1)
+                  a4(3,i,k) = min(max(a4(3,i,k), min(a4(1,i,k), pmp_2, lac_2)),  &
+                                                 max(a4(1,i,k), pmp_2, lac_2) )
+              endif
           endif
        enddo
        do i=i1,i2
           a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
        enddo
+    case (13)  !former 14: no subgrid limiter
+
+       do i=i1,i2
+          a4(4,i,k) = 3.*(2.*a4(1,i,k) - (a4(2,i,k)+a4(3,i,k)))
+       enddo
+
+    case (14) !strict monotonicity constraint
+       call cs_limiters(im, extm(i1,k), a4(1,i1,k), 2)
+    case (15)
+       call cs_limiters(im, extm(i1,k), a4(1,i1,k), 1)
     case default
        call mpp_error(FATAL, 'kord not implemented')
     end select
 
 ! Additional constraint to ensure positivity
-     if ( iv==0 ) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
+     if ( iv==0 .and. abs(kord) < 13 ) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
 
   enddo      ! k-loop
 
