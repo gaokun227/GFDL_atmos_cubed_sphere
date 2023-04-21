@@ -1102,6 +1102,12 @@ module fv_control_mod
           call mpp_error(NOTE, " The old PPM remapping operators will be removed in a future release.")
        endif
 
+       if (do_am4_remap) then
+          call mpp_error(NOTE, "** DEPRECATED DO_AM4_REMAP **")
+          call mpp_error(NOTE, " This switch is no longer necessary because the AM4 kord=10 has been")
+          call mpp_error(NOTE, "     restored to normal operation.")
+       endif
+
 
      end subroutine read_namelist_fv_core_nml
 
