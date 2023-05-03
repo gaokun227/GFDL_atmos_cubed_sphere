@@ -1939,7 +1939,6 @@ contains
            enddo
         enddo
     endif
-    IPD_Data(nb)%Statein%dycore_hydrostatic = Atm(mygrid)%flagstruct%hydrostatic
     IPD_Data(nb)%Statein%nwat = Atm(mygrid)%flagstruct%nwat
   enddo
 
