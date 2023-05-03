@@ -470,9 +470,6 @@ contains
             enddo
          enddo
       enddo
-      if ( flagstruct%trdm2 > 1.e-4 ) then
-         call start_group_halo_update(i_pack(13), dp1, domain)
-      endif
 
       if ( n_map==k_split ) last_step = .true.
 
@@ -494,7 +491,6 @@ contains
                     consv_te, te_2d, inline_pbl, inline_gwd, time_total)
       call timing_off('DYN_CORE')
 
-
 #ifdef SW_DYNAMICS
 !!$OMP parallel do default(none) shared(is,ie,js,je,ps,delp,agrav)
       do j=js,je
@@ -507,6 +503,11 @@ contains
 !--------------------------------------------------------
 ! Perform large-time-step scalar transport using the accumulated CFL and
 ! mass fluxes
+
+      if ( flagstruct%trdm2 > 1.e-4 ) then
+         call start_group_halo_update(i_pack(13), dp1, domain)
+      endif
+
        call timing_on('tracer_2d')
        !!! CLEANUP: merge these two calls?
        if (gridstruct%bounded_domain) then
@@ -1269,4 +1270,3 @@ contains
  end subroutine compute_aam
 
 end module fv_dynamics_mod
-
