@@ -1491,6 +1491,9 @@ endif
 ! Gray-Radiation algorithms based on Frierson, Held, and Zurita-Gotor, 2006 JAS
 ! Note: delz is negative
 ! Coded by S.-J. Lin, June 20, 2012
+! From FHZ06: A gray-radiation scheme is one "in which the optical depths are
+!  fixed and radiative fluxes are a function of temperature alone. There are
+!  therefore no cloud- or water vapor–radiative feedbacks."
       integer, intent(in):: sec
       integer, intent(in):: is, ie, km
       real, dimension(is:ie):: ts
