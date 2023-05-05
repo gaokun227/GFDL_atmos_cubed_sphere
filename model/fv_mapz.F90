@@ -1941,7 +1941,7 @@ contains
     end select
 
 ! Additional constraint to ensure positivity
-     if ( iv==0 .and. abs(kord) <= 13) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
+     if ( iv==0 .and. abs(kord) <= 13 ) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
 
   enddo      ! k-loop
 
@@ -2325,7 +2325,7 @@ else ! all others
     end select
 
 ! Additional constraint to ensure positivity
-     if ( iv==0 .and. abs(kord) < 13 ) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
+     if ( iv==0 .and. abs(kord) <= 13 ) call cs_limiters(im, extm(i1,k), a4(1,i1,k), 0)
 
   enddo      ! k-loop
 
