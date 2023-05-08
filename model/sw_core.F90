@@ -2058,12 +2058,6 @@ end subroutine divergence_corner_nest
              smag_q(i,j) = 0.25*(wk(i,j) + wk(i,j+1) + wk(i+1,j) + wk(i+1,j+1))
           enddo
        enddo
-!!! DEBUG CODE
-!!$       write(mpp_pe()+2000,*) u(is-2:is,js-1:js)
-!!$       write(mpp_pe()+2000,*) v(is-1:is,js-2:js)
-!!$       write(mpp_pe()+2000,*) wk(is:is+2,js:js+2)
-!!$       write(mpp_pe()+2000,*)
-!!! END DEBUG CODE
 
        if (do_smag) then
           do j=js-1,je+1
@@ -2106,16 +2100,6 @@ end subroutine divergence_corner_nest
              enddo
           enddo
        endif
-
-
-!!! DEBUG CODE
-!!$       write(mpp_pe()+2000,*) dudz(is:is+2,js:js+2)
-!!$       write(mpp_pe()+2000,*) dvdz(is:is+2,js:js+2)
-!!$       write(mpp_pe()+2000,*)
-!!$       write(mpp_pe()+2000,*) smag_q(is:is+2,js:js+2)
-!!$       write(mpp_pe()+2000,*)
-!!$       !flush(mpp_pe()+2000)
-!!! DEBUG CODE
 
  end subroutine smag_cell
 
