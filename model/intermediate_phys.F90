@@ -27,7 +27,7 @@
 
 module intermediate_phys_mod
 
-    use constants_mod, only: rdgas, grav, kappa, cp_air
+    use constants_mod, only: rdgas, rvgas, grav, kappa, cp_air
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type, &
                              inline_pbl_type, inline_cnv_type, inline_gwd_type
@@ -631,7 +631,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
                 inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) - cp_air * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
-                inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) - (hlv + (cv_vap - c_liq) * (ta (is:ie, k) - tice)) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) - (hlv - rvgas * tice + (cv_vap - c_liq) * (ta (is:ie, k) - tice)) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dtsfc (is:ie) = dtsfc (is:ie) - c_moist * ta (is:ie, k) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dqvsfc (is:ie) = dqvsfc (is:ie) - q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dqlsfc (is:ie) = dqlsfc (is:ie) - q (is:ie, j, kr, liq_wat) * delp (is:ie, j, kr) / grav / abs (mdt)
@@ -744,7 +744,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
                 inline_pbl%dtsfc (is:ie, j) = inline_pbl%dtsfc (is:ie, j) + cp_air * ta (is:ie, k) * delp (is:ie, j, kr) / ps_dt / grav / abs (mdt)
-                inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) + (hlv + (cv_vap - c_liq) * (ta (is:ie, k) - tice)) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
+                inline_pbl%dqsfc (is:ie, j) = inline_pbl%dqsfc (is:ie, j) + (hlv - rvgas * tice + (cv_vap - c_liq) * (ta (is:ie, k) - tice)) * q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dtsfc (is:ie) = dtsfc (is:ie) + c_moist * (pt (is:ie, j, kr) / ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol)))) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dqvsfc (is:ie) = dqvsfc (is:ie) + q (is:ie, j, kr, sphum) * delp (is:ie, j, kr) / grav / abs (mdt)
                 dqlsfc (is:ie) = dqlsfc (is:ie) + q (is:ie, j, kr, liq_wat) * delp (is:ie, j, kr) / grav / abs (mdt)
@@ -1178,7 +1178,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
                 te8 (is:ie, k) = (c_moist * ta (is:ie, k) + &
-                    (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
+                    (hlv - rvgas * tice - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
                     (hlf - (c_liq - c_ice) * tice) * q_sol) * delp (is:ie, j, kr) / grav
                 dte8 (is:ie, k) = 0.0
             enddo
@@ -1310,7 +1310,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     pt (is:ie, j, kr)) * cp_air / c_moist
                 dte8 (is:ie, k) = te8 (is:ie, k) - (c_moist * pt (is:ie, j, kr) / &
                     ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) + &
-                    (hlv - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
+                    (hlv - rvgas * tice - (cv_vap - c_liq) * tice) * q (is:ie, j, kr, sphum) - &
                     (hlf - (c_liq - c_ice) * tice) * q_sol) * delp (is:ie, j, kr) / grav
                 ua (is:ie, j, kr) = uu (is:ie, k)
                 va (is:ie, j, kr) = vv (is:ie, k)
