@@ -494,6 +494,7 @@ contains
 
 
     call timing_off('ATMOS_DYNAMICS')
+    call mpp_set_current_pelist()
 
  end subroutine atmosphere
 
@@ -514,6 +515,7 @@ contains
     call timing_off('ATMOS_END')
     call timing_off('ATMOS_TOTAL')
     call timing_prt( mpp_pe() )
+    call mpp_set_current_pelist()
 
   end subroutine atmosphere_end
 
