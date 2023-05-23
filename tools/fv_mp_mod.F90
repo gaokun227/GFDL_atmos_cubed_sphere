@@ -322,7 +322,6 @@ contains
                nregions = 1
                num_contact = 0
                npes_per_tile = npes_x*npes_y !/nregions !Set up for concurrency
-               !is_symmetry = .true.
                call mpp_define_layout( (/1,npx-1,1,npy-1/), npes_per_tile, layout )
 
                if ( npes_x == 0 ) then
@@ -332,7 +331,7 @@ contains
                   npes_y = layout(2)
                endif
 
-               if ( npes_x==npes_y .and. (npx-1)==((npx-1)/npes_x)*npes_x .and. (npy-1)==((npy-1)/npes_y)*npes_y )  square_domain = .true.
+               if ( npx==npy .and. npes_x==npes_y .and. (npx-1)==((npx-1)/npes_x)*npes_x )  square_domain = .true.
 
                if ( (npx/npes_x < ng) .or. (npy/npes_y < ng) ) then
                   write(*,310) npes_x, npes_y, npx/npes_x, npy/npes_y
@@ -360,8 +359,7 @@ contains
                  num_contact = 2
                else !accomodate a cartesian nest
                   num_contact = 0
-                  !is_symmetry=.true.
-               if ( npes_x==npes_y .and. (npx-1)==((npx-1)/npes_x)*npes_x .and. (npy-1)==((npy-1)/npes_y)*npes_y )  square_domain = .true.
+                  if ( npx==npy .and. npes_x==npes_y .and. (npx-1)==((npx-1)/npes_x)*npes_x )  square_domain = .true.
                endif
                !npes_per_tile = npes/nregions
                !the previous line will crash if there is a nest, all "npes" will be distributed on the first grid only
