@@ -30,7 +30,8 @@ module coarse_grained_diagnostics_mod
   use mpp_domains_mod, only: domain2d, EAST, NORTH
   use mpp_mod, only: FATAL, mpp_error
   use coarse_graining_mod, only: block_sum, get_fine_array_bounds, get_coarse_array_bounds, MODEL_LEVEL, &
-                                 weighted_block_average, PRESSURE_LEVEL, vertically_remap_field, &
+                                 weighted_block_average, PRESSURE_LEVEL, PRESSURE_LEVEL_EXTRAPOLATE, &
+                                 vertically_remap_field, vertically_remap_temperature, &
                                  vertical_remapping_requirements, mask_area_weights, &
                                  block_edge_sum_x, block_edge_sum_y,&
                                  eddy_covariance_2d_weights, eddy_covariance_3d_weights
@@ -1200,6 +1201,7 @@ contains
     integer :: isd, ied, jsd, jed
     logical :: used
     logical :: need_2d_work_array, need_3d_work_array, need_mass_array, need_height_array, need_masked_area_array
+    logical :: extrapolate
     logical :: need_vorticity_array
     integer :: index, i, j
     character(len=256) :: error_message
@@ -1225,7 +1227,8 @@ contains
 
     if (need_3d_work_array) then
        allocate(work_3d_coarse(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz))
-       if (trim(Atm(tile_count)%coarse_graining%strategy) .eq. PRESSURE_LEVEL) then
+       if (trim(Atm(tile_count)%coarse_graining%strategy) .eq. PRESSURE_LEVEL .or. &
+           trim(Atm(tile_count)%coarse_graining%strategy) .eq. PRESSURE_LEVEL_EXTRAPOLATE) then
         allocate(phalf(is:ie,js:je,1:npz+1))
         allocate(upsampled_coarse_phalf(is:ie,js:je,1:npz+1))
 
@@ -1245,10 +1248,12 @@ contains
 
     if (need_masked_area_array) then
       allocate(masked_area(is:ie,js:je,1:npz))
+      extrapolate = trim(Atm(tile_count)%coarse_graining%strategy) .eq. PRESSURE_LEVEL_EXTRAPOLATE
       call mask_area_weights( &
            Atm(tile_count)%gridstruct%area(is:ie,js:je), &
            phalf, &
            upsampled_coarse_phalf, &
+           extrapolate, &
            masked_area)
     endif
 
@@ -1290,7 +1295,8 @@ contains
                  mass, &
                  Atm(tile_count)%omga(is:ie,js:je,1:npz), &
                  work_3d_coarse)
-          else if (trim(Atm(tile_count)%coarse_graining%strategy) .eq. PRESSURE_LEVEL) then
+          elseif (trim(Atm(tile_count)%coarse_graining%strategy) .eq. PRESSURE_LEVEL .or. &
+                  trim(Atm(tile_count)%coarse_graining%strategy) .eq. PRESSURE_LEVEL_EXTRAPOLATE) then
              call coarse_grain_3D_field_on_pressure_levels(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz, &
                  coarse_diagnostics(index), masked_area, phalf, &
                  upsampled_coarse_phalf, Atm(tile_count)%ptop, &
@@ -1359,12 +1365,24 @@ contains
     character(len=256) :: error_message
 
     allocate(remapped_field(is:ie,js:je,1:npz))
-    call vertically_remap_field( &
-      phalf, &
-      coarse_diag%data%var3, &
-      upsampled_coarse_phalf, &
-      ptop, &
-      remapped_field)
+
+    if (trim(coarse_diag%name) .eq. 'temp_coarse' .or. &
+        trim(coarse_diag%name) .eq. 'vertical_eddy_flux_of_temperature_coarse') then
+      call vertically_remap_temperature( &
+        phalf, &
+        coarse_diag%data%var3, &
+        upsampled_coarse_phalf, &
+        ptop, &
+        remapped_field)
+    else 
+      call vertically_remap_field( &
+        phalf, &
+        coarse_diag%data%var3, &
+        upsampled_coarse_phalf, &
+        ptop, &
+        remapped_field)
+    endif
+   
     if (trim(coarse_diag%reduction_method) .eq. EDDY_COVARIANCE) then
        allocate(remapped_omega(is:ie,js:je,1:npz))
        call vertically_remap_field( &
@@ -1645,7 +1663,8 @@ contains
     integer :: index
 
     need_masked_area_array = .false.
-    valid_strategy = trim(coarsening_strategy) .eq. PRESSURE_LEVEL
+    valid_strategy = (trim(coarsening_strategy) .eq. PRESSURE_LEVEL .or. &
+                      trim(coarsening_strategy) .eq. PRESSURE_LEVEL_EXTRAPOLATE)
     if (.not. valid_strategy) return
     do index = 1, DIAG_SIZE
        valid_axes = coarse_diagnostics(index)%axes .eq. 3
