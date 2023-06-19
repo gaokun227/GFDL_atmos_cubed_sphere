@@ -21,7 +21,6 @@
 
 module coarse_graining_mod
 
-  use constants_mod, only: RDGAS, CP_AIR
   use fms_mod, only: check_nml_error, close_file, open_namelist_file
   use mpp_domains_mod, only: domain2d, mpp_define_io_domain, mpp_define_mosaic, mpp_get_compute_domain
   use mpp_mod, only: FATAL, input_nml_file, mpp_error, mpp_npes
@@ -34,10 +33,9 @@ module coarse_graining_mod
        get_coarse_array_bounds, coarse_graining_init, weighted_block_average, &
        weighted_block_edge_average_x, weighted_block_edge_average_y, MODEL_LEVEL, &
        block_upsample, mask_area_weights, PRESSURE_LEVEL, PRESSURE_LEVEL_EXTRAPOLATE, &
-       vertical_remapping_requirements, vertically_remap_field, vertically_remap_temperature, &
-       remap_edges_along_x, remap_edges_along_y, block_edge_sum_x, block_edge_sum_y, &
-       block_mode, block_min, block_max, eddy_covariance, eddy_covariance_2d_weights, &
-       eddy_covariance_3d_weights
+       vertical_remapping_requirements, vertically_remap_field, remap_edges_along_x, &
+       remap_edges_along_y, block_edge_sum_x, block_edge_sum_y, block_mode, block_min, &
+       block_max, eddy_covariance, eddy_covariance_2d_weights, eddy_covariance_3d_weights
 
   interface block_sum
      module procedure block_sum_2d_real4
@@ -135,16 +133,6 @@ module coarse_graining_mod
      module procedure vertically_remap_field_real4
      module procedure vertically_remap_field_real8
   end interface vertically_remap_field
-
-  interface vertically_remap_temperature
-     module procedure vertically_remap_temperature_real4
-     module procedure vertically_remap_temperature_real8
-  end interface vertically_remap_temperature
-
-  interface compute_potential_temperature
-     module procedure compute_potential_temperature_real4
-     module procedure compute_potential_temperature_real8
-  end interface compute_potential_temperature
   
   interface compute_pfull_from_phalf
      module procedure compute_pfull_from_phalf_real4
@@ -780,118 +768,6 @@ contains
     enddo
   end subroutine vertically_remap_field_real8
 
-  function compute_potential_temperature_real4(temperature, pressure, target_pressure)
-    real(kind=4), intent(in) :: temperature(is:ie,js:je)
-    real(kind=4), intent(in) :: pressure(is:ie,js:je)
-    real(kind=4), intent(in) :: target_pressure(is:ie,js:je)
-
-    real(kind=4) :: compute_potential_temperature_real4(is:ie,js:je)
-    real(kind=4) :: poisson_constant
-
-    poisson_constant = RDGAS / CP_AIR
-    compute_potential_temperature_real4 = temperature * (target_pressure / pressure) ** poisson_constant
-  end function compute_potential_temperature_real4
-
-  subroutine vertically_remap_temperature_real4(phalf_in, temperature, phalf_out, ptop, temperature_out)
-    real(kind=4), intent(in) :: phalf_in(is:ie,js:je,1:npz+1), phalf_out(is:ie,js:je,1:npz+1)
-    real(kind=4), intent(in) :: temperature(is:ie,js:je,1:npz)
-    real(kind=4), intent(in) :: ptop
-    real(kind=4), intent(out) :: temperature_out(is:ie,js:je,1:npz)
-
-    real(kind=4), allocatable :: pfull_in(:,:,:), pfull_out(:,:,:)
-    integer :: kn, km, kord, iv, j, q2, k
-
-    kn = npz
-    km = npz
-
-    ! Hard code values of kord and iv for now
-    kord = 1
-    iv = 1
-    q2 = 1
-
-    ! Start by standardly remapping temperature using nearest-neighbor
-    ! extrapolation for all extrapolated points.
-    do j = js, je
-       call mappm(km, phalf_in(is:ie,j,:), temperature(is:ie,j,:), kn, &
-            phalf_out(is:ie,j,:), temperature_out(is:ie,j,:), is, ie, iv, kord, ptop)
-    enddo
-
-    ! Where we need to extrapolate the temperature, replace adjust the
-    ! extrapolated temperature adiabatically to the coarse level midpoint.
-    allocate(pfull_in(is:ie,js:je,1:npz))
-    allocate(pfull_out(is:ie,js:je,1:npz))
-    call compute_pfull_from_phalf(phalf_in, pfull_in)
-    call compute_pfull_from_phalf(phalf_out, pfull_out)
-
-    do k = 1, npz
-      ! Note this is the inverse condition to what is used in mask_area_weights
-      ! since we want points that *are* extrapolated rather than not.
-      where (phalf_out(is:ie,js:je,k+1) .ge. phalf_in(is:ie,js:je,npz+1))
-        temperature_out(is:ie,js:je,k) = compute_potential_temperature( &
-          temperature_out(is:ie,js:je,k), &
-          pfull_in(is:ie,js:je,npz), &
-          pfull_out(is:ie,js:je,k) &
-        )
-      endwhere
-    enddo
-  end subroutine vertically_remap_temperature_real4
-
-  subroutine vertically_remap_temperature_real8(phalf_in, temperature, phalf_out, ptop, temperature_out)
-    real(kind=8), intent(in) :: phalf_in(is:ie,js:je,1:npz+1), phalf_out(is:ie,js:je,1:npz+1)
-    real(kind=8), intent(in) :: temperature(is:ie,js:je,1:npz)
-    real(kind=8), intent(in) :: ptop
-    real(kind=8), intent(out) :: temperature_out(is:ie,js:je,1:npz)
-
-    real(kind=8), allocatable :: pfull_in(:,:,:), pfull_out(:,:,:)
-    integer :: kn, km, kord, iv, j, q2, k
-
-    kn = npz
-    km = npz
-
-    ! Hard code values of kord and iv for now
-    kord = 1
-    iv = 1
-    q2 = 1
-
-    ! Start by standardly remapping temperature using nearest-neighbor
-    ! extrapolation for all extrapolated points.
-    do j = js, je
-       call mappm(km, phalf_in(is:ie,j,:), temperature(is:ie,j,:), kn, &
-            phalf_out(is:ie,j,:), temperature_out(is:ie,j,:), is, ie, iv, kord, ptop)
-    enddo
-
-    ! Where we need to extrapolate the temperature, replace adjust the
-    ! extrapolated temperature adiabatically to the coarse level midpoint.
-    allocate(pfull_in(is:ie,js:je,1:npz))
-    allocate(pfull_out(is:ie,js:je,1:npz))
-    call compute_pfull_from_phalf(phalf_in, pfull_in)
-    call compute_pfull_from_phalf(phalf_out, pfull_out)
-
-    do k = 1, npz
-      ! Note this is the inverse condition to what is used in mask_area_weights
-      ! since we want points that *are* extrapolated rather than not.
-      where (phalf_out(is:ie,js:je,k+1) .ge. phalf_in(is:ie,js:je,npz+1))
-        temperature_out(is:ie,js:je,k) = compute_potential_temperature( &
-          temperature_out(is:ie,js:je,k), &
-          pfull_in(is:ie,js:je,npz), &
-          pfull_out(is:ie,js:je,k) &
-        )
-      endwhere
-    enddo
-  end subroutine vertically_remap_temperature_real8
-  
-  function compute_potential_temperature_real8(temperature, pressure, target_pressure)
-    real(kind=8), intent(in) :: temperature(is:ie,js:je)
-    real(kind=8), intent(in) :: pressure(is:ie,js:je)
-    real(kind=8), intent(in) :: target_pressure(is:ie,js:je)
-
-    real(kind=8) :: compute_potential_temperature_real8(is:ie,js:je)
-    real(kind=8) :: poisson_constant
-
-    poisson_constant = RDGAS / CP_AIR
-    compute_potential_temperature_real8 = temperature * (target_pressure / pressure) ** poisson_constant
-  end function compute_potential_temperature_real8
-  
   subroutine block_upsample_2d_real4(coarse, fine)
     real(kind=4), intent(in) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse)
     real(kind=4), intent(out) :: fine(is:ie,js:je)
