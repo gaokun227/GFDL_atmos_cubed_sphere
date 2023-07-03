@@ -666,6 +666,14 @@ module fv_eta_mod
            stretch_fac = 1.03
            auto_routine = 1
          endif
+
+      ! kgao: introduce HAFS L81 config
+      case (81)
+         do k=1,km+1
+            ak(k) = a81(k)
+            bk(k) = b81(k)
+         enddo
+
       case (90)          ! super-duper cell
          ptop = 40.e2
          stretch_fac = 1.025
