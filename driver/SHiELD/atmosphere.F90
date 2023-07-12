@@ -1300,7 +1300,11 @@ contains
 !SJL: perform vertical filling to fix the negative humidity if the SAS convection scheme is used
 !     This call may be commented out if RAS or other positivity-preserving CPS is used.
      blen = Atm_block%blksz(nb)
-     if (Atm(n)%flagstruct%fill_gfs) call fill_gfs(blen, npz, IPD_Data(nb)%Statein%prsi, IPD_Data(nb)%Stateout%gq0, 1.e-9_kind_phys)
+     if (Atm(n)%flagstruct%fill_gfs) then
+        do iq = 1, nq
+           call fill_gfs(blen, npz, IPD_Data(nb)%Statein%prsi, IPD_Data(nb)%Stateout%gq0(:,:,iq))
+        enddo
+     endif
 
 !LMH 28sep18: If the name of a tracer ends in 'nopbl' then do NOT update it;
      !override this by setting Stateout%gq0(:,:,iq) to the input value
