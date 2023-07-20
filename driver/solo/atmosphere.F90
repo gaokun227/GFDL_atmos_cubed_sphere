@@ -184,6 +184,9 @@ contains
                 Atm(mygrid)%npz,  Atm(mygrid)%flagstruct%hydrostatic, Atm(mygrid)%flagstruct%moist_phys)
         endif
 
+        Atm(n)%time_init = Time_init
+
+     enddo
 
    call timing_off('ATMOS_INIT')
 
