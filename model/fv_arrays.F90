@@ -737,12 +737,13 @@ module fv_arrays_mod
    logical :: fill_gfs = .true. ! default behavior
    logical :: check_negative = .false.   !< Whether to print the most negativ global value of microphysical tracers.
    logical :: non_ortho = .true.
-   logical :: moist_phys = .true.     !< Run with moist physics
+   logical :: moist_phys = .true.     !< Run with moist physics. This is *only* false in idealized (solo_core)
+                                      !< simulations with adiabatic = .true. or in a held_suarez simulation. When false,
+                                      !< the virtual temperature effect is disabled, the moist effect in total energy
+                                      !< is neglected, and water species are treated as passive tracers.
    logical :: do_Held_Suarez = .false.   !< Whether to use Held-Suarez forcing. Requires adiabatic
                                          !< to be false. The default is .false.; this option has no
                                          !< effect if not running solo_core.
-   logical :: do_reed_physics = .false.
-   logical :: reed_cond_only = .false.
    logical :: reproduce_sum = .true.  !< uses an exactly-reproducible global sum operation performed
                                       !< when computing the global energy for consv_te. This is used
                                       !< because the FMS routine mpp_sum() is not bit-wise reproducible
