@@ -170,6 +170,7 @@ module fv_nwp_nudge_mod
 
 ! track dataset: 'INPUT/tropical_cyclones.txt'
 
+  logical :: do_breed_TC = .true. ! Preserves older default behavior
   logical :: breed_srf_w = .false.
   real :: grid_size     = 28.E3
   real :: tau_vt_slp    = 1200.
@@ -223,7 +224,7 @@ module fv_nwp_nudge_mod
                           tau_vt_rad, r_lo, r_hi, use_high_top, add_bg_wind, conserve_mom, conserve_hgt,  &
                           min_nobs, min_mslp, nudged_time, r_fac, r_min, r_inc, ibtrack, track_file_name, file_names,         &
                           input_fname_list, analysis_file_first, analysis_file_last, P_relax, P_norelax, &
-                          nwp_nudge_int, time_varying_nwp, using_merra2, climate_nudging
+                          nwp_nudge_int, time_varying_nwp, using_merra2, climate_nudging, do_breed_TC
 
  contains
 
@@ -327,7 +328,7 @@ module fv_nwp_nudge_mod
         mask(i,j) = 1.
      enddo
   enddo
-  if ( tc_mask )  call get_tc_mask(time, mask, agrid)
+  if ( do_breed_TC .and. tc_mask )  call get_tc_mask(time, mask, agrid)
 
 ! The following profile is suitable only for nwp purposes; if the analysis has a good representation
 ! of the strat-meso-sphere the profile for upper layers should be changed.
@@ -600,7 +601,7 @@ module fv_nwp_nudge_mod
            enddo
          else
            do j=js,je
-             do i=is,ie
+              do i=is,ie
                t_dt(i,j,k) = prof_t(k)*(t_obs(i,j,k)/(1.+zvir*q(i,j,k,1))-pt(i,j,k))*rdt
              enddo
            enddo
@@ -712,8 +713,9 @@ module fv_nwp_nudge_mod
   deallocate ( q_obs )
   deallocate ( ps_obs )
 
-  if ( breed_srf_w .and. nudge_winds )   &
-  call breed_srf_winds(Time, dt, npz, u_obs, v_obs, ak, bk, ps, phis, delp, ua, va, u_dt, v_dt, pt, q, nwat, zvir, gridstruct)
+  if ( do_breed_TC .and. breed_srf_w .and. nudge_winds )   then
+     call breed_srf_winds(Time, dt, npz, u_obs, v_obs, ak, bk, ps, phis, delp, ua, va, u_dt, v_dt, pt, q, nwat, zvir, gridstruct)
+  endif
 
   if ( nudge_debug) then
        call prt_maxmin('T increment=', t_dt,   is, ie, js, je, 0, npz, dt)
@@ -929,7 +931,7 @@ module fv_nwp_nudge_mod
  bias = g0_sum(ps_dt, is, ie, js, je, 1, .true., isd, ied, jsd, jed, area)
 
  if ( abs(bias) < esl ) then
-      if(master .and. nudge_debug) write(*,*) 'Very small PS bias=', -bias, ' No bais adjustment'
+      if(master .and. nudge_debug) write(*,*) 'Very small PS bias=', -bias, ' No bias adjustment'
       return
  else
       if(master .and. nudge_debug) write(*,*) 'Significant PS bias=', -bias
@@ -1375,9 +1377,10 @@ module fv_nwp_nudge_mod
       enddo
    endif
 
-   if ( k_breed==0 ) k_breed = max(1, ks)
-
-   call slp_obs_init
+   if (do_breed_tc) then
+      if ( k_breed==0 ) k_breed = max(1, ks)
+      call slp_obs_init
+   endif
 
 !-----------------------------------------------------------
 ! Initialize lat-lon to Cubed bi-linear interpolation coeff:
@@ -2136,6 +2139,7 @@ module fv_nwp_nudge_mod
       real(kind=R_GRID), pointer :: agrid(:,:,:)
 
       if ( forecast_mode ) return
+      if ( .not. do_breed_TC ) return
 
       agrid => gridstruct%agrid_64
       area  => gridstruct%area
@@ -2491,6 +2495,7 @@ module fv_nwp_nudge_mod
 
 !--------------------------
 ! Update delp halo regions:
+! (may need modification for nest/regional)
 !--------------------------
     call mpp_update_domains(delp, domain_local, complete=.true.)
 
@@ -3512,7 +3517,7 @@ module fv_nwp_nudge_mod
   rdxc   => gridstruct%rdxc
   rdyc   => gridstruct%rdyc
 
-  da_min => gridstruct%da_min
+ da_min => gridstruct%da_min
 
   bounded_domain => gridstruct%bounded_domain
   sw_corner => gridstruct%sw_corner
@@ -3526,6 +3531,7 @@ module fv_nwp_nudge_mod
 
 !$OMP parallel do default(none) shared(is,ie,js,je,kmd,q,qdt)
    do k=1,kmd
+      q(:,:,k) = 0.0 !init haloes to 0.
       do j=js,je
          do i=is,ie
             q(i,j,k) = qdt(i,j,k)
