@@ -27,8 +27,7 @@
 
 module external_aero_mod
 
-	use fms_mod, only: file_exist, mpp_error, FATAL
-	use mpp_mod, only: mpp_pe, mpp_root_pe
+	use mpp_mod, only: mpp_pe, mpp_root_pe, mpp_error, FATAL
 	use time_manager_mod, only: time_type
 	use fv_mapz_mod, only: map1_q2
 	use fv_fill_mod, only: fillz
@@ -53,8 +52,7 @@ contains
 
 subroutine load_aero(Atm, Time)
 
-	use fms_io_mod, only: restart_file_type, register_restart_field
-	use fms_io_mod, only: restore_state
+	use fms2_io_mod, only: open_file, close_file, FmsNetcdfDomainFile_t, register_restart_field, read_restart, register_axis
 	use fv_arrays_mod, only: fv_atmos_type
 	use diag_manager_mod, only: register_static_field, register_diag_field
 
@@ -62,15 +60,16 @@ subroutine load_aero(Atm, Time)
 
 	type(time_type), intent(in) :: Time
 	type(fv_atmos_type), intent(in), target :: Atm
-	type(restart_file_type) :: aero_restart
+	type(FmsNetcdfDomainFile_t) :: aero_restart
 
 	integer :: k
 	integer :: is, ie, js, je
-	integer :: id_res
 
 	real, allocatable, dimension(:,:,:,:) :: aero_lndp
 
-	character(len=64) :: file_name = "MERRA2_400.inst3_3d_aer_Nv.climatology.nc"
+	character(len=8), dimension(2) :: dim_names_2d
+
+	character(len=64) :: file_name = "INPUT/MERRA2_400.inst3_3d_aer_Nv.climatology.nc"
 
 	is = Atm%bd%is
 	ie = Atm%bd%ie
@@ -84,30 +83,26 @@ subroutine load_aero(Atm, Time)
 	! -----------------------------------------------------------------------
 	! load aerosol data
 
-	if (file_exist('INPUT/'//trim(file_name),domain=Atm%domain)) then
+	! allocate share arrays
+	if (.not. allocated(aero_ps)) allocate(aero_ps(is:ie,js:je,nmon))
+	if (.not. allocated(aero_p)) allocate(aero_p(is:ie,js:je,nlev,nmon))
+	if (.not. allocated(aero_pe)) allocate(aero_pe(is:ie,js:je,nlev+1,nmon))
+	if (.not. allocated(aero_dp)) allocate(aero_dp(is:ie,js:je,nlev,nmon))
+	if (.not. allocated(aerosol)) allocate(aerosol(is:ie,js:je,nlev,nmon))
 
-		! allocate share arrays
-		if (.not. allocated(aero_ps)) allocate(aero_ps(is:ie,js:je,nmon))
-		if (.not. allocated(aero_p)) allocate(aero_p(is:ie,js:je,nlev,nmon))
-		if (.not. allocated(aero_pe)) allocate(aero_pe(is:ie,js:je,nlev+1,nmon))
-		if (.not. allocated(aero_dp)) allocate(aero_dp(is:ie,js:je,nlev,nmon))
-		if (.not. allocated(aerosol)) allocate(aerosol(is:ie,js:je,nlev,nmon))
-
-		! read in restart files
-		id_res = register_restart_field(aero_restart,trim(file_name),"PS",&
-			aero_ps,domain=Atm%domain)
-		id_res = register_restart_field(aero_restart,trim(file_name),"DELP",&
-			aero_dp,domain=Atm%domain)
-		id_res = register_restart_field(aero_restart,trim(file_name),"SO4",&
-			aerosol,domain=Atm%domain)
-		call restore_state(aero_restart)
-
+	! read in restart files
+	if (open_file(aero_restart,file_name,"read",Atm%domain_for_read,is_restart=.true.,dont_add_res_to_filename=.true.)) then
+		dim_names_2d(1) = "lat"
+		dim_names_2d(2) = "lon"
+		call register_axis(aero_restart,"lat","y")
+		call register_axis(aero_restart,"lon","x")
+		call register_restart_field(aero_restart,"PS",aero_ps,dim_names_2d)
+		call register_restart_field(aero_restart,"DELP",aero_dp,dim_names_2d)
+		call register_restart_field(aero_restart,"SO4",aerosol,dim_names_2d)
+		call read_restart(aero_restart)
+		call close_file(aero_restart)
 	else
-
-		! stop when aerosol does not exist
-		call mpp_error("external_aero_mod",&
-			"file: "//trim(file_name)//" does not exist.",FATAL)
-
+		call mpp_error(FATAL,'==> Error in external_aero::load_aero: tiled file '//trim(file_name)//' does not exist')
 	endif
 
 	! -----------------------------------------------------------------------
@@ -145,10 +140,8 @@ subroutine load_aero(Atm, Time)
 	! -----------------------------------------------------------------------
 	! register for diagnostic output
 
-	id_aero = register_static_field('dynamics','aero_ann',&
-		Atm%atmos_axes(1:2),'none','none')
-	id_aero_now= register_diag_field('dynamics','aero_now',&
-		Atm%atmos_axes(1:2),Time,'none','none')
+	id_aero = register_static_field('dynamics','aero_ann',Atm%atmos_axes(1:2),'none','none')
+	id_aero_now = register_diag_field('dynamics','aero_now',Atm%atmos_axes(1:2),Time,'none','none')
 
 end subroutine load_aero
 
