@@ -390,6 +390,14 @@ contains
     index = index + 1
     coarse_diagnostics(index)%axes = 3
     coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'qv_dt_nudge_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained specific humidity tendency from nudging'
+    coarse_diagnostics(index)%units = 'kg/kg/s'
+    coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 3
+    coarse_diagnostics(index)%module_name = DYNAMICS
     coarse_diagnostics(index)%name = 'qv_dt_gfdlmp_coarse'
     coarse_diagnostics(index)%description = 'coarse-grained specific humidity tendency from GFDL MP'
     coarse_diagnostics(index)%units = 'kg/kg/s'
@@ -631,6 +639,15 @@ contains
     coarse_diagnostics(index)%name = 'int_v_dt_nudge_coarse'
     coarse_diagnostics(index)%description = 'coarse-grained vertically integrated meridional wind tendency from nudging'
     coarse_diagnostics(index)%units = 'kg/m s/s'
+    coarse_diagnostics(index)%vertically_integrated = .true.
+    coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+
+    index = index + 1
+    coarse_diagnostics(index)%axes = 2
+    coarse_diagnostics(index)%module_name = DYNAMICS
+    coarse_diagnostics(index)%name = 'int_qv_dt_nudge_coarse'
+    coarse_diagnostics(index)%description = 'coarse-grained vertically integrated specific humidity tendency from nudging'
+    coarse_diagnostics(index)%units = 'kg/m**2/s'
     coarse_diagnostics(index)%vertically_integrated = .true.
     coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
 
@@ -1032,6 +1049,12 @@ contains
           if (.not. allocated(Atm(tile_count)%nudge_diag%nudge_v_dt)) then
              allocate(Atm(tile_count)%nudge_diag%nudge_v_dt(is:ie,js:je,1:npz))
              Atm(tile_count)%nudge_diag%nudge_v_dt(is:ie,js:je,1:npz) = 0.0
+          endif
+          coarse_diagnostic%data%var3 => Atm(tile_count)%nudge_diag%nudge_v_dt(is:ie,js:je,1:npz)
+       elseif (ends_with(coarse_diagnostic%name, 'qv_dt_nudge_coarse')) then
+          if (.not. allocated(Atm(tile_count)%nudge_diag%nudge_qv_dt)) then
+             allocate(Atm(tile_count)%nudge_diag%nudge_qv_dt(is:ie,js:je,1:npz))
+             Atm(tile_count)%nudge_diag%nudge_qv_dt(is:ie,js:je,1:npz) = 0.0
           endif
           coarse_diagnostic%data%var3 => Atm(tile_count)%nudge_diag%nudge_v_dt(is:ie,js:je,1:npz)
        elseif (ends_with(coarse_diagnostic%name, 'qv_dt_gfdlmp_coarse')) then
