@@ -1226,6 +1226,7 @@ module fv_arrays_mod
      real, _ALLOCATABLE :: nudge_delp_dt(:,:,:)
      real, _ALLOCATABLE :: nudge_u_dt(:,:,:)
      real, _ALLOCATABLE :: nudge_v_dt(:,:,:)
+     real, _ALLOCATABLE :: nudge_qv_dt(:,:,:)
 
   end type nudge_diag_type
 

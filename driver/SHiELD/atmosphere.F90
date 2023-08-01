@@ -357,7 +357,7 @@ contains
 !  --- initiate the start for a restarted regional forecast
    if ( Atm(mygrid)%gridstruct%regional .and. Atm(mygrid)%flagstruct%warm_start ) then
 
-     call start_regional_restart(Atm(1),       &
+     call start_regional_restart(Atm(1),       & !should be mygrid instead of 1???
                                  isc, iec, jsc, jec, &
                                  isd, ied, jsd, jed )
    endif
@@ -600,11 +600,11 @@ contains
        Atm(n)%sg_diag%v_dt = v_dt(isc:iec,jsc:jec,:)
     endif
     if (allocated(Atm(n)%sg_diag%t_dt)) then
-       t_dt(:,:,:) = rdt*(Atm(1)%pt(isc:iec,jsc:jec,:) - t_dt(:,:,:))
+       t_dt(:,:,:) = rdt*(Atm(n)%pt(isc:iec,jsc:jec,:) - t_dt(:,:,:))
        Atm(n)%sg_diag%t_dt = t_dt(isc:iec,jsc:jec,:)
     endif
     if (allocated(Atm(n)%sg_diag%qv_dt)) then
-       qv_dt(:,:,:) = rdt*(Atm(1)%q(isc:iec,jsc:jec,:,sphum) - qv_dt(:,:,:))
+       qv_dt(:,:,:) = rdt*(Atm(n)%q(isc:iec,jsc:jec,:,sphum) - qv_dt(:,:,:))
        Atm(n)%sg_diag%qv_dt = qv_dt(isc:iec,jsc:jec,:)
     endif
 

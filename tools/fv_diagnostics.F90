@@ -47,7 +47,7 @@ module fv_diagnostics_mod
  use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, mpp_max, NOTE, input_nml_file
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
- use fv_arrays_mod, only: max_step 
+ use fv_arrays_mod, only: max_step
  use gfdl_mp_mod, only: wqs, mqs3d, qs_init, c_liq, rad_ref
 
  use fv_diag_column_mod, only: fv_diag_column_init, sounding_column, debug_column
@@ -766,6 +766,14 @@ contains
           if ((id_v_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_v_dt))) then
              allocate (Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,npz))
              Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,1:npz) = 0.0
+          endif
+          id_qv_dt_nudge = register_diag_field('dynamics', &
+               'qv_dt_nudge', axes(1:3), Time, &
+               'specific humidity tendency from nudging', &
+               'kg/kg/s', missing_value=missing_value)
+          if ((id_qv_dt_nudge > 0) .and. (.not. allocated(Atm(n)%nudge_diag%nudge_qv_dt))) then
+             allocate (Atm(n)%nudge_diag%nudge_qv_dt(isc:iec,jsc:jec,npz))
+             Atm(n)%nudge_diag%nudge_qv_dt(isc:iec,jsc:jec,1:npz) = 0.0
           endif
 
        endif
@@ -1842,6 +1850,7 @@ contains
        if (id_delp_dt_nudge > 0) used=send_data(id_delp_dt_nudge,  Atm(n)%nudge_diag%nudge_delp_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_u_dt_nudge > 0) used=send_data(id_u_dt_nudge,  Atm(n)%nudge_diag%nudge_u_dt(isc:iec,jsc:jec,1:npz), Time)
        if (id_v_dt_nudge > 0) used=send_data(id_v_dt_nudge,  Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (id_qv_dt_nudge > 0) used=send_data(id_qv_dt_nudge,  Atm(n)%nudge_diag%nudge_qv_dt(isc:iec,jsc:jec,1:npz), Time)
 
        if (idiag%id_t_dt_sg > 0) used=send_data(idiag%id_t_dt_sg,  Atm(n)%sg_diag%t_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_u_dt_sg > 0) used=send_data(idiag%id_u_dt_sg,  Atm(n)%sg_diag%u_dt(isc:iec,jsc:jec,1:npz), Time)
@@ -3753,9 +3762,9 @@ contains
        if(id_diss > 0) used=send_data(id_diss, Atm(n)%diss_est(isc:iec,jsc:jec,:), Time)
 
        allocate( a3(isc:iec,jsc:jec,npz) )
-       if(id_theta_e > 0 .or.                                              &     
+       if(id_theta_e > 0 .or.                                              &
           id_theta_e100>0 .or. id_theta_e200>0 .or. id_theta_e250>0 .or. id_theta_e300>0 .or. &
-          id_theta_e500>0 .or. id_theta_e700>0 .or. id_theta_e850>0 .or. id_theta_e925>0 .or. & 
+          id_theta_e500>0 .or. id_theta_e700>0 .or. id_theta_e850>0 .or. id_theta_e925>0 .or. &
           id_theta_e1000>0) then
 
           if ( Atm(n)%flagstruct%adiabatic .and. Atm(n)%flagstruct%kord_tm>0 ) then
@@ -4514,7 +4523,7 @@ contains
  real(kind=R_GRID), intent(IN):: area(is-n_g:ie+n_g,js-n_g:je+n_g)
  type(domain2d), intent(INOUT) :: domain
 ! Local:
- real psq(is:ie,js:je,nwat), psqv(is:ie,js:je)
+ real psq(is:ie,js:je,nq), psqv(is:ie,js:je)
  real q_strat(is:ie,js:je)
  real qtot(nwat), qwat
  real psmo, totw, psdry
