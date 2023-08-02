@@ -186,8 +186,6 @@ contains
 
         Atm(n)%time_init = Time_init
 
-     enddo
-
    call timing_off('ATMOS_INIT')
 
   end subroutine atmosphere_init
