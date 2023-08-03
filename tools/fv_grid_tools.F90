@@ -127,25 +127,28 @@ contains
        else
           atm_mosaic = trim(grid_file)
        endif
-
-       ntiles = get_mosaic_ntiles(Grid_input)
-       if( .not. Atm%gridstruct%bounded_domain) then  !<-- The regional setup has only 1 tile so do not shutdown in that case.
-       if(ntiles .NE. 6) call mpp_error(FATAL, &
-          'fv_grid_tools(read_grid): ntiles should be 6 in mosaic file '//trim(atm_mosaic) )
-       if(nregions .NE. 6) call mpp_error(FATAL, &
-          'fv_grid_tools(read_grid): nregions should be 6 when reading from mosaic file '//trim(grid_file) )
-       endif
        call close_file(Grid_input)
     endif
 
     call get_mosaic_tile_grid(atm_hgrid, atm_mosaic, Atm%domain)
 
+    if (open_file(Grid_input, atm_mosaic, "read")) then
+      ntiles = get_mosaic_ntiles(Grid_input)
+      call close_file(Grid_input)
+    endif
     grid_form = "none"
     if (open_file(Grid_input, atm_hgrid, "read")) then
        call get_global_attribute(Grid_input, "history", attvalue)
        if( index(attvalue, "gnomonic_ed") > 0) grid_form = "gnomonic_ed"
     if(grid_form .NE. "gnomonic_ed") call mpp_error(FATAL, &
          "fv_grid_tools(read_grid): the grid should be 'gnomonic_ed' when reading from grid file, contact developer")
+
+    if( .not. Atm%gridstruct%bounded_domain) then  !<-- The regional setup has only 1 tile so do not shutdown in that case.
+    if(ntiles .NE. 6) call mpp_error(FATAL, &
+       'fv_grid_tools(read_grid): ntiles should be 6 in mosaic file '//trim(atm_mosaic) )
+    if(nregions .NE. 6) call mpp_error(FATAL, &
+       'fv_grid_tools(read_grid): nregions should be 6 when reading from mosaic file '//trim(grid_file) )
+    endif
 
        call get_variable_attribute(Grid_input, 'x', 'units', units)
 
