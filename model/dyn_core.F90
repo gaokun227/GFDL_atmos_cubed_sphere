@@ -320,7 +320,8 @@ contains
      endif
 
      if ( flagstruct%fv_debug ) then
-          if(is_master()) write(*,*) 'n_split loop, it=', it
+        if(is_master()) write(*,*) 'n_split loop, it=', it
+        call prt_mxm('delp',   delp, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
           if ( .not. flagstruct%hydrostatic )    &
           call prt_mxm('delz',  delz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
      endif
@@ -529,7 +530,7 @@ contains
                                akap, cappa,  cp,  ptop, phis, omga, ptc,  &
                                q_con,  delpc, gz,  pkc, ws3, flagstruct%p_fac, &
                                flagstruct%a_imp, flagstruct%scale_z, pfull, &
-                               flagstruct%tau_w, flagstruct%rf_cutoff )
+                               flagstruct%fast_tau_w_sec, flagstruct%rf_cutoff )
            call timing_off('Riem_Solver')
 
            if (gridstruct%nested) then
@@ -847,8 +848,9 @@ contains
 #endif
      call timing_off('COMM_TOTAL')
     if ( flagstruct%fv_debug ) then
+        call prt_mxm('delp 1',   delp, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
          if ( .not. flagstruct%hydrostatic )    &
-         call prt_mxm('delz',  delz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
+         call prt_mxm('delz 1',  delz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
     endif
 
     !Want to move this block into the hydro/nonhydro branch above and merge the two if structures
@@ -906,6 +908,7 @@ contains
                          gridstruct%rarea, dp_ref, zs, zh, crx, cry, xfx, yfx, ws, rdt, gridstruct, bd, flagstruct%lim_fac)
         call timing_off('UPDATE_DZ')
     if ( flagstruct%fv_debug ) then
+        call prt_mxm('delp updated',   delp, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
          if ( .not. flagstruct%hydrostatic )    then
             call prt_mxm('delz updated',  delz, is, ie, js, je, 0, npz, 1., gridstruct%area_64, domain)
             call prt_mxm('WS', ws, is, ie, js, je, 0, 1, 1., gridstruct%area_64, domain)
@@ -928,7 +931,7 @@ contains
                          pe, pkc, pk3, pk, peln, ws, &
                          flagstruct%scale_z, flagstruct%p_fac, flagstruct%a_imp, &
                          flagstruct%use_logp, remap_step, beta<-0.1, flagstruct%d2bg_zq, &
-                         flagstruct%fv_debug, flagstruct%tau_w)
+                         flagstruct%fv_debug, flagstruct%fast_tau_w_sec)
         call timing_off('Riem_Solver')
 
         call timing_on('COMM_TOTAL')
