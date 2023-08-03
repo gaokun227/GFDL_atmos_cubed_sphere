@@ -132,8 +132,6 @@
       real    :: small_earth_scale = 1.0
       real    :: umean = 0.0
       real    :: vmean = 0.0
-      real    :: Ushear = 30. !TOTAL shear
-      real    :: Vshear = 0.
       logical :: w_forcing
 
 ! Case 0 parameters
@@ -4960,7 +4958,6 @@ end subroutine terminator_tracers
       case ( 17 )
 !---------------------------
 ! Doubly periodic SuperCell, straight wind (v==0)
-! configurable for different shears and hodographs
 !--------------------------
         zvir = rvgas/rdgas - 1.
         p00 = 1000.E2
@@ -5003,35 +5000,27 @@ end subroutine terminator_tracers
                  pt(i,j,k)   = ts1(k)
                   q(i,j,k,1) = qs1(k)
 !                 delz(i,j,k) = rdgas/grav*ts1(k)*(1.+zvir*qs1(k))*(peln(i,k,j)-peln(i,k+1,j))
-              enddo
-           enddo
-        enddo
+                enddo
+             enddo
+          enddo
 
-        call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
-                   pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
-                   moist_phys, .false., nwat, domain, flagstruct%adiabatic, .true.)
+          call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                     pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                     moist_phys, .false., nwat, domain, flagstruct%adiabatic, .true.)
+
+
 
         ze1(npz+1) = 0.
         do k=npz,1,-1
            ze1(k) = ze1(k+1) - delz(is,js,k)
         enddo
 
-        !Straight wind (user configurable)
-        ! 30 m/s == supercell (Ushear default) morphable into a semicircular hodograph
-        ! mean wind set to 0
         do k=1,npz
-           zm = 0.5*(ze1(k)+ze1(k+1))
-           !utmp = Ushear*(tanh(zm/3.E3) - 0.5) + Umean ! subtract off mean wind, add in prescribed mean
-           utmp = -Ushear*0.5*(cos(pi*zm/6.E3)) + Umean
+             zm = 0.5*(ze1(k)+ze1(k+1))
+           utmp = Umean*tanh(zm/3.E3) - Umean*0.5 ! subtract off mean wind
            do j=js,je+1
               do i=is,ie
                  u(i,j,k) = utmp
-             enddo
-           enddo
-           vtmp = Vshear*0.5*(sin(pi*zm/6.E3) - 2./pi) + Umean
-           do j=js,je
-              do i=is,ie+1
-                 v(i,j,k) = vtmp
              enddo
            enddo
         enddo
@@ -5118,8 +5107,6 @@ end subroutine terminator_tracers
         enddo
 
 ! Quarter-circle hodograph (Harris approximation)
-!can we do better than this??
-! 30 m/s == supercell (us0 default)
         do k=1,npz
            zm = 0.5*(ze1(k)+ze1(k+1))
            if ( zm .le. 2.e3 ) then
@@ -6157,7 +6144,7 @@ end subroutine terminator_tracers
         integer :: ierr, f_unit, unit, ios
         namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size, &
              no_wind, gaussian_dt, dt_amp, dt_rad, do_marine_sounding, checker_tr, small_earth_scale, &
-             Umean, Vmean, w_forcing, dp_TC, rp_TC, Ts_TC, Ushear, Vshear
+             Umean, Vmean, w_forcing, dp_TC, rp_TC, Ts_TC
 
 #include<file_version.h>
 
