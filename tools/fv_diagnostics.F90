@@ -4379,7 +4379,7 @@ contains
       if(master) then
          j = min(len(trim(qname)),12)
          display_name = qname(1:j)
-         write(*,'(A12, A, A, A4, G, A4, G)') display_name, ' ', trim(gn), ' max=', qmax*fac, 'min=',qmin*fac
+         write(*,'(A12, A, A, A5, G, A5, G)') display_name, ' ', trim(gn), ' max=', qmax*fac, 'min=',qmin*fac
       endif
 
  end subroutine prt_maxmin
