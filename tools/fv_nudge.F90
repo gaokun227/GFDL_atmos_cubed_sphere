@@ -95,19 +95,20 @@ module fv_nwp_nudge_mod
 
 ! Namelist variables:
 ! ---> h1g, add the list of input NCEP analysis data files, 2012-10-22
- character(len=128):: input_fname_list =""       ! a file lists the input NCEP analysis data
- character(len=128):: analysis_file_first =""    ! the first NCEP analysis file to be used for nudging,
-                                                 ! by default, the first file in the "input_fname_list"
- character(len=128):: analysis_file_last=""      ! the last NCEP analysis file to be used for nudging
-                                                 ! by default, the last file in the "input_fname_list"
+ character(len=128):: input_fname_list =""       !< text file that lists the input NCEP analysis data
+                                                 !< only enabled if set.
+ character(len=128):: analysis_file_first =""    !< the first NCEP analysis file to be used for nudging,
+                                                 !< by default, the first file in the "input_fname_list"
+ character(len=128):: analysis_file_last=""      !< the last NCEP analysis file to be used for nudging
+                                                 !< by default, the last file in the "input_fname_list"
 
- real   :: P_relax = 30.E2                       ! from P_relax upwards, nudging is reduced linearly
-                                                 ! proportional to pfull/P_relax
+ real   :: P_relax = 30.E2                       !< from P_relax upwards, nudging is reduced linearly
+                                                 !< proportional to pfull/P_relax (in Pa)
 
- real   :: P_norelax = 0.0                       ! from P_norelax upwards, no nudging
+ real   :: P_norelax = 0.0                       !< from P_norelax (in Pa) upwards, no nudging
 ! <--- h1g, 2012-10-22
 
- character(len=128):: file_names(nfile_max)
+ character(len=128):: file_names(nfile_max)      !< comma-separated list of input analysis files to nudge towards.
  character(len=128):: track_file_name
  integer :: nfile_total = 0       ! =5 for 1-day (if datasets are 6-hr apart)
  real    :: p_wvp = 100.E2        ! cutoff level for specific humidity nudging

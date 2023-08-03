@@ -343,11 +343,11 @@ contains
     character(len=64) :: fn_sfc_ics = 'INPUT/sfc_data.nc'
     character(len=64) :: fn_oro_ics = 'INPUT/oro_data.nc'
     logical :: remap
-    logical :: filtered_terrain = .true.
-    logical :: gfs_dwinds = .true.
-    integer :: levp = 64
-    logical :: checker_tr = .false.
-    integer :: nt_checker = 0
+    logical :: filtered_terrain = .true. !< use orography-maker filtered terrain for remapping and model orography
+    logical :: gfs_dwinds = .true. !< not used
+    integer :: levp = 64 !< not used
+    logical :: checker_tr = .false. !< whether to create idealized checkerboard pattern
+    integer :: nt_checker = 0 !< number of tracers to initialize with checkerboard pattern
     character(len=20) :: suffix
     character(len=1) :: tile_num
     real(kind=R_GRID), dimension(2):: p1, p2, p3

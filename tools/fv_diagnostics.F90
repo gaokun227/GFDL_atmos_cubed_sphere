@@ -4388,7 +4388,7 @@ contains
       if(master) then
          j = min(len(trim(qname)),12)
          display_name = qname(1:j)
-         write(*,*) display_name, ' ', trim(gn), ' max=', qmax*fac, 'min=',qmin*fac
+         write(*,'(A12, A, A, A5, G, A5, G)') display_name, ' ', trim(gn), ' max=', qmax*fac, 'min=',qmin*fac
       endif
 
  end subroutine prt_maxmin
@@ -4436,9 +4436,9 @@ contains
       gmean = g_sum(domain, q(is:ie,js:je,km), is, ie, js, je, 3, area, 1)
 
       if(master) then
-         j = min(len(trim(qname)),8)
+         j = min(len(trim(qname)),12)
          display_name = qname(1:j)
-         write(6,*) display_name, trim(gn), qmax*fac, qmin*fac, gmean*fac
+         write(6,'(A12,A,3G)') display_name, trim(gn), qmax*fac, qmin*fac, gmean*fac
       endif
 
  end subroutine prt_mxm
@@ -4507,7 +4507,7 @@ contains
  call z_sum(is, ie, js, je, kstrat, n_g, delp, q(is-n_g,js-n_g,1,sphum), q_strat(is,js))
  psmo = g_sum(domain, q_strat(is,js), is, ie, js, je, n_g, area, 1) * 1.e6           &
       / p_sum(is, ie, js, je, kstrat, n_g, delp, area, domain)
- if(master) write(*,*) 'Mean_Specific_Humidity (mg/kg) above 75 mb', trim(gn), ' = ', psmo
+ if(master) write(*,*) 'Mean Specific Humidity (mg/kg) above 75 mb', trim(gn), ' = ', psmo
  endif
 
 
@@ -4524,23 +4524,23 @@ contains
  psdry = psmo - totw
 
  if( master ) then
-     write(*,*) 'Total_Surface_Pressure (mb)', trim(gn), ' = ',  0.01*psmo
-     write(*,*) 'Mean_Dry_Surface_Pressure (mb)', trim(gn), ' = ',    0.01*psdry
-     write(*,*) 'Total_Water_Vapor (kg/m**2)', trim(gn), ' = ',  qtot(sphum)*ginv
+     write(*,*) 'Total Surface Pressure (mb)', trim(gn), ' = ',  0.01*psmo
+     write(*,*) 'Mean Dry Surface Pressure (mb)', trim(gn), ' = ',    0.01*psdry
+     write(*,*) 'Total Water Vapor (kg/m**2)', trim(gn), ' = ',  qtot(sphum)*ginv
      if ( nwat> 2 ) then
           write(*,*) '--- Micro Phys water substances (kg/m**2) ---'
-          write(*,*) 'Total_Cloud_Water', trim(gn), ' = ', qtot(liq_wat)*ginv
+          write(*,*) 'Total Cloud Water', trim(gn), ' = ', qtot(liq_wat)*ginv
           if (rainwat > 0) &
-               write(*,*) 'Total_Rain_Water ', trim(gn), ' = ', qtot(rainwat)*ginv
+               write(*,*) 'Total Rain Water ', trim(gn), ' = ', qtot(rainwat)*ginv
           if (ice_wat > 0) &
-               write(*,*) 'Total_Cloud_Ice  ', trim(gn), ' = ', qtot(ice_wat)*ginv
+               write(*,*) 'Total Cloud Ice  ', trim(gn), ' = ', qtot(ice_wat)*ginv
           if (snowwat > 0) &
-               write(*,*) 'Total_Snow       ', trim(gn), ' = ', qtot(snowwat)*ginv
+               write(*,*) 'Total Snow       ', trim(gn), ' = ', qtot(snowwat)*ginv
           if (graupel > 0) &
-               write(*,*) 'Total_Graupel    ', trim(gn), ' = ', qtot(graupel)*ginv
+               write(*,*) 'Total Graupel    ', trim(gn), ' = ', qtot(graupel)*ginv
           write(*,*) '---------------------------------------------'
      elseif ( nwat==2 ) then
-          write(*,*) 'GFS_Condensate (kg/m^2)', trim(gn), ' = ', qtot(liq_wat)*ginv
+          write(*,*) 'GFS Condensate (kg/m^2)', trim(gn), ' = ', qtot(liq_wat)*ginv
      endif
   endif
 
