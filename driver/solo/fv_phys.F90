@@ -31,7 +31,7 @@ use fv_sg_mod,             only: fv_subgrid_z
 use fv_update_phys_mod,    only: fv_update_phys
 use fv_timing_mod,         only: timing_on, timing_off
 use mon_obkv_mod,          only: mon_obkv
-use tracer_manager_mod,    only: get_tracer_index, adjust_mass
+use tracer_manager_mod,    only: get_tracer_index, adjust_mass, get_tracer_names
 use field_manager_mod,     only: MODEL_ATMOS
 use fms_mod,               only: error_mesg, FATAL, file_exist, open_namelist_file,  &
                                  check_nml_error, mpp_pe, mpp_root_pe, close_file, &
@@ -244,9 +244,11 @@ contains
     real :: qdiag(1,1,1)
     logical moist_phys
     integer  isd, ied, jsd, jed
-    integer  i, j, k, m, n, int
+    integer  i, j, k, m, n, int, iq
     integer  theta_d, Cl, Cl2
     logical used
+    character(len=32) :: tracer_name
+    real::lat_thresh, tracer_clock
 
    call get_time (time, seconds, days)
 
@@ -613,6 +615,32 @@ contains
     deallocate ( v_dt )
     deallocate ( t_dt )
     deallocate ( q_dt )
+
+!LMH 7jan2020: Update PBL and other clock tracers, if present
+    tracer_clock = time_total*1.e-6
+    lat_thresh = 15.*pi/180.
+    do iq = 1, nq
+       call get_tracer_names (MODEL_ATMOS, iq, tracer_name)
+       if (trim(tracer_name) == 'sfc_clock') then
+          do j=js,je
+             do i=is,ie
+                q(i,j,npz-4:npz,iq) = tracer_clock
+             enddo
+          enddo
+       else if (trim(tracer_name) == 'itcz_clock' ) then
+          do k=1,npz
+             do j=js,je
+                do i=is,ie
+                   if (abs(gridstruct%agrid(i,j,2)) < lat_thresh .and. w(i,j,k) > 1.5) then
+                      q(i,j,npz,iq) = tracer_clock
+                   endif
+                enddo
+             enddo
+          enddo
+       endif
+    enddo
+
+
 
     first_call = .false.
 
@@ -1491,6 +1519,9 @@ endif
 ! Gray-Radiation algorithms based on Frierson, Held, and Zurita-Gotor, 2006 JAS
 ! Note: delz is negative
 ! Coded by S.-J. Lin, June 20, 2012
+! From FHZ06: A gray-radiation scheme is one "in which the optical depths are
+!  fixed and radiative fluxes are a function of temperature alone. There are
+!  therefore no cloud- or water vapor–radiative feedbacks."
       integer, intent(in):: sec
       integer, intent(in):: is, ie, km
       real, dimension(is:ie):: ts
