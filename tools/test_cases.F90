@@ -883,6 +883,7 @@
       call mp_stop()
       stop
       case(0)
+         UBar = 0.
          do j=jsd,jed
             do i=isd,ied
 
@@ -1153,6 +1154,7 @@
 
 
       case(6)
+         Ubar = 0.
          gh0  = 8.E3*Grav
          R    = 4.
          omg  = 7.848E-6
@@ -1206,6 +1208,7 @@
 
       case(7)
 ! Barotropically unstable jet
+         Ubar = 0.
          gh0  = 10.E3*Grav
          phis = 0.0
          r0 = radius/12.
@@ -1378,6 +1381,7 @@
 
       case(9)
 
+         Ubar = 0.
          jm1 = jm - 1
          DDP = PI/DBLE(jm1)
          DP  = DDP
@@ -4598,7 +4602,7 @@ end subroutine terminator_tracers
         real ::   pe_v(bd%is:bd%ie+1,npz+1,bd%js:bd%je)
         real ::   ps_u(bd%is:bd%ie,bd%js:bd%je+1)
         real ::   ps_v(bd%is:bd%ie+1,bd%js:bd%je)
-  
+
         real(kind=R_GRID) :: p1(2), p2(2), p3(2), p4(2)
         real(kind=R_GRID) :: e1(3), e2(3), ex(3), ey(3)
         integer :: z
@@ -5017,7 +5021,7 @@ end subroutine terminator_tracers
 
         do k=1,npz
              zm = 0.5*(ze1(k)+ze1(k+1))
-           utmp = us0*tanh(zm/3.E3) - us0*0.5 ! subtract off mean wind
+           utmp = Umean*tanh(zm/3.E3) - Umean*0.5 ! subtract off mean wind
            do j=js,je+1
               do i=is,ie
                  u(i,j,k) = utmp
@@ -5031,10 +5035,10 @@ end subroutine terminator_tracers
 
 ! *** Add Initial perturbation ***
         if (bubble_do) then
-           pturb = 2.
-           r0 = 10.e3
+           pturb = dt_amp ! 2.
+           r0 = dt_rad ! 10.e3
            zc = 1.4e3         ! center of bubble  from surface
-           icenter = (npx-1)/3 + 1
+           icenter = (npx-1)/2 + 1
            jcenter = (npy-1)/2 + 1
            do k=1, npz
               zm = 0.5*(ze1(k)+ze1(k+1))
@@ -5052,7 +5056,6 @@ end subroutine terminator_tracers
 !---------------------------
 ! Doubly periodic SuperCell, quarter circle hodograph
 ! M. Toy, Apr 2013, MWR
-        pturb = 2.5
         zvir = rvgas/rdgas - 1.
         p00 = 1000.E2
           ps(:,:) = p00
@@ -5092,10 +5095,15 @@ end subroutine terminator_tracers
               do i=is,ie
                  pt(i,j,k)   = ts1(k)
                   q(i,j,k,1) = qs1(k)
-                 delz(i,j,k) = rdgas/grav*ts1(k)*(1.+zvir*qs1(k))*(peln(i,k,j)-peln(i,k+1,j))
+                 !delz(i,j,k) = rdgas/grav*ts1(k)*(1.+zvir*qs1(k))*(peln(i,k,j)-peln(i,k+1,j))
                 enddo
              enddo
           enddo
+
+        call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                   pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                   moist_phys, .false., nwat, domain, flagstruct%adiabatic, .true.)
+
 
         ze1(npz+1) = 0.
         do k=npz,1,-1
@@ -5103,7 +5111,6 @@ end subroutine terminator_tracers
         enddo
 
 ! Quarter-circle hodograph (Harris approximation)
-        us0 = 30.
         do k=1,npz
            zm = 0.5*(ze1(k)+ze1(k+1))
            if ( zm .le. 2.e3 ) then
@@ -5137,10 +5144,10 @@ end subroutine terminator_tracers
 
 ! *** Add Initial perturbation ***
         if (bubble_do) then
-           pturb = 2.
-           r0 = 10.e3
+           pturb = dt_amp ! 2.
+           r0 = dt_rad ! 10.e3
            zc = 1.4e3         ! center of bubble  from surface
-           icenter = (npx-1)/3 + 1
+           icenter = (npx-1)/2 + 1
            jcenter = (npy-1)/2 + 1
            do k=1, npz
               zm = 0.5*(ze1(k)+ze1(k+1))
@@ -5253,7 +5260,7 @@ end subroutine terminator_tracers
            enddo
         enddo
 
-        else
+        else if (bubble_do) then
 
 ! *** Add Initial perturbation (Ellipse) ***
         pturb = dt_amp
@@ -5282,9 +5289,9 @@ end subroutine terminator_tracers
 ! adapted from case 55 - Joseph M.
 !---------------------------------------------------------
 
-         !p0(1) = (0.) * pi / 180. 
+         !p0(1) = (0.) * pi / 180.
          p0(1) = (-50.) * pi / 180. !weird physics IC (tsc) when this is around 0
-         p0(2) = (flagstruct%deglat) * pi / 180. 
+         p0(2) = (flagstruct%deglat) * pi / 180.
 
          !original
          !dp = 1115.
@@ -5645,8 +5652,8 @@ end subroutine terminator_tracers
            pks = pk0 + amp*(1./ths - 1./th0)
            p_t  = exp(1./kappa*log(pks))
 
-           if (is_master()) write(*,'(I, 2F)') npz+1, ak(npz+1), bk(npz+1)
-           if (is_master()) write(*,'(2F)') ths*pk0, p_t
+           if (is_master()) write(*,'(I3, 2F11.3)') npz+1, ak(npz+1), bk(npz+1)
+           if (is_master()) write(*,'(2F11.3)') ths*pk0, p_t
 
            do k=npz,1,-1
               ze = ze+dz
@@ -5667,7 +5674,7 @@ end subroutine terminator_tracers
               endif
               thp = ths
               pkp = pks
-              if (is_master()) write(*,'(I, 5F)') k, ak(k), bk(k), ak(k+1)-ak(k) + p00*(bk(k+1)-bk(k)), ths*pk0, pp
+              if (is_master()) write(*,'(I3, 5F11.3)') k, ak(k), bk(k), ak(k+1)-ak(k) + p00*(bk(k+1)-bk(k)), ths*pk0, pp
 
            enddo
 
@@ -5899,7 +5906,7 @@ end subroutine terminator_tracers
            ak(npz+1) = 0.0
            bk(npz+1) = 1.0
            if (is_master()) print*, 'SBL Test case (102)'
-           if (is_master()) write(*,'(I, 2F)') npz+1, ak(npz+1), bk(npz+1)
+           if (is_master()) write(*,'(I3, 2F11.3)') npz+1, ak(npz+1), bk(npz+1)
            ze1(npz+1) = ze
            pk1(npz+1) = pk0
            pe1(npz+1) = p00
@@ -5928,7 +5935,7 @@ end subroutine terminator_tracers
               thp = ths
               pkp = pks
 
-              if (is_master()) write(*,'(I, 6(2x,F11.3))') k, ak(k), bk(k), ak(k+1)-ak(k) + p00*(bk(k+1)-bk(k)), ths*pks, pp, ze1(k)
+              if (is_master()) write(*,'(I3, 6(2x,F11.3))') k, ak(k), bk(k), ak(k+1)-ak(k) + p00*(bk(k+1)-bk(k)), ths*pks, pp, ze1(k)
 
            enddo
 
@@ -5994,7 +6001,7 @@ end subroutine terminator_tracers
            ak(npz+1) = 0.0
            bk(npz+1) = 1.0
            if (is_master()) print*, 'DYCOMS II SCu Test case (103)'
-           if (is_master()) write(*,'(I, 2F)') npz+1, ak(npz+1), bk(npz+1)
+           if (is_master()) write(*,'(I3, 2F11.3)') npz+1, ak(npz+1), bk(npz+1)
            ze1(npz+1) = ze
            pk1(npz+1) = pk0
            pe1(npz+1) = p00
@@ -6023,7 +6030,7 @@ end subroutine terminator_tracers
               !Liquid water temperature
               !new constants!
               ts1(k) = tl + (hlv*qc1(k) - grav*zmid)/cp_air
-              if (is_master()) write(*,'(I, 4(2x,F11.3))') k, ts1(k), qv1(k), ze1(k), qc1(k)
+              if (is_master()) write(*,'(I3, 4(2x,F11.3))') k, ts1(k), qv1(k), ze1(k), qc1(k)
            enddo
 
            !Compute pressure, integrating upward
@@ -6044,7 +6051,7 @@ end subroutine terminator_tracers
               pe1(k) = pp
               pk1(k) = exp(kappa*log(pp))
 
-              if (is_master()) write(*,'(I, 4(2x,F11.3))') k, ak(k), bk(k), pp, ze1(k)
+              if (is_master()) write(*,'(I3, 4(2x,F11.3))') k, ak(k), bk(k), pp, ze1(k)
 
            enddo
 
@@ -6518,7 +6525,7 @@ end subroutine terminator_tracers
      write(*,*) 'Computing sounding for super-cell test'
  endif
 
- call qs_init
+ !call qs_init
 
  dz0 = 50.
  zs(ns) = 0.
@@ -6563,8 +6570,10 @@ end subroutine terminator_tracers
 !      if ( (is_master()) ) write(*,*) k, temp1, rh(k)
        if ( pk(k) > 0. ) then
             pp(k) = exp(log(pk(k))/kappa)
-            qs(k) = min(qv0, rh(k)*wqs(temp1, pp(k), qs(k)))
+            !qs(k) = min(qv0, rh(k)*wqs(temp1, pp(k), qs(k)))
             !qs(k) = min(qv0, rh(k)*qs_blend(temp1, pp(k), qs(k)))
+            qs(k) = 380./pp(k)*exp(17.27*(temp1-273.)/(temp1-36.))
+            qs(k) = min( qv0, rh(k)*qs(k) )
             !if ( (is_master()) ) write(*,*) 0.001*pp(k), qs(k)
        else
             !if ( (is_master()) ) write(*,*) n, k, pk(k)
@@ -6590,12 +6599,15 @@ end subroutine terminator_tracers
              goto 555
          endif
       enddo
-    endif
+   endif
+
 555  continue
 
  do k=1,km
     tp(k) = tp(k)*pk1(k)    ! temperature
     tp(k) = max(Tmin, tp(k))
+   if (is_master()) print*, k, exp(cp_air/rdgas*log(pk1(k))), tp(k), qp(k)
+
  enddo
 
  end subroutine SuperCell_Sounding
@@ -6710,6 +6722,7 @@ end subroutine terminator_tracers
  do k=1,km
     tp(k) = tp(k)*pk1(k)    ! temperature
     tp(k) = max(Tmin, tp(k))
+   if (is_master()) print*, k, exp(cp_air/rdgas*log(pk1(k))), tp(k), qp(k)
  enddo
 
  end subroutine SuperCell_Sounding_Marine
@@ -6794,19 +6807,9 @@ end subroutine terminator_tracers
 !      if ( (is_master()) ) write(*,*) k, temp1, rh(k)
        if ( pk(k) > 0. ) then
             pp(k) = exp(log(pk(k))/kappa)
-#ifdef SUPER_K
+!            qs(k) = min(qv0, rh(k)*wqs(temp1, pp(k), qs(k)))
             qs(k) = 380./pp(k)*exp(17.27*(temp1-273.)/(temp1-36.))
             qs(k) = min( qv0, rh(k)*qs(k) )
-            !if ( (is_master()) ) write(*,*) 0.01*pp(k), qs(k)
-#else
-
-#ifdef USE_MIXED_TABLE
-            qs(k) = min(qv0, rh(k)*mqs(temp1, pp(k), qs(k)))
-#else
-            qs(k) = min(qv0, rh(k)*wqs(temp1, pp(k), qs(k)))
-#endif
-
-#endif
        else
             !if ( (is_master()) ) write(*,*) n, k, pk(k)
             call mpp_error(FATAL, 'Super-Cell case: pk < 0')
@@ -6837,6 +6840,7 @@ end subroutine terminator_tracers
  do k=1,km
     tp(k) = tp(k)*pk1(k)    ! temperature
     tp(k) = max(Tmin, tp(k))
+   if (is_master()) print*, k, exp(cp_air/rdgas*log(pk1(k))), tp(k), qp(k)
  enddo
 
  end subroutine Marine_Sounding
