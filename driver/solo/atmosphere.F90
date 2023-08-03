@@ -29,16 +29,15 @@ module atmosphere_mod
 
 
 use constants_mod, only: grav, kappa, cp_air, pi, rdgas, rvgas, SECONDS_PER_DAY
-use fms_mod,       only: file_exist, open_namelist_file,   &
-                         error_mesg, FATAL,                &
+use fms_mod,       only: error_mesg, FATAL,                &
                          check_nml_error, stdlog, stdout,  &
                          write_version_number,             &
-                         close_file, set_domain, nullify_domain, mpp_pe, mpp_root_pe, &
+                         mpp_pe, mpp_root_pe, &
                          mpp_error, FATAL, NOTE
+use fms2_io_mod,   only: file_exists
 use mpp_mod,       only: input_nml_file
 use time_manager_mod, only: time_type, get_time, set_time, operator(+)
 use mpp_domains_mod,  only: domain2d
-use mpp_io_mod,       only: mpp_close
 use mpp_mod,          only: input_nml_file, mpp_sync_self, mpp_sync, &
                                   mpp_set_current_pelist, mpp_npes, &
                                   mpp_get_current_pelist
@@ -126,7 +125,7 @@ contains
     dt_atmos = real(sec)
 
   !----- initialize FV dynamical core -----
-    cold_start = (.not.file_exist('INPUT/fv_core.res.nc') .and. .not.file_exist('INPUT/fv_core.res.tile1.nc'))
+    cold_start = (.not.file_exists('INPUT/fv_core.res.nc') .and. .not.file_exists('INPUT/fv_core.res.tile1.nc'))
 
     call fv_control_init(Atm, dt_atmos, mygrid, grids_on_this_pe, p_split)  ! allocates Atm components
 
@@ -412,8 +411,6 @@ contains
 
     call mpp_set_current_pelist(Atm(n)%pelist, no_sync=.TRUE.)
 
-    call set_domain(Atm(n)%domain)  ! needed for diagnostic output done in fv_dynamics
-
     if ( Atm(n)%flagstruct%nudge_ic )     &
          call  fv_nudge(Atm(n)%npz, Atm(n)%bd%isc, Atm(n)%bd%iec, Atm(n)%bd%jsc, Atm(n)%bd%jec, Atm(n)%ng, &
          Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%delz, Atm(n)%delp, Atm(n)%pt, dt_atmos/real(abs(p_split)), Atm(n)%flagstruct%hydrostatic )
@@ -469,8 +466,6 @@ contains
            call timing_off('FV_PHYS')
        endif
 
-       call nullify_domain()
-
     if (ngrids > 1 .and. p_split > 0) then
        call timing_on('TWOWAY_UPDATE')
        call twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, fv_time, mygrid)
@@ -488,11 +483,9 @@ contains
        zvir = rvgas/rdgas - 1.
     endif
 
-    call nullify_domain()
     call timing_on('FV_DIAG')
     call fv_diag(Atm(n:n), zvir, fv_time, Atm(n)%flagstruct%print_freq)
     call timing_off('FV_DIAG')
-
 
     call timing_off('ATMOS_DYNAMICS')
     call mpp_set_current_pelist()
