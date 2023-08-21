@@ -2995,7 +2995,7 @@ contains
           endif
        endif
 
-       if(id_delp_total > 0) used=send_data(id_delp_total, Atm(n)%delp(isc:iec,jsc:jec,:), Time)
+       if(id_delp_dycore > 0) used=send_data(id_delp_dycore, Atm(n)%delp(isc:iec,jsc:jec,:), Time)
        
 #ifdef GFS_PHYS
        if(id_delp > 0 .or. id_cape > 0 .or. id_cin > 0 .or. &

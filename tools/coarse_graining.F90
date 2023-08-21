@@ -35,7 +35,7 @@ module coarse_graining_mod
        weighted_block_edge_average_x, weighted_block_edge_average_y, &
        block_upsample, mask_area_weights, vertical_remapping_requirements, vertically_remap_field, &
        remap_edges_along_x, remap_edges_along_y, block_edge_sum_x, block_edge_sum_y, &
-       block_mode, block_min, block_max, eddy_covariance, eddy_covariance_2d_weights, &
+       block_mode, block_min, eddy_covariance, eddy_covariance_2d_weights, &
        eddy_covariance_3d_weights
   public :: compute_blending_weights_agrid, compute_blending_weights_dgrid_u, compute_blending_weights_dgrid_v
   public :: blended_area_weighted_coarse_grain_field, blended_length_weighted_coarse_grain_u, blended_length_weighted_coarse_grain_v
@@ -109,16 +109,9 @@ module coarse_graining_mod
   end interface block_mode
 
   interface block_min
-     module procedure masked_block_min_2d_real4
-     module procedure masked_block_min_2d_real8
      module procedure block_min_2d_real4
      module procedure block_min_2d_real8
   end interface block_min
-
-  interface block_max
-     module procedure masked_block_max_2d_real4
-     module procedure masked_block_max_2d_real8
-  end interface block_max
 
   interface vertical_remapping_requirements
      module procedure vertical_remapping_requirements_pressure_level_real4
@@ -686,74 +679,6 @@ contains
        enddo
     enddo
   end subroutine masked_block_mode_2d_real4
-
-  subroutine masked_block_min_2d_real8(fine, mask, coarse)
-    real(kind=8), intent(in) :: fine(is:ie,js:je)
-    logical, intent(in) :: mask(is:ie,js:je)
-    real(kind=8), intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse)
-
-    integer :: i, j, i_coarse, j_coarse, offset
-
-    offset = coarsening_factor - 1
-    do i = is, ie, coarsening_factor
-       i_coarse = (i - 1) / coarsening_factor + 1
-       do j = js, je, coarsening_factor
-          j_coarse = (j - 1) / coarsening_factor + 1
-          coarse(i_coarse, j_coarse) = minval(fine(i:i+offset,j:j+offset), mask=mask(i:i + offset,j:j + offset))
-       enddo
-    enddo
-  end subroutine masked_block_min_2d_real8
-
-  subroutine masked_block_max_2d_real8(fine, mask, coarse)
-    real(kind=8), intent(in) :: fine(is:ie,js:je)
-    logical, intent(in) :: mask(is:ie,js:je)
-    real(kind=8), intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse)
-
-    integer :: i, j, i_coarse, j_coarse, offset
-
-    offset = coarsening_factor - 1
-    do i = is, ie, coarsening_factor
-       i_coarse = (i - 1) / coarsening_factor + 1
-       do j = js, je, coarsening_factor
-          j_coarse = (j - 1) / coarsening_factor + 1
-          coarse(i_coarse, j_coarse) = maxval(fine(i:i+offset,j:j+offset), mask=mask(i:i + offset,j:j + offset))
-       enddo
-    enddo
-  end subroutine masked_block_max_2d_real8
-  
-  subroutine masked_block_min_2d_real4(fine, mask, coarse)
-    real(kind=4), intent(in) :: fine(is:ie,js:je)
-    logical, intent(in) :: mask(is:ie,js:je)
-    real(kind=4), intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse)
-
-    integer :: i, j, i_coarse, j_coarse, offset
-
-    offset = coarsening_factor - 1
-    do i = is, ie, coarsening_factor
-       i_coarse = (i - 1) / coarsening_factor + 1
-       do j = js, je, coarsening_factor
-          j_coarse = (j - 1) / coarsening_factor + 1
-          coarse(i_coarse, j_coarse) = minval(fine(i:i+offset,j:j+offset), mask=mask(i:i + offset,j:j + offset))
-       enddo
-    enddo
-  end subroutine masked_block_min_2d_real4
-
-  subroutine masked_block_max_2d_real4(fine, mask, coarse)
-    real(kind=4), intent(in) :: fine(is:ie,js:je)
-    logical, intent(in) :: mask(is:ie,js:je)
-    real(kind=4), intent(out) :: coarse(is_coarse:ie_coarse,js_coarse:je_coarse)
-
-    integer :: i, j, i_coarse, j_coarse, offset
-
-    offset = coarsening_factor - 1
-    do i = is, ie, coarsening_factor
-       i_coarse = (i - 1) / coarsening_factor + 1
-       do j = js, je, coarsening_factor
-          j_coarse = (j - 1) / coarsening_factor + 1
-          coarse(i_coarse, j_coarse) = maxval(fine(i:i+offset,j:j+offset), mask=mask(i:i + offset,j:j + offset))
-       enddo
-    enddo
-  end subroutine masked_block_max_2d_real4
 
   subroutine block_min_2d_real4(fine, coarse)
     real(kind=4), intent(in) :: fine(is:ie,js:je)
