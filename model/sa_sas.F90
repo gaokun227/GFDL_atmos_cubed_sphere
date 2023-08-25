@@ -230,7 +230,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     ! real :: acrt (im), acrtfct (im),
 
     real :: aa1 (im), &
-        umean (im), tauadv (im), gdx (im), &
+        umean (im), tauadv (im), &
         delhbar (im), delq (im), delq2 (im), &
         delqbar (im), delqev (im), deltbar (im), &
         deltv (im), dtconv (im), edt (im), &
@@ -355,7 +355,6 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         xpwav (i) = 0.
         xpwev (i) = 0.
         vshear (i) = 0.
-        gdx (i) = gsize (i)
     enddo
     
     ! -----------------------------------------------------------------------
@@ -1913,7 +1912,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do i = 1, im
         asqecflg (i) = cnvflg (i)
-        if (asqecflg (i) .and. gdx (i) < dxcrtas) then
+        if (asqecflg (i) .and. gsize (i) < dxcrtas) then
             asqecflg (i) = .false.
         endif
     enddo
@@ -2299,14 +2298,14 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     ! -----------------------------------------------------------------------
     
     ! -----------------------------------------------------------------------
-    ! following bechtold et al. (2008), the convective adjustment time (dtconv) is set to be proportional to the convective turnover time, which is computed using the mean updraft velocity (wc) and the cloud depth. it is also proportional to the grid size (gdx) .
+    ! following bechtold et al. (2008), the convective adjustment time (dtconv) is set to be proportional to the convective turnover time, which is computed using the mean updraft velocity (wc) and the cloud depth. it is also proportional to the grid size (gsize) .
     ! -----------------------------------------------------------------------
 
     do i = 1, im
         if (cnvflg (i)) then
             tem = zi (i, ktcon1 (i)) - zi (i, kbcon1 (i))
             dtconv (i) = tem / wc (i)
-            tfac = 1. + gdx (i) / 75000.
+            tfac = 1. + gsize (i) / 75000.
             dtconv (i) = tfac * dtconv (i)
             dtconv (i) = max (dtconv (i), dtmin)
             dtconv (i) = min (dtconv (i), dtmax)
@@ -2341,7 +2340,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         if (cnvflg (i)) then
             umean (i) = umean (i) / sumx (i)
             umean (i) = max (umean (i), 1.)
-            tauadv (i) = gdx (i) / umean (i)
+            tauadv (i) = gsize (i) / umean (i)
         endif
     enddo
     
@@ -2457,7 +2456,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do i = 1, im
         if (cnvflg (i)) then
-            if (gdx (i) < dxcrtuf) then
+            if (gsize (i) < dxcrtuf) then
                 scaldfunc (i) = (1. - sigmagfm (i)) * (1. - sigmagfm (i))
                 scaldfunc (i) = max (min (scaldfunc (i), 1.0), 0.)
             else
@@ -2839,7 +2838,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         kbm (im), kmax (im)
     
     real :: aa1 (im), cina (im), &
-        umean (im), tauadv (im), gdx (im), &
+        umean (im), tauadv (im), &
         delhbar (im), delq (im), delq2 (im), &
         delqbar (im), delqev (im), deltbar (im), &
         deltv (im), dtconv (im), edt (im), &
@@ -2940,7 +2939,6 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         aa1 (i) = 0.
         cina (i) = 0.
         vshear (i) = 0.
-        gdx (i) = gsize (i)
     enddo
 
     ! -----------------------------------------------------------------------
@@ -4122,14 +4120,14 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     
     ! -----------------------------------------------------------------------
     ! compute convective turn - over time
-    ! following bechtold et al. (2008), calculate the convective turnover time using the mean updraft velocity (wc) and the cloud depth. it is also proportional to the grid size (gdx) .
+    ! following bechtold et al. (2008), calculate the convective turnover time using the mean updraft velocity (wc) and the cloud depth. it is also proportional to the grid size (gsize) .
     ! -----------------------------------------------------------------------
     
     do i = 1, im
         if (cnvflg (i)) then
             tem = zi (i, ktcon1 (i)) - zi (i, kbcon1 (i))
             dtconv (i) = tem / wc (i)
-            tfac = 1. + gdx (i) / 75000.
+            tfac = 1. + gsize (i) / 75000.
             dtconv (i) = tfac * dtconv (i)
             dtconv (i) = max (dtconv (i), dtmin)
             dtconv (i) = max (dtconv (i), dt2)
@@ -4165,7 +4163,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
         if (cnvflg (i)) then
             umean (i) = umean (i) / sumx (i)
             umean (i) = max (umean (i), 1.)
-            tauadv (i) = gdx (i) / umean (i)
+            tauadv (i) = gsize (i) / umean (i)
         endif
     enddo
     
@@ -4207,7 +4205,7 @@ subroutine sa_sas_shal (im, km, delt, delp, prslp, psp, phil, ql, &
     
     do i = 1, im
         if (cnvflg (i)) then
-            if (gdx (i) < dxcrt) then
+            if (gsize (i) < dxcrt) then
                 scaldfunc (i) = (1. - sigmagfm (i)) * (1. - sigmagfm (i))
                 scaldfunc (i) = max (min (scaldfunc (i), 1.0), 0.)
             else
