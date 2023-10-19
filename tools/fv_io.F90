@@ -884,7 +884,7 @@ contains
       call register_axis(Fv_restart_inc, "xaxis_1", size(Atm%ak(:), 1))
       call register_axis(Fv_restart_inc, "Time", unlimited)
       if (.not. Fv_restart_inc%is_readonly) then !if writing file
-        call register_field(Fv_restart_inc, "xaxis_1", "double", (/"xaxis_1"/))
+        call register_field(Fv_restart_inc, "xaxis_1", axis_type, (/"xaxis_1"/))
         call register_variable_attribute(Fv_restart_inc, "xaxis_1", "axis", "X", str_len=1)
         if (allocated(buffer)) deallocate(buffer)
         allocate(buffer(size(Atm%ak(:), 1)))
@@ -893,7 +893,7 @@ contains
         end do
         call write_data(Fv_restart_inc, "xaxis_1", buffer)
         deallocate(buffer)
-        call register_field(Fv_restart_inc, "Time", "double", (/"Time"/))
+        call register_field(Fv_restart_inc, "Time", axis_type, (/"Time"/))
         call register_variable_attribute(Fv_restart_inc, dim_names_2d(2), "cartesian_axis", "T", str_len=1)
         call register_variable_attribute(Fv_restart_inc, dim_names_2d(2), "units", "time level", str_len=len("time level"))
         call register_variable_attribute(Fv_restart_inc, dim_names_2d(2), "long_name", dim_names_2d(2), str_len=len(dim_names_2d(2)))
