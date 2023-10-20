@@ -85,6 +85,12 @@ module fv_io_mod
   logical :: Fv_tile_restart_inc_is_open = .false.
   logical :: Tra_restart_inc_is_open = .false.
 
+#ifdef OVERLOAD_R4
+  character(len=5), parameter :: axis_type = 'float'
+#else
+  character(len=6), parameter :: axis_type = 'double'
+#endif
+
 contains
 
   !#####################################################################
@@ -136,7 +142,7 @@ contains
       axisname = 'xaxis_'//suffix
       call register_axis(file_obj, axisname, 'X', domain_position=xpos(i))
       if (.not. file_obj%is_readonly) then !if writing file
-        call register_field(file_obj, axisname, "double", (/axisname/))
+        call register_field(file_obj, axisname, axis_type, (/axisname/))
         call register_variable_attribute(file_obj,axisname, "long_name", axisname, str_len=len(axisname))
         call register_variable_attribute(file_obj,axisname, "units", "none", str_len=len("none"))
         call register_variable_attribute(file_obj,axisname, "cartesian_axis", "X", str_len=1)
@@ -152,7 +158,7 @@ contains
       axisname = 'yaxis_'//suffix
       call register_axis(file_obj, axisname, 'Y', domain_position=ypos(i))
       if (.not. file_obj%is_readonly) then !if writing file
-        call register_field(file_obj, axisname, "double", (/axisname/))
+        call register_field(file_obj, axisname, axis_type, (/axisname/))
         call register_variable_attribute(file_obj,axisname, "long_name", axisname, str_len=len(axisname))
         call register_variable_attribute(file_obj,axisname, "units", "none", str_len=len("none"))
         call register_variable_attribute(file_obj,axisname, "cartesian_axis", "Y", str_len=1)
@@ -168,7 +174,7 @@ contains
         axisname = 'zaxis_'//suffix
         call register_axis(file_obj, axisname, zsize(i))
         if (.not. file_obj%is_readonly) then !if writing file
-          call register_field(file_obj, axisname, "double", (/axisname/))
+          call register_field(file_obj, axisname, axis_type, (/axisname/))
           call register_variable_attribute(file_obj,axisname, "long_name", axisname, str_len=len(axisname))
           call register_variable_attribute(file_obj,axisname, "units", "none", str_len=len("none"))
           call register_variable_attribute(file_obj,axisname, "cartesian_axis", "Z", str_len=1)
@@ -185,7 +191,7 @@ contains
 
     call register_axis(file_obj, "Time", unlimited)
     if (.not. file_obj%is_readonly) then !if writing file
-       call register_field(file_obj, "Time", "double", (/"Time"/))
+       call register_field(file_obj, "Time", axis_type, (/"Time"/))
        call register_variable_attribute(file_obj, "Time", "long_name", "Time", &
                                         str_len=len("Time"))
        call register_variable_attribute(file_obj, "Time", "units", "time level", &
@@ -252,7 +258,7 @@ contains
        call register_axis(Atm%Fv_restart, "xaxis_1", size(Atm%ak(:), 1))
        call register_axis(Atm%Fv_restart, "Time", unlimited)
        if (.not. Atm%Fv_restart%is_readonly) then !if writing file
-          call register_field(Atm%Fv_restart, dim_names_2d(1), "double", (/dim_names_2d(1)/))
+          call register_field(Atm%Fv_restart, dim_names_2d(1), axis_type, (/dim_names_2d(1)/))
           call register_variable_attribute(Atm%Fv_restart, dim_names_2d(1), "long_name", dim_names_2d(1), str_len=len(dim_names_2d(1)))
           call register_variable_attribute(Atm%Fv_restart, dim_names_2d(1), "units", "none", str_len=len("none"))
           call register_variable_attribute(Atm%Fv_restart, dim_names_2d(1), "cartesian_axis", "X", str_len=1)
@@ -263,7 +269,7 @@ contains
           end do
           call write_data(Atm%Fv_restart, dim_names_2d(1), buffer)
           deallocate(buffer)
-          call register_field(Atm%Fv_restart, dim_names_2d(2), "double", (/dim_names_2d(2)/))
+          call register_field(Atm%Fv_restart, dim_names_2d(2), axis_type, (/dim_names_2d(2)/))
           call register_variable_attribute(Atm%Fv_restart, dim_names_2d(2), "long_name", dim_names_2d(2), str_len=len(dim_names_2d(2)))
           call register_variable_attribute(Atm%Fv_restart, dim_names_2d(2), "units", "time level", str_len=len("time level"))
           call register_variable_attribute(Atm%Fv_restart, dim_names_2d(2), "cartesian_axis", "T", str_len=1)
@@ -878,7 +884,7 @@ contains
       call register_axis(Fv_restart_inc, "xaxis_1", size(Atm%ak(:), 1))
       call register_axis(Fv_restart_inc, "Time", unlimited)
       if (.not. Fv_restart_inc%is_readonly) then !if writing file
-        call register_field(Fv_restart_inc, "xaxis_1", "double", (/"xaxis_1"/))
+        call register_field(Fv_restart_inc, "xaxis_1", axis_type, (/"xaxis_1"/))
         call register_variable_attribute(Fv_restart_inc, "xaxis_1", "axis", "X", str_len=1)
         if (allocated(buffer)) deallocate(buffer)
         allocate(buffer(size(Atm%ak(:), 1)))
@@ -887,7 +893,7 @@ contains
         end do
         call write_data(Fv_restart_inc, "xaxis_1", buffer)
         deallocate(buffer)
-        call register_field(Fv_restart_inc, "Time", "double", (/"Time"/))
+        call register_field(Fv_restart_inc, "Time", axis_type, (/"Time"/))
         call register_variable_attribute(Fv_restart_inc, dim_names_2d(2), "cartesian_axis", "T", str_len=1)
         call register_variable_attribute(Fv_restart_inc, dim_names_2d(2), "units", "time level", str_len=len("time level"))
         call register_variable_attribute(Fv_restart_inc, dim_names_2d(2), "long_name", dim_names_2d(2), str_len=len(dim_names_2d(2)))
