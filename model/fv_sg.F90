@@ -56,7 +56,11 @@ public  fv_subgrid_z, neg_adj3
   real, parameter:: t2_min = 165.
   real, parameter:: t2_max = 315.
   real, parameter:: t3_max = 325.
+#ifdef ENG_CNV_OLD
   real, parameter:: Lv0 =  hlv0 - dc_vap*t_ice   ! = 3.147782e6
+#else
+  real, parameter:: Lv0 =  hlv0 - dc_vap*t_ice - rvgas*t_ice   ! = 3.147782e6
+#endif
   real, parameter:: Li0 =  hlf0 - dc_ice*t_ice   ! = -2.431928e5
 
   real, parameter:: zvir =  rvgas/rdgas - 1.     ! = 0.607789855
@@ -991,10 +995,15 @@ real, dimension(is:ie,js:je):: pt2, qv2, ql2, qi2, qs2, qr2, qg2, dp2, p2, icpk,
 
      if ( hydrostatic ) then
        d0_vap = cp_vapor - c_liq
+       lv00 = hlv0 - d0_vap*t_ice
      else
        d0_vap = cv_vap - c_liq
+#ifdef ENG_CNV_OLD
+       lv00 = hlv0 - d0_vap*t_ice
+#else
+       lv00 = hlv0 - d0_vap*t_ice - rvgas*t_ice
+#endif
      endif
-     lv00 = hlv0 - d0_vap*t_ice
 
 !$OMP parallel do default(none) shared(is,ie,js,je,kbot,qv,ql,qi,qs,qr,qg,dp,pt,       &
 !$OMP                                  lv00, d0_vap,hydrostatic,peln,delz,cv_air,sat_adj) &
