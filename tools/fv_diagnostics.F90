@@ -1084,6 +1084,8 @@ contains
                 'Echo top ( <= 18.5 dBz )', 'm', missing_value=missing_value2)
        id_dbz_m10C = register_diag_field ( trim(field), 'm10C_reflectivity', axes(1:2), time, &
                 'Reflectivity at -10C level', 'm', missing_value=missing_value)
+       id_40dbzht = register_diag_field ( trim(field), '40dBz_height', axes(1:2), time, &
+                'Height of 40 dBz reflectivity', 'm', missing_value=missing_value)
 
 !--------------------------
 ! Extra surface diagnostics:
@@ -3138,7 +3140,7 @@ contains
        endif
 
        if ( id_u100m>0 .or. id_v100m>0 .or.  id_w100m>0 .or. id_w5km>0 .or. id_w2500m>0 &
-            & .or. id_w1km>0 .or. id_basedbz>0 .or. id_dbz4km>0) then
+            & .or. id_w1km>0 .or. id_basedbz>0 .or. id_dbz4km>0 .or. id_40dbzht>0) then
           if (.not.allocated(wz)) allocate ( wz(isc:iec,jsc:jec,npz+1) )
           if ( Atm(n)%flagstruct%hydrostatic) then
              rgrav = 1. / grav
@@ -3210,7 +3212,7 @@ contains
        endif
 
        if ( rainwat > 0 .and. (id_dbz>0 .or. id_maxdbz>0 .or. id_basedbz>0 .or. id_dbz4km>0 &
-            & .or. id_dbztop>0 .or. id_dbz_m10C>0)) then
+            & .or. id_dbztop>0 .or. id_dbz_m10C>0 .or. id_40dbzht>0)) then
 
           if (.not. allocated(a3)) allocate(a3(isc:iec,jsc:jec,npz))
 
@@ -3266,6 +3268,21 @@ contains
              enddo
              enddo
              used=send_data(id_dbz_m10C, a2, time)
+          endif
+          if (id_40dbzht > 0) then
+             do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) = missing_value
+             do k=1,npz
+                if (wz(i,j,k) >= 25000.) cycle
+                if (a3(i,j,k) >= 40.) then
+                   a2(i,j) = wz(i,j,k)
+                   exit
+                endif
+             enddo
+             enddo
+             enddo
+             used=send_data(id_40dbzht, a2, time)
           endif
 
           if (prt_minmax) then
