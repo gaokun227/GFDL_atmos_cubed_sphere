@@ -557,7 +557,7 @@ module sw_core_mod
 
       real :: dt2, dt4, dt5, dt6
       real :: damp, damp2, damp4, dd8, u2, v2, du2, dv2
-      real :: u_lon
+      real :: u_lon, tmp
       integer :: i,j, is2, ie1, js2, je1, n, nt, n2, iq
 
       real, pointer, dimension(:,:) :: area, area_c, rarea
@@ -951,12 +951,13 @@ module sw_core_mod
                 do j=js,je
                    do i=is,ie
                       dw(i,j) = (fx2(i,j)-fx2(i+1,j)+fy2(i,j)-fy2(i,j+1))*rarea(i,j)
-! 0.5 * [ (w+dw)**2 - w**2 ] = w*dw + 0.5*dw*dw
-!                   heat_source(i,j) = -d_con*dw(i,j)*(w(i,j)+0.5*dw(i,j))
-                    heat_source(i,j) = dd8 - dw(i,j)*(w(i,j)+0.5*dw(i,j))
-                    if ( flagstruct%do_diss_est ) then
-                       diss_est(i,j) = heat_source(i,j)
-                    endif
+                      ! 0.5 * [ (w+dw)**2 - w**2 ] = w*dw + 0.5*dw*dw
+                      !limiter to prevent "dissipative cooling"
+                      tmp = dw(i,j)*(w(i,j)+0.5*dw(i,j))
+                      heat_source(i,j) = dd8 - min(0.,tmp)
+                      if ( flagstruct%do_diss_est ) then
+                         diss_est(i,j) = dd8 - tmp
+                      endif
                    enddo
                 enddo
            endif
@@ -1525,15 +1526,14 @@ module sw_core_mod
            dv2 = vb(i,j) + vb(i+1,j)
 ! Total energy conserving:
 ! Convert lost KE due to divergence damping to "heat"
-         heat_source(i,j) = delp(i,j)*(heat_source(i,j) - damp*rsin2(i,j)*( &
-                  (ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
-                              + 2.*(gy(i,j)+gy(i,j+1)+gx(i,j)+gx(i+1,j))   &
-                              - cosa_s(i,j)*(u2*dv2 + v2*du2 + du2*dv2)) )
-           if (flagstruct%do_diss_est) then
-             diss_est(i,j) = diss_est(i,j)-rsin2(i,j)*( &
-                  (ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
+           tmp = rsin2(i,j)*((ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
                               + 2.*(gy(i,j)+gy(i,j+1)+gx(i,j)+gx(i+1,j))   &
                               - cosa_s(i,j)*(u2*dv2 + v2*du2 + du2*dv2))
+           !limiter to prevent dissipative cooling
+           ! again this quantity should physically be negative
+           heat_source(i,j) = delp(i,j)*(heat_source(i,j) - damp*min(0.,tmp) )
+           if (flagstruct%do_diss_est) then
+             diss_est(i,j) = diss_est(i,j)-tmp
            endif
          enddo
       enddo
