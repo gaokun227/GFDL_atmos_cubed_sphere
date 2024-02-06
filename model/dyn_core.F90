@@ -1335,7 +1335,8 @@ contains
                 pkz(i,j,k) = exp( k1k*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
 #endif
                      dtmp = heat_source(i,j,k) / (cv_air*delp(i,j,k))
-                pt(i,j,k) = pt(i,j,k) + sign(min(delt, abs(dtmp)),dtmp) / pkz(i,j,k)
+                     pt(i,j,k) = pt(i,j,k) + sign(min(delt, abs(dtmp)),dtmp) / pkz(i,j,k)
+                     heat_source(i,j,k) = dtmp !save actual K/s for diagnostics
              enddo
           enddo
        enddo
