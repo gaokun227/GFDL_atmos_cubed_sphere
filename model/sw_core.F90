@@ -953,6 +953,7 @@ module sw_core_mod
                       dw(i,j) = (fx2(i,j)-fx2(i+1,j)+fy2(i,j)-fy2(i,j+1))*rarea(i,j)
                       ! 0.5 * [ (w+dw)**2 - w**2 ] = w*dw + 0.5*dw*dw
                       !limiter to prevent "dissipative cooling"
+                      !physically `tmp` is negative.
                       tmp = dw(i,j)*(w(i,j)+0.5*dw(i,j))
                       heat_source(i,j) = dd8 - min(0.,tmp)
                       if ( flagstruct%do_diss_est ) then

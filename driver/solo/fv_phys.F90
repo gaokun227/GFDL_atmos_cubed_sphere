@@ -23,6 +23,8 @@ module fv_phys_mod
 
 use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, kappa
 use fv_arrays_mod,         only: radius, omega ! scaled for small earth
+use fv_arrays_mod,         only: fv_grid_type, fv_flags_type, fv_nest_type, fv_grid_bounds_type
+use fv_arrays_mod,         only: phys_diag_type, nudge_diag_type, sg_diag_type
 
 use time_manager_mod,      only: time_type, get_time
 use gfdl_mp_mod,           only: mqs3d, wet_bulb, c_liq
@@ -39,7 +41,6 @@ use fms_mod,               only: error_mesg, FATAL,  &
 use fv_mp_mod,             only: is_master, mp_reduce_max
 use fv_diagnostics_mod,    only: prt_maxmin, gn
 
-use fv_arrays_mod,          only: fv_grid_type, fv_flags_type, fv_nest_type, fv_grid_bounds_type, phys_diag_type, nudge_diag_type
 use mpp_domains_mod,       only: domain2d
 use mpp_mod,               only: input_nml_file
 use diag_manager_mod,      only: register_diag_field, register_static_field, send_data
@@ -188,7 +189,7 @@ contains
                     oro, rayf, p_ref, fv_sg_adj,                 &
                     do_Held_Suarez, gridstruct, flagstruct,      &
                     neststruct, nwat, bd, domain,                & !S-J: Need to update fv_phys call
-                    Time, phys_diag, nudge_diag, time_total)
+                    Time, phys_diag, nudge_diag, sg_diag, time_total)
 
     integer, INTENT(IN   ) :: npx, npy, npz
     integer, INTENT(IN   ) :: is, ie, js, je, ng, nq, nwat
@@ -222,6 +223,7 @@ contains
     real, INTENT(inout)::    ts(is:ie,js:je)
     type(phys_diag_type), intent(inout) :: phys_diag
     type(nudge_diag_type), intent(inout) :: nudge_diag
+    type(sg_diag_type) :: sg_diag
 
     type(fv_grid_type) :: gridstruct
     type(fv_flags_type) :: flagstruct
@@ -241,7 +243,7 @@ contains
     real, dimension(is:ie,npz):: dp2, pm, rdelp, u2, v2, t2, q2, du2, dv2, dt2, dq2
     real:: lcp(is:ie), den(is:ie)
     real:: rain(is:ie,js:je), rain2(is:ie), zint(is:ie,1:npz+1)
-    real:: dq, dqsdt, delm, adj, rkv, sigl, tmp, prec, rgrav
+    real:: dq, dqsdt, delm, adj, rkv, sigl, tmp, prec, rgrav, rdt
     real :: qdiag(1,1,1)
     logical moist_phys
     integer  isd, ied, jsd, jed
@@ -311,10 +313,78 @@ contains
 
      if ( fv_sg_adj > 0 ) then
         if (is_master() .and. first_call) print*, " Calling fv_subgrid_z ", fv_sg_adj, flagstruct%n_sponge
-         call fv_subgrid_z(isd, ied, jsd, jed, is, ie, js, je, npz, min(6,nq), pdt,  &
+
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,is,ie,js,je,sphum,sg_diag,ua,va,pt,q)
+        do k=1, npz
+           if (allocated(sg_diag%u_dt)) then
+              do j=js, je
+              do i=is, ie
+                 sg_diag%u_dt(i,j,k) = 0.
+              enddo
+              enddo
+           endif
+           if (allocated(sg_diag%v_dt)) then
+              do j=js, je
+              do i=is, ie
+                 sg_diag%v_dt(i,j,k) = 0.
+              enddo
+              enddo
+           endif
+           if (allocated(sg_diag%t_dt)) then
+              do j=js, je
+              do i=is, ie
+                 sg_diag%t_dt(i,j,k) = pt(i,j,k)
+              enddo
+              enddo
+          endif
+          if (allocated(sg_diag%qv_dt)) then
+             do j=js, je
+             do i=is, ie
+                sg_diag%qv_dt(i,j,k) = q(i,j,k,sphum)
+             enddo
+             enddo
+          endif
+       enddo
+
+        !fv_sg already returns the state, not the tendency.
+        call fv_subgrid_z(isd, ied, jsd, jed, is, ie, js, je, npz, min(6,nq), pdt,  &
                            fv_sg_adj, nwat, delp, pe, peln, pkz, pt, q, ua, va,  &
                            hydrostatic, w, delz, u_dt, v_dt, t_dt, q_dt, flagstruct%n_sponge )
-         no_tendency = .false.
+
+        rdt = 1./pdt
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,is,ie,js,je,sphum,rdt,sg_diag,ua,va,pt,q,u_dt,v_dt)
+        do k=1, npz
+           if (allocated(sg_diag%u_dt)) then
+              do j=js, je
+              do i=is, ie
+                 sg_diag%u_dt(i,j,k) = u_dt(i,j,k)
+              enddo
+              enddo
+           endif
+           if (allocated(sg_diag%v_dt)) then
+              do j=js, je
+              do i=is, ie
+                 sg_diag%v_dt(i,j,k) = v_dt(i,j,k)
+              enddo
+              enddo
+           endif
+           if (allocated(sg_diag%t_dt)) then
+              do j=js, je
+              do i=is, ie
+                 sg_diag%t_dt(i,j,k) = (pt(i,j,k) - sg_diag%t_dt(i,j,k))*rdt
+              enddo
+              enddo
+          endif
+          if (allocated(sg_diag%qv_dt)) then
+             do j=js, je
+             do i=is, ie
+                sg_diag%qv_dt(i,j,k) = (q(i,j,k,sphum) - sg_diag%qv_dt(i,j,k))*rdt
+             enddo
+             enddo
+          endif
+       enddo
+       no_tendency = .false.
+
     endif
 
     if ( do_LS_cond ) then
@@ -1820,6 +1890,7 @@ endif
          'Physics U tendency', 'm/s/s', missing_value=missing_value)
     id_dvdt = register_diag_field( mod_name, 'dvdt', axes(1:3), time, &
          'Physics V tendency', 'm/s/s', missing_value=missing_value)
+    !dtdt does NOT include heating from kessler
     id_dtdt = register_diag_field( mod_name, 'dtdt', axes(1:3), time, &
          'Physics T tendency', 'K/s', missing_value=missing_value)
     id_dqdt = register_diag_field( mod_name, 'dqdt', axes(1:3), time, &
