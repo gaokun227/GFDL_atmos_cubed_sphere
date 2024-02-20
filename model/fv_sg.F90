@@ -94,7 +94,7 @@ contains
       real, intent(inout):: qa(isd:ied,jsd:jed,km,nq)   ! Specific humidity & tracers
       real, intent(inout):: u_dt(isd:ied,jsd:jed,km)
       real, intent(inout):: v_dt(isd:ied,jsd:jed,km)
-      real, intent(inout):: t_dt(is:ie,js:je,km)
+      real, intent(inout):: t_dt(is:ie,js:je,km) !not used
 !---------------------------Local variables-----------------------------
       real, dimension(is:ie,km):: u0, v0, w0, t0, hd, te, gz, tvm, pm, den
       real q0(is:ie,km,nq), qcon(is:ie,km)
@@ -519,8 +519,8 @@ contains
       real, intent(inout):: qa(isd:ied,jsd:jed,km,nq)   ! Specific humidity & tracers
       real, intent(inout):: u_dt(isd:ied,jsd:jed,km)
       real, intent(inout):: v_dt(isd:ied,jsd:jed,km)
-      real, intent(inout):: t_dt(is:ie,js:je,km)
-      real, intent(inout):: q_dt(is:ie,js:je,km,nq)
+      real, intent(inout):: t_dt(is:ie,js:je,km) !not used
+      real, intent(inout):: q_dt(is:ie,js:je,km,nq)  !not used!
 !---------------------------Local variables-----------------------------
       real, dimension(is:ie,km):: u0, v0, w0, t0, hd, te, gz, tvm, pm, den
       real q0(is:ie,km,nq), qcon(is:ie,km)
