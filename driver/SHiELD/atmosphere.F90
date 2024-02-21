@@ -146,7 +146,7 @@ character(len=20)   :: mod_name = 'SHiELD/atmosphere_mod'
 
   integer :: id_udt_dyn, id_vdt_dyn
 
-  real, parameter:: w0_big = 60.  ! to prevent negative w-tracer diffusion
+  real, parameter:: w0_big = 200.  ! to prevent negative w-tracer diffusion
 
 !---dynamics tendencies for use in fv_subgrid_z and during fv_update_phys
   real, allocatable, dimension(:,:,:)   :: u_dt, v_dt, t_dt, qv_dt
@@ -570,17 +570,16 @@ contains
                         Atm(n)%w, Atm(n)%delz, u_dt, v_dt, t_dt, Atm(n)%flagstruct%n_sponge)
     endif
 
-#ifdef USE_Q_DT
+!#ifdef W_DIFF
     if ( .not. Atm(n)%flagstruct%hydrostatic .and. w_diff /= NO_TRACER ) then
 !$OMP parallel do default (none) &
-!$OMP              shared (isc, iec, jsc, jec, w_diff, n, Atm, q_dt) &
+!$OMP              shared (isc, iec, jsc, jec, w_diff, n, Atm) &
 !$OMP             private (k)
        do k=1, Atm(n)%npz
           Atm(n)%q(isc:iec,jsc:jec,k,w_diff) = Atm(n)%w(isc:iec,jsc:jec,k) + w0_big
-          q_dt(:,:,k,w_diff) = 0.
-        enddo
+       enddo
     endif
-#endif
+!#endif
 
     if (allocated(Atm(n)%sg_diag%u_dt)) then
        Atm(n)%sg_diag%u_dt = u_dt(isc:iec,jsc:jec,:)
@@ -1204,6 +1203,7 @@ contains
    real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
    real :: psum, qsum, psumb, qsumb, betad, psdt_mean
    real :: tracer_clock, lat_thresh, fhr
+   real :: t_aging, t_relax
    character(len=32) :: tracer_name
 
    call timing_on('ATMOS_UPDATE')
@@ -1388,25 +1388,27 @@ contains
    endif
 
 !--- adjust w and heat tendency for non-hydrostatic case
-#ifdef USE_Q_DT
+!#ifdef W_DIFF
     if ( .not.Atm(n)%flagstruct%hydrostatic .and. w_diff /= NO_TRACER ) then
       rcp = 1. / cp_air
 !$OMP parallel do default (none) &
-!$OMP              shared (jsc, jec, isc, iec, n, w_diff, Atm, q_dt, t_dt, rcp, dt_atmos) &
-!$OMP             private (i, j, k)
+!$OMP              shared (jsc, jec, isc, iec, n, w_diff, Atm, t_dt, &
+!$OMP                      rcp, dt_atmos, nb, IPD_Data, ix, Atm_block) &
+!$OMP             private (i, j, k, k1, blen)
        do k=1, Atm(n)%npz
-         do j=jsc, jec
-           do i=isc, iec
-             Atm(n)%q(i,j,k,w_diff) = q_dt(i,j,k,w_diff) ! w tendency due to phys
-! Heating due to loss of KE (vertical diffusion of w)
-             t_dt(i,j,k) = t_dt(i,j,k) - q_dt(i,j,k,w_diff)*rcp*&
-                                     (Atm(n)%w(i,j,k)+0.5*dt_atmos*q_dt(i,j,k,w_diff))
-             Atm(n)%w(i,j,k) = Atm(n)%w(i,j,k) + dt_atmos*Atm(n)%q(i,j,k,w_diff)
-           enddo
-         enddo
-       enddo
+         k1 = Atm(n)%npz+1-k !reverse the k direction
+         do ix = 1, blen
+           i = Atm_block%index(nb)%ii(ix)
+           j = Atm_block%index(nb)%jj(ix)
+              !Atm(n)%q(i,j,k,w_diff) = q_dt(i,j,k,w_diff) ! w tendency due to phys
+              ! Heating due to loss of KE (vertical diffusion of w)
+              !t_dt(i,j,k) = t_dt(i,j,k) - q_dt(i,j,k,w_diff)*rcp*&
+              !                        (Atm(n)%w(i,j,k)+0.5*dt_atmos*q_dt(i,j,k,w_diff))
+           Atm(n)%w(i,j,k1) = IPD_Data(nb)%Stateout%gq0(ix,k,w_diff) - w0_big !Atm(n)%w(i,j,k) + dt_atmos*Atm(n)%q(i,j,k,w_diff)
+        enddo
+      enddo
     endif
-#endif
+!#endif
 
     call timing_on('FV_UPDATE_PHYS')
     call fv_update_phys( dt_atmos, isc, iec, jsc, jec, isd, ied, jsd, jed, Atm(n)%ng, nt_dyn, &
@@ -1473,6 +1475,37 @@ contains
          enddo
       endif
   enddo
+
+!Age of (PBL) air tracers, instead --- lmh 21feb24
+   lat_thresh = 15.*pi/180.
+   t_aging = dt_atmos/86400. !days
+   t_relax = exp(-dt_atmos/3600.) !e-folding of 1 hour
+   do iq = 1, nq
+      call get_tracer_names (MODEL_ATMOS, iq, tracer_name)
+      if (trim(tracer_name) == 'pbl_age' .or. trim(tracer_name) == 'tro_pbl_age') then
+         do nb = 1,Atm_block%nblks
+            blen = Atm_block%blksz(nb)
+            do ix = 1, blen
+               i = Atm_block%index(nb)%ii(ix)
+               j = Atm_block%index(nb)%jj(ix)
+               if (trim(tracer_name) == 'tro_pbl_age' .and. abs(Atm(n)%gridstruct%agrid(i,j,2)) > lat_thresh) then
+                  do k=1,npz
+                     Atm(n)%q(i,j,k,iq) = Atm(n)%q(i,j,k,iq) + t_aging
+                  enddo
+               else
+                  do k=1,npz
+                     k1 = npz+1-k !reverse the k direction
+                     if (IPD_Data(nb)%Statein%phii(ix,k) > IPD_Data(nb)%intdiag%hpbl(ix)*grav) then
+                        Atm(n)%q(i,j,k1,iq) = Atm(n)%q(i,j,k1,iq) + t_aging
+                     else !source region
+                        Atm(n)%q(i,j,k1,iq) = Atm(n)%q(i,j,k1,iq)*t_relax
+                     endif
+                  enddo
+               endif
+            enddo
+         enddo
+      endif
+   enddo
 
 !--- nesting update after updating atmospheric variables with
 !--- physics tendencies
