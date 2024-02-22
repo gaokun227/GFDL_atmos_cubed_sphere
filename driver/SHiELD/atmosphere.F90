@@ -517,8 +517,9 @@ contains
                       Atm(n)%gridstruct, Atm(n)%flagstruct,                &
                       Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
                       Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp, &
-                      Atm(n)%inline_pbl, Atm(n)%inline_cnv,               &
-                      Atm(n)%inline_gwd, Atm(n)%diss_est,time_total=time_total)
+                      Atm(n)%inline_pbl, Atm(n)%inline_cnv, Atm(n)%inline_gwd, &
+                      Atm(n)%heat_source,Atm(n)%diss_est,time_total=time_total)
+
      call timing_off('FV_DYNAMICS')
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
@@ -1660,7 +1661,7 @@ contains
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
                      Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%inline_pbl,                  &
-                     Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%diss_est)
+                     Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%heat_source,Atm(mygrid)%diss_est)
 ! Backward
     call fv_dynamics(Atm(mygrid)%npx, Atm(mygrid)%npy, npz,  nq, Atm(mygrid)%ng, -dt_atmos, 0.,      &
                      Atm(mygrid)%flagstruct%fill, Atm(mygrid)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1675,7 +1676,7 @@ contains
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
                      Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%inline_pbl,                  &
-                     Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%diss_est)
+                     Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%heat_source,Atm(mygrid)%diss_est)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (pref, npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dp0, xt, zvir, mygrid, nudge_dz, dz0) &
@@ -1748,7 +1749,7 @@ contains
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
                      Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%inline_pbl,                  &
-                     Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%diss_est)
+                     Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%heat_source,Atm(mygrid)%diss_est)
 ! Forward call
     call fv_dynamics(Atm(mygrid)%npx, Atm(mygrid)%npy, npz,  nq, Atm(mygrid)%ng, dt_atmos, 0.,      &
                      Atm(mygrid)%flagstruct%fill, Atm(mygrid)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -1763,7 +1764,7 @@ contains
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
                      Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%inline_pbl,                  &
-                     Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%diss_est)
+                     Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%heat_source,Atm(mygrid)%diss_est)
 ! Nudging back to IC
 !$omp parallel do default (none) &
 !$omp              shared (nudge_dz,npz, jsc, jec, isc, iec, n, sphum, Atm, u0, v0, t0, dz0, dp0, xt, zvir, mygrid) &

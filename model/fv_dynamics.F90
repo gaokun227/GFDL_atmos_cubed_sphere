@@ -78,7 +78,7 @@ contains
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
-                        parent_grid, domain, inline_mp, inline_pbl, inline_cnv, &
+                        parent_grid, domain, inline_mp, heat_source, inline_pbl, inline_cnv, &
                         inline_gwd, diss_est, time_total)
 
     real, intent(IN) :: bdt  ! Large time-step
@@ -112,7 +112,8 @@ contains
     real, intent(inout) :: q(   bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, ncnst) ! specific humidity and constituents
     real, intent(inout) :: delz(bd%is:,bd%js:,1:)   ! delta-height (m); non-hydrostatic only
     real, intent(inout) ::  ze0(bd%is:, bd%js: ,1:) ! height at edges (m); non-hydrostatic
-    real, intent(inout) :: diss_est(bd%isd:bd%ied  ,bd%jsd:bd%jed, npz) ! diffusion estimate for SKEB
+    real, intent(inout) :: diss_est(bd%isd:bd%ied,bd%jsd:bd%jed,npz) ! diffusion estimate for SKEB
+    real, intent(inout) :: heat_source(bd%isd:bd%ied  ,bd%jsd:bd%jed, npz) ! Dissipative heating
 ! ze0 no longer used
 
 !-----------------------------------------------------------------------
@@ -487,7 +488,7 @@ contains
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &
                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
-                    domain, n_map==1, i_pack, last_step, diss_est, &
+                    domain, n_map==1, i_pack, last_step, heat_source, diss_est, &
                     consv_te, te_2d, inline_pbl, inline_gwd, time_total)
       call timing_off('DYN_CORE')
 
@@ -512,17 +513,17 @@ contains
        !!! CLEANUP: merge these two calls?
        if (gridstruct%bounded_domain) then
          call tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
-                        flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), i_pack(13), &
+                        flagstruct%hord_tr, q_split, mdt, idiag%id_divg_mean, i_pack(10), i_pack(13), &
                         flagstruct%nord_tr, flagstruct%trdm2, &
                         k_split, neststruct, parent_grid, n_map, flagstruct%lim_fac)
        else
          if ( flagstruct%z_tracer ) then
             call tracer_2d_1L(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
-                 flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), i_pack(13), &
+                 flagstruct%hord_tr, q_split, mdt, idiag%id_divg_mean, i_pack(10), i_pack(13), &
                  flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac)
          else
             call tracer_2d(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy, npz, nq,    &
-                 flagstruct%hord_tr, q_split, mdt, idiag%id_divg, i_pack(10), i_pack(13), &
+                 flagstruct%hord_tr, q_split, mdt, idiag%id_divg_mean, i_pack(10), i_pack(13), &
                  flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac)
          endif
        endif
@@ -545,9 +546,9 @@ contains
      endif
 #endif
 
-         if( last_step .and. idiag%id_divg>0 ) then
-             used = send_data(idiag%id_divg, dp1, fv_time)
-             if(flagstruct%fv_debug) call prt_mxm('divg',  dp1, is, ie, js, je, 0, npz, 1.,gridstruct%area_64, domain)
+         if( last_step .and. idiag%id_divg_mean>0 ) then
+             used = send_data(idiag%id_divg_mean, dp1(is:ie,js:je,:), fv_time)
+             if(flagstruct%fv_debug) call prt_mxm('divg_mean',  dp1, is, ie, js, je, 0, npz, 1.,gridstruct%area_64, domain)
          endif
       endif
 
@@ -711,59 +712,59 @@ contains
   endif
 
   if( (flagstruct%consv_am.or.idiag%id_amdt>0.or.idiag%id_aam>0) .and. (.not.do_adiabatic_init)  ) then
-      call compute_aam(npz, is, ie, js, je, isd, ied, jsd, jed, gridstruct, bd,   &
-                       ptop, ua, va, u, v, delp, te_2d, ps, m_fac)
-      if( idiag%id_aam>0 ) then
-          used = send_data(idiag%id_aam, te_2d, fv_time)
-       endif
-       if ( idiag%id_aam>0 .or. flagstruct%consv_am ) then
-          if ( prt_minmax ) then
-             gam = g_sum( domain, te_2d, is, ie, js, je, ng, gridstruct%area_64, 0)
-             if( is_master() ) write(6,*) 'Total AAM =', gam
-          endif
-       endif
-  endif
+     call compute_aam(npz, is, ie, js, je, isd, ied, jsd, jed, gridstruct, bd,   &
+          ptop, ua, va, u, v, delp, te_2d, ps, m_fac)
+     if( idiag%id_aam>0 ) then
+        used = send_data(idiag%id_aam, te_2d, fv_time)
+     endif
+     if ( idiag%id_aam>0 .or. flagstruct%consv_am ) then
+        if ( prt_minmax ) then
+           gam = g_sum( domain, te_2d, is, ie, js, je, ng, gridstruct%area_64, 0)
+           if( is_master() ) write(6,*) ' Total AAM =', gam
+        endif
+     endif
 
-  if( (flagstruct%consv_am.or.idiag%id_amdt>0) .and. (.not.do_adiabatic_init)  ) then
-!$OMP parallel do default(none) shared(is,ie,js,je,te_2d,teq,dt2,ps2,ps,idiag)
-      do j=js,je
-         do i=is,ie
-! Note: the mountain torque computation contains also numerical error
-! The numerical error is mostly from the zonal gradient of the terrain (zxg)
-            te_2d(i,j) = te_2d(i,j)-teq(i,j) + dt2*(ps2(i,j)+ps(i,j))*idiag%zxg(i,j)
-         enddo
-      enddo
-      if( idiag%id_amdt>0 ) used = send_data(idiag%id_amdt, te_2d/bdt, fv_time)
+     !$OMP parallel do default(none) shared(is,ie,js,je,te_2d,teq,dt2,ps2,ps,idiag)
+     do j=js,je
+        do i=is,ie
+           ! Note: the mountain torque computation contains also numerical error
+           ! The numerical error is mostly from the zonal gradient of the terrain (zxg)
+           te_2d(i,j) = te_2d(i,j)-teq(i,j) + dt2*(ps2(i,j)+ps(i,j))*idiag%zxg(i,j)
+        enddo
+     enddo
+     if ( idiag%id_amdt>0 ) used = send_data(idiag%id_amdt, te_2d/bdt, fv_time)
 
-      if ( flagstruct%consv_am .or. prt_minmax ) then
-         amdt = g_sum( domain, te_2d, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
-         u00 = -radius*amdt/g_sum( domain, m_fac, is, ie, js, je, ng, gridstruct%area_64, 0,reproduce=.true.)
-         if(is_master() .and. prt_minmax)         &
-         write(6,*) 'Dynamic AM tendency (Hadleys)=', amdt/(bdt*1.e18), 'del-u (per day)=', u00*86400./bdt
-      endif
+     if ( flagstruct%consv_am .or. idiag%id_amdt>0 ) then
+        amdt = g_sum( domain, te_2d, is, ie, js, je, ng, gridstruct%area_64, 0, reproduce=.true.)
+        u00 = -radius*amdt/g_sum( domain, m_fac, is, ie, js, je, ng, gridstruct%area_64, 0,reproduce=.true.)
+        if(is_master() .and. prt_minmax) then
+           write(6,*) ' Dynamic AM tendency (Hadleys)=', amdt/(bdt*1.e18)
+           write(6,*) '               del-u (per day)=', u00*86400./bdt
+        endif
+     endif
 
-    if( flagstruct%consv_am ) then
-!$OMP parallel do default(none) shared(is,ie,js,je,m_fac,u00,gridstruct)
-      do j=js,je
-         do i=is,ie
-            m_fac(i,j) = u00*cos(gridstruct%agrid(i,j,2))
-         enddo
-      enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,hydrostatic,pt,m_fac,ua,cp_air, &
-!$OMP                                  u,u00,gridstruct,v )
-      do k=1,npz
-      do j=js,je+1
-         do i=is,ie
-            u(i,j,k) = u(i,j,k) + u00*gridstruct%l2c_u(i,j)
-         enddo
-      enddo
-      do j=js,je
-         do i=is,ie+1
-            v(i,j,k) = v(i,j,k) + u00*gridstruct%l2c_v(i,j)
-         enddo
-      enddo
-      enddo
-    endif   !  consv_am
+     if( flagstruct%consv_am ) then
+        !$OMP parallel do default(none) shared(is,ie,js,je,m_fac,u00,gridstruct)
+        do j=js,je
+           do i=is,ie
+              m_fac(i,j) = u00*cos(gridstruct%agrid(i,j,2))
+           enddo
+        enddo
+        !$OMP parallel do default(none) shared(is,ie,js,je,npz,hydrostatic,pt,m_fac,ua,cp_air, &
+        !$OMP                                  u,u00,gridstruct,v )
+        do k=1,npz
+           do j=js,je+1
+              do i=is,ie
+                 u(i,j,k) = u(i,j,k) + u00*gridstruct%l2c_u(i,j)
+              enddo
+           enddo
+           do j=js,je
+              do i=is,ie+1
+                 v(i,j,k) = v(i,j,k) + u00*gridstruct%l2c_v(i,j)
+              enddo
+           enddo
+        enddo
+     endif   !  consv_am
   endif
 
 911  call cubed_to_latlon(u, v, ua, va, gridstruct, &
