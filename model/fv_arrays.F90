@@ -56,7 +56,7 @@ module fv_arrays_mod
      real, allocatable :: zxg(:,:)
 
      integer :: id_u_dt_sg, id_v_dt_sg, id_t_dt_sg, id_qv_dt_sg, id_diss
-     integer :: id_ws, id_te, id_amdt, id_divg, id_aam
+     integer :: id_ws, id_te, id_amdt, id_divg_mean, id_divg, id_aam
      logical :: initialized = .false.
 
      real :: efx(max_step), efx_sum, efx_nest(max_step), efx_sum_nest, mtq(max_step), mtq_sum
@@ -1282,6 +1282,7 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: ci(:,:)       _NULL  ! sea-ice fraction from external file
 
 ! For stochastic kinetic energy backscatter (SKEB)
+    real, _ALLOCATABLE :: heat_source(:,:,:) _NULL !< dissipative heating
     real, _ALLOCATABLE :: diss_est(:,:,:) _NULL !< dissipation estimate taken from 'heat_source'
 
 !-----------------------------------------------------------------------
@@ -1516,7 +1517,8 @@ contains
     endif
 
     ! Allocate others
-    allocate ( Atm%diss_est(isd:ied  ,jsd:jed  ,npz) )
+    allocate ( Atm%heat_source(isd:ied,jsd:jed,npz) )
+    allocate ( Atm%diss_est(isd:ied,jsd:jed,npz) )
     allocate ( Atm%ts(is:ie,js:je) )
     allocate ( Atm%phis(isd:ied  ,jsd:jed  ) )
     allocate ( Atm%omga(isd:ied  ,jsd:jed  ,npz) ); Atm%omga=0.
@@ -1900,6 +1902,7 @@ contains
     deallocate (  Atm%cy )
     deallocate (  Atm%ak )
     deallocate (  Atm%bk )
+    deallocate ( Atm%heat_source )
     deallocate ( Atm%diss_est )
 
     if (Atm%flagstruct%do_inline_mp) then

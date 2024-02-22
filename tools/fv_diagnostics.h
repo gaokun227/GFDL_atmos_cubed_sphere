@@ -73,7 +73,7 @@
      integer, allocatable :: id_tracer(:)
 
 ! dissipation estimates
- integer :: id_diss
+ integer :: id_diss, id_diss_heat
 
 ! ESM requested diagnostics  -  dry mass/volume mixing ratios
  integer, allocatable :: id_tracer_dmmr(:)

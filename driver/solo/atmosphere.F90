@@ -157,6 +157,8 @@ contains
      else
         zvir = rvgas/rdgas - 1.
         Atm(mygrid)%flagstruct%moist_phys = .true.
+     endif
+     if (.not. Atm(mygrid)%flagstruct%adiabatic .or. Atm(mygrid)%flagstruct%fv_sg_adj > 0.) then
         call fv_phys_init(isc,iec,jsc,jec,Atm(mygrid)%npz,Atm(mygrid)%flagstruct%nwat, Atm(mygrid)%ts, Atm(mygrid)%pt(isc:iec,jsc:jec,:),   &
                           Time, axes, Atm(mygrid)%gridstruct%agrid(isc:iec,jsc:jec,2))
      endif
@@ -164,26 +166,26 @@ contains
      if (.not. Atm(mygrid)%flagstruct%adiabatic) call gfdl_mp_init (input_nml_file, stdlog(), Atm(mygrid)%flagstruct%hydrostatic)
 
 
-        if ( Atm(mygrid)%flagstruct%nudge )    &
-             call fv_nwp_nudge_init( Time, axes, Atm(mygrid)%npz, zvir, Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%ts, &
-             Atm(mygrid)%phis, Atm(mygrid)%gridstruct, Atm(mygrid)%ks, Atm(mygrid)%npx, Atm(mygrid)%neststruct, Atm(mygrid)%bd)
+     if ( Atm(mygrid)%flagstruct%nudge )    &
+          call fv_nwp_nudge_init( Time, axes, Atm(mygrid)%npz, zvir, Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%ts, &
+          Atm(mygrid)%phis, Atm(mygrid)%gridstruct, Atm(mygrid)%ks, Atm(mygrid)%npx, Atm(mygrid)%neststruct, Atm(mygrid)%bd)
 
-        if ( Atm(mygrid)%flagstruct%make_nh ) then
-           Atm(mygrid)%w(:,:,:) = 0.
-        endif
+     if ( Atm(mygrid)%flagstruct%make_nh ) then
+        Atm(mygrid)%w(:,:,:) = 0.
+     endif
 
-        if ( Atm(mygrid)%flagstruct%na_init>0 ) then
-           call adiabatic_init(zvir,mygrid)
-        endif
+     if ( Atm(mygrid)%flagstruct%na_init>0 ) then
+        call adiabatic_init(zvir,mygrid)
+     endif
 
-        theta_d = get_tracer_index (MODEL_ATMOS, 'theta_d')
-        if ( theta_d > 0 ) then
-           call eqv_pot(Atm(mygrid)%q(isc:iec,jsc:jec,:,theta_d), Atm(mygrid)%pt, Atm(mygrid)%delp,    &
-                Atm(mygrid)%delz, Atm(mygrid)%peln, Atm(mygrid)%pkz, Atm(mygrid)%q(isd,jsd,1,1), isc, iec, jsc, jec, Atm(mygrid)%ng,   &
-                Atm(mygrid)%npz,  Atm(mygrid)%flagstruct%hydrostatic, Atm(mygrid)%flagstruct%moist_phys)
-        endif
+     theta_d = get_tracer_index (MODEL_ATMOS, 'theta_d')
+     if ( theta_d > 0 ) then
+        call eqv_pot(Atm(mygrid)%q(isc:iec,jsc:jec,:,theta_d), Atm(mygrid)%pt, Atm(mygrid)%delp,    &
+             Atm(mygrid)%delz, Atm(mygrid)%peln, Atm(mygrid)%pkz, Atm(mygrid)%q(isd,jsd,1,1), isc, iec, jsc, jec, Atm(mygrid)%ng,   &
+             Atm(mygrid)%npz,  Atm(mygrid)%flagstruct%hydrostatic, Atm(mygrid)%flagstruct%moist_phys)
+     endif
 
-        Atm(n)%time_init = Time_init
+     Atm(mygrid)%time_init = Time_init
 
    call timing_off('ATMOS_INIT')
 
@@ -268,7 +270,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%diss_est)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%heat_source, Atm(n)%diss_est)
 ! Backward
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, -dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -282,7 +284,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%diss_est)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%heat_source, Atm(n)%diss_est)
 ! Nudging back to IC
 !$omp parallel do default(shared)
        do k=1,npz
@@ -329,7 +331,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%diss_est)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%heat_source, Atm(n)%diss_est)
 ! Forwardward call
     call fv_dynamics(Atm(n)%npx, Atm(n)%npy, npz,  Atm(n)%ncnst, Atm(n)%ng, dt_atmos, 0.,      &
                      Atm(n)%flagstruct%fill, Atm(n)%flagstruct%reproduce_sum, kappa, cp_air, zvir,  &
@@ -343,7 +345,7 @@ contains
                      Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z,    &
                      Atm(n)%gridstruct, Atm(n)%flagstruct,                            &
                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid,  &
-                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%diss_est)
+                     Atm(n)%domain, Atm(n)%inline_mp, Atm(n)%heat_source, Atm(n)%diss_est)
 ! Nudging back to IC
 !$omp parallel do default(shared)
        do k=1,npz
@@ -424,19 +426,19 @@ contains
     endif
 
        call timing_on('FV_DYNAMICS')
-    call fv_dynamics(Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%ncnst, Atm(n)%ng,   &
-         dt_atmos/real(abs(p_split)), Atm(n)%flagstruct%consv_te, Atm(n)%flagstruct%fill, &
-         Atm(n)%flagstruct%reproduce_sum, kappa,   &
-         cp_air, zvir, Atm(n)%ptop, Atm(n)%ks, Atm(n)%ncnst, &
-         Atm(n)%flagstruct%n_split, Atm(n)%flagstruct%q_split, &
-         Atm(n)%u0, Atm(n)%v0, Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%delz, &
-         Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%delp, Atm(n)%q, Atm(n)%ps, &
-         Atm(n)%pe, Atm(n)%pk, Atm(n)%peln, Atm(n)%pkz,             &
-         Atm(n)%phis, Atm(n)%q_con, Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc, Atm(n)%vc,  &
-         Atm(n)%ak, Atm(n)%bk, Atm(n)%mfx, Atm(n)%mfy, Atm(n)%cx, Atm(n)%cy,    &
-         Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z, Atm(n)%gridstruct, Atm(n)%flagstruct, &
-         Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid, Atm(n)%domain, &
-         Atm(n)%inline_mp, Atm(n)%diss_est, time_total=time_total)
+       call fv_dynamics(Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%ncnst, Atm(n)%ng,   &
+            dt_atmos/real(abs(p_split)), Atm(n)%flagstruct%consv_te, Atm(n)%flagstruct%fill, &
+            Atm(n)%flagstruct%reproduce_sum, kappa,   &
+            cp_air, zvir, Atm(n)%ptop, Atm(n)%ks, Atm(n)%ncnst, &
+            Atm(n)%flagstruct%n_split, Atm(n)%flagstruct%q_split, &
+            Atm(n)%u0, Atm(n)%v0, Atm(n)%u, Atm(n)%v, Atm(n)%w, Atm(n)%delz, &
+            Atm(n)%flagstruct%hydrostatic, Atm(n)%pt, Atm(n)%delp, Atm(n)%q, Atm(n)%ps, &
+            Atm(n)%pe, Atm(n)%pk, Atm(n)%peln, Atm(n)%pkz,             &
+            Atm(n)%phis, Atm(n)%q_con, Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc, Atm(n)%vc,  &
+            Atm(n)%ak, Atm(n)%bk, Atm(n)%mfx, Atm(n)%mfy, Atm(n)%cx, Atm(n)%cy,    &
+            Atm(n)%ze0, Atm(n)%flagstruct%hybrid_z, Atm(n)%gridstruct, Atm(n)%flagstruct, &
+            Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd, Atm(n)%parent_grid, Atm(n)%domain, &
+            Atm(n)%inline_mp, Atm(n)%heat_source, Atm(n)%diss_est, time_total=time_total)
        call timing_off('FV_DYNAMICS')
 
     if (ngrids > 1 .and. (psc < p_split .or. p_split < 0)) then
@@ -447,7 +449,7 @@ contains
 
     end do !p_split
 
-    if(Atm(n)%npz /=1 .and. .not. Atm(n)%flagstruct%adiabatic)then
+    if(Atm(n)%npz /=1 .and. (.not. Atm(n)%flagstruct%adiabatic .or. Atm(mygrid)%flagstruct%fv_sg_adj > 0.)) then
 
            call timing_on('FV_PHYS')
     call fv_phys(Atm(n)%npx, Atm(n)%npy, Atm(n)%npz, Atm(n)%bd%isc, Atm(n)%bd%iec, &
@@ -462,7 +464,8 @@ contains
             Atm(n)%flagstruct%fv_sg_adj, Atm(n)%flagstruct%do_Held_Suarez,  &
             Atm(n)%gridstruct, Atm(n)%flagstruct, Atm(n)%neststruct,        &
             Atm(n)%flagstruct%nwat, Atm(n)%bd,                              &
-            Atm(n)%domain, fv_time, Atm(n)%phys_diag, Atm(n)%nudge_diag, time_total)
+            Atm(n)%domain, fv_time, Atm(n)%phys_diag, Atm(n)%nudge_diag,    &
+            Atm(n)%sg_diag, time_total)
            call timing_off('FV_PHYS')
        endif
 

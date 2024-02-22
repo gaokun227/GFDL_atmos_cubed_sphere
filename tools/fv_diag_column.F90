@@ -435,13 +435,14 @@ contains
   end subroutine debug_column
 
   subroutine debug_column_dyn(pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
-       use_heat_source, npz, ncnst, sphum, nwat, zvir, ptop, hydrostatic, bd, Time, k_step, n_step)
+       npz, ncnst, sphum, nwat, zvir, ptop, hydrostatic, bd, Time, k_step, n_step)
 
     type(fv_grid_bounds_type), intent(IN) :: bd
     integer, intent(IN) :: npz, ncnst, sphum, nwat, k_step, n_step
     real, intent(IN) :: akap, zvir, ptop
-    logical, intent(IN) :: hydrostatic, use_heat_source
-    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w, heat_source
+    logical, intent(IN) :: hydrostatic
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w
+    real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: heat_source
     real, dimension(bd%is:, bd%js:,1:), intent(IN) :: delz
     real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz), intent(IN) :: u
     real, dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz), intent(IN) :: v
@@ -503,11 +504,7 @@ contains
              !NOTE: Moist cappa not implemented for hydrostatic dynamics.
              pk = exp(akap*log(preshyd(k)))
              temp = pt(i,j,k)*pk/virt
-             if (use_heat_source) then
-                heats = heat_source(i,j,k) / (cp_air*delp(i,j,k))
-             else
-                heats = 0.0
-             endif
+             heats = heat_source(i,j,k) / (cp_air*delp(i,j,k))
              write(unit,'(I4, F7.2, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, 1x, G9.3)') &
                   k, temp, delp(i,j,k)*0.01, u(i,j,k), v(i,j,k), &
                   q(i,j,k,sphum)*1000., cond*1000., preshyd(k)*1.e-2, heats!, presdry*1.e-2, (presdry-preshyddry(k))*1.e-2
@@ -536,11 +533,7 @@ contains
              pk = exp(akap*log(pres))
 #endif
              temp = pt(i,j,k)*pk/virt
-             if (use_heat_source) then
-                heats = heat_source(i,j,k) / (cv_air*delp(i,j,k))
-             else
-                heats = 0.0
-             endif
+             heats = heat_source(i,j,k) / (cv_air*delp(i,j,k))
              write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, F9.3, 1x, G9.3 )') &
                   k, temp, delp(i,j,k)*0.01, -int(delz(i,j,k)), u(i,j,k), v(i,j,k), w(i,j,k), &
                   q(i,j,k,sphum)*1000., cond*1000., pres*1.e-2, (pres-preshyd(k))*1.e-2, heats
