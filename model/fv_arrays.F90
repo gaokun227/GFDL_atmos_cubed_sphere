@@ -1082,6 +1082,18 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: u_dt(:,:,:)
     real, _ALLOCATABLE :: v_dt(:,:,:)
 
+    real, _ALLOCATABLE :: qcw(:,:,:)
+    real, _ALLOCATABLE :: qci(:,:,:)
+    real, _ALLOCATABLE :: qcr(:,:,:)
+    real, _ALLOCATABLE :: qcs(:,:,:)
+    real, _ALLOCATABLE :: qcg(:,:,:)
+    real, _ALLOCATABLE :: rew(:,:,:)
+    real, _ALLOCATABLE :: rei(:,:,:)
+    real, _ALLOCATABLE :: rer(:,:,:)
+    real, _ALLOCATABLE :: res(:,:,:)
+    real, _ALLOCATABLE :: reg(:,:,:)
+    real, _ALLOCATABLE :: cld(:,:,:)
+
   end type inline_mp_type
 
   type phys_diag_type
