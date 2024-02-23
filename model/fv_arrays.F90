@@ -1112,6 +1112,18 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: intm_te_b_chg(:,:)     _NULL
     real, _ALLOCATABLE :: intm_tw_b_chg(:,:)     _NULL
 
+    real, _ALLOCATABLE :: qcw(:,:,:)
+    real, _ALLOCATABLE :: qci(:,:,:)
+    real, _ALLOCATABLE :: qcr(:,:,:)
+    real, _ALLOCATABLE :: qcs(:,:,:)
+    real, _ALLOCATABLE :: qcg(:,:,:)
+    real, _ALLOCATABLE :: rew(:,:,:)
+    real, _ALLOCATABLE :: rei(:,:,:)
+    real, _ALLOCATABLE :: rer(:,:,:)
+    real, _ALLOCATABLE :: res(:,:,:)
+    real, _ALLOCATABLE :: reg(:,:,:)
+    real, _ALLOCATABLE :: cld(:,:,:)
+
   end type inline_mp_type
 
   type inline_pbl_type

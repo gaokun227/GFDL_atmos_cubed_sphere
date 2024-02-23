@@ -226,7 +226,6 @@ module gfdl_mp_mod
     integer :: rewflag = 1 ! cloud water effective radius scheme
     ! 1: Martin et al. (1994)
     ! 2: Martin et al. (1994), GFDL revision
-    ! 3: Kiehl et al. (1994)
     ! 4: effective radius
 
     integer :: reiflag = 5 ! cloud ice effective radius scheme
@@ -5931,7 +5930,7 @@ end subroutine psaut_simp
 ! =======================================================================
 
 subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qv, qw, qi, qr, qs, qg, qa, &
-        qcw, qci, qcr, qcs, qcg, rew, rei, rer, res, reg, cld, cloud, snowd, &
+        qcw, qci, qcr, qcs, qcg, rew, rei, rer, res, reg, cld, cloud, &
         cnvw, cnvi, cnvc)
 
     implicit none
@@ -5942,7 +5941,7 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qv, qw, qi, qr, qs, qg,
 
     integer, intent (in) :: is, ie, ks, ke
 
-    real, intent (in), dimension (is:ie) :: lsm, snowd
+    real, intent (in), dimension (is:ie) :: lsm
 
     real, intent (in), dimension (is:ie, ks:ke) :: delp, t, p, cloud
     real, intent (in), dimension (is:ie, ks:ke) :: qv, qw, qi, qr, qs, qg, qa
@@ -6107,27 +6106,6 @@ subroutine cld_eff_rad (is, ie, ks, ke, lsm, p, delp, t, qv, qw, qi, qr, qs, qg,
                     qcw (i, k) = dpg * qmw (i, k) * 1.0e3
                     rew (i, k) = exp (1.0 / 3.0 * log ((3.0 * qmw (i, k) * rho) / &
                          (4.0 * pi * rhow * ccnw))) * 1.0e4
-                    rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
-                else
-                    qcw (i, k) = 0.0
-                    rew (i, k) = rewmin
-                endif
-
-            endif
-
-            if (rewflag .eq. 3) then
-
-                ! -----------------------------------------------------------------------
-                ! cloud water (Kiehl et al. 1994)
-                ! -----------------------------------------------------------------------
-
-                if (qmw (i, k) .gt. qcmin) then
-                    qcw (i, k) = dpg * qmw (i, k) * 1.0e3
-                    rew (i, k) = 14.0 * abs (mask - 1.0) + &
-                         (8.0 + (14.0 - 8.0) * min (1.0, max (0.0, - tc / 30.0))) * &
-                         (1.0 - abs (mask - 1.0))
-                    rew (i, k) = rew (i, k) + (14.0 - rew (i, k)) * &
-                        min (1.0, max (0.0, snowd (i) / 1000.0))
                     rew (i, k) = max (rewmin, min (rewmax, rew (i, k)))
                 else
                     qcw (i, k) = 0.0
