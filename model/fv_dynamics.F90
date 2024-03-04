@@ -78,8 +78,8 @@ contains
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
-                        parent_grid, domain, inline_mp, heat_source, inline_pbl, inline_cnv, &
-                        inline_gwd, diss_est, time_total)
+                        parent_grid, domain, inline_mp, inline_pbl, inline_cnv, &
+                        inline_gwd, heat_source, diss_est, time_total)
 
     real, intent(IN) :: bdt  ! Large time-step
     real, intent(IN) :: consv_te
