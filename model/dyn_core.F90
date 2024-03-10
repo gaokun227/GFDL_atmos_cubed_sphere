@@ -278,6 +278,7 @@ contains
                allocate( dv(isd:ied+1,jsd:jed,  npz) )
                call init_ijk_mem(isd,ied+1, jsd,jed  , npz, dv, 0.)
           endif
+          !only zero if first_step??
           call init_ijk_mem(isd,ied, jsd,jed, npz, diss_est, 0.)
       endif    ! end init_step
 
@@ -805,7 +806,7 @@ contains
                enddo
             enddo
        endif
-       if ( flagstruct%d_con > 1.0E-5 .or. flagstruct%do_diss_est) then
+       if ( flagstruct%do_diss_est) then
             do j=js,je
                do i=is,ie
                   diss_est(i,j,k) = diss_est(i,j,k) + diss_e(i,j)
