@@ -300,6 +300,7 @@ module gfdl_mp_mod
     logical :: snow_grauple_combine = .true. ! combine snow and graupel
 
     logical :: prog_ccn = .false. ! do prognostic ccn (Yi Ming's method)
+    logical :: prog_cin = .false. ! do prognostic cin
 
     logical :: fix_negative = .true. ! fix negative water species
 
@@ -382,7 +383,6 @@ module gfdl_mp_mod
 
     real :: rh_inc = 0.25 ! rh increment for complete evaporation of cloud water and cloud ice
     real :: rh_inr = 0.25 ! rh increment for minimum evaporation of rain
-    real :: rh_ins = 0.25 ! rh increment for sublimation of snow
 
     real :: tau_r2g = 900.0 ! rain freezing to graupel time scale (s)
     real :: tau_i2s = 1000.0 ! cloud ice to snow autoconversion time scale (s)
@@ -409,8 +409,6 @@ module gfdl_mp_mod
 
     real :: ql_mlt = 2.0e-3 ! maximum cloud water allowed from melted cloud ice (kg/kg)
     real :: qs_mlt = 1.0e-6 ! maximum cloud water allowed from melted snow (kg/kg)
-
-    real :: ql_gen = 1.0e-3 ! maximum cloud water generation during remapping step (kg/kg)
 
     real :: ql0_max = 2.0e-3 ! maximum cloud water value (autoconverted to rain) (kg/kg)
     real :: qi0_max = 1.0e-4 ! maximum cloud ice value (autoconverted to snow) (kg/m^3)
@@ -523,12 +521,12 @@ module gfdl_mp_mod
         t_min, t_sub, tau_r2g, tau_smlt, tau_gmlt, dw_land, dw_ocean, vw_fac, vi_fac, &
         vr_fac, vs_fac, vg_fac, ql_mlt, do_qa, fix_negative, vw_max, vi_max, vs_max, &
         vg_max, vr_max, qs_mlt, qs0_crt, ql0_max, qi0_max, qi0_crt, ifflag, &
-        rh_inc, rh_ins, rh_inr, const_vw, const_vi, const_vs, const_vg, const_vr, rthresh, &
+        rh_inc, rh_inr, const_vw, const_vi, const_vs, const_vg, const_vr, rthresh, &
         ccn_l, ccn_o, igflag, c_paut, tau_imlt, tau_v2l, tau_l2v, tau_i2s, &
-        tau_l2r, qi_lim, ql_gen, do_hail, inflag, c_psacw, c_psaci, c_pracs, &
+        tau_l2r, qi_lim, do_hail, inflag, c_psacw, c_psaci, c_pracs, &
         c_psacr, c_pgacr, c_pgacs, c_pgacw, c_pgaci, z_slope_liq, z_slope_ice, &
         prog_ccn, c_pracw, c_praci, rad_snow, rad_graupel, rad_rain, cld_min, &
-        sedflag, sed_fac, do_sedi_uv, do_sedi_w, do_sedi_heat, icloud_f, &
+        prog_cin, sedflag, sed_fac, do_sedi_uv, do_sedi_w, do_sedi_heat, icloud_f, &
         irain_f, xr_a, xr_b, xr_c, ntimes, tau_revp, tice_mlt, do_cond_timescale, &
         mp_time, consv_checker, te_err, tw_err, use_rhc_cevap, use_rhc_revap, tau_wbf, &
         do_warm_rain_mp, rh_thres, f_dq_p, f_dq_m, do_cld_adj, rhc_cevap, &
@@ -1366,18 +1364,26 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, &
                      (10. ** 2.24 * (qnl (i, k) * den (k) * 1.e9) ** 0.257) + &
                      (1. - min (1., abs (hs (i)) / (10. * grav))) * &
                      (10. ** 2.06 * (qnl (i, k) * den (k) * 1.e9) ** 0.48)
-                ni = qni (i, k)
                 ccn (k) = max (10.0, nl) * 1.e6
-                cin (k) = max (10.0, ni) * 1.e6
                 ccn (k) = ccn (k) / den (k)
-                cin (k) = cin (k) / den (k)
             enddo
         else
             ccn0 = (ccn_l * min (1., abs (hs (i)) / (10. * grav)) + &
                 ccn_o * (1. - min (1., abs (hs (i)) / (10. * grav)))) * 1.e6
-            cin0 = 0.0
             do k = ks, ke
                 ccn (k) = ccn0 / den (k)
+            enddo
+        endif
+
+        if (prog_cin) then
+            do k = ks, ke
+                ni = qni (i, k)
+                cin (k) = max (10.0, ni) * 1.e6
+                cin (k) = cin (k) / den (k)
+            enddo
+        else
+            cin0 = 0.0
+            do k = ks, ke
                 cin (k) = cin0 / den (k)
             enddo
         endif
@@ -4421,7 +4427,7 @@ subroutine pidep_pisub (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, dp, cvm, te8, d
             tmp = dq / (1. + tcpk (k) * dqdt)
 
             if (qi (k) .gt. qcmin) then
-                if (.not. prog_ccn) then
+                if (.not. prog_cin) then
                     if (inflag .eq. 1) &
                         cin (k) = 5.38e7 * exp (0.75 * log (qi (k) * den (k)))
                     if (inflag .eq. 2) &

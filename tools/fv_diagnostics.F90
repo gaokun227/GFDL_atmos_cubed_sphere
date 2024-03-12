@@ -48,7 +48,7 @@ module fv_diagnostics_mod
  use sat_vapor_pres_mod, only: compute_qs, lookup_es
 
  use fv_arrays_mod, only: max_step
- use gfdl_mp_mod, only: wqs, mqs3d, qs_init, c_liq, rad_ref
+ use gfdl_mp_mod, only: wqs, mqs3d, c_liq, rad_ref
 
  use fv_diag_column_mod, only: fv_diag_column_init, sounding_column, debug_column
 
@@ -1413,9 +1413,6 @@ contains
 
     module_is_initialized=.true.
     istep = 0
-#ifndef GFS_PHYS
-    if(id_theta_e >0 ) call qs_init
-#endif
 
     call fv_diag_column_init(Atm(n), yr_init, mo_init, dy_init, hr_init, do_diag_debug, do_diag_sonde, sound_freq, m_calendar)
 
