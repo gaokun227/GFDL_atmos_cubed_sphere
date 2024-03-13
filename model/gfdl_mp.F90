@@ -1206,6 +1206,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, &
     real, dimension (is:ie) :: condensation, evaporation
     real, dimension (is:ie) :: deposition, sublimation
     real, dimension (is:ie) :: freezing, melting
+    real, dimension (is:ie) :: autoconversion
 
     real (kind = r8) :: con_r8, c8, cp8
 
@@ -1237,6 +1238,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, &
     sublimation = 0.0
     freezing = 0.0
     melting = 0.0
+    autoconversion = 0.0
 
     ! -----------------------------------------------------------------------
     ! unit convert to mm/day
@@ -1425,7 +1427,8 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, &
 
             call mp_fast (ks, ke, tz, qvz, qlz, qrz, qiz, qsz, qgz, dtm, dp, den, &
                 ccn, cin, condensation (i), evaporation (i), deposition (i), &
-                sublimation (i), freezing (i), melting (i), denfac, convt, last_step)
+                sublimation (i), freezing (i), melting (i), autoconversion (i), &
+                denfac, convt, last_step)
 
         endif
 
@@ -1440,7 +1443,7 @@ subroutine mpdrv (hydrostatic, ua, va, wa, delp, pt, qv, ql, qr, qi, qs, qg, &
                 water (i), rain (i), ice (i), snow (i), graupel (i), prefluxw (i, :), &
                 prefluxr (i, :), prefluxi (i, :), prefluxs (i, :), prefluxg (i, :), &
                 condensation (i), evaporation (i), deposition (i), sublimation (i), &
-                freezing (i), melting (i), convt, last_step)
+                freezing (i), melting (i), autoconversion (i), convt, last_step)
 
         endif
 
@@ -1879,7 +1882,7 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
         den, denfac, ccn, cin, dts, rh_adj, rh_rain, h_var, dte, water, rain, ice, &
         snow, graupel, prefluxw, prefluxr, prefluxi, prefluxs, prefluxg, &
         condensation, evaporation, deposition, sublimation, freezing, melting, &
-        convt, last_step)
+        autoconversion, convt, last_step)
 
     implicit none
 
@@ -1904,6 +1907,7 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
     real, intent (inout) :: condensation, evaporation
     real, intent (inout) :: deposition, sublimation
     real, intent (inout) :: freezing, melting
+    real, intent (inout) :: autoconversion
 
     real (kind = r8), intent (inout) :: dte
 
@@ -1944,14 +1948,14 @@ subroutine mp_full (ks, ke, ntimes, tz, qv, ql, qr, qi, qs, qg, dp, dz, u, v, w,
         ! -----------------------------------------------------------------------
 
         call warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
-            den, denfac, vtw, vtr, ccn, rh_rain, h_var, evaporation, convt)
+            den, denfac, vtw, vtr, ccn, rh_rain, h_var, evaporation, autoconversion, convt)
 
         ! -----------------------------------------------------------------------
         ! ice cloud microphysics
         ! -----------------------------------------------------------------------
 
         call ice_cloud (ks, ke, dp, tz, qv, ql, qr, qi, qs, qg, den, denfac, vtw, &
-            vtr, vti, vts, vtg, dts, h_var, freezing, melting, convt)
+            vtr, vti, vts, vtg, dts, h_var, freezing, melting, autoconversion, convt)
 
         if (do_subgrid_proc) then
 
@@ -1975,7 +1979,7 @@ end subroutine mp_full
 
 subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
         ccn, cin, condensation, evaporation, deposition, sublimation, &
-        freezing, melting, denfac, convt, last_step)
+        freezing, melting, autoconversion, denfac, convt, last_step)
 
     implicit none
 
@@ -1998,6 +2002,7 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
     real, intent (inout) :: condensation, evaporation
     real, intent (inout) :: deposition, sublimation
     real, intent (inout) :: freezing, melting
+    real, intent (inout) :: autoconversion
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -2096,7 +2101,7 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
     ! cloud water to rain autoconversion
     ! -----------------------------------------------------------------------
 
-    call praut_simp (ks, ke, dtm, tz, qv, ql, qr, qi, qs, qg)
+    call praut_simp (ks, ke, dtm, dp, tz, qv, ql, qr, qi, qs, qg, autoconversion, convt)
 
     if (.not. do_warm_rain_mp .and. fast_dep_sub) then
 
@@ -2111,7 +2116,7 @@ subroutine mp_fast (ks, ke, tz, qv, ql, qr, qi, qs, qg, dtm, dp, den, &
         ! cloud ice to snow autoconversion
         ! -----------------------------------------------------------------------
 
-        call psaut_simp (ks, ke, dtm, qv, ql, qr, qi, qs, qg, tz, den)
+        call psaut_simp (ks, ke, dtm, qv, ql, qr, qi, qs, qg, dp, tz, den, autoconversion, convt)
 
         ! -----------------------------------------------------------------------
         ! snow deposition and sublimation
@@ -2772,7 +2777,8 @@ end subroutine check_column
 ! =======================================================================
 
 subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
-        den, denfac, vtw, vtr, ccn, rh_rain, h_var, evaporation, convt)
+        den, denfac, vtw, vtr, ccn, rh_rain, h_var, evaporation, autoconversion, &
+        convt)
 
     implicit none
 
@@ -2791,6 +2797,7 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     real, intent (inout) :: evaporation
+    real, intent (inout) :: autoconversion
 
     ! -----------------------------------------------------------------------
     ! rain evaporation to form water vapor
@@ -2809,7 +2816,8 @@ subroutine warm_rain (dts, ks, ke, dp, dz, tz, qv, ql, qr, qi, qs, qg, &
     ! cloud water to rain autoconversion
     ! -----------------------------------------------------------------------
 
-    call praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
+    call praut (ks, ke, dts, dp, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var, &
+        autoconversion, convt)
 
 end subroutine warm_rain
 
@@ -2979,7 +2987,8 @@ end subroutine pracw
 ! cloud water to rain autoconversion, Hong et al. (2004)
 ! =======================================================================
 
-subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
+subroutine praut (ks, ke, dts, dp, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var, &
+        autoconversion, convt)
 
     implicit none
 
@@ -2989,13 +2998,15 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
 
     integer, intent (in) :: ks, ke
 
-    real, intent (in) :: dts, h_var
+    real, intent (in) :: dts, h_var, convt
 
-    real, intent (in), dimension (ks:ke) :: den
+    real, intent (in), dimension (ks:ke) :: den, dp
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, ccn
 
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (inout) :: autoconversion
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3034,6 +3045,7 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
                     sink = min (1., dq / dl (k)) * dts * c_praut (k) * den (k) * &
                         exp (so3 * log (ql (k)))
                     sink = min (ql (k), sink)
+                    autoconversion = autoconversion + sink * dp (k) * convt
 
                     call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                         0., - sink, sink, 0., 0., 0.)
@@ -3066,6 +3078,7 @@ subroutine praut (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg, den, ccn, h_var)
                     c_praut (k) = cpaut * exp (so1 * log (ccn (k) * rhow))
                     sink = min (dq, dts * c_praut (k) * den (k) * exp (so3 * log (ql (k))))
                     sink = min (ql (k), sink)
+                    autoconversion = autoconversion + sink * dp (k) * convt
 
                     call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                         0., - sink, sink, 0., 0., 0.)
@@ -3085,7 +3098,8 @@ end subroutine praut
 ! =======================================================================
 
 subroutine ice_cloud (ks, ke, dp, tz, qv, ql, qr, qi, qs, qg, den, &
-        denfac, vtw, vtr, vti, vts, vtg, dts, h_var, freezing, melting, convt)
+        denfac, vtw, vtr, vti, vts, vtg, dts, h_var, freezing, melting, &
+        autoconversion, convt)
 
     implicit none
 
@@ -3104,6 +3118,7 @@ subroutine ice_cloud (ks, ke, dp, tz, qv, ql, qr, qi, qs, qg, den, &
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
 
     real, intent (inout) :: freezing, melting
+    real, intent (inout) :: autoconversion
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3166,7 +3181,7 @@ subroutine ice_cloud (ks, ke, dp, tz, qv, ql, qr, qi, qs, qg, den, &
         ! cloud ice to snow autoconversion
         ! -----------------------------------------------------------------------
 
-        call psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
+        call psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, dp, tz, den, di, autoconversion, convt)
 
         ! -----------------------------------------------------------------------
         ! graupel accretion with cloud ice
@@ -3191,7 +3206,7 @@ subroutine ice_cloud (ks, ke, dp, tz, qv, ql, qr, qi, qs, qg, den, &
         ! snow to graupel autoconversion
         ! -----------------------------------------------------------------------
 
-        call pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
+        call pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, dp, tz, den, autoconversion, convt)
 
         ! -----------------------------------------------------------------------
         ! graupel accretion with cloud water and rain
@@ -3559,7 +3574,7 @@ end subroutine psaci
 ! cloud ice to snow autoconversion, Lin et al. (1983)
 ! =======================================================================
 
-subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
+subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, dp, tz, den, di, autoconversion, convt)
 
     implicit none
 
@@ -3569,13 +3584,15 @@ subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
 
     integer, intent (in) :: ks, ke
 
-    real, intent (in) :: dts
+    real, intent (in) :: dts, convt
 
-    real, intent (in), dimension (ks:ke) :: den
+    real, intent (in), dimension (ks:ke) :: den, dp
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg, di
 
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (inout) :: autoconversion
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3608,6 +3625,7 @@ subroutine psaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den, di)
             endif
 
             sink = min (fi2s_fac * qi (k), sink)
+            autoconversion = autoconversion + sink * dp (k) * convt
 
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., - sink, sink, 0.)
@@ -3802,7 +3820,7 @@ end subroutine pgacs
 ! snow to graupel autoconversion, Lin et al. (1983)
 ! =======================================================================
 
-subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
+subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, dp, tz, den, autoconversion, convt)
 
     implicit none
 
@@ -3812,13 +3830,15 @@ subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
 
     integer, intent (in) :: ks, ke
 
-    real, intent (in) :: dts
+    real, intent (in) :: dts, convt
 
-    real, intent (in), dimension (ks:ke) :: den
+    real, intent (in), dimension (ks:ke) :: den, dp
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (inout) :: autoconversion
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -3842,6 +3862,7 @@ subroutine pgaut (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
             endif
 
             sink = min (fs2g_fac * qs (k), sink)
+            autoconversion = autoconversion + sink * dp (k) * convt
 
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., 0., - sink, sink)
@@ -5861,7 +5882,7 @@ end subroutine psmlt_simp
 ! cloud water to rain autoconversion, simple version
 ! =======================================================================
 
-subroutine praut_simp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg)
+subroutine praut_simp (ks, ke, dts, dp, tz, qv, ql, qr, qi, qs, qg, autoconversion, convt)
 
     implicit none
 
@@ -5871,11 +5892,15 @@ subroutine praut_simp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg)
 
     integer, intent (in) :: ks, ke
 
-    real, intent (in) :: dts
+    real, intent (in) :: dts, convt
+
+    real, intent (in), dimension (ks:ke) :: dp
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (inout) :: autoconversion
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5894,6 +5919,7 @@ subroutine praut_simp (ks, ke, dts, tz, qv, ql, qr, qi, qs, qg)
         if (tc .gt. 0 .and. ql (k) .gt. ql0_max) then
 
             sink = fac_l2r * (ql (k) - ql0_max)
+            autoconversion = autoconversion + sink * dp (k) * convt
 
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., - sink, sink, 0., 0., 0.)
@@ -5908,7 +5934,7 @@ end subroutine praut_simp
 ! cloud ice to snow autoconversion, simple version
 ! =======================================================================
 
-subroutine psaut_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
+subroutine psaut_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, dp, tz, den, autoconversion, convt)
 
     implicit none
 
@@ -5918,13 +5944,15 @@ subroutine psaut_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
 
     integer, intent (in) :: ks, ke
 
-    real, intent (in) :: dts
+    real, intent (in) :: dts, convt
 
-    real, intent (in), dimension (ks:ke) :: den
+    real, intent (in), dimension (ks:ke) :: den, dp
 
     real, intent (inout), dimension (ks:ke) :: qv, ql, qr, qi, qs, qg
 
     real (kind = r8), intent (inout), dimension (ks:ke) :: tz
+
+    real, intent (inout) :: autoconversion
 
     ! -----------------------------------------------------------------------
     ! local variables
@@ -5945,6 +5973,7 @@ subroutine psaut_simp (ks, ke, dts, qv, ql, qr, qi, qs, qg, tz, den)
         if (tc .lt. 0. .and. qi (k) .gt. qim) then
 
             sink = fac_i2s * (qi (k) - qim)
+            autoconversion = autoconversion + sink * dp (k) * convt
 
             call update_qq (qv (k), ql (k), qr (k), qi (k), qs (k), qg (k), &
                 0., 0., 0., - sink, sink, 0.)
