@@ -1094,15 +1094,15 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: reg(:,:,:)
     real, _ALLOCATABLE :: cld(:,:,:)
 
-    real, _ALLOCATABLE :: condensation(:,:)     _NULL
-    real, _ALLOCATABLE :: evaporation(:,:)     _NULL
-    real, _ALLOCATABLE :: deposition(:,:)     _NULL
-    real, _ALLOCATABLE :: sublimation(:,:)     _NULL
-    real, _ALLOCATABLE :: freezing(:,:)     _NULL
-    real, _ALLOCATABLE :: melting(:,:)     _NULL
-    real, _ALLOCATABLE :: autoconversion(:,:)     _NULL
-    real, _ALLOCATABLE :: riming(:,:)     _NULL
-    real, _ALLOCATABLE :: accretion(:,:)     _NULL
+    real, _ALLOCATABLE :: mppc(:,:)     _NULL
+    real, _ALLOCATABLE :: mppe(:,:)     _NULL
+    real, _ALLOCATABLE :: mppd(:,:)     _NULL
+    real, _ALLOCATABLE :: mpps(:,:)     _NULL
+    real, _ALLOCATABLE :: mppf(:,:)     _NULL
+    real, _ALLOCATABLE :: mppm(:,:)     _NULL
+    real, _ALLOCATABLE :: mppa(:,:)     _NULL
+    real, _ALLOCATABLE :: mppr(:,:)     _NULL
+    real, _ALLOCATABLE :: mppx(:,:)     _NULL
 
   end type inline_mp_type
 
@@ -1572,15 +1572,15 @@ contains
        allocate ( Atm%inline_mp%prefluxs(is:ie,js:je,npz) )
        allocate ( Atm%inline_mp%prefluxg(is:ie,js:je,npz) )
     endif
-    allocate ( Atm%inline_mp%condensation(is:ie,js:je) )
-    allocate ( Atm%inline_mp%evaporation(is:ie,js:je) )
-    allocate ( Atm%inline_mp%deposition(is:ie,js:je) )
-    allocate ( Atm%inline_mp%sublimation(is:ie,js:je) )
-    allocate ( Atm%inline_mp%freezing(is:ie,js:je) )
-    allocate ( Atm%inline_mp%melting(is:ie,js:je) )
-    allocate ( Atm%inline_mp%autoconversion(is:ie,js:je) )
-    allocate ( Atm%inline_mp%riming(is:ie,js:je) )
-    allocate ( Atm%inline_mp%accretion(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppc(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppe(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppd(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mpps(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppf(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppm(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppa(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppr(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppx(is:ie,js:je) )
 
     !--------------------------
     ! Non-hydrostatic dynamics:
@@ -1683,15 +1683,15 @@ contains
      endif
      do j=js, je
         do i=is, ie
-           Atm%inline_mp%condensation(i,j) = real_big
-           Atm%inline_mp%evaporation(i,j) = real_big
-           Atm%inline_mp%deposition(i,j) = real_big
-           Atm%inline_mp%sublimation(i,j) = real_big
-           Atm%inline_mp%freezing(i,j) = real_big
-           Atm%inline_mp%melting(i,j) = real_big
-           Atm%inline_mp%autoconversion(i,j) = real_big
-           Atm%inline_mp%riming(i,j) = real_big
-           Atm%inline_mp%accretion(i,j) = real_big
+           Atm%inline_mp%mppc(i,j) = real_big
+           Atm%inline_mp%mppe(i,j) = real_big
+           Atm%inline_mp%mppd(i,j) = real_big
+           Atm%inline_mp%mpps(i,j) = real_big
+           Atm%inline_mp%mppf(i,j) = real_big
+           Atm%inline_mp%mppm(i,j) = real_big
+           Atm%inline_mp%mppa(i,j) = real_big
+           Atm%inline_mp%mppr(i,j) = real_big
+           Atm%inline_mp%mppx(i,j) = real_big
         enddo
      enddo
 
@@ -1961,15 +1961,15 @@ contains
        deallocate ( Atm%inline_mp%prefluxs )
        deallocate ( Atm%inline_mp%prefluxg )
     endif
-    deallocate ( Atm%inline_mp%condensation )
-    deallocate ( Atm%inline_mp%evaporation )
-    deallocate ( Atm%inline_mp%deposition )
-    deallocate ( Atm%inline_mp%sublimation )
-    deallocate ( Atm%inline_mp%freezing )
-    deallocate ( Atm%inline_mp%melting )
-    deallocate ( Atm%inline_mp%autoconversion )
-    deallocate ( Atm%inline_mp%riming )
-    deallocate ( Atm%inline_mp%accretion )
+    deallocate ( Atm%inline_mp%mppc )
+    deallocate ( Atm%inline_mp%mppe )
+    deallocate ( Atm%inline_mp%mppd )
+    deallocate ( Atm%inline_mp%mpps )
+    deallocate ( Atm%inline_mp%mppf )
+    deallocate ( Atm%inline_mp%mppm )
+    deallocate ( Atm%inline_mp%mppa )
+    deallocate ( Atm%inline_mp%mppr )
+    deallocate ( Atm%inline_mp%mppx )
 
     deallocate ( Atm%u_srf )
     deallocate ( Atm%v_srf )

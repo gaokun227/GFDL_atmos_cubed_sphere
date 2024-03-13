@@ -290,11 +290,11 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 #else
                      cappa (isd:, jsd, 1:), &
 #endif
-                     gsize, inline_mp%condensation (is:ie, j), inline_mp%evaporation (is:ie, j), &
-                     inline_mp%deposition (is:ie, j), inline_mp%sublimation (is:ie, j), &
-                     inline_mp%freezing (is:ie, j), inline_mp%melting (is:ie, j), &
-                     inline_mp%autoconversion (is:ie, j), inline_mp%riming (is:ie, j), &
-                     inline_mp%accretion (is:ie, j), last_step, do_sat_adj)
+                     gsize, inline_mp%mppc (is:ie, j), inline_mp%mppe (is:ie, j), &
+                     inline_mp%mppd (is:ie, j), inline_mp%mpps (is:ie, j), &
+                     inline_mp%mppf (is:ie, j), inline_mp%mppm (is:ie, j), &
+                     inline_mp%mppa (is:ie, j), inline_mp%mppr (is:ie, j), &
+                     inline_mp%mppx (is:ie, j), last_step, do_sat_adj)
 
             ! update non-microphyiscs tracers due to mass change
             if (adj_mass_vmr) then
@@ -588,11 +588,11 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      inline_mp%prefluxw(is:ie, j, kmp:km), &
                      inline_mp%prefluxr(is:ie, j, kmp:km), inline_mp%prefluxi(is:ie, j, kmp:km), &
                      inline_mp%prefluxs(is:ie, j, kmp:km), inline_mp%prefluxg(is:ie, j, kmp:km), &
-                     inline_mp%condensation (is:ie, j), inline_mp%evaporation (is:ie, j), &
-                     inline_mp%deposition (is:ie, j), inline_mp%sublimation (is:ie, j), &
-                     inline_mp%freezing (is:ie, j), inline_mp%melting (is:ie, j), &
-                     inline_mp%autoconversion (is:ie, j), inline_mp%riming (is:ie, j), &
-                     inline_mp%accretion (is:ie, j), last_step, do_inline_mp)
+                     inline_mp%mppc (is:ie, j), inline_mp%mppe (is:ie, j), &
+                     inline_mp%mppd (is:ie, j), inline_mp%mpps (is:ie, j), &
+                     inline_mp%mppf (is:ie, j), inline_mp%mppm (is:ie, j), &
+                     inline_mp%mppa (is:ie, j), inline_mp%mppr (is:ie, j), &
+                     inline_mp%mppx (is:ie, j), last_step, do_inline_mp)
 
             ! update non-microphyiscs tracers due to mass change
             if (adj_mass_vmr) then

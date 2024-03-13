@@ -436,15 +436,15 @@ contains
       if (allocated(inline_mp%t_dt))  inline_mp%t_dt = 0.0
       if (allocated(inline_mp%u_dt)) inline_mp%u_dt = 0.0
       if (allocated(inline_mp%v_dt)) inline_mp%v_dt = 0.0
-      inline_mp%condensation = 0.0
-      inline_mp%evaporation = 0.0
-      inline_mp%deposition = 0.0
-      inline_mp%sublimation = 0.0
-      inline_mp%freezing = 0.0
-      inline_mp%melting = 0.0
-      inline_mp%autoconversion = 0.0
-      inline_mp%riming = 0.0
-      inline_mp%accretion = 0.0
+      inline_mp%mppc = 0.0
+      inline_mp%mppe = 0.0
+      inline_mp%mppd = 0.0
+      inline_mp%mpps = 0.0
+      inline_mp%mppf = 0.0
+      inline_mp%mppm = 0.0
+      inline_mp%mppa = 0.0
+      inline_mp%mppr = 0.0
+      inline_mp%mppx = 0.0
   endif
 
   call timing_on('FV_DYN_LOOP')
@@ -684,15 +684,15 @@ contains
       if (allocated(inline_mp%t_dt))  inline_mp%t_dt = inline_mp%t_dt / bdt
       if (allocated(inline_mp%u_dt)) inline_mp%u_dt = inline_mp%u_dt / bdt
       if (allocated(inline_mp%v_dt)) inline_mp%v_dt = inline_mp%v_dt / bdt
-      inline_mp%condensation = inline_mp%condensation / k_split
-      inline_mp%evaporation = inline_mp%evaporation / k_split
-      inline_mp%deposition = inline_mp%deposition / k_split
-      inline_mp%sublimation = inline_mp%sublimation / k_split
-      inline_mp%freezing = inline_mp%freezing / k_split
-      inline_mp%melting = inline_mp%melting / k_split
-      inline_mp%autoconversion = inline_mp%autoconversion / k_split
-      inline_mp%riming = inline_mp%riming / k_split
-      inline_mp%accretion = inline_mp%accretion / k_split
+      inline_mp%mppc = inline_mp%mppc / k_split
+      inline_mp%mppe = inline_mp%mppe / k_split
+      inline_mp%mppd = inline_mp%mppd / k_split
+      inline_mp%mpps = inline_mp%mpps / k_split
+      inline_mp%mppf = inline_mp%mppf / k_split
+      inline_mp%mppm = inline_mp%mppm / k_split
+      inline_mp%mppa = inline_mp%mppa / k_split
+      inline_mp%mppr = inline_mp%mppr / k_split
+      inline_mp%mppx = inline_mp%mppx / k_split
   endif
 
   if( nwat==6 ) then
