@@ -663,6 +663,27 @@ contains
             'graupel effective radius', 'micron', missing_value=missing_value )
        if (id_cld > 0) allocate(Atm(n)%inline_mp%cld(isc:iec,jsc:jec,npz))
 !-------------------
+! Microphysical process diagnostic from GFDL MP
+!-------------------
+       id_condensation = register_diag_field ( trim(field), 'condensation', axes(1:2), Time,           &
+            'Condensation Rate', 'mm/day', missing_value=missing_value )
+       id_evaporation = register_diag_field ( trim(field), 'evaporation', axes(1:2), Time,           &
+            'evaporation Rate', 'mm/day', missing_value=missing_value )
+       id_deposition = register_diag_field ( trim(field), 'deposition', axes(1:2), Time,           &
+            'deposition Rate', 'mm/day', missing_value=missing_value )
+       id_sublimation = register_diag_field ( trim(field), 'sublimation', axes(1:2), Time,           &
+            'sublimation Rate', 'mm/day', missing_value=missing_value )
+       id_freezing = register_diag_field ( trim(field), 'freezing', axes(1:2), Time,           &
+            'freezing Rate', 'mm/day', missing_value=missing_value )
+       id_melting = register_diag_field ( trim(field), 'melting', axes(1:2), Time,           &
+            'melting Rate', 'mm/day', missing_value=missing_value )
+       id_autoconversion = register_diag_field ( trim(field), 'autoconversion', axes(1:2), Time,           &
+            'autoconversion Rate', 'mm/day', missing_value=missing_value )
+       id_riming = register_diag_field ( trim(field), 'riming', axes(1:2), Time,           &
+            'riming Rate', 'mm/day', missing_value=missing_value )
+       id_accretion = register_diag_field ( trim(field), 'accretion', axes(1:2), Time,           &
+            'accretion Rate', 'mm/day', missing_value=missing_value )
+!-------------------
 !! 3D Tendency terms from GFDL MP and physics
 !-------------------
        if (Atm(n)%flagstruct%write_3d_diags) then
@@ -1794,6 +1815,15 @@ contains
           if(id_pres > 0) used=send_data(id_pres, Atm(n)%inline_mp%pres(isc:iec,jsc:jec), Time)
           if(id_preg > 0) used=send_data(id_preg, Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
        endif
+       if(id_condensation > 0) used=send_data(id_condensation, Atm(n)%inline_mp%condensation(isc:iec,jsc:jec), Time)
+       if(id_evaporation > 0) used=send_data(id_evaporation, Atm(n)%inline_mp%evaporation(isc:iec,jsc:jec), Time)
+       if(id_deposition > 0) used=send_data(id_deposition, Atm(n)%inline_mp%deposition(isc:iec,jsc:jec), Time)
+       if(id_sublimation > 0) used=send_data(id_sublimation, Atm(n)%inline_mp%sublimation(isc:iec,jsc:jec), Time)
+       if(id_freezing > 0) used=send_data(id_freezing, Atm(n)%inline_mp%freezing(isc:iec,jsc:jec), Time)
+       if(id_melting > 0) used=send_data(id_melting, Atm(n)%inline_mp%melting(isc:iec,jsc:jec), Time)
+       if(id_autoconversion > 0) used=send_data(id_autoconversion, Atm(n)%inline_mp%autoconversion(isc:iec,jsc:jec), Time)
+       if(id_riming > 0) used=send_data(id_riming, Atm(n)%inline_mp%riming(isc:iec,jsc:jec), Time)
+       if(id_accretion > 0) used=send_data(id_accretion, Atm(n)%inline_mp%accretion(isc:iec,jsc:jec), Time)
 
        if (id_qcw > 0 .and. id_qcr > 0 .and. id_qci > 0 .and. id_qcs > 0 .and. id_qcg > 0 .and. &
            id_rew > 0 .and. id_rer > 0 .and. id_rei > 0 .and. id_res > 0 .and. id_reg > 0 .and. id_cld) then
