@@ -293,8 +293,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      gsize, inline_mp%mppc (is:ie, j), inline_mp%mppe (is:ie, j), &
                      inline_mp%mppd (is:ie, j), inline_mp%mpps (is:ie, j), &
                      inline_mp%mppf (is:ie, j), inline_mp%mppm (is:ie, j), &
-                     inline_mp%mppa (is:ie, j), inline_mp%mppr (is:ie, j), &
-                     inline_mp%mppx (is:ie, j), last_step, do_sat_adj)
+                     inline_mp%mppar (is:ie, j), inline_mp%mppas (is:ie, j), &
+                     inline_mp%mppag (is:ie, j), inline_mp%mpprs (is:ie, j), &
+                     inline_mp%mpprg (is:ie, j), inline_mp%mppxr (is:ie, j), &
+                     inline_mp%mppxs (is:ie, j), inline_mp%mppxg (is:ie, j), last_step, do_sat_adj)
 
             ! update non-microphyiscs tracers due to mass change
             if (adj_mass_vmr) then
@@ -591,8 +593,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      inline_mp%mppc (is:ie, j), inline_mp%mppe (is:ie, j), &
                      inline_mp%mppd (is:ie, j), inline_mp%mpps (is:ie, j), &
                      inline_mp%mppf (is:ie, j), inline_mp%mppm (is:ie, j), &
-                     inline_mp%mppa (is:ie, j), inline_mp%mppr (is:ie, j), &
-                     inline_mp%mppx (is:ie, j), last_step, do_inline_mp)
+                     inline_mp%mppar (is:ie, j), inline_mp%mppas (is:ie, j), &
+                     inline_mp%mppag (is:ie, j), inline_mp%mpprs (is:ie, j), &
+                     inline_mp%mpprg (is:ie, j), inline_mp%mppxr (is:ie, j), &
+                     inline_mp%mppxs (is:ie, j), inline_mp%mppxg (is:ie, j), last_step, do_inline_mp)
 
             ! update non-microphyiscs tracers due to mass change
             if (adj_mass_vmr) then

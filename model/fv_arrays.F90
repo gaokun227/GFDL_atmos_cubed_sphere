@@ -1100,9 +1100,14 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: mpps(:,:)     _NULL
     real, _ALLOCATABLE :: mppf(:,:)     _NULL
     real, _ALLOCATABLE :: mppm(:,:)     _NULL
-    real, _ALLOCATABLE :: mppa(:,:)     _NULL
-    real, _ALLOCATABLE :: mppr(:,:)     _NULL
-    real, _ALLOCATABLE :: mppx(:,:)     _NULL
+    real, _ALLOCATABLE :: mppar(:,:)     _NULL
+    real, _ALLOCATABLE :: mppas(:,:)     _NULL
+    real, _ALLOCATABLE :: mppag(:,:)     _NULL
+    real, _ALLOCATABLE :: mpprs(:,:)     _NULL
+    real, _ALLOCATABLE :: mpprg(:,:)     _NULL
+    real, _ALLOCATABLE :: mppxr(:,:)     _NULL
+    real, _ALLOCATABLE :: mppxs(:,:)     _NULL
+    real, _ALLOCATABLE :: mppxg(:,:)     _NULL
 
   end type inline_mp_type
 
@@ -1578,9 +1583,14 @@ contains
     allocate ( Atm%inline_mp%mpps(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppf(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppm(is:ie,js:je) )
-    allocate ( Atm%inline_mp%mppa(is:ie,js:je) )
-    allocate ( Atm%inline_mp%mppr(is:ie,js:je) )
-    allocate ( Atm%inline_mp%mppx(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppar(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppas(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppag(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mpprs(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mpprg(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppxr(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppxs(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppxg(is:ie,js:je) )
 
     !--------------------------
     ! Non-hydrostatic dynamics:
@@ -1689,9 +1699,14 @@ contains
            Atm%inline_mp%mpps(i,j) = real_big
            Atm%inline_mp%mppf(i,j) = real_big
            Atm%inline_mp%mppm(i,j) = real_big
-           Atm%inline_mp%mppa(i,j) = real_big
-           Atm%inline_mp%mppr(i,j) = real_big
-           Atm%inline_mp%mppx(i,j) = real_big
+           Atm%inline_mp%mppar(i,j) = real_big
+           Atm%inline_mp%mppas(i,j) = real_big
+           Atm%inline_mp%mppag(i,j) = real_big
+           Atm%inline_mp%mpprs(i,j) = real_big
+           Atm%inline_mp%mpprg(i,j) = real_big
+           Atm%inline_mp%mppxr(i,j) = real_big
+           Atm%inline_mp%mppxs(i,j) = real_big
+           Atm%inline_mp%mppxg(i,j) = real_big
         enddo
      enddo
 
@@ -1967,9 +1982,14 @@ contains
     deallocate ( Atm%inline_mp%mpps )
     deallocate ( Atm%inline_mp%mppf )
     deallocate ( Atm%inline_mp%mppm )
-    deallocate ( Atm%inline_mp%mppa )
-    deallocate ( Atm%inline_mp%mppr )
-    deallocate ( Atm%inline_mp%mppx )
+    deallocate ( Atm%inline_mp%mppar )
+    deallocate ( Atm%inline_mp%mppas )
+    deallocate ( Atm%inline_mp%mppag )
+    deallocate ( Atm%inline_mp%mpprs )
+    deallocate ( Atm%inline_mp%mpprg )
+    deallocate ( Atm%inline_mp%mppxr )
+    deallocate ( Atm%inline_mp%mppxs )
+    deallocate ( Atm%inline_mp%mppxg )
 
     deallocate ( Atm%u_srf )
     deallocate ( Atm%v_srf )

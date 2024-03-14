@@ -97,7 +97,8 @@
      integer :: id_liq_wat_dt_phys, id_ice_wat_dt_phys
      integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
      integer :: id_mppc, id_mppe, id_mppd, id_mpps
-     integer :: id_mppf, id_mppm, id_mppa, id_mppr, id_mppx
+     integer :: id_mppf, id_mppm, id_mppar, id_mppas, id_mppag
+     integer :: id_mpprs, id_mpprg, id_mppxr, id_mppxs, id_mppxg
 
 ! ESM/CM 3-D diagostics
      integer :: id_uq, id_vq, id_wq, id_iuq, id_ivq, id_iwq,   & ! moisture flux & vertical integral

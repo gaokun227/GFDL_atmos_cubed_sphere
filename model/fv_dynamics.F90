@@ -442,9 +442,14 @@ contains
       inline_mp%mpps = 0.0
       inline_mp%mppf = 0.0
       inline_mp%mppm = 0.0
-      inline_mp%mppa = 0.0
-      inline_mp%mppr = 0.0
-      inline_mp%mppx = 0.0
+      inline_mp%mppar = 0.0
+      inline_mp%mppas = 0.0
+      inline_mp%mppag = 0.0
+      inline_mp%mpprs = 0.0
+      inline_mp%mpprg = 0.0
+      inline_mp%mppxr = 0.0
+      inline_mp%mppxs = 0.0
+      inline_mp%mppxg = 0.0
   endif
 
   call timing_on('FV_DYN_LOOP')
@@ -690,9 +695,14 @@ contains
       inline_mp%mpps = inline_mp%mpps / k_split
       inline_mp%mppf = inline_mp%mppf / k_split
       inline_mp%mppm = inline_mp%mppm / k_split
-      inline_mp%mppa = inline_mp%mppa / k_split
-      inline_mp%mppr = inline_mp%mppr / k_split
-      inline_mp%mppx = inline_mp%mppx / k_split
+      inline_mp%mppar = inline_mp%mppar / k_split
+      inline_mp%mppas = inline_mp%mppas / k_split
+      inline_mp%mppag = inline_mp%mppag / k_split
+      inline_mp%mpprs = inline_mp%mpprs / k_split
+      inline_mp%mpprg = inline_mp%mpprg / k_split
+      inline_mp%mppxr = inline_mp%mppxr / k_split
+      inline_mp%mppxs = inline_mp%mppxs / k_split
+      inline_mp%mppxg = inline_mp%mppxg / k_split
   endif
 
   if( nwat==6 ) then

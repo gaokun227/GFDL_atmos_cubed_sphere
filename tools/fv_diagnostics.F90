@@ -677,12 +677,22 @@ contains
             'Freezing Rate', 'mm/day', missing_value=missing_value )
        id_mppm = register_diag_field ( trim(field), 'mppm', axes(1:2), Time,           &
             'Melting Rate', 'mm/day', missing_value=missing_value )
-       id_mppa = register_diag_field ( trim(field), 'mppa', axes(1:2), Time,           &
-            'Autoconversion Rate', 'mm/day', missing_value=missing_value )
-       id_mppr = register_diag_field ( trim(field), 'mppr', axes(1:2), Time,           &
-            'Riming Rate', 'mm/day', missing_value=missing_value )
-       id_mppx = register_diag_field ( trim(field), 'mppx', axes(1:2), Time,           &
-            'Accretion Rate', 'mm/day', missing_value=missing_value )
+       id_mppar = register_diag_field ( trim(field), 'mppar', axes(1:2), Time,           &
+            'Autoconversion (to Rain) Rate', 'mm/day', missing_value=missing_value )
+       id_mppas = register_diag_field ( trim(field), 'mppas', axes(1:2), Time,           &
+            'Autoconversion (to Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mppag = register_diag_field ( trim(field), 'mppag', axes(1:2), Time,           &
+            'Autoconversion (to Graupel) Rate', 'mm/day', missing_value=missing_value )
+       id_mpprs = register_diag_field ( trim(field), 'mpprs', axes(1:2), Time,           &
+            'Riming (to Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mpprg = register_diag_field ( trim(field), 'mpprg', axes(1:2), Time,           &
+            'Riming (to Graupel) Rate', 'mm/day', missing_value=missing_value )
+       id_mppxr = register_diag_field ( trim(field), 'mppxr', axes(1:2), Time,           &
+            'Accretion (to Rain) Rate', 'mm/day', missing_value=missing_value )
+       id_mppxs = register_diag_field ( trim(field), 'mppxs', axes(1:2), Time,           &
+            'Accretion (to Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mppxg = register_diag_field ( trim(field), 'mppxg', axes(1:2), Time,           &
+            'Accretion (to Graupel) Rate', 'mm/day', missing_value=missing_value )
 !-------------------
 !! 3D Tendency terms from GFDL MP and physics
 !-------------------
@@ -1821,9 +1831,14 @@ contains
        if(id_mpps > 0) used=send_data(id_mpps, Atm(n)%inline_mp%mpps(isc:iec,jsc:jec), Time)
        if(id_mppf > 0) used=send_data(id_mppf, Atm(n)%inline_mp%mppf(isc:iec,jsc:jec), Time)
        if(id_mppm > 0) used=send_data(id_mppm, Atm(n)%inline_mp%mppm(isc:iec,jsc:jec), Time)
-       if(id_mppa > 0) used=send_data(id_mppa, Atm(n)%inline_mp%mppa(isc:iec,jsc:jec), Time)
-       if(id_mppr > 0) used=send_data(id_mppr, Atm(n)%inline_mp%mppr(isc:iec,jsc:jec), Time)
-       if(id_mppx > 0) used=send_data(id_mppx, Atm(n)%inline_mp%mppx(isc:iec,jsc:jec), Time)
+       if(id_mppar > 0) used=send_data(id_mppar, Atm(n)%inline_mp%mppar(isc:iec,jsc:jec), Time)
+       if(id_mppas > 0) used=send_data(id_mppas, Atm(n)%inline_mp%mppas(isc:iec,jsc:jec), Time)
+       if(id_mppag > 0) used=send_data(id_mppag, Atm(n)%inline_mp%mppag(isc:iec,jsc:jec), Time)
+       if(id_mpprs > 0) used=send_data(id_mpprs, Atm(n)%inline_mp%mpprs(isc:iec,jsc:jec), Time)
+       if(id_mpprg > 0) used=send_data(id_mpprg, Atm(n)%inline_mp%mpprg(isc:iec,jsc:jec), Time)
+       if(id_mppxr > 0) used=send_data(id_mppxr, Atm(n)%inline_mp%mppxr(isc:iec,jsc:jec), Time)
+       if(id_mppxs > 0) used=send_data(id_mppxs, Atm(n)%inline_mp%mppxs(isc:iec,jsc:jec), Time)
+       if(id_mppxg > 0) used=send_data(id_mppxg, Atm(n)%inline_mp%mppxg(isc:iec,jsc:jec), Time)
 
        if (id_qcw > 0 .and. id_qcr > 0 .and. id_qci > 0 .and. id_qcs > 0 .and. id_qcg > 0 .and. &
            id_rew > 0 .and. id_rer > 0 .and. id_rei > 0 .and. id_res > 0 .and. id_reg > 0 .and. id_cld) then
