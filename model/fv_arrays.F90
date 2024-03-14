@@ -1096,11 +1096,14 @@ module fv_arrays_mod
 
     real, _ALLOCATABLE :: mppcw(:,:)     _NULL
     real, _ALLOCATABLE :: mppew(:,:)     _NULL
+    real, _ALLOCATABLE :: mppe1(:,:)     _NULL
     real, _ALLOCATABLE :: mpper(:,:)     _NULL
     real, _ALLOCATABLE :: mppdi(:,:)     _NULL
+    real, _ALLOCATABLE :: mppd1(:,:)     _NULL
     real, _ALLOCATABLE :: mppds(:,:)     _NULL
     real, _ALLOCATABLE :: mppdg(:,:)     _NULL
     real, _ALLOCATABLE :: mppsi(:,:)     _NULL
+    real, _ALLOCATABLE :: mpps1(:,:)     _NULL
     real, _ALLOCATABLE :: mppss(:,:)     _NULL
     real, _ALLOCATABLE :: mppsg(:,:)     _NULL
     real, _ALLOCATABLE :: mppfw(:,:)     _NULL
@@ -1587,11 +1590,14 @@ contains
     endif
     allocate ( Atm%inline_mp%mppcw(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppew(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppe1(is:ie,js:je) )
     allocate ( Atm%inline_mp%mpper(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppdi(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppd1(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppds(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppdg(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppsi(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mpps1(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppss(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppsg(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppfw(is:ie,js:je) )
@@ -1711,11 +1717,14 @@ contains
         do i=is, ie
            Atm%inline_mp%mppcw(i,j) = real_big
            Atm%inline_mp%mppew(i,j) = real_big
+           Atm%inline_mp%mppe1(i,j) = real_big
            Atm%inline_mp%mpper(i,j) = real_big
            Atm%inline_mp%mppdi(i,j) = real_big
+           Atm%inline_mp%mppd1(i,j) = real_big
            Atm%inline_mp%mppds(i,j) = real_big
            Atm%inline_mp%mppdg(i,j) = real_big
            Atm%inline_mp%mppsi(i,j) = real_big
+           Atm%inline_mp%mpps1(i,j) = real_big
            Atm%inline_mp%mppss(i,j) = real_big
            Atm%inline_mp%mppsg(i,j) = real_big
            Atm%inline_mp%mppfw(i,j) = real_big
@@ -2002,11 +2011,14 @@ contains
     endif
     deallocate ( Atm%inline_mp%mppcw )
     deallocate ( Atm%inline_mp%mppew )
+    deallocate ( Atm%inline_mp%mppe1 )
     deallocate ( Atm%inline_mp%mpper )
     deallocate ( Atm%inline_mp%mppdi )
+    deallocate ( Atm%inline_mp%mppd1 )
     deallocate ( Atm%inline_mp%mppds )
     deallocate ( Atm%inline_mp%mppdg )
     deallocate ( Atm%inline_mp%mppsi )
+    deallocate ( Atm%inline_mp%mpps1 )
     deallocate ( Atm%inline_mp%mppss )
     deallocate ( Atm%inline_mp%mppsg )
     deallocate ( Atm%inline_mp%mppfw )

@@ -96,9 +96,10 @@
      integer :: id_qr_dt_phys, id_qg_dt_phys, id_qs_dt_phys
      integer :: id_liq_wat_dt_phys, id_ice_wat_dt_phys
      integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
-     integer :: id_mppcw, id_mppew, id_mpper, id_mppdi, id_mppds, id_mppdg
-     integer :: id_mppsi, id_mppss, id_mppsg, id_mppfw, id_mppfr
-     integer :: id_mppmi, id_mppms, id_mppmg, id_mppar, id_mppas, id_mppag
+     integer :: id_mppcw, id_mppew, id_mppe1, id_mpper, id_mppdi
+     integer :: id_mppd1, id_mppds, id_mppdg, id_mppsi, id_mpps1
+     integer :: id_mppss, id_mppsg, id_mppfw, id_mppfr, id_mppmi
+     integer :: id_mppms, id_mppmg, id_mppar, id_mppas, id_mppag
      integer :: id_mpprs, id_mpprg, id_mppxr, id_mppxs, id_mppxg
 
 ! ESM/CM 3-D diagostics
