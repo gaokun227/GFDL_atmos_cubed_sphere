@@ -699,6 +699,12 @@ contains
             'Melting (of Snow) Rate', 'mm/day', missing_value=missing_value )
        id_mppmg = register_diag_field ( trim(field), 'mppmg', axes(1:2), Time,           &
             'Melting (of Graupel) Rate', 'mm/day', missing_value=missing_value )
+       id_mppm1 = register_diag_field ( trim(field), 'mppm1', axes(1:2), Time,           &
+            'Sedimentational Melting (of Cloud Ice) Rate', 'mm/day', missing_value=missing_value )
+       id_mppm2 = register_diag_field ( trim(field), 'mppm2', axes(1:2), Time,           &
+            'Sedimentational Melting (of Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mppm3 = register_diag_field ( trim(field), 'mppm3', axes(1:2), Time,           &
+            'Sedimentational Melting (of Graupel) Rate', 'mm/day', missing_value=missing_value )
        id_mppar = register_diag_field ( trim(field), 'mppar', axes(1:2), Time,           &
             'Autoconversion (to Rain) Rate', 'mm/day', missing_value=missing_value )
        id_mppas = register_diag_field ( trim(field), 'mppas', axes(1:2), Time,           &
@@ -1864,6 +1870,9 @@ contains
        if(id_mppmi > 0) used=send_data(id_mppmi, Atm(n)%inline_mp%mppmi(isc:iec,jsc:jec), Time)
        if(id_mppms > 0) used=send_data(id_mppms, Atm(n)%inline_mp%mppms(isc:iec,jsc:jec), Time)
        if(id_mppmg > 0) used=send_data(id_mppmg, Atm(n)%inline_mp%mppmg(isc:iec,jsc:jec), Time)
+       if(id_mppm1 > 0) used=send_data(id_mppm1, Atm(n)%inline_mp%mppm1(isc:iec,jsc:jec), Time)
+       if(id_mppm2 > 0) used=send_data(id_mppm2, Atm(n)%inline_mp%mppm2(isc:iec,jsc:jec), Time)
+       if(id_mppm3 > 0) used=send_data(id_mppm3, Atm(n)%inline_mp%mppm3(isc:iec,jsc:jec), Time)
        if(id_mppar > 0) used=send_data(id_mppar, Atm(n)%inline_mp%mppar(isc:iec,jsc:jec), Time)
        if(id_mppas > 0) used=send_data(id_mppas, Atm(n)%inline_mp%mppas(isc:iec,jsc:jec), Time)
        if(id_mppag > 0) used=send_data(id_mppag, Atm(n)%inline_mp%mppag(isc:iec,jsc:jec), Time)

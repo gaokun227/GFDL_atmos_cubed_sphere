@@ -295,7 +295,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      inline_mp%mppds (is:ie, j), inline_mp%mppdg (is:ie, j), inline_mp%mppsi (is:ie, j), &
                      inline_mp%mpps1 (is:ie, j), inline_mp%mppss (is:ie, j), inline_mp%mppsg (is:ie, j), &
                      inline_mp%mppfw (is:ie, j), inline_mp%mppfr (is:ie, j), inline_mp%mppmi (is:ie, j), &
-                     inline_mp%mppms (is:ie, j), inline_mp%mppmg (is:ie, j), inline_mp%mppar (is:ie, j), &
+                     inline_mp%mppms (is:ie, j), inline_mp%mppmg (is:ie, j), inline_mp%mppm1 (is:ie, j), &
+                     inline_mp%mppm2 (is:ie, j), inline_mp%mppm3 (is:ie, j), inline_mp%mppar (is:ie, j), &
                      inline_mp%mppas (is:ie, j), inline_mp%mppag (is:ie, j), inline_mp%mpprs (is:ie, j), &
                      inline_mp%mpprg (is:ie, j), inline_mp%mppxr (is:ie, j), inline_mp%mppxs (is:ie, j), &
                      inline_mp%mppxg (is:ie, j), last_step, do_sat_adj)
@@ -597,7 +598,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      inline_mp%mppds (is:ie, j), inline_mp%mppdg (is:ie, j), inline_mp%mppsi (is:ie, j), &
                      inline_mp%mpps1 (is:ie, j), inline_mp%mppss (is:ie, j), inline_mp%mppsg (is:ie, j), &
                      inline_mp%mppfw (is:ie, j), inline_mp%mppfr (is:ie, j), inline_mp%mppmi (is:ie, j), &
-                     inline_mp%mppms (is:ie, j), inline_mp%mppmg (is:ie, j), inline_mp%mppar (is:ie, j), &
+                     inline_mp%mppms (is:ie, j), inline_mp%mppmg (is:ie, j), inline_mp%mppm1 (is:ie, j), &
+                     inline_mp%mppm2 (is:ie, j), inline_mp%mppm3 (is:ie, j), inline_mp%mppar (is:ie, j), &
                      inline_mp%mppas (is:ie, j), inline_mp%mppag (is:ie, j), inline_mp%mpprs (is:ie, j), &
                      inline_mp%mpprg (is:ie, j), inline_mp%mppxr (is:ie, j), inline_mp%mppxs (is:ie, j), &
                      inline_mp%mppxg (is:ie, j), last_step, do_inline_mp)

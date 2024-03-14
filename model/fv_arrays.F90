@@ -1111,6 +1111,9 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: mppmi(:,:)     _NULL
     real, _ALLOCATABLE :: mppms(:,:)     _NULL
     real, _ALLOCATABLE :: mppmg(:,:)     _NULL
+    real, _ALLOCATABLE :: mppm1(:,:)     _NULL
+    real, _ALLOCATABLE :: mppm2(:,:)     _NULL
+    real, _ALLOCATABLE :: mppm3(:,:)     _NULL
     real, _ALLOCATABLE :: mppar(:,:)     _NULL
     real, _ALLOCATABLE :: mppas(:,:)     _NULL
     real, _ALLOCATABLE :: mppag(:,:)     _NULL
@@ -1605,6 +1608,9 @@ contains
     allocate ( Atm%inline_mp%mppmi(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppms(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppmg(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppm1(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppm2(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppm3(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppar(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppas(is:ie,js:je) )
     allocate ( Atm%inline_mp%mppag(is:ie,js:je) )
@@ -1732,6 +1738,9 @@ contains
            Atm%inline_mp%mppmi(i,j) = real_big
            Atm%inline_mp%mppms(i,j) = real_big
            Atm%inline_mp%mppmg(i,j) = real_big
+           Atm%inline_mp%mppm1(i,j) = real_big
+           Atm%inline_mp%mppm2(i,j) = real_big
+           Atm%inline_mp%mppm3(i,j) = real_big
            Atm%inline_mp%mppar(i,j) = real_big
            Atm%inline_mp%mppas(i,j) = real_big
            Atm%inline_mp%mppag(i,j) = real_big
@@ -2026,6 +2035,9 @@ contains
     deallocate ( Atm%inline_mp%mppmi )
     deallocate ( Atm%inline_mp%mppms )
     deallocate ( Atm%inline_mp%mppmg )
+    deallocate ( Atm%inline_mp%mppm1 )
+    deallocate ( Atm%inline_mp%mppm2 )
+    deallocate ( Atm%inline_mp%mppm3 )
     deallocate ( Atm%inline_mp%mppar )
     deallocate ( Atm%inline_mp%mppas )
     deallocate ( Atm%inline_mp%mppag )

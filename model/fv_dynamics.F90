@@ -453,6 +453,9 @@ contains
       inline_mp%mppmi = 0.0
       inline_mp%mppms = 0.0
       inline_mp%mppmg = 0.0
+      inline_mp%mppm1 = 0.0
+      inline_mp%mppm2 = 0.0
+      inline_mp%mppm3 = 0.0
       inline_mp%mppar = 0.0
       inline_mp%mppas = 0.0
       inline_mp%mppag = 0.0
@@ -717,6 +720,9 @@ contains
       inline_mp%mppmi = inline_mp%mppmi / k_split
       inline_mp%mppms = inline_mp%mppms / k_split
       inline_mp%mppmg = inline_mp%mppmg / k_split
+      inline_mp%mppm1 = inline_mp%mppm1 / k_split
+      inline_mp%mppm2 = inline_mp%mppm2 / k_split
+      inline_mp%mppm3 = inline_mp%mppm3 / k_split
       inline_mp%mppar = inline_mp%mppar / k_split
       inline_mp%mppas = inline_mp%mppas / k_split
       inline_mp%mppag = inline_mp%mppag / k_split

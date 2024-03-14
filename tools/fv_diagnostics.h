@@ -101,6 +101,7 @@
      integer :: id_mppss, id_mppsg, id_mppfw, id_mppfr, id_mppmi
      integer :: id_mppms, id_mppmg, id_mppar, id_mppas, id_mppag
      integer :: id_mpprs, id_mpprg, id_mppxr, id_mppxs, id_mppxg
+     integer :: id_mppm1, id_mppm2, id_mppm3
 
 ! ESM/CM 3-D diagostics
      integer :: id_uq, id_vq, id_wq, id_iuq, id_ivq, id_iwq,   & ! moisture flux & vertical integral
