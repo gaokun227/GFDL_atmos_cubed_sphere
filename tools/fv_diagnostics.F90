@@ -665,6 +665,65 @@ contains
             'graupel effective radius', 'micron', missing_value=missing_value )
        if (id_cld > 0) allocate(Atm(n)%inline_mp%cld(isc:iec,jsc:jec,npz))
 !-------------------
+! Microphysical process diagnostic from GFDL MP
+!-------------------
+       id_mppcw = register_diag_field ( trim(field), 'mppcw', axes(1:2), Time,           &
+            'Condensation (to Cloud Water) Rate', 'mm/day', missing_value=missing_value )
+       id_mppew = register_diag_field ( trim(field), 'mppew', axes(1:2), Time,           &
+            'Evaporation (of Cloud Water) Rate', 'mm/day', missing_value=missing_value )
+       id_mppe1 = register_diag_field ( trim(field), 'mppe1', axes(1:2), Time,           &
+            'Instant Evaporation (of Cloud Water) Rate', 'mm/day', missing_value=missing_value )
+       id_mpper = register_diag_field ( trim(field), 'mpper', axes(1:2), Time,           &
+            'Evaporation (of Rain) Rate', 'mm/day', missing_value=missing_value )
+       id_mppdi = register_diag_field ( trim(field), 'mppdi', axes(1:2), Time,           &
+            'Deposition (to Cloud Ice) Rate', 'mm/day', missing_value=missing_value )
+       id_mppd1 = register_diag_field ( trim(field), 'mppd1', axes(1:2), Time,           &
+            'Instant Deposition (to Cloud Ice) Rate', 'mm/day', missing_value=missing_value )
+       id_mppds = register_diag_field ( trim(field), 'mppds', axes(1:2), Time,           &
+            'Deposition (to Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mppdg = register_diag_field ( trim(field), 'mppdg', axes(1:2), Time,           &
+            'Deposition (to Graupel) Rate', 'mm/day', missing_value=missing_value )
+       id_mppsi = register_diag_field ( trim(field), 'mppsi', axes(1:2), Time,           &
+            'Sublimation (of Cloud Ice) Rate', 'mm/day', missing_value=missing_value )
+       id_mpps1 = register_diag_field ( trim(field), 'mpps1', axes(1:2), Time,           &
+            'Instant Sublimation (of Cloud Ice) Rate', 'mm/day', missing_value=missing_value )
+       id_mppss = register_diag_field ( trim(field), 'mppss', axes(1:2), Time,           &
+            'Sublimation (of Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mppsg = register_diag_field ( trim(field), 'mppsg', axes(1:2), Time,           &
+            'Sublimation (of Graupel) Rate', 'mm/day', missing_value=missing_value )
+       id_mppfw = register_diag_field ( trim(field), 'mppfw', axes(1:2), Time,           &
+            'Freezing (of Cloud Water) Rate', 'mm/day', missing_value=missing_value )
+       id_mppfr = register_diag_field ( trim(field), 'mppfr', axes(1:2), Time,           &
+            'Freezing (of Rain) Rate', 'mm/day', missing_value=missing_value )
+       id_mppmi = register_diag_field ( trim(field), 'mppmi', axes(1:2), Time,           &
+            'Melting (of Cloud Ice) Rate', 'mm/day', missing_value=missing_value )
+       id_mppms = register_diag_field ( trim(field), 'mppms', axes(1:2), Time,           &
+            'Melting (of Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mppmg = register_diag_field ( trim(field), 'mppmg', axes(1:2), Time,           &
+            'Melting (of Graupel) Rate', 'mm/day', missing_value=missing_value )
+       id_mppm1 = register_diag_field ( trim(field), 'mppm1', axes(1:2), Time,           &
+            'Sedimentational Melting (of Cloud Ice) Rate', 'mm/day', missing_value=missing_value )
+       id_mppm2 = register_diag_field ( trim(field), 'mppm2', axes(1:2), Time,           &
+            'Sedimentational Melting (of Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mppm3 = register_diag_field ( trim(field), 'mppm3', axes(1:2), Time,           &
+            'Sedimentational Melting (of Graupel) Rate', 'mm/day', missing_value=missing_value )
+       id_mppar = register_diag_field ( trim(field), 'mppar', axes(1:2), Time,           &
+            'Autoconversion (to Rain) Rate', 'mm/day', missing_value=missing_value )
+       id_mppas = register_diag_field ( trim(field), 'mppas', axes(1:2), Time,           &
+            'Autoconversion (to Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mppag = register_diag_field ( trim(field), 'mppag', axes(1:2), Time,           &
+            'Autoconversion (to Graupel) Rate', 'mm/day', missing_value=missing_value )
+       id_mpprs = register_diag_field ( trim(field), 'mpprs', axes(1:2), Time,           &
+            'Riming (to Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mpprg = register_diag_field ( trim(field), 'mpprg', axes(1:2), Time,           &
+            'Riming (to Graupel) Rate', 'mm/day', missing_value=missing_value )
+       id_mppxr = register_diag_field ( trim(field), 'mppxr', axes(1:2), Time,           &
+            'Accretion (to Rain) Rate', 'mm/day', missing_value=missing_value )
+       id_mppxs = register_diag_field ( trim(field), 'mppxs', axes(1:2), Time,           &
+            'Accretion (to Snow) Rate', 'mm/day', missing_value=missing_value )
+       id_mppxg = register_diag_field ( trim(field), 'mppxg', axes(1:2), Time,           &
+            'Accretion (to Graupel) Rate', 'mm/day', missing_value=missing_value )
+!-------------------
 !! 3D Tendency terms from GFDL MP and physics
 !-------------------
        if (Atm(n)%flagstruct%write_3d_diags) then
@@ -1863,6 +1922,34 @@ contains
           if(id_pres > 0) used=send_data(id_pres, Atm(n)%inline_mp%pres(isc:iec,jsc:jec), Time)
           if(id_preg > 0) used=send_data(id_preg, Atm(n)%inline_mp%preg(isc:iec,jsc:jec), Time)
        endif
+       if(id_mppcw > 0) used=send_data(id_mppcw, Atm(n)%inline_mp%mppcw(isc:iec,jsc:jec), Time)
+       if(id_mppew > 0) used=send_data(id_mppew, Atm(n)%inline_mp%mppew(isc:iec,jsc:jec), Time)
+       if(id_mppe1 > 0) used=send_data(id_mppe1, Atm(n)%inline_mp%mppe1(isc:iec,jsc:jec), Time)
+       if(id_mpper > 0) used=send_data(id_mpper, Atm(n)%inline_mp%mpper(isc:iec,jsc:jec), Time)
+       if(id_mppdi > 0) used=send_data(id_mppdi, Atm(n)%inline_mp%mppdi(isc:iec,jsc:jec), Time)
+       if(id_mppd1 > 0) used=send_data(id_mppd1, Atm(n)%inline_mp%mppd1(isc:iec,jsc:jec), Time)
+       if(id_mppds > 0) used=send_data(id_mppds, Atm(n)%inline_mp%mppds(isc:iec,jsc:jec), Time)
+       if(id_mppdg > 0) used=send_data(id_mppdg, Atm(n)%inline_mp%mppdg(isc:iec,jsc:jec), Time)
+       if(id_mppsi > 0) used=send_data(id_mppsi, Atm(n)%inline_mp%mppsi(isc:iec,jsc:jec), Time)
+       if(id_mpps1 > 0) used=send_data(id_mpps1, Atm(n)%inline_mp%mpps1(isc:iec,jsc:jec), Time)
+       if(id_mppss > 0) used=send_data(id_mppss, Atm(n)%inline_mp%mppss(isc:iec,jsc:jec), Time)
+       if(id_mppsg > 0) used=send_data(id_mppsg, Atm(n)%inline_mp%mppsg(isc:iec,jsc:jec), Time)
+       if(id_mppfw > 0) used=send_data(id_mppfw, Atm(n)%inline_mp%mppfw(isc:iec,jsc:jec), Time)
+       if(id_mppfr > 0) used=send_data(id_mppfr, Atm(n)%inline_mp%mppfr(isc:iec,jsc:jec), Time)
+       if(id_mppmi > 0) used=send_data(id_mppmi, Atm(n)%inline_mp%mppmi(isc:iec,jsc:jec), Time)
+       if(id_mppms > 0) used=send_data(id_mppms, Atm(n)%inline_mp%mppms(isc:iec,jsc:jec), Time)
+       if(id_mppmg > 0) used=send_data(id_mppmg, Atm(n)%inline_mp%mppmg(isc:iec,jsc:jec), Time)
+       if(id_mppm1 > 0) used=send_data(id_mppm1, Atm(n)%inline_mp%mppm1(isc:iec,jsc:jec), Time)
+       if(id_mppm2 > 0) used=send_data(id_mppm2, Atm(n)%inline_mp%mppm2(isc:iec,jsc:jec), Time)
+       if(id_mppm3 > 0) used=send_data(id_mppm3, Atm(n)%inline_mp%mppm3(isc:iec,jsc:jec), Time)
+       if(id_mppar > 0) used=send_data(id_mppar, Atm(n)%inline_mp%mppar(isc:iec,jsc:jec), Time)
+       if(id_mppas > 0) used=send_data(id_mppas, Atm(n)%inline_mp%mppas(isc:iec,jsc:jec), Time)
+       if(id_mppag > 0) used=send_data(id_mppag, Atm(n)%inline_mp%mppag(isc:iec,jsc:jec), Time)
+       if(id_mpprs > 0) used=send_data(id_mpprs, Atm(n)%inline_mp%mpprs(isc:iec,jsc:jec), Time)
+       if(id_mpprg > 0) used=send_data(id_mpprg, Atm(n)%inline_mp%mpprg(isc:iec,jsc:jec), Time)
+       if(id_mppxr > 0) used=send_data(id_mppxr, Atm(n)%inline_mp%mppxr(isc:iec,jsc:jec), Time)
+       if(id_mppxs > 0) used=send_data(id_mppxs, Atm(n)%inline_mp%mppxs(isc:iec,jsc:jec), Time)
+       if(id_mppxg > 0) used=send_data(id_mppxg, Atm(n)%inline_mp%mppxg(isc:iec,jsc:jec), Time)
 
        if (id_qcw > 0 .and. id_qcr > 0 .and. id_qci > 0 .and. id_qcs > 0 .and. id_qcg > 0 .and. &
            id_rew > 0 .and. id_rer > 0 .and. id_rei > 0 .and. id_res > 0 .and. id_reg > 0 .and. id_cld) then
