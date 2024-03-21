@@ -1500,6 +1500,8 @@ module sw_core_mod
         vt=0.
    endif
 
+   !estimate dissipation for dissipative heating
+   ! or dissipation estimate diagnostic
    if ( d_con > 1.e-5 .or. flagstruct%do_diss_est ) then
       do j=js,je+1
          do i=is,ie
@@ -1530,9 +1532,11 @@ module sw_core_mod
            tmp = rsin2(i,j)*((ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
                               + 2.*(gy(i,j)+gy(i,j+1)+gx(i,j)+gx(i+1,j))   &
                               - cosa_s(i,j)*(u2*dv2 + v2*du2 + du2*dv2))
-           !limiter to prevent dissipative cooling
-           ! again this quantity should physically be negative
-           heat_source(i,j) = delp(i,j)*(heat_source(i,j) - damp*min(0.,tmp) )
+           if (d_con > 1.e-5) then
+              !limiter to prevent dissipative cooling
+              ! again this quantity should physically be negative
+              heat_source(i,j) = delp(i,j)*(heat_source(i,j) - damp*min(0.,tmp) )
+           endif
            if (flagstruct%do_diss_est) then
              diss_est(i,j) = diss_est(i,j)-tmp
            endif
