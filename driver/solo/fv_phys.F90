@@ -29,7 +29,7 @@ use fv_arrays_mod,         only: phys_diag_type, nudge_diag_type, sg_diag_type
 use time_manager_mod,      only: time_type, get_time
 use gfdl_mp_mod,           only: mqs3d, wet_bulb, c_liq
 use hswf_mod,              only: Held_Suarez_Tend
-use fv_sg_mod,             only: fv_subgrid_z
+use fv_sg_mod,             only: fv_sg_SHiELD, fv_sg_AM5
 use fv_update_phys_mod,    only: fv_update_phys
 use fv_timing_mod,         only: timing_on, timing_off
 use mon_obkv_mod,          only: mon_obkv
@@ -186,14 +186,13 @@ contains
                     u, v, w, pt, q, pe, delp, peln, pkz, pdt,    &
                     ua, va, phis, grid, ptop, ak, bk, ks, ps, pk,&
                     u_srf, v_srf, ts, delz, hydrostatic,         &
-                    oro, rayf, p_ref, fv_sg_adj,                 &
+                    oro, rayf, p_ref,                            &
                     do_Held_Suarez, gridstruct, flagstruct,      &
                     neststruct, nwat, bd, domain,                & !S-J: Need to update fv_phys call
                     Time, phys_diag, nudge_diag, sg_diag, time_total)
 
     integer, INTENT(IN   ) :: npx, npy, npz
     integer, INTENT(IN   ) :: is, ie, js, je, ng, nq, nwat
-    integer, INTENT(IN   ) :: fv_sg_adj
     real, INTENT(IN) :: p_ref, ptop
     real, INTENT(IN) :: oro(is:ie,js:je)
 
@@ -311,8 +310,8 @@ contains
         enddo
      enddo
 
-     if ( fv_sg_adj > 0 ) then
-        if (is_master() .and. first_call) print*, " Calling fv_subgrid_z ", fv_sg_adj, flagstruct%n_sponge
+     if ( flagstruct%fv_sg_adj > 0 ) then
+        if (is_master() .and. first_call) print*, " Calling fv_subgrid_z ", flagstruct%fv_sg_adj, flagstruct%n_sponge
 
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,is,ie,js,je,sphum,sg_diag,ua,va,pt,q)
         do k=1, npz
@@ -347,9 +346,10 @@ contains
        enddo
 
         !fv_sg already returns the state, not the tendency.
-        call fv_subgrid_z(isd, ied, jsd, jed, is, ie, js, je, npz, min(6,nq), pdt,  &
-                           fv_sg_adj, nwat, delp, pe, peln, pkz, pt, q, ua, va,  &
-                           hydrostatic, w, delz, u_dt, v_dt, t_dt, q_dt, flagstruct%n_sponge )
+        call fv_sg_SHiELD(isd, ied, jsd, jed, is, ie, js, je, npz, min(6,nq), pdt,  &
+                          flagstruct%fv_sg_adj, flagstruct%fv_sg_adj_weak, &
+                          nwat, delp, pe, peln, pkz, pt, q, ua, va,  &
+                          hydrostatic, w, delz, u_dt, v_dt, t_dt, q_dt, flagstruct%n_sponge )
 
         rdt = 1./pdt
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,is,ie,js,je,sphum,rdt,sg_diag,ua,va,pt,q,u_dt,v_dt)

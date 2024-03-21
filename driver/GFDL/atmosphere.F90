@@ -77,7 +77,7 @@ use fv_cmip_diag_mod,   only: fv_cmip_diag_init, fv_cmip_diag, fv_cmip_diag_end
 use fv_restart_mod,     only: fv_restart, fv_write_restart
 use fv_timing_mod,      only: timing_on, timing_off, timing_init, timing_prt
 use fv_mp_mod,          only: is_master
-use fv_sg_mod,          only: fv_subgrid_z
+use fv_sg_mod,          only: fv_sg_AM5
 use fv_update_phys_mod, only: fv_update_phys
 use fv_io_mod,          only: fv_io_register_nudge_restart
 use fv_regional_mod,    only: start_regional_restart, read_new_bc_data
@@ -167,7 +167,7 @@ character(len=20)   :: mod_name = 'GFDL/atmosphere_mod'
 
   real, parameter:: w0_big = 60.  ! to prevent negative w-tracer diffusion
 
-!---dynamics tendencies for use in fv_subgrid_z and during fv_update_phys
+!---dynamics tendencies for use in fv_sg and during fv_update_phys
   real, allocatable, dimension(:,:,:)   :: u_dt, v_dt, t_dt, qv_dt
   real, allocatable, dimension(:,:,:,:) :: q_dt
   real, allocatable :: pref(:,:), dum1d(:)
@@ -654,10 +654,10 @@ contains
 
     call timing_on('FV_SUBGRID_Z')
 
-    u_dt(:,:,:)   = 0. ! These are updated by fv_subgrid_z
+    u_dt(:,:,:)   = 0. ! These are updated by fv_sg_AM5
     v_dt(:,:,:)   = 0.
 ! t_dt is used for two different purposes:
-!    1 - to calculate the diagnostic temperature tendency from fv_subgrid_z
+!    1 - to calculate the diagnostic temperature tendency from fv_sg_AM5
 !    2 - as an accumulator for the IAU increment and physics tendency
 ! because of this, it will need to be zeroed out after the diagnostic is calculated
     t_dt(:,:,:)   = Atm(n)%pt(isc:iec,jsc:jec,:)
@@ -672,7 +672,7 @@ contains
       if ( w_diff /= NO_TRACER ) then
         nt_dyn = nq - 1
       endif
-      call fv_subgrid_z(isd, ied, jsd, jed, isc, iec, jsc, jec, Atm(n)%npz, &
+      call fv_sg_AM5(isd, ied, jsd, jed, isc, iec, jsc, jec, Atm(n)%npz, &
                         nt_dyn, dt_atmos, Atm(n)%flagstruct%fv_sg_adj,      &
                         Atm(n)%flagstruct%nwat, Atm(n)%delp, Atm(n)%pe,     &
                         Atm(n)%peln, Atm(n)%pkz, Atm(n)%pt, Atm(n)%q,       &

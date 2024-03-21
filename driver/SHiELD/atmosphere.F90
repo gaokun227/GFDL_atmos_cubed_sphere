@@ -72,7 +72,7 @@ use fv_nggps_diags_mod, only: fv_nggps_diag_init, fv_nggps_diag
 use fv_restart_mod,     only: fv_restart, fv_write_restart
 use fv_timing_mod,      only: timing_on, timing_off, timing_init, timing_prt
 use fv_mp_mod,          only: is_master
-use fv_sg_mod,          only: fv_subgrid_z
+use fv_sg_mod,          only: fv_sg_SHiELD
 use fv_update_phys_mod, only: fv_update_phys
 use fv_io_mod,          only: fv_io_register_nudge_restart
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
@@ -148,7 +148,7 @@ character(len=20)   :: mod_name = 'SHiELD/atmosphere_mod'
 
   real, parameter:: w0_big = 60.  ! to prevent negative w-tracer diffusion
 
-!---dynamics tendencies for use in fv_subgrid_z and during fv_update_phys
+!---dynamics tendencies for use in fv_sg and during fv_update_phys
   real, allocatable, dimension(:,:,:)   :: u_dt, v_dt, t_dt, qv_dt
   real, allocatable :: pref(:,:), dum1d(:), ps_dt(:,:)
 
@@ -539,16 +539,16 @@ contains
    call mpp_clock_begin (id_subgrid)
 
 !-----------------------------------------------------
-!--- COMPUTE SUBGRID Z
+!--- COMPUTE SUBGRID Z (fv_sg)
 !-----------------------------------------------------
 !--- zero out tendencies
 
     call timing_on('FV_SUBGRID_Z')
 
-    u_dt(:,:,:)   = 0. ! These are updated by fv_subgrid_z
+    u_dt(:,:,:)   = 0. ! These are updated by fv_sg
     v_dt(:,:,:)   = 0.
 ! t_dt is used for two different purposes:
-!    1 - to calculate the diagnostic temperature tendency from fv_subgrid_z
+!    1 - to calculate the diagnostic temperature tendency from fv_sg
 !    2 - as an accumulator for the IAU increment and physics tendency
 ! because of this, it will need to be zeroed out after the diagnostic is calculated
     t_dt(:,:,:)   = Atm(n)%pt(isc:iec,jsc:jec,:)
@@ -562,8 +562,9 @@ contains
       if ( w_diff /= NO_TRACER ) then
         nt_dyn = nq - 1
       endif
-      call fv_subgrid_z(isd, ied, jsd, jed, isc, iec, jsc, jec, Atm(n)%npz, &
+      call fv_sg_SHiELD(isd, ied, jsd, jed, isc, iec, jsc, jec, Atm(n)%npz, &
                         nt_dyn, dt_atmos, Atm(n)%flagstruct%fv_sg_adj,      &
+                        Atm(n)%flagstruct%fv_sg_adj_weak,                   &
                         Atm(n)%flagstruct%nwat, Atm(n)%delp, Atm(n)%pe,     &
                         Atm(n)%peln, Atm(n)%pkz, Atm(n)%pt, Atm(n)%q,       &
                         Atm(n)%ua, Atm(n)%va, Atm(n)%flagstruct%hydrostatic,&
