@@ -1812,7 +1812,7 @@ contains
     output_pressures = log(100.0 * real(pressure_level))  ! convert to Pa then take log to match expectation of cs3_interpolator
     allocate(work(is:ie,js:je,n_pressure_levels))
 
-    call cs3_interpolator(is, ie, js, je, npz, field, n_pressure_levels, output_pressures, height, phalf, ids, work, iv)
+    call cs3_interpolator(is, ie, js, je, npz, field, n_pressure_levels, output_pressures, phalf, ids, work, iv)
     result = work(is:ie,js:je,1)
   end subroutine interpolate_to_pressure_level
 
