@@ -85,6 +85,8 @@
      real, allocatable :: pt1(:)
 
      integer :: id_pret, id_prew, id_prer, id_prei, id_pres, id_preg
+     integer :: id_qcw, id_qcr, id_qci, id_qcs, id_qcg
+     integer :: id_rew, id_rer, id_rei, id_res, id_reg, id_cld
      integer :: id_prefluxw, id_prefluxr, id_prefluxi, id_prefluxs, id_prefluxg
      integer :: id_qv_dt_gfdlmp, id_T_dt_gfdlmp, id_ql_dt_gfdlmp, id_qi_dt_gfdlmp
      integer :: id_qr_dt_gfdlmp, id_qg_dt_gfdlmp, id_qs_dt_gfdlmp
@@ -94,6 +96,12 @@
      integer :: id_qr_dt_phys, id_qg_dt_phys, id_qs_dt_phys
      integer :: id_liq_wat_dt_phys, id_ice_wat_dt_phys
      integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
+     integer :: id_mppcw, id_mppew, id_mppe1, id_mpper, id_mppdi
+     integer :: id_mppd1, id_mppds, id_mppdg, id_mppsi, id_mpps1
+     integer :: id_mppss, id_mppsg, id_mppfw, id_mppfr, id_mppmi
+     integer :: id_mppms, id_mppmg, id_mppar, id_mppas, id_mppag
+     integer :: id_mpprs, id_mpprg, id_mppxr, id_mppxs, id_mppxg
+     integer :: id_mppm1, id_mppm2, id_mppm3
 
 ! ESM/CM 3-D diagostics
      integer :: id_uq, id_vq, id_wq, id_iuq, id_ivq, id_iwq,   & ! moisture flux & vertical integral

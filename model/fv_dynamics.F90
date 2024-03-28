@@ -436,6 +436,34 @@ contains
       if (allocated(inline_mp%t_dt))  inline_mp%t_dt = 0.0
       if (allocated(inline_mp%u_dt)) inline_mp%u_dt = 0.0
       if (allocated(inline_mp%v_dt)) inline_mp%v_dt = 0.0
+      inline_mp%mppcw = 0.0
+      inline_mp%mppew = 0.0
+      inline_mp%mppe1 = 0.0
+      inline_mp%mpper = 0.0
+      inline_mp%mppdi = 0.0
+      inline_mp%mppd1 = 0.0
+      inline_mp%mppds = 0.0
+      inline_mp%mppdg = 0.0
+      inline_mp%mppsi = 0.0
+      inline_mp%mpps1 = 0.0
+      inline_mp%mppss = 0.0
+      inline_mp%mppsg = 0.0
+      inline_mp%mppfw = 0.0
+      inline_mp%mppfr = 0.0
+      inline_mp%mppmi = 0.0
+      inline_mp%mppms = 0.0
+      inline_mp%mppmg = 0.0
+      inline_mp%mppm1 = 0.0
+      inline_mp%mppm2 = 0.0
+      inline_mp%mppm3 = 0.0
+      inline_mp%mppar = 0.0
+      inline_mp%mppas = 0.0
+      inline_mp%mppag = 0.0
+      inline_mp%mpprs = 0.0
+      inline_mp%mpprg = 0.0
+      inline_mp%mppxr = 0.0
+      inline_mp%mppxs = 0.0
+      inline_mp%mppxg = 0.0
   endif
 
   call timing_on('FV_DYN_LOOP')
@@ -675,6 +703,34 @@ contains
       if (allocated(inline_mp%t_dt))  inline_mp%t_dt = inline_mp%t_dt / bdt
       if (allocated(inline_mp%u_dt)) inline_mp%u_dt = inline_mp%u_dt / bdt
       if (allocated(inline_mp%v_dt)) inline_mp%v_dt = inline_mp%v_dt / bdt
+      inline_mp%mppcw = inline_mp%mppcw / k_split
+      inline_mp%mppew = inline_mp%mppew / k_split
+      inline_mp%mppe1 = inline_mp%mppe1 / k_split
+      inline_mp%mpper = inline_mp%mpper / k_split
+      inline_mp%mppdi = inline_mp%mppdi / k_split
+      inline_mp%mppd1 = inline_mp%mppd1 / k_split
+      inline_mp%mppds = inline_mp%mppds / k_split
+      inline_mp%mppdg = inline_mp%mppdg / k_split
+      inline_mp%mppsi = inline_mp%mppsi / k_split
+      inline_mp%mpps1 = inline_mp%mpps1 / k_split
+      inline_mp%mppss = inline_mp%mppss / k_split
+      inline_mp%mppsg = inline_mp%mppsg / k_split
+      inline_mp%mppfw = inline_mp%mppfw / k_split
+      inline_mp%mppfr = inline_mp%mppfr / k_split
+      inline_mp%mppmi = inline_mp%mppmi / k_split
+      inline_mp%mppms = inline_mp%mppms / k_split
+      inline_mp%mppmg = inline_mp%mppmg / k_split
+      inline_mp%mppm1 = inline_mp%mppm1 / k_split
+      inline_mp%mppm2 = inline_mp%mppm2 / k_split
+      inline_mp%mppm3 = inline_mp%mppm3 / k_split
+      inline_mp%mppar = inline_mp%mppar / k_split
+      inline_mp%mppas = inline_mp%mppas / k_split
+      inline_mp%mppag = inline_mp%mppag / k_split
+      inline_mp%mpprs = inline_mp%mpprs / k_split
+      inline_mp%mpprg = inline_mp%mpprg / k_split
+      inline_mp%mppxr = inline_mp%mppxr / k_split
+      inline_mp%mppxs = inline_mp%mppxs / k_split
+      inline_mp%mppxg = inline_mp%mppxg / k_split
   endif
 
   if( nwat==6 ) then

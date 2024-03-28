@@ -1082,6 +1082,47 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: u_dt(:,:,:)
     real, _ALLOCATABLE :: v_dt(:,:,:)
 
+    real, _ALLOCATABLE :: qcw(:,:,:)
+    real, _ALLOCATABLE :: qci(:,:,:)
+    real, _ALLOCATABLE :: qcr(:,:,:)
+    real, _ALLOCATABLE :: qcs(:,:,:)
+    real, _ALLOCATABLE :: qcg(:,:,:)
+    real, _ALLOCATABLE :: rew(:,:,:)
+    real, _ALLOCATABLE :: rei(:,:,:)
+    real, _ALLOCATABLE :: rer(:,:,:)
+    real, _ALLOCATABLE :: res(:,:,:)
+    real, _ALLOCATABLE :: reg(:,:,:)
+    real, _ALLOCATABLE :: cld(:,:,:)
+
+    real, _ALLOCATABLE :: mppcw(:,:)     _NULL
+    real, _ALLOCATABLE :: mppew(:,:)     _NULL
+    real, _ALLOCATABLE :: mppe1(:,:)     _NULL
+    real, _ALLOCATABLE :: mpper(:,:)     _NULL
+    real, _ALLOCATABLE :: mppdi(:,:)     _NULL
+    real, _ALLOCATABLE :: mppd1(:,:)     _NULL
+    real, _ALLOCATABLE :: mppds(:,:)     _NULL
+    real, _ALLOCATABLE :: mppdg(:,:)     _NULL
+    real, _ALLOCATABLE :: mppsi(:,:)     _NULL
+    real, _ALLOCATABLE :: mpps1(:,:)     _NULL
+    real, _ALLOCATABLE :: mppss(:,:)     _NULL
+    real, _ALLOCATABLE :: mppsg(:,:)     _NULL
+    real, _ALLOCATABLE :: mppfw(:,:)     _NULL
+    real, _ALLOCATABLE :: mppfr(:,:)     _NULL
+    real, _ALLOCATABLE :: mppmi(:,:)     _NULL
+    real, _ALLOCATABLE :: mppms(:,:)     _NULL
+    real, _ALLOCATABLE :: mppmg(:,:)     _NULL
+    real, _ALLOCATABLE :: mppm1(:,:)     _NULL
+    real, _ALLOCATABLE :: mppm2(:,:)     _NULL
+    real, _ALLOCATABLE :: mppm3(:,:)     _NULL
+    real, _ALLOCATABLE :: mppar(:,:)     _NULL
+    real, _ALLOCATABLE :: mppas(:,:)     _NULL
+    real, _ALLOCATABLE :: mppag(:,:)     _NULL
+    real, _ALLOCATABLE :: mpprs(:,:)     _NULL
+    real, _ALLOCATABLE :: mpprg(:,:)     _NULL
+    real, _ALLOCATABLE :: mppxr(:,:)     _NULL
+    real, _ALLOCATABLE :: mppxs(:,:)     _NULL
+    real, _ALLOCATABLE :: mppxg(:,:)     _NULL
+
   end type inline_mp_type
 
   type phys_diag_type
@@ -1550,6 +1591,34 @@ contains
        allocate ( Atm%inline_mp%prefluxs(is:ie,js:je,npz) )
        allocate ( Atm%inline_mp%prefluxg(is:ie,js:je,npz) )
     endif
+    allocate ( Atm%inline_mp%mppcw(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppew(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppe1(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mpper(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppdi(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppd1(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppds(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppdg(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppsi(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mpps1(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppss(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppsg(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppfw(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppfr(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppmi(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppms(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppmg(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppm1(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppm2(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppm3(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppar(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppas(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppag(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mpprs(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mpprg(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppxr(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppxs(is:ie,js:je) )
+    allocate ( Atm%inline_mp%mppxg(is:ie,js:je) )
 
     !--------------------------
     ! Non-hydrostatic dynamics:
@@ -1650,6 +1719,38 @@ contains
            enddo
         enddo
      endif
+     do j=js, je
+        do i=is, ie
+           Atm%inline_mp%mppcw(i,j) = real_big
+           Atm%inline_mp%mppew(i,j) = real_big
+           Atm%inline_mp%mppe1(i,j) = real_big
+           Atm%inline_mp%mpper(i,j) = real_big
+           Atm%inline_mp%mppdi(i,j) = real_big
+           Atm%inline_mp%mppd1(i,j) = real_big
+           Atm%inline_mp%mppds(i,j) = real_big
+           Atm%inline_mp%mppdg(i,j) = real_big
+           Atm%inline_mp%mppsi(i,j) = real_big
+           Atm%inline_mp%mpps1(i,j) = real_big
+           Atm%inline_mp%mppss(i,j) = real_big
+           Atm%inline_mp%mppsg(i,j) = real_big
+           Atm%inline_mp%mppfw(i,j) = real_big
+           Atm%inline_mp%mppfr(i,j) = real_big
+           Atm%inline_mp%mppmi(i,j) = real_big
+           Atm%inline_mp%mppms(i,j) = real_big
+           Atm%inline_mp%mppmg(i,j) = real_big
+           Atm%inline_mp%mppm1(i,j) = real_big
+           Atm%inline_mp%mppm2(i,j) = real_big
+           Atm%inline_mp%mppm3(i,j) = real_big
+           Atm%inline_mp%mppar(i,j) = real_big
+           Atm%inline_mp%mppas(i,j) = real_big
+           Atm%inline_mp%mppag(i,j) = real_big
+           Atm%inline_mp%mpprs(i,j) = real_big
+           Atm%inline_mp%mpprg(i,j) = real_big
+           Atm%inline_mp%mppxr(i,j) = real_big
+           Atm%inline_mp%mppxs(i,j) = real_big
+           Atm%inline_mp%mppxg(i,j) = real_big
+        enddo
+     enddo
 
      do j=js, je
         do i=is, ie
@@ -1917,6 +2018,34 @@ contains
        deallocate ( Atm%inline_mp%prefluxs )
        deallocate ( Atm%inline_mp%prefluxg )
     endif
+    deallocate ( Atm%inline_mp%mppcw )
+    deallocate ( Atm%inline_mp%mppew )
+    deallocate ( Atm%inline_mp%mppe1 )
+    deallocate ( Atm%inline_mp%mpper )
+    deallocate ( Atm%inline_mp%mppdi )
+    deallocate ( Atm%inline_mp%mppd1 )
+    deallocate ( Atm%inline_mp%mppds )
+    deallocate ( Atm%inline_mp%mppdg )
+    deallocate ( Atm%inline_mp%mppsi )
+    deallocate ( Atm%inline_mp%mpps1 )
+    deallocate ( Atm%inline_mp%mppss )
+    deallocate ( Atm%inline_mp%mppsg )
+    deallocate ( Atm%inline_mp%mppfw )
+    deallocate ( Atm%inline_mp%mppfr )
+    deallocate ( Atm%inline_mp%mppmi )
+    deallocate ( Atm%inline_mp%mppms )
+    deallocate ( Atm%inline_mp%mppmg )
+    deallocate ( Atm%inline_mp%mppm1 )
+    deallocate ( Atm%inline_mp%mppm2 )
+    deallocate ( Atm%inline_mp%mppm3 )
+    deallocate ( Atm%inline_mp%mppar )
+    deallocate ( Atm%inline_mp%mppas )
+    deallocate ( Atm%inline_mp%mppag )
+    deallocate ( Atm%inline_mp%mpprs )
+    deallocate ( Atm%inline_mp%mpprg )
+    deallocate ( Atm%inline_mp%mppxr )
+    deallocate ( Atm%inline_mp%mppxs )
+    deallocate ( Atm%inline_mp%mppxg )
 
     deallocate ( Atm%u_srf )
     deallocate ( Atm%v_srf )
