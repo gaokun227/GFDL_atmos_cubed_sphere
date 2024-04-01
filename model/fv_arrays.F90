@@ -682,6 +682,8 @@ module fv_arrays_mod
                           !< converted to heat. Acts as a dissipative heating mechanism in
                           !< the dynamical core. The default is 0. Proper range is 0 to 1.
                           !< Note that this is a local, physically correct, energy fixer.
+   logical :: prevent_diss_cooling = .false. !< Flag to enable limiter to prevent dissipative cooling if
+                                             !< d_con > 0. Turned off by default to retain previous behavior.
    real    :: ke_bg = 0.  !<  background KE production (m^2/s^3) over a small step
                           !< Use this to conserve total energy if consv_te=0
    real    :: consv_te = 0.   !< Fraction of total energy lost during the adiabatic integration
