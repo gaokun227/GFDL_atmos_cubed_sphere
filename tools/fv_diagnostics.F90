@@ -1299,9 +1299,6 @@ contains
        id_qn850 = register_diag_field ( trim(field), 'qn850', axes(1:2), Time,       &
                '850mb condensate', 'kg/m/s^2', missing_value=missing_value )
 
-       id_vort500 = register_diag_field ( trim(field), 'vort500', axes(1:2), Time,       &
-                           '500-mb vorticity', '1/s', missing_value=missing_value )
-
        id_rain5km = register_diag_field ( trim(field), 'rain5km', axes(1:2), Time,       &
                            '5-km AGL liquid water', 'kg/kg', missing_value=missing_value )
 !--------------------------
