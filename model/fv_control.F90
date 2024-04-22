@@ -235,6 +235,7 @@ module fv_control_mod
 
      real    , pointer :: delt_max
      real    , pointer :: d_con
+     logical , pointer :: prevent_diss_cooling
      real    , pointer :: ke_bg
      real    , pointer :: consv_te
      real    , pointer :: tau
@@ -775,6 +776,7 @@ module fv_control_mod
        tau_h2o                       => Atm%flagstruct%tau_h2o
        delt_max                      => Atm%flagstruct%delt_max
        d_con                         => Atm%flagstruct%d_con
+       prevent_diss_cooling          => Atm%flagstruct%prevent_diss_cooling
        ke_bg                         => Atm%flagstruct%ke_bg
        consv_te                      => Atm%flagstruct%consv_te
        tau                           => Atm%flagstruct%tau
@@ -948,7 +950,7 @@ module fv_control_mod
             ncep_ic, nggps_ic, hrrrv3_ic, ecmwf_ic, do_diss_est, use_gfsO3, use_new_ncep, use_ncep_phy, fv_diag_ic, &
             external_eta, res_latlon_dynamics, res_latlon_tracers, scale_z, w_max, z_min, d2bg_zq, lim_fac, &
             dddmp, smag2d, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
-            warm_start, adjust_dry_mass, mountain, d_con, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
+            warm_start, adjust_dry_mass, mountain, d_con, prevent_diss_cooling, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
             dry_mass, grid_type, do_Held_Suarez, &
             consv_te, fill, filter_phys, fill_dp, fill_wz, fill_gfs, consv_am, RF_fast, &
             range_warn, dwind_2d, inline_q, z_tracer, reproduce_sum, adiabatic, do_vort_damp, no_dycore,   &

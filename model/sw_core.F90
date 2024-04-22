@@ -559,6 +559,7 @@ module sw_core_mod
       real :: damp, damp2, damp4, dd8, u2, v2, du2, dv2
       real :: u_lon, tmp
       integer :: i,j, is2, ie1, js2, je1, n, nt, n2, iq
+      logical :: prevent_diss_cooling
 
       real, pointer, dimension(:,:) :: area, area_c, rarea
 
@@ -618,6 +619,8 @@ module sw_core_mod
       se_corner = gridstruct%se_corner
       nw_corner = gridstruct%nw_corner
       ne_corner = gridstruct%ne_corner
+
+      prevent_diss_cooling = flagstruct%prevent_diss_cooling
 
 #ifdef SW_DYNAMICS
       if ( test_case == 1 ) then
@@ -945,22 +948,36 @@ module sw_core_mod
 
         if ( .not. hydrostatic ) then
             if ( damp_w>1.E-5 ) then
-                 dd8 = kgb*abs(dt)
-                 damp4 = (damp_w*gridstruct%da_min_c)**(nord_w+1)
-                 call del6_vt_flux(nord_w, npx, npy, damp4, w, wk, fx2, fy2, gridstruct, bd)
-                do j=js,je
-                   do i=is,ie
-                      dw(i,j) = (fx2(i,j)-fx2(i+1,j)+fy2(i,j)-fy2(i,j+1))*rarea(i,j)
-                      ! 0.5 * [ (w+dw)**2 - w**2 ] = w*dw + 0.5*dw*dw
-                      !limiter to prevent "dissipative cooling"
-                      !physically `tmp` is negative.
-                      tmp = dw(i,j)*(w(i,j)+0.5*dw(i,j))
-                      heat_source(i,j) = dd8 - min(0.,tmp)
-                      if ( flagstruct%do_diss_est ) then
-                         diss_est(i,j) = dd8 - tmp
-                      endif
-                   enddo
+               dd8 = kgb*abs(dt)
+               damp4 = (damp_w*gridstruct%da_min_c)**(nord_w+1)
+               call del6_vt_flux(nord_w, npx, npy, damp4, w, wk, fx2, fy2, gridstruct, bd)
+               if (prevent_diss_cooling) then
+                  do j=js,je
+                  do i=is,ie
+                    dw(i,j) = (fx2(i,j)-fx2(i+1,j)+fy2(i,j)-fy2(i,j+1))*rarea(i,j)
+                    ! 0.5 * [ (w+dw)**2 - w**2 ] = w*dw + 0.5*dw*dw
+                    !limiter to prevent "dissipative cooling"
+                    !physically `tmp` is negative.
+                    tmp = dw(i,j)*(w(i,j)+0.5*dw(i,j))
+                    heat_source(i,j) = dd8 - min(0.,tmp)
+                    if ( flagstruct%do_diss_est ) then
+                       diss_est(i,j) = dd8 - tmp
+                    endif
+                 enddo
+                 enddo
+              else
+                 do j=js,je
+                 do i=is,ie
+                   dw(i,j) = (fx2(i,j)-fx2(i+1,j)+fy2(i,j)-fy2(i,j+1))*rarea(i,j)
+                   ! 0.5 * [ (w+dw)**2 - w**2 ] = w*dw + 0.5*dw*dw
+                   heat_source(i,j) = dd8 - dw(i,j)*(w(i,j)+0.5*dw(i,j))
+                   tmp = dw(i,j)*(w(i,j)+0.5*dw(i,j))
+                   if ( flagstruct%do_diss_est ) then
+                      diss_est(i,j) = heat_source(i,j)
+                   endif
                 enddo
+                enddo
+              endif
            endif
            call fv_tp_2d(w, crx_adv,cry_adv, npx, npy, hord_vt, gx, gy, xfx_adv, yfx_adv, &
                           gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, mfx=fx, mfy=fy)
@@ -1521,7 +1538,8 @@ module sw_core_mod
 ! Heating due to damping:
 !----------------------------------
       damp = 0.25*d_con
-      do j=js,je
+      if (prevent_diss_cooling) then
+         do j=js,je
          do i=is,ie
             u2 = fy(i,j) + fy(i,j+1)
            du2 = ub(i,j) + ub(i,j+1)
@@ -1541,8 +1559,30 @@ module sw_core_mod
              diss_est(i,j) = diss_est(i,j)-tmp
            endif
          enddo
-      enddo
-   endif
+         enddo
+      else
+         do j=js,je
+         do i=is,ie
+            u2 = fy(i,j) + fy(i,j+1)
+           du2 = ub(i,j) + ub(i,j+1)
+            v2 = fx(i,j) + fx(i+1,j)
+           dv2 = vb(i,j) + vb(i+1,j)
+! Total energy conserving:
+! Convert lost KE due to divergence damping to "heat"
+         heat_source(i,j) = delp(i,j)*(heat_source(i,j) - damp*rsin2(i,j)*( &
+                  (ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
+                              + 2.*(gy(i,j)+gy(i,j+1)+gx(i,j)+gx(i+1,j))   &
+                              - cosa_s(i,j)*(u2*dv2 + v2*du2 + du2*dv2)) )
+           if (flagstruct%do_diss_est) then
+             diss_est(i,j) = diss_est(i,j)-rsin2(i,j)*( &
+                  (ub(i,j)**2 + ub(i,j+1)**2 + vb(i,j)**2 + vb(i+1,j)**2)  &
+                                + 2.*(gy(i,j)+gy(i,j+1)+gx(i,j)+gx(i+1,j))   &
+                               - cosa_s(i,j)*(u2*dv2 + v2*du2 + du2*dv2))
+          endif
+         enddo
+         enddo
+      endif !prevent_diss_cooling
+   endif !  d_con > 1.e-5 .or. flagstruct%do_diss_est 
 
 ! Add diffusive fluxes to the momentum equation:
    if ( damp_v>1.E-5 ) then
