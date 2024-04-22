@@ -349,7 +349,7 @@ contains
         call fv_sg_SHiELD(isd, ied, jsd, jed, is, ie, js, je, npz, min(6,nq), pdt,  &
                           flagstruct%fv_sg_adj, flagstruct%fv_sg_adj_weak, &
                           nwat, delp, pe, peln, pkz, pt, q, ua, va,  &
-                          hydrostatic, w, delz, u_dt, v_dt, t_dt, q_dt, flagstruct%n_sponge )
+                          hydrostatic, w, delz, u_dt, v_dt, flagstruct%n_sponge )
 
         rdt = 1./pdt
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,npz,is,ie,js,je,sphum,rdt,sg_diag,ua,va,pt,q,u_dt,v_dt)

@@ -71,7 +71,7 @@ contains
 
  subroutine fv_sg_SHiELD( isd, ied, jsd, jed, is, ie, js, je, km, nq, dt,    &
                           fv_sg_adj, fv_sg_adj_weak, nwat, delp, pe, peln, pkz, ta, qa, ua, va,  &
-                          hydrostatic, w, delz, u_dt, v_dt, t_dt, k_bot_full )
+                          hydrostatic, w, delz, u_dt, v_dt, k_bot_full )
 ! Dry convective adjustment-mixing
 !-------------------------------------------
       integer, intent(in):: is, ie, js, je, km, nq, nwat
@@ -94,7 +94,6 @@ contains
       real, intent(inout):: qa(isd:ied,jsd:jed,km,nq)   ! Specific humidity & tracers
       real, intent(inout):: u_dt(isd:ied,jsd:jed,km)
       real, intent(inout):: v_dt(isd:ied,jsd:jed,km)
-      real, intent(inout):: t_dt(is:ie,js:je,km) !not used
 !---------------------------Local variables-----------------------------
       real, dimension(is:ie,km):: u0, v0, w0, t0, hd, te, gz, tvm, pm, den
       real q0(is:ie,km,nq), qcon(is:ie,km)
