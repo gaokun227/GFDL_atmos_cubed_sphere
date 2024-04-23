@@ -223,6 +223,7 @@ module fv_control_mod
      integer , pointer :: ntiles
      integer , pointer :: nf_omega
      integer , pointer :: fv_sg_adj
+     integer , pointer :: fv_sg_adj_weak
      real    , pointer :: sg_cutoff
 
      integer , pointer :: na_init
@@ -766,6 +767,7 @@ module fv_control_mod
        ntiles                        => Atm%flagstruct%ntiles
        nf_omega                      => Atm%flagstruct%nf_omega
        fv_sg_adj                     => Atm%flagstruct%fv_sg_adj
+       fv_sg_adj_weak                => Atm%flagstruct%fv_sg_adj_weak
        sg_cutoff                     => Atm%flagstruct%sg_cutoff
        na_init                       => Atm%flagstruct%na_init
        nudge_dz                      => Atm%flagstruct%nudge_dz
@@ -954,7 +956,8 @@ module fv_control_mod
             dry_mass, grid_type, do_Held_Suarez, &
             consv_te, fill, filter_phys, fill_dp, fill_wz, fill_gfs, consv_am, RF_fast, &
             range_warn, dwind_2d, inline_q, z_tracer, reproduce_sum, adiabatic, do_vort_damp, no_dycore,   &
-            tau, fast_tau_w_sec, tau_h2o, rf_cutoff, nf_omega, hydrostatic, fv_sg_adj, sg_cutoff, breed_vortex_inline,  &
+            tau, fast_tau_w_sec, tau_h2o, rf_cutoff, nf_omega, hydrostatic, fv_sg_adj, fv_sg_adj_weak, &
+            sg_cutoff, breed_vortex_inline,  &
             na_init, nudge_dz, hybrid_z, Make_NH, n_zs_filter, nord_zs_filter, full_zs_filter, reset_eta,         &
             pnats, dnats, dnrts, a2b_ord, remap_t, p_ref, d2_bg_k1, d2_bg_k2,  &
             c2l_ord, dx_const, dy_const, umax, deglat, domain_deg,     &

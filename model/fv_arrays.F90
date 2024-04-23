@@ -642,6 +642,7 @@ module fv_arrays_mod
                                !< Values of 0 or smaller disable this feature. If n_sponge < 0
                                !< then the mixing is applied only to the top n_sponge layers of the
                                !< domain. Set to -1 (inactive) by default. The proper range is 0 to 3600.
+   integer :: fv_sg_adj_weak = -1   !< Option for weaker (longer timescale) 2dz filter below sg_cutoff. Disabled if < 0.
    real    :: sg_cutoff = -1   !< cutoff level for fv_sg_adj (2dz filter; overrides n_sponge)
    integer :: na_init = 0   !< Number of forward-backward dynamics steps used to initialize
                             !< adiabatic solver. This is useful for spinning up the nonhydrostatic
