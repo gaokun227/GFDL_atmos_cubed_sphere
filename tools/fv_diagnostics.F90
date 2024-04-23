@@ -663,7 +663,7 @@ contains
             'graupel effective radius', 'micron', missing_value=missing_value )
        if (id_reg > 0) allocate(Atm(n)%inline_mp%reg(isc:iec,jsc:jec,npz))
        id_cld = register_diag_field ( trim(field), 'cld', axes(1:3), Time,           &
-            'graupel effective radius', 'micron', missing_value=missing_value )
+            'cloud fraction', '%', missing_value=missing_value )
        if (id_cld > 0) allocate(Atm(n)%inline_mp%cld(isc:iec,jsc:jec,npz))
 !-------------------
 ! Microphysical process diagnostic from GFDL MP
