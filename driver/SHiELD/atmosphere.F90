@@ -570,7 +570,7 @@ contains
                         Atm(n)%w, Atm(n)%delz, u_dt, v_dt, t_dt, Atm(n)%flagstruct%n_sponge)
     endif
 
-#ifdef W_DIFF
+    !Only active if w_diff is defined
     if ( .not. Atm(n)%flagstruct%hydrostatic .and. w_diff /= NO_TRACER ) then
 !$OMP parallel do default (none) &
 !$OMP              shared (isc, iec, jsc, jec, w_diff, n, Atm) &
@@ -579,7 +579,6 @@ contains
           Atm(n)%q(isc:iec,jsc:jec,k,w_diff) = Atm(n)%w(isc:iec,jsc:jec,k) + w0_big
        enddo
     endif
-#endif
 
     if (allocated(Atm(n)%sg_diag%u_dt)) then
        Atm(n)%sg_diag%u_dt = u_dt(isc:iec,jsc:jec,:)
@@ -1388,7 +1387,6 @@ contains
    endif
 
 !--- adjust w and heat tendency for non-hydrostatic case
-#ifdef W_DIFF
     if ( .not.Atm(n)%flagstruct%hydrostatic .and. w_diff /= NO_TRACER ) then
       rcp = 1. / cp_air
 !$OMP parallel do default (none) &
@@ -1408,7 +1406,6 @@ contains
         enddo
       enddo
     endif
-#endif
 
     call timing_on('FV_UPDATE_PHYS')
     call fv_update_phys( dt_atmos, isc, iec, jsc, jec, isd, ied, jsd, jed, Atm(n)%ng, nt_dyn, &
