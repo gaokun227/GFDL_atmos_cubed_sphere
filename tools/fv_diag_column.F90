@@ -28,7 +28,7 @@ module fv_diag_column_mod
   use constants_mod,      only: grav, rdgas, kappa, cp_air, TFREEZE, pi=>pi_8
   use fms_mod,            only: write_version_number, lowercase
   use mpp_mod,            only: mpp_error, FATAL, stdlog, mpp_pe, mpp_root_pe, mpp_sum, &
-                                mpp_max, NOTE, input_nml_file, get_unit
+                                mpp_max, NOTE, input_nml_file
   use gfdl_mp_mod,        only: mqs3d
 
   implicit none
@@ -152,8 +152,7 @@ contains
     character(len=256)    :: record
     character(len=10)     :: dum1, dum2
 
-    iunit = get_unit()
-    open(iunit, file='column_table', action='READ', iostat=io)
+    open(newunit=iunit, file='column_table', action='READ', iostat=io)
     if(io/=0) call mpp_error(FATAL, ' find_diagnostic_column: Error in opening column_table')
 
     num_diag_debug=0
