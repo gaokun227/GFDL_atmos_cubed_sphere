@@ -1,0 +1,328 @@
+!***********************************************************************
+!*                   GNU Lesser General Public License
+!*
+!* This file is part of the FV3 dynamical core.
+!*
+!* The FV3 dynamical core is free software: you can redistribute it
+!* and/or modify it under the terms of the
+!* GNU Lesser General Public License as published by the
+!* Free Software Foundation, either version 3 of the License, or
+!* (at your option) any later version.
+!*
+!* The FV3 dynamical core is distributed in the hope that it will be
+!* useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+!* of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+!* See the GNU General Public License for more details.
+!*
+!* You should have received a copy of the GNU Lesser General Public
+!* License along with the FV3 dynamical core.
+!* If not, see <http://www.gnu.org/licenses/>.
+!***********************************************************************
+
+! Linjiong Zhou: Nov 19, 2019
+! Revise the OpenMP code to avoid crash
+module fv_thermodynamics_mod
+
+  use constants_mod,     only: grav, cp_air, cp_vapor, rvgas, rdgas
+  use gfdl_mp_mod,       only: c_liq, c_ice
+
+  implicit none
+  real, parameter:: cv_vap = 3.*rvgas  ! 1384.5
+  real, parameter:: cv_air =  cp_air - rdgas ! = rdgas * (7/2-1) = 2.5*rdgas=717.68
+  real, parameter:: tice = 273.16
+
+  public compute_total_energy, moist_cv, moist_cp
+
+contains
+
+ subroutine compute_total_energy(is, ie, js, je, isd, ied, jsd, jed, km,       &
+                                 u, v, w, delz, pt, delp, q, qc, pe, peln, hs, &
+                                 rsin2_l, cosa_s_l, &
+                                 r_vir,  cp, rg, hlv, te_2d, ua, va, teq, &
+                                 moist_phys, nwat, sphum, liq_wat, rainwat, ice_wat, snowwat, graupel, hydrostatic, id_te)
+!------------------------------------------------------
+! Compute vertically integrated total energy per column
+!------------------------------------------------------
+! !INPUT PARAMETERS:
+   integer,  intent(in):: km, is, ie, js, je, isd, ied, jsd, jed, id_te
+   integer,  intent(in):: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel, nwat
+   real, intent(inout), dimension(isd:ied,jsd:jed,km):: ua, va
+   real, intent(in), dimension(isd:ied,jsd:jed,km):: pt, delp
+   real, intent(in), dimension(isd:ied,jsd:jed,km,*):: q
+   real, intent(in), dimension(isd:ied,jsd:jed,km):: qc
+   real, intent(inout)::  u(isd:ied,  jsd:jed+1,km)
+   real, intent(inout)::  v(isd:ied+1,jsd:jed,  km)
+   real, intent(in)::  w(isd:,jsd:,1:)   ! vertical velocity (m/s)
+   real, intent(in):: delz(is:,js:,1:)
+   real, intent(in):: hs(isd:ied,jsd:jed)  ! surface geopotential
+   real, intent(in)::   pe(is-1:ie+1,km+1,js-1:je+1) ! pressure at layer edges
+   real, intent(in):: peln(is:ie,km+1,js:je)  ! log(pe)
+   real, intent(in):: cp, rg, r_vir, hlv
+   real, intent(in) :: rsin2_l(isd:ied, jsd:jed)
+   real, intent(in) :: cosa_s_l(isd:ied, jsd:jed)
+   logical, intent(in):: moist_phys, hydrostatic
+! Output:
+   real, intent(out):: te_2d(is:ie,js:je)   ! vertically integrated TE
+   real, intent(out)::   teq(is:ie,js:je)   ! Moist TE
+! Local
+   real, dimension(is:ie,km):: tv
+   real  phiz(is:ie,km+1)
+   real  cvm(is:ie), qd(is:ie)
+   integer i, j, k
+
+!$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,km,hydrostatic,hs,pt,qc,rg,peln,te_2d, &
+!$OMP                                  pe,delp,cp,rsin2_l,u,v,cosa_s_l,delz,moist_phys,w, &
+!$OMP                                  q,nwat,liq_wat,rainwat,ice_wat,snowwat,graupel,sphum)   &
+!$OMP                          private(phiz, tv, cvm, qd)
+  do j=js,je
+
+     if ( hydrostatic ) then
+
+        do i=is,ie
+           phiz(i,km+1) = hs(i,j)
+        enddo
+        do k=km,1,-1
+           do i=is,ie
+                tv(i,k) = pt(i,j,k)*(1.+qc(i,j,k))
+              phiz(i,k) = phiz(i,k+1) + rg*tv(i,k)*(peln(i,k+1,j)-peln(i,k,j))
+           enddo
+        enddo
+
+        do i=is,ie
+           te_2d(i,j) = pe(i,km+1,j)*phiz(i,km+1) - pe(i,1,j)*phiz(i,1)
+        enddo
+
+        do k=1,km
+           do i=is,ie
+              te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*(cp*tv(i,k) +            &
+                           0.25*rsin2_l(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +      &
+                                            v(i,j,k)**2+v(i+1,j,k)**2 -      &
+                       (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*cosa_s_l(i,j)))
+           enddo
+        enddo
+
+     else
+!-----------------
+! Non-hydrostatic:
+!-----------------
+     do i=is,ie
+        phiz(i,km+1) = hs(i,j)
+        do k=km,1,-1
+           phiz(i,k) = phiz(i,k+1) - grav*delz(i,j,k)
+        enddo
+     enddo
+     do i=is,ie
+        te_2d(i,j) = 0.
+     enddo
+     !TODO moist_phys doesn't seem to make a difference --- lmh 13may21
+     if ( moist_phys ) then
+     do k=1,km
+#ifdef MOIST_CAPPA
+        call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                      ice_wat, snowwat, graupel, q, qd, cvm)
+#endif
+        do i=is,ie
+#ifdef MOIST_CAPPA
+           te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*( cvm(i)*pt(i,j,k) +  &
+#else
+           te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*( cv_air*pt(i,j,k) +  &
+#endif
+                        0.5*(phiz(i,k)+phiz(i,k+1)+w(i,j,k)**2+0.5*rsin2_l(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
+                        v(i,j,k)**2+v(i+1,j,k)**2-(u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*cosa_s_l(i,j))))
+        enddo
+     enddo
+     else
+       do k=1,km
+          do i=is,ie
+             te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*( cv_air*pt(i,j,k) +  &
+                          0.5*(phiz(i,k)+phiz(i,k+1)+w(i,j,k)**2+0.5*rsin2_l(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
+                          v(i,j,k)**2+v(i+1,j,k)**2-(u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*cosa_s_l(i,j))))
+          enddo
+       enddo
+     endif
+     endif
+  enddo
+
+!-------------------------------------
+! Diganostics computation for moist TE
+!-------------------------------------
+  if( id_te>0 ) then
+!$OMP parallel do default(none) shared(is,ie,js,je,teq,te_2d,moist_phys,km,hlv,sphum,q,delp)
+      do j=js,je
+         do i=is,ie
+            teq(i,j) = te_2d(i,j)
+         enddo
+         if ( moist_phys ) then
+           do k=1,km
+              do i=is,ie
+                 teq(i,j) = teq(i,j) + hlv*q(i,j,k,sphum)*delp(i,j,k)
+              enddo
+           enddo
+         endif
+      enddo
+   endif
+
+  end subroutine compute_total_energy
+
+
+
+
+ subroutine moist_cv(is,ie, isd,ied, jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                     ice_wat, snowwat, graupel, q, qd, cvm, t1)
+  integer, intent(in):: is, ie, isd,ied, jsd,jed, km, nwat, j, k
+  integer, intent(in):: sphum, liq_wat, rainwat, ice_wat, snowwat, graupel
+  real, intent(in), dimension(isd:ied,jsd:jed,km,nwat):: q
+  real, intent(out), dimension(is:ie):: cvm, qd  ! qd is q_con
+  real, intent(in), optional:: t1(is:ie)
+!
+  real, parameter:: t_i0 = 15.
+  real, dimension(is:ie):: qv, ql, qs
+  integer:: i
+
+  select case (nwat)
+
+   case(2)
+     if ( present(t1) ) then  ! Special case for GFS physics
+        do i=is,ie
+           qd(i) = max(0., q(i,j,k,liq_wat))
+           if ( t1(i) > tice ) then
+                qs(i) = 0.
+           elseif ( t1(i) < tice-t_i0 ) then
+                qs(i) = qd(i)
+           else
+                qs(i) = qd(i)*(tice-t1(i))/t_i0
+           endif
+           ql(i) = qd(i) - qs(i)
+           qv(i) = max(0.,q(i,j,k,sphum))
+           cvm(i) = (1.-(qv(i)+qd(i)))*cv_air + qv(i)*cv_vap + ql(i)*c_liq + qs(i)*c_ice
+        enddo
+     else
+        do i=is,ie
+           qv(i) = max(0.,q(i,j,k,sphum))
+           qs(i) = max(0.,q(i,j,k,liq_wat))
+           qd(i) = qs(i)
+           cvm(i) = (1.-qv(i))*cv_air + qv(i)*cv_vap
+        enddo
+     endif
+  case (3)
+     do i=is,ie
+        qv(i) = q(i,j,k,sphum)
+        ql(i) = q(i,j,k,liq_wat)
+        qs(i) = q(i,j,k,ice_wat)
+        qd(i) = ql(i) + qs(i)
+        cvm(i) = (1.-(qv(i)+qd(i)))*cv_air + qv(i)*cv_vap + ql(i)*c_liq + qs(i)*c_ice
+     enddo
+  case(4)              ! K_warm_rain with fake ice
+     do i=is,ie
+        qv(i) = q(i,j,k,sphum)
+        qd(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat)
+        cvm(i) = (1.-(qv(i)+qd(i)))*cv_air + qv(i)*cv_vap + qd(i)*c_liq
+     enddo
+  case(5)
+     do i=is,ie
+        qv(i) = q(i,j,k,sphum)
+        ql(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat)
+        qs(i) = q(i,j,k,ice_wat) + q(i,j,k,snowwat)
+        qd(i) = ql(i) + qs(i)
+        cvm(i) = (1.-(qv(i)+qd(i)))*cv_air + qv(i)*cv_vap + ql(i)*c_liq + qs(i)*c_ice
+     enddo
+  case(6)
+     do i=is,ie
+        qv(i) = q(i,j,k,sphum)
+        ql(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat)
+        qs(i) = q(i,j,k,ice_wat) + q(i,j,k,snowwat) + q(i,j,k,graupel)
+        qd(i) = ql(i) + qs(i)
+        cvm(i) = (1.-(qv(i)+qd(i)))*cv_air + qv(i)*cv_vap + ql(i)*c_liq + qs(i)*c_ice
+     enddo
+  case default
+     !call mpp_error (NOTE, 'fv_mapz::moist_cv - using default cv_air')
+     do i=is,ie
+         qd(i) = 0.
+        cvm(i) = cv_air
+     enddo
+ end select
+
+ end subroutine moist_cv
+
+ subroutine moist_cp(is,ie, isd,ied, jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                     ice_wat, snowwat, graupel, q, qd, cpm, t1)
+
+  integer, intent(in):: is, ie, isd,ied, jsd,jed, km, nwat, j, k
+  integer, intent(in):: sphum, liq_wat, rainwat, ice_wat, snowwat, graupel
+  real, intent(in), dimension(isd:ied,jsd:jed,km,nwat):: q
+  real, intent(out), dimension(is:ie):: cpm, qd
+  real, intent(in), optional:: t1(is:ie)
+!
+  real, parameter:: t_i0 = 15.
+  real, dimension(is:ie):: qv, ql, qs
+  integer:: i
+
+  select case (nwat)
+
+  case(2)
+     if ( present(t1) ) then  ! Special case for GFS physics
+        do i=is,ie
+           qd(i) = max(0., q(i,j,k,liq_wat))
+           if ( t1(i) > tice ) then
+                qs(i) = 0.
+           elseif ( t1(i) < tice-t_i0 ) then
+                qs(i) = qd(i)
+           else
+                qs(i) = qd(i)*(tice-t1(i))/t_i0
+           endif
+           ql(i) = qd(i) - qs(i)
+           qv(i) = max(0.,q(i,j,k,sphum))
+           cpm(i) = (1.-(qv(i)+qd(i)))*cp_air + qv(i)*cp_vapor + ql(i)*c_liq + qs(i)*c_ice
+        enddo
+     else
+     do i=is,ie
+        qv(i) = max(0.,q(i,j,k,sphum))
+        qs(i) = max(0.,q(i,j,k,liq_wat))
+        qd(i) = qs(i)
+        cpm(i) = (1.-qv(i))*cp_air + qv(i)*cp_vapor
+     enddo
+     endif
+
+  case(3)
+     do i=is,ie
+        qv(i) = q(i,j,k,sphum)
+        ql(i) = q(i,j,k,liq_wat)
+        qs(i) = q(i,j,k,ice_wat)
+        qd(i) = ql(i) + qs(i)
+        cpm(i) = (1.-(qv(i)+qd(i)))*cp_air + qv(i)*cp_vapor + ql(i)*c_liq + qs(i)*c_ice
+     enddo
+  case(4)    ! K_warm_rain scheme with fake ice
+     do i=is,ie
+        qv(i) = q(i,j,k,sphum)
+        qd(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat)
+        cpm(i) = (1.-(qv(i)+qd(i)))*cp_air + qv(i)*cp_vapor + qd(i)*c_liq
+     enddo
+  case(5)
+     do i=is,ie
+        qv(i) = q(i,j,k,sphum)
+        ql(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat)
+        qs(i) = q(i,j,k,ice_wat) + q(i,j,k,snowwat)
+        qd(i) = ql(i) + qs(i)
+        cpm(i) = (1.-(qv(i)+qd(i)))*cp_air + qv(i)*cp_vapor + ql(i)*c_liq + qs(i)*c_ice
+     enddo
+  case(6)
+     do i=is,ie
+        qv(i) = q(i,j,k,sphum)
+        ql(i) = q(i,j,k,liq_wat) + q(i,j,k,rainwat)
+        qs(i) = q(i,j,k,ice_wat) + q(i,j,k,snowwat) + q(i,j,k,graupel)
+        qd(i) = ql(i) + qs(i)
+        cpm(i) = (1.-(qv(i)+qd(i)))*cp_air + qv(i)*cp_vapor + ql(i)*c_liq + qs(i)*c_ice
+     enddo
+  case default
+     !call mpp_error (NOTE, 'fv_mapz::moist_cp - using default cp_air')
+     do i=is,ie
+        qd(i) = 0.
+        cpm(i) = cp_air
+     enddo
+  end select
+
+ end subroutine moist_cp
+
+
+
+end module fv_thermodynamics_mod

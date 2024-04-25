@@ -60,7 +60,7 @@ module fv_regional_mod
    use fv_grid_utils_mod, only: g_sum,mid_pt_sphere,get_unit_vect2      &
                                ,get_latlon_vector,inner_prod            &
                                ,cell_center2
-   use fv_mapz_mod,       only: mappm, moist_cp, moist_cv
+   use fv_operators_mod,  only: mappm
    use fv_mp_mod,         only: is_master, mp_reduce_min, mp_reduce_max
    use fv_fill_mod,       only: fillz
    use fv_eta_mod,        only: get_eta_level

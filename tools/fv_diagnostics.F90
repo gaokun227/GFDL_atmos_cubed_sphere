@@ -35,7 +35,8 @@ module fv_diagnostics_mod
                                diag_field_add_attribute
  use fv_arrays_mod,      only: fv_atmos_type, fv_grid_type, fv_diag_type, fv_grid_bounds_type, &
                                R_GRID
- use fv_mapz_mod,        only: E_Flux, moist_cv, moist_cp, mappm
+ use fv_mapz_mod,        only: E_Flux
+ use fv_operators_mod,   only: mappm
  use fv_mp_mod,          only: mp_reduce_sum, mp_reduce_min, mp_reduce_max, is_master
  use fv_eta_mod,         only: get_eta_level, gw_1d
  use fv_grid_utils_mod,  only: g_sum
