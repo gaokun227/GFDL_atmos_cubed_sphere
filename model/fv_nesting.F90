@@ -395,6 +395,10 @@ contains
 
        sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
        if (flagstruct%hydrostatic) then
+          if (.not. neststruct%do_remap_BC(flagstruct%grid_number)) then
+            call allocate_fv_nest_BC_type(pe_eul_BC,is,ie,js,je,isd,ied,jsd,jed,npx,npy,npz+1,ng,0,0,0,.false.)
+            call compute_peBC(neststruct%delp_BC, pe_eul_bc, npx, npy, npz, parent_grid%ptop, bd)
+          endif
           call setup_pt_BC(neststruct%pt_BC, pe_eul_BC, neststruct%q_BC(sphum), npx, npy, npz, zvir, bd)
        else
           if (neststruct%do_remap_BC(flagstruct%grid_number)) then
@@ -512,6 +516,10 @@ contains
                neststruct%ind_b, neststruct%wt_b, 1, 1,  npx,  npy,  npz_coarse, bd, &
                neststruct%divg_BC, divg_buf)
 
+       endif
+
+       if (flagstruct%hydrostatic .and. (.not. neststruct%do_remap_BC(flagstruct%grid_number))) then
+          call deallocate_fv_nest_BC_type(pe_eul_BC)
        endif
 
        !Correct halo values have now been set up for BCs; we can go ahead and apply them too
@@ -696,7 +704,7 @@ contains
    jed = bd%jed
 
    if (is == 1) then
-      call setup_pt_BC_k(pt_BC%west_t1, sphum_BC%west_t1, pe_eul_BC%west_t1, zvir, isd, ied, isd, 0, jsd, jed, npz)
+      call setup_pt_BC_k(pt_BC%west_t1, sphum_BC%west_t1, pe_eul_BC%west_t1, zvir, isd, 0, isd, 0, jsd, jed, npz)
    end if
 
    if (js == 1) then
@@ -716,7 +724,7 @@ contains
 
 
    if (ie == npx-1) then
-      call setup_pt_BC_k(pt_BC%east_t1, sphum_BC%east_t1, pe_eul_BC%east_t1, zvir, isd, ied, npx, ied, jsd, jed, npz)
+      call setup_pt_BC_k(pt_BC%east_t1, sphum_BC%east_t1, pe_eul_BC%east_t1, zvir, npx, ied, npx, ied, jsd, jed, npz)
    end if
 
    if (je == npy-1) then
@@ -742,6 +750,86 @@ contains
 !!!!   However these were NOT intended to delineate the dimensions of the data domain
 !!!!   but instead were of the BC arrays. This is confusing especially in other locations
 !!!!   where BCs and data arrays are both present.
+
+ subroutine compute_peBC(delp_BC, pe_BC, npx, npy, npz, ptop_src, bd)
+
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: delp_BC
+   type(fv_nest_BC_type_3d), intent(INOUT), target :: pe_BC
+   integer, intent(IN) :: npx, npy, npz
+   real, intent(IN) :: ptop_src
+
+   integer :: i,j,k, istart, iend
+
+   integer :: is,  ie,  js,  je
+   integer :: isd, ied, jsd, jed
+
+   is  = bd%is
+   ie  = bd%ie
+   js  = bd%js
+   je  = bd%je
+   isd = bd%isd
+   ied = bd%ied
+   jsd = bd%jsd
+   jed = bd%jed
+
+   if (is == 1) then
+      call compute_peBC_k(delp_BC%west_t1, pe_BC%west_t1, &
+           ptop_src, isd, 0, isd, 0, jsd, jed, npz)
+   end if
+
+   if (ie == npx-1) then
+      call compute_peBC_k(delp_BC%east_t1, pe_BC%east_t1, &
+           ptop_src, npx, ied, npx, ied, jsd, jed, npz)
+   end if
+
+   if (is == 1) then
+      istart = is
+   else
+      istart = isd
+   end if
+   if (ie == npx-1) then
+      iend = ie
+   else
+      iend = ied
+   end if
+
+   if (js == 1) then
+      call compute_peBC_k(delp_BC%south_t1, pe_BC%south_t1, &
+           ptop_src, isd, ied, istart, iend, jsd, 0, npz)
+   end if
+
+   if (je == npy-1) then
+      call compute_peBC_k(delp_BC%north_t1, pe_BC%north_t1, &
+           ptop_src, isd, ied, istart, iend, npy, jed, npz)
+   end if
+
+ end subroutine compute_peBC
+
+
+
+
+ subroutine compute_peBC_k(delp, peBC, ptop_src, isd_BC, ied_BC, istart, iend, jstart, jend, npz)
+   integer, intent(IN) :: isd_BC, ied_BC, istart, iend, jstart, jend, npz
+   real, intent(INOUT) :: delp(isd_BC:ied_BC,jstart:jend,npz), peBC(isd_BC:ied_BC,jstart:jend,npz+1)
+   real, intent(IN) :: ptop_src
+
+   integer :: i,j,k
+
+!$OMP parallel do default(none) shared(istart,iend,jstart,jend,peBC,ptop_src,delp,npz)
+             do j=jstart,jend
+             do i=istart,iend
+                peBC(i,j,1) = ptop_src
+             enddo
+             do k=1,npz
+             do i=istart,iend
+                peBC(i,j,k+1) = peBC(i,j,k) + delp(i,j,k)
+             enddo
+             enddo
+             enddo
+
+ end subroutine compute_peBC_k
+
  subroutine setup_pt_BC_k(ptBC, sphumBC, peBC, zvir, isd_BC, ied_BC, istart, iend, jstart, jend, npz)
 
    integer, intent(IN) :: isd_BC, ied_BC, istart, iend, jstart, jend, npz
