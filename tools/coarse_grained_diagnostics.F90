@@ -26,7 +26,7 @@ module coarse_grained_diagnostics_mod
   use field_manager_mod,  only: MODEL_ATMOS
   use fv_arrays_mod, only: fv_atmos_type, fv_coarse_graining_type
   use fv_diagnostics_mod, only: cs3_interpolator, get_height_given_pressure, get_vorticity, interpolate_vertical
-  use fv_mapz_mod, only: moist_cp, moist_cv
+  use fv_thermodynamics_mod, only: moist_cp, moist_cv
   use mpp_domains_mod, only: domain2d, EAST, NORTH
   use mpp_mod, only: FATAL, mpp_error
   use coarse_graining_mod, only: MODEL_LEVEL, PRESSURE_LEVEL, PRESSURE_LEVEL_EXTRAPOLATE, BLENDED_AREA_WEIGHTED

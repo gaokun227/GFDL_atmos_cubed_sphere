@@ -39,7 +39,7 @@ module fv_nesting_mod
    use init_hydro_mod,      only: p_var
    use constants_mod,       only: grav, pi=>pi_8, hlv, rdgas, cp_air, rvgas, cp_vapor, kappa
    use fv_arrays_mod,       only: radius ! scaled for small earth
-   use fv_mapz_mod,         only: mappm
+   use fv_operators_mod,    only: mappm
    use fv_timing_mod,       only: timing_on, timing_off
    use fv_mp_mod,           only: is_master
    use fv_mp_mod,           only: mp_reduce_sum, global_nest_domain
