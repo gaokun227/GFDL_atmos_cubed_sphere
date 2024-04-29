@@ -42,9 +42,6 @@ module fv_mapz_mod
   real, parameter:: t_min= 184.   ! below which applies stricter constraint
   real, parameter:: cv_air =  cp_air - rdgas ! = rdgas * (7/2-1) = 2.5*rdgas=717.68
 
-  real, parameter :: w_max = 90.
-  real, parameter :: w_min = -60.
-
   real(kind=4) :: E_Flux = 0.
   private
 
@@ -59,12 +56,11 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum,      &
                       ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
-                      do_inline_mp, inline_mp, c2l_ord, bd, fv_debug, &
-                      w_limiter, do_fast_phys, do_intermediate_phys, consv_checker, adj_mass_vmr)
+                      do_inline_mp, inline_mp, bd, fv_debug, &
+                      do_fast_phys, do_intermediate_phys, consv_checker, adj_mass_vmr)
 
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
-  logical, intent(in):: w_limiter
   logical, intent(in):: do_fast_phys
   logical, intent(in):: do_intermediate_phys
   logical, intent(in):: consv_checker
@@ -83,7 +79,6 @@ contains
   integer, intent(in):: kord_wz               ! Mapping order/option for w
   integer, intent(in):: kord_tr(nq)           ! Mapping order for tracers
   integer, intent(in):: kord_tm               ! Mapping order for thermodynamics
-  integer, intent(in):: c2l_ord
 
   real, intent(in):: consv                 ! factor for TE conservation
   real, intent(in):: r_vir
@@ -175,7 +170,7 @@ contains
 !$OMP                                  graupel,q_con,sphum,cappa,r_vir,k1k,delp, &
 !$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
-!$OMP                                  hs,w,ws,kord_wz,omga,rrg,kord_mt,pe4,w_limiter,cp,remap_te)    &
+!$OMP                                  hs,w,ws,kord_wz,omga,rrg,kord_mt,pe4,cp,remap_te)    &
 !$OMP                          private(gz,cvm,kp,k_next,bkh,dp2,dlnp,tpe,   &
 !$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2,w2)
 
@@ -423,60 +418,6 @@ contains
                delz(i,j,k) = -delz(i,j,k)*dp2(i,k)
             enddo
          enddo
-
-         !Fix excessive w - momentum conserving --- sjl
-         ! gz(:) used here as a temporary array
-         if ( w_limiter ) then
-            do k=1,km
-               do i=is,ie
-                  w2(i,k) = w(i,j,k)
-               enddo
-            enddo
-            do k=1, km-1
-               do i=is,ie
-                  if ( w2(i,k) > w_max ) then
-                     gz(i) = (w2(i,k)-w_max) * dp2(i,k)
-                     w2(i,k  ) = w_max
-                     w2(i,k+1) = w2(i,k+1) + gz(i)/dp2(i,k+1)
-                     !print*, ' W_LIMITER down: ', i,j,k, w2(i,k:k+1), w(i,j,k:k+1)
-                  elseif ( w2(i,k) < w_min ) then
-                     gz(i) = (w2(i,k)-w_min) * dp2(i,k)
-                     w2(i,k  ) = w_min
-                     w2(i,k+1) = w2(i,k+1) + gz(i)/dp2(i,k+1)
-                     !print*, ' W_LIMITER down: ', i,j,k, w2(i,k:k+1), w(i,j,k:k+1)
-                  endif
-               enddo
-            enddo
-            do k=km, 2, -1
-               do i=is,ie
-                  if ( w2(i,k) > w_max ) then
-                     gz(i) = (w2(i,k)-w_max) * dp2(i,k)
-                     w2(i,k  ) = w_max
-                     w2(i,k-1) = w2(i,k-1) + gz(i)/dp2(i,k-1)
-                     !print*, ' W_LIMITER up: ', i,j,k, w2(i,k-1:k), w(i,j,k-1:k)
-                  elseif ( w2(i,k) < w_min ) then
-                     gz(i) = (w2(i,k)-w_min) * dp2(i,k)
-                     w2(i,k  ) = w_min
-                     w2(i,k-1) = w2(i,k-1) + gz(i)/dp2(i,k-1)
-                     !print*, ' W_LIMITER up: ', i,j,k, w2(i,k-1:k), w(i,j,k-1:k)
-                  endif
-               enddo
-            enddo
-            do i=is,ie
-               if (w2(i,1) > w_max*2. ) then
-                  w2(i,1) = w_max*2 ! sink out of the top of the domain
-                  !print*, ' W_LIMITER top limited: ', i,j,1, w2(i,1), w(i,j,1)
-               elseif (w2(i,1) < w_min*2. ) then
-                  w2(i,1) = w_min*2.
-                  !print*, ' W_LIMITER top limited: ', i,j,1, w2(i,1), w(i,j,1)
-               endif
-            enddo
-            do k=1,km
-               do i=is,ie
-                  w(i,j,k) = w2(i,k)
-               enddo
-            enddo
-         endif
       endif
 
       ! 3.1) Update pressure variables
@@ -834,7 +775,7 @@ contains
     if (do_intermediate_phys) then
         call timing_on('INTERMEDIATE_PHYS')
         call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-                 c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
+                 mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
                  v, w, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
                  inline_mp, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
                  do_inline_mp, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr)

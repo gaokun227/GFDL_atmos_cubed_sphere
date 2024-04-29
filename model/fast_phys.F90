@@ -52,7 +52,7 @@ module fast_phys_mod
 contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
-               c2l_ord, mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
+               mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
                consv_checker, adj_mass_vmr)
@@ -63,7 +63,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     ! input / output arguments
     ! -----------------------------------------------------------------------
 
-    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord
+    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, consv_checker, adj_mass_vmr
 

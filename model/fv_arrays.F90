@@ -279,9 +279,6 @@ module fv_arrays_mod
    integer :: kord_tr = 8    !< The vertical remapping scheme for tracers. The default is 8.
                              !< 9 or 11 recommended. It is often recommended to use the same
                              !< value for 'kord_tr' as for 'kord_tm'.
-   real    :: scale_z = 0.   !< diff_z = scale_z**2 * 0.25 (only used for Riemann solver)
-   real    :: w_max = 75.    !< Not used.
-   real    :: z_min = 0.05   !< Not used.
    real    :: d2bg_zq = 0.0  !< Implicit vertical diffusion for scalars (currently vertical velocity only)
    real    :: lim_fac = 1.0  !< linear scheme limiting factor when using hord = 1. 1: hord = 5, 3: hord = 6
 
@@ -324,10 +321,6 @@ module fv_arrays_mod
    real    :: d2_bg_k2 = 2.         !< Strength of second-order diffusion in the second sponge
                                     !< layer from the model top. This value must be specified, and
                                     !< should be less than 'd2_bg_k1'.
-   real    :: d2_divg_max_k1 = 0.15 !< d2_divg max value (k=1)
-   real    :: d2_divg_max_k2 = 0.08 !< d2_divg max value (k=2)
-   real    :: damp_k_k1 = 0.2       !< damp_k value (k=1)
-   real    :: damp_k_k2 = 0.12      !< damp_k value (k=2)
 
 !> Additional (after the fact) terrain filter (to further smooth the terrain after cold start)
    integer ::    n_zs_filter=0      !< Number of times to apply a diffusive filter to the topography
@@ -782,17 +775,6 @@ module fv_arrays_mod
                                    !< This may improve efficiency for very large numbers of tracers.
                                    !< The default value is .false.; currently not implemented.
 
-   logical :: old_divg_damp = .false. !< parameter to revert damping parameters back to values
-                                      !< defined in a previous revision
-                                      !< old_values:
-                                      !<    d2_bg_k1 = 6.           d2_bg_k2 = 4.
-                                      !<    d2_divg_max_k1 = 0.02   d2_divg_max_k2 = 0.01
-                                      !<    damp_k_k1 = 0.          damp_k_k2 = 0.
-                                      !< current_values:
-                                      !<    d2_bg_k1 = 4.           d2_bg_k2 = 2.
-                                      !<    d2_divg_max_k1 = 0.15   d2_divg_max_k2 = 0.08
-                                      !<    damp_k_k1 = 0.2         damp_k_k2 = 0.12
-
    logical :: fv_land = .false.   !< Whether to create terrain deviation and land fraction for
                                   !< output to mg_drag restart files, for use in mg_drag and in the land
                                   !< model. The default is .false; .true. is recommended when, and only
@@ -801,7 +783,6 @@ module fv_arrays_mod
                                   !< wave drag parameterization and for the land surface roughness than
                                   !< either computes internally. This has no effect on the representation of
                                   !< the terrain in the dynamics.
-   logical :: do_am4_remap = .false.   !< Use AM4 vertical remapping operators
 !--------------------------------------------------------------------------------------
 ! The following options are useful for NWP experiments using datasets on the lat-lon grid
 !--------------------------------------------------------------------------------------
@@ -831,8 +812,6 @@ module fv_arrays_mod
                                         !< (ua and va) to the restart files. This is useful for data
                                         !< assimilation cycling systems which do not handle staggered winds.
                                         !< The default is .false.
-   logical :: use_new_ncep = .false.  !< use the NCEP ICs created after 2014/10/22, if want to read CWAT (not used??)
-   logical :: use_ncep_phy = .false.  !< if .T., separate CWAT by weights of liq_wat and liq_ice in FV_IC (not used??)
    logical :: fv_diag_ic = .false.    !< reconstruct IC from fv_diagnostics on lat-lon grid
    logical :: external_ic = .false.   !< Whether to initialize the models state using the data
                                       !< in an externally specified file, given in res_latlon_dynamics.
@@ -896,16 +875,6 @@ module fv_arrays_mod
                                !< Useful for perturbing initial conditions. -1 by default;
                                !< disabled if 0 or negative.
 
-   integer :: a2b_ord = 4   !< Order of interpolation used by the pressure gradient force
-                            !< to interpolate cell-centered (A-grid) values to the grid corners.
-                            !< The default value is 4 (recommended), which uses fourth-order
-                            !< interpolation; otherwise second-order interpolation is used.
-   integer :: c2l_ord = 4   !< Order of interpolation from the solvers native D-grid winds
-                            !< to latitude-longitude A-grid winds, which are used as input to
-                            !< the physics routines and for writing to history files.
-                            !< The default value is 4 (recommended); fourth-order interpolation
-                            !< is used unless c2l_ord = 2.
-
   real(kind=R_GRID) :: dx_const = 1000.   !< Specifies the (uniform) grid-cell-width in the x-direction
                                           !< on a doubly-periodic grid (grid_type = 4) in meters.
                                           !< The default value is 1000.
@@ -927,8 +896,6 @@ module fv_arrays_mod
   !f1p
   logical  :: adj_mass_vmr = .false. !TER: This is to reproduce answers for verona patch.  This default can be changed
                                      !     to .true. in the next city release if desired
-
-  logical :: w_limiter = .true. ! Fix excessive w - momentum conserving --- sjl
 
   ! options related to regional mode
   logical :: regional = .false.       !< Default setting for the regional domain.
