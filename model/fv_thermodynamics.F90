@@ -164,7 +164,27 @@ contains
 
   end subroutine compute_total_energy
 
+#ifdef THERMO_PROTOTYPE
+ subroutine fv_thermodynamics_init
 
+   !set up heat capacities for each tracer
+
+   do n=1,min(ncnst,nwat)
+      tracer_name = ...
+      if ( 'sphum' == trim(tracer_name)) then
+         dcv(n) = cv_vap - cv_air
+         dcp(n) = cp_vap - cp_air
+      else if ( ANY( (/'liq_wat','rainwat'/) == trim(tracer_name)) ) then
+         dcv(n) = c_liq - cv_air
+         dcp(n) = c_liq - cp_air
+      else if ( ANY( (/'ice_wat', 'snowwat', 'graupel', 'hailwat'/) == trim(tracer_name)) ) then
+         dcv(n) = c_ice - cv_air
+         dcp(n) = c_ice - cp_air
+      endif
+   enddo
+
+ end subroutine fv_thermodynamics_init
+#endif
 
 
  subroutine moist_cv(is,ie, isd,ied, jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &

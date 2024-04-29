@@ -2868,7 +2868,7 @@ subroutine twoway_nesting(Atm, ngrids, grids_on_this_pe, zvir, Time, this_grid)
     call cubed_to_latlon(u, v, ua, va, &
          gridstruct, npx, npy, npz, &
          1, gridstruct%grid_type, domain, &
-         gridstruct%bounded_domain, flagstruct%c2l_ord, bd)
+         gridstruct%bounded_domain, 4, bd)
 
 #ifndef SW_DYNAMICS
 

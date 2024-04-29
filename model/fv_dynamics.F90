@@ -26,7 +26,7 @@ module fv_dynamics_mod
    use fv_mapz_mod,         only: Lagrangian_to_Eulerian
    use fv_thermodynamics_mod, only: compute_total_energy, moist_cv, moist_cp
    use fv_tracer2d_mod,     only: tracer_2d, tracer_2d_1L, tracer_2d_nested
-   use fv_grid_utils_mod,   only: cubed_to_latlon, c2l_ord2, g_sum
+   use fv_grid_utils_mod,   only: cubed_to_latlon, g_sum
    use fv_fill_mod,         only: fill2D
    use fv_mp_mod,           only: is_master
    use fv_mp_mod,           only: group_halo_update_type
@@ -376,8 +376,8 @@ contains
       endif
 
       if( (flagstruct%consv_am .or. idiag%id_amdt>0) .and. (.not.do_adiabatic_init) ) then
-          call compute_aam(npz, is, ie, js, je, isd, ied, jsd, jed, gridstruct, bd,   &
-                           ptop, ua, va, u, v, delp, teq, ps2, m_fac)
+          call compute_aam(npx, npy, npz, is, ie, js, je, isd, ied, jsd, jed, gridstruct, bd,   &
+                           ptop, ua, va, u, v, delp, teq, ps2, m_fac, domain)
       endif
 
       if( .not.flagstruct%RF_fast .and. flagstruct%tau > 0. ) then
@@ -629,8 +629,8 @@ contains
                      flagstruct%do_sat_adj, hydrostatic, &
                      hybrid_z,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
-                     inline_mp, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
-                     flagstruct%w_limiter, flagstruct%do_fast_phys, flagstruct%do_intermediate_phys, &
+                     inline_mp, bd, flagstruct%fv_debug, &
+                     flagstruct%do_fast_phys, flagstruct%do_intermediate_phys, &
                      flagstruct%consv_checker, flagstruct%adj_mass_vmr)
 
      if ( flagstruct%fv_debug ) then
@@ -760,8 +760,8 @@ contains
   endif
 
   if( (flagstruct%consv_am.or.idiag%id_amdt>0.or.idiag%id_aam>0) .and. (.not.do_adiabatic_init)  ) then
-     call compute_aam(npz, is, ie, js, je, isd, ied, jsd, jed, gridstruct, bd,   &
-          ptop, ua, va, u, v, delp, te_2d, ps, m_fac)
+     call compute_aam(npx, npy, npz, is, ie, js, je, isd, ied, jsd, jed, gridstruct, bd,   &
+          ptop, ua, va, u, v, delp, te_2d, ps, m_fac, domain)
      if( idiag%id_aam>0 ) then
         used = send_data(idiag%id_aam, te_2d, fv_time)
      endif
@@ -816,7 +816,8 @@ contains
   endif
 
 911  call cubed_to_latlon(u, v, ua, va, gridstruct, &
-          npx, npy, npz, 1, gridstruct%grid_type, domain, gridstruct%bounded_domain, flagstruct%c2l_ord, bd)
+          npx, npy, npz, 1, gridstruct%grid_type, &
+          domain, gridstruct%bounded_domain, 4, bd)
 
   deallocate(dp1)
   deallocate(cappa)
@@ -1051,7 +1052,9 @@ contains
        RF_initialized = .true.
     endif
 
-    call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%bounded_domain)
+    call cubed_to_latlon(u, v, ua, va, gridstruct, &
+         npx, npy, npz, 1, gridstruct%grid_type, &
+         domain, gridstruct%bounded_domain, 2, bd)
 
     allocate( u2f(isd:ied,jsd:jed,kmax) )
 
@@ -1195,7 +1198,9 @@ contains
 
     allocate( u2f(isd:ied,jsd:jed,kmax) )
 
-    call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%bounded_domain)
+    call cubed_to_latlon(u, v, ua, va, gridstruct, &
+         npx, npy, npz, 1, gridstruct%grid_type, &
+         domain, gridstruct%bounded_domain, 2, bd)
 
 !$OMP parallel do default(none) shared(is,ie,js,je,kmax,u2f,hydrostatic,ua,va,w)
     do k=1,kmax
@@ -1273,10 +1278,10 @@ contains
 
  end subroutine Rayleigh_Friction
 
- subroutine compute_aam(npz, is, ie, js, je, isd, ied, jsd, jed, gridstruct, bd,   &
-                        ptop, ua, va, u, v, delp, aam, ps, m_fac)
+ subroutine compute_aam(npx, npy, npz, is, ie, js, je, isd, ied, jsd, jed, gridstruct, bd,   &
+                        ptop, ua, va, u, v, delp, aam, ps, m_fac, domain)
 ! Compute vertically (mass) integrated Atmospheric Angular Momentum
-    integer, intent(in):: npz
+    integer, intent(in):: npx, npy, npz
     integer, intent(in):: is,  ie,  js,  je
     integer, intent(in):: isd, ied, jsd, jed
     real, intent(in):: ptop
@@ -1289,11 +1294,16 @@ contains
     real, intent(out):: ps(isd:ied,jsd:jed)
     type(fv_grid_bounds_type), intent(IN) :: bd
     type(fv_grid_type), intent(IN) :: gridstruct
+    type(domain2d), intent(INOUT) :: domain
 ! local:
     real, dimension(is:ie):: r1, r2, dm
     integer i, j, k
 
-    call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%bounded_domain)
+    call cubed_to_latlon(u, v, ua, va, gridstruct, &
+         npx, npy, npz, 1, gridstruct%grid_type, &
+         domain, gridstruct%bounded_domain, 2, bd)
+
+    !call c2l_ord2(u, v, ua, va, gridstruct, npz, gridstruct%grid_type, bd, gridstruct%bounded_domain)
 
 !$OMP parallel do default(none) shared(is,ie,js,je,npz,gridstruct,aam,m_fac,ps,ptop,delp,agrav,ua,radius,omega) &
 !$OMP                          private(r1, r2, dm)

@@ -476,7 +476,7 @@ contains
       endif
       if ( hydrostatic ) then
            call geopk(ptop, pe, peln, delpc, pkc, gz, phis, ptc, q_con, pkz, npz, akap, .true., &
-                      gridstruct%bounded_domain, .false., npx, npy, flagstruct%a2b_ord, bd)
+                      gridstruct%bounded_domain, .false., npx, npy, bd)
       else
 #ifndef SW_DYNAMICS
            if ( it == 1 ) then
@@ -528,7 +528,7 @@ contains
            call Riem_Solver_C( ms, dt2,   is,  ie,   js,   je,   npz,   ng,   &
                                akap, cappa,  cp,  ptop, phis, omga, ptc,  &
                                q_con,  delpc, gz,  pkc, ws3, flagstruct%p_fac, &
-                               flagstruct%a_imp, flagstruct%scale_z, pfull, &
+                               flagstruct%a_imp, pfull, &
                                flagstruct%fast_tau_w_sec, flagstruct%rf_cutoff )
            call timing_off('Riem_Solver')
 
@@ -912,7 +912,7 @@ contains
     endif
      if ( hydrostatic ) then
           call geopk(ptop, pe, peln, delp, pkc, gz, phis, pt, q_con, pkz, npz, akap, .false., &
-                     gridstruct%bounded_domain, .true., npx, npy, flagstruct%a2b_ord, bd)
+                     gridstruct%bounded_domain, .true., npx, npy, bd)
        else
 #ifndef SW_DYNAMICS
         call timing_on('UPDATE_DZ')
@@ -941,7 +941,7 @@ contains
                          isd, ied, jsd, jed, &
                          akap, cappa, cp,  ptop, zs, q_con, w, delz, pt, delp, zh,   &
                          pe, pkc, pk3, pk, peln, ws, &
-                         flagstruct%scale_z, flagstruct%p_fac, flagstruct%a_imp, &
+                         flagstruct%p_fac, flagstruct%a_imp, &
                          flagstruct%use_logp, remap_step, beta<-0.1, flagstruct%d2bg_zq, &
                          flagstruct%fv_debug, flagstruct%fast_tau_w_sec)
         call timing_off('Riem_Solver')
@@ -1032,9 +1032,9 @@ contains
     call timing_on('PG_D')
     if ( hydrostatic ) then
        if ( beta > 0. ) then
-          call grad1_p_update(divg2, u, v, pkc, gz, dt, ng, gridstruct, bd, npx, npy, npz, ptop, beta_d, flagstruct%a2b_ord)
+          call grad1_p_update(divg2, u, v, pkc, gz, dt, ng, gridstruct, bd, npx, npy, npz, ptop, beta_d)
        else
-          call one_grad_p(u, v, pkc, gz, divg2, delp, dt, ng, gridstruct, bd, npx, npy, npz, ptop, hydrostatic, flagstruct%a2b_ord, flagstruct%d_ext)
+          call one_grad_p(u, v, pkc, gz, divg2, delp, dt, ng, gridstruct, bd, npx, npy, npz, ptop, hydrostatic, flagstruct%d_ext)
        endif
 
     else
@@ -1043,7 +1043,7 @@ contains
        if ( beta > 0. ) then
           call split_p_grad( u, v, pkc, gz, delp, pk3, beta_d, dt, ng, gridstruct, bd, npx, npy, npz, flagstruct%use_logp)
        elseif ( beta < -0.1 ) then
-         call one_grad_p(u, v, pkc, gz, divg2, delp, dt, ng, gridstruct, bd, npx, npy, npz, ptop, hydrostatic, flagstruct%a2b_ord, flagstruct%d_ext)
+         call one_grad_p(u, v, pkc, gz, divg2, delp, dt, ng, gridstruct, bd, npx, npy, npz, ptop, hydrostatic, flagstruct%d_ext)
        else
           call nh_p_grad(u, v, pkc, gz, delp, pk3, dt, ng, gridstruct, bd, npx, npy, npz, flagstruct%use_logp)
        endif
@@ -1111,7 +1111,7 @@ contains
           call timing_on('FAST_PHYS')
 
           call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, &
-             flagstruct%c2l_ord, dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
+             dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
              delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, &
              gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
              flagstruct%consv_checker, flagstruct%adj_mass_vmr)
@@ -1907,9 +1907,9 @@ end subroutine split_p_grad
 
 
 subroutine one_grad_p(u, v, pk, gz, divg2, delp, dt, ng, gridstruct, bd, npx, npy, npz,  &
-   ptop, hydrostatic, a2b_ord, d_ext)
+   ptop, hydrostatic, d_ext)
 
-integer, intent(IN) :: ng, npx, npy, npz, a2b_ord
+integer, intent(IN) :: ng, npx, npy, npz
 real,    intent(IN) :: dt, ptop, d_ext
 logical, intent(in) :: hydrostatic
 type(fv_grid_bounds_type), intent(IN) :: bd
@@ -1954,24 +1954,16 @@ do j=js,je+1
    enddo
 enddo
 
-!$OMP parallel do default(none) shared(npz,isd,jsd,pk,gridstruct,npx,npy,is,ie,js,je,ng,a2b_ord) &
+!$OMP parallel do default(none) shared(npz,isd,jsd,pk,gridstruct,npx,npy,is,ie,js,je,ng) &
 !$OMP                          private(wk)
 do k=2,npz+1
-   if ( a2b_ord==4 ) then
-      call a2b_ord4(pk(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
-   else
-      call a2b_ord2(pk(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
-   endif
+   call a2b_ord4(pk(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
 enddo
 
-!$OMP parallel do default(none) shared(npz,isd,jsd,gz,gridstruct,npx,npy,is,ie,js,je,ng,a2b_ord) &
+!$OMP parallel do default(none) shared(npz,isd,jsd,gz,gridstruct,npx,npy,is,ie,js,je,ng) &
 !$OMP                          private(wk)
 do k=1,npz+1
-   if ( a2b_ord==4 ) then
-      call a2b_ord4( gz(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
-   else
-      call a2b_ord2( gz(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
-   endif
+   call a2b_ord4( gz(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
 enddo
 
 if ( d_ext > 0. ) then
@@ -2004,7 +1996,7 @@ else
 
 endif
 
-!$OMP parallel do default(none) shared(is,ie,js,je,npz,pk,delp,hydrostatic,a2b_ord,gridstruct, &
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,pk,delp,hydrostatic,gridstruct, &
 !$OMP                                  npx,npy,isd,jsd,ng,u,v,wk2,dt,gz,wk1) &
 !$OMP                          private(wk)
 do k=1,npz
@@ -2016,11 +2008,7 @@ do k=1,npz
          enddo
       enddo
    else
-      if ( a2b_ord==4 ) then
-         call a2b_ord4(delp(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng)
-      else
-         call a2b_ord2(delp(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng)
-      endif
+      call a2b_ord4(delp(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng)
    endif
 
    do j=js,je+1
@@ -2042,9 +2030,9 @@ enddo    ! end k-loop
 end subroutine one_grad_p
 
 
-subroutine grad1_p_update(divg2, u, v, pk, gz, dt, ng, gridstruct, bd, npx, npy, npz, ptop, beta, a2b_ord)
+subroutine grad1_p_update(divg2, u, v, pk, gz, dt, ng, gridstruct, bd, npx, npy, npz, ptop, beta)
 
-integer, intent(in) :: ng, npx, npy, npz, a2b_ord
+integer, intent(in) :: ng, npx, npy, npz
 real,    intent(in) :: dt, ptop, beta
 type(fv_grid_bounds_type), intent(IN) :: bd
 real, intent(in):: divg2(bd%is:bd%ie+1,bd%js:bd%je+1)
@@ -2082,24 +2070,16 @@ do j=js,je+1
       pk(i,j,1) = top_value
    enddo
 enddo
-!$OMP parallel do default(none) shared(npz,isd,jsd,pk,gridstruct,npx,npy,is,ie,js,je,ng,a2b_ord) &
+!$OMP parallel do default(none) shared(npz,isd,jsd,pk,gridstruct,npx,npy,is,ie,js,je,ng) &
 !$OMP                          private(wk)
 do k=2,npz+1
-   if ( a2b_ord==4 ) then
-      call a2b_ord4(pk(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
-   else
-      call a2b_ord2(pk(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
-   endif
+   call a2b_ord4(pk(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
 enddo
 
-!$OMP parallel do default(none) shared(npz,isd,jsd,gz,gridstruct,npx,npy,is,ie,js,je,ng,a2b_ord) &
+!$OMP parallel do default(none) shared(npz,isd,jsd,gz,gridstruct,npx,npy,is,ie,js,je,ng) &
 !$OMP                          private(wk)
 do k=1,npz+1
-   if ( a2b_ord==4 ) then
-      call a2b_ord4( gz(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
-   else
-      call a2b_ord2( gz(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
-   endif
+   call a2b_ord4( gz(isd,jsd,k), wk, gridstruct, npx, npy, is, ie, js, je, ng, .true.)
 enddo
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,pk,u,beta,gz,divg2,alpha, &
@@ -2219,9 +2199,9 @@ do 1000 j=jfirst,jlast
  end subroutine  mix_dp
 
 
- subroutine geopk(ptop, pe, peln, delp, pk, gz, hs, pt, q_con, pkz, km, akap, CG, bounded_domain, computehalo, npx, npy, a2b_ord, bd)
+ subroutine geopk(ptop, pe, peln, delp, pk, gz, hs, pt, q_con, pkz, km, akap, CG, bounded_domain, computehalo, npx, npy, bd)
 
-   integer, intent(IN) :: km, npx, npy, a2b_ord
+   integer, intent(IN) :: km, npx, npy
    real   , intent(IN) :: akap, ptop
    type(fv_grid_bounds_type), intent(IN) :: bd
    real   , intent(IN) :: hs(bd%isd:bd%ied,bd%jsd:bd%jed)
@@ -2256,7 +2236,7 @@ do 1000 j=jfirst,jlast
       jsd = bd%jsd
       jed = bd%jed
 
-   if ( (.not. CG .and. a2b_ord==4) .or. (bounded_domain .and. .not. CG) ) then   ! D-Grid
+   if ( (.not. CG) .or. (bounded_domain .and. .not. CG) ) then   ! D-Grid
       ifirst = is-2; ilast = ie+2
       jfirst = js-2; jlast = je+2
    else

@@ -318,12 +318,12 @@ CONTAINS
 
   subroutine Riem_Solver_c(ms,   dt,  is,   ie,   js, je, km,   ng,  &
                            akap, cappa, cp,  ptop, hs, w3,  pt, q_con, &
-                           delp, gz,  pef,  ws, p_fac, a_imp, scale_m, &
+                           delp, gz,  pef,  ws, p_fac, a_imp, &
                            pfull, fast_tau_w_sec, rf_cutoff)
 
    integer, intent(in):: is, ie, js, je, ng, km
    integer, intent(in):: ms
-   real, intent(in):: dt,  akap, cp, ptop, p_fac, a_imp, scale_m, fast_tau_w_sec, rf_cutoff
+   real, intent(in):: dt,  akap, cp, ptop, p_fac, a_imp, fast_tau_w_sec, rf_cutoff
    real, intent(in):: ws(is-ng:ie+ng,js-ng:je+ng)
    real, intent(in), dimension(is-ng:ie+ng,js-ng:je+ng,km):: pt, delp
    real, intent(in), dimension(is-ng:,js-ng:,1:):: q_con, cappa
@@ -340,6 +340,7 @@ CONTAINS
   real(kind=8) :: rff_temp
   integer i, j, k
   integer is1, ie1
+  real, parameter :: scale_m = 0.0 ! diff_z = scale_m**2 * 0.25
 
     gama = 1./(1.-akap)
    rgrav = 1./grav
@@ -362,7 +363,7 @@ CONTAINS
 
 
 !$OMP parallel do default(none) shared(js,je,is1,ie1,km,delp,pef,ptop,gz,rgrav,w3,pt, &
-!$OMP                                  a_imp,dt,gama,akap,ws,p_fac,scale_m,ms,hs,q_con,cappa,fast_tau_w_sec) &
+!$OMP                                  a_imp,dt,gama,akap,ws,p_fac,ms,hs,q_con,cappa,fast_tau_w_sec) &
 !$OMP                          private(cp2,gm2, dm, dz2, w2, pm2, pe2, pem, peg)
    do 2000 j=js-1, je+1
 
@@ -449,7 +450,7 @@ CONTAINS
                           isd, ied, jsd, jed, akap, cappa, cp,     &
                           ptop, zs, q_con, w,  delz, pt,  &
                           delp, zh, pe, ppe, pk3, pk, peln, &
-                          ws, scale_m,  p_fac, a_imp, &
+                          ws,  p_fac, a_imp, &
                           use_logp, last_call, fp_out)
 !--------------------------------------------
 ! !OUTPUT PARAMETERS
@@ -460,7 +461,7 @@ CONTAINS
    integer, intent(in):: ms, is, ie, js, je, km, ng
    integer, intent(in):: isd, ied, jsd, jed
    real, intent(in):: dt         ! the BIG horizontal Lagrangian time step
-   real, intent(in):: akap, cp, ptop, p_fac, a_imp, scale_m
+   real, intent(in):: akap, cp, ptop, p_fac, a_imp
    real, intent(in):: zs(isd:ied,jsd:jed)
    logical, intent(in):: last_call, use_logp, fp_out
    real, intent(in):: ws(is:ie,js:je)
@@ -479,6 +480,7 @@ CONTAINS
   real, dimension(is:ie,km+1)::pem, pe2, peln2, peg, pelng
   real gama, rgrav, ptk, peln1
   integer i, j, k
+  real, parameter :: scale_m = 0.0 ! diff_z = scale_m**2 * 0.25
 
     gama = 1./(1.-akap)
    rgrav = 1./grav
@@ -486,7 +488,7 @@ CONTAINS
      ptk = exp(akap*peln1)
 
 !$OMP parallel do default(none) shared(is,ie,js,je,km,delp,ptop,peln1,pk3,ptk,akap,rgrav,zh,pt, &
-!$OMP                                  w,a_imp,dt,gama,ws,p_fac,scale_m,ms,delz,last_call,  &
+!$OMP                                  w,a_imp,dt,gama,ws,p_fac,ms,delz,last_call,  &
 !$OMP                                  peln,pk,fp_out,ppe,use_logp,zs,pe,cappa,q_con )          &
 !$OMP                          private(cp2, gm2, dm, dz2, pm2, pem, peg, pelng, pe2, peln2, w2)
    do 2000 j=js, je

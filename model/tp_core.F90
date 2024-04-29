@@ -71,6 +71,11 @@ module tp_core_mod
 !   q(i+0.5) = p1*(q(i-1)+q(i)) + p2*(q(i-2)+q(i+1))
 ! integer:: is, ie, js, je, isd, ied, jsd, jed
 
+  !List of schemes for tracer setup
+  integer, public, parameter :: tp_mono_schemes(1) = (/8/)
+  integer, public, parameter :: tp_PD_schemes(5) = (/-5, 7, 9, 12, 13/)
+  integer, public, parameter :: tp_unlim_schemes(8) = (/1, 2, 3, 4, 5, 6, 10, 11/)
+  integer, public, parameter :: tp_valid_schemes(14) = (/-5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13/)
 !
 !EOP
 !-----------------------------------------------------------------------
