@@ -30,13 +30,14 @@ module intermediate_phys_mod
     use constants_mod, only: rdgas, grav
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, inline_mp_type
+    use fv_arrays_mod, only: fv_thermo_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, mtetw
-    
+
     implicit none
-    
+
     private
 
     real, parameter :: consv_min = 0.001
@@ -46,19 +47,19 @@ module intermediate_phys_mod
     ! -----------------------------------------------------------------------
     ! precision definition
     ! -----------------------------------------------------------------------
-    
+
     integer, parameter :: r8 = 8 ! double precision
-    
+
 contains
 
 subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_mp, &
-               gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+               gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
                do_inline_mp, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr)
-    
+
     implicit none
-    
+
     ! -----------------------------------------------------------------------
     ! input / output arguments
     ! -----------------------------------------------------------------------
@@ -75,9 +76,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
     real, intent (inout), dimension (is:, js:, 1:) :: delz
-    
+
     real, intent (inout), dimension (isd:, jsd:, 1:) :: q_con, cappa, w
-    
+
     real, intent (inout), dimension (is:ie, js:je) :: te0_2d
 
     real, intent (inout), dimension (isd:ied, jsd:jed, km) :: pt, delp
@@ -91,6 +92,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     real, intent (out), dimension (is:ie, js:je, km) :: pkz
 
     type (fv_grid_type), intent (in), target :: gridstruct
+
+    type (fv_thermo_type), intent (in), target :: thermostruct
 
     type (fv_grid_bounds_type), intent (in) :: bd
 
@@ -106,6 +109,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     integer :: i, j, k, m, kmp, sphum, liq_wat, ice_wat
     integer :: rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
+    integer :: k_con, k_cappa
 
     real :: rrg
 
@@ -122,13 +126,13 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     real, allocatable, dimension (:,:) :: dz, wa
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0
-    
+
     real (kind = r8), allocatable, dimension (:) :: tz
 
     real (kind = r8), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
 
     real (kind = r8), dimension (is:ie, 1:km) :: te_beg, te_end, tw_beg, tw_end
-    
+
     character (len = 32) :: tracer_units, tracer_name
 
     sphum = get_tracer_index (model_atmos, 'sphum')
@@ -168,6 +172,16 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         enddo
     endif
 
+    if (thermostruct%use_cond) then
+       k_con = kmp
+    else
+       k_con = 1
+    endif
+    if (thermostruct%moist_kappa) then
+       k_cappa = kmp
+    else
+       k_cappa = 1
+    endif
     !-----------------------------------------------------------------------
     ! Fast Saturation Adjustment >>>
     !-----------------------------------------------------------------------
@@ -187,7 +201,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    q, mdt, cld_amt, cappa, rrg, akap, ccn_cm3, &
 !$OMP                                    cin_cm3, aerosol, do_sat_adj, adj_mass_vmr, &
 !$OMP                                    conv_vmr_mmr, nq, consv_checker, te_err, tw_err, &
-!$OMP                                    inline_mp) &
+!$OMP                                    inline_mp,k_con,k_cappa,thermostruct) &
 !$OMP                           private (q2, q3, gsize, dz, pe, peln, adj_vmr, qliq, qsol, &
 !$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
 !$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)
@@ -210,7 +224,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             else
                 q3 (is:ie, kmp:km) = 0.0
             endif
- 
+
             ! initialize tendencies diagnostic
             if (allocated (inline_mp%liq_wat_dt)) inline_mp%liq_wat_dt (is:ie, j, kmp:km) = &
                 inline_mp%liq_wat_dt (is:ie, j, kmp:km) - q (is:ie, j, kmp:km, liq_wat)
@@ -280,16 +294,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      q (is:ie, j, kmp:km, graupel), q (is:ie, j, kmp:km, cld_amt), &
                      q2 (is:ie, kmp:km), q3 (is:ie, kmp:km), hs (is:ie, j), &
                      dz (is:ie, kmp:km), pt (is:ie, j, kmp:km), delp (is:ie, j, kmp:km), &
-#ifdef USE_COND
-                     q_con (is:ie, j, kmp:km), &
-#else
-                     q_con (isd:, jsd, 1:), &
-#endif
-#ifdef MOIST_CAPPA
-                     cappa (is:ie, j, kmp:km), &
-#else
-                     cappa (isd:, jsd, 1:), &
-#endif
+                     q_con (is:ie, j, k_con:), cappa (is:ie, j, k_cappa:), &
                      gsize, inline_mp%mppcw (is:ie, j), inline_mp%mppew (is:ie, j), inline_mp%mppe1 (is:ie, j), &
                      inline_mp%mpper (is:ie, j), inline_mp%mppdi (is:ie, j), inline_mp%mppd1 (is:ie, j), &
                      inline_mp%mppds (is:ie, j), inline_mp%mppdg (is:ie, j), inline_mp%mppsi (is:ie, j), &
@@ -299,7 +304,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      inline_mp%mppm2 (is:ie, j), inline_mp%mppm3 (is:ie, j), inline_mp%mppar (is:ie, j), &
                      inline_mp%mppas (is:ie, j), inline_mp%mppag (is:ie, j), inline_mp%mpprs (is:ie, j), &
                      inline_mp%mpprg (is:ie, j), inline_mp%mppxr (is:ie, j), inline_mp%mppxs (is:ie, j), &
-                     inline_mp%mppxg (is:ie, j), last_step, do_sat_adj)
+                     inline_mp%mppxg (is:ie, j), last_step, do_sat_adj, &
+                     thermostruct%use_cond, thermostruct%moist_kappa)
 
             ! update non-microphyiscs tracers due to mass change
             if (adj_mass_vmr) then
@@ -334,16 +340,16 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
             ! update pkz
             if (.not. hydrostatic) then
-#ifdef MOIST_CAPPA
-                pkz (is:ie, j, kmp:km) = exp (cappa (is:ie, j, kmp:km) * &
-                    log (rrg * delp (is:ie, j, kmp:km) / &
-                    delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
-#else
-                pkz (is:ie, j, kmp:km) = exp (akap * log (rrg * delp (is:ie, j, kmp:km) / &
-                    delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
-#endif
+               if (thermostruct%moist_kappa) then
+                  pkz (is:ie, j, kmp:km) = exp (cappa (is:ie, j, kmp:km) * &
+                       log (rrg * delp (is:ie, j, kmp:km) / &
+                       delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
+               else
+                  pkz (is:ie, j, kmp:km) = exp (akap * log (rrg * delp (is:ie, j, kmp:km) / &
+                       delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
+               endif
             endif
- 
+
             ! total energy checker
             if (consv_checker) then
                 qliq (is:ie, kmp:km) = q (is:ie, j, kmp:km, liq_wat) + q (is:ie, j, kmp:km, rainwat)
@@ -461,7 +467,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    gridstruct, q, mdt, cld_amt, cappa, rrg, akap, &
 !$OMP                                    ccn_cm3, cin_cm3, inline_mp, do_inline_mp, consv_checker, &
 !$OMP                                    u_dt, v_dt, aerosol, adj_mass_vmr, conv_vmr_mmr, nq, &
-!$OMP                                    te_err, tw_err) &
+!$OMP                                    te_err, tw_err, k_con, k_cappa, thermostruct) &
 !$OMP                           private (q2, q3, gsize, dz, wa, pe, peln, adj_vmr, qliq, qsol, &
 !$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
 !$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss)
@@ -484,7 +490,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             else
                 q3 (is:ie, kmp:km) = 0.0
             endif
- 
+
             ! note: ua and va are A-grid variables
             ! note: pt is virtual temperature at this point
             ! note: w is vertical velocity (m/s)
@@ -579,16 +585,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      inline_mp%prew (is:ie, j), inline_mp%prer (is:ie, j), &
                      inline_mp%prei (is:ie, j), inline_mp%pres (is:ie, j), &
                      inline_mp%preg (is:ie, j), hydrostatic, is, ie, kmp, km, &
-#ifdef USE_COND
-                     q_con (is:ie, j, kmp:km), &
-#else
-                     q_con (isd:, jsd, 1:), &
-#endif
-#ifdef MOIST_CAPPA
-                     cappa (is:ie, j, kmp:km), &
-#else
-                     cappa (isd:, jsd, 1:), &
-#endif
+                     q_con (is:ie, j, k_con:), cappa (is:ie, j, k_cappa:), &
                      consv .gt. consv_min, adj_vmr (is:ie, kmp:km), te (is:ie, j, kmp:km), dte (is:ie), &
                      inline_mp%prefluxw(is:ie, j, kmp:km), &
                      inline_mp%prefluxr(is:ie, j, kmp:km), inline_mp%prefluxi(is:ie, j, kmp:km), &
@@ -602,7 +599,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      inline_mp%mppm2 (is:ie, j), inline_mp%mppm3 (is:ie, j), inline_mp%mppar (is:ie, j), &
                      inline_mp%mppas (is:ie, j), inline_mp%mppag (is:ie, j), inline_mp%mpprs (is:ie, j), &
                      inline_mp%mpprg (is:ie, j), inline_mp%mppxr (is:ie, j), inline_mp%mppxs (is:ie, j), &
-                     inline_mp%mppxg (is:ie, j), last_step, do_inline_mp)
+                     inline_mp%mppxg (is:ie, j), last_step, do_inline_mp, &
+                     thermostruct%use_cond, thermostruct%moist_kappa)
 
             ! update non-microphyiscs tracers due to mass change
             if (adj_mass_vmr) then
@@ -655,16 +653,16 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
             ! update pkz
             if (.not. hydrostatic) then
-#ifdef MOIST_CAPPA
-                pkz (is:ie, j, kmp:km) = exp (cappa (is:ie, j, kmp:km) * &
-                    log (rrg * delp (is:ie, j, kmp:km) / &
-                    delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
-#else
-                pkz (is:ie, j, kmp:km) = exp (akap * log (rrg * delp (is:ie, j, kmp:km) / &
-                    delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
-#endif
+               if (thermostruct%moist_kappa) then
+                  pkz (is:ie, j, kmp:km) = exp (cappa (is:ie, j, kmp:km) * &
+                       log (rrg * delp (is:ie, j, kmp:km) / &
+                       delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
+               else
+                  pkz (is:ie, j, kmp:km) = exp (akap * log (rrg * delp (is:ie, j, kmp:km) / &
+                       delz (is:ie, j, kmp:km) * pt (is:ie, j, kmp:km)))
+               endif
             endif
- 
+
             ! total energy checker
             if (consv_checker) then
                 qliq (is:ie, kmp:km) = q (is:ie, j, kmp:km, liq_wat) + q (is:ie, j, kmp:km, rainwat)

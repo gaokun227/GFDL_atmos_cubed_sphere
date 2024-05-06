@@ -1897,14 +1897,14 @@ contains
                            fname_ne, fname_sw, 'delz', var_bc=Atm%neststruct%delz_BC, mandatory=.false.)
 !                           fname_ne, fname_sw, 'delz', Atm%delz, Atm%neststruct%delz_BC, mandatory=.false.)
     endif
-#ifdef USE_COND
+    if (Atm%thermostruct%use_cond) then
        call register_bcs_3d(Atm, Atm%neststruct%BCfile_ne, Atm%neststruct%BCfile_sw, &
                             fname_ne, fname_sw,'q_con', var_bc=Atm%neststruct%q_con_BC, mandatory=.false.)
-#ifdef MOIST_CAPPA
+    endif
+    if (Atm%thermostruct%moist_kappa) then
        call register_bcs_3d(Atm, Atm%neststruct%BCfile_ne, Atm%neststruct%BCfile_sw, &
             fname_ne, fname_sw, 'cappa', var_bc=Atm%neststruct%cappa_BC, mandatory=.false.)
-#endif
-#endif
+    endif
 #endif
     if (Atm%flagstruct%is_ideal_case) then
        call register_bcs_3d(Atm, Atm%neststruct%BCfile_ne, Atm%neststruct%BCfile_sw, &

@@ -434,12 +434,12 @@ contains
   end subroutine debug_column
 
   subroutine debug_column_dyn(pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
-       npz, ncnst, sphum, nwat, zvir, ptop, hydrostatic, bd, Time, k_step, n_step)
+       npz, ncnst, sphum, nwat, zvir, ptop, hydrostatic, moist_kappa, bd, Time, k_step, n_step)
 
     type(fv_grid_bounds_type), intent(IN) :: bd
     integer, intent(IN) :: npz, ncnst, sphum, nwat, k_step, n_step
     real, intent(IN) :: akap, zvir, ptop
-    logical, intent(IN) :: hydrostatic
+    logical, intent(IN) :: hydrostatic, moist_kappa
     real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: pt, delp, w
     real, dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz), intent(IN) :: heat_source
     real, dimension(bd%is:, bd%js:,1:), intent(IN) :: delz
@@ -524,13 +524,13 @@ contains
                 cond = cond + q(i,j,k,l)
              enddo
              virt = (1.+zvir*q(i,j,k,sphum))
-#ifdef MOIST_CAPPA
-             pres = exp(1./(1.-cappa(i,j,k))*log(rdg*(delp(i,j,k)-cond)/delz(i,j,k)*pt(i,j,k)) )
-             pk = exp(cappa(i,j,k)*log(pres))
-#else
-             pres = exp(1./(1.-akap)*log(rdg*(delp(i,j,k))/delz(i,j,k)*pt(i,j,k)) )
-             pk = exp(akap*log(pres))
-#endif
+             if (moist_kappa) then
+                pres = exp(1./(1.-cappa(i,j,k))*log(rdg*(delp(i,j,k)-cond)/delz(i,j,k)*pt(i,j,k)) )
+                pk = exp(cappa(i,j,k)*log(pres))
+             else
+                pres = exp(1./(1.-akap)*log(rdg*(delp(i,j,k))/delz(i,j,k)*pt(i,j,k)) )
+                pk = exp(akap*log(pres))
+             endif
              temp = pt(i,j,k)*pk/virt
              heats = heat_source(i,j,k) / (cv_air*delp(i,j,k))
              write(unit,'(I4, F7.2, F8.3, I6, F8.3, F8.3, F8.3, F8.3, F9.5, F9.3, F9.3, 1x, G9.3 )') &

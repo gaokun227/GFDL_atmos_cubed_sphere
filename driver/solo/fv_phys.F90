@@ -23,7 +23,8 @@ module fv_phys_mod
 
 use constants_mod,         only: grav, rdgas, rvgas, pi, cp_air, cp_vapor, hlv, kappa
 use fv_arrays_mod,         only: radius, omega ! scaled for small earth
-use fv_arrays_mod,         only: fv_grid_type, fv_flags_type, fv_nest_type, fv_grid_bounds_type
+use fv_arrays_mod,         only: fv_grid_type, fv_flags_type, fv_nest_type
+use fv_arrays_mod,         only: fv_grid_bounds_type, fv_thermo_type
 use fv_arrays_mod,         only: phys_diag_type, nudge_diag_type, sg_diag_type
 
 use time_manager_mod,      only: time_type, get_time
@@ -188,7 +189,7 @@ contains
                     u_srf, v_srf, ts, delz, hydrostatic,         &
                     oro, rayf, p_ref,                            &
                     do_Held_Suarez, gridstruct, flagstruct,      &
-                    neststruct, nwat, bd, domain,                & !S-J: Need to update fv_phys call
+                    neststruct, thermostruct, nwat, bd, domain,  & !S-J: Need to update fv_phys call
                     Time, phys_diag, nudge_diag, sg_diag, time_total)
 
     integer, INTENT(IN   ) :: npx, npy, npz
@@ -227,6 +228,7 @@ contains
     type(fv_grid_type) :: gridstruct
     type(fv_flags_type) :: flagstruct
     type(fv_nest_type) :: neststruct
+    type(fv_thermo_type) :: thermostruct
     type(fv_grid_bounds_type), intent(IN) :: bd
     type(domain2d), intent(INOUT) :: domain
 
@@ -491,7 +493,8 @@ contains
        endif
        call K_warm_rain(pdt, is, ie, js, je, ng, npz, nq, zvir, ua, va,   &
                         w, u_dt, v_dt, q, pt, delp, delz, &
-                        pe, peln, pk, ps, rain, Time, flagstruct%hydrostatic)
+                        pe, peln, pk, ps, rain, Time, &
+                        flagstruct%hydrostatic, thermostruct%moist_kappa)
 
        if( K_sedi_transport )  no_tendency = .false.
        if (do_terminator) then
@@ -1987,12 +1990,12 @@ endif
  end function g0_sum
 
  subroutine K_warm_rain(dt, is, ie, js, je, ng, km, nq, zvir, u, v, w, u_dt, v_dt, &
-                        q, pt, dp, delz, pe, peln, pk, ps, rain, Time, hydrostatic)
+                        q, pt, dp, delz, pe, peln, pk, ps, rain, Time, hydrostatic, moist_kappa)
  type (time_type), intent(in) :: Time
  real, intent(in):: dt ! time step
  real, intent(in):: zvir
  integer, intent(in):: is, ie, js, je, km, ng, nq
- logical, intent(in) :: hydrostatic
+ logical, intent(in) :: hydrostatic, moist_kappa
  real, intent(inout), dimension(is-ng:ie+ng,js-ng:je+ng,km):: dp, pt, w, u, v, u_dt, v_dt
  real, intent(inout), dimension(is   :ie   ,js   :je   ,km):: delz
  real, intent(inout), dimension(is-ng:ie+ng,js-ng:je+ng,km,nq):: q
@@ -2098,7 +2101,7 @@ endif
        endif
          endif
       enddo
-      call kessler_imp( t1, q1, q2, q3, vr, drym, sdt, dz, km )
+      call kessler_imp( t1, q1, q2, q3, vr, drym, sdt, dz, km, moist_kappa )
 
 ! Retrive rain_flux from non-local changes in total water
        m1(1) = drym(1)*(q0(1)-(q1(1)+q2(1)+q3(1))) ! Pa * kg/kg (dry) = kg * (g/dA)
@@ -2196,7 +2199,7 @@ endif
  ! numerical techniques, implemented consistently with
  ! the FV3 dynamics. You can think of this as a "lite"
  ! version of the GFDL MP.
- subroutine kessler_imp( T, qv, qc, qr, vr, drym, dt, dz, NZ )
+ subroutine kessler_imp( T, qv, qc, qr, vr, drym, dt, dz, NZ, moist_kappa )
 ! T  - TEMPERATURE (K)
 ! QV - WATER VAPOR MIXING RATIO (GM/GM)
 ! qc - CLOUD WATER MIXING RATIO (GM/GM)
@@ -2214,6 +2217,7 @@ endif
    REAL, intent(in)   :: drym(nz), dz(nz)
    REAL, intent(inout):: T(NZ), qv(NZ), qc(NZ), qr(NZ)
    real, intent(out):: vr(nz)   ! terminal fall speed of rain * dt
+   logical, intent(in) :: moist_kappa
 ! Local:
    real, parameter:: qr_min = 1.e-8
    real, parameter:: vr_min = 1.e-3
@@ -2236,32 +2240,53 @@ endif
       qr(k) = (dz(k)*qr(k)+qr(k-1)*r(k-1)*dt*vr(k-1)/r(k)) / (dz(k)+dt*vr(k))
    enddo
 
-   do k=1,nz
-! Autoconversion and accretion rates following K&W78 Eq. 2.13a,b
-      QRPROD = qc(k) - (qc(k)-dt*max(.001*(qc(k)-.001),0.))/(1.+dt*2.2*qr(k)**.875)
-       qc(K) = qc(k) - QRPROD
-       qr(K) = qr(k) + QRPROD
-      rqr(k) = r(k)*max(qr(k), qr_min)
-      QVS =  qs_wat(T(k), rho(k), dqsdt)
-#ifdef MOIST_CAPPA
-      hlvm = (Lv0+dc_vap*T(k)) / (cv_air+qv(k)*cv_vap+(qc(k)+qr(k))*c_liq)
-#else
-      hlvm = hlv / cv_air
-#endif
-      PROD = (qv(k)-QVS) / (1.+dqsdt*hlvm)
-! Evaporation rate following K&W78 Eq3. 3.8-3.10
-      ERN = min(dt*(((1.6+124.9*rqr(k)**.2046)   &
-          *rqr(k)**.525)/(2.55E6*pc(K)           &
-          /(3.8 *QVS)+5.4E5))*(DIM(QVS,qv(K))    &
-          /(r(k)*QVS)),max(-PROD-qc(k),0.), qr(k))
-! Saturation adjustment following K&W78 Eq.2.14a,b
-        dq = max(PROD, -qc(k))
-        T(k) = T(k) + hlvm*(dq-ERN)
-! The following conserves total water
-       qv(K) = qv(K) - dq + ERN
-       qc(K) = qc(K) + dq
-       qr(K) = qr(K) - ERN
-   enddo
+   if (moist_kappa) then
+      do k=1,nz
+   ! Autoconversion and accretion rates following K&W78 Eq. 2.13a,b
+         QRPROD = qc(k) - (qc(k)-dt*max(.001*(qc(k)-.001),0.))/(1.+dt*2.2*qr(k)**.875)
+          qc(K) = qc(k) - QRPROD
+          qr(K) = qr(k) + QRPROD
+         rqr(k) = r(k)*max(qr(k), qr_min)
+         QVS =  qs_wat(T(k), rho(k), dqsdt)
+         hlvm = (Lv0+dc_vap*T(k)) / (cv_air+qv(k)*cv_vap+(qc(k)+qr(k))*c_liq) !moist_kappa calc
+         PROD = (qv(k)-QVS) / (1.+dqsdt*hlvm)
+   ! Evaporation rate following K&W78 Eq3. 3.8-3.10
+         ERN = min(dt*(((1.6+124.9*rqr(k)**.2046)   &
+             *rqr(k)**.525)/(2.55E6*pc(K)           &
+             /(3.8 *QVS)+5.4E5))*(DIM(QVS,qv(K))    &
+             /(r(k)*QVS)),max(-PROD-qc(k),0.), qr(k))
+   ! Saturation adjustment following K&W78 Eq.2.14a,b
+           dq = max(PROD, -qc(k))
+           T(k) = T(k) + hlvm*(dq-ERN)
+   ! The following conserves total water
+          qv(K) = qv(K) - dq + ERN
+          qc(K) = qc(K) + dq
+          qr(K) = qr(K) - ERN
+      enddo
+   else
+      do k=1,nz
+   ! Autoconversion and accretion rates following K&W78 Eq. 2.13a,b
+         QRPROD = qc(k) - (qc(k)-dt*max(.001*(qc(k)-.001),0.))/(1.+dt*2.2*qr(k)**.875)
+          qc(K) = qc(k) - QRPROD
+          qr(K) = qr(k) + QRPROD
+         rqr(k) = r(k)*max(qr(k), qr_min)
+         QVS =  qs_wat(T(k), rho(k), dqsdt)
+         hlvm = hlv / cv_air
+         PROD = (qv(k)-QVS) / (1.+dqsdt*hlvm)
+   ! Evaporation rate following K&W78 Eq3. 3.8-3.10
+         ERN = min(dt*(((1.6+124.9*rqr(k)**.2046)   &
+             *rqr(k)**.525)/(2.55E6*pc(K)           &
+             /(3.8 *QVS)+5.4E5))*(DIM(QVS,qv(K))    &
+             /(r(k)*QVS)),max(-PROD-qc(k),0.), qr(k))
+   ! Saturation adjustment following K&W78 Eq.2.14a,b
+           dq = max(PROD, -qc(k))
+           T(k) = T(k) + hlvm*(dq-ERN)
+   ! The following conserves total water
+          qv(K) = qv(K) - dq + ERN
+          qc(K) = qc(K) + dq
+          qr(K) = qr(K) - ERN
+      enddo
+   endif !moist cappa
 
  end subroutine kessler_imp
 
