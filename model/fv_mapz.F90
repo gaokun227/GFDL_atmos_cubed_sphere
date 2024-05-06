@@ -35,7 +35,7 @@ module fv_mapz_mod
   use fv_timing_mod,     only: timing_on, timing_off
   use intermediate_phys_mod, only: intermediate_phys
   use fv_operators_mod,  only: map_scalar, map1_ppm, mapn_tracer, map1_q2, map1_cubic
-  use fv_thermodynamics_mod, only: moist_cv
+  use fv_thermodynamics_mod, only: moist_cv, fv_thermo_type
 
   implicit none
   real, parameter:: consv_min = 0.001   ! below which no correction applies
@@ -54,7 +54,7 @@ contains
                       nq, nwat, sphum, q_con, u, v, w, delz, pt, q, hs, r_vir, cp, te_err, tw_err, &
                       akap, cappa, kord_mt, kord_wz, kord_tr, kord_tm, remap_te, peln, te0_2d,        &
                       ng, ua, va, omga, te, ws, fill, reproduce_sum,      &
-                      ptop, ak, bk, pfull, gridstruct, domain, do_sat_adj, &
+                      ptop, ak, bk, pfull, gridstruct, thermostruct, domain, do_sat_adj, &
                       hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, inline_mp, bd, fv_debug, &
                       do_fast_phys, do_intermediate_phys, consv_checker, adj_mass_vmr)
@@ -101,6 +101,7 @@ contains
   real, intent(in) :: bk(km+1)
   real, intent(in):: pfull(km)
   type(fv_grid_type), intent(IN), target :: gridstruct
+  type(fv_thermo_type), intent(IN), target :: thermostruct
   type(domain2d), intent(INOUT) :: domain
   type(fv_grid_bounds_type), intent(IN) :: bd
 
@@ -170,7 +171,7 @@ contains
 !$OMP                                  graupel,q_con,sphum,cappa,r_vir,k1k,delp, &
 !$OMP                                  delz,akap,pkz,te,u,v,ps, gridstruct, last_step, &
 !$OMP                                  ak,bk,nq,isd,ied,jsd,jed,kord_tr,fill, adiabatic, &
-!$OMP                                  hs,w,ws,kord_wz,omga,rrg,kord_mt,pe4,cp,remap_te)    &
+!$OMP                                  hs,w,ws,kord_wz,omga,rrg,kord_mt,pe4,cp,remap_te,thermostruct)&
 !$OMP                          private(gz,cvm,kp,k_next,bkh,dp2,dlnp,tpe,   &
 !$OMP                                  pe0,pe1,pe2,pe3,pk1,pk2,pn2,phis,q2,w2)
 
@@ -202,24 +203,21 @@ contains
                     enddo
                  enddo
               else
-                 ! Transform "density pt" to "density temp"
+                 ! Transform "density pt" to "density temp". (OK to have flag in outer loop)
                  do k=1,km
-#ifdef MOIST_CAPPA
-                    call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
-                         ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie))
-                    do i=is,ie
-                       q_con(i,j,k) = gz(i)
-                       cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
-                       pt(i,j,k) = pt(i,j,k)*exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-                    enddo
-#else
-                    do i=is,ie
-                       pt(i,j,k) = pt(i,j,k)*exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-                       ! Using dry pressure for the definition of the virtual potential temperature
-                       !                    pt(i,j,k) = pt(i,j,k)*exp(k1k*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*    &
-                       !                                              pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
-                    enddo
-#endif
+                    if (thermostruct%moist_kappa) then
+                       call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                            ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie))
+                       do i=is,ie
+                          q_con(i,j,k) = gz(i)
+                          cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
+                          pt(i,j,k) = pt(i,j,k)*exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                       enddo
+                    else
+                       do i=is,ie
+                          pt(i,j,k) = pt(i,j,k)*exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                       enddo
+                    endif !moist_kappa
                  enddo
               endif         ! hydro test
 
@@ -227,7 +225,7 @@ contains
            endif !kord_tm
         else
            !----------------------------------
-           ! Compute cp*T + KE +phis
+           ! remap_te: Compute cp*T + KE +phis
            do i=is,ie
               phis(i,km+1) = hs(i,j)
            enddo
@@ -256,29 +254,29 @@ contains
                  do i=is,ie
                     phis(i,k) = phis(i,k+1) - grav*delz(i,j,k)
                  enddo
-#ifdef MOIST_CAPPA
-                 call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
-                      ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie))
-                 do i=is,ie
-                    q_con(i,j,k) = gz(i)
-                    cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
-                    pkz(i,j,k) = exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-                    te(i,j,k) = cvm(i)*pt(i,j,k)*pkz(i,j,k)/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i))) +     &
-                         0.5 * w(i,j,k)**2 + 0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
-                         v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                         (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)) +         &
-                         0.5*(phis(i,k+1)+phis(i,k))
-                 enddo
-#else
-                 do i=is,ie
-                    pkz(i,j,k) = exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-                    te(i,j,k) = cv_air*pt(i,j,k)*pkz(i,j,k)/(1.+r_vir*q(i,j,k,sphum)) +     &
-                         0.5 * w(i,j,k)**2 + 0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
-                         v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                         (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)) +         &
-                         0.5*(phis(i,k+1)+phis(i,k))
-                 enddo
-#endif
+                 if (thermostruct%moist_kappa) then
+                    call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                         ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie))
+                    do i=is,ie
+                       q_con(i,j,k) = gz(i)
+                       cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
+                       pkz(i,j,k) = exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                       te(i,j,k) = cvm(i)*pt(i,j,k)*pkz(i,j,k)/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i))) +     &
+                            0.5 * w(i,j,k)**2 + 0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
+                            v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                            (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)) +         &
+                            0.5*(phis(i,k+1)+phis(i,k))
+                    enddo
+                 else
+                    do i=is,ie
+                       pkz(i,j,k) = exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                       te(i,j,k) = cv_air*pt(i,j,k)*pkz(i,j,k)/(1.+r_vir*q(i,j,k,sphum)) +     &
+                            0.5 * w(i,j,k)**2 + 0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
+                            v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                            (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)) +         &
+                            0.5*(phis(i,k+1)+phis(i,k))
+                    enddo
+                 endif
               enddo
 
            endif !end hydrostatic test
@@ -452,43 +450,43 @@ contains
          if ( hydrostatic ) then
             do k=1,km
                do i=is,ie
-                  pkz(i,j,k) = (pk2(i,k+1)-pk2(i,k))/(akap*(peln(i,k+1,j)-peln(i,k,j)))
+                  pkz(i,j,k) = (pk2(i,k+1)-pk2(i,k))/(akap*(peln(i,k+1,j)-peln(i,k,j))) !MOIST_CAPPA not supported
                enddo
             enddo
          else
             ! Note: pt at this stage is T_v or T_m , unless kord_tm > 0
             do k=1,km
-#ifdef MOIST_CAPPA
-               call moist_cv(is,ie+1,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
-                    ice_wat, snowwat, graupel, q, gz(is:ie+1), cvm(is:ie+1))
-               if ( kord_tm < 0 ) then
-                  do i=is,ie
-                     q_con(i,j,k) = gz(i)
-                     cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
-                     pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-                  enddo
+               if (thermostruct%moist_kappa) then
+                  call moist_cv(is,ie+1,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                       ice_wat, snowwat, graupel, q, gz(is:ie+1), cvm(is:ie+1))
+                  if ( kord_tm < 0 ) then
+                     do i=is,ie
+                        q_con(i,j,k) = gz(i)
+                        cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
+                        pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                     enddo
+                  else
+                     do i=is,ie
+                        q_con(i,j,k) = gz(i)
+                        cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
+                        pkz(i,j,k) = exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                     enddo
+                  endif
                else
-                  do i=is,ie
-                     q_con(i,j,k) = gz(i)
-                     cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
-                     pkz(i,j,k) = exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-                  enddo
-               endif
-#else
-               if ( kord_tm < 0 ) then
-                  do i=is,ie
-                     pkz(i,j,k) = exp(akap*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-                     ! Using dry pressure for the definition of the virtual potential temperature
-                     !             pkz(i,j,k) = exp(akap*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
-                  enddo
-               else
-                  do i=is,ie
-                     pkz(i,j,k) = exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-                     ! Using dry pressure for the definition of the virtual potential temperature
-                     !             pkz(i,j,k) = exp(k1k*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
-                  enddo
-               endif
-#endif
+                  if ( kord_tm < 0 ) then
+                     do i=is,ie
+                        pkz(i,j,k) = exp(akap*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                        ! Using dry pressure for the definition of the virtual potential temperature
+                        !             pkz(i,j,k) = exp(akap*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
+                     enddo
+                  else
+                     do i=is,ie
+                        pkz(i,j,k) = exp(k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                        ! Using dry pressure for the definition of the virtual potential temperature
+                        !             pkz(i,j,k) = exp(k1k*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
+                     enddo
+                  endif
+               endif !moist_kappa
             enddo
          endif
          if ( kord_tm > 0 ) then
@@ -576,7 +574,7 @@ contains
             phis(i,km+1) = hs(i,j)
          enddo
          ! calculate Tv from TE
-         if ( hydrostatic ) then
+         if ( hydrostatic ) then !MOIST_CAPPA not supported
             do k=km,1,-1
                do i=is,ie
                   tpe = te(i,j,k) - phis(i,k+1) - 0.25*gridstruct%rsin2(i,j)*(    &
@@ -590,27 +588,29 @@ contains
             enddo           ! end k-loop
          else
             do k=km,1,-1
-#ifdef MOIST_CAPPA
-               call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
-                    ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie))
-               do i=is,ie
-                  q_con(i,j,k) = gz(i)
-                  cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
-               enddo
-#endif
-               do i=is,ie
-                  phis(i,k) = phis(i,k+1) - delz(i,j,k)*grav
-                  tpe = te(i,j,k) - 0.5*(phis(i,k)+phis(i,k+1)) - 0.5*w(i,j,k)**2 - 0.25*gridstruct%rsin2(i,j)*(    &
-                       u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                       (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j) )
-#ifdef MOIST_CAPPA
-                  pt(i,j,k)= tpe / cvm(i)*(1.+r_vir*q(i,j,k,sphum))*(1.-gz(i))
-                  pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-#else
-                  pt(i,j,k)= tpe / cv_air *(1.+r_vir*q(i,j,k,sphum))
-                  pkz(i,j,k) = exp(akap*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
-#endif
-               enddo
+               if (thermostruct%moist_kappa) then
+                  call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                       ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie))
+                  do i=is,ie
+                     q_con(i,j,k) = gz(i)
+                     cappa(i,j,k) = rdgas / ( rdgas + cvm(i)/(1.+r_vir*q(i,j,k,sphum)) )
+                     phis(i,k) = phis(i,k+1) - delz(i,j,k)*grav
+                     tpe = te(i,j,k) - 0.5*(phis(i,k)+phis(i,k+1)) - 0.5*w(i,j,k)**2 - 0.25*gridstruct%rsin2(i,j)*(    &
+                          u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                          (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j) )
+                     pt(i,j,k)= tpe / cvm(i)*(1.+r_vir*q(i,j,k,sphum))*(1.-gz(i))
+                     pkz(i,j,k) = exp(cappa(i,j,k)*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                  enddo
+               else
+                  do i=is,ie
+                     phis(i,k) = phis(i,k+1) - delz(i,j,k)*grav
+                     tpe = te(i,j,k) - 0.5*(phis(i,k)+phis(i,k+1)) - 0.5*w(i,j,k)**2 - 0.25*gridstruct%rsin2(i,j)*(    &
+                          u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                          (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j) )
+                     pt(i,j,k)= tpe / cv_air *(1.+r_vir*q(i,j,k,sphum))
+                     pkz(i,j,k) = exp(akap*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)))
+                  enddo
+               endif
 
             enddo           ! end k-loop
          endif
@@ -645,7 +645,7 @@ contains
 !$OMP parallel do default(none) shared(is,ie,js,je,km,ptop,u,v,pe,isd,ied,jsd,jed,te_2d,delp, &
 !$OMP                                  hydrostatic,hs,rg,pt,peln,cp,delz,nwat,rainwat,liq_wat, &
 !$OMP                                  ice_wat,snowwat,graupel,q_con,r_vir,sphum,w,pk,pkz,zsum1, &
-!$OMP                                  zsum0,te0_2d,gridstruct,q,kord_tm,te,remap_te) &
+!$OMP                                  zsum0,te0_2d,gridstruct,q,kord_tm,te,remap_te,thermostruct) &
 !$OMP                          private(cvm,gz,phis)
         do j=js,je
            if ( remap_te ) then
@@ -689,25 +689,25 @@ contains
                  enddo
 
                  do k=1,km
-#ifdef USE_COND
-                    call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
-                         ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie))
-                    do i=is,ie
-                       ! KE using 3D winds:
-                       q_con(i,j,k) = gz(i)
-                       te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*(cvm(i)*pt(i,j,k)/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i))) + &
-                            0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
-                            u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                            (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))))
-                    enddo
-#else
-                    do i=is,ie
-                       te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*(cv_air*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum)) + &
-                            0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
-                            u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                            (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))))
-                    enddo
-#endif
+                    if (thermostruct%use_cond) then
+                       call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                            ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie))
+                       do i=is,ie
+                          ! KE using 3D winds:
+                          q_con(i,j,k) = gz(i)
+                          te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*(cvm(i)*pt(i,j,k)/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i))) + &
+                               0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
+                               u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                               (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))))
+                       enddo
+                    else
+                       do i=is,ie
+                          te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*(cv_air*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum)) + &
+                               0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
+                               u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                               (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))))
+                       enddo
+                    endif
                  enddo   ! k-loop
               endif  ! end non-hydro
            endif  ! end non remapping te
@@ -777,7 +777,7 @@ contains
         call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                  mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
                  v, w, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
-                 inline_mp, gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+                 inline_mp, gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
                  do_inline_mp, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr)
         call timing_off('INTERMEDIATE_PHYS')
     endif
@@ -790,31 +790,41 @@ contains
        ! 9a) Convert T_v/T_m to T if last_step
 !$OMP parallel do default(none) shared(is,ie,js,je,km,isd,ied,jsd,jed,hydrostatic,pt,adiabatic,cp, &
 !$OMP                                  nwat,rainwat,liq_wat,ice_wat,snowwat,graupel,r_vir,&
-!$OMP                                  sphum,pkz,dtmp,q) &
+!$OMP                                  sphum,pkz,dtmp,q,thermostruct) &
 !$OMP                          private(cvm,gz)
      do k=1,km
         do j=js,je
            if (hydrostatic) then !This is re-factored from AM4 so answers may be different
               do i=is,ie
-                 pt(i,j,k) = (pt(i,j,k)+dtmp/cp*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum))
+                 pt(i,j,k) = (pt(i,j,k)+dtmp/cp*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum)) !use_cond not implemented
               enddo
            else
-#ifdef USE_COND
-              call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
-                   ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie))
-              do i=is,ie
-                 pt(i,j,k) = (pt(i,j,k)+dtmp/cvm(i)*pkz(i,j,k))/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i)))
-              enddo
-#else
-              if ( .not. adiabatic ) then
+              if (thermostruct%use_cond) then
+                 call moist_cv(is,ie,isd,ied,jsd,jed, km, j, k, nwat, sphum, liq_wat, rainwat,    &
+                      ice_wat, snowwat, graupel, q, gz(is:ie), cvm(is:ie)) !gz is q_con
                  do i=is,ie
-                    pt(i,j,k) = (pt(i,j,k)+dtmp/cv_air*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum))
+                    pt(i,j,k) = (pt(i,j,k)+dtmp/cvm(i)*pkz(i,j,k))/((1.+r_vir*q(i,j,k,sphum))*(1.-gz(i)))
                  enddo
+              else
+                 if ( .not. adiabatic ) then
+                    do i=is,ie
+                       pt(i,j,k) = (pt(i,j,k)+dtmp/cv_air*pkz(i,j,k)) / (1.+r_vir*q(i,j,k,sphum))
+                    enddo
+                 endif
               endif
-#endif
            endif
         enddo   ! j-loop
      enddo  ! k-loop
+!!$     if (hydrostatic) then
+!!$        thermostruct%pt_is_virtual = .false.
+!!$     else
+!!$        if (thermostruct%use_cond) then
+!!$           thermostruct%pt_is_virtual = .false.
+!!$           thermostruct%pt_is_density = .false.
+!!$        else
+!!$           if (.not. adiabatic) thermostruct%pt_is_virtual = .false.
+!!$        endif
+!!$     endif
   else
      ! 9b) not last_step: convert T_v/T_m back to theta_v/theta_m for dyn_core
 !$OMP parallel do default(none) shared(is,ie,js,je,km,pkz,pt)
@@ -825,6 +835,7 @@ contains
            enddo
         enddo
      enddo
+     !thermostruct%pt_is_potential = .true.
   endif
 
  end subroutine Lagrangian_to_Eulerian

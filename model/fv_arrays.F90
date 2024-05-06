@@ -1008,12 +1008,8 @@ module fv_arrays_mod
      type(fv_nest_BC_type_3D), allocatable, dimension(:) :: q_BC
 #ifndef SW_DYNAMICS
      type(fv_nest_BC_type_3D) :: pt_BC, w_BC, delz_BC
-#ifdef USE_COND
      type(fv_nest_BC_type_3D) :: q_con_BC
-#ifdef MOIST_CAPPA
      type(fv_nest_BC_type_3D) :: cappa_BC
-#endif
-#endif
 #endif
 
      !points to same parent grid as does Atm%parent_grid
@@ -1224,6 +1220,28 @@ module fv_arrays_mod
                ,is_west_uvw  ,ie_west_uvw  ,js_west_uvw  ,je_west_uvw
 
   end type fv_regional_bc_bounds_type
+
+  type fv_thermo_type
+
+     !Option flags. If hydrostatic is set, for backwards-compatibility
+     ! the defaults are changed in fv_thermo_init() to both be false.
+     ! In either case, fv_thermo_nml will override the defaults.
+     logical :: use_cond = .true.
+     logical :: moist_kappa = .true.
+
+     !Simulation flags
+     logical :: pt_is_potential = .false.
+     logical :: pt_is_virtual   = .false.
+     logical :: pt_is_density   = .false.
+
+     real :: zvir = 0.0 !choose a better default
+
+     !integer, dimension(:), allocatable :: nwat_for_delp
+
+     logical :: is_initialized = .false.
+
+  end type fv_thermo_type
+
   type fv_atmos_type
 
      logical :: allocated = .false.
@@ -1394,6 +1412,7 @@ module fv_arrays_mod
      type(sg_diag_type) :: sg_diag
      type(coarse_restart_type) :: coarse_restart
      type(fv_coarse_graining_type) :: coarse_graining
+     type(fv_thermo_type) :: thermostruct
   end type fv_atmos_type
 
 contains
@@ -1609,11 +1628,11 @@ contains
        !         allocate ( mono(isd:ied, jsd:jed, npz))
     endif
 
-#ifdef USE_COND
+    if ( Atm%thermostruct%use_cond ) then
       allocate ( Atm%q_con(isd:ied,jsd:jed,1:npz) )
-#else
+   else
       allocate ( Atm%q_con(isd:isd,jsd:jsd,1) )
-#endif
+   endif
 
 ! Notes by SJL
 ! Place the memory in the optimal shared mem space
@@ -1896,12 +1915,13 @@ contains
 #ifndef SW_DYNAMICS
 
        call allocate_fv_nest_BC_type(Atm%neststruct%pt_BC,Atm,ns,0,0,dummy)
-#ifdef USE_COND
-       call allocate_fv_nest_BC_type(Atm%neststruct%q_con_BC,Atm,ns,0,0,dummy)
-#ifdef MOIST_CAPPA
-       call allocate_fv_nest_BC_type(Atm%neststruct%cappa_BC,Atm,ns,0,0,dummy)
-#endif
-#endif
+!About USE_COND and MOIST_CAPPA: We want to initialize these to length 1 in each dimension if the flags are not defined.
+       if ( Atm%thermostruct%use_cond) then
+          call allocate_fv_nest_BC_type(Atm%neststruct%q_con_BC,Atm,ns,0,0,dummy) !only initialize if using USE_COND
+       endif
+       if ( Atm%thermostruct%moist_kappa) then
+          call allocate_fv_nest_BC_type(Atm%neststruct%cappa_BC,Atm,ns,0,0,dummy) !only initialize if using MOIST_CAPPA
+       endif
        if (.not.Atm%flagstruct%hydrostatic) then
           call allocate_fv_nest_BC_type(Atm%neststruct%w_BC,Atm,ns,0,0,dummy)
           call allocate_fv_nest_BC_type(Atm%neststruct%delz_BC,Atm,ns,0,0,dummy)
@@ -2172,12 +2192,12 @@ contains
 
 #ifndef SW_DYNAMICS
        call deallocate_fv_nest_BC_type(Atm%neststruct%pt_BC)
-#ifdef USE_COND
-       call deallocate_fv_nest_BC_type(Atm%neststruct%q_con_BC)
-#ifdef MOIST_CAPPA
-       call deallocate_fv_nest_BC_type(Atm%neststruct%cappa_BC)
-#endif
-#endif
+       if ( Atm%thermostruct%use_cond ) then
+          call deallocate_fv_nest_BC_type(Atm%neststruct%q_con_BC)
+       endif
+       if ( Atm%thermostruct%moist_kappa ) then
+          call deallocate_fv_nest_BC_type(Atm%neststruct%cappa_BC)
+       endif
        if (.not.Atm%flagstruct%hydrostatic) then
           call deallocate_fv_nest_BC_type(Atm%neststruct%w_BC)
           call deallocate_fv_nest_BC_type(Atm%neststruct%delz_BC)

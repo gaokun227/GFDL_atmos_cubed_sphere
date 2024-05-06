@@ -497,7 +497,7 @@ module sw_core_mod
                    diss_est, zvir, sphum, nq, q, k, km, inline_q,  &
                    dt, hord_tr, hord_mt, hord_vt, hord_tm, hord_dp, nord,   &
                    nord_v, nord_w, nord_t, dddmp, d2_bg, d4_bg, damp_v, damp_w, &
-                   damp_t, d_con, hydrostatic, gridstruct, flagstruct, bd)
+                   damp_t, d_con, hydrostatic, gridstruct, flagstruct, use_cond, bd)
 
       integer, intent(IN):: hord_tr, hord_mt, hord_vt, hord_tm, hord_dp
       integer, intent(IN):: nord   ! nord=1 divergence damping; (del-4) or 3 (del-8)
@@ -507,9 +507,10 @@ module sw_core_mod
       integer, intent(IN):: sphum, nq, k, km
       real   , intent(IN):: dt, dddmp, d2_bg, d4_bg, d_con
       real   , intent(IN):: zvir
-      real,    intent(in):: damp_v, damp_w, damp_t, kgb
+      real   , intent(IN):: damp_v, damp_w, damp_t, kgb
+      logical, intent(IN):: use_cond
       type(fv_grid_bounds_type), intent(IN) :: bd
-      real, intent(inout):: divg_d(bd%isd:bd%ied+1,bd%jsd:bd%jed+1) ! divergence
+      real, intent(INOUT):: divg_d(bd%isd:bd%ied+1,bd%jsd:bd%jed+1) ! divergence
       real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: z_rat
       real, intent(INOUT), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: delp, pt, ua, va
       real, intent(INOUT), dimension(bd%isd:      ,  bd%jsd:      ):: w, q_con
@@ -988,15 +989,15 @@ module sw_core_mod
            enddo
         endif
 
-#ifdef USE_COND
+        if (use_cond) then
            call fv_tp_2d(q_con, crx_adv,cry_adv, npx, npy, hord_dp, gx, gy,  &
                 xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t)
-            do j=js,je
-               do i=is,ie
-                  q_con(i,j) = delp(i,j)*q_con(i,j) + (gx(i,j)-gx(i+1,j)+gy(i,j)-gy(i,j+1))*rarea(i,j)
-               enddo
-            enddo
-#endif
+           do j=js,je
+              do i=is,ie
+                 q_con(i,j) = delp(i,j)*q_con(i,j) + (gx(i,j)-gx(i+1,j)+gy(i,j)-gy(i,j+1))*rarea(i,j)
+              enddo
+           enddo
+        endif
 
 !    if ( inline_q .and. zvir>0.01 ) then
 !       do j=jsd,jed
@@ -1273,13 +1274,13 @@ module sw_core_mod
         endif
 
      endif
-#ifdef USE_COND
-     do j=js,je
+     if (use_cond) then
+        do j=js,je
         do i=is,ie
            q_con(i,j) = q_con(i,j)/delp(i,j)
         enddo
-     enddo
-#endif
+        enddo
+     endif
 
 !-----------------------------
 ! Compute divergence damping

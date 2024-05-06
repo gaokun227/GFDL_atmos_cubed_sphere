@@ -47,8 +47,8 @@ module dyn_core_mod
   use fv_nwp_nudge_mod,   only: breed_slp_inline, do_adiabatic_init
 #endif
   use diag_manager_mod,   only: send_data
-  use fv_arrays_mod,      only: fv_grid_type, fv_flags_type, fv_nest_type, fv_diag_type, &
-                                fv_grid_bounds_type, R_GRID, fv_nest_BC_type_3d
+  use fv_arrays_mod,      only: fv_grid_type, fv_flags_type, fv_nest_type, fv_diag_type
+  use fv_arrays_mod,      only: fv_grid_bounds_type, R_GRID, fv_nest_BC_type_3d, fv_thermo_type
 
   use boundary_mod,         only: extrapolation_BC,  nested_grid_BC_apply_intT
   use fv_regional_mod,      only: regional_boundary_update
@@ -73,8 +73,6 @@ public :: dyn_core, del2_cubed, init_ijk_mem
   real :: d3_damp
   real, allocatable, dimension(:,:,:) ::  ut, vt, crx, cry, xfx, yfx, divgd, &
                                           zh, du, dv, pkc, delpc, pk3, ptc, gz
-! real, parameter:: delt_max = 1.e-1   ! Max dissipative heating/cooling rate
-                                       ! 6 deg per 10-min
   real(kind=R_GRID), parameter :: cnst_0p20=0.20d0
 
   real, allocatable ::  rf(:)
@@ -92,7 +90,7 @@ contains
  subroutine dyn_core(npx, npy, npz, ng, sphum, nq, bdt, n_map, n_split, zvir, cp, akap, cappa, grav, hydrostatic,  &
                      u,  v,  w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va, &
                      uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, &
-                     ks, gridstruct, flagstruct, neststruct, idiag, bd, domain, &
+                     ks, gridstruct, flagstruct, neststruct, thermostruct, idiag, bd, domain, &
                      init_step, i_pack, end_step, heat_source, diss_est, consv, te0_2d, time_total)
     integer, intent(IN) :: npx
     integer, intent(IN) :: npy
@@ -159,6 +157,7 @@ contains
     type(fv_grid_type),  intent(INOUT), target :: gridstruct
     type(fv_flags_type), intent(IN),    target :: flagstruct
     type(fv_nest_type),  intent(INOUT)         :: neststruct
+    type(fv_thermo_type), intent(INOUT),target :: thermostruct
     type(fv_diag_type),  intent(IN)            :: idiag
     type(domain2d),      intent(INOUT)         :: domain
 
@@ -188,7 +187,7 @@ contains
     integer :: ms
 !---------------------------------------
     integer :: i,j,k, it, iq, n_con, nf_ke
-    integer :: iep1, jep1
+    integer :: iep1, jep1, k_q_con
     real    :: beta, beta_d, d_con_k, damp_w, damp_t, kgb, cv_air
     real    :: dt, dt2, rdt
     real    :: d2_divg
@@ -432,7 +431,7 @@ contains
       call timing_on('C_SW')
 !$OMP parallel do default(none) shared(npz,isd,jsd,delpc,delp,ptc,pt,u,v,w,uc,vc,ua,va, &
 !$OMP                                  omga,ut,vt,divgd,flagstruct,dt2,hydrostatic,bd,  &
-!$OMP                                  gridstruct)
+!$OMP                                  gridstruct,thermostruct)
       do k=1,npz
          call c_sw(delpc(isd,jsd,k), delp(isd,jsd,k),  ptc(isd,jsd,k),    &
                       pt(isd,jsd,k),    u(isd,jsd,k),    v(isd,jsd,k),    &
@@ -476,7 +475,7 @@ contains
       endif
       if ( hydrostatic ) then
            call geopk(ptop, pe, peln, delpc, pkc, gz, phis, ptc, q_con, pkz, npz, akap, .true., &
-                      gridstruct%bounded_domain, .false., npx, npy, bd)
+                      gridstruct%bounded_domain, .false., thermostruct%use_cond, npx, npy, bd)
       else
 #ifndef SW_DYNAMICS
            if ( it == 1 ) then
@@ -528,36 +527,27 @@ contains
            call Riem_Solver_C( ms, dt2,   is,  ie,   js,   je,   npz,   ng,   &
                                akap, cappa,  cp,  ptop, phis, omga, ptc,  &
                                q_con,  delpc, gz,  pkc, ws3, flagstruct%p_fac, &
-                               flagstruct%a_imp, pfull, &
+                               flagstruct%a_imp, thermostruct%use_cond, &
+                               thermostruct%moist_kappa, pfull, &
                                flagstruct%fast_tau_w_sec, flagstruct%rf_cutoff )
            call timing_off('Riem_Solver')
 
            if (gridstruct%nested) then
            call nh_bc(ptop, grav, akap, cp, delpc, neststruct%delz_BC, ptc, phis, &
-#ifdef USE_COND
-                q_con, &
-#ifdef MOIST_CAPPA
-                cappa, &
-#endif
-#endif
-                pkc, gz, pk3, &
+                q_con, cappa, pkc, gz, pk3, &
                 split_timestep_BC+0.5, real(n_split*flagstruct%k_split), &
-                npx, npy, npz, gridstruct%bounded_domain, .false., .false., .false., bd)
+                npx, npy, npz, gridstruct%bounded_domain, .false., .false., .false., &
+                thermostruct%use_cond, thermostruct%moist_kappa, bd)
            endif
 
            if (flagstruct%regional) then
 
              reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+(0.5+(it-1))*dt
              call nh_bc(ptop, grav, akap, cp, delpc, delz_regBC, ptc, phis, &
-#ifdef USE_COND
-                q_con, &
-#ifdef MOIST_CAPPA
-                cappa, &
-#endif
-#endif
-                pkc, gz, pk3, &
+                q_con, cappa, pkc, gz, pk3, &
                 mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600.,  &
-                npx, npy, npz, gridstruct%bounded_domain, .false., .false., .false., bd)
+                npx, npy, npz, gridstruct%bounded_domain, .false., .false., .false., &
+                thermostruct%use_cond, thermostruct%moist_kappa, bd)
 
            endif
 
@@ -665,9 +655,10 @@ contains
 !$OMP                                  is,ie,js,je,isd,ied,jsd,jed,omga,delp,gridstruct,npx,npy,  &
 !$OMP                                  ng,zh,vt,ptc,pt,u,v,w,uc,vc,ua,va,divgd,mfx,mfy,cx,cy,     &
 !$OMP                                  crx,cry,xfx,yfx,q_con,zvir,sphum,nq,q,dt,bd,rdt,iep1,jep1, &
-!$OMP                                  heat_source,diss_est,radius,idiag,end_step)                &
+!$OMP                                  heat_source,diss_est,radius,idiag,end_step,thermostruct)   &
 !$OMP                          private(nord_k, nord_w, nord_t, damp_w, damp_t, d2_divg,   &
-!$OMP                          d_con_k,kgb, hord_m, hord_v, hord_t, hord_p, wk, heat_s, diss_e, z_rat)
+!$OMP                          d_con_k,kgb, hord_m, hord_v, hord_t, hord_p, wk, heat_s,   &
+!$OMP                          diss_e, z_rat, k_q_con)
     do k=1,npz
        hord_m = flagstruct%hord_mt
        hord_t = flagstruct%hord_tm
@@ -759,21 +750,22 @@ contains
             enddo
          enddo
        endif
+       if (thermostruct%use_cond) then
+          k_q_con = k
+       else
+          k_q_con = 1
+       endif
        call d_sw(vt(isd,jsd,k), delp(isd,jsd,k), ptc(isd,jsd,k),  pt(isd,jsd,k),      &
                   u(isd,jsd,k),    v(isd,jsd,k),   w(isd:,jsd:,k),  uc(isd,jsd,k),      &
                   vc(isd,jsd,k),   ua(isd,jsd,k),  va(isd,jsd,k), divgd(isd,jsd,k),   &
                   mfx(is, js, k),  mfy(is, js, k),  cx(is, jsd,k),  cy(isd,js, k),    &
                   crx(is, jsd,k),  cry(isd,js, k), xfx(is, jsd,k), yfx(isd,js, k),    &
-#ifdef USE_COND
-                  q_con(isd:,jsd:,k),  z_rat(isd,jsd),  &
-#else
-                  q_con(isd:,jsd:,1),  z_rat(isd,jsd),  &
-#endif
+                  q_con(isd:,jsd:,k_q_con),  z_rat(isd,jsd),  &
                   kgb, heat_s, diss_e, zvir, sphum, nq,  q,  k,  npz, flagstruct%inline_q,  dt,  &
                   flagstruct%hord_tr, hord_m, hord_v, hord_t, hord_p,    &
                   nord_k, nord_v(k), nord_w, nord_t, flagstruct%dddmp, d2_divg, flagstruct%d4_bg,  &
                   damp_vt(k), damp_w, damp_t, d_con_k, &
-                  hydrostatic, gridstruct, flagstruct, bd)
+                  hydrostatic, gridstruct, flagstruct, thermostruct%use_cond, bd)
 
        if((.not.flagstruct%use_old_omega) .and. last_step ) then
 ! Average horizontal "convergence" to cell center
@@ -826,9 +818,7 @@ contains
     call timing_on('COMM_TOTAL')
     call start_group_halo_update(i_pack(1), delp, domain, complete=.false.)
     call start_group_halo_update(i_pack(1), pt,   domain, complete=.true.)
-#ifdef USE_COND
-    call start_group_halo_update(i_pack(11), q_con, domain)
-#endif
+    if (thermostruct%use_cond) call start_group_halo_update(i_pack(11), q_con, domain)
     call timing_off('COMM_TOTAL')
 
     if ( flagstruct%d_ext > 0. ) then
@@ -855,9 +845,7 @@ contains
 
      call timing_on('COMM_TOTAL')
      call complete_group_halo_update(i_pack(1), domain)
-#ifdef USE_COND
-     call complete_group_halo_update(i_pack(11), domain)
-#endif
+     if (thermostruct%use_cond) call complete_group_halo_update(i_pack(11), domain)
      call timing_off('COMM_TOTAL')
     if ( flagstruct%fv_debug ) then
         call prt_mxm('delp 1',   delp, is, ie, js, je, ng, npz, 1., gridstruct%area_64, domain)
@@ -877,11 +865,11 @@ contains
             0, 0, npx, npy, npz, bd, split_timestep_BC+1, real(n_split*flagstruct%k_split), &
             neststruct%pt_BC, bctype=neststruct%nestbctype  )
 
-#ifdef USE_COND
-       call nested_grid_BC_apply_intT(q_con, &
+       if (thermostruct%use_cond) then
+          call nested_grid_BC_apply_intT(q_con, &
             0, 0, npx, npy, npz, bd, split_timestep_BC+1, real(n_split*flagstruct%k_split), &
             neststruct%q_con_BC, bctype=neststruct%nestbctype  )
-#endif
+       endif
 
 #endif
 
@@ -900,19 +888,19 @@ contains
                                     isd, ied, jsd, jed,      &
                                     reg_bc_update_time,it )
 
-#ifdef USE_COND
-      call regional_boundary_update(q_con, 'q_con', &
+      if (thermostruct%use_cond) then
+         call regional_boundary_update(q_con, 'q_con', &
                                     isd, ied, jsd, jed, npz, &
                                     is,  ie,  js,  je,       &
                                     isd, ied, jsd, jed,      &
                                     reg_bc_update_time,it )
-#endif
+      endif
 
 #endif
     endif
      if ( hydrostatic ) then
           call geopk(ptop, pe, peln, delp, pkc, gz, phis, pt, q_con, pkz, npz, akap, .false., &
-                     gridstruct%bounded_domain, .true., npx, npy, bd)
+                     gridstruct%bounded_domain, .true., thermostruct%use_cond, npx, npy, bd)
        else
 #ifndef SW_DYNAMICS
         call timing_on('UPDATE_DZ')
@@ -942,7 +930,9 @@ contains
                          akap, cappa, cp,  ptop, zs, q_con, w, delz, pt, delp, zh,   &
                          pe, pkc, pk3, pk, peln, ws, &
                          flagstruct%p_fac, flagstruct%a_imp, &
-                         flagstruct%use_logp, remap_step, beta<-0.1, flagstruct%d2bg_zq, &
+                         flagstruct%use_logp, thermostruct%use_cond, &
+                         thermostruct%moist_kappa, remap_step, &
+                         beta<-0.1, flagstruct%d2bg_zq, &
                          flagstruct%fv_debug, flagstruct%fast_tau_w_sec)
         call timing_off('Riem_Solver')
 
@@ -966,29 +956,19 @@ contains
 
         if (gridstruct%nested) then
            call nh_bc(ptop, grav, akap, cp, delp, neststruct%delz_BC, pt, phis, &
-#ifdef USE_COND
-                q_con, &
-#ifdef MOIST_CAPPA
-                cappa, &
-#endif
-#endif
-                pkc, gz, pk3, &
+                q_con, cappa, pkc, gz, pk3, &
                 split_timestep_BC+1., real(n_split*flagstruct%k_split), &
-                npx, npy, npz, gridstruct%bounded_domain, .true., .true., .true., bd)
+                npx, npy, npz, gridstruct%bounded_domain, .true., .true., .true., &
+                thermostruct%use_cond, thermostruct%moist_kappa, bd)
         endif
 
         if (flagstruct%regional) then
           reg_bc_update_time=current_time_in_seconds+bdt*(n_map-1)+it*dt
           call nh_bc(ptop, grav, akap, cp, delp, delz_regBC, pt, phis, &
-#ifdef USE_COND
-               q_con, &
-#ifdef MOIST_CAPPA
-               cappa, &
-#endif
-#endif
-                pkc, gz, pk3, &
+               q_con, cappa, pkc, gz, pk3, &
                 mod(reg_bc_update_time,bc_time_interval*3600.), bc_time_interval*3600., &
-                npx, npy, npz, gridstruct%bounded_domain, .true., .true., .true., bd)
+                npx, npy, npz, gridstruct%bounded_domain, .true., .true., .true., &
+                thermostruct%use_cond, thermostruct%moist_kappa, bd)
 
         endif
 
@@ -1078,20 +1058,28 @@ contains
 !-------------------------------------------------------------------------------------------------------
     if ( flagstruct%breed_vortex_inline ) then
         if ( .not. hydrostatic ) then
+           if (thermostruct%moist_kappa) then
 !$OMP parallel do default(none) shared(is,ie,js,je,npz,pkz,cappa,rdg,delp,delz,pt,k1k)
-           do k=1,npz
+              do k=1,npz
               do j=js,je
                  do i=is,ie
 ! Note: pt at this stage is Theta_m
-#ifdef MOIST_CAPPA
                     pkz(i,j,k) = exp(cappa(i,j,k)/(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
-#else
-                    pkz(i,j,k) = exp( k1k*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
-#endif
                  enddo
               enddo
-           enddo
-        endif
+              enddo
+           else
+!$OMP parallel do default(none) shared(is,ie,js,je,npz,pkz,cappa,rdg,delp,delz,pt,k1k)
+              do k=1,npz
+              do j=js,je
+                 do i=is,ie
+! Note: pt at this stage is Theta_m
+                    pkz(i,j,k) = exp( k1k*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+                 enddo
+              enddo
+              enddo
+           endif !moist_kappa
+        endif !.not. hydrostatic
 #if defined (ADA_NUDGE)
          call breed_slp_inline_ada( it, dt, npz, ak, bk, phis, pe, pk, peln, pkz,     &
                                 delp, u, v, pt, q, flagstruct%nwat, zvir, gridstruct, ks, domain, bd )
@@ -1114,7 +1102,7 @@ contains
              dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
              delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, &
              gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-             flagstruct%consv_checker, flagstruct%adj_mass_vmr)
+             flagstruct%consv_checker, flagstruct%adj_mass_vmr, thermostruct%moist_kappa)
 
           call timing_on('COMM_TOTAL')
           !some mpp domains updates are commented out at this moment -- Linjiong
@@ -1286,7 +1274,8 @@ contains
 
       if ( do_diag_debug_dyn ) then
          call debug_column_dyn( pt, delp, delz, u, v, w, q, heat_source, cappa, akap, &
-              npz, nq, sphum, flagstruct%nwat, zvir, ptop, hydrostatic, bd, fv_time, n_map, it)
+              npz, nq, sphum, flagstruct%nwat, zvir, ptop, hydrostatic, &
+              thermostruct%moist_kappa, bd, fv_time, n_map, it)
       endif
 
 !-----------------------------------------------------
@@ -1333,25 +1322,32 @@ contains
        enddo
     else
 !$OMP parallel do default(none) shared(flagstruct,is,ie,js,je,n_con,pkz,cappa,rdg,delp,delz,pt, &
-!$OMP                                  heat_source,k1k,cv_air,bdt) &
+!$OMP                                  heat_source,k1k,cv_air,bdt,thermostruct) &
 !$OMP                          private(dtmp, delt)
        do k=1,n_con
           delt = abs(bdt*flagstruct%delt_max)
 ! Sponge layers:
           if ( k == 1 ) delt = 0.1*delt
           if ( k == 2 ) delt = 0.5*delt
-          do j=js,je
+          if (thermostruct%moist_kappa) then
+             do j=js,je
              do i=is,ie
-#ifdef MOIST_CAPPA
                 pkz(i,j,k) = exp( cappa(i,j,k)/(1.-cappa(i,j,k))*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
-#else
-                pkz(i,j,k) = exp( k1k*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
-#endif
                 dtmp = heat_source(i,j,k) / (cv_air*delp(i,j,k))
                 pt(i,j,k) = pt(i,j,k) + sign(min(delt, abs(dtmp)),dtmp) / pkz(i,j,k)
                 heat_source(i,j,k) = dtmp !save actual K/s for diagnostics
              enddo
-          enddo
+             enddo
+          else
+             do j=js,je
+             do i=is,ie
+                pkz(i,j,k) = exp( k1k*log(rdg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+                dtmp = heat_source(i,j,k) / (cv_air*delp(i,j,k))
+                pt(i,j,k) = pt(i,j,k) + sign(min(delt, abs(dtmp)),dtmp) / pkz(i,j,k)
+                heat_source(i,j,k) = dtmp !save actual K/s for diagnostics
+             enddo
+             enddo
+          endif !moist_kappa
        enddo
     endif
 
@@ -2199,7 +2195,7 @@ do 1000 j=jfirst,jlast
  end subroutine  mix_dp
 
 
- subroutine geopk(ptop, pe, peln, delp, pk, gz, hs, pt, q_con, pkz, km, akap, CG, bounded_domain, computehalo, npx, npy, bd)
+ subroutine geopk(ptop, pe, peln, delp, pk, gz, hs, pt, q_con, pkz, km, akap, CG, bounded_domain, computehalo, use_cond, npx, npy, bd)
 
    integer, intent(IN) :: km, npx, npy
    real   , intent(IN) :: akap, ptop
@@ -2207,7 +2203,7 @@ do 1000 j=jfirst,jlast
    real   , intent(IN) :: hs(bd%isd:bd%ied,bd%jsd:bd%jed)
    real, intent(IN), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,km):: pt, delp
    real, intent(IN), dimension(bd%isd:,bd%jsd:,1:):: q_con
-   logical, intent(IN) :: CG, bounded_domain, computehalo
+   logical, intent(IN) :: CG, bounded_domain, computehalo, use_cond
    ! !OUTPUT PARAMETERS
    real, intent(OUT), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,km+1):: gz, pk
    real, intent(OUT) :: pe(bd%is-1:bd%ie+1,km+1,bd%js-1:bd%je+1)
@@ -2252,19 +2248,26 @@ do 1000 j=jfirst,jlast
    end if
 
 !$OMP parallel do default(none) shared(jfirst,jlast,ifirst,ilast,pk,km,gz,hs,ptop,ptk, &
-!$OMP                                  js,je,is,ie,peln,peln1,pe,delp,akap,pt,CG,pkz,q_con) &
+!$OMP                                  js,je,is,ie,peln,peln1,pe,delp,akap,pt,CG,pkz,  &
+!$OMP                                  q_con,use_cond) &
 !$OMP                          private(peg, pkg, p1d, logp)
    do 2000 j=jfirst,jlast
 
-      do i=ifirst, ilast
-         p1d(i) = ptop
-         pk(i,j,1) = ptk
-         gz(i,j,km+1) = hs(i,j)
-#ifdef USE_COND
-         peg(i,1) = ptop
-         pkg(i,1) = ptk
-#endif
-      enddo
+      if (use_cond) then
+         do i=ifirst, ilast
+            p1d(i) = ptop
+            pk(i,j,1) = ptk
+            gz(i,j,km+1) = hs(i,j)
+            peg(i,1) = ptop
+            pkg(i,1) = ptk
+         enddo
+      else
+         do i=ifirst, ilast
+            p1d(i) = ptop
+            pk(i,j,1) = ptk
+            gz(i,j,km+1) = hs(i,j)
+         enddo
+      endif !use_cond
 
 #ifndef SW_DYNAMICS
       if( j>=js .and. j<=je) then
@@ -2282,15 +2285,21 @@ do 1000 j=jfirst,jlast
 
       ! Top down
       do k=2,km+1
-         do i=ifirst, ilast
-            p1d(i)  = p1d(i) + delp(i,j,k-1)
-            logp(i) = log(p1d(i))
-            pk(i,j,k) = exp( akap*logp(i) )
-#ifdef USE_COND
-            peg(i,k) = peg(i,k-1) + delp(i,j,k-1)*(1.-q_con(i,j,k-1))
-            pkg(i,k) = exp( akap*log(peg(i,k)) )
-#endif
-         enddo
+         if (use_cond) then
+            do i=ifirst, ilast
+               p1d(i)  = p1d(i) + delp(i,j,k-1)
+               logp(i) = log(p1d(i))
+               pk(i,j,k) = exp( akap*logp(i) )
+               peg(i,k) = peg(i,k-1) + delp(i,j,k-1)*(1.-q_con(i,j,k-1))
+               pkg(i,k) = exp( akap*log(peg(i,k)) )
+            enddo
+         else
+            do i=ifirst, ilast
+               p1d(i)  = p1d(i) + delp(i,j,k-1)
+               logp(i) = log(p1d(i))
+               pk(i,j,k) = exp( akap*logp(i) )
+            enddo
+         endif
 
          if( j>(js-2) .and. j<(je+2) ) then
             do i=max(ifirst,is-1), min(ilast,ie+1)
@@ -2306,19 +2315,27 @@ do 1000 j=jfirst,jlast
       enddo
 
       ! Bottom up
+#ifdef SW_DYNAMICS
       do k=km,1,-1
          do i=ifirst, ilast
-#ifdef SW_DYNAMICS
             gz(i,j,k) = gz(i,j,k+1) + pt(i,j,k)*(pk(i,j,k+1)-pk(i,j,k))
-#else
-#ifdef USE_COND
-            gz(i,j,k) = gz(i,j,k+1) + cp_air*pt(i,j,k)*(pkg(i,k+1)-pkg(i,k))
-#else
-            gz(i,j,k) = gz(i,j,k+1) + cp_air*pt(i,j,k)*(pk(i,j,k+1)-pk(i,j,k))
-#endif
-#endif
          enddo
       enddo
+#else
+      if (use_cond) then
+         do k=km,1,-1
+         do i=ifirst, ilast
+            gz(i,j,k) = gz(i,j,k+1) + cp_air*pt(i,j,k)*(pkg(i,k+1)-pkg(i,k))
+         enddo
+      enddo
+      else
+         do k=km,1,-1
+            do i=ifirst, ilast
+               gz(i,j,k) = gz(i,j,k+1) + cp_air*pt(i,j,k)*(pk(i,j,k+1)-pk(i,j,k))
+            enddo
+         enddo
+      endif !use_cond
+#endif SW_DYNAMICS
 
       if ( .not. CG .and. j .ge. js .and. j .le. je ) then
          do k=1,km

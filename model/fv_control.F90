@@ -65,6 +65,7 @@ module fv_control_mod
    use fv_diagnostics_mod,  only: fv_diag_init_gn
    use coarse_grained_restart_files_mod, only: deallocate_coarse_restart_type
    use tp_core_mod,         only: tp_mono_schemes, tp_PD_schemes, tp_unlim_schemes, tp_valid_schemes
+   use fv_thermodynamics_mod, only: fv_thermo_init
 
    implicit none
    private
@@ -118,7 +119,7 @@ module fv_control_mod
      integer, dimension(MAX_NNEST) :: tile_coarse = 0
      integer, dimension(MAX_NTILE) :: npes_nest_tile = 0
 
-     real :: sdt
+     real :: sdt, rdt
      integer :: unit, ens_root_pe, tile_id(1)
 
      !!!!!!!!!! POINTERS FOR READING NAMELISTS !!!!!!!!!!
@@ -451,6 +452,8 @@ module fv_control_mod
      call read_namelist_fv_core_nml(Atm(this_grid)) ! do options processing here too?
      call read_namelist_test_case_nml
      call read_namelist_integ_phys_nml
+     call fv_thermo_init(Atm(this_grid)%thermostruct,Atm(this_grid)%flagstruct) !thermo namelist and setup
+
      call mpp_get_current_pelist(Atm(this_grid)%pelist, commID=commID) ! for commID
      call mp_start(commID,halo_update_type)
 
@@ -554,8 +557,10 @@ module fv_control_mod
      call tm_register_tracers (MODEL_ATMOS, Atm(this_grid)%flagstruct%ncnst, Atm(this_grid)%flagstruct%nt_prog, &
           Atm(this_grid)%flagstruct%pnats, num_family)
      if(is_master()) then
-        write(*,*) 'ncnst=', ncnst,' num_prog=',Atm(this_grid)%flagstruct%nt_prog,' pnats=',Atm(this_grid)%flagstruct%pnats,' dnats=',dnats,&
-             ' num_family=',num_family
+        write(*,200) ncnst, Atm(this_grid)%flagstruct%nt_prog, Atm(this_grid)%flagstruct%pnats
+        write(*,201) dnats, num_family
+200     format('ncnst = ', I4, ' num_prog   = ', I4, ' pnats = ', I4)
+201     format('dnats = ', I4, ' num_family = ', I4)
         print*, ''
      endif
      if (dnrts < 0) dnrts = dnats
@@ -625,28 +630,37 @@ module fv_control_mod
      ! Initialize the SW (2D) part of the model
      call grid_utils_init(Atm(this_grid), Atm(this_grid)%flagstruct%npx, Atm(this_grid)%flagstruct%npy, Atm(this_grid)%flagstruct%npz, Atm(this_grid)%flagstruct%non_ortho, Atm(this_grid)%flagstruct%grid_type)
 
-     ! Finish up initialization; write damping coefficients dependent upon
+     ! Finish up initialization; write solver information and damping coefficients
 
      if ( is_master() ) then
-        sdt =  dt_atmos/real(Atm(this_grid)%flagstruct%n_split*Atm(this_grid)%flagstruct%k_split*abs(p_split))
         write(*,*) ' '
-        write(*,*) 'Divergence damping Coefficients'
-        write(*,*) 'For small dt=', sdt
-        write(*,*) 'External mode del-2 (m**2/s)=',  Atm(this_grid)%flagstruct%d_ext*Atm(this_grid)%gridstruct%da_min_c/sdt
-        write(*,*) 'Internal mode del-2 SMAG dimensionless coeff=',  Atm(this_grid)%flagstruct%dddmp
-        write(*,*) 'Internal mode del-2 background diff=', Atm(this_grid)%flagstruct%d2_bg*Atm(this_grid)%gridstruct%da_min_c/sdt
+        write(*,300) Atm(this_grid)%flagstruct%hydrostatic, Atm(this_grid)%thermostruct%use_cond, Atm(this_grid)%thermostruct%moist_kappa
+300     format(' hydrostatic = ',L1,' use_cond = ',L1,' moist_kappa = ',L1)
 
-        if (nord==1) then
-           write(*,*) 'Internal mode del-4 background diff=', Atm(this_grid)%flagstruct%d4_bg
+        rdt =  dt_atmos/real(Atm(this_grid)%flagstruct%k_split*abs(p_split))
+        sdt =  rdt/real(Atm(this_grid)%flagstruct%n_split)
+        write(*,*) ' '
+        write(*,*) 'Acoustic (small) dt = ', sdt
+        write(*,*) 'Remapping dt        = ', rdt
+
+        if (Atm(this_grid)%flagstruct%fv_debug) then
+           write(*,*) ' '
+           write(*,*) 'Divergence damping Coefficients'
+           write(*,*) 'External mode del-2 (m**2/s)=',  Atm(this_grid)%flagstruct%d_ext*Atm(this_grid)%gridstruct%da_min_c/sdt
+           write(*,*) 'Internal mode del-2 SMAG dimensionless coeff=',  Atm(this_grid)%flagstruct%dddmp
+           write(*,*) 'Internal mode del-2 background diff=', Atm(this_grid)%flagstruct%d2_bg*Atm(this_grid)%gridstruct%da_min_c/sdt
+
+           if (nord==1) then
+              write(*,*) 'Internal mode del-4 background diff=', Atm(this_grid)%flagstruct%d4_bg
+           endif
+           if (Atm(this_grid)%flagstruct%nord==2) write(*,*) 'Internal mode del-6 background diff=', Atm(this_grid)%flagstruct%d4_bg
+           if (Atm(this_grid)%flagstruct%nord==3) write(*,*) 'Internal mode del-8 background diff=', Atm(this_grid)%flagstruct%d4_bg
+           write(*,*) 'tracer del-2 diff=', Atm(this_grid)%flagstruct%trdm2
+
            write(*,*) 'Vorticity del-4 (m**4/s)=', (Atm(this_grid)%flagstruct%vtdm4*Atm(this_grid)%gridstruct%da_min)**2/sdt*1.E-6
+           write(*,*) 'beta=', Atm(this_grid)%flagstruct%beta
+           write(*,*) ' '
         endif
-        if (Atm(this_grid)%flagstruct%nord==2) write(*,*) 'Internal mode del-6 background diff=', Atm(this_grid)%flagstruct%d4_bg
-        if (Atm(this_grid)%flagstruct%nord==3) write(*,*) 'Internal mode del-8 background diff=', Atm(this_grid)%flagstruct%d4_bg
-        write(*,*) 'tracer del-2 diff=', Atm(this_grid)%flagstruct%trdm2
-
-        write(*,*) 'Vorticity del-4 (m**4/s)=', (Atm(this_grid)%flagstruct%vtdm4*Atm(this_grid)%gridstruct%da_min)**2/sdt*1.E-6
-        write(*,*) 'beta=', Atm(this_grid)%flagstruct%beta
-        write(*,*) ' '
      endif
 
      !Initialize restart
@@ -1119,7 +1133,12 @@ module fv_control_mod
           call mpp_error(NOTE, " Recommended: Mono = 8; unlim = 5, 6, or 10.")
        endif
 
-       !Set up tracer schemes
+       if (.not. moist_phys) then
+          call mpp_error(NOTE, "** Deprecated moist_phys = .false. **")
+          call mpp_error(NOTE, "   The moist_phys = .false. capability is being")
+          call mpp_error(NOTE, "   removed and will be replaced with a separate")
+          call mpp_error(NOTE, "   option to turn off the virtual effect soon.")
+       endif
 
      end subroutine read_namelist_fv_core_nml
 

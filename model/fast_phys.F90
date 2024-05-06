@@ -55,7 +55,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
                mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               consv_checker, adj_mass_vmr)
+               consv_checker, adj_mass_vmr, moist_kappa)
     
     implicit none
     
@@ -65,7 +65,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, consv_checker, adj_mass_vmr
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, consv_checker, adj_mass_vmr, moist_kappa
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
@@ -155,43 +155,41 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, &
     endif
 
     !-----------------------------------------------------------------------
+    ! pt and pkz conversion
+    !-----------------------------------------------------------------------
+    if (moist_kappa) then
+       do k = 1, km
+       do j = js, je
+       do i = is, ie
+           pt (i, j, k) = pt (i, j, k) * exp (cappa (i, j, k) / (1. - cappa (i, j, k)) * &
+               log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
+           pkz (i, j, k) = exp (cappa (i, j, k) * &
+               log (rrg * delp (i, j, k) / &
+               delz (i, j, k) * pt (i, j, k)))
+           pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
+       enddo
+       enddo
+       enddo
+    else
+       do k = 1, km
+       do j = js, je
+       do i = is, ie
+           pt (i, j, k) = pt (i, j, k) * exp (akap / (1 - akap) * &
+               log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
+           pkz (i, j, k) = exp (akap * &
+               log (rrg * delp (i, j, k) / &
+               delz (i, j, k) * pt (i, j, k)))
+           pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
+       enddo
+       enddo
+       enddo
+    endif
+
+
+    !-----------------------------------------------------------------------
     ! pt conversion
     !-----------------------------------------------------------------------
 
-    do k = 1, km
-        do j = js, je
-            do i = is, ie
-#ifdef MOIST_CAPPA
-                pt (i, j, k) = pt (i, j, k) * exp (cappa (i, j, k) / (1. - cappa (i, j, k)) * &
-                    log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
-#else
-                pt (i, j, k) = pt (i, j, k) * exp (akap / (1 - akap) * &
-                    log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
-#endif
-            enddo
-        enddo
-    enddo
-
-    !-----------------------------------------------------------------------
-    ! pt conversion
-    !-----------------------------------------------------------------------
-
-    do k = 1, km
-        do j = js, je
-            do i = is, ie
-#ifdef MOIST_CAPPA
-                pkz (i, j, k) = exp (cappa (i, j, k) * &
-                    log (rrg * delp (i, j, k) / &
-                    delz (i, j, k) * pt (i, j, k)))
-#else
-                pkz (i, j, k) = exp (akap * &
-                    log (rrg * delp (i, j, k) / &
-                    delz (i, j, k) * pt (i, j, k)))
-#endif
-                pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
-            enddo
-        enddo
-    enddo
 
 end subroutine fast_phys
 
