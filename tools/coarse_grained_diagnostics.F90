@@ -1366,7 +1366,7 @@ contains
 
    subroutine coarse_grain_3D_field_model_level_mass_weighted(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, &
                                                     npz, coarse_diag, area, mass, omega, result)
-       integer, intent(in) :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
+    integer, intent(in) :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
     type(coarse_diag_type) :: coarse_diag
     real, intent(in) :: mass(is:ie,js:je,1:npz), area(is:ie,js:je)
     real, intent(in) :: omega(is:ie,js:je,1:npz)
@@ -1403,7 +1403,7 @@ contains
 
    subroutine coarse_grain_3D_field_model_level_area_weighted(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, &
                                                     npz, coarse_diag, area, omega, result)
-       integer, intent(in) :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
+    integer, intent(in) :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
     type(coarse_diag_type) :: coarse_diag
     real, intent(in) :: area(is:ie,js:je)
     real, intent(in) :: omega(is:ie,js:je,1:npz)
