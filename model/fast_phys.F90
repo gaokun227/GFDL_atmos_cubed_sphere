@@ -29,8 +29,8 @@ module fast_phys_mod
 
     use constants_mod, only: rdgas, rvgas, grav, kappa, cp_air
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
-    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, &
-                             inline_pbl_type, inline_gwd_type
+    use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_thermo_type
+    use fv_arrays_mod, only: inline_pbl_type, inline_gwd_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
@@ -57,7 +57,7 @@ contains
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                c2l_ord, mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_pbl, inline_gwd, &
-               gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+               gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
                do_inline_pbl, do_inline_gwd, consv_checker, adj_mass_vmr, moist_kappa)
     
     implicit none
@@ -92,6 +92,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     real, intent (out), dimension (is:ie, js:je, km) :: pkz
 
     type (fv_grid_type), intent (in), target :: gridstruct
+
+    type (fv_thermo_type), intent (in), target :: thermostruct
 
     type (fv_grid_bounds_type), intent (in) :: bd
 
@@ -280,7 +282,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
 !$OMP                                    ptop, ntke, inline_pbl, safety_check, nwat, &
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, consv_checker, &
-!$OMP                                    te_err, tw_err) &
+!$OMP                                    te_err, tw_err, thermostruct) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, adj_vmr, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
@@ -502,7 +504,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 endif
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                if (thermostruct%moist_kappa)
+                if (thermostruct%moist_kappa) then
                     cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
                 endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
@@ -539,7 +541,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
             ! update pkz
             if (.not. hydrostatic) then
-                if (thermostruct%moist_kappa)
+                if (thermostruct%moist_kappa) then
                     pkz (is:ie, j, 1:km) = exp (cappa (is:ie, j, 1:km) * &
                         log (rrg * delp (is:ie, j, 1:km) / &
                         delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
@@ -792,7 +794,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, inline_gwd, &
 !$OMP                                    ptop, inline_pbl, u_dt, v_dt, safety_check, &
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq, consv_checker, &
-!$OMP                                    te_err, tw_err) &
+!$OMP                                    te_err, tw_err, thermostruct) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, pe, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
 !$OMP                                    cvm, kr, c_moist, peln, &
@@ -927,7 +929,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 endif
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-                if (thermostruct%moist_kappa)
+                if (thermostruct%moist_kappa) then
                     cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
                 endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
@@ -943,7 +945,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
             ! update pkz
             if (.not. hydrostatic) then
-                if (thermostruct%moist_kappa)
+                if (thermostruct%moist_kappa) then
                     pkz (is:ie, j, 1:km) = exp (cappa (is:ie, j, 1:km) * &
                         log (rrg * delp (is:ie, j, 1:km) / &
                         delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))

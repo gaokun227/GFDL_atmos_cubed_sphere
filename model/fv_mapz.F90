@@ -62,7 +62,7 @@ contains
                       fv_time, hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
                       inline_mp, inline_pbl, inline_cnv, inline_gwd, c2l_ord, bd, fv_debug, &
-                      w_limiter, do_fast_phys, do_intermediate_phys, consv_checker, adj_mass_vmr, inline_cnv_flag)
+                      do_fast_phys, do_intermediate_phys, consv_checker, adj_mass_vmr, inline_cnv_flag)
 
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug

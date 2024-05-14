@@ -528,7 +528,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
 !$OMP                                    ptop, ntke, inline_pbl, safety_check, nwat, &
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, consv_checker, &
-!$OMP                                    te_err, tw_err) &
+!$OMP                                    te_err, tw_err, thermostruct) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
 !$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, adj_vmr, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
@@ -1089,7 +1089,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    u_dt, v_dt, inline_pbl, safety_check, ptop, &
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq, consv_checker, &
 !$OMP                                    te_err, tw_err, inline_cnv_flag, fscav, ntchs, &
-!$OMP                                    ntchm, ntke, nwat) &
+!$OMP                                    ntchm, ntke, nwat, thermostruct) &
 !$OMP                           private (gsize, dz, pi, rn, tmp, q_liq, q_sol, pe, peln, qa, &
 !$OMP                                    zm, dp, pm, qv, ql, qr, ta, uu, vv, ww, ncld, qliq, qsol, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, c_moist, &
@@ -1592,7 +1592,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    ptop, inline_pbl, inline_cnv, u_dt, v_dt, &
 !$OMP                                    safety_check, do_fast_phys, &
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, nq, consv_checker, &
-!$OMP                                    te_err, tw_err) &
+!$OMP                                    te_err, tw_err, thermostruct) &
 !$OMP                           private (gsize, dz, pi, pmk, zi, q_liq, q_sol, pe, &
 !$OMP                                    zm, dp, pm, qv, ta, uu, vv, qliq, qsol, &
 !$OMP                                    cvm, kr, c_moist, peln, &

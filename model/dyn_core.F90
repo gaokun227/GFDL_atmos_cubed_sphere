@@ -1105,7 +1105,7 @@ contains
           call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, flagstruct%nwat, &
              flagstruct%c2l_ord, dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
              delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, inline_pbl, inline_gwd, &
-             gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
+             gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
              flagstruct%do_inline_pbl, flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr, thermostruct%moist_kappa)
 
           call timing_on('COMM_TOTAL')
