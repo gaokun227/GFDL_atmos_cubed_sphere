@@ -618,7 +618,7 @@ contains
                      flagstruct%do_sat_adj, fv_time, hydrostatic, hybrid_z,     &
                      flagstruct%adiabatic, do_adiabatic_init, flagstruct%do_inline_mp, &
                      flagstruct%do_inline_pbl, flagstruct%do_inline_cnv, flagstruct%do_inline_gwd, &
-                     inline_mp, inline_pbl, inline_cnv, inline_gwd, flagstruct%c2l_ord, bd, flagstruct%fv_debug, &
+                     inline_mp, inline_pbl, inline_cnv, inline_gwd, bd, flagstruct%fv_debug, &
                      flagstruct%do_fast_phys, flagstruct%do_intermediate_phys, &
                      flagstruct%consv_checker, flagstruct%adj_mass_vmr, flagstruct%inline_cnv_flag)
 

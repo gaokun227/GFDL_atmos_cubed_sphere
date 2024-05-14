@@ -55,7 +55,7 @@ module fast_phys_mod
 contains
 
 subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-               c2l_ord, mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
+               mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_pbl, inline_gwd, &
                gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
                do_inline_pbl, do_inline_gwd, consv_checker, adj_mass_vmr, moist_kappa)
@@ -66,7 +66,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     ! input / output arguments
     ! -----------------------------------------------------------------------
 
-    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord, nwat
+    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_pbl, do_inline_gwd
     logical, intent (in) :: consv_checker, adj_mass_vmr, moist_kappa
@@ -267,7 +267,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
         ! D grid wind to A grid wind remap
         call cubed_to_latlon (u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
-                 domain, gridstruct%bounded_domain, c2l_ord, bd)
+                 domain, gridstruct%bounded_domain, 4, bd)
 
         ! save delp
         if (consv .gt. consv_min) then
@@ -779,7 +779,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
         ! D grid wind to A grid wind remap
         call cubed_to_latlon (u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
-                 domain, gridstruct%bounded_domain, c2l_ord, bd)
+                 domain, gridstruct%bounded_domain, 4, bd)
 
         ! save delp
         if (consv .gt. consv_min) then

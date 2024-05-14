@@ -59,7 +59,7 @@ module intermediate_phys_mod
 contains
 
 subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-               c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, omga, pt, &
+               mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, omga, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
                inline_mp, inline_pbl, inline_cnv, inline_gwd, &
                gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
@@ -73,7 +73,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     ! input / output arguments
     ! -----------------------------------------------------------------------
 
-    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord, nwat, inline_cnv_flag
+    integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, inline_cnv_flag
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, consv_checker
     logical, intent (in) :: do_inline_cnv, do_inline_gwd, do_sat_adj, last_step, do_fast_phys, adj_mass_vmr
@@ -513,7 +513,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
         ! D grid wind to A grid wind remap
         call cubed_to_latlon (u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
-                 domain, gridstruct%bounded_domain, c2l_ord, bd)
+                 domain, gridstruct%bounded_domain, 4, bd)
 
         ! save delp
         if (consv .gt. consv_min) then
@@ -1031,7 +1031,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
         ! D grid wind to A grid wind remap
         call cubed_to_latlon (u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
-                 domain, gridstruct%bounded_domain, c2l_ord, bd)
+                 domain, gridstruct%bounded_domain, 4, bd)
 
         ! save delp
         if (consv .gt. consv_min) then
@@ -1576,7 +1576,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
         ! D grid wind to A grid wind remap
         call cubed_to_latlon (u, v, ua, va, gridstruct, npx, npy, km, 1, gridstruct%grid_type, &
-                 domain, gridstruct%bounded_domain, c2l_ord, bd)
+                 domain, gridstruct%bounded_domain, 4, bd)
 
         ! save delp
         if (consv .gt. consv_min) then

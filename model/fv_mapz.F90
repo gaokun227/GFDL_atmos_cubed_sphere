@@ -61,7 +61,7 @@ contains
                       ptop, ak, bk, pfull, gridstruct, thermostruct, domain, do_sat_adj, &
                       fv_time, hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
-                      inline_mp, inline_pbl, inline_cnv, inline_gwd, c2l_ord, bd, fv_debug, &
+                      inline_mp, inline_pbl, inline_cnv, inline_gwd, bd, fv_debug, &
                       do_fast_phys, do_intermediate_phys, consv_checker, adj_mass_vmr, inline_cnv_flag)
 
   logical, intent(in):: last_step
@@ -84,7 +84,6 @@ contains
   integer, intent(in):: kord_wz               ! Mapping order/option for w
   integer, intent(in):: kord_tr(nq)           ! Mapping order for tracers
   integer, intent(in):: kord_tm               ! Mapping order for thermodynamics
-  integer, intent(in):: c2l_ord
   integer, intent(in):: inline_cnv_flag
 
   real, intent(in):: consv                 ! factor for TE conservation
@@ -794,7 +793,7 @@ contains
         call timing_on('INTERMEDIATE_PHYS')
 
         call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-                 c2l_ord, mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
+                 mdt, consv, akap, ptop, pfull, hs, te0_2d, u, &
                  v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
                  inline_mp, inline_pbl, inline_cnv, inline_gwd, gridstruct, thermostruct, domain, bd, &
                  hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, do_inline_cnv, &
