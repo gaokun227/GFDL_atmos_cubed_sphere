@@ -72,7 +72,7 @@ use fv_nggps_diags_mod, only: fv_nggps_diag_init, fv_nggps_diag
 use fv_restart_mod,     only: fv_restart, fv_write_restart
 use fv_timing_mod,      only: timing_on, timing_off, timing_init, timing_prt
 use fv_mp_mod,          only: is_master
-use fv_sg_mod,          only: fv_subgrid_z
+use fv_sg_mod,          only: fv_sg_SHiELD
 use fv_update_phys_mod, only: fv_update_phys
 use fv_io_mod,          only: fv_io_register_nudge_restart
 use fv_nwp_nudge_mod,   only: fv_nwp_nudge_init, fv_nwp_nudge_end, do_adiabatic_init
@@ -150,9 +150,9 @@ character(len=20)   :: mod_name = 'SHiELD/atmosphere_mod'
 
   integer :: id_udt_dyn, id_vdt_dyn
 
-  real, parameter:: w0_big = 60.  ! to prevent negative w-tracer diffusion
+  real, parameter:: w0_big = 200.  ! to prevent negative w-tracer diffusion
 
-!---dynamics tendencies for use in fv_subgrid_z and during fv_update_phys
+!---dynamics tendencies for use in fv_sg and during fv_update_phys
   real, allocatable, dimension(:,:,:)   :: u_dt, v_dt, t_dt, qv_dt
   real, allocatable :: pref(:,:), dum1d(:), ps_dt(:,:)
 
@@ -512,9 +512,9 @@ contains
                       Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc,        &
                       Atm(n)%vc, Atm(n)%ak, Atm(n)%bk, Atm(n)%mfx,         &
                       Atm(n)%mfy, Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0,        &
-                      Atm(n)%flagstruct%hybrid_z,                          &
-                      Atm(n)%gridstruct, Atm(n)%flagstruct,                &
-                      Atm(n)%neststruct, Atm(n)%idiag, Atm(n)%bd,          &
+                      Atm(n)%flagstruct%hybrid_z, Atm(n)%gridstruct,       &
+                      Atm(n)%flagstruct, Atm(n)%neststruct,                &
+                      Atm(n)%thermostruct, Atm(n)%idiag, Atm(n)%bd,        &
                       Atm(n)%parent_grid, Atm(n)%domain, Atm(n)%inline_mp, &
                       Atm(n)%inline_pbl, Atm(n)%inline_cnv, Atm(n)%inline_gwd, &
                       Atm(n)%heat_source,Atm(n)%diss_est,time_total=time_total)
@@ -550,16 +550,16 @@ contains
    call mpp_clock_begin (id_subgrid)
 
 !-----------------------------------------------------
-!--- COMPUTE SUBGRID Z
+!--- COMPUTE SUBGRID Z (fv_sg)
 !-----------------------------------------------------
 !--- zero out tendencies
 
     call timing_on('FV_SUBGRID_Z')
 
-    u_dt(:,:,:)   = 0. ! These are updated by fv_subgrid_z
+    u_dt(:,:,:)   = 0. ! These are updated by fv_sg
     v_dt(:,:,:)   = 0.
 ! t_dt is used for two different purposes:
-!    1 - to calculate the diagnostic temperature tendency from fv_subgrid_z
+!    1 - to calculate the diagnostic temperature tendency from fv_sg
 !    2 - as an accumulator for the IAU increment and physics tendency
 ! because of this, it will need to be zeroed out after the diagnostic is calculated
     t_dt(:,:,:)   = Atm(n)%pt(isc:iec,jsc:jec,:)
@@ -573,25 +573,24 @@ contains
       if ( w_diff /= NO_TRACER ) then
         nt_dyn = nq - 1
       endif
-      call fv_subgrid_z(isd, ied, jsd, jed, isc, iec, jsc, jec, Atm(n)%npz, &
+      call fv_sg_SHiELD(isd, ied, jsd, jed, isc, iec, jsc, jec, Atm(n)%npz, &
                         nt_dyn, dt_atmos, Atm(n)%flagstruct%fv_sg_adj,      &
+                        Atm(n)%flagstruct%fv_sg_adj_weak,                   &
                         Atm(n)%flagstruct%nwat, Atm(n)%delp, Atm(n)%pe,     &
                         Atm(n)%peln, Atm(n)%pkz, Atm(n)%pt, Atm(n)%q,       &
                         Atm(n)%ua, Atm(n)%va, Atm(n)%flagstruct%hydrostatic,&
-                        Atm(n)%w, Atm(n)%delz, u_dt, v_dt, t_dt, Atm(n)%flagstruct%n_sponge)
+                        Atm(n)%w, Atm(n)%delz, u_dt, v_dt, Atm(n)%flagstruct%n_sponge)
     endif
 
-#ifdef USE_Q_DT
+    !Only active if w_diff is defined
     if ( .not. Atm(n)%flagstruct%hydrostatic .and. w_diff /= NO_TRACER ) then
 !$OMP parallel do default (none) &
-!$OMP              shared (isc, iec, jsc, jec, w_diff, n, Atm, q_dt) &
+!$OMP              shared (isc, iec, jsc, jec, w_diff, n, Atm) &
 !$OMP             private (k)
        do k=1, Atm(n)%npz
           Atm(n)%q(isc:iec,jsc:jec,k,w_diff) = Atm(n)%w(isc:iec,jsc:jec,k) + w0_big
-          q_dt(:,:,k,w_diff) = 0.
-        enddo
+       enddo
     endif
-#endif
 
     if (allocated(Atm(n)%sg_diag%u_dt)) then
        Atm(n)%sg_diag%u_dt = u_dt(isc:iec,jsc:jec,:)
@@ -1218,6 +1217,7 @@ contains
    real(kind=kind_phys):: rcp, q0, qwat(nq), qt, rdt
    real :: psum, qsum, psumb, qsumb, betad, psdt_mean
    real :: tracer_clock, lat_thresh, fhr
+   real :: t_aging, t_relax
    character(len=32) :: tracer_name
 
    call timing_on('ATMOS_UPDATE')
@@ -1438,25 +1438,25 @@ contains
    endif
 
 !--- adjust w and heat tendency for non-hydrostatic case
-#ifdef USE_Q_DT
     if ( .not.Atm(n)%flagstruct%hydrostatic .and. w_diff /= NO_TRACER ) then
       rcp = 1. / cp_air
 !$OMP parallel do default (none) &
-!$OMP              shared (jsc, jec, isc, iec, n, w_diff, Atm, q_dt, t_dt, rcp, dt_atmos) &
-!$OMP             private (i, j, k)
+!$OMP              shared (jsc, jec, isc, iec, n, w_diff, Atm, t_dt, &
+!$OMP                      rcp, dt_atmos, nb, IPD_Data, ix, Atm_block) &
+!$OMP             private (i, j, k, k1, blen)
        do k=1, Atm(n)%npz
-         do j=jsc, jec
-           do i=isc, iec
-             Atm(n)%q(i,j,k,w_diff) = q_dt(i,j,k,w_diff) ! w tendency due to phys
-! Heating due to loss of KE (vertical diffusion of w)
-             t_dt(i,j,k) = t_dt(i,j,k) - q_dt(i,j,k,w_diff)*rcp*&
-                                     (Atm(n)%w(i,j,k)+0.5*dt_atmos*q_dt(i,j,k,w_diff))
-             Atm(n)%w(i,j,k) = Atm(n)%w(i,j,k) + dt_atmos*Atm(n)%q(i,j,k,w_diff)
-           enddo
-         enddo
-       enddo
+         k1 = Atm(n)%npz+1-k !reverse the k direction
+         do ix = 1, blen
+           i = Atm_block%index(nb)%ii(ix)
+           j = Atm_block%index(nb)%jj(ix)
+              !Atm(n)%q(i,j,k,w_diff) = q_dt(i,j,k,w_diff) ! w tendency due to phys
+              ! Heating due to loss of KE (vertical diffusion of w)
+              !t_dt(i,j,k) = t_dt(i,j,k) - q_dt(i,j,k,w_diff)*rcp*&
+              !                        (Atm(n)%w(i,j,k)+0.5*dt_atmos*q_dt(i,j,k,w_diff))
+           Atm(n)%w(i,j,k1) = IPD_Data(nb)%Stateout%gq0(ix,k,w_diff) - w0_big !Atm(n)%w(i,j,k) + dt_atmos*Atm(n)%q(i,j,k,w_diff)
+        enddo
+      enddo
     endif
-#endif
 
     call timing_on('FV_UPDATE_PHYS')
     call fv_update_phys( dt_atmos, isc, iec, jsc, jec, isd, ied, jsd, jed, Atm(n)%ng, nt_dyn, &
@@ -1486,43 +1486,36 @@ contains
       enddo
    enddo
 
-!LMH 7jan2020: Update PBL and other clock tracers, if present
-   tracer_clock = time_type_to_real(Time_next - Atm(n)%Time_init)*1.e-6
+!Age of (PBL) air tracers --- lmh 21feb24
    lat_thresh = 15.*pi/180.
+   t_aging = dt_atmos/86400. !days
+   t_relax = exp(-dt_atmos/3600.) !e-folding of 1 hour
    do iq = 1, nq
       call get_tracer_names (MODEL_ATMOS, iq, tracer_name)
-      if (trim(tracer_name) == 'pbl_clock' .or. trim(tracer_name) == 'tro_pbl_clock') then
+      if (trim(tracer_name) == 'pbl_age' .or. trim(tracer_name) == 'tro_pbl_age') then
          do nb = 1,Atm_block%nblks
             blen = Atm_block%blksz(nb)
             do ix = 1, blen
                i = Atm_block%index(nb)%ii(ix)
                j = Atm_block%index(nb)%jj(ix)
-               if (trim(tracer_name) == 'tro_pbl_clock' .and. abs(Atm(n)%gridstruct%agrid(i,j,2)) > lat_thresh) cycle
-               do k=1,npz
-                  k1 = npz+1-k !reverse the k direction
-                  Atm(n)%q(i,j,k1,iq) = tracer_clock
-                  if (IPD_Data(nb)%Statein%phii(ix,k) > IPD_Data(nb)%intdiag%hpbl(ix)*grav) exit
-               enddo
+               if (trim(tracer_name) == 'tro_pbl_age' .and. abs(Atm(n)%gridstruct%agrid(i,j,2)) > lat_thresh) then
+                  do k=1,npz
+                     Atm(n)%q(i,j,k,iq) = Atm(n)%q(i,j,k,iq) + t_aging
+                  enddo
+               else
+                  do k=1,npz
+                     k1 = npz+1-k !reverse the k direction
+                     if (IPD_Data(nb)%Statein%phii(ix,k) > IPD_Data(nb)%intdiag%hpbl(ix)*grav) then
+                        Atm(n)%q(i,j,k1,iq) = Atm(n)%q(i,j,k1,iq) + t_aging
+                     else !source region
+                        Atm(n)%q(i,j,k1,iq) = Atm(n)%q(i,j,k1,iq)*t_relax
+                     endif
+                  enddo
+               endif
             enddo
          enddo
-      else if (trim(tracer_name) == 'sfc_clock') then
-         do j=jsc,jec
-         do i=isc,iec
-            Atm(n)%q(i,j,npz,iq) = tracer_clock
-         enddo
-         enddo
-      else if (trim(tracer_name) == 'itcz_clock' ) then
-         do k=1,npz
-         do j=jsc,jec
-         do i=isc,iec
-            if (abs(Atm(n)%gridstruct%agrid(i,j,2)) < lat_thresh .and. Atm(n)%w(i,j,k) > 1.5) then
-               Atm(n)%q(i,j,npz,iq) = tracer_clock
-            endif
-         enddo
-         enddo
-         enddo
       endif
-  enddo
+   enddo
 
 !--- nesting update after updating atmospheric variables with
 !--- physics tendencies
@@ -1657,8 +1650,8 @@ contains
                      Atm(mygrid)%q_con, Atm(mygrid)%omga, Atm(mygrid)%ua, Atm(mygrid)%va, Atm(mygrid)%uc, Atm(mygrid)%vc, &
                      Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%mfx, Atm(mygrid)%mfy,                    &
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
-                     Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
-                     Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
+                     Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct, Atm(mygrid)%neststruct,                &
+                     Atm(mygrid)%thermostruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
                      Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%inline_pbl,                  &
                      Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%heat_source,Atm(mygrid)%diss_est)
 ! Backward
@@ -1672,8 +1665,8 @@ contains
                      Atm(mygrid)%q_con, Atm(mygrid)%omga, Atm(mygrid)%ua, Atm(mygrid)%va, Atm(mygrid)%uc, Atm(mygrid)%vc, &
                      Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%mfx, Atm(mygrid)%mfy,                    &
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
-                     Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
-                     Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
+                     Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct, Atm(mygrid)%neststruct,               &
+                     Atm(mygrid)%thermostruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
                      Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%inline_pbl,                  &
                      Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%heat_source,Atm(mygrid)%diss_est)
 ! Nudging back to IC
@@ -1745,8 +1738,8 @@ contains
                      Atm(mygrid)%q_con, Atm(mygrid)%omga, Atm(mygrid)%ua, Atm(mygrid)%va, Atm(mygrid)%uc, Atm(mygrid)%vc, &
                      Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%mfx, Atm(mygrid)%mfy,                    &
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
-                     Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
-                     Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
+                     Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct, Atm(mygrid)%neststruct, &
+                     Atm(mygrid)%thermostruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
                      Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%inline_pbl,                  &
                      Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%heat_source,Atm(mygrid)%diss_est)
 ! Forward call
@@ -1760,8 +1753,8 @@ contains
                      Atm(mygrid)%q_con, Atm(mygrid)%omga, Atm(mygrid)%ua, Atm(mygrid)%va, Atm(mygrid)%uc, Atm(mygrid)%vc, &
                      Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%mfx, Atm(mygrid)%mfy,                    &
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
-                     Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
-                     Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
+                     Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct, Atm(mygrid)%neststruct,              &
+                     Atm(mygrid)%thermostruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
                      Atm(mygrid)%domain, Atm(mygrid)%inline_mp, Atm(mygrid)%inline_pbl,                  &
                      Atm(mygrid)%inline_cnv, Atm(mygrid)%inline_gwd, Atm(mygrid)%heat_source,Atm(mygrid)%diss_est)
 ! Nudging back to IC

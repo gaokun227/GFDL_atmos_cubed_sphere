@@ -58,7 +58,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                c2l_ord, mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_pbl, inline_gwd, &
                gridstruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_pbl, do_inline_gwd, consv_checker, adj_mass_vmr)
+               do_inline_pbl, do_inline_gwd, consv_checker, adj_mass_vmr, moist_kappa)
     
     implicit none
     
@@ -69,7 +69,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, c2l_ord, nwat
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_pbl, do_inline_gwd
-    logical, intent (in) :: adj_mass_vmr, consv_checker
+    logical, intent (in) :: consv_checker, adj_mass_vmr, moist_kappa
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
@@ -169,22 +169,36 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     endif
 
     !-----------------------------------------------------------------------
-    ! pt conversion
+    ! pt and pkz conversion
     !-----------------------------------------------------------------------
+    if (moist_kappa) then
+       do k = 1, km
+       do j = js, je
+       do i = is, ie
+           pt (i, j, k) = pt (i, j, k) * exp (cappa (i, j, k) / (1. - cappa (i, j, k)) * &
+               log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
+           pkz (i, j, k) = exp (cappa (i, j, k) * &
+               log (rrg * delp (i, j, k) / &
+               delz (i, j, k) * pt (i, j, k)))
+           pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
+       enddo
+       enddo
+       enddo
+    else
+       do k = 1, km
+       do j = js, je
+       do i = is, ie
+           pt (i, j, k) = pt (i, j, k) * exp (akap / (1 - akap) * &
+               log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
+           pkz (i, j, k) = exp (akap * &
+               log (rrg * delp (i, j, k) / &
+               delz (i, j, k) * pt (i, j, k)))
+           pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
+       enddo
+       enddo
+       enddo
+    endif
 
-    do k = 1, km
-        do j = js, je
-            do i = is, ie
-#ifdef MOIST_CAPPA
-                pt (i, j, k) = pt (i, j, k) * exp (cappa (i, j, k) / (1. - cappa (i, j, k)) * &
-                    log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
-#else
-                pt (i, j, k) = pt (i, j, k) * exp (akap / (1 - akap) * &
-                    log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
-#endif
-            enddo
-        enddo
-    enddo
 
     !-----------------------------------------------------------------------
     ! Inline Planetary Boundary Layer >>>
@@ -483,14 +497,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 delp (is:ie, j, kr) = delp (is:ie, j, kr) * ps_dt
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
-#ifdef USE_COND
-                q_con (is:ie, j, kr) = q_liq + q_sol
-#endif
+                if (thermostruct%use_cond) then
+                    q_con (is:ie, j, kr) = q_liq + q_sol
+                endif
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-#ifdef MOIST_CAPPA
-                cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
-#endif
+                if (thermostruct%moist_kappa)
+                    cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
+                endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
                     ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
                     pt (is:ie, j, kr)) * cp_air / c_moist
@@ -525,14 +539,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
             ! update pkz
             if (.not. hydrostatic) then
-#ifdef MOIST_CAPPA
-                pkz (is:ie, j, 1:km) = exp (cappa (is:ie, j, 1:km) * &
-                    log (rrg * delp (is:ie, j, 1:km) / &
-                    delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
-#else
-                pkz (is:ie, j, 1:km) = exp (akap * log (rrg * delp (is:ie, j, 1:km) / &
-                    delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
-#endif
+                if (thermostruct%moist_kappa)
+                    pkz (is:ie, j, 1:km) = exp (cappa (is:ie, j, 1:km) * &
+                        log (rrg * delp (is:ie, j, 1:km) / &
+                        delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
+                else
+                    pkz (is:ie, j, 1:km) = exp (akap * log (rrg * delp (is:ie, j, 1:km) / &
+                        delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
+                endif
             endif
  
             ! total energy checker
@@ -908,14 +922,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 kr = km - k + 1
                 q_liq = q (is:ie, j, kr, liq_wat) + q (is:ie, j, kr, rainwat)
                 q_sol = q (is:ie, j, kr, ice_wat) + q (is:ie, j, kr, snowwat) + q (is:ie, j, kr, graupel)
-#ifdef USE_COND
-                q_con (is:ie, j, kr) = q_liq + q_sol
-#endif
+                if (thermostruct%use_cond) then
+                    q_con (is:ie, j, kr) = q_liq + q_sol
+                endif
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
-#ifdef MOIST_CAPPA
-                cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
-#endif
+                if (thermostruct%moist_kappa)
+                    cappa (is:ie, j, kr) = rdgas / (rdgas + c_moist / (1. + r_vir * q (is:ie, j, kr, sphum)))
+                endif
                 pt (is:ie, j, kr) = pt (is:ie, j, kr) + (ta (is:ie, k) * &
                     ((1. + r_vir * q (is:ie, j, kr, sphum)) * (1. - (q_liq + q_sol))) - &
                     pt (is:ie, j, kr)) * cp_air / c_moist
@@ -929,14 +943,14 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
             ! update pkz
             if (.not. hydrostatic) then
-#ifdef MOIST_CAPPA
-                pkz (is:ie, j, 1:km) = exp (cappa (is:ie, j, 1:km) * &
-                    log (rrg * delp (is:ie, j, 1:km) / &
-                    delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
-#else
-                pkz (is:ie, j, 1:km) = exp (akap * log (rrg * delp (is:ie, j, 1:km) / &
-                    delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
-#endif
+                if (thermostruct%moist_kappa)
+                    pkz (is:ie, j, 1:km) = exp (cappa (is:ie, j, 1:km) * &
+                        log (rrg * delp (is:ie, j, 1:km) / &
+                        delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
+                else
+                    pkz (is:ie, j, 1:km) = exp (akap * log (rrg * delp (is:ie, j, 1:km) / &
+                        delz (is:ie, j, 1:km) * pt (is:ie, j, 1:km)))
+                endif
             endif
  
             ! total energy checker
@@ -1104,22 +1118,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     ! pt conversion
     !-----------------------------------------------------------------------
 
-    do k = 1, km
-        do j = js, je
-            do i = is, ie
-#ifdef MOIST_CAPPA
-                pkz (i, j, k) = exp (cappa (i, j, k) * &
-                    log (rrg * delp (i, j, k) / &
-                    delz (i, j, k) * pt (i, j, k)))
-#else
-                pkz (i, j, k) = exp (akap * &
-                    log (rrg * delp (i, j, k) / &
-                    delz (i, j, k) * pt (i, j, k)))
-#endif
-                pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
-            enddo
-        enddo
-    enddo
 
 end subroutine fast_phys
 

@@ -48,7 +48,7 @@ module external_ic_mod
    use fv_diagnostics_mod,only: prt_maxmin, prt_mxm, prt_gb_nh_sh, prt_height
    use fv_grid_utils_mod, only: ptop_min, g_sum,mid_pt_sphere,get_unit_vect2,get_latlon_vector,inner_prod
    use fv_io_mod,         only: fv_io_read_tracers
-   use fv_mapz_mod,       only: mappm
+   use fv_operators_mod,  only: mappm
    use fv_regional_mod,   only: dump_field, H_STAGGER, U_STAGGER, V_STAGGER, get_data_source
    use fv_mp_mod,         only: is_master, fill_corners, YDir, mp_reduce_min, mp_reduce_max
    use fv_regional_mod,   only: start_regional_cold_start

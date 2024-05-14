@@ -37,7 +37,7 @@ module fv_update_phys_mod
   use fv_eta_mod,         only: get_eta_level
   use fv_timing_mod,      only: timing_on, timing_off
   use fv_diagnostics_mod, only: prt_maxmin, range_check
-  use fv_mapz_mod,        only: moist_cv, moist_cp
+  use fv_thermodynamics_mod, only: moist_cv, moist_cp
 #if defined (ATMOS_NUDGE)
   use atmos_nudge_mod,    only: get_atmos_nudge, do_ps
 #elif defined (CLIMATE_NUDGE)
@@ -727,7 +727,8 @@ module fv_update_phys_mod
 
 #ifdef GFS_PHYS
     call cubed_to_latlon(u, v, ua, va, gridstruct, &
-         npx, npy, npz, 1, gridstruct%grid_type, domain, gridstruct%bounded_domain, flagstruct%c2l_ord, bd)
+         npx, npy, npz, 1, gridstruct%grid_type, &
+         domain, gridstruct%bounded_domain, 4, bd)
 #endif
 
   if ( flagstruct%fv_debug ) then

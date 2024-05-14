@@ -316,6 +316,7 @@ contains
 
     integer :: k
 
+!$OMP parallel do default(none) shared(npz,mass,area,delp)
     do k = 1, npz
        mass(:,:,k) = area * delp(:,:,k)
     enddo
@@ -328,6 +329,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
        do j = js, je, coarsening_factor
@@ -344,6 +347,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
        do j = js, je, coarsening_factor
@@ -361,6 +366,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset,mask) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
        do j = js, je, coarsening_factor
@@ -378,6 +385,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset,mask) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
        do j = js, je, coarsening_factor
@@ -461,6 +470,8 @@ contains
 
     integer :: k
 
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,weights,fine,mask,coarse, &
+!$OMP                                  is_coarse,ie_coarse,js_coarse,je_coarse)
     do k = 1, nz
        call masked_weighted_block_average_2d_real4(weights, fine(is:ie,js:je,k), mask, coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k))
     enddo
@@ -474,6 +485,8 @@ contains
 
     integer :: k
 
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,weights,fine,mask,coarse, &
+!$OMP                                  is_coarse,ie_coarse,js_coarse,je_coarse)
     do k = 1, nz
        call masked_weighted_block_average_2d_real8(weights, fine(is:ie,js:je,k), mask, coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k))
     enddo
@@ -485,6 +498,8 @@ contains
 
     integer :: k
 
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,weights,fine,coarse, &
+!$OMP                                  is_coarse,ie_coarse,js_coarse,je_coarse)
     do k = 1, npz
        call weighted_block_average_2d_real4(weights, fine(is:ie,js:je,k), coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k))
     enddo
@@ -496,6 +511,8 @@ contains
 
     integer :: k
 
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,weights,fine,coarse, &
+!$OMP                                  is_coarse,ie_coarse,js_coarse,je_coarse)
     do k = 1, npz
        call weighted_block_average_2d_real8(weights, fine(is:ie,js:je,k), coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k))
     enddo
@@ -507,6 +524,8 @@ contains
 
     integer :: k
 
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,weights,fine,coarse, &
+!$OMP                                  is_coarse,ie_coarse,js_coarse,je_coarse)
     do k = 1, npz
        call weighted_block_average_2d_real4(weights(is:ie,js:je,k), fine(is:ie,js:je,k), coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k))
     enddo
@@ -518,6 +537,8 @@ contains
 
     integer :: k
 
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,weights,fine,coarse, &
+!$OMP                                  is_coarse,ie_coarse,js_coarse,je_coarse)
     do k = 1, npz
        call weighted_block_average_2d_real8(weights(is:ie,js:je,k), fine(is:ie,js:je,k), coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k))
     enddo
@@ -621,6 +642,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
        do j = js, je, coarsening_factor
@@ -638,6 +661,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset,mask) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
        do j = js, je, coarsening_factor
@@ -654,6 +679,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
        do j = js, je, coarsening_factor
@@ -671,6 +698,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset,mask) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
        i_coarse = (i - 1) / coarsening_factor + 1
        do j = js, je, coarsening_factor
@@ -687,6 +716,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
       i_coarse = (i - 1) / coarsening_factor + 1
       do j = js, je, coarsening_factor
@@ -703,6 +734,8 @@ contains
     integer :: i, j, i_coarse, j_coarse, offset
 
     offset = coarsening_factor - 1
+!$OMP parallel do default(none) shared(is,ie,js,je,coarsening_factor,coarse,fine,offset) &
+!$OMP                           private(i_coarse,j_coarse)
     do i = is, ie, coarsening_factor
       i_coarse = (i - 1) / coarsening_factor + 1
       do j = js, je, coarsening_factor
@@ -815,6 +848,8 @@ contains
 
     integer :: k
 
+!$OMP parallel do default(none) shared(nz, coarse, fine, &
+!$OMP                                  is,ie,js,je, is_coarse, ie_coarse, js_coarse, je_coarse)
     do k = 1, nz
       call block_upsample_2d_real4(coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k), fine(is:ie,js:je,k))
     enddo
@@ -843,6 +878,8 @@ contains
 
     integer :: k
 
+!$OMP parallel do default(none) shared(nz, coarse, fine, &
+!$OMP                                  is,ie,js,je, is_coarse, ie_coarse, js_coarse, je_coarse)
     do k = 1, nz
       call block_upsample_2d_real8(coarse(is_coarse:ie_coarse,js_coarse:je_coarse,k), fine(is:ie,js:je,k))
     enddo
