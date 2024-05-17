@@ -29,7 +29,8 @@ module coarse_grained_diagnostics_mod
   use fv_thermodynamics_mod, only: moist_cp, moist_cv
   use mpp_domains_mod, only: domain2d, EAST, NORTH
   use mpp_mod, only: FATAL, mpp_error
-  use coarse_graining_mod, only: MODEL_LEVEL, PRESSURE_LEVEL, PRESSURE_LEVEL_EXTRAPOLATE, BLENDED_AREA_WEIGHTED
+  use coarse_graining_mod, only: MODEL_LEVEL_MASS_WEIGHTED, MODEL_LEVEL_AREA_WEIGHTED
+  use coarse_graining_mod, only: PRESSURE_LEVEL, PRESSURE_LEVEL_EXTRAPOLATE, BLENDED_AREA_WEIGHTED
   use coarse_graining_mod, only: block_sum, get_fine_array_bounds, get_coarse_array_bounds, &
                                  weighted_block_average, vertically_remap_field, &
                                  vertical_remapping_requirements, mask_area_weights, &
@@ -58,7 +59,7 @@ module coarse_grained_diagnostics_mod
     character(len=64) :: reduction_method
     logical :: vertically_integrated = .false.
     logical :: scaled_by_specific_heat_and_vertically_integrated = .false.
-    logical :: always_model_level_coarse_grain = .false.
+    logical :: always_model_level_area_weighted_coarse_grain = .false.
     integer :: pressure_level = -1  ! If greater than 0, interpolate to this pressure level (in hPa)
     integer :: iv = 0  ! Controls type of pressure-level interpolation performed (-1, 0, or 1)
     character(len=64) :: special_case = ''  ! E.g. height is computed differently on pressure surfaces
@@ -146,7 +147,7 @@ contains
     coarse_diagnostics(index)%description = 'coarse-grained pressure thickness'
     coarse_diagnostics(index)%units = 'Pa'
     coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
-    coarse_diagnostics(index)%always_model_level_coarse_grain = .true.
+    coarse_diagnostics(index)%always_model_level_area_weighted_coarse_grain = .true.
     coarse_diagnostics(index)%data%var3 => Atm(tile_count)%delp(is:ie,js:je,1:npz)
 
     index = index + 1
@@ -166,7 +167,7 @@ contains
        coarse_diagnostics(index)%description = 'coarse-grained height thickness'
        coarse_diagnostics(index)%units = 'm'
        coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
-       coarse_diagnostics(index)%always_model_level_coarse_grain = .true.
+       coarse_diagnostics(index)%always_model_level_area_weighted_coarse_grain = .true.
        coarse_diagnostics(index)%data%var3 => Atm(tile_count)%delz(is:ie,js:je,1:npz)
 
        index = index + 1
@@ -370,7 +371,7 @@ contains
     coarse_diagnostics(index)%name = 'delp_dt_nudge_coarse'
     coarse_diagnostics(index)%description = 'coarse-grained pressure thickness tendency from nudging'
     coarse_diagnostics(index)%units = 'Pa/s'
-    coarse_diagnostics(index)%always_model_level_coarse_grain = .true.
+    coarse_diagnostics(index)%always_model_level_area_weighted_coarse_grain = .true.
     coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
 
     index = index + 1
@@ -1326,10 +1327,15 @@ contains
                                      Atm(tile_count), coarse_diagnostics(index), height_on_interfaces, work_2d_coarse)
           used = send_data(coarse_diagnostics(index)%id, work_2d_coarse, Time)
        elseif (coarse_diagnostics(index)%axes .eq. 3) then
-          if (trim(Atm(tile_count)%coarse_graining%strategy) .eq. MODEL_LEVEL .or. coarse_diagnostics(index)%always_model_level_coarse_grain) then
-            call coarse_grain_3D_field_on_model_levels(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz, &
+          if (trim(Atm(tile_count)%coarse_graining%strategy) .eq. MODEL_LEVEL_MASS_WEIGHTED) then
+            call coarse_grain_3D_field_model_level_mass_weighted(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz, &
                  coarse_diagnostics(index), Atm(tile_count)%gridstruct%area(is:ie,js:je),&
                  mass, &
+                 Atm(tile_count)%omga(is:ie,js:je,1:npz), &
+                 work_3d_coarse)
+          elseif (trim(Atm(tile_count)%coarse_graining%strategy) .eq. MODEL_LEVEL_AREA_WEIGHTED .or. coarse_diagnostics(index)%always_model_level_area_weighted_coarse_grain) then
+            call coarse_grain_3D_field_model_level_area_weighted(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz, &
+                 coarse_diagnostics(index), Atm(tile_count)%gridstruct%area(is:ie,js:je),&
                  Atm(tile_count)%omga(is:ie,js:je,1:npz), &
                  work_3d_coarse)
           elseif (trim(Atm(tile_count)%coarse_graining%strategy) .eq. PRESSURE_LEVEL .or. &
@@ -1358,7 +1364,7 @@ contains
     enddo
   end subroutine fv_coarse_diag
 
-   subroutine coarse_grain_3D_field_on_model_levels(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, &
+   subroutine coarse_grain_3D_field_model_level_mass_weighted(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, &
                                                     npz, coarse_diag, area, mass, omega, result)
     integer, intent(in) :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
     type(coarse_diag_type) :: coarse_diag
@@ -1388,12 +1394,44 @@ contains
             result &
        )
     else
-      write(error_message, *) 'coarse_grain_3D_field_on_model_levels: invalid reduction_method, ' // &
+      write(error_message, *) 'coarse_grain_3D_field_model_level_mass_weighted: invalid reduction_method, ' // &
         trim(coarse_diag%reduction_method) // ', provided for 3D variable, ' // &
         trim(coarse_diag%name)
       call mpp_error(FATAL, error_message)
     endif
-   end subroutine coarse_grain_3D_field_on_model_levels
+   end subroutine coarse_grain_3D_field_model_level_mass_weighted
+
+   subroutine coarse_grain_3D_field_model_level_area_weighted(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, &
+                                                    npz, coarse_diag, area, omega, result)
+    integer, intent(in) :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
+    type(coarse_diag_type) :: coarse_diag
+    real, intent(in) :: area(is:ie,js:je)
+    real, intent(in) :: omega(is:ie,js:je,1:npz)
+    real, intent(out) :: result(is_coarse:ie_coarse,js_coarse:je_coarse,1:npz)
+
+    character(len=256) :: error_message
+
+    if (trim(coarse_diag%reduction_method) .eq. AREA_WEIGHTED .or. &
+        trim(coarse_diag%reduction_method) .eq. MASS_WEIGHTED) then
+      call weighted_block_average( &
+        area(is:ie,js:je), &
+        coarse_diag%data%var3, &
+        result &
+      )
+    elseif (trim(coarse_diag%reduction_method) .eq. EDDY_COVARIANCE) then
+       call eddy_covariance_2d_weights( &
+            area(is:ie,js:je), &
+            omega(is:ie,js:je,1:npz), &
+            coarse_diag%data%var3, &
+            result &
+       )
+    else
+      write(error_message, *) 'coarse_grain_3D_field_model_level_area_weighted: invalid reduction_method, ' // &
+        trim(coarse_diag%reduction_method) // ', provided for 3D variable, ' // &
+        trim(coarse_diag%name)
+      call mpp_error(FATAL, error_message)
+    endif
+   end subroutine coarse_grain_3D_field_model_level_area_weighted
 
    subroutine coarse_grain_3D_field_on_pressure_levels(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, &
         npz, coarse_diag, masked_area, phalf, upsampled_coarse_phalf, &
@@ -1708,7 +1746,7 @@ contains
      integer :: index
 
      need_mass_array = .false.
-     valid_strategy = trim(coarsening_strategy) .eq. MODEL_LEVEL
+     valid_strategy = trim(coarsening_strategy) .eq. MODEL_LEVEL_MASS_WEIGHTED
      if (.not. valid_strategy) return
      do index = 1, DIAG_SIZE
         valid_axes = coarse_diagnostics(index)%axes .eq. 3
