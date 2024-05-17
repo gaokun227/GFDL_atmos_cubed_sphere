@@ -1136,7 +1136,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
        enddo
     endif
 
-
 end subroutine fast_phys
 
 end module fast_phys_mod
