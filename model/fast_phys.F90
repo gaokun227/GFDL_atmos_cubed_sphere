@@ -58,7 +58,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                mdt, consv, akap, ptop, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_pbl, inline_gwd, &
                gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_pbl, do_inline_gwd, consv_checker, adj_mass_vmr, moist_kappa)
+               do_inline_pbl, do_inline_gwd, consv_checker, adj_mass_vmr)
     
     implicit none
     
@@ -69,7 +69,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_pbl, do_inline_gwd
-    logical, intent (in) :: consv_checker, adj_mass_vmr, moist_kappa
+    logical, intent (in) :: consv_checker, adj_mass_vmr
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
@@ -171,36 +171,28 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     endif
 
     !-----------------------------------------------------------------------
-    ! pt and pkz conversion
+    ! pt conversion
     !-----------------------------------------------------------------------
-    if (moist_kappa) then
+
+    if (thermostruct%moist_kappa) then
        do k = 1, km
-       do j = js, je
-       do i = is, ie
-           pt (i, j, k) = pt (i, j, k) * exp (cappa (i, j, k) / (1. - cappa (i, j, k)) * &
-               log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
-           pkz (i, j, k) = exp (cappa (i, j, k) * &
-               log (rrg * delp (i, j, k) / &
-               delz (i, j, k) * pt (i, j, k)))
-           pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
-       enddo
-       enddo
+           do j = js, je
+               do i = is, ie
+                   pt (i, j, k) = pt (i, j, k) * exp (cappa (i, j, k) / (1. - cappa (i, j, k)) * &
+                       log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
+               enddo
+           enddo
        enddo
     else
        do k = 1, km
-       do j = js, je
-       do i = is, ie
-           pt (i, j, k) = pt (i, j, k) * exp (akap / (1 - akap) * &
-               log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
-           pkz (i, j, k) = exp (akap * &
-               log (rrg * delp (i, j, k) / &
-               delz (i, j, k) * pt (i, j, k)))
-           pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
-       enddo
-       enddo
+           do j = js, je
+               do i = is, ie
+                   pt (i, j, k) = pt (i, j, k) * exp (akap / (1 - akap) * &
+                       log (rrg * delp (i, j, k) / delz (i, j, k) * pt (i, j, k)))
+               enddo
+           enddo
        enddo
     endif
-
 
     !-----------------------------------------------------------------------
     ! Inline Planetary Boundary Layer >>>
@@ -1119,6 +1111,30 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     !-----------------------------------------------------------------------
     ! pt conversion
     !-----------------------------------------------------------------------
+
+    if (thermostruct%moist_kappa) then
+       do k = 1, km
+           do j = js, je
+               do i = is, ie
+                   pkz (i, j, k) = exp (cappa (i, j, k) * &
+                       log (rrg * delp (i, j, k) / &
+                       delz (i, j, k) * pt (i, j, k)))
+                   pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
+               enddo
+           enddo
+       enddo
+    else
+       do k = 1, km
+           do j = js, je
+               do i = is, ie
+                   pkz (i, j, k) = exp (akap * &
+                       log (rrg * delp (i, j, k) / &
+                       delz (i, j, k) * pt (i, j, k)))
+                   pt (i, j, k) = pt (i, j, k) / pkz (i, j, k)
+               enddo
+           enddo
+       enddo
+    endif
 
 
 end subroutine fast_phys

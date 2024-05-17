@@ -209,6 +209,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     else
        k_cappa = 1
     endif
+
     !-----------------------------------------------------------------------
     ! Fast Saturation Adjustment >>>
     !-----------------------------------------------------------------------
