@@ -29,7 +29,8 @@ module coarse_graining_mod
   implicit none
   private
 
-  public :: MODEL_LEVEL, PRESSURE_LEVEL, PRESSURE_LEVEL_EXTRAPOLATE, BLENDED_AREA_WEIGHTED
+  public :: MODEL_LEVEL_MASS_WEIGHTED, MODEL_LEVEL_AREA_WEIGHTED
+  public :: PRESSURE_LEVEL, PRESSURE_LEVEL_EXTRAPOLATE, BLENDED_AREA_WEIGHTED
   public :: block_sum, compute_mass_weights, get_fine_array_bounds, &
        get_coarse_array_bounds, coarse_graining_init, weighted_block_average, &
        weighted_block_edge_average_x, weighted_block_edge_average_y, &
@@ -188,10 +189,11 @@ module coarse_graining_mod
   ! Global variables for the module, initialized in coarse_graining_init
   integer :: is, ie, js, je, npz
   integer :: is_coarse, ie_coarse, js_coarse, je_coarse
-  character(len=11) :: MODEL_LEVEL = 'model_level'
-  character(len=14) :: PRESSURE_LEVEL = 'pressure_level'
-  character(len=26) :: PRESSURE_LEVEL_EXTRAPOLATE = 'pressure_level_extrapolate'
-  character(len=21) :: BLENDED_AREA_WEIGHTED = 'blended_area_weighted'
+  character(len=25), parameter :: MODEL_LEVEL_MASS_WEIGHTED = 'model_level_mass_weighted'
+  character(len=25), parameter :: MODEL_LEVEL_AREA_WEIGHTED = 'model_level_area_weighted'
+  character(len=14), parameter :: PRESSURE_LEVEL = 'pressure_level'
+  character(len=26), parameter :: PRESSURE_LEVEL_EXTRAPOLATE = 'pressure_level_extrapolate'
+  character(len=21), parameter :: BLENDED_AREA_WEIGHTED = 'blended_area_weighted'
   
   ! Global variables for mappm
   real(kind=4), parameter:: r3_real4 = 1./3., r23_real4 = 2./3., r12_real4 = 1./12.
@@ -200,7 +202,7 @@ module coarse_graining_mod
   ! Namelist parameters initialized with default values
   integer :: coarsening_factor = 8  !< factor the coarse grid is downsampled by (e.g. 8 if coarsening from C384 to C48 resolution)
   integer :: coarse_io_layout(2) = (/1, 1/)  !< I/O layout for coarse-grid fields
-  character(len=64) :: strategy = 'model_level'  !< Valid values are 'model_level', pressure_level', 'pressure_level_extrapolate', 'blended_area_weighted'
+  character(len=64) :: strategy = MODEL_LEVEL_MASS_WEIGHTED  !< Valid values are 'model_level_mass_weighted', 'model_level_area_weighted', 'pressure_level', 'pressure_level_extrapolate', 'blended_area_weighted'
   real :: sigma_blend = 0.9  ! Constant defining sigma level at which we switch to pressure-level coarsening in the blended method.
   
   namelist /coarse_graining_nml/ coarsening_factor, coarse_io_layout, strategy, sigma_blend
@@ -273,7 +275,8 @@ contains
 
     character(len=256) :: error_message
 
-    if (trim(strategy) .ne. MODEL_LEVEL .and. &
+    if (trim(strategy) .ne. MODEL_LEVEL_MASS_WEIGHTED .and. &
+        trim(strategy) .ne. MODEL_LEVEL_AREA_WEIGHTED .and. &
         trim(strategy) .ne. PRESSURE_LEVEL .and. &
         trim(strategy) .ne. PRESSURE_LEVEL_EXTRAPOLATE .and. &
         trim(strategy) .ne. BLENDED_AREA_WEIGHTED) then
