@@ -127,7 +127,12 @@ module sa_tke_edmf_mod
     real :: czilc        = 0.8     ! Zilintkivitch constant
     real :: z0s_max      = .317e-2 ! a limiting value for z0 under high windskk
     real :: wind_th_hwrf = 33.     ! wind speed threshold when z0 level off as in HWRF
-    
+
+    real :: ck0 = 0.4  ! proportionality coefficient for momentum in PBL
+    real :: ck1 = 0.15 ! proportionality coefficient for momentum above PBL
+    real :: ch0 = 0.4  ! proportionality coefficient for heat & q in PBL
+    real :: ch1 = 0.15 ! proportionality coefficient for heat & q above PBL
+
     ! -----------------------------------------------------------------------
     ! namelist
     ! -----------------------------------------------------------------------
@@ -137,7 +142,7 @@ module sa_tke_edmf_mod
         xkzm_lim, xkzm_fac, xkzinv, xkgdx, rlmn, rlmx, &
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
-        z0s_max, wind_th_hwrf, ivegsrc
+        z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1
 
 contains
 
@@ -313,7 +318,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         tem, tem1, tem2, &
         ptem, ptem0, ptem1, ptem2
     
-    real :: ck0, ck1, ch0, ch1, ce0, rchck
+    real :: ce0, rchck
     
     real :: qlcr, zstblmax
     
@@ -337,7 +342,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     parameter (dw2min = 1.e-4, dkmax = 1000.)
     parameter (qlcr = 3.5e-5, zstblmax = 2500.)
     parameter (h1 = 0.33333333)
-    parameter (ck0 = 0.4, ck1 = 0.15, ch0 = 0.4, ch1 = 0.15, ce0 = 0.4)
+    parameter (ce0 = 0.4)
     parameter (rchck = 1.5, cdtn = 25.)
     
     elmx = rlmx

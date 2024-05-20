@@ -89,8 +89,11 @@ module sa_aamf_mod
     real :: evfactl_deep = 0.3   ! evaporation factor over land
     real :: betal_deep   = 0.05  ! downdraft heat flux contribution over land
     real :: betas_deep   = 0.05  ! downdraft heat flux contribution over ocean
+    real :: dxcrtas_deep = 8.e3  ! the threshold value (unit: m) for the quasi-equilibrium assumption of Arakawa-Schubert
+    real :: cthk_deep    = 200.  ! min cloud top for deep convection
+    real :: betaw_deep   = 0.03  ! ratio between cloud base mass flux and mean updraft (eq 6 in Han et al 2017)
 
-    ! mass flux shallow convectio
+    ! mass flux shallow convection
 
     real :: clam_shal    = 0.3   ! c_e for shallow convection (Han and Pan, 2011, eq(6))
     real :: c0s_shal     = 0.002 ! conversion parameter of detrainment from liquid water into convetive precipitaiton
@@ -106,6 +109,17 @@ module sa_aamf_mod
                                  ! as Nccn=100 for sea and Nccn=7000 for land
     real :: evfact_shal  = 0.3   ! rain evaporation efficiency over the ocean
     real :: evfactl_shal = 0.3   ! rain evaporation efficiency over the land
+    real :: cthk_shal    = 200.  ! max cloud top for shallow convection
+    real :: top_shal     = 0.7   ! max cloud height for shallow convection (P/Ps < top_shal)
+    real :: betaw_shal   = 0.03  ! ratio between cloud base mass flux and mean updraft (eq 6 in Han et al 2017)
+    real :: dxcrt_shal   = 15.e3 ! critical resolution for calculating scale-aware cloud base mass flux
+
+    ! for both convections
+
+    logical :: use_tke_conv    = .false. ! flag for adjusting entrainment/detrainment rates in conv
+    logical :: use_shear_conv  = .false. ! flag for considering shear effect for wu/wd in conv
+    logical :: limit_shal_conv = .false. ! flag for constraining shal conv based on diagnosed cloud depth/top
+
 
     ! -----------------------------------------------------------------------
     ! namelist
@@ -113,8 +127,9 @@ module sa_aamf_mod
     
     namelist / sa_aamf_nml / &
         clam_deep, c0s_deep, c1_deep, pgcon_deep, asolfac_deep, evfact_deep, evfactl_deep, &
-        clam_shal, c0s_shal, c1_shal, pgcon_shal, asolfac_shal, evfact_shal, evfactl_shal, &
-        betal_deep, betas_deep
+        betal_deep, betas_deep, dxcrtas_deep, cthk_deep, betaw_deep, clam_shal, c0s_shal, &
+        c1_shal, pgcon_shal, asolfac_shal, evfact_shal, evfactl_shal, cthk_shal, top_shal, &
+        betaw_shal, dxcrt_shal, use_tke_conv, use_shear_conv, limit_shal_conv
 
 contains
 
@@ -324,13 +339,13 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
         dh, dhh, dp, &
         dq, dqsdp, dqsdt, dt, &
         dt2, dtmax, dtmin, &
-        dxcrtas, dxcrtuf, &
+        dxcrtuf, &
         dv1h, dv2h, dv3h, &
         dv1q, dv2q, dv3q, &
         dz, dz1, e1, edtmax, &
         edtmaxl, edtmaxs, el2orc, elocp, &
         es, etah, &
-        cthk, dthk, &
+        dthk, &
         evef, fact1, &
         fact2, factor, &
         g, gamma, pprime, cm, &
@@ -340,7 +355,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
         w1, w1l, w1s, w2, &
         w2l, w2s, w3, w3l, &
         w3s, w4, w4l, w4s, &
-        rho, betaw, &
+        rho, &
         xdby, xpw, xpwd, &
         xqrch, tem, tem1, tem2, &
         ptem, ptem1, ptem2
@@ -369,7 +384,9 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
         xmb (im), xmbmax (im), xpwav (im), &
         xpwev (im), delebar (im, ntr), &
         ! xlamx (im), &
-        delubar (im), delvbar (im)
+        delubar (im), delvbar (im), &
+        xlamdet (im), xlamddt (im), &
+        cxlamet (im), cxlamdt (im)
     
     real :: c0 (im)
 
@@ -378,7 +395,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
 
     ! parameters for updraft velocity calculation
     real :: bet1, cd1, f1, gam1, &
-        bb1, bb2, wucb
+        bb1, bb2, wucb, csmf, tkcrt, cmxfac
 
     ! physical parameters
     parameter (g = grav)
@@ -397,11 +414,13 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     parameter (clamd = 0.03, tkemx = 0.65, tkemn = 0.05)
     parameter (dtke = tkemx - tkemn)
     parameter (dbeta = 0.1)
-    parameter (cthk = 200., dthk = 25.)
+    parameter (dthk = 25.)
     parameter (cinpcrmx = 180., cinpcrmn = 120.)
     parameter (cinacrmx = - 120., cinacrmn = - 80.)
     parameter (bet1 = 1.875, cd1 = .506, f1 = 2.0, gam1 = .5)
-    parameter (betaw = .03, dxcrtas = 8.e3, dxcrtuf = 15.e3)
+    parameter (dxcrtuf = 15.e3)
+    parameter (bb1 = 4.0, bb2 = 0.8, csmf = 0.2)
+    parameter (tkcrt = 2., cmxfac = 15.)
     
     ! local variables and arrays
     real :: pfld (im, km), to (im, km), qo (im, km), &
@@ -412,7 +431,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     real :: qaero (im, km, ntc)
 
     ! for updraft velocity calculation
-    real :: wu2 (im, km), buo (im, km), drag (im, km)
+    real :: wu2 (im, km), buo (im, km), drag (im, km), wush (im, km)
     real :: wc (im), scaldfunc (im), sigmagfm (im)
     
     real :: qlko_ktcon (im), dellal (im, km), tvo (im, km), &
@@ -657,7 +676,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
 
     ! -----------------------------------------------------------------------
     ! convert surface pressure to mb from cb
-    ! convert prsl from centibar to millibar, set normalized mass fluxes to 1, cloud properties to 0, and save model state variables (after advection / turbulence) .
+    ! convert prslp from centibar to millibar, set normalized mass fluxes to 1, cloud properties to 0, and save model state variables (after advection / turbulence) .
     ! -----------------------------------------------------------------------
     
     do k = 1, km
@@ -964,7 +983,6 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                 endif
             enddo
         enddo
-
         do i = 1, im
             if (cnvflg (i)) then
                 tkemean (i) = tkemean (i) / sumx (i)
@@ -979,6 +997,26 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                 endif
             endif
         enddo
+        ! kgao 12 / 08 / 2023: adjust ent / det rates based on tke
+        if (use_tke_conv) then
+            do i = 1, im
+                if (cnvflg (i)) then
+                    xlamdet (i) = xlamde
+                    xlamddt (i) = xlamdd
+                    cxlamet (i) = cxlame
+                    cxlamdt (i) = cxlamd
+                    if (tkemean (i) > tkcrt) then
+                        tem = 1. + tkemean (i) / tkcrt
+                        tem1 = min (tem, cmxfac)
+                        clamt (i) = tem1 * clam_deep
+                        xlamdet (i) = tem1 * xlamdet (i)
+                        xlamddt (i) = tem1 * xlamddt (i)
+                        cxlamet (i) = tem1 * cxlamet (i)
+                        cxlamdt (i) = tem1 * cxlamdt (i)
+                    endif
+                endif
+            enddo
+        endif
     else
         do i = 1, im
             if (cnvflg (i)) then
@@ -1063,16 +1101,32 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     ! (bechtold et al., 2008; derbyshire et al., 2011)
     ! -----------------------------------------------------------------------
 
-    do k = 2, km1
-        do i = 1, im
-            if (cnvflg (i) .and. (k > kbcon (i) .and. k < kmax (i))) then
-                tem = cxlame * frh (i, k) * fent2 (i, k)
-                xlamue (i, k) = xlamue (i, k) * fent1 (i, k) + tem
-                tem1 = cxlamd * frh (i, k)
-                xlamud (i, k) = xlamud (i, k) + tem1
-            endif
+    ! kgao 12 / 21 / 2023
+    if (use_tke_conv) then
+        ! new code
+        do k = 2, km1
+            do i = 1, im
+                if (cnvflg (i) .and. (k > kbcon (i) .and. k < kmax (i))) then
+                    tem = cxlamet (i) * frh (i, k) * fent2 (i, k)
+                    xlamue (i, k) = xlamue (i, k) * fent1 (i, k) + tem
+                    tem1 = cxlamdt (i) * frh (i, k)
+                    xlamud (i, k) = xlamud (i, k) + tem1
+                endif
+            enddo
         enddo
-    enddo
+    else
+        ! ori code
+        do k = 2, km1
+            do i = 1, im
+                if (cnvflg (i) .and. (k > kbcon (i) .and. k < kmax (i))) then
+                    tem = cxlame * frh (i, k) * fent2 (i, k)
+                    xlamue (i, k) = xlamue (i, k) * fent1 (i, k) + tem
+                    tem1 = cxlamd * frh (i, k)
+                    xlamud (i, k) = xlamud (i, k) + tem1
+                endif
+            enddo
+        enddo
+    endif ! end of use_tke_conv
 
     ! -----------------------------------------------------------------------
     ! determine updraft mass flux for the subcloud layers
@@ -1343,7 +1397,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                 ktcon (i) = ktconn (i)
             endif
             tem = pfld (i, kbcon (i)) - pfld (i, ktcon (i))
-            if (tem < cthk) cnvflg (i) = .false.
+            if (tem < cthk_deep) cnvflg (i) = .false.
         endif
     enddo
 
@@ -1486,6 +1540,10 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                         buo (i, k) = buo (i, k) + g * delta * &
                             max (val, (qeso (i, k) - qo (i, k)))
                         drag (i, k) = max (xlamue (i, k), xlamud (i, k))
+                        ! kgao 12 / 18 / 2023: considers shear effect
+                        tem = ((uo (i, k) - uo (i, k - 1)) / dz) ** 2
+                        tem = tem + ((vo (i, k) - vo (i, k - 1)) / dz) ** 2
+                        wush (i, k) = csmf * sqrt (tem)
                     endif
                     
                 endif
@@ -1678,8 +1736,8 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     ! bb1 = 2.0
     ! bb2 = 4.0
     
-    bb1 = 4.0
-    bb2 = 0.8
+    ! bb1 = 4.0
+    ! bb2 = 0.8
     
     ! do i = 1, im
     !     if (cnvflg (i)) then
@@ -1701,9 +1759,18 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                     dz = zi (i, k) - zi (i, k - 1)
                     tem = 0.25 * bb1 * (drag (i, k) + drag (i, k - 1)) * dz
                     tem1 = 0.5 * bb2 * (buo (i, k) + buo (i, k - 1)) * dz
-                    ptem = (1. - tem) * wu2 (i, k - 1)
-                    ptem1 = 1. + tem
-                    wu2 (i, k) = (ptem + tem1) / ptem1
+                    ! kgao 12 / 18 / 2023
+                    if (use_shear_conv) then
+                        tem2 = wush (i, k) * sqrt (wu2 (i, k - 1))
+                        tem2 = (tem1 - tem2) * dz
+                        ptem = (1. - tem) * wu2 (i, k - 1)
+                        ptem1 = 1. + tem
+                        wu2 (i, k) = (ptem + tem2) / ptem1
+                    else
+                        ptem = (1. - tem) * wu2 (i, k - 1)
+                        ptem1 = 1. + tem
+                        wu2 (i, k) = (ptem + tem1) / ptem1
+                    endif
                     wu2 (i, k) = max (wu2 (i, k), 0.)
                 endif
             endif
@@ -1895,11 +1962,21 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
             if (cnvflg (i) .and. k <= kmax (i) - 1) then
                 if (k < jmin (i) .and. k >= kbcon (i)) then
                     dz = zi (i, k + 1) - zi (i, k)
-                    ptem = xlamdd - xlamde
+                    ! kgao 12 / 18 / 2023
+                    if (use_tke_conv) then
+                        ptem = xlamddt (i) - xlamdet (i)
+                    else
+                        ptem = xlamdd - xlamde
+                    endif
                     etad (i, k) = etad (i, k + 1) * (1. - ptem * dz)
                 else if (k < kbcon (i)) then
                     dz = zi (i, k + 1) - zi (i, k)
-                    ptem = xlamd (i) + xlamdd - xlamde
+                    ! kgao 12 / 18 / 2023
+                    if (use_tke_conv) then
+                        ptem = xlamd (i) + xlamddt (i) - xlamdet (i)
+                    else
+                        ptem = xlamd (i) + xlamdd - xlamde
+                    endif
                     etad (i, k) = etad (i, k + 1) * (1. - ptem * dz)
                 endif
             endif
@@ -1942,11 +2019,23 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
             if (cnvflg (i) .and. k < jmin (i)) then
                 dz = zi (i, k + 1) - zi (i, k)
                 if (k >= kbcon (i)) then
-                    tem = xlamde * dz
-                    tem1 = 0.5 * xlamdd * dz
+                    ! kgao 12 / 18 / 2023
+                    if (use_tke_conv) then
+                        tem = xlamdet (i) * dz
+                        tem1 = 0.5 * xlamddt (i) * dz
+                    else
+                        tem = xlamde * dz
+                        tem1 = 0.5 * xlamdd * dz
+                    endif
                 else
-                    tem = xlamde * dz
-                    tem1 = 0.5 * (xlamd (i) + xlamdd) * dz
+                    ! kgao 12 / 18 / 2023
+                    if (use_tke_conv) then
+                        tem = xlamdet (i) * dz
+                        tem1 = 0.5 * (xlamd (i) + xlamddt (i)) * dz
+                    else
+                        tem = xlamde * dz
+                        tem1 = 0.5 * (xlamd (i) + xlamdd) * dz
+                    endif
                 endif
                 factor = 1. + tem - tem1
                 hcdo (i, k) = ((1. - tem1) * hcdo (i, k + 1) + tem * 0.5 * &
@@ -1970,7 +2059,12 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
             do i = 1, im
                 if (cnvflg (i) .and. k < jmin (i)) then
                     dz = zi (i, k + 1) - zi (i, k)
-                    tem = 0.5 * xlamde * dz
+                    ! kgao 12 / 18 / 2023
+                    if (use_tke_conv) then
+                        tem = 0.5 * xlamdet (i) * dz
+                    else
+                        tem = 0.5 * xlamde * dz
+                    endif
                     factor = 1. + tem
                     ecdo (i, k, n) = ((1. - tem) * ecdo (i, k + 1, n) + tem * &
                         (ctro (i, k, n) + ctro (i, k + 1, n))) / factor
@@ -1992,12 +2086,23 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                 ! detad = etad (i, k + 1) - etad (i, k)
 
                 dz = zi (i, k + 1) - zi (i, k)
-                if (k >= kbcon (i)) then
-                    tem = xlamde * dz
-                    tem1 = 0.5 * xlamdd * dz
+                ! kgao 12 / 18 / 2023
+                if (use_tke_conv) then
+                    if (k >= kbcon (i)) then
+                        tem = xlamdet (i) * dz
+                        tem1 = 0.5 * xlamddt (i) * dz
+                    else
+                        tem = xlamdet (i) * dz
+                        tem1 = 0.5 * (xlamd (i) + xlamddt (i)) * dz
+                    endif
                 else
-                    tem = xlamde * dz
-                    tem1 = 0.5 * (xlamd (i) + xlamdd) * dz
+                    if (k >= kbcon (i)) then
+                        tem = xlamde * dz
+                        tem1 = 0.5 * xlamdd * dz
+                    else
+                        tem = xlamde * dz
+                        tem1 = 0.5 * (xlamd (i) + xlamdd) * dz
+                    endif
                 endif
                 factor = 1. + tem - tem1
                 qcdo (i, k) = ((1. - tem1) * qrcdo (i, k + 1) + tem * 0.5 * &
@@ -2152,12 +2257,23 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                 tem = 0.5 * (xlamue (i, k) + xlamue (i, k - 1))
                 tem1 = 0.5 * (xlamud (i, k) + xlamud (i, k - 1))
                 
-                if (k <= kbcon (i)) then
-                    ptem = xlamde
-                    ptem1 = xlamd (i) + xlamdd
+                ! kgao 12 / 18 / 2023
+                if (use_tke_conv) then
+                    if (k <= kbcon (i)) then
+                        ptem = xlamdet (i)
+                        ptem1 = xlamd (i) + xlamddt (i)
+                    else
+                        ptem = xlamdet (i)
+                        ptem1 = xlamddt (i)
+                    endif
                 else
-                    ptem = xlamde
-                    ptem1 = xlamdd
+                    if (k <= kbcon (i)) then
+                        ptem = xlamde
+                        ptem1 = xlamd (i) + xlamdd
+                    else
+                        ptem = xlamde
+                        ptem1 = xlamdd
+                    endif
                 endif
 
                 dellah (i, k) = dellah (i, k) + &
@@ -2255,18 +2371,18 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
 
     ! -----------------------------------------------------------------------
     ! final changed variable per unit mass flux
-    ! if grid size is less than a threshold value (dxcrtas: currently 8km), the quasi - equilibrium assumption of arakawa - schubert is not used any longer.
+    ! if grid size is less than a threshold value (dxcrtas_deep: currently 8km), the quasi - equilibrium assumption of arakawa - schubert is not used any longer.
     ! -----------------------------------------------------------------------
 
     ! -----------------------------------------------------------------------
-    ! if grid size is less than a threshold value (dxcrtas),
+    ! if grid size is less than a threshold value (dxcrtas_deep),
     ! the quasi - equilibrium assumption of arakawa - schubert is not
     ! used any longer.
     ! -----------------------------------------------------------------------
     
     do i = 1, im
         asqecflg (i) = cnvflg (i)
-        if (asqecflg (i) .and. gsize (i) < dxcrtas) then
+        if (asqecflg (i) .and. gsize (i) < dxcrtas_deep) then
             asqecflg (i) = .false.
         endif
     enddo
@@ -2488,12 +2604,23 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
         do i = 1, im
             if (asqecflg (i) .and. k < jmin (i)) then
                 dz = zi (i, k + 1) - zi (i, k)
-                if (k >= kbcon (i)) then
-                    tem = xlamde * dz
-                    tem1 = 0.5 * xlamdd * dz
+                ! kgao 12 / 18 / 2023
+                if (use_tke_conv) then
+                    if (k >= kbcon (i)) then
+                        tem = xlamdet (i) * dz
+                        tem1 = 0.5 * xlamddt (i) * dz
+                    else
+                        tem = xlamdet (i) * dz
+                        tem1 = 0.5 * (xlamd (i) + xlamddt (i)) * dz
+                    endif
                 else
-                    tem = xlamde * dz
-                    tem1 = 0.5 * (xlamd (i) + xlamdd) * dz
+                    if (k >= kbcon (i)) then
+                        tem = xlamde * dz
+                        tem1 = 0.5 * xlamdd * dz
+                    else
+                        tem = xlamde * dz
+                        tem1 = 0.5 * (xlamd (i) + xlamdd) * dz
+                    endif
                 endif
                 factor = 1. + tem - tem1
                 hcdo (i, k) = ((1. - tem1) * hcdo (i, k + 1) + tem * 0.5 * &
@@ -2513,12 +2640,23 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                 ! detad = etad (i, k + 1) - etad (i, k)
 
                 dz = zi (i, k + 1) - zi (i, k)
-                if (k >= kbcon (i)) then
-                    tem = xlamde * dz
-                    tem1 = 0.5 * xlamdd * dz
+                ! kgao 12 / 18 / 2023
+                if (use_tke_conv) then
+                    if (k >= kbcon (i)) then
+                        tem = xlamdet (i) * dz
+                        tem1 = 0.5 * xlamddt (i) * dz
+                    else
+                        tem = xlamdet (i) * dz
+                        tem1 = 0.5 * (xlamd (i) + xlamddt (i)) * dz
+                    endif
                 else
-                    tem = xlamde * dz
-                    tem1 = 0.5 * (xlamd (i) + xlamdd) * dz
+                    if (k >= kbcon (i)) then
+                        tem = xlamde * dz
+                        tem1 = 0.5 * xlamdd * dz
+                    else
+                        tem = xlamde * dz
+                        tem1 = 0.5 * (xlamd (i) + xlamdd) * dz
+                    endif
                 endif
                 factor = 1. + tem - tem1
                 qcdo (i, k) = ((1. - tem1) * qrcd (i, k + 1) + tem * 0.5 * &
@@ -2713,7 +2851,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
             rho = po (i, k) * 100. / (rdgas * to (i, k))
             tfac = tauadv (i) / dtconv (i)
             tfac = min (tfac, 1.)
-            xmb (i) = tfac * betaw * rho * wc (i)
+            xmb (i) = tfac * betaw_deep * rho * wc (i)
         endif
     enddo
     
@@ -3214,7 +3352,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                     if (k > kb (i) .and. k < ktop (i)) then
                         tem = 0.5 * (eta (i, k - 1) + eta (i, k)) * xmb (i)
                         tem1 = pfld (i, k) * 100. / (rdgas * t1 (i, k))
-                        sigmagfm (i) = max (sigmagfm (i), betaw)
+                        sigmagfm (i) = max (sigmagfm (i), betaw_deep)
                         ptem = tem / (sigmagfm (i) * tem1)
                         qtr (i, k, ntk) = qtr (i, k, ntk) + 0.5 * sigmagfm (i) * ptem * ptem
                     endif
@@ -3228,7 +3366,7 @@ subroutine sa_aamf_deep (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                     if (k > 1 .and. k <= jmin (i)) then
                         tem = 0.5 * edto (i) * (etad (i, k - 1) + etad (i, k)) * xmb (i)
                         tem1 = pfld (i, k) * 100. / (rdgas * t1 (i, k))
-                        sigmagfm (i) = max (sigmagfm (i), betaw)
+                        sigmagfm (i) = max (sigmagfm (i), betaw_deep)
                         ptem = tem / (sigmagfm (i) * tem1)
                         qtr (i, k, ntk) = qtr (i, k, ntk) + 0.5 * sigmagfm (i) * ptem * ptem
                     endif
@@ -3357,7 +3495,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
         c0l, d0, &
         desdt, dp, &
         dq, dqsdp, dqsdt, dt, &
-        dt2, dtmax, dtmin, dxcrt, &
+        dt2, dtmax, dtmin, &
         dv1h, dv2h, dv3h, &
         dv1q, dv2q, dv3q, &
         dz, dz1, e1, &
@@ -3365,7 +3503,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
         es, etah, h1, &
         evef, fact1, &
         fact2, factor, dthk, &
-        g, gamma, pprime, betaw, &
+        g, gamma, pprime, &
         qlk, qrch, qs, &
         rfact, shear, tfac, &
         val, val1, val2, &
@@ -3401,7 +3539,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     
     ! parameters for updraft velocity calculation
     real :: bet1, cd1, f1, gam1, &
-        bb1, bb2, wucb
+        bb1, bb2, tkcrt, cmxfac, csmf
 
     ! physical parameters
     parameter (g = grav)
@@ -3426,8 +3564,9 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     parameter (crtlamd = 3.e-4)
     parameter (dtmax = 10800., dtmin = 600.)
     parameter (bet1 = 1.875, cd1 = .506, f1 = 2.0, gam1 = .5)
-    parameter (betaw = .03, dxcrt = 15.e3)
     parameter (h1 = 0.33333333)
+    parameter (bb1 = 4.0, bb2 = 0.8, csmf = 0.2)
+    parameter (tkcrt = 2., cmxfac = 15.)
 
     ! local variables and arrays
     real :: pfld (im, km), to (im, km), qo (im, km), &
@@ -3438,7 +3577,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     real :: qaero (im, km, ntc)
 
     ! for updraft velocity calculation
-    real :: wu2 (im, km), buo (im, km), drag (im, km)
+    real :: wu2 (im, km), buo (im, km), drag (im, km), wush (im, km)
     real :: wc (im), scaldfunc (im), sigmagfm (im)
     
     ! cloud water
@@ -3663,7 +3802,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     
     ! -----------------------------------------------------------------------
     ! convert surface pressure to mb from cb
-    ! convert prsl from centibar to millibar, set normalized mass flux to 1, cloud properties to 0, and save model state variables (after advection / turbulence) .
+    ! convert prslp from centibar to millibar, set normalized mass flux to 1, cloud properties to 0, and save model state variables (after advection / turbulence) .
     ! -----------------------------------------------------------------------
 
     do k = 1, km
@@ -3974,6 +4113,18 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                 endif
             endif
         enddo
+        ! kgao 12 / 18 / 2023 - adjust entrainment rate based on tke
+        if (use_tke_conv) then
+            do i = 1, im
+                if (cnvflg (i)) then
+                    if (tkemean (i) > tkcrt) then
+                        tem = 1. + tkemean (i) / tkcrt
+                        tem1 = min (tem, cmxfac)
+                        clamt (i) = tem1 * clam_shal
+                    endif
+                endif
+            enddo
+        endif
     else
         do i = 1, im
             if (cnvflg (i)) then
@@ -4271,6 +4422,20 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
             endif
         enddo
     enddo
+
+    ! kg change: turn off shal conv based on diagnosed cloud depth or top
+    ! the idea here is that if the cloud is too deep or too high, it should not be
+    ! handled by shal conv
+    do i = 1, im
+        if (cnvflg (i) .and. limit_shal_conv) then
+            ! a) cloud depth criterion as in deep conv
+            tem = pfld (i, kbcon (i)) - pfld (i, ktcon (i))
+            if (tem >= cthk_shal) cnvflg (i) = .false.
+            ! b) cloud top criterion
+            if (prslp (i, ktcon (i)) * tx1 (i) < top_shal) cnvflg (i) = .false.
+            !if (ktcon (i) > kmax (i)) cnvflg (i) = .false.
+        endif
+    enddo
     
     ! -----------------------------------------------------------------------
     ! specify upper limit of mass flux at cloud base
@@ -4362,6 +4527,10 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                         buo (i, k) = buo (i, k) + g * delta * &
                             max (val, (qeso (i, k) - qo (i, k)))
                         drag (i, k) = max (xlamue (i, k), xlamud (i))
+                        ! kgao 12 / 18 / 2023
+                        tem = ((uo (i, k) - uo (i, k - 1)) / dz) ** 2
+                        tem = tem + ((vo (i, k) - vo (i, k - 1)) / dz) ** 2
+                        wush (i, k) = csmf * sqrt (tem)
                     endif
                     
                 endif
@@ -4551,8 +4720,8 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     ! bb1 = 2.0
     ! bb2 = 4.0
     
-    bb1 = 4.0
-    bb2 = 0.8
+    ! bb1 = 4.0
+    ! bb2 = 0.8
     
     ! do i = 1, im
     !     if (cnvflg (i)) then
@@ -4574,9 +4743,18 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                     dz = zi (i, k) - zi (i, k - 1)
                     tem = 0.25 * bb1 * (drag (i, k) + drag (i, k - 1)) * dz
                     tem1 = 0.5 * bb2 * (buo (i, k) + buo (i, k - 1)) * dz
-                    ptem = (1. - tem) * wu2 (i, k - 1)
-                    ptem1 = 1. + tem
-                    wu2 (i, k) = (ptem + tem1) / ptem1
+                    ! kgao 12 / 18 / 2023 - considers shear effect on updraft
+                    if (use_shear_conv) then
+                        tem2 = wush (i, k) * sqrt (wu2 (i, k - 1))
+                        tem2 = (tem1 - tem2) * dz
+                        ptem = (1. - tem) * wu2 (i, k - 1)
+                        ptem1 = 1. + tem
+                        wu2 (i, k) = (ptem + tem2) / ptem1
+                    else
+                        ptem = (1. - tem) * wu2 (i, k - 1)
+                        ptem1 = 1. + tem
+                        wu2 (i, k) = (ptem + tem1) / ptem1
+                    endif
                     wu2 (i, k) = max (wu2 (i, k), 0.)
                 endif
             endif
@@ -4894,7 +5072,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
             rho = po (i, k) * 100. / (rdgas * to (i, k))
             tfac = tauadv (i) / dtconv (i)
             tfac = min (tfac, 1.)
-            xmb (i) = tfac * betaw * rho * wc (i)
+            xmb (i) = tfac * betaw_shal * rho * wc (i)
         endif
     enddo
     
@@ -4919,7 +5097,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
     
     do i = 1, im
         if (cnvflg (i)) then
-            if (gsize (i) < dxcrt) then
+            if (gsize (i) < dxcrt_shal) then
                 scaldfunc (i) = (1. - sigmagfm (i)) * (1. - sigmagfm (i))
                 scaldfunc (i) = max (min (scaldfunc (i), 1.0), 0.)
             else
@@ -5251,7 +5429,7 @@ subroutine sa_aamf_shal (im, km, delt, itc, ntc, ntw, nti, ntk, ntr, delp, &
                     if (k > kb (i) .and. k < ktop (i)) then
                         tem = 0.5 * (eta (i, k - 1) + eta (i, k)) * xmb (i)
                         tem1 = pfld (i, k) * 100. / (rdgas * t1 (i, k))
-                        sigmagfm (i) = max (sigmagfm (i), betaw)
+                        sigmagfm (i) = max (sigmagfm (i), betaw_shal)
                         ptem = tem / (sigmagfm (i) * tem1)
                         qtr (i, k, ntk) = qtr (i, k, ntk) + 0.5 * sigmagfm (i) * ptem * ptem
                     endif

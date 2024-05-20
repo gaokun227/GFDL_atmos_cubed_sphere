@@ -87,6 +87,7 @@ module sa_sas_mod
     real :: evfactl_deep = 0.3   ! evaporation factor over land
     real :: betal_deep   = 0.05  ! downdraft heat flux contribution over land
     real :: betas_deep   = 0.05  ! downdraft heat flux contribution over ocean
+    real :: dxcrtas_deep = 8.e3  ! the threshold value (unit: m) for the quasi-equilibrium assumption of Arakawa-Schubert
 
     ! mass flux shallow convectio
 
@@ -112,7 +113,7 @@ module sa_sas_mod
     namelist / sa_sas_nml / &
         clam_deep, c0s_deep, c1_deep, pgcon_deep, asolfac_deep, evfact_deep, evfactl_deep, &
         clam_shal, c0s_shal, c1_shal, pgcon_shal, asolfac_shal, evfact_shal, evfactl_shal, &
-        betal_deep, betas_deep
+        betal_deep, betas_deep, dxcrtas_deep
 
 contains
 
@@ -201,7 +202,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
         dh, dhh, dp, &
         dq, dqsdp, dqsdt, dt, &
         dt2, dtmax, dtmin, &
-        dxcrtas, dxcrtuf, &
+        dxcrtuf, &
         dv1h, dv2h, dv3h, &
         dv1q, dv2q, dv3q, &
         dz, dz1, e1, edtmax, &
@@ -273,7 +274,7 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
     parameter (cinpcrmx = 180., cinpcrmn = 120.)
     parameter (cinacrmx = - 120., cinacrmn = - 80.)
     parameter (bet1 = 1.875, cd1 = .506, f1 = 2.0, gam1 = .5)
-    parameter (betaw = .03, dxcrtas = 8.e3, dxcrtuf = 15.e3)
+    parameter (betaw = .03, dxcrtuf = 15.e3)
     
     ! local variables and arrays
     real :: pfld (im, km), to (im, km), qo (im, km), &
@@ -1901,18 +1902,18 @@ subroutine sa_sas_deep (im, km, delt, delp, prslp, psp, phil, ql, &
 
     ! -----------------------------------------------------------------------
     ! final changed variable per unit mass flux
-    ! if grid size is less than a threshold value (dxcrtas: currently 8km), the quasi - equilibrium assumption of arakawa - schubert is not used any longer.
+    ! if grid size is less than a threshold value (dxcrtas_deep: currently 8km), the quasi - equilibrium assumption of arakawa - schubert is not used any longer.
     ! -----------------------------------------------------------------------
 
     ! -----------------------------------------------------------------------
-    ! if grid size is less than a threshold value (dxcrtas),
+    ! if grid size is less than a threshold value (dxcrtas_deep),
     ! the quasi - equilibrium assumption of arakawa - schubert is not
     ! used any longer.
     ! -----------------------------------------------------------------------
     
     do i = 1, im
         asqecflg (i) = cnvflg (i)
-        if (asqecflg (i) .and. gsize (i) < dxcrtas) then
+        if (asqecflg (i) .and. gsize (i) < dxcrtas_deep) then
             asqecflg (i) = .false.
         endif
     enddo
