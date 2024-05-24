@@ -209,10 +209,6 @@ contains
             pt_buf, nnest)
 
        if (.not. flagstruct%hydrostatic) then
-          if (neststruct%parent_grid%flagstruct%hydrostatic) then
-             call mpp_error(FATAL, " A nonhydrostatic nest needs a nonhydrostatic parent grid.")
-          endif
-
           call nested_grid_BC_recv(global_nest_domain, 0, 0,  npz_coarse, bd, &
                w_buf, nnest)
           call nested_grid_BC_recv(global_nest_domain, 0, 0,  npz_coarse, bd, &
