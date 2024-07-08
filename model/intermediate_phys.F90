@@ -733,8 +733,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             call mpp_update_domains (u_dt, domain, complete=.false.)
             call mpp_update_domains (v_dt, domain, complete=.true.)
         endif
-        ! update u_dt and v_dt in halo
-        call mpp_update_domains (u_dt, v_dt, domain)
 
         ! update D grid wind
         call update_dwinds_phys (is, ie, js, je, isd, ied, jsd, jed, abs (mdt), u_dt, v_dt, u, v, &
