@@ -37,6 +37,7 @@ module fast_phys_mod
     use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap, hlv, mtetw, tice
     use sa_tke_edmf_mod, only: sa_tke_edmf_sfc, sa_tke_edmf_pbl
     use sa_gwd_mod, only: sa_gwd_oro
+    use fv_timing_mod, only: timing_on, timing_off
     
     implicit none
     
@@ -649,6 +650,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         deallocate (wz)
 
         ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
+        call timing_on('COMM_TOTAL')
         if ( gridstruct%square_domain ) then
             call mpp_update_domains (u_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.false.)
             call mpp_update_domains (v_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.true.)
@@ -656,8 +658,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             call mpp_update_domains (u_dt, domain, complete=.false.)
             call mpp_update_domains (v_dt, domain, complete=.true.)
         endif
-        ! update u_dt and v_dt in halo
-        call mpp_update_domains (u_dt, v_dt, domain)
+        call timing_off('COMM_TOTAL')
 
         ! update D grid wind
         call update_dwinds_phys (is, ie, js, je, isd, ied, jsd, jed, abs (mdt), u_dt, v_dt, u, v, &
@@ -1031,6 +1032,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         deallocate (wz)
 
         ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
+        call timing_on('COMM_TOTAL')
         if ( gridstruct%square_domain ) then
             call mpp_update_domains (u_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.false.)
             call mpp_update_domains (v_dt, domain, whalo=1, ehalo=1, shalo=1, nhalo=1, complete=.true.)
@@ -1038,8 +1040,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             call mpp_update_domains (u_dt, domain, complete=.false.)
             call mpp_update_domains (v_dt, domain, complete=.true.)
         endif
-        ! update u_dt and v_dt in halo
-        call mpp_update_domains (u_dt, v_dt, domain)
+        call timing_off('COMM_TOTAL')
 
         ! update D grid wind
         call update_dwinds_phys (is, ie, js, je, isd, ied, jsd, jed, abs (mdt), u_dt, v_dt, u, v, &
