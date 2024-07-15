@@ -977,6 +977,7 @@ contains
 
       do t = 1, n_tracers
          call get_tracer_names(MODEL_ATMOS, t, tracer_name, tracer_long_name, tracer_units)
+         index = index + 1
          coarse_diagnostics(index)%axes = 3
          coarse_diagnostics(index)%module_name = DYNAMICS
          coarse_diagnostics(index)%name = trim(tracer_name) // '_plev_coarse'
@@ -1441,7 +1442,7 @@ contains
           used = send_data(coarse_diagnostics(index)%id, work_2d_coarse, Time)
         elseif (coarse_diagnostics(index)%write_3d_diags) then
           call coarse_grain_3D_plev_field(is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, &
-                                          Atm(tile_count), coarse_diagnostics(index), height_on_interfaces, nplev, levs(1:nplev), work_3d_coarse(:,:,1:nplev))
+               Atm(tile_count), coarse_diagnostics(index), height_on_interfaces, work_3d_coarse(:,:,1:nplev))
           used = send_data(coarse_diagnostics(index)%id, work_3d_coarse(:,:,1:nplev), Time)
         elseif (coarse_diagnostics(index)%axes .eq. 3) then
           if (trim(Atm(tile_count)%coarse_graining%strategy) .eq. MODEL_LEVEL_MASS_WEIGHTED) then
@@ -1476,7 +1477,7 @@ contains
             call mpp_error(FATAL, error_message)
           endif
           used = send_data(coarse_diagnostics(index)%id, work_3d_coarse, Time)
-       endif
+        endif
       endif
     enddo
   end subroutine fv_coarse_diag
@@ -1668,12 +1669,11 @@ contains
    end subroutine coarse_grain_3D_field_blended_area_weighted
    
    subroutine coarse_grain_3D_plev_field(is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, &
-      Atm, coarse_diag, height_on_interfaces, nplev, plev, result)
-      integer, intent(in) :: is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, nplev
+      Atm, coarse_diag, height_on_interfaces, result)
+      integer, intent(in) :: is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse
       type(fv_atmos_type), intent(in) :: Atm
       type(coarse_diag_type), intent(in) :: coarse_diag
       real, intent(in) :: height_on_interfaces(is:ie,js:je,1:npz+1)
-      integer, intent(in) :: plev(nplev)
       real, intent(out) :: result(is_coarse:ie_coarse,js_coarse:je_coarse,nplev)
 
       character(len=256) :: error_message
@@ -1683,8 +1683,8 @@ contains
       allocate(work_3d(is:ie,js:je,nplev))
 
       do k = 1,nplev
-         if (trim(coarse_diag%special_case) .eq. 'height') then
-            call height_given_pressure_level( &
+        if (trim(coarse_diag%special_case) .eq. 'height') then
+          call height_given_pressure_level( &
                is, &
                ie, &
                js, &
@@ -1692,33 +1692,33 @@ contains
                npz, &
                height_on_interfaces(is:ie,js:je,1:npz+1), &
                Atm%peln(is:ie,1:npz+1,js:je), &
-               plev(k), &
+               levs(k), &
                work_3d(is:ie,js:je,k) &
-            )
-            call weighted_block_average( &
+          )
+          call weighted_block_average( &
                Atm%gridstruct%area(is:ie,js:je), &
                work_3d(is:ie,js:je,k), &
                result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
-               )
-         elseif (trim(coarse_diag%special_case) .eq. 'vorticity') then
-            call interpolate_vertical( &
+          )
+        elseif (trim(coarse_diag%special_case) .eq. 'vorticity') then
+          call interpolate_vertical( &
                is, &
                ie, &
                js, &
                je, &
                npz, &
-               100.0 * plev(k), &  ! Convert mb to Pa
+               100.0 * levs(k), &  ! Convert mb to Pa
                Atm%peln(is:ie,1:npz+1,js:je), &
                coarse_diag%data%var3, &
                work_3d(is:ie,js:je,k) &
-            )
-            call weighted_block_average( &
+          )
+          call weighted_block_average( &
                Atm%gridstruct%area(is:ie,js:je), &
                work_3d(is:ie,js:je,k), &
                result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
-               )
-         else
-            call interpolate_to_pressure_level( &
+          )
+        else
+          call interpolate_to_pressure_level( &
                is, &
                ie, &
                js, &
@@ -1727,17 +1727,17 @@ contains
                coarse_diag%data%var3, &
                height_on_interfaces(is:ie,js:je,1:npz+1), &
                Atm%peln(is:ie,1:npz+1,js:je), &
-               plev(k), &
+               levs(k), &
                coarse_diag%iv, &
                work_3d(is:ie,js:je,k) &
-            )
+          )
 
-            call weighted_block_average( &
+          call weighted_block_average( &
                Atm%gridstruct%area(is:ie,js:je), &
                work_3d(is:ie,js:je,k), &
                result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
-            )
-         endif
+          )
+        endif
       enddo
    end subroutine coarse_grain_3D_plev_field
 
