@@ -172,6 +172,7 @@ contains
 
    integer :: nlunit = 9999
    character (len = 64) :: fn_nml = 'input.nml'
+   integer :: id_plev
 
    call timing_init
    call timing_on('ATMOS_TOTAL')
@@ -307,7 +308,7 @@ contains
 
 !----- initialize atmos_axes and fv_dynamics diagnostics
        !I've had trouble getting this to work with multiple grids at a time; worth revisiting?
-   call fv_diag_init(Atm(mygrid:mygrid), Atm(mygrid)%atmos_axes, Time, npx, npy, npz, Atm(mygrid)%flagstruct%p_ref)
+   call fv_diag_init(Atm(mygrid:mygrid), Atm(mygrid)%atmos_axes, Time, npx, npy, npz, Atm(mygrid)%flagstruct%p_ref, id_plev)
 
    if (Atm(mygrid)%flagstruct%do_aerosol) then
      call load_aero(Atm(mygrid), Time)
@@ -318,7 +319,7 @@ contains
 
    if (Atm(mygrid)%coarse_graining%write_coarse_diagnostics) then
       call fv_coarse_diag_init(Atm, Time, Atm(mygrid)%atmos_axes(3), &
-           Atm(mygrid)%atmos_axes(4), Atm(mygrid)%coarse_graining)
+           Atm(mygrid)%atmos_axes(4), id_plev, Atm(mygrid)%coarse_graining)
    endif
    if (Atm(mygrid)%coarse_graining%write_coarse_restart_files) then
       call fv_coarse_restart_init(Atm(mygrid)%npz, Atm(mygrid)%flagstruct%nt_prog, &

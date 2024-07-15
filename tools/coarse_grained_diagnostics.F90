@@ -26,6 +26,7 @@ module coarse_grained_diagnostics_mod
   use field_manager_mod,  only: MODEL_ATMOS
   use fv_arrays_mod, only: fv_atmos_type, fv_coarse_graining_type
   use fv_diagnostics_mod, only: cs3_interpolator, get_height_given_pressure, get_vorticity, interpolate_vertical
+  use fv_diagnostics_mod, only: nplev, levs
   use fv_thermodynamics_mod, only: moist_cp, moist_cv
   use mpp_domains_mod, only: domain2d, EAST, NORTH
   use mpp_mod, only: FATAL, mpp_error
@@ -40,7 +41,7 @@ module coarse_grained_diagnostics_mod
                                  
   use time_manager_mod, only: time_type
   use tracer_manager_mod, only: get_tracer_index, get_tracer_names
-
+  
   implicit none
   private
 
@@ -64,6 +65,7 @@ module coarse_grained_diagnostics_mod
     integer :: iv = 0  ! Controls type of pressure-level interpolation performed (-1, 0, or 1)
     character(len=64) :: special_case = ''  ! E.g. height is computed differently on pressure surfaces
     type(data_subtype) :: data
+    logical :: write_3d_diags = .false.
   end type coarse_diag_type
 
   public :: fv_coarse_diag_init, fv_coarse_diag
@@ -914,38 +916,149 @@ contains
          coarse_diagnostics(index)%iv = -1
       endif
     enddo
+
+    if (Atm(tile_count)%flagstruct%write_3d_diags) then
+      index = index + 1
+      coarse_diagnostics(index)%axes = 3
+      coarse_diagnostics(index)%module_name = DYNAMICS
+      coarse_diagnostics(index)%name = 'u_plev_coarse'
+      coarse_diagnostics(index)%description = 'coarse-grained zonal wind'
+      coarse_diagnostics(index)%units = 'm/s'
+      coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+      coarse_diagnostics(index)%data%var3 => Atm(tile_count)%ua(is:ie,js:je,1:npz)
+      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%iv = -1
+
+      index = index + 1
+      coarse_diagnostics(index)%axes = 3
+      coarse_diagnostics(index)%module_name = DYNAMICS
+      coarse_diagnostics(index)%name = 'v_plev_coarse'
+      coarse_diagnostics(index)%description = 'coarse-grained meridional wind'
+      coarse_diagnostics(index)%units = 'm/s'
+      coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+      coarse_diagnostics(index)%data%var3 => Atm(tile_count)%va(is:ie,js:je,1:npz)
+      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%iv = -1
+
+      index = index + 1
+      coarse_diagnostics(index)%axes = 3
+      coarse_diagnostics(index)%module_name = DYNAMICS
+      coarse_diagnostics(index)%name = 't_plev_coarse'
+      coarse_diagnostics(index)%description = 'coarse-grained temperature'
+      coarse_diagnostics(index)%units = 'K'
+      coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+      coarse_diagnostics(index)%data%var3 => Atm(tile_count)%pt(is:ie,js:je,1:npz)
+      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%iv = 1
+
+      index = index + 1
+      coarse_diagnostics(index)%axes = 3
+      coarse_diagnostics(index)%module_name = DYNAMICS
+      coarse_diagnostics(index)%name = 'omega_plev_coarse'
+      coarse_diagnostics(index)%description = 'coarse-grained pressure velocity'
+      coarse_diagnostics(index)%units = 'Pa/s'
+      coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+      coarse_diagnostics(index)%data%var3 => Atm(tile_count)%omga(is:ie,js:je,1:npz)
+      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%iv = -1
+      
+      if (.not. Atm(tile_count)%flagstruct%hydrostatic) then
+         index = index + 1
+         coarse_diagnostics(index)%axes = 3
+         coarse_diagnostics(index)%module_name = DYNAMICS
+         coarse_diagnostics(index)%name = 'w_plev_coarse'
+         coarse_diagnostics(index)%description = 'coarse-grained vertical wind'
+         coarse_diagnostics(index)%units = 'm/s'
+         coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+         coarse_diagnostics(index)%data%var3 => Atm(tile_count)%w(is:ie,js:je,1:npz)
+         coarse_diagnostics(index)%write_3d_diags = .true.
+         coarse_diagnostics(index)%iv = -1
+      endif
+
+      do t = 1, n_tracers
+         call get_tracer_names(MODEL_ATMOS, t, tracer_name, tracer_long_name, tracer_units)
+         coarse_diagnostics(index)%axes = 3
+         coarse_diagnostics(index)%module_name = DYNAMICS
+         coarse_diagnostics(index)%name = trim(tracer_name) // '_plev_coarse'
+         coarse_diagnostics(index)%description = 'coarse-grained ' // trim(tracer_long_name)
+         coarse_diagnostics(index)%units = tracer_units
+         coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+         if (t .gt. n_prognostic) then
+           coarse_diagnostics(index)%data%var3 => Atm(tile_count)%qdiag(is:ie,js:je,1:npz,t)
+         else
+           coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,t)
+         endif
+         coarse_diagnostics(index)%write_3d_diags = .true.
+         coarse_diagnostics(index)%iv = 0
+      enddo
+
+      index = index + 1
+      coarse_diagnostics(index)%axes = 3
+      coarse_diagnostics(index)%module_name = DYNAMICS
+      coarse_diagnostics(index)%name = 'h_plev_coarse'
+      coarse_diagnostics(index)%description = 'coarse-grained height'
+      coarse_diagnostics(index)%units = 'm'
+      coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+      coarse_diagnostics(index)%special_case = 'height'
+      coarse_diagnostics(index)%write_3d_diags = .true.
+
+      index = index + 1
+      coarse_diagnostics(index)%axes = 3
+      coarse_diagnostics(index)%module_name = DYNAMICS
+      coarse_diagnostics(index)%name = 'vort_plev_coarse'
+      coarse_diagnostics(index)%description = 'coarse-grained vorticity'
+      coarse_diagnostics(index)%units = '1/s'
+      coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+      coarse_diagnostics(index)%special_case = 'vorticity'
+      coarse_diagnostics(index)%write_3d_diags = .true.
+
+    endif
+
   end subroutine populate_coarse_diag_type
 
   subroutine register_coarse_diagnostics(Atm, coarse_diagnostics, Time, &
-       id_xt_coarse, id_yt_coarse, id_pfull_coarse, id_x_coarse, id_y_coarse)
+       id_xt_coarse, id_yt_coarse, id_pfull_coarse, id_plev_coarse, id_x_coarse, id_y_coarse)
     type(fv_atmos_type), intent(inout) :: Atm(:)
     type(coarse_diag_type), intent(inout) :: coarse_diagnostics(:)
     type(time_type), intent(in) :: Time
-    integer, intent(in) :: id_xt_coarse, id_yt_coarse, id_pfull_coarse
+    integer, intent(in) :: id_xt_coarse, id_yt_coarse, id_pfull_coarse, id_plev_coarse
     integer, intent(in) :: id_x_coarse, id_y_coarse
 
     integer :: index, n_valid_diagnostics
-    integer :: axes_t(3), axes(3)
+    integer :: axes_t(3), axes(3), axes_p(3)
     real :: missing_value = -1.0e10  ! Following fv_diagnostics.F90
 
     axes_t = (/  id_xt_coarse, id_yt_coarse, id_pfull_coarse /)
     axes = (/  id_x_coarse, id_y_coarse, id_pfull_coarse /)
+    axes_p = (/ id_xt_coarse, id_yt_coarse, id_plev_coarse /)
     do index = 1, DIAG_SIZE
       if (trim(coarse_diagnostics(index)%name) == '') exit
       n_valid_diagnostics = index
     enddo
 
     do index = 1, n_valid_diagnostics
-      coarse_diagnostics(index)%id = register_diag_field( &
-        trim(coarse_diagnostics(index)%module_name), &
-        trim(coarse_diagnostics(index)%name), &
-        axes_t(1:coarse_diagnostics(index)%axes), &
-        Time, &
-        trim(coarse_diagnostics(index)%description), &
-        trim(coarse_diagnostics(index)%units), &
-        missing_value=missing_value &
-      )
-      call maybe_allocate_reference_array(Atm, coarse_diagnostics(index))
+      if (coarse_diagnostics(index)%write_3d_diags) then
+            coarse_diagnostics(index)%id = register_diag_field( &
+            trim(coarse_diagnostics(index)%module_name), &
+            trim(coarse_diagnostics(index)%name), &
+            axes_p, &
+            Time, &
+            trim(coarse_diagnostics(index)%description), &
+            trim(coarse_diagnostics(index)%units), &
+            missing_value=missing_value &
+         )
+      else
+         coarse_diagnostics(index)%id = register_diag_field( &
+            trim(coarse_diagnostics(index)%module_name), &
+            trim(coarse_diagnostics(index)%name), &
+            axes_t(1:coarse_diagnostics(index)%axes), &
+            Time, &
+            trim(coarse_diagnostics(index)%description), &
+            trim(coarse_diagnostics(index)%units), &
+            missing_value=missing_value &
+         )
+        call maybe_allocate_reference_array(Atm, coarse_diagnostics(index))
+      endif
     enddo
 
     call register_coarse_static_diagnostics(Atm, Time, axes_t, axes)
@@ -1155,10 +1268,10 @@ contains
     endif
   end subroutine maybe_allocate_reference_array
 
-  subroutine fv_coarse_diag_init(Atm, Time, id_pfull, id_phalf, coarse_graining)
+  subroutine fv_coarse_diag_init(Atm, Time, id_pfull, id_phalf, id_plev, coarse_graining)
     type(fv_atmos_type), intent(inout) :: Atm(:)
     type(time_type), intent(in) :: Time
-    integer, intent(in) :: id_pfull, id_phalf
+    integer, intent(in) :: id_pfull, id_phalf, id_plev
     type(fv_coarse_graining_type), intent(inout) :: coarse_graining
 
     integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse
@@ -1174,7 +1287,7 @@ contains
 
     call populate_coarse_diag_type(Atm, coarse_diagnostics)
     call register_coarse_diagnostics(Atm, coarse_diagnostics, Time, &
-         coarse_graining%id_xt_coarse, coarse_graining%id_yt_coarse, id_pfull, &
+         coarse_graining%id_xt_coarse, coarse_graining%id_yt_coarse, id_pfull, id_plev, &
          coarse_graining%id_x_coarse, coarse_graining%id_y_coarse)
   end subroutine fv_coarse_diag_init
 
@@ -1326,7 +1439,11 @@ contains
           call coarse_grain_2D_field(is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, &
                                      Atm(tile_count), coarse_diagnostics(index), height_on_interfaces, work_2d_coarse)
           used = send_data(coarse_diagnostics(index)%id, work_2d_coarse, Time)
-       elseif (coarse_diagnostics(index)%axes .eq. 3) then
+        elseif (coarse_diagnostics(index)%write_3d_diags) then
+          call coarse_grain_3D_plev_field(is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, &
+                                          Atm(tile_count), coarse_diagnostics(index), height_on_interfaces, nplev, levs(1:nplev), work_3d_coarse(:,:,1:nplev))
+          used = send_data(coarse_diagnostics(index)%id, work_3d_coarse(:,:,1:nplev), Time)
+        elseif (coarse_diagnostics(index)%axes .eq. 3) then
           if (trim(Atm(tile_count)%coarse_graining%strategy) .eq. MODEL_LEVEL_MASS_WEIGHTED) then
             call coarse_grain_3D_field_model_level_mass_weighted(is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz, &
                  coarse_diagnostics(index), Atm(tile_count)%gridstruct%area(is:ie,js:je),&
@@ -1359,7 +1476,7 @@ contains
             call mpp_error(FATAL, error_message)
           endif
           used = send_data(coarse_diagnostics(index)%id, work_3d_coarse, Time)
-        endif
+       endif
       endif
     enddo
   end subroutine fv_coarse_diag
@@ -1550,6 +1667,80 @@ contains
     endif
    end subroutine coarse_grain_3D_field_blended_area_weighted
    
+   subroutine coarse_grain_3D_plev_field(is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, &
+      Atm, coarse_diag, height_on_interfaces, nplev, plev, result)
+      integer, intent(in) :: is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, nplev
+      type(fv_atmos_type), intent(in) :: Atm
+      type(coarse_diag_type), intent(in) :: coarse_diag
+      real, intent(in) :: height_on_interfaces(is:ie,js:je,1:npz+1)
+      integer, intent(in) :: plev(nplev)
+      real, intent(out) :: result(is_coarse:ie_coarse,js_coarse:je_coarse,nplev)
+
+      character(len=256) :: error_message
+      real, allocatable :: work_3d(:,:,:)
+      integer :: k
+
+      allocate(work_3d(is:ie,js:je,nplev))
+
+      do k = 1,nplev
+         if (trim(coarse_diag%special_case) .eq. 'height') then
+            call height_given_pressure_level( &
+               is, &
+               ie, &
+               js, &
+               je, &
+               npz, &
+               height_on_interfaces(is:ie,js:je,1:npz+1), &
+               Atm%peln(is:ie,1:npz+1,js:je), &
+               plev(k), &
+               work_3d(is:ie,js:je,k) &
+            )
+            call weighted_block_average( &
+               Atm%gridstruct%area(is:ie,js:je), &
+               work_3d(is:ie,js:je,k), &
+               result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
+               )
+         elseif (trim(coarse_diag%special_case) .eq. 'vorticity') then
+            call interpolate_vertical( &
+               is, &
+               ie, &
+               js, &
+               je, &
+               npz, &
+               100.0 * plev(k), &  ! Convert mb to Pa
+               Atm%peln(is:ie,1:npz+1,js:je), &
+               coarse_diag%data%var3, &
+               work_3d(is:ie,js:je,k) &
+            )
+            call weighted_block_average( &
+               Atm%gridstruct%area(is:ie,js:je), &
+               work_3d(is:ie,js:je,k), &
+               result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
+               )
+         else
+            call interpolate_to_pressure_level( &
+               is, &
+               ie, &
+               js, &
+               je, &
+               npz, &
+               coarse_diag%data%var3, &
+               height_on_interfaces(is:ie,js:je,1:npz+1), &
+               Atm%peln(is:ie,1:npz+1,js:je), &
+               plev(k), &
+               coarse_diag%iv, &
+               work_3d(is:ie,js:je,k) &
+            )
+
+            call weighted_block_average( &
+               Atm%gridstruct%area(is:ie,js:je), &
+               work_3d(is:ie,js:je,k), &
+               result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
+            )
+         endif
+      enddo
+   end subroutine coarse_grain_3D_plev_field
+
    subroutine coarse_grain_2D_field(is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, &
                                     Atm, coarse_diag, height_on_interfaces, result)
     integer, intent(in) :: is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse
@@ -1766,9 +1957,10 @@ contains
 
     need_height_array = .false.
     do index = 1, DIAG_SIZE
-      if ((coarse_diagnostics(index)%axes == 2) .and. &
+      if (((coarse_diagnostics(index)%axes == 2) .and. &
           (coarse_diagnostics(index)%pressure_level > 0) .and. &
-          (coarse_diagnostics(index)%id > 0)) then
+          (coarse_diagnostics(index)%id > 0)) .or. &
+          coarse_diagnostics(index)%write_3d_diags) then
           need_height_array = .true.
           exit
       endif
