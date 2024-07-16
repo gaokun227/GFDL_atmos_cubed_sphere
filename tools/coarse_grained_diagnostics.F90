@@ -41,6 +41,7 @@ module coarse_grained_diagnostics_mod
                                  
   use time_manager_mod, only: time_type
   use tracer_manager_mod, only: get_tracer_index, get_tracer_names
+  use gfdl_mp_mod, only: mqs3d
   
   implicit none
   private
@@ -983,7 +984,7 @@ contains
          coarse_diagnostics(index)%name = trim(tracer_name) // '_plev_coarse'
          coarse_diagnostics(index)%description = 'coarse-grained ' // trim(tracer_long_name)
          coarse_diagnostics(index)%units = tracer_units
-         coarse_diagnostics(index)%reduction_method = MASS_WEIGHTED
+         coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
          if (t .gt. n_prognostic) then
            coarse_diagnostics(index)%data%var3 => Atm(tile_count)%qdiag(is:ie,js:je,1:npz,t)
          else
@@ -1012,7 +1013,18 @@ contains
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%special_case = 'vorticity'
       coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%iv = -1
 
+      index = index + 1
+      coarse_diagnostics(index)%axes = 3
+      coarse_diagnostics(index)%module_name = DYNAMICS
+      coarse_diagnostics(index)%name = 'rh_plev_coarse'
+      coarse_diagnostics(index)%description = 'coarse-grained relative humidity'
+      coarse_diagnostics(index)%units = '%'
+      coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
+      coarse_diagnostics(index)%special_case = 'rh'
+      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%iv = 0
     endif
 
   end subroutine populate_coarse_diag_type
@@ -1335,15 +1347,16 @@ contains
     real, allocatable :: mass(:,:,:), height_on_interfaces(:,:,:), masked_area(:,:,:)
     real, allocatable :: phalf(:,:,:), upsampled_coarse_phalf(:,:,:)
     real, allocatable :: blending_weights(:,:,:)
-    real, allocatable, target :: vorticity(:,:,:)
+    real, allocatable, target :: vorticity(:,:,:), rh(:,:,:)
     real, allocatable :: zsurf(:,:)
     integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse, npz
     integer :: isd, ied, jsd, jed
     logical :: used
     logical :: need_2d_work_array, need_3d_work_array, need_mass_array, need_height_array, need_masked_area_array
     logical :: extrapolate
-    logical :: need_vorticity_array
+    logical :: need_vorticity_array, need_rh_array
     integer :: index, i, j
+    integer :: nwat
     character(len=256) :: error_message
 
     call get_need_nd_work_array(2, need_2d_work_array)
@@ -1351,6 +1364,7 @@ contains
     call get_need_mass_array(Atm(tile_count)%coarse_graining%strategy, need_mass_array)
     call get_need_height_array(need_height_array)
     call get_need_vorticity_array(need_vorticity_array)
+    call get_need_rh_array(need_rh_array)
     call get_need_masked_area_array(Atm(tile_count)%coarse_graining%strategy, need_masked_area_array)
 
     call get_fine_array_bounds(is, ie, js, je)
@@ -1431,8 +1445,17 @@ contains
        allocate(vorticity(is:ie,js:je,1:npz))
        call get_vorticity(is, ie, js, je, isd, ied, jsd, jed, npz, Atm(tile_count)%u, Atm(tile_count)%v, vorticity, &
                Atm(tile_count)%gridstruct%dx, Atm(tile_count)%gridstruct%dy, Atm(tile_count)%gridstruct%rarea)
-       call associate_vorticity_pointers(is, ie, js, je, npz, vorticity)
+       call associate_variable_pointers(is, ie, js, je, npz, vorticity, 'vorticity')
     endif
+
+    if (need_rh_array) then
+      nwat = Atm(tile_count)%flagstruct%nwat
+      allocate(rh(is:ie,js:je,1:npz))
+      call get_rh(is, ie, js, je, npz, nwat, Atm(tile_count)%q(is:ie,js:je,1:npz,1:nwat), &
+                  Atm(tile_count)%delp(is:ie,js:je,1:npz), Atm(tile_count)%peln(is:ie,1:npz+1,js:je), &           
+                  Atm(tile_count)%pt(is:ie,js:je,1:npz), rh)
+      call associate_variable_pointers(is, ie, js, je, npz, rh, 'rh')
+   endif
 
     do index = 1, DIAG_SIZE
       if (coarse_diagnostics(index)%id .gt. 0) then
@@ -1695,28 +1718,6 @@ contains
                levs(k), &
                work_3d(is:ie,js:je,k) &
           )
-          call weighted_block_average( &
-               Atm%gridstruct%area(is:ie,js:je), &
-               work_3d(is:ie,js:je,k), &
-               result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
-          )
-        elseif (trim(coarse_diag%special_case) .eq. 'vorticity') then
-          call interpolate_vertical( &
-               is, &
-               ie, &
-               js, &
-               je, &
-               npz, &
-               100.0 * levs(k), &  ! Convert mb to Pa
-               Atm%peln(is:ie,1:npz+1,js:je), &
-               coarse_diag%data%var3, &
-               work_3d(is:ie,js:je,k) &
-          )
-          call weighted_block_average( &
-               Atm%gridstruct%area(is:ie,js:je), &
-               work_3d(is:ie,js:je,k), &
-               result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
-          )
         else
           call interpolate_to_pressure_level( &
                is, &
@@ -1731,13 +1732,12 @@ contains
                coarse_diag%iv, &
                work_3d(is:ie,js:je,k) &
           )
-
-          call weighted_block_average( &
-               Atm%gridstruct%area(is:ie,js:je), &
-               work_3d(is:ie,js:je,k), &
-               result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
-          )
         endif
+        call weighted_block_average( &
+             Atm%gridstruct%area(is:ie,js:je), &
+             work_3d(is:ie,js:je,k), &
+             result(is_coarse:ie_coarse,js_coarse:je_coarse,k) &
+        )
       enddo
    end subroutine coarse_grain_3D_plev_field
 
@@ -1982,6 +1982,21 @@ contains
     enddo
  end subroutine get_need_vorticity_array
 
+ subroutine get_need_rh_array(need_rh_array)
+   logical, intent(out) :: need_rh_array
+
+   integer :: index
+
+   need_rh_array = .false.
+   do index = 1, DIAG_SIZE
+     if (trim(coarse_diagnostics(index)%special_case) .eq. 'rh' .and. &
+         coarse_diagnostics(index)%id .gt. 0) then
+         need_rh_array = .true.
+         exit
+     endif
+   enddo
+end subroutine get_need_rh_array
+
   subroutine get_need_masked_area_array(coarsening_strategy, need_masked_area_array)
     character(len=64), intent(in) :: coarsening_strategy
     logical, intent(out) :: need_masked_area_array
@@ -2002,19 +2017,20 @@ contains
    enddo
  end subroutine get_need_masked_area_array
 
- subroutine associate_vorticity_pointers(is, ie, js, je, npz, vorticity)
+ subroutine associate_variable_pointers(is, ie, js, je, npz, work_3d, special_case)
    integer, intent(in) :: is, ie, js, je, npz
-   real, target, intent(in) :: vorticity(is:ie,js:je,1:npz)
+   real, target, intent(in) :: work_3d(is:ie,js:je,1:npz)
+   character(len=*), intent(in) :: special_case
 
-    integer :: index
+   integer :: index
 
-    do index = 1, DIAG_SIZE
-      if (trim(coarse_diagnostics(index)%special_case) .eq. 'vorticity' .and. &
-          coarse_diagnostics(index)%id .gt. 0) then
-          coarse_diagnostics(index)%data%var3 => vorticity(is:ie,js:je,1:npz)
-      endif
-    enddo
- end subroutine associate_vorticity_pointers
+   do index = 1, DIAG_SIZE
+     if (trim(coarse_diagnostics(index)%special_case) .eq. trim(special_case) .and. &
+         coarse_diagnostics(index)%id .gt. 0) then
+         coarse_diagnostics(index)%data%var3 => work_3d(is:ie,js:je,1:npz)
+     endif
+   enddo
+ end subroutine associate_variable_pointers
 
   subroutine compute_mass(Atm, is, ie, js, je, npz, mass)
     type(fv_atmos_type), intent(in) :: Atm
@@ -2364,4 +2380,30 @@ contains
       iw = iw + ginv * sum(q(is:ie,js:je,1:npz,graupel) * delp(is:ie,js:je,1:npz), 3)
    endif
  end subroutine ice_water_path
+ 
+ subroutine get_rh(is, ie, js, je, npz, nwat, q, delp, peln, pt, rh)
+   integer, intent(in) :: is, ie, js, je, npz, nwat
+   real, intent(in) :: q(is:ie,js:je,1:npz,1:nwat), delp(is:ie,js:je,1:npz), peln(is:ie,1:npz+1,js:je)
+   real, intent(in) :: pt(is:ie,js:je,1:npz)
+   real, intent(out) :: rh(is:ie,js:je,npz)
+   
+   integer :: sphum, i, j, k
+   real:: work_2d(is:ie,js:je)
+
+   sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
+   do k=1,npz
+     do j=js,je
+       do i=is,ie
+         work_2d(i,j) = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
+       enddo
+     enddo
+     call mqs3d(ie-is+1, je-js+1, 1, pt(is:ie,js:je,k), work_2d, &
+                q(is:ie,js:je,k,sphum), rh(is:ie,js:je,k))
+     do j=js,je
+       do i=is,ie
+         rh(i,j,k) = 100.*q(i,j,k,sphum)/rh(i,j,k)
+       enddo
+     enddo
+   enddo
+ end subroutine get_rh
 end module coarse_grained_diagnostics_mod
