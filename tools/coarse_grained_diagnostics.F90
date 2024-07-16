@@ -66,7 +66,7 @@ module coarse_grained_diagnostics_mod
     integer :: iv = 0  ! Controls type of pressure-level interpolation performed (-1, 0, or 1)
     character(len=64) :: special_case = ''  ! E.g. height is computed differently on pressure surfaces
     type(data_subtype) :: data
-    logical :: write_3d_diags = .false.
+    logical :: plev_diag = .false.
   end type coarse_diag_type
 
   public :: fv_coarse_diag_init, fv_coarse_diag
@@ -927,7 +927,7 @@ contains
       coarse_diagnostics(index)%units = 'm/s'
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%data%var3 => Atm(tile_count)%ua(is:ie,js:je,1:npz)
-      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%plev_diag = .true.
       coarse_diagnostics(index)%iv = -1
 
       index = index + 1
@@ -938,7 +938,7 @@ contains
       coarse_diagnostics(index)%units = 'm/s'
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%data%var3 => Atm(tile_count)%va(is:ie,js:je,1:npz)
-      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%plev_diag = .true.
       coarse_diagnostics(index)%iv = -1
 
       index = index + 1
@@ -949,7 +949,7 @@ contains
       coarse_diagnostics(index)%units = 'K'
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%data%var3 => Atm(tile_count)%pt(is:ie,js:je,1:npz)
-      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%plev_diag = .true.
       coarse_diagnostics(index)%iv = 1
 
       index = index + 1
@@ -960,7 +960,7 @@ contains
       coarse_diagnostics(index)%units = 'Pa/s'
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%data%var3 => Atm(tile_count)%omga(is:ie,js:je,1:npz)
-      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%plev_diag = .true.
       coarse_diagnostics(index)%iv = -1
       
       if (.not. Atm(tile_count)%flagstruct%hydrostatic) then
@@ -972,7 +972,7 @@ contains
          coarse_diagnostics(index)%units = 'm/s'
          coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
          coarse_diagnostics(index)%data%var3 => Atm(tile_count)%w(is:ie,js:je,1:npz)
-         coarse_diagnostics(index)%write_3d_diags = .true.
+         coarse_diagnostics(index)%plev_diag = .true.
          coarse_diagnostics(index)%iv = -1
       endif
 
@@ -990,7 +990,7 @@ contains
          else
            coarse_diagnostics(index)%data%var3 => Atm(tile_count)%q(is:ie,js:je,1:npz,t)
          endif
-         coarse_diagnostics(index)%write_3d_diags = .true.
+         coarse_diagnostics(index)%plev_diag = .true.
          coarse_diagnostics(index)%iv = 0
       enddo
 
@@ -1002,7 +1002,7 @@ contains
       coarse_diagnostics(index)%units = 'm'
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%special_case = 'height'
-      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%plev_diag = .true.
 
       index = index + 1
       coarse_diagnostics(index)%axes = 3
@@ -1012,7 +1012,7 @@ contains
       coarse_diagnostics(index)%units = '1/s'
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%special_case = 'vorticity'
-      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%plev_diag = .true.
       coarse_diagnostics(index)%iv = -1
 
       index = index + 1
@@ -1023,7 +1023,7 @@ contains
       coarse_diagnostics(index)%units = '%'
       coarse_diagnostics(index)%reduction_method = AREA_WEIGHTED
       coarse_diagnostics(index)%special_case = 'rh'
-      coarse_diagnostics(index)%write_3d_diags = .true.
+      coarse_diagnostics(index)%plev_diag = .true.
       coarse_diagnostics(index)%iv = 0
     endif
 
@@ -1050,7 +1050,7 @@ contains
     enddo
 
     do index = 1, n_valid_diagnostics
-      if (coarse_diagnostics(index)%write_3d_diags) then
+      if (coarse_diagnostics(index)%plev_diag) then
             coarse_diagnostics(index)%id = register_diag_field( &
             trim(coarse_diagnostics(index)%module_name), &
             trim(coarse_diagnostics(index)%name), &
@@ -1463,7 +1463,7 @@ contains
           call coarse_grain_2D_field(is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, &
                                      Atm(tile_count), coarse_diagnostics(index), height_on_interfaces, work_2d_coarse)
           used = send_data(coarse_diagnostics(index)%id, work_2d_coarse, Time)
-        elseif (coarse_diagnostics(index)%write_3d_diags) then
+        elseif (coarse_diagnostics(index)%plev_diag) then
           call coarse_grain_3D_plev_field(is, ie, js, je, npz, is_coarse, ie_coarse, js_coarse, je_coarse, &
                Atm(tile_count), coarse_diagnostics(index), height_on_interfaces, work_3d_coarse(:,:,1:nplev))
           used = send_data(coarse_diagnostics(index)%id, work_3d_coarse(:,:,1:nplev), Time)
@@ -1960,7 +1960,7 @@ contains
       if (((coarse_diagnostics(index)%axes == 2) .and. &
           (coarse_diagnostics(index)%pressure_level > 0) .and. &
           (coarse_diagnostics(index)%id > 0)) .or. &
-          coarse_diagnostics(index)%write_3d_diags) then
+          coarse_diagnostics(index)%plev_diag) then
           need_height_array = .true.
           exit
       endif
