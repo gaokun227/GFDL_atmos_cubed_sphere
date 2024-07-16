@@ -26,7 +26,7 @@ module coarse_grained_diagnostics_mod
   use field_manager_mod,  only: MODEL_ATMOS
   use fv_arrays_mod, only: fv_atmos_type, fv_coarse_graining_type
   use fv_diagnostics_mod, only: cs3_interpolator, get_height_given_pressure, get_vorticity, interpolate_vertical
-  use fv_diagnostics_mod, only: nplev, levs
+  use fv_diagnostics_mod, only: nplev, levs, id_plev
   use fv_thermodynamics_mod, only: moist_cp, moist_cv
   use mpp_domains_mod, only: domain2d, EAST, NORTH
   use mpp_mod, only: FATAL, mpp_error
@@ -1030,11 +1030,11 @@ contains
   end subroutine populate_coarse_diag_type
 
   subroutine register_coarse_diagnostics(Atm, coarse_diagnostics, Time, &
-       id_xt_coarse, id_yt_coarse, id_pfull_coarse, id_plev_coarse, id_x_coarse, id_y_coarse)
+       id_xt_coarse, id_yt_coarse, id_pfull_coarse, id_x_coarse, id_y_coarse)
     type(fv_atmos_type), intent(inout) :: Atm(:)
     type(coarse_diag_type), intent(inout) :: coarse_diagnostics(:)
     type(time_type), intent(in) :: Time
-    integer, intent(in) :: id_xt_coarse, id_yt_coarse, id_pfull_coarse, id_plev_coarse
+    integer, intent(in) :: id_xt_coarse, id_yt_coarse, id_pfull_coarse
     integer, intent(in) :: id_x_coarse, id_y_coarse
 
     integer :: index, n_valid_diagnostics
@@ -1043,7 +1043,7 @@ contains
 
     axes_t = (/  id_xt_coarse, id_yt_coarse, id_pfull_coarse /)
     axes = (/  id_x_coarse, id_y_coarse, id_pfull_coarse /)
-    axes_p = (/ id_xt_coarse, id_yt_coarse, id_plev_coarse /)
+    axes_p = (/ id_xt_coarse, id_yt_coarse, id_plev /)
     do index = 1, DIAG_SIZE
       if (trim(coarse_diagnostics(index)%name) == '') exit
       n_valid_diagnostics = index
@@ -1281,10 +1281,10 @@ contains
     endif
   end subroutine maybe_allocate_reference_array
 
-  subroutine fv_coarse_diag_init(Atm, Time, id_pfull, id_phalf, id_plev, coarse_graining)
+  subroutine fv_coarse_diag_init(Atm, Time, id_pfull, id_phalf, coarse_graining)
     type(fv_atmos_type), intent(inout) :: Atm(:)
     type(time_type), intent(in) :: Time
-    integer, intent(in) :: id_pfull, id_phalf, id_plev
+    integer, intent(in) :: id_pfull, id_phalf
     type(fv_coarse_graining_type), intent(inout) :: coarse_graining
 
     integer :: is, ie, js, je, is_coarse, ie_coarse, js_coarse, je_coarse
@@ -1300,7 +1300,7 @@ contains
 
     call populate_coarse_diag_type(Atm, coarse_diagnostics)
     call register_coarse_diagnostics(Atm, coarse_diagnostics, Time, &
-         coarse_graining%id_xt_coarse, coarse_graining%id_yt_coarse, id_pfull, id_plev, &
+         coarse_graining%id_xt_coarse, coarse_graining%id_yt_coarse, id_pfull, &
          coarse_graining%id_x_coarse, coarse_graining%id_y_coarse)
   end subroutine fv_coarse_diag_init
 

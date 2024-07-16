@@ -104,7 +104,7 @@ module fv_diagnostics_mod
  public :: cs3_interpolator, get_vorticity
 ! needed by fv_nggps_diag
  public :: max_vv, max_uh, bunkers_vector, helicity_relative_CAPS
- public :: nplev, levs
+ public :: nplev, levs, id_plev
 
  integer, parameter :: MAX_PLEVS = 31
  integer :: nplev = 31 !< # of levels in plev interpolated standard level output, with levels given by levs. 31 by default
@@ -115,6 +115,7 @@ module fv_diagnostics_mod
 
  integer :: yr_init, mo_init, dy_init, hr_init, mn_init, sec_init
  integer :: id_dx, id_dy
+ integer :: id_plev = 0
 
  real              :: vrange(2), vsrange(2), wrange(2), trange(2), slprange(2), rhrange(2), psrange(2), skrange(2)
 
@@ -138,13 +139,13 @@ module fv_diagnostics_mod
 
 contains
 
- subroutine fv_diag_init(Atm, axes, Time, npx, npy, npz, p_ref, id_plev)
+ subroutine fv_diag_init(Atm, axes, Time, npx, npy, npz, p_ref)
     type(fv_atmos_type), intent(inout), target :: Atm(:)
     integer, intent(out) :: axes(4)
     type(time_type), intent(in) :: Time
     integer,         intent(in) :: npx, npy, npz
     real, intent(in):: p_ref
-    integer ,optional, intent(out):: id_plev
+
 
     real, allocatable :: grid_xt(:), grid_yt(:), grid_xe(:), grid_ye(:), grid_xn(:), grid_yn(:)
     real, allocatable :: grid_x(:),  grid_y(:)
