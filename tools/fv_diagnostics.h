@@ -60,7 +60,7 @@
             id_rh300_cmip,  id_rh250_cmip, id_rh100_cmip, id_rh50_cmip,  id_rh10_cmip
 
  integer :: id_hght3d, id_any_hght
- integer :: id_u100m, id_v100m, id_w100m
+ integer :: id_u100m, id_v100m, id_w100m, id_wind100m
 
  ! For initial conditions:
  integer ic_ps, ic_ua, ic_va, ic_ppt
@@ -85,6 +85,7 @@
  integer :: id_qr_dt_phys, id_qg_dt_phys, id_qs_dt_phys
  integer :: id_liq_wat_dt_phys, id_ice_wat_dt_phys
  integer :: id_intqv, id_intql, id_intqi, id_intqr, id_intqs, id_intqg
+ integer :: id_t_dt_diabatic, id_qv_dt_diabatic
 
  integer :: id_mppcw, id_mppew, id_mppe1, id_mpper, id_mppdi
  integer :: id_mppd1, id_mppds, id_mppdg, id_mppsi, id_mpps1

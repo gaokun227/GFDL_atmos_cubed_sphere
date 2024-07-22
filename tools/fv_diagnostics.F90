@@ -883,6 +883,26 @@ contains
              Atm(n)%nudge_diag%nudge_qv_dt(isc:iec,jsc:jec,1:npz) = 0.0
           endif
 
+          id_t_dt_diabatic = register_diag_field ( trim(field), 'T_dt_diabatic', axes(1:3), Time,           &
+               'temperature tendency from diabatic processes (t_dt_phys + t_dt_gfdlmp)', 'K/s', missing_value=missing_value )
+          if (id_t_dt_diabatic > 0) then
+             if (.not. allocated(Atm(n)%phys_diag%phys_t_dt)) then
+                allocate(Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,npz))
+             endif
+             if (.not. allocated(Atm(n)%inline_mp%t_dt)) then
+                allocate(Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,npz))
+             endif
+          endif
+          id_qv_dt_diabatic = register_diag_field ( trim(field), 'qv_dt_diabatic', axes(1:3), Time,           &
+               'temperature tendency from diabatic processes (qv_dt_phys + qv_dt_gfdlmp)', 'kg/kg/s', missing_value=missing_value )
+          if (id_qv_dt_diabatic > 0) then
+             if (.not. allocated(Atm(n)%phys_diag%phys_qv_dt)) then
+                allocate(Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,npz))
+             endif
+             if (.not. allocated(Atm(n)%inline_mp%qv_dt)) then
+                allocate(Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,npz))
+             endif
+          endif
        endif
 
 !
@@ -1354,6 +1374,8 @@ contains
                         '100-m AGL u-wind', 'm/s', missing_value=missing_value )
        id_v100m = register_diag_field ( trim(field), 'v100m', axes(1:2), Time,       &
                         '100-m AGL v-wind', 'm/s', missing_value=missing_value )
+       id_wind100m = register_diag_field ( trim(field), 'wind100m', axes(1:2), Time,       &
+                        '100-m AGL windspeed', 'm/s', missing_value=missing_value )
 
 !--------------------------
 ! relative humidity (CMIP definition):
@@ -1905,6 +1927,11 @@ contains
        if (idiag%id_u_dt_sg > 0) used=send_data(idiag%id_u_dt_sg,  Atm(n)%sg_diag%u_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_v_dt_sg > 0) used=send_data(idiag%id_v_dt_sg,  Atm(n)%sg_diag%v_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_qv_dt_sg > 0) used=send_data(idiag%id_qv_dt_sg,  Atm(n)%sg_diag%qv_dt(isc:iec,jsc:jec,1:npz), Time)
+
+       if (id_t_dt_diabatic > 0) used=send_data(id_t_dt_diabatic, Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,1:npz) + &
+                                                Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,1:npz), Time)
+       if (id_qv_dt_diabatic > 0) used=send_data(id_qv_dt_diabatic, Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,1:npz) + &
+                                                Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,1:npz), Time)
 
        if(id_c15>0 .or. id_c25>0 .or. id_c35>0 .or. id_c45>0) then
           call wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, Atm(n)%ua(isc:iec,jsc:jec,npz),   &
@@ -3162,7 +3189,7 @@ contains
             used=send_data(id_pmaskv2, a2, Time)
        endif
 
-       if ( id_u100m>0 .or. id_v100m>0 .or.  id_w100m>0 .or. id_w5km>0 .or. id_w2500m>0 &
+       if ( id_u100m>0 .or. id_v100m>0 .or. id_wind100m>0 .or.  id_w100m>0 .or. id_w5km>0 .or. id_w2500m>0 &
             & .or. id_w1km>0 .or. id_basedbz>0 .or. id_dbz4km>0 .or. id_40dbzht>0) then
           if (.not.allocated(wz)) allocate ( wz(isc:iec,jsc:jec,npz+1) )
           if ( Atm(n)%flagstruct%hydrostatic) then
@@ -3221,15 +3248,29 @@ contains
             used=send_data(id_w100m, a2, Time)
             if(prt_minmax) call prt_mxm('w100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
        endif
-       if ( id_u100m>0 ) then
-            call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%ua(isc:iec,jsc:jec,:), a2)
-            used=send_data(id_u100m, a2, Time)
-            if(prt_minmax) call prt_mxm('u100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+
+       if ( id_u100m>0 .or. id_wind100m>0 ) then
+            call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%ua(isc:iec,jsc:jec,:), u2)
+            if (id_u100m>0) then
+               used=send_data(id_u100m, u2, Time)
+               if(prt_minmax) call prt_mxm('u100m', u2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            endif
        endif
-       if ( id_v100m>0 ) then
-            call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%va(isc:iec,jsc:jec,:), a2)
-            used=send_data(id_v100m, a2, Time)
-            if(prt_minmax) call prt_mxm('v100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+       if ( id_v100m>0 .or. id_wind100m>0 ) then
+            call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%va(isc:iec,jsc:jec,:), v2)
+            if (id_v100m > 0) then
+               used=send_data(id_v100m, v2, Time)
+               if(prt_minmax) call prt_mxm('v100m', v2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+            endif
+       endif
+       if ( id_wind100m > 0) then
+          do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) = sqrt(u2(i,j)**2 + v2(i,j)**2)
+             enddo
+          enddo
+          used=send_data(id_wind100m, a2, Time)
+          if(prt_minmax) call prt_mxm('wind100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
        endif
 
        if ( rainwat > 0 .and. (id_dbz>0 .or. id_maxdbz>0 .or. id_basedbz>0 .or. id_dbz4km>0 &
