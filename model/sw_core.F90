@@ -492,6 +492,9 @@ module sw_core_mod
 
    subroutine d_sw(delpc, delp,  ptc,   pt, u,  v, w, uc,vc, &
                    ua, va, divg_d, xflux, yflux, cx, cy,              &
+                   !3D-SA-TKE
+                   deform_1, tke, scl, pbl2d,                         &
+                   !3D-SA-TKE-end
                    crx_adv, cry_adv,  xfx_adv, yfx_adv, q_con, z_rat, kgb, heat_source,    &
                    diss_est, zvir, sphum, nq, q, k, km, inline_q,  &
                    dt, hord_tr, hord_mt, hord_vt, hord_tm, hord_dp, nord,   &
@@ -508,6 +511,12 @@ module sw_core_mod
       real   , intent(IN):: zvir
       real,    intent(in):: damp_v, damp_w, damp_t, kgb
       type(fv_grid_bounds_type), intent(IN) :: bd
+      !3D-SA-TKE
+      real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: deform_1
+      real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: tke
+      real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: pbl2d
+      real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: scl
+      !3D-SA-TKE-end
       real, intent(inout):: divg_d(bd%isd:bd%ied+1,bd%jsd:bd%jed+1) ! divergence
       real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: z_rat
       real, intent(INOUT), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: delp, pt, ua, va
@@ -555,6 +564,14 @@ module sw_core_mod
       real :: damp, damp2, damp4, dd8, u2, v2, du2, dv2
       real :: u_lon
       integer :: i,j, is2, ie1, js2, je1, n, nt, n2, iq
+
+      !3D-SA-TKE
+      real :: cpl1,cpl2,cpl3,cpl4,cpl5,cpl6,cm,ce,tem,pfl,damp3d
+      real :: tkemax, esmin
+      parameter(cpl1=0.280,cpl2=0.870,cpl3=0.913)
+      parameter(cpl4=0.153,cpl5=0.278,cpl6=0.720)
+      parameter(cm=0.0856,ce=0.845,tkemax=100.0,esmin=500.0)
+      !3D-SA-TKE-end
 
       real, pointer, dimension(:,:) :: area, area_c, rarea
 
@@ -1428,7 +1445,20 @@ module sw_core_mod
 
      do j=js,je+1
         do i=is,ie+1
+!3D-SA-TKE
+! KGao note 07/19/2024: blending is done here 
+! original code only has the following line (damp2 = xxx)
            damp2 =  gridstruct%da_min_c*max(d2_bg, min(0.20, dddmp*vort(i,j)))  ! del-2
+!           damp2 = dddmp*vort(i,j)
+!           damp3d = dddmp*abs(dt)*sqrt(max(tke(i,j),tkemax))/sqrt(gridstruct%da_min_c)
+!           tem = sqrt(area(i,j))/max(pbl2d(i,j),esmin)
+!           pfl = cpl1*(tem**2+cpl2*tem**0.5-cpl3)/        &
+!                     (tem**2+cpl4*tem**0.5+cpl5)+cpl6
+!           pfl = min(max(pfl,0.0),1.0)
+!           pfl = 0.0 ! KGao note: disable blending here
+!           damp2 = (1.0-pfl)*damp3d + pfl*damp2 ! KGao note: damp2 is a combo of tke-damping coeff and ori dddmp damping 
+!           damp2 = gridstruct%da_min_c*max(d2_bg, min(0.20, damp2))  ! del-2
+!3D-SA-TKE-end
            vort(i,j) = damp2*delpc(i,j) + dd8*divg_d(i,j)
              ke(i,j) = ke(i,j) + vort(i,j)
         enddo

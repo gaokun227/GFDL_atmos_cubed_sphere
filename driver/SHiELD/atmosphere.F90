@@ -477,7 +477,11 @@ contains
                       Atm(n)%pe, Atm(n)%pk, Atm(n)%peln,                   &
                       Atm(n)%pkz, Atm(n)%phis, Atm(n)%q_con,               &
                       Atm(n)%omga, Atm(n)%ua, Atm(n)%va, Atm(n)%uc,        &
-                      Atm(n)%vc, Atm(n)%ak, Atm(n)%bk, Atm(n)%mfx,         &
+                      Atm(n)%vc,                                           & 
+!3D-SA-TKE
+                      Atm(n)%deform_1, Atm(n)%deform_2, Atm(n)%pbl2d,      &
+!3D-SA-TKE-end
+                      Atm(n)%ak, Atm(n)%bk, Atm(n)%mfx,                    &
                       Atm(n)%mfy, Atm(n)%cx, Atm(n)%cy, Atm(n)%ze0,        &
                       Atm(n)%flagstruct%hybrid_z,                          &
                       Atm(n)%gridstruct, Atm(n)%flagstruct,                &
@@ -1565,6 +1569,9 @@ contains
                      Atm(mygrid)%pt, Atm(mygrid)%delp, Atm(mygrid)%q, Atm(mygrid)%ps,                     &
                      Atm(mygrid)%pe, Atm(mygrid)%pk, Atm(mygrid)%peln, Atm(mygrid)%pkz, Atm(mygrid)%phis,      &
                      Atm(mygrid)%q_con, Atm(mygrid)%omga, Atm(mygrid)%ua, Atm(mygrid)%va, Atm(mygrid)%uc, Atm(mygrid)%vc, &
+                     !3D-SA-TKE
+                     Atm(mygrid)%deform_1, Atm(mygrid)%deform_2, Atm(mygrid)%pbl2d,        &
+                     !3D-SA-TKE-end
                      Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%mfx, Atm(mygrid)%mfy,                    &
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
@@ -1579,6 +1586,9 @@ contains
                      Atm(mygrid)%pt, Atm(mygrid)%delp, Atm(mygrid)%q, Atm(mygrid)%ps,                     &
                      Atm(mygrid)%pe, Atm(mygrid)%pk, Atm(mygrid)%peln, Atm(mygrid)%pkz, Atm(mygrid)%phis,      &
                      Atm(mygrid)%q_con, Atm(mygrid)%omga, Atm(mygrid)%ua, Atm(mygrid)%va, Atm(mygrid)%uc, Atm(mygrid)%vc, &
+!3D-SA-TKE
+                     Atm(mygrid)%deform_1, Atm(mygrid)%deform_2, Atm(mygrid)%pbl2d,        &
+!3D-SA-TKE-end
                      Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%mfx, Atm(mygrid)%mfy,                    &
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
@@ -1652,6 +1662,9 @@ contains
                      Atm(mygrid)%pe, Atm(mygrid)%pk, Atm(mygrid)%peln, Atm(mygrid)%pkz, Atm(mygrid)%phis,      &
                      Atm(mygrid)%q_con, Atm(mygrid)%omga, Atm(mygrid)%ua, Atm(mygrid)%va, Atm(mygrid)%uc, Atm(mygrid)%vc, &
                      Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%mfx, Atm(mygrid)%mfy,                    &
+!3D-SA-TKE
+                     Atm(mygrid)%deform_1, Atm(mygrid)%deform_2, Atm(mygrid)%pbl2d,        &
+!3D-SA-TKE-end
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
                      Atm(mygrid)%neststruct, Atm(mygrid)%idiag, Atm(mygrid)%bd, Atm(mygrid)%parent_grid,  &
@@ -1665,6 +1678,9 @@ contains
                      Atm(mygrid)%pt, Atm(mygrid)%delp, Atm(mygrid)%q, Atm(mygrid)%ps,                     &
                      Atm(mygrid)%pe, Atm(mygrid)%pk, Atm(mygrid)%peln, Atm(mygrid)%pkz, Atm(mygrid)%phis,      &
                      Atm(mygrid)%q_con, Atm(mygrid)%omga, Atm(mygrid)%ua, Atm(mygrid)%va, Atm(mygrid)%uc, Atm(mygrid)%vc, &
+!3D-SA-TKE
+                     Atm(mygrid)%deform_1, Atm(mygrid)%deform_2, Atm(mygrid)%pbl2d,        &
+!3D-SA-TKE-end
                      Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%mfx, Atm(mygrid)%mfy,                    &
                      Atm(mygrid)%cx, Atm(mygrid)%cy, Atm(mygrid)%ze0, Atm(mygrid)%flagstruct%hybrid_z,    &
                      Atm(mygrid)%gridstruct, Atm(mygrid)%flagstruct,                            &
@@ -1769,6 +1785,13 @@ contains
 ! log(pe) <-- prsik
 
      blen = Atm_block%blksz(nb)
+!3D-SA-TKE
+     do ix = 1, blen
+        i = Atm_block%index(nb)%ii(ix)
+        j = Atm_block%index(nb)%jj(ix)
+        Atm(mygrid)%pbl2d(i,j) = IPD_Data(nb)%Tbd%hpbl(ix) ! KGao Tbd->Diag
+     enddo
+!3D-SA-TKE
 
      !-- level interface geopotential height (relative to the surface)
      IPD_Data(nb)%Statein%phii(:,1) = 0.0_kind_phys
@@ -1798,6 +1821,11 @@ contains
          IPD_Data(nb)%Statein%vgrs(ix,k) = _DBL_(_RL_(Atm(mygrid)%va(i,j,k1)))
           IPD_Data(nb)%Statein%vvl(ix,k) = _DBL_(_RL_(omega_for_physics(i,j,k1)))
          IPD_Data(nb)%Statein%prsl(ix,k) = _DBL_(_RL_(Atm(mygrid)%delp(i,j,k1)))   ! Total mass
+         !3D-SA-TKE
+         IPD_Data(nb)%Statein%def_1(ix,k) = _DBL_(_RL_(Atm(mygrid)%deform_1(i,j,k1)))
+         IPD_Data(nb)%Statein%def_2(ix,k) = _DBL_(_RL_(Atm(mygrid)%deform_2(i,j,k1)))
+         !3D-SA-TKE-end
+
          if (Atm(mygrid)%flagstruct%do_diss_est)IPD_Data(nb)%Statein%diss_est(ix,k) = _DBL_(_RL_(Atm(mygrid)%diss_est(i,j,k1)))
 
          if (.not.Atm(mygrid)%flagstruct%hydrostatic .and. (.not.Atm(mygrid)%flagstruct%use_hydro_pressure))  &

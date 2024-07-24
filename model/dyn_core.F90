@@ -53,6 +53,10 @@ module dyn_core_mod
   use fv_regional_mod,      only: regional_boundary_update
   use fv_regional_mod,      only: current_time_in_seconds, bc_time_interval
   use fv_regional_mod,      only: delz_regBC ! TEMPORARY --- lmh
+!3D-SA-TKE
+  use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
+  use field_manager_mod,  only: MODEL_ATMOS
+!3D-SA-TKE-end
 
 #ifdef SW_DYNAMICS
   use test_cases_mod,      only: test_case, case9_forcing1, case9_forcing2
@@ -87,7 +91,11 @@ contains
 
  subroutine dyn_core(npx, npy, npz, ng, sphum, nq, bdt, n_map, n_split, zvir, cp, akap, cappa, grav, hydrostatic,  &
                      u,  v,  w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va, &
-                     uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, &
+                     uc, vc,                                     &
+             !3D-SA-TKE
+                     deform_1, deform_2, pbl2d,                  &
+             !3D-SA-TKE-end
+                     mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, &
                      ks, gridstruct, flagstruct, neststruct, idiag, bd, domain, &
                      init_step, i_pack, end_step, diss_est, time_total)
     integer, intent(IN) :: npx
@@ -140,6 +148,11 @@ contains
     real, intent(inout):: uc(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz)  ! (uc, vc) are mostly used as the C grid winds
     real, intent(inout):: vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
     real, intent(inout), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz):: ua, va
+!3D-SA-TKE
+    real, intent(out), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz):: deform_1
+    real, intent(out), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz):: deform_2
+    real, intent(inout), dimension(bd%isd:bd%ied,bd%jsd:bd%jed):: pbl2d 
+!3D-SA-TKE-end
     real, intent(inout):: q_con(bd%isd:, bd%jsd:, 1:)
 
 ! The Flux capacitors: accumulated Mass flux arrays
@@ -192,7 +205,10 @@ contains
     logical :: last_step, remap_step
     logical used
     real :: split_timestep_bc
-
+!3D-SA-TKE
+    real:: tke(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: scl(bd%isd:bd%ied,bd%jsd:bd%jed)
+!3D-SA-TKE-end
     integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed
 
@@ -652,11 +668,20 @@ contains
 
     endif
 
+!3D-SA-TKE
+!--calculating shear deformation and TKE transport for 3d TKE scheme
+    call diff3d(npx, npy, npz, nq, ua, va, w,       &
+                 q, deform_1, deform_2, tke, scl,        &
+                 delz, gz, gridstruct,  bd)
+!-- add deform_1 pbl2d, tke, and scl in parallel calculation
+!3D-SA-TKE-end
+
 
                                                      call timing_on('d_sw')
 !$OMP parallel do default(none) shared(npz,flagstruct,nord_v,pfull,damp_vt,hydrostatic,last_step, &
 !$OMP                                  is,ie,js,je,isd,ied,jsd,jed,omga,delp,gridstruct,npx,npy,  &
 !$OMP                                  ng,zh,vt,ptc,pt,u,v,w,uc,vc,ua,va,divgd,mfx,mfy,cx,cy,     &
+!$OMP                                  deform_1, pbl2d, tke, scl,                                 &
 !$OMP                                  crx,cry,xfx,yfx,q_con,zvir,sphum,nq,q,dt,bd,rdt,iep1,jep1, &
 !$OMP                                  heat_source,is_ideal_case,diss_est,radius)                 &
 !$OMP                          private(nord_k, nord_w, nord_t, damp_w, damp_t, d2_divg,   &
@@ -756,6 +781,10 @@ contains
                   u(isd,jsd,k),    v(isd,jsd,k),   w(isd:,jsd:,k),  uc(isd,jsd,k),      &
                   vc(isd,jsd,k),   ua(isd,jsd,k),  va(isd,jsd,k), divgd(isd,jsd,k),   &
                   mfx(is, js, k),  mfy(is, js, k),  cx(is, jsd,k),  cy(isd,js, k),    &
+!3D-SA-TKE
+                  deform_1(isd, jsd, k), tke(isd, jsd, k),                            &
+                  scl(isd, jsd), pbl2d(isd, jsd),                                     &
+!3D-SA-TKE-end
                   crx(is, jsd,k),  cry(isd,js, k), xfx(is, jsd,k), yfx(isd,js, k),    &
 #ifdef USE_COND
                   q_con(isd:,jsd:,k),  z_rat(isd,jsd),  &
@@ -2597,5 +2626,266 @@ do 1000 j=jfirst,jlast
 
  end subroutine gz_bc
 
+
+!3D-SA-TKE
+ subroutine diff3d(npx, npy, npz, nq, ua, va, w, q,       &
+                  deform_1, deform_2, tke, scl, delz, gz, gridstruct, bd)
+
+    use fv_arrays_mod,      only: fv_grid_type
+
+    integer, intent(in) :: nq, npx, npy, npz
+    type(fv_grid_bounds_type), intent(IN) :: bd
+    real, intent(in), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz) :: ua
+    real, intent(in), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz) :: va
+    real, intent(in) ::     w(bd%isd:,bd%jsd:,1:)
+
+    real, intent(in) ::     delz(bd%is:,bd%js:,1:)
+    real, intent(in) ::     gz(bd%is:,bd%js:,1:)
+    real, intent(in) ::     q( bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, nq)  !
+
+    real, intent(out) ::    deform_1(bd%isd:bd%ied  ,bd%jsd:bd%jed,npz)
+    real, intent(out) ::    deform_2(bd%isd:bd%ied  ,bd%jsd:bd%jed,npz)
+    real, intent(out) ::    tke(bd%isd:bd%ied  ,bd%jsd:bd%jed,npz)
+    real, intent(out) ::    scl(bd%isd:bd%ied  ,bd%jsd:bd%jed)
+    type(fv_grid_type), intent(IN), target :: gridstruct
+
+! local
+   
+    real, pointer, dimension(:,:) :: dx, dy, rarea
+    integer :: is, ie, js, je, isd, ied, jsd, jed, i, j, k
+    real:: dudx(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: dudy(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: dvdx(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: dvdy(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: dwdx(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: dwdy(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: dudz(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: dvdz(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: dwdz(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+    real:: ut(bd%isd:bd%ied+1,bd%jsd:bd%jed)
+    real:: vt(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
+   
+    integer :: ntke
+    real :: tke_1(bd%isd:bd%ied+2,  bd%jsd:bd%jed+2)
+    real :: dedy_1(bd%isd:bd%ied+1,  bd%jsd:bd%jed+1)
+    real :: dedy_2(bd%isd:bd%ied,  bd%jsd:bd%jed,npz)
+    real :: dedx_1(bd%isd:bd%ied+1,  bd%jsd:bd%jed+1)
+    real :: dedx_2(bd%isd:bd%ied,  bd%jsd:bd%jed,npz)
+    real :: tke_2(npz)
+    real :: dedz_1(npz)
+    real :: dedz_2(bd%isd:bd%ied,  bd%jsd:bd%jed,npz)
+   
+    real :: tkemax
+    integer:: l_tkemax,kscl
+   
+    dx  => gridstruct%dx
+    dy  => gridstruct%dy
+    rarea   => gridstruct%rarea
+   
+    is  = bd%is
+    ie  = bd%ie
+    js  = bd%js
+    je  = bd%je
+    isd  = bd%isd
+    ied  = bd%ied
+    jsd  = bd%jsd
+    jed  = bd%jed
+   
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
+!$OMP                          ut,vt,dudx,dudy,dvdx,dvdy,dwdx,dwdy)
+   do k=1,npz
+       do j=js,je+1
+          do i=is,ie
+             vt(i,j) = ua(i,j,k)*dx(i,j)
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie+1
+             ut(i,j) = va(i,j,k)*dy(i,j)
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie
+             dudy(i,j,k) = rarea(i,j)*(vt(i,j+1)-vt(i,j))
+             dvdx(i,j,k) = rarea(i,j)*(ut(i+1,j)-ut(i,j))
+          enddo
+       enddo
+   !-------------------------------------
+       do j=js,je
+          do i=is,ie+1
+             ut(i,j) = ua(i,j,k)*dy(i,j)
+          enddo
+       enddo
+       do j=js,je+1
+          do i=is,ie
+             vt(i,j) = va(i,j,k)*dx(i,j)
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie
+             dudx(i,j,k) = rarea(i,j)*(ut(i+1,j)-ut(i,j))
+             dvdy(i,j,k) = rarea(i,j)*(vt(i,j+1)-vt(i,j))
+          enddo
+       enddo
+   !-------------------------------------
+       do j=js,je
+          do i=is,ie+1
+             ut(i,j) = w(i,j,k)*dy(i,j)
+          enddo
+       enddo
+       do j=js,je+1
+          do i=is,ie
+             vt(i,j) = w(i,j,k)*dx(i,j)
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie
+             dwdx(i,j,k) = rarea(i,j)*(ut(i+1,j)-ut(i,j))
+             dwdy(i,j,k) = rarea(i,j)*(vt(i,j+1)-vt(i,j))
+          enddo
+       enddo
+   
+   enddo   !z loop
+   
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,delz, &
+!$OMP                          dudz,dvdz,dwdz)
+   do j=js,je
+       do i=is,ie
+          do k=1,npz-1
+             dudz(i,j,k)=(ua(i,j,k+1)-ua(i,j,k))/delz(i,j,k)
+             dvdz(i,j,k)=(va(i,j,k+1)-va(i,j,k))/delz(i,j,k)
+             dwdz(i,j,k)=(w(i,j,k+1)-w(i,j,k))/delz(i,j,k)
+          enddo
+          dudz(i,j,npz)=0.0
+          dvdz(i,j,npz)=0.0
+          dwdz(i,j,npz)=0.0
+       enddo
+   enddo
+   
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_1, &
+!$OMP        dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
+   do k=1,npz
+       do j=js,je
+          do i=is,ie
+             deform_1(i,j,k)=2*(dudx(i,j,k)**2+dvdy(i,j,k)**2+  &
+                dwdz(i,j,k)**2)+(dudy(i,j,k)+dvdx(i,j,k))**2+   &
+                (dudz(i,j,k)+dwdx(i,j,k))**2+                     &
+                (dvdz(i,j,k)+dwdy(i,j,k))**2
+          enddo
+       enddo
+   enddo
+   
+   ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+   
+!find scale of energy containin eddies using TKE
+
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,q, &
+!$OMP     ntke,tkemax,l_tkemax,kscl,scl,gz)
+   do j=js,je
+      do i=is,ie
+         scl(i,j)=1000.0
+         l_tkemax=10
+         kscl=10
+         tkemax=0.0
+         do k=1,npz
+            tkemax=max(tkemax,q(i,j,k,ntke))
+         enddo
+         do k=1,npz
+            if (abs(q(i,j,k,ntke)-tkemax)/tkemax .lt. 1.0e-9) then
+               l_tkemax=k
+            endif
+         enddo
+         do k=l_tkemax,npz
+            if (q(i,j,k,ntke)-0.5*tkemax .gt. 0.0) then
+               kscl=k
+            endif 
+         enddo
+         kscl=min(kscl,npz-10)
+         scl(i,j)=gz(i,j,kscl+1)
+      enddo
+   enddo
+         
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,q,dx,dy,rarea, &
+!$OMP     ntke,ut,vt,tke,tke_1,dedy_1,dedy_2,dedx_1,dedx_2)
+   do k=1,npz
+       do j=js,je+2
+          do i=is,ie+2
+             tke(i,j,k)=q(i,j,k,ntke)
+             tke_1(i,j)=q(i,j,k,ntke)
+          enddo
+       enddo
+       do j=js,je+2
+          do i=is,ie
+             vt(i,j)=tke_1(i,j)*dx(i,j)
+          enddo
+       enddo
+       do j=js,je+1
+          do i=is,ie
+             dedy_1(i,j)=rarea(i,j)*(vt(i,j+1)-vt(i,j))
+          enddo
+       enddo
+       do j=js,je+1
+          do i=is,ie
+             vt(i,j)=dedy_1(i,j)*dx(i,j)
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie
+             dedy_2(i,j,k)=rarea(i,j)*(vt(i,j+1)-vt(i,j))
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie+2
+             ut(i,j)=tke_1(i,j)*dy(i,j)
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie+1
+             dedx_1(i,j)=rarea(i,j)*(ut(i+1,j)-ut(i,j))
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie+1
+             ut(i,j)=dedx_1(i,j)*dy(i,j)
+          enddo
+       enddo
+       do j=js,je
+          do i=is,ie
+             dedx_2(i,j,k)=rarea(i,j)*(ut(i+1,j)-ut(i,j))
+          enddo
+       enddo
+   enddo
+   
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,q,delz, &
+!$OMP     ntke,tke_2,dedz_1,dedz_2)
+   do j=js,je
+       do i=is,ie
+          do k=1,npz
+             tke_2(k)=q(i,j,k,ntke)
+          enddo
+          do k=1,npz-1
+             dedz_1(k)=(tke_2(k+1)-tke_2(k))/delz(i,j,k)
+          enddo
+          do k=1,npz-2
+             dedz_2(i,j,k)=(dedz_1(k+1)-dedz_1(k))/delz(i,j,k)
+          enddo
+          dedz_2(i,j,npz-1)=0.0
+          dedz_2(i,j,npz)=0.0
+       enddo
+   enddo
+   
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_2, &
+!$OMP     dedx_2,dedy_2)
+   do k=1,npz
+       do j=js,je
+          do i=is,ie
+   !          deform_2(i,j,k)=dedx_2(i,j,k)+dedy_2(i,j,k)+dedz_2(i,j,k)
+             deform_2(i,j,k)=dedx_2(i,j,k)+dedy_2(i,j,k)
+          enddo
+       enddo
+   enddo
+
+ end subroutine diff3d
+!3D-SA-TKE-end
 
 end module dyn_core_mod

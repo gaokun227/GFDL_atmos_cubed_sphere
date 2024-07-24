@@ -1261,7 +1261,11 @@ module fv_arrays_mod
     real, _ALLOCATABLE :: va(:,:,:)     _NULL
     real, _ALLOCATABLE :: uc(:,:,:)     _NULL  ! (uc, vc) are mostly used as the C grid winds
     real, _ALLOCATABLE :: vc(:,:,:)     _NULL
-
+!3D-SA-TKE
+    real, _ALLOCATABLE :: deform_1(:,:,:)  _NULL !< 3D deformation
+    real, _ALLOCATABLE :: deform_2(:,:,:)  _NULL !< 3D TKE transport & pressure correlation
+    real, _ALLOCATABLE :: pbl2d(:,:)       _NULL !< 2D PBL height usd for blending 
+!3D-SA-TKE-end
     real, _ALLOCATABLE :: ak(:)  _NULL
     real, _ALLOCATABLE :: bk(:)  _NULL
 
@@ -1486,6 +1490,12 @@ contains
     allocate (   Atm%va(isd:ied  ,jsd:jed  ,npz) )
     allocate (   Atm%uc(isd:ied+1,jsd:jed  ,npz) )
     allocate (   Atm%vc(isd:ied  ,jsd:jed+1,npz) )
+!3D-SA-TKE
+    allocate (   Atm%deform_1(isd:ied  ,jsd:jed  ,npz) )
+    allocate (   Atm%deform_2(isd:ied  ,jsd:jed  ,npz) )
+    allocate (   Atm%pbl2d(isd:ied  ,jsd:jed) )
+!3D-SA-TKE-end
+
     ! For tracer transport:
     allocate ( Atm%mfx(is:ie+1, js:je,  npz) )
     allocate ( Atm%mfy(is:ie  , js:je+1,npz) )
@@ -1533,6 +1543,13 @@ contains
 ! Place the memory in the optimal shared mem space
 ! This will help the scaling with OpenMP
 !$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,Atm,nq,ncnst)
+!3D-SA-TKE
+     do j=jsd, jed
+        do i=isd, ied
+                Atm%pbl2d(i,j) = real_big
+        enddo
+     enddo
+!3D-SA-TKE-end
      do k=1, npz
         do j=jsd, jed
            do i=isd, ied
@@ -1540,6 +1557,10 @@ contains
                 Atm%va(i,j,k) = real_big
                 Atm%pt(i,j,k) = real_big
               Atm%delp(i,j,k) = real_big
+              !3D-SA-TKE
+              Atm%deform_1(i,j,k) = real_big
+              Atm%deform_2(i,j,k) = real_big
+              !3D-SA-TKE-end
            enddo
         enddo
         do j=jsd, jed+1
@@ -1833,6 +1854,11 @@ contains
     deallocate (   Atm%va )
     deallocate (   Atm%uc )
     deallocate (   Atm%vc )
+    !3D-SA-TKE
+    deallocate (   Atm%deform_1 )
+    deallocate (   Atm%deform_2 )
+    deallocate (   Atm%pbl2d )
+    !3D-SA-TKE-end
     deallocate ( Atm%mfx )
     deallocate ( Atm%mfy )
     deallocate (  Atm%cx )

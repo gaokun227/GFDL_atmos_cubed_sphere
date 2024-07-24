@@ -74,6 +74,9 @@ contains
                         reproduce_sum, kappa, cp_air, zvir, ptop, ks, ncnst, n_split,     &
                         q_split, u, v, w, delz, hydrostatic, pt, delp, q,   &
                         ps, pe, pk, peln, pkz, phis, q_con, omga, ua, va, uc, vc,          &
+!3D-SA-TKE
+                        deform_1, deform_2, pbl2d,                                    &
+!3D-SA-TKE-end
                         ak, bk, mfx, mfy, cx, cy, ze0, hybrid_z, &
                         gridstruct, flagstruct, neststruct, idiag, bd, &
                         parent_grid, domain, inline_mp, diss_est, time_total)
@@ -131,6 +134,11 @@ contains
     real, intent(inout) :: vc(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
 
     real, intent(inout), dimension(bd%isd:bd%ied ,bd%jsd:bd%jed ,npz):: ua, va
+!3D-SA-TKE
+    real, intent(out), dimension(bd%isd:bd%ied ,bd%jsd:bd%jed ,npz):: deform_1
+    real, intent(out), dimension(bd%isd:bd%ied ,bd%jsd:bd%jed ,npz):: deform_2
+    real, intent(inout), dimension(bd%isd:bd%ied ,bd%jsd:bd%jed):: pbl2d 
+!3D-SA-TKE-end
     real, intent(in),    dimension(npz+1):: ak, bk
 
     type(inline_mp_type), intent(inout) :: inline_mp
@@ -485,7 +493,11 @@ contains
                                            call timing_on('DYN_CORE')
       call dyn_core(npx, npy, npz, ng, sphum, nq, mdt, n_map, n_split, zvir, cp_air, akap, cappa, grav, hydrostatic, &
                     u, v, w, delz, pt, q, delp, pe, pk, phis, ws, omga, ptop, pfull, ua, va,           &
-                    uc, vc, mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
+                    uc, vc, &
+                    !3D-SA-TKE
+                    deform_1, deform_2, pbl2d,                      &
+                    !3D-SA-TKE-end
+                    mfx, mfy, cx, cy, pkz, peln, q_con, ak, bk, ks, &
                     gridstruct, flagstruct, neststruct, idiag, bd, &
                     domain, n_map==1, i_pack, last_step, diss_est, time_total)
                                            call timing_off('DYN_CORE')
