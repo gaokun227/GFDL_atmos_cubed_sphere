@@ -1449,6 +1449,7 @@ module sw_core_mod
 ! KGao note 07/19/2024: blending is done here 
 ! original code only has the following line (damp2 = xxx)
            damp2 =  gridstruct%da_min_c*max(d2_bg, min(0.20, dddmp*vort(i,j)))  ! del-2
+! KGao: following lines are commented out for testing purpose 
 !           damp2 = dddmp*vort(i,j)
 !           damp3d = dddmp*abs(dt)*sqrt(max(tke(i,j),tkemax))/sqrt(gridstruct%da_min_c)
 !           tem = sqrt(area(i,j))/max(pbl2d(i,j),esmin)

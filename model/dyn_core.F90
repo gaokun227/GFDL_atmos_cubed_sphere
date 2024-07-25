@@ -24,8 +24,8 @@ module dyn_core_mod
   use constants_mod,      only: rdgas, cp_air, pi
   use fv_arrays_mod,      only: radius ! scaled for small earth
   use mpp_mod,            only: mpp_pe
-  use mpp_domains_mod,    only: CGRID_NE, DGRID_NE, mpp_get_boundary, mpp_update_domains,  &
-                                domain2d
+  use mpp_domains_mod,    only: AGRID, CGRID_NE, DGRID_NE, mpp_get_boundary, mpp_update_domains,  &
+                                domain2d ! KGao: add AGRID for 3D-TKE
   use mpp_parameter_mod,  only: CORNER
   use fv_mp_mod,          only: is_master
   use fv_mp_mod,          only: start_group_halo_update, complete_group_halo_update
@@ -208,6 +208,7 @@ contains
 !3D-SA-TKE
     real:: tke(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
     real:: scl(bd%isd:bd%ied,bd%jsd:bd%jed)
+    integer :: ntke
 !3D-SA-TKE-end
     integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed
@@ -670,8 +671,11 @@ contains
 
 !3D-SA-TKE
 !--calculating shear deformation and TKE transport for 3d TKE scheme
-    call diff3d(npx, npy, npz, nq, ua, va, w,       &
-                 q, deform_1, deform_2, tke, scl,        &
+    !call mpp_update_domains(ua, va, domain, gridtype=AGRID)
+    ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+    call mpp_update_domains(q(:,:,:,ntke), domain) ! KGao: update tke at halo points 
+    call diff3d(npx, npy, npz, nq, ua, va, w,        &
+                 q, deform_1, deform_2, tke, scl,    &
                  delz, gz, gridstruct,  bd)
 !-- add deform_1 pbl2d, tke, and scl in parallel calculation
 !3D-SA-TKE-end
@@ -2690,10 +2694,23 @@ do 1000 j=jfirst,jlast
     ied  = bd%ied
     jsd  = bd%jsd
     jed  = bd%jed
-   
+
+!-------------------------------------
+! Calculate deform_1
+! deform_1 = 2*(du/dx**2 + dv/dy**2 + dwdz**2)
+!          + (du/dy + dv/dx) ** 2
+!          + (du/dz + dw/dx) ** 2 
+!          + (dv/dz + dw/dy) ** 2
+!-------------------------------------
+
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
 !$OMP                          ut,vt,dudx,dudy,dvdx,dvdy,dwdx,dwdy)
+
    do k=1,npz
+
+!-------------------------------------
+! get du/dy and dv/dx
+
        do j=js,je+1
           do i=is,ie
              vt(i,j) = ua(i,j,k)*dx(i,j)
@@ -2710,7 +2727,10 @@ do 1000 j=jfirst,jlast
              dvdx(i,j,k) = rarea(i,j)*(ut(i+1,j)-ut(i,j))
           enddo
        enddo
-   !-------------------------------------
+
+!-------------------------------------
+! get du/dx and dv/dy
+
        do j=js,je
           do i=is,ie+1
              ut(i,j) = ua(i,j,k)*dy(i,j)
@@ -2727,7 +2747,10 @@ do 1000 j=jfirst,jlast
              dvdy(i,j,k) = rarea(i,j)*(vt(i,j+1)-vt(i,j))
           enddo
        enddo
-   !-------------------------------------
+
+!-------------------------------------
+! get dw/dx and dw/dy
+
        do j=js,je
           do i=is,ie+1
              ut(i,j) = w(i,j,k)*dy(i,j)
@@ -2746,13 +2769,16 @@ do 1000 j=jfirst,jlast
        enddo
    
    enddo   !z loop
-   
+
+!-------------------------------------
+! get du/dz, dv/dz, dw/dz
+
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,delz, &
 !$OMP                          dudz,dvdz,dwdz)
    do j=js,je
        do i=is,ie
           do k=1,npz-1
-             dudz(i,j,k)=(ua(i,j,k+1)-ua(i,j,k))/delz(i,j,k)
+             dudz(i,j,k)=(ua(i,j,k+1)-ua(i,j,k))/delz(i,j,k) ! KGao: this is problematic
              dvdz(i,j,k)=(va(i,j,k+1)-va(i,j,k))/delz(i,j,k)
              dwdz(i,j,k)=(w(i,j,k+1)-w(i,j,k))/delz(i,j,k)
           enddo
@@ -2761,7 +2787,10 @@ do 1000 j=jfirst,jlast
           dwdz(i,j,npz)=0.0
        enddo
    enddo
-   
+
+!-------------------------------------
+! get deform_1 based on all terms
+
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_1, &
 !$OMP        dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
    do k=1,npz
@@ -2774,7 +2803,13 @@ do 1000 j=jfirst,jlast
           enddo
        enddo
    enddo
-   
+
+!-------------------------------------
+! Calculate deform_2
+! deform_2 = (d^2e/dx^2 + d^2e/dy^2 + d^2e/dz^2)
+! e is tke
+!-------------------------------------
+
    ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
    
 !find scale of energy containin eddies using TKE
@@ -2808,6 +2843,10 @@ do 1000 j=jfirst,jlast
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,q,dx,dy,rarea, &
 !$OMP     ntke,ut,vt,tke,tke_1,dedy_1,dedy_2,dedx_1,dedx_2)
    do k=1,npz
+
+!-------------------------------------
+! get d^2e/dy^2 
+
        do j=js,je+2
           do i=is,ie+2
              tke(i,j,k)=q(i,j,k,ntke)
@@ -2834,6 +2873,10 @@ do 1000 j=jfirst,jlast
              dedy_2(i,j,k)=rarea(i,j)*(vt(i,j+1)-vt(i,j))
           enddo
        enddo
+
+!-------------------------------------
+! get d^2e/dx^2
+
        do j=js,je
           do i=is,ie+2
              ut(i,j)=tke_1(i,j)*dy(i,j)
@@ -2854,8 +2897,11 @@ do 1000 j=jfirst,jlast
              dedx_2(i,j,k)=rarea(i,j)*(ut(i+1,j)-ut(i,j))
           enddo
        enddo
-   enddo
-   
+   enddo ! z loop
+
+!-------------------------------------
+! get d^2e/dz^2
+
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,q,delz, &
 !$OMP     ntke,tke_2,dedz_1,dedz_2)
    do j=js,je
@@ -2873,7 +2919,10 @@ do 1000 j=jfirst,jlast
           dedz_2(i,j,npz)=0.0
        enddo
    enddo
-   
+
+!-------------------------------------
+! get deform_2 based on all terms 
+
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_2, &
 !$OMP     dedx_2,dedy_2)
    do k=1,npz
