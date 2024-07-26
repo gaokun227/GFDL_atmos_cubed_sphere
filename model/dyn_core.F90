@@ -671,14 +671,18 @@ contains
 
 !3D-SA-TKE
 !--calculating shear deformation and TKE transport for 3d TKE scheme
-    !call mpp_update_domains(ua, va, domain, gridtype=AGRID)
+
+! KGao: note calling diff3d and mpp_update_domains for tke at every dyn step is an overkill
+! deform_1 and deform_2 are not used for tke update at such frequency
+
+! KGao: update halo point values 
     ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
-    call mpp_update_domains(q(:,:,:,ntke), domain) ! KGao: update tke at halo points 
+    call mpp_update_domains(q(:,:,:,ntke), domain) 
+    !call mpp_update_domains(ua, va, domain, gridtype=AGRID) ! necessary?
+
     call diff3d(npx, npy, npz, nq, ua, va, w,        &
                  q, deform_1, deform_2, tke, scl,    &
                  delz, gz, gridstruct,  bd)
-    !call mpp_update_domains(deform_1, domain) ! KGao
-    !call mpp_update_domains(deform_2, domain) ! KGao
 
 !-- add deform_1 pbl2d, tke, and scl in parallel calculation
 !3D-SA-TKE-end
@@ -2706,8 +2710,8 @@ do 1000 j=jfirst,jlast
 !          + (dv/dz + dw/dy) ** 2
 !----------------------------------------------
 
-!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
-!$OMP                          ut,vt,dudx,dudy,dvdx,dvdy,dwdx,dwdy)
+!!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
+!!$OMP                          ut,vt,dudx,dudy,dvdx,dvdy,dwdx,dwdy)
 
    do k=1,npz
 
@@ -2776,8 +2780,8 @@ do 1000 j=jfirst,jlast
 !-------------------------------------
 ! get du/dz, dv/dz and dw/dz
 
-!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,delz, &
-!$OMP                          dudz,dvdz,dwdz)
+!!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,delz, &
+!!$OMP                          dudz,dvdz,dwdz)
    do j=js,je
        do i=is,ie
           do k=1,npz-1
@@ -2794,8 +2798,8 @@ do 1000 j=jfirst,jlast
 !-------------------------------------
 ! get deform_1 based on all terms
 
-!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_1, &
-!$OMP        dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
+!!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_1, &
+!!$OMP        dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
    do k=1,npz
        do j=js,je
           do i=is,ie
@@ -2817,8 +2821,8 @@ do 1000 j=jfirst,jlast
    
 !find scale of energy containin eddies using TKE
 
-!$OMP parallel do default(none) shared(npz,is,ie,js,je,q, &
-!$OMP     ntke,tkemax,l_tkemax,kscl,scl,gz)
+!!$OMP parallel do default(none) shared(npz,is,ie,js,je,q, &
+!!$OMP     ntke,tkemax,l_tkemax,kscl,scl,gz)
    do j=js,je
       do i=is,ie
          scl(i,j)=1000.0
@@ -2843,8 +2847,8 @@ do 1000 j=jfirst,jlast
       enddo
    enddo
          
-!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,q,dx,dy,rarea, &
-!$OMP     ntke,ut,vt,tke,tke_1,dedy_1,dedy_2,dedx_1,dedx_2)
+!!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,q,dx,dy,rarea, &
+!!$OMP     ntke,ut,vt,tke,tke_1,dedy_1,dedy_2,dedx_1,dedx_2)
    do k=1,npz
 
 !-------------------------------------
@@ -2905,8 +2909,8 @@ do 1000 j=jfirst,jlast
 !-------------------------------------
 ! get d^2e/dz^2
 
-!$OMP parallel do default(none) shared(npz,is,ie,js,je,q,delz, &
-!$OMP     ntke,tke_2,dedz_1,dedz_2)
+!!$OMP parallel do default(none) shared(npz,is,ie,js,je,q,delz, &
+!!$OMP     ntke,tke_2,dedz_1,dedz_2)
    do j=js,je
        do i=is,ie
           do k=1,npz
@@ -2926,8 +2930,8 @@ do 1000 j=jfirst,jlast
 !-------------------------------------
 ! get deform_2 based on all terms 
 
-!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_2, &
-!$OMP     dedx_2,dedy_2)
+!!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_2, &
+!!$OMP     dedx_2,dedy_2)
    do k=1,npz
        do j=js,je
           do i=is,ie
