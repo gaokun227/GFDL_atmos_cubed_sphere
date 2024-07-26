@@ -677,6 +677,9 @@ contains
     call diff3d(npx, npy, npz, nq, ua, va, w,        &
                  q, deform_1, deform_2, tke, scl,    &
                  delz, gz, gridstruct,  bd)
+    call mpp_update_domains(deform_1, domain) ! KGao
+    call mpp_update_domains(deform_2, domain) ! KGao
+
 !-- add deform_1 pbl2d, tke, and scl in parallel calculation
 !3D-SA-TKE-end
 
@@ -2695,13 +2698,13 @@ do 1000 j=jfirst,jlast
     jsd  = bd%jsd
     jed  = bd%jed
 
-!-------------------------------------
+!----------------------------------------------
 ! Calculate deform_1
-! deform_1 = 2*(du/dx**2 + dv/dy**2 + dwdz**2)
+! deform_1 = 2*(du/dx**2 + dv/dy**2 + dw/dz**2)
 !          + (du/dy + dv/dx) ** 2
 !          + (du/dz + dw/dx) ** 2 
 !          + (dv/dz + dw/dy) ** 2
-!-------------------------------------
+!---------------------------------------------
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
 !$OMP                          ut,vt,dudx,dudy,dvdx,dvdy,dwdx,dwdy)
@@ -2771,7 +2774,7 @@ do 1000 j=jfirst,jlast
    enddo   !z loop
 
 !-------------------------------------
-! get du/dz, dv/dz, dw/dz
+! get du/dz, dv/dz and dw/dz
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,delz, &
 !$OMP                          dudz,dvdz,dwdz)
@@ -2804,11 +2807,11 @@ do 1000 j=jfirst,jlast
        enddo
    enddo
 
-!-------------------------------------
+!------------------------------------------------
 ! Calculate deform_2
 ! deform_2 = (d^2e/dx^2 + d^2e/dy^2 + d^2e/dz^2)
-! e is tke
-!-------------------------------------
+! where e is tke
+!------------------------------------------------
 
    ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
    
