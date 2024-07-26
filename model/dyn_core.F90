@@ -677,8 +677,8 @@ contains
     call diff3d(npx, npy, npz, nq, ua, va, w,        &
                  q, deform_1, deform_2, tke, scl,    &
                  delz, gz, gridstruct,  bd)
-    call mpp_update_domains(deform_1, domain) ! KGao
-    call mpp_update_domains(deform_2, domain) ! KGao
+    !call mpp_update_domains(deform_1, domain) ! KGao
+    !call mpp_update_domains(deform_2, domain) ! KGao
 
 !-- add deform_1 pbl2d, tke, and scl in parallel calculation
 !3D-SA-TKE-end
@@ -2704,7 +2704,7 @@ do 1000 j=jfirst,jlast
 !          + (du/dy + dv/dx) ** 2
 !          + (du/dz + dw/dx) ** 2 
 !          + (dv/dz + dw/dy) ** 2
-!---------------------------------------------
+!----------------------------------------------
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
 !$OMP                          ut,vt,dudx,dudy,dvdx,dvdy,dwdx,dwdy)
