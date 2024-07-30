@@ -24,8 +24,8 @@ module dyn_core_mod
   use constants_mod,      only: rdgas, cp_air, pi
   use fv_arrays_mod,      only: radius ! scaled for small earth
   use mpp_mod,            only: mpp_pe
-  use mpp_domains_mod,    only: AGRID, CGRID_NE, DGRID_NE, mpp_get_boundary, mpp_update_domains,  &
-                                domain2d ! KGao: add AGRID for 3D-TKE
+  use mpp_domains_mod,    only: CGRID_NE, DGRID_NE, mpp_get_boundary, mpp_update_domains,  &
+                                domain2d
   use mpp_parameter_mod,  only: CORNER
   use fv_mp_mod,          only: is_master
   use fv_mp_mod,          only: start_group_halo_update, complete_group_halo_update
@@ -33,6 +33,7 @@ module dyn_core_mod
   use sw_core_mod,        only: c_sw, d_sw
   use a2b_edge_mod,       only: a2b_ord2, a2b_ord4
   use nh_core_mod,        only: Riem_Solver3, Riem_Solver_C, update_dz_c, update_dz_d, nh_bc
+  use nh_utils_mod,       only: edge_profile1 ! KGao: for dudz,dvdz,dwdz calculations
   use tp_core_mod,        only: copy_corners
   use fv_timing_mod,      only: timing_on, timing_off
   use fv_diagnostics_mod, only: prt_maxmin, fv_time, prt_mxm, is_ideal_case
@@ -680,9 +681,11 @@ contains
     call mpp_update_domains(q(:,:,:,ntke), domain) 
     !call mpp_update_domains(ua, va, domain, gridtype=AGRID) ! necessary?
 
+! KGao: update d/dz calculations using Lucas's method
+!       check gz dim; is zh=gz?
     call diff3d(npx, npy, npz, nq, ua, va, w,        &
-                 q, deform_1, deform_2, tke, scl,    &
-                 delz, gz, gridstruct,  bd)
+                q, deform_1, deform_2, tke, scl,     &
+                delz, gz, zh, dp_ref, gridstruct, bd)
 
 !-- add deform_1 pbl2d, tke, and scl in parallel calculation
 !3D-SA-TKE-end
@@ -2637,27 +2640,29 @@ do 1000 j=jfirst,jlast
 
  end subroutine gz_bc
 
-
 !3D-SA-TKE
  subroutine diff3d(npx, npy, npz, nq, ua, va, w, q,       &
-                  deform_1, deform_2, tke, scl, delz, gz, gridstruct, bd)
+                  deform_1, deform_2, tke, scl, delz, gz, &
+                  zh, dp_ref, gridstruct, bd)
 
     use fv_arrays_mod,      only: fv_grid_type
 
     integer, intent(in) :: nq, npx, npy, npz
     type(fv_grid_bounds_type), intent(IN) :: bd
-    real, intent(in), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz) :: ua
-    real, intent(in), dimension(bd%isd:bd%ied,bd%jsd:bd%jed,npz) :: va
-    real, intent(in) ::     w(bd%isd:,bd%jsd:,1:)
+    real, intent(in) ::     ua(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
+    real, intent(in) ::     va(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
+    real, intent(in) ::      w(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
+    real, intent(in) ::      q(bd%isd:bd%ied, bd%jsd:bd%jed, npz, nq)
+    real, intent(in) ::     zh(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)
+    real, intent(in) ::     gz(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)
+    !real, intent(in) ::     gz(bd%is:,bd%js:,1:) ! why?
+    real, intent(in) ::     delz(bd%is:bd%ie, bd%js:bd%je,   npz)
+    real, intent(in) ::     dp_ref(npz)
 
-    real, intent(in) ::     delz(bd%is:,bd%js:,1:)
-    real, intent(in) ::     gz(bd%is:,bd%js:,1:)
-    real, intent(in) ::     q( bd%isd:bd%ied  ,bd%jsd:bd%jed  ,npz, nq)  !
-
-    real, intent(out) ::    deform_1(bd%isd:bd%ied  ,bd%jsd:bd%jed,npz)
-    real, intent(out) ::    deform_2(bd%isd:bd%ied  ,bd%jsd:bd%jed,npz)
-    real, intent(out) ::    tke(bd%isd:bd%ied  ,bd%jsd:bd%jed,npz)
-    real, intent(out) ::    scl(bd%isd:bd%ied  ,bd%jsd:bd%jed)
+    real, intent(out) ::    deform_1(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
+    real, intent(out) ::    deform_2(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
+    real, intent(out) ::    tke(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
+    real, intent(out) ::    scl(bd%isd:bd%ied, bd%jsd:bd%jed)
     type(fv_grid_type), intent(IN), target :: gridstruct
 
 ! local
@@ -2675,7 +2680,10 @@ do 1000 j=jfirst,jlast
     real:: dwdz(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
     real:: ut(bd%isd:bd%ied+1,bd%jsd:bd%jed)
     real:: vt(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
-   
+    real:: u_e(bd%is:bd%ie,npz+1)
+    real:: v_e(bd%is:bd%ie,npz+1)
+    real:: w_e(bd%is:bd%ie,npz+1)
+
     integer :: ntke
     real :: tke_1(bd%isd:bd%ied+2,  bd%jsd:bd%jed+2)
     real :: dedy_1(bd%isd:bd%ied+1,  bd%jsd:bd%jed+1)
@@ -2686,7 +2694,7 @@ do 1000 j=jfirst,jlast
     real :: dedz_1(npz)
     real :: dedz_2(bd%isd:bd%ied,  bd%jsd:bd%jed,npz)
    
-    real :: tkemax
+    real :: tkemax, dz
     integer:: l_tkemax,kscl
    
     dx  => gridstruct%dx
@@ -2710,9 +2718,11 @@ do 1000 j=jfirst,jlast
 !          + (dv/dz + dw/dy) ** 2
 !----------------------------------------------
 
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
-!!$OMP                          ut,vt,dudx,dudy,dvdx,dvdy,dwdx,dwdy)
+! make ut and vt private as suggested by Lucas
 
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
+!$OMP                           dudx,dudy,dvdx,dvdy,dwdx,dwdy)              &
+!$OMP                           private(ut,vt)
    do k=1,npz
 
 !-------------------------------------
@@ -2780,26 +2790,49 @@ do 1000 j=jfirst,jlast
 !-------------------------------------
 ! get du/dz, dv/dz and dw/dz
 
+! KGao: use Lucas's method as in compute_dudz()
+! TBD: OMP stuff
+
+   do j=js,je
+      call edge_profile1(ua(is:ie,j,:), u_e, is, ie, npz, dp_ref, 1)
+      call edge_profile1(va(is:ie,j,:), v_e, is, ie, npz, dp_ref, 1)
+      call edge_profile1(w(is:ie,j,:),  w_e, is, ie, npz, dp_ref, 1)
+      do k=1,npz
+         do i=is,ie
+            dz = zh(i,j,k) + zh(i,j-1,k)
+            dz = dz - (zh(i,j,k+1) + zh(i,j-1,k+1))
+            dz = 0.5*dz !*rgrav ! KGao ??
+                      
+            if(is_master() .and. i .eq. 1 .and. j.eq.1) write(*,*) 'k, dz', k, dz, delz(i,j,k)
+
+            dudz(i,j,k) = (u_e(i,k)-u_e(i,k+1))/dz
+            dvdz(i,j,k) = (v_e(i,k)-v_e(i,k+1))/dz
+            dwdz(i,j,k) = (w_e(i,k)-w_e(i,k+1))/dz
+         enddo
+      enddo
+   enddo
+
 !!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,delz, &
 !!$OMP                          dudz,dvdz,dwdz)
-   do j=js,je
-       do i=is,ie
-          do k=1,npz-1
-             dudz(i,j,k)=(ua(i,j,k+1)-ua(i,j,k))/delz(i,j,k) ! KGao: this is problematic
-             dvdz(i,j,k)=(va(i,j,k+1)-va(i,j,k))/delz(i,j,k)
-             dwdz(i,j,k)=(w(i,j,k+1)-w(i,j,k))/delz(i,j,k)
-          enddo
-          dudz(i,j,npz)=0.0
-          dvdz(i,j,npz)=0.0
-          dwdz(i,j,npz)=0.0
-       enddo
-   enddo
+
+!   do j=js,je
+!       do i=is,ie
+!          do k=1,npz-1
+!             dudz(i,j,k)=(ua(i,j,k+1)-ua(i,j,k))/delz(i,j,k) ! KGao: this is problematic
+!             dvdz(i,j,k)=(va(i,j,k+1)-va(i,j,k))/delz(i,j,k)
+!             dwdz(i,j,k)=(w(i,j,k+1)-w(i,j,k))/delz(i,j,k)
+!          enddo
+!          dudz(i,j,npz)=0.0
+!          dvdz(i,j,npz)=0.0
+!          dwdz(i,j,npz)=0.0
+!       enddo
+!   enddo
 
 !-------------------------------------
 ! get deform_1 based on all terms
 
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_1, &
-!!$OMP        dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_1, &
+!$OMP        dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
    do k=1,npz
        do j=js,je
           do i=is,ie
@@ -2821,8 +2854,8 @@ do 1000 j=jfirst,jlast
    
 !find scale of energy containin eddies using TKE
 
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,q, &
-!!$OMP     ntke,tkemax,l_tkemax,kscl,scl,gz)
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,q, &
+!$OMP     ntke,tkemax,l_tkemax,kscl,scl,gz)
    do j=js,je
       do i=is,ie
          scl(i,j)=1000.0
@@ -2843,12 +2876,15 @@ do 1000 j=jfirst,jlast
             endif 
          enddo
          kscl=min(kscl,npz-10)
-         scl(i,j)=gz(i,j,kscl+1)
+         scl(i,j)=gz(i,j,kscl+1) ! KGao: is this correct?
       enddo
    enddo
-         
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,q,dx,dy,rarea, &
-!!$OMP     ntke,ut,vt,tke,tke_1,dedy_1,dedy_2,dedx_1,dedx_2)
+
+! make some fields private - as suggested by Lucas
+
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,q,dx,dy,rarea, &
+!$OMP                                  ntke,tke,dedy_2,dedx_2)                &
+!$OMP                           private(ut,vt,tke_1,dedy_1,dedx_1)
    do k=1,npz
 
 !-------------------------------------
@@ -2911,27 +2947,27 @@ do 1000 j=jfirst,jlast
 
 !!$OMP parallel do default(none) shared(npz,is,ie,js,je,q,delz, &
 !!$OMP     ntke,tke_2,dedz_1,dedz_2)
-   do j=js,je
-       do i=is,ie
-          do k=1,npz
-             tke_2(k)=q(i,j,k,ntke)
-          enddo
-          do k=1,npz-1
-             dedz_1(k)=(tke_2(k+1)-tke_2(k))/delz(i,j,k)
-          enddo
-          do k=1,npz-2
-             dedz_2(i,j,k)=(dedz_1(k+1)-dedz_1(k))/delz(i,j,k)
-          enddo
-          dedz_2(i,j,npz-1)=0.0
-          dedz_2(i,j,npz)=0.0
-       enddo
-   enddo
+!   do j=js,je
+!       do i=is,ie
+!          do k=1,npz
+!             tke_2(k)=q(i,j,k,ntke)
+!          enddo
+!          do k=1,npz-1
+!             dedz_1(k)=(tke_2(k+1)-tke_2(k))/delz(i,j,k)
+!          enddo
+!          do k=1,npz-2
+!             dedz_2(i,j,k)=(dedz_1(k+1)-dedz_1(k))/delz(i,j,k)
+!          enddo
+!          dedz_2(i,j,npz-1)=0.0
+!          dedz_2(i,j,npz)=0.0
+!       enddo
+!   enddo
 
 !-------------------------------------
 ! get deform_2 based on all terms 
 
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_2, &
-!!$OMP     dedx_2,dedy_2)
+!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_2, &
+!$OMP                                  dedx_2,dedy_2)
    do k=1,npz
        do j=js,je
           do i=is,ie
