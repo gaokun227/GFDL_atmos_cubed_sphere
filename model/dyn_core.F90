@@ -2791,7 +2791,6 @@ do 1000 j=jfirst,jlast
 ! get du/dz, dv/dz and dw/dz
 
 ! KGao: use Lucas's method as in compute_dudz()
-! TBD: OMP stuff
 
    do j=js,je
       call edge_profile1(ua(is:ie,j,:), u_e, is, ie, npz, dp_ref, 1)
@@ -2801,10 +2800,7 @@ do 1000 j=jfirst,jlast
          do i=is,ie
             dz = zh(i,j,k) + zh(i,j-1,k)
             dz = dz - (zh(i,j,k+1) + zh(i,j-1,k+1))
-            dz = 0.5*dz !*rgrav ! KGao ??
-                      
-            if(is_master() .and. i .eq. 1 .and. j.eq.1) write(*,*) 'k, dz', k, dz, delz(i,j,k)
-
+            dz = 0.5*dz !*rgrav KGao fix 
             dudz(i,j,k) = (u_e(i,k)-u_e(i,k+1))/dz
             dvdz(i,j,k) = (v_e(i,k)-v_e(i,k+1))/dz
             dwdz(i,j,k) = (w_e(i,k)-w_e(i,k+1))/dz
