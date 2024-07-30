@@ -2798,9 +2798,7 @@ do 1000 j=jfirst,jlast
       call edge_profile1(w(is:ie,j,:),  w_e, is, ie, npz, dp_ref, 1)
       do k=1,npz
          do i=is,ie
-            dz = zh(i,j,k) + zh(i,j-1,k)
-            dz = dz - (zh(i,j,k+1) + zh(i,j-1,k+1))
-            dz = 0.5*dz !*rgrav KGao fix 
+            dz = zh(i,j,k) - zh(i,j,k+1)
             dudz(i,j,k) = (u_e(i,k)-u_e(i,k+1))/dz
             dvdz(i,j,k) = (v_e(i,k)-v_e(i,k+1))/dz
             dwdz(i,j,k) = (w_e(i,k)-w_e(i,k+1))/dz
