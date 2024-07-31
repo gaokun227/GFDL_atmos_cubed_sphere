@@ -239,7 +239,7 @@ contains
 
         reg_bc_update_time=current_time_in_seconds
         call set_regional_BCs          & !<-- Insert values into the boundary region valid for the start of this large timestep.
-              (delp,delz,w,pt,q_con,cappa,q,u,v,uc,vc, bd, npz, &
+              (delp,w,pt,q_con,cappa,q,u,v,uc,vc, bd, npz, &
               reg_bc_update_time, thermostruct%use_cond, thermostruct%moist_kappa )
 
         call timing_off('Regional_BCs')
