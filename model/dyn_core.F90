@@ -671,21 +671,22 @@ contains
     endif
 
 !3D-SA-TKE
-!--calculating shear deformation and TKE transport for 3d TKE scheme
+!--calculating shear deformation and TKE transport for 3d TKE scheme using Ping Zhu's method
 
-! KGao: note calling diff3d and mpp_update_domains for tke at every dyn step is an overkill
-! deform_1 and deform_2 are not used for tke update at such frequency
+! KGao notes on GFDL updates (Jul 31 2024)
+! - only call diff3d at the last dynamical step (k_split * n_split) 
+! - do mpp_update_domains for tke before calling diff3d 
+! - update vertical wind shear calculation using Lucas's method
+! - pass zh (layer interface height) as input instead of gz (geopotential)
 
-! KGao: update halo point values 
-    ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
-    call mpp_update_domains(q(:,:,:,ntke), domain) 
-    !call mpp_update_domains(ua, va, domain, gridtype=AGRID) ! necessary?
+    if (end_step) then
+      ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+      call mpp_update_domains(q(:,:,:,ntke), domain) 
 
-! KGao: update d/dz calculations using Lucas's method
-!       check gz dim; is zh=gz?
-    call diff3d(npx, npy, npz, nq, ua, va, w,        &
-                q, deform_1, deform_2, tke, scl,     &
-                delz, gz, zh, dp_ref, gridstruct, bd)
+      call diff3d(npx, npy, npz, nq, ua, va, w,        &
+                  q, deform_1, deform_2, tke, scl,     &
+                  delz, zh, dp_ref, gridstruct, bd)
+    endif
 
 !-- add deform_1 pbl2d, tke, and scl in parallel calculation
 !3D-SA-TKE-end
@@ -2641,8 +2642,9 @@ do 1000 j=jfirst,jlast
  end subroutine gz_bc
 
 !3D-SA-TKE
+!Ping Zhu's scheme for 3D TKE budget terms
  subroutine diff3d(npx, npy, npz, nq, ua, va, w, q,       &
-                  deform_1, deform_2, tke, scl, delz, gz, &
+                  deform_1, deform_2, tke, scl, delz,     &
                   zh, dp_ref, gridstruct, bd)
 
     use fv_arrays_mod,      only: fv_grid_type
@@ -2654,8 +2656,7 @@ do 1000 j=jfirst,jlast
     real, intent(in) ::      w(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
     real, intent(in) ::      q(bd%isd:bd%ied, bd%jsd:bd%jed, npz, nq)
     real, intent(in) ::     zh(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)
-    real, intent(in) ::     gz(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)
-    !real, intent(in) ::     gz(bd%is:,bd%js:,1:) ! why?
+    !real, intent(in) ::     gz(bd%is:,bd%js:,1:) ! KGao: dims may not be right; zh is now used  
     real, intent(in) ::     delz(bd%is:bd%ie, bd%js:bd%je,   npz)
     real, intent(in) ::     dp_ref(npz)
 
@@ -2710,15 +2711,15 @@ do 1000 j=jfirst,jlast
     jsd  = bd%jsd
     jed  = bd%jed
 
-!----------------------------------------------
+!===========================================================
 ! Calculate deform_1
 ! deform_1 = 2*(du/dx**2 + dv/dy**2 + dw/dz**2)
 !          + (du/dy + dv/dx) ** 2
 !          + (du/dz + dw/dx) ** 2 
 !          + (dv/dz + dw/dy) ** 2
-!----------------------------------------------
+!===========================================================
 
-! make ut and vt private as suggested by Lucas
+! KGao: make ut and vt private as suggested by Lucas
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
 !$OMP                           dudx,dudy,dvdx,dvdy,dwdx,dwdy)              &
@@ -2798,7 +2799,7 @@ do 1000 j=jfirst,jlast
       call edge_profile1(w(is:ie,j,:),  w_e, is, ie, npz, dp_ref, 1)
       do k=1,npz
          do i=is,ie
-            dz = zh(i,j,k) - zh(i,j,k+1)
+            dz = zh(i,j,k) - zh(i,j,k+1) ! can use delz too
             dudz(i,j,k) = (u_e(i,k)-u_e(i,k+1))/dz
             dvdz(i,j,k) = (v_e(i,k)-v_e(i,k+1))/dz
             dwdz(i,j,k) = (w_e(i,k)-w_e(i,k+1))/dz
@@ -2838,18 +2839,18 @@ do 1000 j=jfirst,jlast
        enddo
    enddo
 
-!------------------------------------------------
+!===========================================================
 ! Calculate deform_2
 ! deform_2 = (d^2e/dx^2 + d^2e/dy^2 + d^2e/dz^2)
 ! where e is tke
-!------------------------------------------------
+!===========================================================
 
    ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
    
 !find scale of energy containin eddies using TKE
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,q, &
-!$OMP     ntke,tkemax,l_tkemax,kscl,scl,gz)
+!$OMP     ntke,tkemax,l_tkemax,kscl,scl,zh)
    do j=js,je
       do i=is,ie
          scl(i,j)=1000.0
@@ -2870,15 +2871,15 @@ do 1000 j=jfirst,jlast
             endif 
          enddo
          kscl=min(kscl,npz-10)
-         scl(i,j)=gz(i,j,kscl+1) ! KGao: is this correct?
+         scl(i,j)=zh(i,j,kscl+1) ! KGao: use zh, not gz
       enddo
    enddo
 
-! make some fields private - as suggested by Lucas
+! KGao: make the 2d temporay arrays private - as suggested by Lucas
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,q,dx,dy,rarea, &
 !$OMP                                  ntke,tke,dedy_2,dedx_2)                &
-!$OMP                           private(ut,vt,tke_1,dedy_1,dedx_1)
+!$OMP                           private(ut,vt,tke_1,dedx_1,dedy_1)
    do k=1,npz
 
 !-------------------------------------

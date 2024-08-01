@@ -1446,18 +1446,17 @@ module sw_core_mod
      do j=js,je+1
         do i=is,ie+1
 !3D-SA-TKE
-! KGao note 07/19/2024: blending is done here 
-! original code only has the following line (damp2 = xxx)
            damp2 =  gridstruct%da_min_c*max(d2_bg, min(0.20, dddmp*vort(i,j)))  ! del-2
-! KGao: following lines are commented out for testing purpose 
+! KGao: following lines are commented out for testing purpose
+! Ping Zhu's method for TKE-based horizontal divergence damping
 !           damp2 = dddmp*vort(i,j)
 !           damp3d = dddmp*abs(dt)*sqrt(max(tke(i,j),tkemax))/sqrt(gridstruct%da_min_c)
 !           tem = sqrt(area(i,j))/max(pbl2d(i,j),esmin)
 !           pfl = cpl1*(tem**2+cpl2*tem**0.5-cpl3)/        &
 !                     (tem**2+cpl4*tem**0.5+cpl5)+cpl6
 !           pfl = min(max(pfl,0.0),1.0)
-!           pfl = 0.0 ! KGao note: disable blending here
-!           damp2 = (1.0-pfl)*damp3d + pfl*damp2 ! KGao note: damp2 is a combo of tke-damping coeff and ori dddmp damping 
+!           pfl = 0.0 ! KGao note: controls damping coeff blending 
+!           damp2 = (1.0-pfl)*damp3d + pfl*damp2
 !           damp2 = gridstruct%da_min_c*max(d2_bg, min(0.20, damp2))  ! del-2
 !3D-SA-TKE-end
            vort(i,j) = damp2*delpc(i,j) + dd8*divg_d(i,j)
