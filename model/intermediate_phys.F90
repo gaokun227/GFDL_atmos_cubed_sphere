@@ -42,6 +42,7 @@ module intermediate_phys_mod
     use sa_aamf_mod, only: sa_aamf_deep, sa_aamf_shal
     use sa_gwd_mod, only: sa_gwd_oro, sa_gwd_cnv
     use fv_timing_mod, only: timing_on, timing_off
+    use sa_3d_tke_mod, only: cal_3d_tke_budget ! KGao: 3D-SA-TKE
 
     implicit none
 
@@ -60,7 +61,7 @@ module intermediate_phys_mod
 contains
 
 subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
-               mdt, consv, akap, ptop, pfull, hs, te0_2d, u, v, w, omga, pt, &
+               mdt, consv, akap, ptop, ak, bk, pfull, hs, te0_2d, u, v, w, omga, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
                inline_mp, inline_pbl, inline_cnv, inline_gwd, &
                gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
@@ -82,6 +83,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
     real, intent (in), dimension (km) :: pfull
+
+    real, intent (in), dimension (km+1) :: ak, bk !KGao
 
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
@@ -151,6 +154,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     real, allocatable, dimension (:,:) :: dz, zm, zi, wa, dp, pm, pi, pmk, pik, qv, ql, qr, ta, uu, vv, ww, radh
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
+    
+    real, allocatable, dimension (:,:,:) :: deform_1, deform_2 ! KGao: 3D-SA-TKE
     
     real (kind = r8), allocatable, dimension (:) :: tz
 
@@ -495,6 +500,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
+        allocate (deform_1 (isd:ied, jsd:jed, km)) ! KGao: 3D-SA-TKE
+        !allocate (deform_2 (isd:ied, jsd:jed, km)) ! KGao: 3D-SA-TKE
+
         ! initialize wind tendencies
         do k = 1, km
             do j = jsd, jed
@@ -523,6 +531,12 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             dp0 = delp
         endif
 
+        ! KGao 3D TKE
+        !if (do_3dtke) then
+            ! could pass is,ie ... as inputs instead of bd
+            call cal_3d_tke_budget(ua, va, w, q(:,:,:,ntke), delz, km, ak, bk, gridstruct, bd, &
+                   deform_1) !, deform_2) !, scl ! KGao - test
+        !endif
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, w, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
