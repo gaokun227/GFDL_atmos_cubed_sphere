@@ -84,7 +84,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real, intent (in), dimension (km) :: pfull
 
-    real, intent (in), dimension (km+1) :: ak, bk !KGao
+    real, intent (in), dimension (km+1) :: ak, bk !KGao: 3D-SA-TKE
 
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
@@ -156,7 +156,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
     real, allocatable, dimension (:,:,:) :: deform_1, deform_2 ! KGao: 3D-SA-TKE
-    
+
+    real, allocatable, dimension (:,:) :: def_1, def_2 ! KGao: 3D-SA-TKE 
+
     real (kind = r8), allocatable, dimension (:) :: tz
 
     real (kind = r8), dimension (is:ie) :: te_b_beg, te_b_end, tw_b_beg, tw_b_end, dte, te_loss
@@ -500,8 +502,11 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
-        allocate (deform_1 (isd:ied, jsd:jed, km)) ! KGao: 3D-SA-TKE
-        !allocate (deform_2 (isd:ied, jsd:jed, km)) ! KGao: 3D-SA-TKE
+        ! KGao: 3D-SA-TKE
+        allocate (deform_1 (isd:ied, jsd:jed, km))
+        !allocate (deform_2 (isd:ied, jsd:jed, km))
+        allocate (def_1 (is:ie, 1:km))
+        !allocate (def_2 (is:ie, 1:km))
 
         ! initialize wind tendencies
         do k = 1, km
@@ -538,7 +543,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                    deform_1) !, deform_2) !, scl ! KGao - test
         !endif
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, w, &
-!$OMP                                    te, delp, hydrostatic, hs, pt, delz, q_con, &
+!$OMP                                    deform_1, te, delp, hydrostatic, hs, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
@@ -546,7 +551,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, consv_checker, &
 !$OMP                                    te_err, tw_err, thermostruct) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
-!$OMP                                    zm, dp, pm, ta, uu, vv, qliq, qsol, qa, adj_vmr, &
+!$OMP                                    zm, dp, pm, ta, uu, vv, def_1, qliq, qsol, qa, adj_vmr, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
 !$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, &
@@ -658,6 +663,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
+                def_1 (is:ie, k) = deform_1 (is:ie, j, kr) ! KGao: 3D-SA-TKE
                 radh (is:ie, k) = inline_pbl%radh (is:ie, j, kr)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
@@ -724,7 +730,11 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
             ! SA-TKE-EDMF main program
             call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
-                abs (mdt), uu, vv, ta, qa, gsize, inline_pbl%lsm (is:ie, j), &
+                abs (mdt), uu, vv, ta, qa, &
+                ! KGao: 3D-SA-TKE
+                def_1, &
+                ! 3D-SA-TKE-end 
+                gsize, inline_pbl%lsm (is:ie, j), &
                 radh, rb, inline_pbl%zorl (is:ie, j), u10m, v10m, &
                 inline_pbl%ffmm (is:ie, j), inline_pbl%ffhh (is:ie, j), &
                 inline_pbl%tsfc (is:ie, j), inline_pbl%hflx (is:ie, j), &

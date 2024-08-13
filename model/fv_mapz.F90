@@ -792,7 +792,7 @@ contains
 
         call timing_on('INTERMEDIATE_PHYS')
 
-        ! KGao: add ak,bk as inputs for 3D-SA-TKE
+        ! KGao: pass ak, bk as inputs for 3D-SA-TKE
         call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                  mdt, consv, akap, ptop, ak, bk, pfull, hs, te0_2d, u, &
                  v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
