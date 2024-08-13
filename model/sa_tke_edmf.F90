@@ -1301,7 +1301,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             endif
 
             !KGao: 3D-SA-TKE
-            if (do_3dtke) then
+            !if (do_3dtke) then
             ! obtaining 3d shear production from dycore
               if (k ==1) then
                 tem = dku(i,k)*def_1(i,k)
@@ -1311,7 +1311,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
                 tem = 0.5*(tem1+tem2)
               endif
               shrp = tem ! KGao: shrp is overridden by shrp3d
-            endif
+            !endif
             !3D-SA-TKE-end
 
             prod (i, k) = buop + shrp

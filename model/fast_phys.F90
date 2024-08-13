@@ -32,6 +32,7 @@ module fast_phys_mod
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_thermo_type
     use fv_arrays_mod, only: inline_pbl_type, inline_gwd_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
+    use mpp_domains_mod, only: AGRID ! KGao: 3D-SA-TKE 
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap, hlv, mtetw, tice
@@ -284,6 +285,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         ! KGao 3D TKE
         !if (do_3dtke) then
             ! could pass is,ie ... as inputs instead of bd
+            call mpp_update_domains(ua, va, domain, gridtype=AGRID) ! KGao - fix ???
+            !!! do mpp_update for tke !!!
             call cal_3d_tke_budget(ua, va, w, q(:,:,:,ntke), delz, km, ak, bk, gridstruct, bd, &
                    deform_1) !, deform_2) !, scl ! KGao - test
         !endif

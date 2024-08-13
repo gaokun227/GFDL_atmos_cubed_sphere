@@ -22,7 +22,8 @@
 module sa_3d_tke_mod
 
   use fv_arrays_mod,      only: fv_grid_bounds_type, fv_grid_type
-  use nh_utils_mod,        only: edge_profile1 
+  use nh_utils_mod,       only: edge_profile1 
+  use fv_mp_mod,          only: is_master ! KGao - debug
 
   implicit none
   private
@@ -46,9 +47,7 @@ contains
     real, intent(in) ::     va(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
     real, intent(in) ::      w(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
     real, intent(in) ::    tke(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
-    !real, intent(in) ::     zh(bd%isd:bd%ied, bd%jsd:bd%jed, npz+1)
-    !real, intent(in) ::     gz(bd%is:,bd%js:,1:) ! KGao: dims may not be right; zh is now used
-    real, intent(in) ::     delz(bd%is:bd%ie, bd%js:bd%je,   npz)
+    real, intent(in) ::   delz(bd%is:bd%ie,   bd%js:bd%je,   npz)
 
     real, intent(out) ::    deform_1(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
     !real, intent(out) ::    deform_2(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
@@ -226,9 +225,19 @@ contains
                 dwdz(i,j,k)**2)+(dudy(i,j,k)+dvdx(i,j,k))**2+   &
                 (dudz(i,j,k)+dwdx(i,j,k))**2+                     &
                 (dvdz(i,j,k)+dwdy(i,j,k))**2
+             ! KGao - enforce a limiter
+             deform_1(i,j,k) = min( 1.e3, deform_1(i,j,k) )
           enddo
        enddo
    enddo
+
+   !if (is_master())  then
+   !   write(*,*) 'KGao debug - max deform_1 ', maxval(abs(deform_1))
+   !   write(*,*) 'KGao debug - max dudx ', maxval(abs(dudx))
+   !   write(*,*) 'KGao debug - max dudz ', maxval(abs(dudz))
+   !   write(*,*) 'KGao debug - max dz ', maxval(abs(delz))
+   !   write(*,*) 'KGao debug - max dx ', maxval(abs(dx))
+   !endif
 
 !===========================================================
 ! Calculate deform_2
