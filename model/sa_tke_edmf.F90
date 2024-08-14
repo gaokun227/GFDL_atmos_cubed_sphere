@@ -135,7 +135,9 @@ module sa_tke_edmf_mod
 
     ! KGao: 3D-SA-TKE
     logical :: do_3dtke = .false. ! flag for using 3d tke budget terms 
-    
+    logical :: ideal_sst = .false.
+    real    :: sst0 = 302
+
     ! -----------------------------------------------------------------------
     ! namelist
     ! -----------------------------------------------------------------------
@@ -146,7 +148,7 @@ module sa_tke_edmf_mod
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        do_3dtke
+        do_3dtke, ideal_sst, sst0
 
 contains
 
@@ -1937,7 +1939,12 @@ subroutine sfc_exch (im, ps, u1, v1, t1, q1, z1, &
 
     ddvel = 0.0
     flag_iter = .true.
-    
+   
+    ! KGao - use ideal sst for test cases
+    if ( ideal_sst ) then
+       tsurf (:) = sst0
+    endif
+
     do i = 1, im
         if (flag_iter (i)) then
             wind (i) = max (sqrt (u1 (i) * u1 (i) + v1 (i) * v1 (i)) &
