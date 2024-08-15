@@ -83,6 +83,9 @@ module coarse_grained_diagnostics_mod
   character(len=15) :: EDDY_COVARIANCE = 'eddy_covariance'
   character(len=5) :: pressure_level_label
 
+  ! Define module name as a global variable
+  character(len=8) :: DYNAMICS = 'dynamics'
+
 contains
 
   subroutine populate_coarse_diag_type(Atm, coarse_diagnostics)
@@ -94,7 +97,6 @@ contains
     integer :: sphum, liq_wat, ice_wat, rainwat, snowwat, graupel
     character(len=128) :: tracer_name
     character(len=256) :: tracer_long_name, tracer_units
-    character(len=8) :: DYNAMICS = 'dynamics'
     integer :: pressure_levels(31)
 
     n_pressure_levels = 31
@@ -1093,6 +1095,14 @@ contains
         call maybe_allocate_reference_array(Atm, coarse_diagnostics(index))
       endif
     enddo
+
+    ! Since data is typically sent for total energy within fv_dynamics, we
+    ! implement te_coarse through idiag as a special case.
+    Atm(1)%idiag%id_te_coarse = register_diag_field( &
+         trim(DYNAMICS), 'te_coarse', axes_t(1:2), Time, &
+         'coarse-grained total energy', 'J/m/s^2', &
+         missing_value=missing_value &
+    )
 
     call register_coarse_static_diagnostics(Atm, Time, axes_t, axes)
   end subroutine register_coarse_diagnostics
@@ -2246,7 +2256,6 @@ end subroutine get_need_rh_array
     integer :: is_coarse, ie_coarse, js_coarse, je_coarse
     logical :: used
     integer :: tile_count = 1
-    character(len=8) :: DYNAMICS = 'dynamics'
     real :: rad2deg = 180. / pi
 
 
