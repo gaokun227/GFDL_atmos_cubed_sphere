@@ -49,6 +49,7 @@ module fv_dynamics_mod
    use fv_arrays_mod,       only: fv_diag_type, fv_grid_bounds_type, inline_mp_type, fv_thermo_type
    use fv_arrays_mod,       only: inline_pbl_type, inline_cnv_type, inline_gwd_type
    use fv_nwp_nudge_mod,    only: do_adiabatic_init
+   use coarse_graining_mod, only: get_coarse_array_bounds, weighted_block_average
 
 implicit none
    logical :: RF_initialized = .false.
@@ -182,6 +183,10 @@ contains
       integer :: is,  ie,  js,  je
       integer :: isd, ied, jsd, jed
       real :: dt2
+
+      ! Variables for coarse-grained total energy diagnostic
+      integer :: is_coarse, ie_coarse, js_coarse, je_coarse
+      real, allocatable :: teq_coarse(:,:)
 
       is  = bd%is
       ie  = bd%ie
@@ -343,7 +348,7 @@ contains
 !---------------------
 ! Compute Total Energy
 !---------------------
-      if ( (consv_te > 0. .or. idiag%id_te>0)  .and. (.not.do_adiabatic_init) ) then
+      if ( (consv_te > 0. .or. idiag%id_te>0 .or. idiag%id_te_coarse > 0 )  .and. (.not.do_adiabatic_init) ) then
            call compute_total_energy(is, ie, js, je, isd, ied, jsd, jed, npz,        &
                                      u, v, w, delz, pt, delp, q, dp1, q_con, pe, peln, phis, &
                                      gridstruct%rsin2, gridstruct%cosa_s, &
@@ -353,6 +358,13 @@ contains
                                      thermostruct%moist_kappa, idiag%id_te)
            if( idiag%id_te>0 ) then
                used = send_data(idiag%id_te, teq, fv_time)
+           endif
+           if ( idiag%id_te_coarse > 0 ) then
+               call get_coarse_array_bounds(is_coarse, ie_coarse, js_coarse, je_coarse)
+               allocate(teq_coarse(is_coarse:ie_coarse,js_coarse:je_coarse))
+               call weighted_block_average(gridstruct%area(is:ie,js:je), teq, teq_coarse)
+               used = send_data(idiag%id_te_coarse, teq_coarse, fv_time)
+               deallocate(teq_coarse)
            endif
       endif
 

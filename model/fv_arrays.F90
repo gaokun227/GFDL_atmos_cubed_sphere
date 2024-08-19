@@ -71,6 +71,12 @@ module fv_arrays_mod
      integer :: id_inline_gwd_fast_te_a_chg, id_inline_gwd_fast_te_b_chg, id_inline_gwd_fast_tw_a_chg, id_inline_gwd_fast_tw_b_chg
      integer :: id_inline_gwd_intm_te_a_chg, id_inline_gwd_intm_te_b_chg, id_inline_gwd_intm_tw_a_chg, id_inline_gwd_intm_tw_b_chg
 
+     ! As a special case, we implement te_coarse through the fv_diag_type;
+     ! initialize to -1 to robustly allow its use as a proxy for both whether
+     ! coarse-graining is enabled in this simulation *and* whether this
+     ! diagnostic was called for in the diag_table.
+     integer :: id_te_coarse = -1
+
   end type fv_diag_type
 
 
