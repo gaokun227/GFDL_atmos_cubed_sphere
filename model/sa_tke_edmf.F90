@@ -135,7 +135,7 @@ module sa_tke_edmf_mod
 
     ! KGao: 3D-SA-TKE
     logical :: do_3dtke = .false. ! flag for using 3d tke budget terms 
-
+    logical :: no_mf    = .false. ! flag for turning off mass-flux effect
     ! -----------------------------------------------------------------------
     ! namelist
     ! -----------------------------------------------------------------------
@@ -146,7 +146,7 @@ module sa_tke_edmf_mod
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        do_3dtke
+        do_3dtke, no_mf
 
 contains
 
@@ -540,7 +540,14 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         sfcflg (i) = .true.
         if (rbsoil (i) > 0.) sfcflg (i) = .false.
         pcnvflg (i) = .false.
-        scuflg (i) = .true.
+
+        ! KGao: no mass flux
+        if (no_mf) then
+           scuflg (i) = .false.
+        else
+           scuflg (i) = .true.
+        endif
+
         if (scuflg (i)) then
             radmin (i) = 0.
             mrad (i) = km1
@@ -793,6 +800,8 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         if (pblflg (i)) then
             if (zol (i) < zolcru) then
                 pcnvflg (i) = .true.
+                ! KGao: no mass flux
+                if (no_mf) pcnvflg (i) = .false.
             endif
             wst3 (i) = gotvx (i, 1) * sflux (i) * hpbl (i)
             wstar (i) = wst3 (i) ** h1
@@ -867,7 +876,10 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     ! -----------------------------------------------------------------------
     ! look for stratocumulus
     ! -----------------------------------------------------------------------
-    
+   
+    ! KGao: if not using mass flux, skip this step to save time
+    if (.not. no_mf) then
+
     do i = 1, im
         flg (i) = scuflg (i)
     enddo
@@ -918,6 +930,8 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         if (scuflg (i) .and. radmin (i) >= 0.) scuflg (i) = .false.
     enddo
     
+    endif ! <--- endif (.not. no_mf)
+
     ! -----------------------------------------------------------------------
     ! compute components for mass flux mixing by large thermals
     ! -----------------------------------------------------------------------
@@ -959,6 +973,9 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         ntcw_new = ntcw - 1
     endif
 
+    ! KGao: if not using mass flux, skip steps below to save time
+    if (.not. no_mf) then
+
     ! -----------------------------------------------------------------------
     ! edmf parameterization siebesma et al. (2007)
     ! -----------------------------------------------------------------------
@@ -977,7 +994,9 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         thlx, thvx, thlvx, gdx, thetae, radj, &
         krad, mrad, radmin, buod, xmfd, &
         tcdo, qcdo, ucdo, vcdo, xlamde)
-    
+
+    endif ! <--- endif (.not. no_mf)
+
     ! -----------------------------------------------------------------------
     ! compute prandtl number and exchange coefficient varying with height
     ! -----------------------------------------------------------------------
@@ -1302,15 +1321,15 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
 
             !KGao: 3D-SA-TKE
             if (do_3dtke) then
-            ! obtaining 3d shear production from dycore
               if (k ==1) then
                 tem = dku(i,k)*def_1(i,k)
+                !if (i .eq. 1 ) print*, 'KGao debug using 3dtke budget'
               else
                 tem1 = dku(i,k-1) * def_1(i,k-1) ! KGao: dku is defined at layer interfaces 
                 tem2 = dku(i,k) * def_1(i,k)
                 tem = 0.5*(tem1+tem2)
               endif
-              shrp = tem ! KGao: shrp is overridden by shrp3d
+              shrp = tem ! KGao: shrp is overridden
             endif
             !3D-SA-TKE-end
 
@@ -1958,7 +1977,7 @@ subroutine sfc_exch (im, ps, u1, v1, t1, q1, z1, &
             
             if (islimsk (i) == 0) then ! over ocean
                 ustar (i) = sqrt (grav * z0 / charnock)
-                
+
                 ! ** test xubin's new z0
                 
                 ! ztmax = z0max
