@@ -56,6 +56,11 @@ module dyn_core_mod
   use fv_regional_mod,      only: current_time_in_seconds, bc_time_interval
   use fv_regional_mod,      only: delz_regBC ! TEMPORARY --- lmh
 
+  !3D-SA-TKE
+  use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
+  use field_manager_mod,  only: MODEL_ATMOS
+  !3D-SA-TKE-end
+
 #ifdef SW_DYNAMICS
   use test_cases_mod,      only: test_case, case9_forcing1, case9_forcing2
 #endif
@@ -204,6 +209,12 @@ contains
 
     integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed
+
+    ! KGao: 3D-SA-TKE
+    integer :: ntke
+    ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke') ! not ideal
+    call mpp_update_domains(q(:,:,:,ntke), domain)
+    ! 3D-SA-TKE-end
 
       is  = bd%is
       ie  = bd%ie
@@ -657,6 +668,7 @@ contains
     call timing_on('D_SW')
 !$OMP parallel do default(none) shared(npz,flagstruct,nord_v,pfull,damp_vt,hydrostatic,last_step, &
 !$OMP                                  is,ie,js,je,isd,ied,jsd,jed,omga,delp,gridstruct,npx,npy,  &
+!$OMP                                  ntke,                                                      &
 !$OMP                                  ng,zh,vt,ptc,pt,u,v,w,uc,vc,ua,va,divgd,mfx,mfy,cx,cy,     &
 !$OMP                                  crx,cry,xfx,yfx,q_con,zvir,sphum,nq,q,dt,bd,rdt,iep1,jep1, &
 !$OMP                                  heat_source,diss_est,radius,idiag,end_step,thermostruct)   &
@@ -759,10 +771,14 @@ contains
        else
           k_q_con = 1
        endif
+
        call d_sw(vt(isd,jsd,k), delp(isd,jsd,k), ptc(isd,jsd,k),  pt(isd,jsd,k),      &
                   u(isd,jsd,k),    v(isd,jsd,k),   w(isd:,jsd:,k),  uc(isd,jsd,k),      &
                   vc(isd,jsd,k),   ua(isd,jsd,k),  va(isd,jsd,k), divgd(isd,jsd,k),   &
                   mfx(is, js, k),  mfy(is, js, k),  cx(is, jsd,k),  cy(isd,js, k),    &
+                  !3D-SA-TKE
+                  q(isd, jsd, k, ntke), &
+                  !3D-SA-TKE-end
                   crx(is, jsd,k),  cry(isd,js, k), xfx(is, jsd,k), yfx(isd,js, k),    &
                   q_con(isd:,jsd:,k_q_con),  z_rat(isd,jsd),  &
                   kgb, heat_s, diss_e, zvir, sphum, nq,  q,  k,  npz, flagstruct%inline_q,  dt,  &

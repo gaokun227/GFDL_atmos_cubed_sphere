@@ -493,6 +493,9 @@ module sw_core_mod
 
    subroutine d_sw(delpc, delp,  ptc,   pt, u,  v, w, uc,vc, &
                    ua, va, divg_d, xflux, yflux, cx, cy,              &
+                   !3D-SA-TKE
+                   tke, &
+                   !3D-SA-TKE
                    crx_adv, cry_adv,  xfx_adv, yfx_adv, q_con, z_rat, kgb, heat_source,    &
                    diss_est, zvir, sphum, nq, q, k, km, inline_q,  &
                    dt, hord_tr, hord_mt, hord_vt, hord_tm, hord_dp, nord,   &
@@ -510,6 +513,11 @@ module sw_core_mod
       real   , intent(IN):: damp_v, damp_w, damp_t, kgb
       logical, intent(IN):: use_cond
       type(fv_grid_bounds_type), intent(IN) :: bd
+      !3D-SA-TKE
+      real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: tke
+      !real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: pbl2d
+      !real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: scl
+      !3D-SA-TKE-end
       real, intent(INOUT):: divg_d(bd%isd:bd%ied+1,bd%jsd:bd%jed+1) ! divergence
       real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: z_rat
       real, intent(INOUT), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: delp, pt, ua, va
@@ -561,6 +569,14 @@ module sw_core_mod
       real :: u_lon, tmp
       integer :: i,j, is2, ie1, js2, je1, n, nt, n2, iq
       logical :: prevent_diss_cooling
+
+      !3D-SA-TKE
+      real :: cpl1,cpl2,cpl3,cpl4,cpl5,cpl6,cm,ce,tem,pfl,damp3d
+      real :: tkemax, esmin
+      parameter(cpl1=0.280,cpl2=0.870,cpl3=0.913)
+      parameter(cpl4=0.153,cpl5=0.278,cpl6=0.720)
+      parameter(cm=0.0856,ce=0.845,tkemax=100.0,esmin=500.0)
+      !3D-SA-TKE-end
 
       real, pointer, dimension(:,:) :: area, area_c, rarea
 
@@ -1451,7 +1467,43 @@ module sw_core_mod
 
      do j=js,je+1
         do i=is,ie+1
+
+! KGao notes on 08/14/24
+! - about the damping coeff:
+!   - damp2 is a coeff (dt * Km) to be used together with horizontal divergence (D or delpc) for 2nd order divergence damping 
+!   - for smag type: Km = dddmp * l^2 * sqrt(T^2+S^2); dddmp * dt * sqrt(T^2+S^2) is limited below 0.2 
+!   - for TKE based: Km = dddmp * l * sqrt(e) 
+! - about the damping tendency:
+!   - delpc is divergence (D), divg_d is high-order derivatives of divergence
+!   - term = damp2 * D = dt * Km * D  => 1/dx * (term[i+1,j] - term[i,j]) is u tendency term
+!   - ke(i,j) = ke(i,j) + vort(i,j); ke here combines ke and damp2 * D; why no negative sign?
+!   - u(i,j) = ... + ke(i,j) - ke(i+1,j) ; no 1/dx, why???
+
+           ! KGao - a temp flag; dddmp < 0, use tke-based 
+           if (dddmp > 0.) then
+
            damp2 =  gridstruct%da_min_c*max(d2_bg, min(0.20, dddmp*vort(i,j)))  ! del-2
+!3D-SA-TKE
+! Ping Zhu's method for TKE-based horizontal divergence damping
+!           damp2 = dddmp*vort(i,j)
+!           damp3d = dddmp*abs(dt)*sqrt(max(tke(i,j),tkemax))/sqrt(gridstruct%da_min_c)
+!           !!tem = sqrt(area(i,j))/max(pbl2d(i,j),esmin)
+!           !!pfl = cpl1*(tem**2+cpl2*tem**0.5-cpl3)/        &
+!           !!          (tem**2+cpl4*tem**0.5+cpl5)+cpl6
+!           !!pfl = min(max(pfl,0.0),1.0)
+!           pfl = 0.0 ! KGao note: controls damping coeff blending
+!           damp2 = (1.0-pfl)*damp3d + pfl*damp2
+!           damp2 = gridstruct%da_min_c*max(d2_bg, min(0.20, damp2))  ! del-2
+! KGao - a cleaner version 
+! To-do: interpolate tke to cell corners, where D is defined, to get tke-based Km; see below
+!          call a2b_ord4(wk, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
+
+           else
+           !print*, 'KGao debug - using tke-based, dddmp=', abs(dddmp)
+           damp2 = abs(dddmp)*abs(dt)*sqrt(max(tke(i,j),tkemax))/sqrt(gridstruct%da_min_c)
+           damp2 = gridstruct%da_min_c*max(d2_bg, min(0.20, damp2))
+           endif
+!3D-SA-TKE-end
            vort(i,j) = damp2*delpc(i,j) + dd8*divg_d(i,j)
              ke(i,j) = ke(i,j) + vort(i,j)
         enddo
