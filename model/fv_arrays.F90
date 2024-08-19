@@ -62,6 +62,12 @@ module fv_arrays_mod
      real :: efx(max_step), efx_sum, efx_nest(max_step), efx_sum_nest, mtq(max_step), mtq_sum
      integer :: steps
 
+     ! As a special case, we implement te_coarse through the fv_diag_type;
+     ! initialize to -1 to robustly allow its use as a proxy for both whether
+     ! coarse-graining is enabled in this simulation *and* whether this
+     ! diagnostic was called for in the diag_table.
+     integer :: id_te_coarse = -1
+
   end type fv_diag_type
 
 
