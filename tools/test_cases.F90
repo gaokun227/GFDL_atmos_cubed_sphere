@@ -6108,7 +6108,7 @@ end subroutine terminator_tracers
             inline_pbl%zorl = 0.1
             inline_pbl%ffmm = 10.0
             inline_pbl%ffhh = 10.0
-            inline_pbl%tsfc = 300.
+            inline_pbl%tsfc = Ts_TC ! KGao !300.
             inline_pbl%shdmax = 0.0
             inline_pbl%vtype = 0.0
             inline_pbl%vfrac = 0.0
