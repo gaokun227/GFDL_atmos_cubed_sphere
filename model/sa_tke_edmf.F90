@@ -134,8 +134,10 @@ module sa_tke_edmf_mod
     real :: ch1 = 0.15 ! proportionality coefficient for heat & q above PBL
 
     ! KGao: 3D-SA-TKE
-    logical :: do_3dtke = .false. ! flag for using 3d tke budget terms 
-    logical :: no_mf    = .false. ! flag for turning off mass-flux effect
+    logical :: do_3dtke      = .false. ! flag for using 3d tke budget terms 
+    logical :: no_mf         = .false. ! flag for turning off mass-flux effect
+    logical :: use_const_l2  = .false. ! flag for using a constant l2 parameter 
+
     ! -----------------------------------------------------------------------
     ! namelist
     ! -----------------------------------------------------------------------
@@ -146,7 +148,7 @@ module sa_tke_edmf_mod
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        do_3dtke, no_mf
+        do_3dtke, no_mf, use_const_l2
 
 contains
 
@@ -1097,7 +1099,11 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             ele (i, k) = elefac * ptem2
             ele (i, k) = max (ele (i, k), tem1)
             ele (i, k) = min (ele (i, k), elmx)
-            
+           
+            ! KGao: use const l2
+            if (use_const_l2) rlam(i,k) = rlmx
+            if (use_const_l2) ele(i,k)  = elefac * rlmx
+
         enddo
     enddo
     
@@ -1117,6 +1123,14 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             elm (i, k) = zk * rlam (i, k) / (rlam (i, k) + zk)
             
             dz = zi (i, k + 1) - zi (i, k)
+
+            ! KGao: notes on mixing lengths and their limiters
+            ! elm - mixing length used for Kz calculations
+            !     - no larger than max(dx, dz)
+            ! ele - mixing length used for TKE dissipation calculations 
+            !     - no larger than max(dx, dz)
+            ! example:
+            ! if dx = 35m, elm and ele are capped at 35m
             tem = max (gdx (i), dz)
             elm (i, k) = min (elm (i, k), tem)
             ele (i, k) = min (ele (i, k), tem)
