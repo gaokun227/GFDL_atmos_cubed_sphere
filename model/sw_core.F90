@@ -932,6 +932,24 @@ module sw_core_mod
          enddo
       enddo
 
+      ! KGao: get a non-dim tke-based smag_q 
+      ! idea follows Lucas's smag damping 
+      ! use dddmp as a temp flag; negative means use tke-based 2nd order damping
+
+      !!if (flagstruct%smag2d > 1.e-5) then
+      !!   if (flagstruct%grid_type<3 .and. .not. bounded_domain .and. &
+      !!        ( sw_corner .or. se_corner .or. ne_corner .or. nw_corner ) ) call fill_corners(u, v, npx, npy, VECTOR=.true., DGRID=.true.)
+      !!   call smag_cell(abs(dt), u, v, w, smag_q, bd, npx, npy, gridstruct, ng, flagstruct%smag2d > 1.e-5, dudz, dvdz, flagstruct%smag2d)
+      !!endif
+      if (dddmp < -1E-5) then
+         do j = jsd, jed
+            do i = isd, ied
+               ! dddmp * smag_q should be no larger than 0.2
+               smag_q(i,j) = min(0.2/abs(dddmp), abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
+            enddo
+         enddo
+      endif
+
       call fv_tp_2d(delp, crx_adv, cry_adv, npx, npy, hord_dp, fx, fy,  &
                     xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, nord=nord_v, damp_c=damp_v)
 
@@ -1023,9 +1041,20 @@ module sw_core_mod
 !       enddo
 !    endif
 #if defined(GFS_PHYS) || defined(DCMIP)
+
+        ! KGao: apply damping to dp
+        !if (dddmp > -1E-5) then
         call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
                       xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
                       mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v) !SHiELD
+        !else
+        !!        call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
+        !!              xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
+        !!              mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v, damp_smag=flagstruct%smag2D*smag_scalar, damp_Km=smag_q) !SHiELD
+        !call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
+        !              xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
+        !              mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v, damp_smag=abs(dddmp)*smag_scalar, damp_Km=smag_q) !SHiELD
+        !endif
 #else
         call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
                       xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
@@ -1466,12 +1495,15 @@ module sw_core_mod
      endif
 
 ! KGao: get a non-dim tke-based smag_q
-     do j = jsd, jed
-        do i = isd, ied
-            ! dddmp * smag_q should be no larger than 0.2
-            smag_q(i,j) = min(0.2/abs(dddmp), abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
-        enddo
-     enddo
+! use dddmp as a temp flag; negative means use tke-based 2nd order damping
+!     if (dddmp < -1E-5) then
+!        do j = jsd, jed
+!           do i = isd, ied
+!              ! dddmp * smag_q should be no larger than 0.2
+!              smag_q(i,j) = min(0.2/abs(dddmp), abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
+!           enddo
+!        enddo
+!     endif
 
      do j=js,je+1
         do i=is,ie+1
@@ -1492,7 +1524,7 @@ module sw_core_mod
            ! KGao - a temp flag; dddmp < 0, use tke-based 
            if (dddmp > 0.) then
 
-           damp2 =  gridstruct%da_min_c*max(d2_bg, min(0.20, dddmp*vort(i,j)))  ! del-2
+              damp2 =  gridstruct%da_min_c*max(d2_bg, min(0.20, dddmp*vort(i,j)))  ! del-2
 !3D-SA-TKE
 ! Ping Zhu's method for TKE-based horizontal divergence damping
 !           damp2 = dddmp*vort(i,j)
@@ -1508,12 +1540,14 @@ module sw_core_mod
 ! To-do: interpolate tke to cell corners, where D is defined, to get tke-based Km; see below
 !          call a2b_ord4(wk, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
 
+           elseif (dddmp < -1E-5) then 
+              ! KGao note: a potential bug fix here 
+              !damp2 = abs(dddmp)*abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c)
+              !damp2 = gridstruct%da_min_c*max(d2_bg, min(0.20, damp2))
+              !!!smag_q(i,j) = min(0.2/abs(dddmp), abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
+              damp2 = gridstruct%da_min_c * max( d2_bg, abs(dddmp)*smag_q(i,j) )
            else 
-           !print*, 'KGao debug - using tke-based, dddmp=', abs(dddmp)
-
-           ! max or min ???
-           damp2 = abs(dddmp)*abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c)
-           damp2 = gridstruct%da_min_c*max(d2_bg, min(0.20, damp2))
+              damp2 = 0.
            endif
 !3D-SA-TKE-end
            vort(i,j) = damp2*delpc(i,j) + dd8*divg_d(i,j)
@@ -1581,6 +1615,16 @@ module sw_core_mod
         ut=0.
         vt=0.
    endif
+
+   ! KGao: apply tke-based damping to vorticity, following Lucas's code
+   !! if ( flagstruct%smag2d > 1.E-5  ) then
+   !!    damp4 = flagstruct%smag2D*gridstruct%da_min_c
+   !!    call del6_vt_flux(0, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd, damp_Km=smag_q)
+   !! endif
+   !if ( dddmp < -1.E-5  ) then
+   !    damp4 = abs(dddmp) * gridstruct%da_min_c ! KGao note: damp4 is a constant
+   !    call del6_vt_flux(0, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd, damp_Km=smag_q)
+   ! endif
 
    !estimate dissipation for dissipative heating
    ! or dissipation estimate diagnostic

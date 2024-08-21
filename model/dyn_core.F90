@@ -213,7 +213,6 @@ contains
     ! KGao: 3D-SA-TKE
     integer :: ntke
     ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke') ! not ideal
-    call mpp_update_domains(q(:,:,:,ntke), domain)
     ! 3D-SA-TKE-end
 
       is  = bd%is
@@ -323,6 +322,12 @@ contains
 !-----------------------------------------------------
   do it=1,n_split
 !-----------------------------------------------------
+
+     ! KGao 3D-SA-TKE
+     ! tke will be used to calculate damping coeff at halo points
+     ! do mpp_update_domains every acoustic step; but it is really necessary?
+     call mpp_update_domains(q(:,:,:,ntke), domain)
+
 #ifdef ROT3
      call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
 #endif
@@ -772,6 +777,7 @@ contains
           k_q_con = 1
        endif
 
+       ! KGao: 3D-SA-TKE
        call d_sw(vt(isd,jsd,k), delp(isd,jsd,k), ptc(isd,jsd,k),  pt(isd,jsd,k),      &
                   u(isd,jsd,k),    v(isd,jsd,k),   w(isd:,jsd:,k),  uc(isd,jsd,k),      &
                   vc(isd,jsd,k),   ua(isd,jsd,k),  va(isd,jsd,k), divgd(isd,jsd,k),   &
