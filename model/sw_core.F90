@@ -572,10 +572,10 @@ module sw_core_mod
 
       !3D-SA-TKE
       real :: cpl1,cpl2,cpl3,cpl4,cpl5,cpl6,cm,ce,tem,pfl,damp3d
-      real :: tkemax, esmin
+      real :: tkemax,tkemin,esmin
       parameter(cpl1=0.280,cpl2=0.870,cpl3=0.913)
       parameter(cpl4=0.153,cpl5=0.278,cpl6=0.720)
-      parameter(cm=0.0856,ce=0.845,tkemax=100.0,esmin=500.0)
+      parameter(cm=0.0856,ce=0.845,tkemax=100.0,tkemin=0.001,esmin=500.0)
       !3D-SA-TKE-end
 
       real, pointer, dimension(:,:) :: area, area_c, rarea
@@ -1465,12 +1465,22 @@ module sw_core_mod
          dd8 = ( gridstruct%da_min_c*d4_bg )**n2
      endif
 
+! KGao: get a non-dim tke-based smag_q
+     do j = jsd, jed
+        do i = isd, ied
+            ! dddmp * smag_q should be no larger than 0.2
+            smag_q(i,j) = min(0.2/abs(dddmp), abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
+        enddo
+     enddo
+
      do j=js,je+1
         do i=is,ie+1
 
 ! KGao notes on 08/14/24
 ! - about the damping coeff:
 !   - damp2 is a coeff (dt * Km) to be used together with horizontal divergence (D or delpc) for 2nd order divergence damping 
+!     * damp2 = A * max(d2_bg, min(0.20, dddmp*vort(i,j))) 
+!     * vort  = dt * S (vort is dimensionless) 
 !   - for smag type: Km = dddmp * l^2 * sqrt(T^2+S^2); dddmp * dt * sqrt(T^2+S^2) is limited below 0.2 
 !   - for TKE based: Km = dddmp * l * sqrt(e) 
 ! - about the damping tendency:
@@ -1498,9 +1508,11 @@ module sw_core_mod
 ! To-do: interpolate tke to cell corners, where D is defined, to get tke-based Km; see below
 !          call a2b_ord4(wk, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
 
-           else
+           else 
            !print*, 'KGao debug - using tke-based, dddmp=', abs(dddmp)
-           damp2 = abs(dddmp)*abs(dt)*sqrt(max(tke(i,j),tkemax))/sqrt(gridstruct%da_min_c)
+
+           ! max or min ???
+           damp2 = abs(dddmp)*abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c)
            damp2 = gridstruct%da_min_c*max(d2_bg, min(0.20, damp2))
            endif
 !3D-SA-TKE-end
