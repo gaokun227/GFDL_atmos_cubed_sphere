@@ -1178,8 +1178,11 @@ contains
 
        if (domain_deg > 0.05) then
           domain_rad = pi/180. * domain_deg 
-       else 
-          domain_rad = pi/16. ! arbitrary 
+       else
+          ! KGao: do not use arbitrary value, which can cause problem 
+          !       for the tc test case when domain_deg is not used 
+          !domain_rad = pi/16. ! arbitrary 
+          domain_rad = pi/180. * (npx-1) * dx_const / 1e5 ! assumes npx=npy, dx_const=dy_const
        endif
 
        lat_rad = deglat * pi/180.
