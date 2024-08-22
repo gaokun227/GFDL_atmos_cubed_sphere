@@ -166,6 +166,7 @@ module fv_control_mod
      logical , pointer :: do_intermediate_phys
      logical , pointer :: do_inline_mp
      logical , pointer :: do_inline_pbl
+     logical , pointer :: do_3dtke
      logical , pointer :: do_inline_cnv
      logical , pointer :: do_inline_gwd
      integer , pointer :: inline_cnv_flag
@@ -713,6 +714,7 @@ module fv_control_mod
        do_intermediate_phys          => Atm%flagstruct%do_intermediate_phys
        do_inline_mp                  => Atm%flagstruct%do_inline_mp
        do_inline_pbl                 => Atm%flagstruct%do_inline_pbl
+       do_3dtke                      => Atm%flagstruct%do_3dtke
        do_inline_cnv                 => Atm%flagstruct%do_inline_cnv
        do_inline_gwd                 => Atm%flagstruct%do_inline_gwd
        inline_cnv_flag               => Atm%flagstruct%inline_cnv_flag
@@ -1153,7 +1155,9 @@ module fv_control_mod
      subroutine read_namelist_integ_phys_nml
 
        integer :: ios, ierr
-       namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_intermediate_phys, do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
+       namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_intermediate_phys, do_inline_mp, do_inline_pbl, &
+            do_3dtke, & ! KGao: 3D-SA-TKE
+            do_inline_cnv, do_inline_gwd, &
             inline_cnv_flag, do_aerosol, do_cosp, consv_checker, te_err, tw_err
 
        read (input_nml_file,integ_phys_nml,iostat=ios)

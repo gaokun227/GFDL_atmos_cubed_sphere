@@ -378,6 +378,7 @@ module fv_arrays_mod
    logical :: do_inline_pbl = .false.!< Controls inline planetary boundary layer, in which the planetary boundary layer is
                                     !< called entirely within FV3. If .true. disabling planetary boundary layer within the physics
                                     !< is very strongly recommended. .false. by default.
+   logical :: do_3dtke = .false.    !< Controls if using 3D TKE budget terms in TKE-EDMF planetary boundary layer scheme.  
    logical :: do_inline_cnv = .false.!< Controls inline convection, in which the convection is
                                     !< called entirely within FV3. If .true. disabling convection within the physics
                                     !< is very strongly recommended. .false. by default.

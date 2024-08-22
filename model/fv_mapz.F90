@@ -60,7 +60,7 @@ contains
                       ng, ua, va, omga, te, ws, fill, reproduce_sum, idiag, &
                       ptop, ak, bk, pfull, gridstruct, thermostruct, domain, do_sat_adj, &
                       fv_time, hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
-                      do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
+                      do_inline_mp, do_inline_pbl, do_3dtke, do_inline_cnv, do_inline_gwd, &
                       inline_mp, inline_pbl, inline_cnv, inline_gwd, bd, fv_debug, &
                       do_fast_phys, do_intermediate_phys, consv_checker, adj_mass_vmr, inline_cnv_flag)
 
@@ -99,6 +99,7 @@ contains
   logical, intent(in):: do_sat_adj
   logical, intent(in):: do_inline_mp
   logical, intent(in):: do_inline_pbl
+  logical, intent(in):: do_3dtke ! KGao: 3D-SA-TKE
   logical, intent(in):: do_inline_cnv
   logical, intent(in):: do_inline_gwd
   logical, intent(in):: fill                  ! fill negative tracers
@@ -797,7 +798,7 @@ contains
                  mdt, consv, akap, ptop, ak, bk, pfull, hs, te0_2d, u, &
                  v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
                  inline_mp, inline_pbl, inline_cnv, inline_gwd, gridstruct, thermostruct, domain, bd, &
-                 hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, do_inline_cnv, &
+                 hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, do_3dtke, do_inline_cnv, &
                  do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr, &
                  inline_cnv_flag)
 

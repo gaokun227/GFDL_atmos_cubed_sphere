@@ -66,7 +66,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
                inline_mp, inline_pbl, inline_cnv, inline_gwd, &
                gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
+               do_inline_mp, do_inline_pbl, do_3dtke, do_inline_cnv, do_inline_gwd, &
                do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr, &
                inline_cnv_flag)
     
@@ -80,6 +80,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, consv_checker
     logical, intent (in) :: do_inline_cnv, do_inline_gwd, do_sat_adj, last_step, do_fast_phys, adj_mass_vmr
+    logical, intent (in) :: do_3dtke ! KGao: 3D-SA-TKE
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
@@ -504,6 +505,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         allocate (v_dt (isd:ied, jsd:jed, km))
 
         ! KGao: 3D-SA-TKE
+        ! do allocation regardless if do_3dtke is true
         allocate (deform_1 (isd:ied, jsd:jed, km))
         !allocate (deform_2 (isd:ied, jsd:jed, km))
         allocate (def_1 (is:ie, 1:km))
@@ -537,14 +539,14 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             dp0 = delp
         endif
 
-        ! KGao 3D TKE
-        !if (do_3dtke) then
+        ! KGao: 3D-SA-TKE
+        if (do_3dtke) then
             ! could pass is,ie ... as inputs instead of bd
             call mpp_update_domains(ua, va, domain, gridtype=AGRID) ! KGao - fix ???
-            !!! do mpp_update for tke !!!
             call cal_3d_tke_budget(ua, va, w, q(:,:,:,ntke), delz, km, ak, bk, gridstruct, bd, &
                    deform_1) !, deform_2) !, scl ! KGao - test
-        !endif
+        endif
+        
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, w, &
 !$OMP                                    deform_1, te, delp, hydrostatic, hs, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
@@ -732,20 +734,34 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 rb_out = rb, stress_out = stress, wind_out = wind)
 
             ! SA-TKE-EDMF main program
-            call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
-                abs (mdt), uu, vv, ta, qa, &
-                ! KGao: 3D-SA-TKE
-                def_1, &
-                ! 3D-SA-TKE-end 
-                gsize, inline_pbl%lsm (is:ie, j), &
-                radh, rb, inline_pbl%zorl (is:ie, j), u10m, v10m, &
-                inline_pbl%ffmm (is:ie, j), inline_pbl%ffhh (is:ie, j), &
-                inline_pbl%tsfc (is:ie, j), inline_pbl%hflx (is:ie, j), &
-                inline_pbl%evap (is:ie, j), stress, wind, kinver, &
-                pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j))
-                !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
-                !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
+
+            if ( do_3dtke ) then
+               call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
+                  abs (mdt), uu, vv, ta, qa, &
+                  gsize, inline_pbl%lsm (is:ie, j), &
+                  radh, rb, inline_pbl%zorl (is:ie, j), u10m, v10m, &
+                  inline_pbl%ffmm (is:ie, j), inline_pbl%ffhh (is:ie, j), &
+                  inline_pbl%tsfc (is:ie, j), inline_pbl%hflx (is:ie, j), &
+                  inline_pbl%evap (is:ie, j), stress, wind, kinver, &
+                  pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
+                  inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j), &
+                  ! KGao: 3D-SA-TKE
+                  def_1 = def_1(is:ie, j))
+                  !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
+                  !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
+            else 
+              call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
+                  abs (mdt), uu, vv, ta, qa, &
+                  gsize, inline_pbl%lsm (is:ie, j), &
+                  radh, rb, inline_pbl%zorl (is:ie, j), u10m, v10m, &
+                  inline_pbl%ffmm (is:ie, j), inline_pbl%ffhh (is:ie, j), &
+                  inline_pbl%tsfc (is:ie, j), inline_pbl%hflx (is:ie, j), &
+                  inline_pbl%evap (is:ie, j), stress, wind, kinver, &
+                  pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
+                  inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j))
+                  !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
+                  !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
+            endif
 
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km

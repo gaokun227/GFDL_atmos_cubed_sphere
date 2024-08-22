@@ -134,7 +134,6 @@ module sa_tke_edmf_mod
     real :: ch1 = 0.15 ! proportionality coefficient for heat & q above PBL
 
     ! KGao: 3D-SA-TKE
-    logical :: do_3dtke      = .false. ! flag for using 3d tke budget terms 
     logical :: no_mf         = .false. ! flag for turning off mass-flux effect
     logical :: use_const_l2  = .false. ! flag for using a constant l2 parameter 
 
@@ -148,7 +147,7 @@ module sa_tke_edmf_mod
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        do_3dtke, no_mf, use_const_l2
+        no_mf, use_const_l2
 
 contains
 
@@ -197,13 +196,13 @@ end subroutine sa_tke_edmf_init
 
 subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         delt, u1, v1, t1, q1, &
-        ! KGao: 3D-SA-TKE
-        def_1, &
         gsize, islimsk, &
         radh, rbsoil, zorl, u10m, v10m, fm, fh, &
         tsea, heat, evap, stress, spd1, kinver, &
         psk, del, prsi, prsl, prslk, phii, phil, &
-        hpbl, kpbl, dusfc, dvsfc, dtsfc, dqsfc, dkt_out)
+        hpbl, kpbl, &
+        def_1, & ! KGao: 3D-SA-TKE 
+        dusfc, dvsfc, dtsfc, dqsfc, dkt_out)
     
     implicit none
     
@@ -226,16 +225,16 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         prsl (im, km), prslk (im, km), &
         phii (im, km + 1), phil (im, km)
 
-    ! KGao: 3D-SA-TKE
-    real, intent (in) :: def_1 (im, km)
-
     real, intent (inout) :: u1 (im, km), v1 (im, km), &
         t1 (im, km), q1 (im, km, ntrac)
 
     integer, intent (out) :: kpbl (im)
     
     real, intent (out) :: hpbl (im)
-    
+  
+    ! KGao: 3D-SA-TKE
+    real, intent (in), optional :: def_1 (im, km)
+
     real, intent (out), optional :: dusfc (im), dvsfc (im), dtsfc (im), dqsfc (im), &
         dkt_out (im, km)
     
@@ -1334,7 +1333,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             endif
 
             !KGao: 3D-SA-TKE
-            if (do_3dtke) then
+            if ( present(def_1) ) then
               if (k ==1) then
                 tem = dku(i,k)*def_1(i,k)
                 !if (i .eq. 1 ) print*, 'KGao debug using 3dtke budget'
