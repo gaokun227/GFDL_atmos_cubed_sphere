@@ -19,11 +19,15 @@
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
 
+! KGao notes:
+! - cannot use edge_profile1 from nh_util; cannot compile - mess up dependencies?
+! - need to think about where to put cal_3d_tke_budget
+
 module sa_3d_tke_mod
 
   use fv_arrays_mod,      only: fv_grid_bounds_type, fv_grid_type
-  use nh_utils_mod,       only: edge_profile1 
-  use fv_mp_mod,          only: is_master ! KGao - debug
+  !use nh_utils_mod,       only: edge_profile1  
+  !use fv_mp_mod,          only: is_master ! KGao - debug
 
   implicit none
   private
@@ -232,9 +236,9 @@ contains
    enddo
 
    !if (is_master())  then
-   !   write(*,*) 'KGao debug - max deform_1 ', maxval(abs(deform_1))
-   !   write(*,*) 'KGao debug - max dudx ', maxval(abs(dudx))
-   !   write(*,*) 'KGao debug - max dudz ', maxval(abs(dudz))
+   !   write(*,*) 'KGao debug - max deform_1 ', maxval(abs(deform_1(is:ie,js:je,:)))
+   !   write(*,*) 'KGao debug - max dudx ', maxval(abs(dudx(is:ie,js:je,:)))
+   !   write(*,*) 'KGao debug - max dudz ', maxval(abs(dudz(is:ie,js:je,:)))
    !   write(*,*) 'KGao debug - max dz ', maxval(abs(delz))
    !   write(*,*) 'KGao debug - max dx ', maxval(abs(dx))
    !endif
@@ -249,90 +253,90 @@ contains
 
 !!$OMP parallel do default(none) shared(npz,is,ie,js,je,tke, &
 !!$OMP     tkemax,l_tkemax,kscl,scl,zh)
-   do j=js,je
-      do i=is,ie
-         !scl(i,j)=1000.0
-         l_tkemax=10
-         kscl=10
-         tkemax=0.0
-         do k=1,npz
-            tkemax=max(tkemax,tke(i,j,k))
-         enddo
-         do k=1,npz
-            if (abs(tke(i,j,k)-tkemax)/tkemax .lt. 1.0e-9) then
-               l_tkemax=k
-            endif
-         enddo
-         do k=l_tkemax,npz
-            if (tke(i,j,k)-0.5*tkemax .gt. 0.0) then
-               kscl=k
-            endif
-         enddo
-         kscl=min(kscl,npz-10)
-         !scl(i,j)=zh(i,j,kscl+1) ! KGao: use zh, not gz; zh is needed as input !!!
-      enddo
-   enddo
+!   do j=js,je
+!      do i=is,ie
+!         !scl(i,j)=1000.0
+!         l_tkemax=10
+!         kscl=10
+!         tkemax=0.0
+!         do k=1,npz
+!            tkemax=max(tkemax,tke(i,j,k))
+!         enddo
+!         do k=1,npz
+!            if (abs(tke(i,j,k)-tkemax)/tkemax .lt. 1.0e-9) then
+!               l_tkemax=k
+!            endif
+!         enddo
+!         do k=l_tkemax,npz
+!            if (tke(i,j,k)-0.5*tkemax .gt. 0.0) then
+!               kscl=k
+!            endif
+!         enddo
+!         kscl=min(kscl,npz-10)
+!         !scl(i,j)=zh(i,j,kscl+1) ! KGao: use zh, not gz; zh is needed as input !!!
+!      enddo
+!   enddo
 
 ! KGao: make the 2d temporay arrays private - as suggested by Lucas
 
-!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
-!$OMP                                  tke,dedy_2,dedx_2)                &
-!$OMP                           private(ut,vt,tke_1,dedx_1,dedy_1)
-   do k=1,npz
+!!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
+!!$OMP                                  tke,dedy_2,dedx_2)                &
+!!$OMP                           private(ut,vt,tke_1,dedx_1,dedy_1)
+!   do k=1,npz
 
 !-------------------------------------
 ! get d^2e/dy^2
 
-       do j=js,je+2
-          do i=is,ie+2
-             tke_1(i,j)=tke(i,j,k)
-          enddo
-       enddo
-       do j=js,je+2
-          do i=is,ie
-             vt(i,j)=tke_1(i,j)*dx(i,j)
-          enddo
-       enddo
-       do j=js,je+1
-          do i=is,ie
-             dedy_1(i,j)=rarea(i,j)*(vt(i,j+1)-vt(i,j))
-          enddo
-       enddo
-       do j=js,je+1
-          do i=is,ie
-             vt(i,j)=dedy_1(i,j)*dx(i,j)
-          enddo
-       enddo
-       do j=js,je
-          do i=is,ie
-             dedy_2(i,j,k)=rarea(i,j)*(vt(i,j+1)-vt(i,j))
-          enddo
-       enddo
+!       do j=js,je+2
+!          do i=is,ie+2
+!             tke_1(i,j)=tke(i,j,k)
+!          enddo
+!       enddo
+!       do j=js,je+2
+!          do i=is,ie
+!             vt(i,j)=tke_1(i,j)*dx(i,j)
+!          enddo
+!       enddo
+!       do j=js,je+1
+!          do i=is,ie
+!             dedy_1(i,j)=rarea(i,j)*(vt(i,j+1)-vt(i,j))
+!          enddo
+!       enddo
+!       do j=js,je+1
+!          do i=is,ie
+!             vt(i,j)=dedy_1(i,j)*dx(i,j)
+!          enddo
+!       enddo
+!       do j=js,je
+!          do i=is,ie
+!             dedy_2(i,j,k)=rarea(i,j)*(vt(i,j+1)-vt(i,j))
+!          enddo
+!       enddo
 
 !-------------------------------------
 ! get d^2e/dx^2
 
-       do j=js,je
-          do i=is,ie+2
-             ut(i,j)=tke_1(i,j)*dy(i,j)
-          enddo
-       enddo
-       do j=js,je
-          do i=is,ie+1
-             dedx_1(i,j)=rarea(i,j)*(ut(i+1,j)-ut(i,j))
-          enddo
-       enddo
-       do j=js,je
-          do i=is,ie+1
-             ut(i,j)=dedx_1(i,j)*dy(i,j)
-          enddo
-       enddo
-       do j=js,je
-          do i=is,ie
-             dedx_2(i,j,k)=rarea(i,j)*(ut(i+1,j)-ut(i,j))
-          enddo
-       enddo
-   enddo ! z loop
+!       do j=js,je
+!          do i=is,ie+2
+!             ut(i,j)=tke_1(i,j)*dy(i,j)
+!          enddo
+!       enddo
+!       do j=js,je
+!          do i=is,ie+1
+!             dedx_1(i,j)=rarea(i,j)*(ut(i+1,j)-ut(i,j))
+!          enddo
+!       enddo
+!       do j=js,je
+!          do i=is,ie+1
+!             ut(i,j)=dedx_1(i,j)*dy(i,j)
+!          enddo
+!       enddo
+!       do j=js,je
+!          do i=is,ie
+!             dedx_2(i,j,k)=rarea(i,j)*(ut(i+1,j)-ut(i,j))
+!          enddo
+!       enddo
+!   enddo ! z loop
 
 !-------------------------------------
 ! get d^2e/dz^2
@@ -370,5 +374,71 @@ contains
 !   enddo
 
   end subroutine cal_3d_tke_budget
+
+  subroutine edge_profile1(q1, q1e, i1, i2, km, dp0, limiter)
+! Edge profiles for a single scalar quantity
+ integer, intent(in):: i1, i2
+ integer, intent(in):: km
+ integer, intent(in):: limiter
+ real, intent(in):: dp0(km)
+ real, intent(in),  dimension(i1:i2,km):: q1
+ real, intent(out), dimension(i1:i2,km+1):: q1e
+!-----------------------------------------------------------------------
+ real, dimension(i1:i2,km+1):: qe1, gam  ! edge values
+ real  gak(km)
+ real  bet, r2o3, r4o3
+ real  g0, gk, xt1, xt2, a_bot
+ integer i, k
+
+! Assuming grid varying in vertical only
+   g0 = dp0(2) / dp0(1)
+  xt1 = 2.*g0*(g0+1. )
+  bet =    g0*(g0+0.5)
+  do i=i1,i2
+      qe1(i,1) = ( xt1*q1(i,1) + q1(i,2) ) / bet
+      gam(i,1) = ( 1. + g0*(g0+1.5) ) / bet
+  enddo
+
+  do k=2,km
+     gk = dp0(k-1) / dp0(k)
+     do i=i1,i2
+             bet =  2. + 2.*gk - gam(i,k-1)
+        qe1(i,k) = ( 3.*(q1(i,k-1)+gk*q1(i,k)) - qe1(i,k-1) ) / bet
+        gam(i,k) = gk / bet
+     enddo
+  enddo
+
+  a_bot = 1. + gk*(gk+1.5)
+    xt1 =   2.*gk*(gk+1.)
+  do i=i1,i2
+             xt2 = gk*(gk+0.5) - a_bot*gam(i,km)
+     qe1(i,km+1) = ( xt1*q1(i,km) + q1(i,km-1) - a_bot*qe1(i,km) ) / xt2
+  enddo
+
+  do k=km,1,-1
+     do i=i1,i2
+        qe1(i,k) = qe1(i,k) - gam(i,k)*qe1(i,k+1)
+     enddo
+  enddo
+
+!------------------
+! Apply constraints
+!------------------
+    if ( limiter/=0 ) then   ! limit the top & bottom winds
+         do i=i1,i2
+! Top
+            if ( q1(i,1)*qe1(i,1) < 0. ) qe1(i,1) = 0.
+! Surface:
+            if ( q1(i,km)*qe1(i,km+1) < 0. ) qe1(i,km+1) = 0.
+         enddo
+    endif
+
+    do k=1,km+1
+       do i=i1,i2
+          q1e(i,k) = qe1(i,k)
+       enddo
+    enddo
+
+  end subroutine edge_profile1
 
 end module sa_3d_tke_mod

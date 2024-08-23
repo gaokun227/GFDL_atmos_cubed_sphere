@@ -283,17 +283,20 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             dp0 = delp
         endif
 
-        ! KGao 3D TKE
-        if ( do_3dtke ) then
+        ! KGao: 3D-SA-TKE
+        if (do_3dtke) then
             ! could pass is,ie ... as inputs instead of bd
+            ! deform_2 is not considered yet (need to do mpp_update_domains for tke)
             call mpp_update_domains(ua, va, domain, gridtype=AGRID)
             call cal_3d_tke_budget(ua, va, w, q(:,:,:,ntke), delz, km, ak, bk, gridstruct, bd, &
                    deform_1)
         endif
+        ! 3D-SA-TKE-end
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, w, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, delz, q_con, &
-!$OMP                                    deform_1, rainwat, liq_wat, ice_wat, snowwat, graupel, &
+!$OMP                                    do_3dtke, deform_1, &
+!$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
 !$OMP                                    ptop, ntke, inline_pbl, safety_check, nwat, &
@@ -490,7 +493,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                   pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
                   inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j), &
                   ! KGao: 3D-SA-TKE
-                  def_1 = def_1(is:ie,j))
+                  shr3d = def_1)
                   !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
                   !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
             else

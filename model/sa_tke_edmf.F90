@@ -53,6 +53,7 @@ module sa_tke_edmf_mod
 
     use fms_mod, only: check_nml_error
     use gfdl_mp_mod, only: mqs
+    !use fv_mp_mod, only: is_master ! KGao - debug
 
     implicit none
 
@@ -201,7 +202,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         tsea, heat, evap, stress, spd1, kinver, &
         psk, del, prsi, prsl, prslk, phii, phil, &
         hpbl, kpbl, &
-        def_1, & ! KGao: 3D-SA-TKE 
+        shr3d, & ! KGao: 3D-SA-TKE 
         dusfc, dvsfc, dtsfc, dqsfc, dkt_out)
     
     implicit none
@@ -233,7 +234,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     real, intent (out) :: hpbl (im)
   
     ! KGao: 3D-SA-TKE
-    real, intent (in), optional :: def_1 (im, km)
+    real, intent (in), optional :: shr3d (im, km)
 
     real, intent (out), optional :: dusfc (im), dvsfc (im), dtsfc (im), dqsfc (im), &
         dkt_out (im, km)
@@ -1333,13 +1334,13 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             endif
 
             !KGao: 3D-SA-TKE
-            if ( present(def_1) ) then
+            if ( present(shr3d) ) then
               if (k ==1) then
-                tem = dku(i,k)*def_1(i,k)
-                !if (i .eq. 1 ) print*, 'KGao debug using 3dtke budget'
+                tem = dku(i,k)*shr3d(i,k)
+                !if (is_master() .and. i .eq. 1 ) print*, 'KGao debug using 3dtke budget'
               else
-                tem1 = dku(i,k-1) * def_1(i,k-1) ! KGao: dku is defined at layer interfaces 
-                tem2 = dku(i,k) * def_1(i,k)
+                tem1 = dku(i,k-1) * shr3d(i,k-1) ! KGao: dku is defined at layer interfaces 
+                tem2 = dku(i,k) * shr3d(i,k)
                 tem = 0.5*(tem1+tem2)
               endif
               shrp = tem ! KGao: shrp is overridden
