@@ -150,7 +150,7 @@ module sa_tke_edmf_mod
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        no_mf, use_const_l2, cd0
+        no_mf, use_const_l2, use_const_cd, cd0
 
 contains
 
