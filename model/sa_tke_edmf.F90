@@ -134,9 +134,11 @@ module sa_tke_edmf_mod
     real :: ch0 = 0.4  ! proportionality coefficient for heat & q in PBL
     real :: ch1 = 0.15 ! proportionality coefficient for heat & q above PBL
 
-    ! KGao: 3D-SA-TKE
+    ! KGao!
     logical :: no_mf         = .false. ! flag for turning off mass-flux effect
     logical :: use_const_l2  = .false. ! flag for using a constant l2 parameter 
+    logical :: use_const_cd  = .false. ! flag for using constant surface exchange coeff
+    real    :: cd0           = 0.0011
 
     ! -----------------------------------------------------------------------
     ! namelist
@@ -148,7 +150,7 @@ module sa_tke_edmf_mod
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        no_mf, use_const_l2
+        no_mf, use_const_l2, cd0
 
 contains
 
@@ -2177,6 +2179,13 @@ subroutine sfc_exch (im, ps, u1, v1, t1, q1, z1, &
             tem1 = 0.00001 / z1 (i)
             cm (i) = max (cm (i), tem1)
             ch (i) = max (ch (i), tem1)
+
+            ! KGao - constant cd
+            if ( use_const_cd ) then
+               cm (i) = cd0
+               ch (i) = cd0
+            endif
+
             stress (i) = cm (i) * wind (i) * wind (i)
             ustar (i) = sqrt (stress (i))
             
