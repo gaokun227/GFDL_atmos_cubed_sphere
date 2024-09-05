@@ -933,8 +933,9 @@ module sw_core_mod
       enddo
 
       ! KGao: get a non-dim tke-based smag_q 
-      ! idea follows Lucas's smag damping 
-      ! use dddmp as a temp flag; negative means use tke-based 2nd order damping
+      ! - idea follows Lucas's smag damping 
+      ! - use dddmp as a temp flag; negative means use tke-based 2nd order damping
+      ! - need to get corner values for divergence damping
 
       !!if (flagstruct%smag2d > 1.e-5) then
       !!   if (flagstruct%grid_type<3 .and. .not. bounded_domain .and. &
@@ -1043,6 +1044,10 @@ module sw_core_mod
 #if defined(GFS_PHYS) || defined(DCMIP)
 
         ! KGao: apply damping to dp
+        ! - there are two steps involved
+        ! - first is the vtdm4 damping (higher order)
+        ! - second is the smag_2d damping (2nd order)
+
         !if (dddmp > -1E-5) then
         call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
                       xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
@@ -1494,17 +1499,6 @@ module sw_core_mod
          dd8 = ( gridstruct%da_min_c*d4_bg )**n2
      endif
 
-! KGao: get a non-dim tke-based smag_q
-! use dddmp as a temp flag; negative means use tke-based 2nd order damping
-!     if (dddmp < -1E-5) then
-!        do j = jsd, jed
-!           do i = isd, ied
-!              ! dddmp * smag_q should be no larger than 0.2
-!              smag_q(i,j) = min(0.2/abs(dddmp), abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
-!           enddo
-!        enddo
-!     endif
-
      do j=js,je+1
         do i=is,ie+1
 
@@ -1616,15 +1610,18 @@ module sw_core_mod
         vt=0.
    endif
 
-   ! KGao: apply tke-based damping to vorticity, following Lucas's code
+   ! KGao: apply tke-based 2nd order damping to vorticity, following Lucas's code
+   !       note this is an additional step after the vtdm4 step
+
    !! if ( flagstruct%smag2d > 1.E-5  ) then
    !!    damp4 = flagstruct%smag2D*gridstruct%da_min_c
    !!    call del6_vt_flux(0, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd, damp_Km=smag_q)
    !! endif
-   !if ( dddmp < -1.E-5  ) then
-   !    damp4 = abs(dddmp) * gridstruct%da_min_c ! KGao note: damp4 is a constant
-   !    call del6_vt_flux(0, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd, damp_Km=smag_q)
-   ! endif
+   
+   if ( dddmp < -1.E-5  ) then
+       damp4 = abs(dddmp) * gridstruct%da_min_c ! KGao note: damp4 is a constant
+       call del6_vt_flux(0, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd, damp_Km=smag_q)
+    endif
 
    !estimate dissipation for dissipative heating
    ! or dissipation estimate diagnostic
