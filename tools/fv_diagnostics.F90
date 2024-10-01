@@ -596,7 +596,7 @@ contains
        field= 'dynamics'
 
 #ifdef DYNAMICS_ZS
-       id_zsurf = register_diag_field ( trim(field), 'zsurf', axes(1:2), Time,           &
+       id_zsurf_t = register_diag_field ( trim(field), 'zsurf_t', axes(1:2), Time,           &
                                        'surface height', 'm', interp_method='conserve_order1')
 #endif
 !-------------------
