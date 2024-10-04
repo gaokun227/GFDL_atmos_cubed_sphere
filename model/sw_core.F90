@@ -1048,14 +1048,18 @@ module sw_core_mod
         ! - first is the vtdm4 damping (higher order)
         ! - second is the smag_2d damping (2nd order)
 
-        !if (dddmp > -1E-5) then
+        !if (dddmp > -1E-5) then ! KGao: original scheme; no additional 2nd order damping
         call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
                       xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
                       mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v) !SHiELD
-        !else
-        !!        call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
-        !!              xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
-        !!              mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v, damp_smag=flagstruct%smag2D*smag_scalar, damp_Km=smag_q) !SHiELD
+
+        !else  ! KGao: add additional 2nd order damping with provided diffusion coeff. (scaled by smag_scalar, which is 1/3) 
+        
+        !!! REF: below is from Lucas's new smag
+        !!!        call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
+        !!!              xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
+        !!!              mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v, damp_smag=flagstruct%smag2D*smag_scalar, damp_Km=smag_q) !SHiELD
+
         !call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
         !              xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
         !              mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v, damp_smag=abs(dddmp)*smag_scalar, damp_Km=smag_q) !SHiELD
@@ -1513,7 +1517,7 @@ module sw_core_mod
 !   - delpc is divergence (D), divg_d is high-order derivatives of divergence
 !   - term = damp2 * D = dt * Km * D  => 1/dx * (term[i+1,j] - term[i,j]) is u tendency term
 !   - ke(i,j) = ke(i,j) + vort(i,j); ke here combines ke and damp2 * D; why no negative sign?
-!   - u(i,j) = ... + ke(i,j) - ke(i+1,j) ; no 1/dx, why???
+!   - u(i,j) = ... + ke(i,j) - ke(i+1,j) ; no 1/dx, because u is u*dx here 
 
            ! KGao - a temp flag; dddmp < 0, use tke-based 
            if (dddmp > 0.) then
@@ -2201,12 +2205,16 @@ end subroutine divergence_corner_nest
        enddo
        do j=js-1,je+2
           do i=is-1,ie+2
+            ! KGao notes:
+            !  T     =               -dv/dy             + du/dx
+            !wk(i,j) = rarea_c(i,j)*( vt(i,j-1)-vt(i,j) -ut(i-1,j)+ut(i,j) )
              wk(i,j) = rarea_c(i,j)*(vt(i,j-1)-vt(i,j)-ut(i-1,j)+ut(i,j))
           enddo
        enddo
 ! Fix the corners?? if grid_type /= 4
        do j=js-1,je+1
           do i=is-1,ie+1
+             ! KGao note: mean of 4 corners
              smag_q(i,j) = 0.25*(wk(i,j) + wk(i,j+1) + wk(i+1,j) + wk(i+1,j+1))
           enddo
        enddo
@@ -2234,6 +2242,10 @@ end subroutine divergence_corner_nest
 
        do j=js-1,je+1
           do i=is-1,ie+1
+            ! KGao notes
+            !S       =              du/dy             + dv/dx
+            !                     why j - j+1         why i - i+1; negative S??? 
+            !wk(i,j) = rarea(i,j)*( vt(i,j)-vt(i,j+1) +ut(i,j)-ut(i+1,j) )
              wk(i,j) = rarea(i,j)*(vt(i,j)-vt(i,j+1)+ut(i,j)-ut(i+1,j))
           enddo
        enddo
