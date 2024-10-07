@@ -204,7 +204,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         tsea, heat, evap, stress, spd1, kinver, &
         psk, del, prsi, prsl, prslk, phii, phil, &
         hpbl, kpbl, &
-        shr3d, & ! KGao: 3D-SA-TKE 
+        shr3d_h, shr3d_v, & ! KGao: 3D-SA-TKE 
         dusfc, dvsfc, dtsfc, dqsfc, dkt_out)
     
     implicit none
@@ -236,7 +236,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     real, intent (out) :: hpbl (im)
   
     ! KGao: 3D-SA-TKE
-    real, intent (in), optional :: shr3d (im, km)
+    real, intent (in), optional :: shr3d_h (im, km), shr3d_v (im, km)
 
     real, intent (out), optional :: dusfc (im), dvsfc (im), dtsfc (im), dqsfc (im), &
         dkt_out (im, km)
@@ -1336,16 +1336,21 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             endif
 
             !KGao: 3D-SA-TKE
-            if ( present(shr3d) ) then
+            !TODO: 1. dku_v and dku_h will be treated separately
+            !         shrp_3d = dku_h * shr3d_h + dku_v * shr3d_v
+            !      2. how to get dku_h?
+            !         dku_h = cs * l_h * e (can be determined internally with knowledge of cs and l_h)
+
+            if ( present(shr3d_h) .and. present(shr3d_v)) then
               if (k ==1) then
-                tem = dku(i,k)*shr3d(i,k)
+                tem = dku(i,k) * (shr3d_h(i,k) + shr3d_v(i,k))
                 !if (is_master() .and. i .eq. 1 ) print*, 'KGao debug using 3dtke budget'
               else
-                tem1 = dku(i,k-1) * shr3d(i,k-1) ! KGao: dku is defined at layer interfaces 
-                tem2 = dku(i,k) * shr3d(i,k)
+                tem1 = dku(i,k-1) * (shr3d_h(i,k-1) + shr3d_v(i,k-1))  ! KGao: dku is at layer interfaces 
+                tem2 = dku(i,k) * (shr3d_h(i,k) + shr3d_v(i,k))
                 tem = 0.5*(tem1+tem2)
               endif
-              shrp = tem ! KGao: shrp is overridden
+              shrp = tem
             endif
             !3D-SA-TKE-end
 

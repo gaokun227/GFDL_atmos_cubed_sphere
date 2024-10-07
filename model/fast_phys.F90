@@ -32,7 +32,7 @@ module fast_phys_mod
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_thermo_type
     use fv_arrays_mod, only: inline_pbl_type, inline_gwd_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
-    use mpp_domains_mod, only: AGRID ! KGao: 3D-SA-TKE 
+    use mpp_domains_mod, only: DGRID_NE, AGRID ! KGao: 3D-SA-TKE 
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: c_liq, c_ice, cv_air, cv_vap, hlv, mtetw, tice
@@ -140,9 +140,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
    
-    real, allocatable, dimension (:,:,:) :: deform_1, deform_2 ! KGao: 3D-SA-TKE
+    real, allocatable, dimension (:,:,:) :: deform_1h, deform_1v, deform_2 ! KGao: 3D-SA-TKE
                 
-    real, allocatable, dimension (:,:) :: def_1, def_2 ! KGao: 3D-SA-TKE
+    real, allocatable, dimension (:,:) :: def_1h, def_1v, def_2 ! KGao: 3D-SA-TKE
     
     real (kind = r8), allocatable, dimension (:) :: tz
 
@@ -250,9 +250,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         allocate (v_dt (isd:ied, jsd:jed, km))
 
         ! KGao: 3D-SA-TKE
-        allocate (deform_1 (isd:ied, jsd:jed, km))
+        allocate (deform_1h (isd:ied, jsd:jed, km))
+        allocate (deform_1v (isd:ied, jsd:jed, km))
+        allocate (def_1h (is:ie, 1:km)) 
+        allocate (def_1v (is:ie, 1:km)) 
         !allocate (deform_2 (isd:ied, jsd:jed, km))
-        allocate (def_1 (is:ie, 1:km))
         !allocate (def_2 (is:ie, 1:km))
 
         ! initialize wind tendencies
@@ -288,14 +290,18 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
             ! could pass is,ie ... as inputs instead of bd
             ! deform_2 is not considered yet (need to do mpp_update_domains for tke)
             call mpp_update_domains(ua, va, domain, gridtype=AGRID)
-            call cal_3d_tke_budget(ua, va, w, q(:,:,:,ntke), delz, km, ak, bk, gridstruct, bd, &
-                   deform_1)
+            call mpp_update_domains(u , v , domain, gridtype=DGRID_NE)
+            !call mpp_update_domains(q(:,:,:,ntke), domain)
+
+            call cal_3d_tke_budget(u, v, ua, va, w, q(:,:,:,ntke),   &
+                                   delz, km, ak, bk, gridstruct, bd, &
+                                   deform_1h, deform_1v)
         endif
         ! 3D-SA-TKE-end
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, w, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, delz, q_con, &
-!$OMP                                    do_3dtke, deform_1, &
+!$OMP                                    do_3dtke, deform_1h, deform_1v, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
@@ -303,7 +309,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, consv_checker, &
 !$OMP                                    te_err, tw_err, thermostruct) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
-!$OMP                                    zm, dp, pm, ta, uu, vv, def_1, qliq, qsol, qa, adj_vmr, &
+!$OMP                                    zm, dp, pm, ta, uu, vv, def_1h, def_1v, qliq, qsol, qa, adj_vmr, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
 !$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, &
@@ -415,7 +421,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
-                def_1 (is:ie, k) = deform_1 (is:ie, j, kr) ! KGao: 3D-SA-TKE
+                def_1h (is:ie, k) = deform_1h (is:ie, j, kr) ! KGao: 3D-SA-TKE
+                def_1v (is:ie, k) = deform_1v (is:ie, j, kr) ! KGao: 3D-SA-TKE
                 radh (is:ie, k) = inline_pbl%radh (is:ie, j, kr)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
@@ -493,7 +500,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                   pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
                   inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j), &
                   ! KGao: 3D-SA-TKE
-                  shr3d = def_1)
+                  shr3d_h = def_1h, shr3d_v = def_1v)
                   !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
                   !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
             else
