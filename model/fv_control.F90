@@ -640,9 +640,9 @@ module fv_control_mod
      ! Finish up initialization; write solver information and damping coefficients
 
      ! 9. KGao: override cs with dddmp  when smag_flag=0; need to better think the logic 
-     if (Atm(this_grid)%flagstruct%smag_flag .eq. 0) then
+     if (Atm(this_grid)%flagstruct%smag_flag .eq. 0 .and. Atm(this_grid)%flagstruct%dddmp .gt. 0) then
         Atm(this_grid)%flagstruct%cs = Atm(this_grid)%flagstruct%dddmp ! KGao: is this correct?
-        if ( is_master() .and. Atm(this_grid)%flagstruct%dddmp .gt. 0) then
+        if ( is_master() ) then
            write(*,*) 'Using the old 2nd order divergence damping'
            write(*,*) '!!! dddmp is deprecated !!!'
            write(*,*) '!!! please specify cs parameter instead in the future !!!'
