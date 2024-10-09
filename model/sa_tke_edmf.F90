@@ -198,8 +198,7 @@ end subroutine sa_tke_edmf_init
 ! =======================================================================
 
 subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
-        delt, u1, v1, t1, q1, &
-        gsize, islimsk, &
+        delt, u1, v1, t1, q1, gsize, islimsk, &
         radh, rbsoil, zorl, u10m, v10m, fm, fh, &
         tsea, heat, evap, stress, spd1, kinver, &
         psk, del, prsi, prsl, prslk, phii, phil, &

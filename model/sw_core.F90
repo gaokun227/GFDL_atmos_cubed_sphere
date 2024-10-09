@@ -21,8 +21,8 @@
 
 module sw_core_mod
 
- use tp_core_mod,       only: fv_tp_2d, pert_ppm, copy_corners
- use fv_mp_mod, only: fill_corners, XDir, YDir
+ use tp_core_mod, only: fv_tp_2d, pert_ppm, copy_corners
+ use fv_mp_mod, only: fill_corners, XDir, YDir, is_master
  use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_flags_type
  use a2b_edge_mod, only: a2b_ord4
  use mpp_mod, only: mpp_pe !DEBUG
@@ -574,12 +574,7 @@ module sw_core_mod
       logical :: prevent_diss_cooling
 
       !3D-SA-TKE
-      real :: cpl1,cpl2,cpl3,cpl4,cpl5,cpl6,cm,ce,tem,pfl,damp3d
-      real :: tkemax,tkemin,esmin
-      parameter(cpl1=0.280,cpl2=0.870,cpl3=0.913)
-      parameter(cpl4=0.153,cpl5=0.278,cpl6=0.720)
-      parameter(cm=0.0856,ce=0.845,tkemax=100.0,tkemin=0.001,esmin=500.0)
-      !3D-SA-TKE-end
+      parameter(tkemin = 0.001)
 
       real, pointer, dimension(:,:) :: area, area_c, rarea
 
@@ -1528,28 +1523,16 @@ module sw_core_mod
 
               damp2 =  gridstruct%da_min_c*max(d2_bg, min(0.20, cs*vort(i,j)))  ! dddpm->cs
 !3D-SA-TKE
-! Ping Zhu's method for TKE-based horizontal divergence damping
-!           damp2 = dddmp*vort(i,j)
-!           damp3d = dddmp*abs(dt)*sqrt(max(tke(i,j),tkemax))/sqrt(gridstruct%da_min_c)
-!           !!tem = sqrt(area(i,j))/max(pbl2d(i,j),esmin)
-!           !!pfl = cpl1*(tem**2+cpl2*tem**0.5-cpl3)/        &
-!           !!          (tem**2+cpl4*tem**0.5+cpl5)+cpl6
-!           !!pfl = min(max(pfl,0.0),1.0)
-!           pfl = 0.0 ! KGao note: controls damping coeff blending
-!           damp2 = (1.0-pfl)*damp3d + pfl*damp2
-!           damp2 = gridstruct%da_min_c*max(d2_bg, min(0.20, damp2))  ! del-2
-! KGao - a cleaner version 
-! To-do: interpolate tke to cell corners, where D is defined, to get tke-based Km; see below
+! TODO: interpolate tke to cell corners, where D is defined, to get tke-based Km; see below
 !          call a2b_ord4(wk, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
 
            elseif (smag_flag .eq. 1) then 
-              ! KGao note: a potential bug fix here 
-              !damp2 = abs(dddmp)*abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c)
+              !damp2 = cs*abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c)
               !damp2 = gridstruct%da_min_c*max(d2_bg, min(0.20, damp2))
-              !!!smag_q(i,j) = min(0.2/abs(dddmp), abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
+              !smag_q(i,j) = min(0.2/cs, abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
               damp2 = gridstruct%da_min_c * max( d2_bg, cs*smag_q(i,j) )
            else
-              ! KGao: print out a warning message here, the 2nd order damping option is not legit 
+              if (is_master()) print*, 'Warning: the smag_flag parameter is not valid !!!' 
               damp2 = 0.
            endif
 !3D-SA-TKE-end
