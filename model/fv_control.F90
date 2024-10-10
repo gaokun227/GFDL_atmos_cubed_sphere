@@ -146,7 +146,7 @@ module fv_control_mod
 
      integer , pointer :: nord
      integer , pointer :: nord_tr
-     integer , pointer :: smag_flag ! KGao
+     integer , pointer :: damp_flag ! KGao
      real    , pointer :: cs  ! KGao 
      real    , pointer :: dddmp
      real    , pointer :: smag2d
@@ -639,9 +639,9 @@ module fv_control_mod
 
      ! Finish up initialization; write solver information and damping coefficients
 
-     ! 9. KGao: override cs with dddmp  when smag_flag=0; need to better think the logic 
-     if (Atm(this_grid)%flagstruct%smag_flag .eq. 0 .and. Atm(this_grid)%flagstruct%dddmp .gt. 0) then
-        Atm(this_grid)%flagstruct%cs = Atm(this_grid)%flagstruct%dddmp ! KGao: is this correct?
+     ! KGao: check value of dddmp when damp_flag = 0 
+     if (Atm(this_grid)%flagstruct%damp_flag .eq. 0 .and. Atm(this_grid)%flagstruct%dddmp .gt. 0) then
+        Atm(this_grid)%flagstruct%cs = Atm(this_grid)%flagstruct%dddmp
         if ( is_master() ) then
            write(*,*) 'Using the old 2nd order divergence damping'
            write(*,*) '!!! dddmp is deprecated !!!'
@@ -664,7 +664,7 @@ module fv_control_mod
            write(*,*) ' '
            write(*,*) 'Divergence damping Coefficients'
            write(*,*) 'External mode del-2 (m**2/s)=',  Atm(this_grid)%flagstruct%d_ext*Atm(this_grid)%gridstruct%da_min_c/sdt
-           write(*,*) 'Internal mode del-2 SMAG dimensionless coeff=',  Atm(this_grid)%flagstruct%dddmp
+           write(*,*) 'Internal mode del-2 SMAG dimensionless coeff=',  Atm(this_grid)%flagstruct%cs ! KGao: dddmp->cs
            write(*,*) 'Internal mode del-2 background diff=', Atm(this_grid)%flagstruct%d2_bg*Atm(this_grid)%gridstruct%da_min_c/sdt
 
            if (nord==1) then
@@ -707,7 +707,7 @@ module fv_control_mod
        lim_fac                       => Atm%flagstruct%lim_fac
        nord                          => Atm%flagstruct%nord
        nord_tr                       => Atm%flagstruct%nord_tr
-       smag_flag                     => Atm%flagstruct%smag_flag ! KGao
+       damp_flag                     => Atm%flagstruct%damp_flag ! KGao
        cs                            => Atm%flagstruct%cs ! KGao
        dddmp                         => Atm%flagstruct%dddmp
        smag2d                        => Atm%flagstruct%smag2d
@@ -961,7 +961,7 @@ module fv_control_mod
             nudge, do_f3d, external_ic, is_ideal_case, read_increment, &
             ncep_ic, nggps_ic, hrrrv3_ic, ecmwf_ic, do_diss_est, use_gfsO3, fv_diag_ic, &
             external_eta, res_latlon_dynamics, res_latlon_tracers, d2bg_zq, lim_fac, &
-            smag_flag, cs, & ! KGao
+            damp_flag, cs, & ! KGao
             dddmp, smag2d, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
             warm_start, adjust_dry_mass, mountain, d_con, prevent_diss_cooling, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
             dry_mass, grid_type, do_Held_Suarez, &

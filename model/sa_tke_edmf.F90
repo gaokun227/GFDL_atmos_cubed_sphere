@@ -134,7 +134,7 @@ module sa_tke_edmf_mod
     real :: ch0 = 0.4  ! proportionality coefficient for heat & q in PBL
     real :: ch1 = 0.15 ! proportionality coefficient for heat & q above PBL
 
-    ! KGao
+    ! KGao: parameters below are for LES and/or idealized simulatons
     logical :: no_mf         = .false. ! flag for turning off mass-flux effect
     logical :: use_const_l2  = .false. ! flag for using a constant l2 parameter 
     logical :: use_const_cd  = .false. ! flag for using constant surface exchange coeff

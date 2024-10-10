@@ -56,7 +56,7 @@ module dyn_core_mod
   use fv_regional_mod,      only: current_time_in_seconds, bc_time_interval
   use fv_regional_mod,      only: delz_regBC ! TEMPORARY --- lmh
 
-  !3D-SA-TKE
+  !KGao: 3D-SA-TKE
   use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
   use field_manager_mod,  only: MODEL_ATMOS
   !3D-SA-TKE-end
@@ -212,8 +212,7 @@ contains
 
     ! KGao: 3D-SA-TKE
     integer :: ntke
-    ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke') ! not ideal
-    ! 3D-SA-TKE-end
+    ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
 
       is  = bd%is
       ie  = bd%ie
@@ -323,9 +322,9 @@ contains
   do it=1,n_split
 !-----------------------------------------------------
 
-     ! KGao 3D-SA-TKE
+     ! KGao: 3D-SA-TKE
      ! tke will be used to calculate damping coeff at halo points
-     ! do mpp_update_domains every acoustic step; but it is really necessary?
+     ! here we do mpp_update_domains for tke at every acoustic step; necessary if using fast inline phys
      call mpp_update_domains(q(:,:,:,ntke), domain)
 
 #ifdef ROT3
@@ -777,20 +776,17 @@ contains
           k_q_con = 1
        endif
 
-       ! KGao: 3D-SA-TKE
        call d_sw(vt(isd,jsd,k), delp(isd,jsd,k), ptc(isd,jsd,k),  pt(isd,jsd,k),      &
                   u(isd,jsd,k),    v(isd,jsd,k),   w(isd:,jsd:,k),  uc(isd,jsd,k),      &
                   vc(isd,jsd,k),   ua(isd,jsd,k),  va(isd,jsd,k), divgd(isd,jsd,k),   &
                   mfx(is, js, k),  mfy(is, js, k),  cx(is, jsd,k),  cy(isd,js, k),    &
-                  !3D-SA-TKE
-                  q(isd, jsd, k, ntke), &
-                  !3D-SA-TKE-end
+                  q(isd, jsd, k, ntke), & ! KGao: for tke-based damping
                   crx(is, jsd,k),  cry(isd,js, k), xfx(is, jsd,k), yfx(isd,js, k),    &
                   q_con(isd:,jsd:,k_q_con),  z_rat(isd,jsd),  &
                   kgb, heat_s, diss_e, zvir, sphum, nq,  q,  k,  npz, flagstruct%inline_q,  dt,  &
                   flagstruct%hord_tr, hord_m, hord_v, hord_t, hord_p,    &
                   nord_k, nord_v(k), nord_w, nord_t, &
-                  flagstruct%smag_flag, flagstruct%cs, & ! KGao; dddmp removed
+                  flagstruct%damp_flag, flagstruct%cs, & ! KGao; dddmp removed
                   d2_divg, flagstruct%d4_bg,  &
                   damp_vt(k), damp_w, damp_t, d_con_k, &
                   hydrostatic, gridstruct, flagstruct, thermostruct%use_cond, bd)

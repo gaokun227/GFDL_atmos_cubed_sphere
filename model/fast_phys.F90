@@ -287,8 +287,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
         ! KGao: 3D-SA-TKE
         if (do_3dtke) then
-            ! could pass is,ie ... as inputs instead of bd
-            ! deform_2 is not considered yet (need to do mpp_update_domains for tke)
+            ! deform_2 is not considered yet (requires mpp_update_domains for tke)
             call mpp_update_domains(ua, va, domain, gridtype=AGRID)
             call mpp_update_domains(u , v , domain, gridtype=DGRID_NE)
             !call mpp_update_domains(q(:,:,:,ntke), domain)

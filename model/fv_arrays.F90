@@ -299,23 +299,21 @@ module fv_arrays_mod
                              !< The default value is 0. Positivity not guaranteed for nord > 0.
                              !< (We really don't recommend using tracer damping.)
 
-   ! KGao - new parameters below for a unified control of the 2nd order damping/diffusion in FV3
-   !        dddmp and smag2d below should be removed in future development
-   integer :: smag_flag = 0  !< 0 - default 2nd order divergence damping; applied to divergence damping only
+   ! KGao: 10/09/2024
+   ! - two new parameters are introduced below for a unified control of the 2nd order damping/diffusion in FV3
+   ! - dddmp and smag2d below should be removed in future development
+   integer :: damp_flag = 0  !< 0 - default 2nd order divergence damping; applied to divergence damping only
                              !< 1 - tke based damping
-   real    :: cs = 0         !< replaces dddmp when smag_flag = 0; otherwise, it is a new non-dim coeff for calculating kh
-
+   real    :: cs = 0         !< when damp_flag = 0, cs simply replaces the old
+                             !< when damp_flag = 1, cs is the constatn used for calculating tke-based damping coefficient
    real    :: dddmp = 0.0    !< Dimensionless coefficient for the second-order Smagorinsky-type
                              !< divergence damping. The default is value is 0.0. 0.2
                              !< (the Smagorinsky constant) is recommended if ICs are noisy.
    real    :: smag2d = 0.0   !< Dimensionless coefficient for 2d smag damping. Experimental!!
- 
    real    :: d2_bg = 0.0    !< Coefficient for explicit second-order divergence damping.
                              !< This option remains active even if nord is nonzero. The default
                              !< value is 0.0. The proper range is 0 to 0.02, with 0 strongly recommended
                              !< except for LES simulation.
-   ! KGao - end
-
    real    :: d4_bg = 0.16   !< Dimensionless coefficient for explicit higher-order divergence damping.
                              !< 0.0 by default. If no second-order divergence damping is used, then values
                              !< between 0.1 and 0.16 are recommended. Requires 'nord' > 0. Note that the
