@@ -68,10 +68,10 @@ module sw_core_mod
   real, parameter:: b3 = -13./60.
   real, parameter:: b4 =  0.45
   real, parameter:: b5 = -0.05
-  real, parameter :: smag_scalar = r3
+  real, parameter :: smag_scalar = r3 ! KGao TODO: make this a namelist
 
-      private
-      public :: c_sw, d_sw, fill_4corners, del6_vt_flux, divergence_corner, divergence_corner_nest
+  private
+  public :: c_sw, d_sw, fill_4corners, del6_vt_flux, divergence_corner, divergence_corner_nest
 
   contains
 
@@ -514,8 +514,7 @@ module sw_core_mod
       real   , intent(IN):: damp_v, damp_w, damp_t, kgb
       logical, intent(IN):: use_cond
       type(fv_grid_bounds_type), intent(IN) :: bd
-      !KGao: for tke-based damping 
-      real, intent(INOUT), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: tke
+      real, intent(INOUT), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: tke ! KGao
       real, intent(INOUT):: divg_d(bd%isd:bd%ied+1,bd%jsd:bd%jed+1) ! divergence
       real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: z_rat
       real, intent(INOUT), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: delp, pt, ua, va
@@ -924,17 +923,24 @@ module sw_core_mod
          enddo
       enddo
 
-      ! KGao: get the tke-based diffusion coefficient at cell centers 
-      ! - idea follows Lucas's smag damping 
-      ! - smag_q is only used for the damping/diffusion of variables at cell center
-      ! - a difference field defined at cell corners will be used for divergence damping 
-      if (damp_flag .eq. 1) then
+      ! KGao: get diffusion coefficient to be used for 2nd order damping/diffusion of 
+      !       the physical fields defined at cell centers (potential temp., vorticity)
+
+      if (damp_flag .eq. 1 .and. cs > 1.e-5) then ! smag-type
+         if (flagstruct%grid_type<3 .and. .not. bounded_domain .and. &
+              ( sw_corner .or. se_corner .or. ne_corner .or. nw_corner ) ) call fill_corners(u, v, npx, npy, VECTOR=.true., DGRID=.true.)
+         call smag_cell(abs(dt), u, v, smag_q, bd, npx, npy, gridstruct, ng, cs) !, flagstruct%smag2d > 1.e-5, dudz, dvdz)
+
+      elseif (damp_flag .eq. 2 .and. cs > 1.e-5) then ! tke-based
          do j = jsd, jed
             do i = isd, ied
                ! cs * smag_q should be no larger than 0.2
                smag_q(i,j) = min(0.2/cs, abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
             enddo
          enddo
+
+      else
+         smag_q(:,:) = 0.
       endif
 
       call fv_tp_2d(delp, crx_adv, cry_adv, npx, npy, hord_dp, fx, fy,  &
@@ -969,10 +975,19 @@ module sw_core_mod
         enddo
 
         if ( .not. hydrostatic ) then
-            if ( damp_w>1.E-5 ) then
-               dd8 = kgb*abs(dt)
-               damp4 = (damp_w*gridstruct%da_min_c)**(nord_w+1)
-               call del6_vt_flux(nord_w, npx, npy, damp4, w, wk, fx2, fy2, gridstruct, bd)
+           if ( damp_w>1.E-5 ) then
+              dd8 = kgb*abs(dt)
+              damp4 = (damp_w*gridstruct%da_min_c)**(nord_w+1)
+              call del6_vt_flux(nord_w, npx, npy, damp4, w, wk, fx2, fy2, gridstruct, bd)
+           endif
+
+           ! KGao: apply 2nd order damping to w (using Lucas's code)
+           if ( damp_flag .gt. 0 .and. cs > 1.e-5 ) then
+              damp4 = cs * gridstruct%da_min_c
+              call del6_vt_flux(0, npx, npy, damp4, w, wk, fx2, fy2, gridstruct, bd, damp_Km=smag_q)
+           endif
+
+           if ( damp_w > 1.e-5 .or. ( damp_flag .gt. 0 .and. cs > 1.e-5 )) then
                if (prevent_diss_cooling) then
                   do j=js,je
                   do i=is,ie
@@ -1028,32 +1043,17 @@ module sw_core_mod
 !       enddo
 !    endif
 #if defined(GFS_PHYS) || defined(DCMIP)
-
-        ! KGao: apply damping to dp
-        ! - there are two steps involved
-        ! - first is the vtdm4 damping (higher order)
-        ! - second is the smag_2d damping (2nd order)
-
-        !if (damp_flag .eq. 0) then ! KGao: original scheme; no additional 2nd order damping
+        ! KGao: apply damping to pt (using Lucas's code)
+        ! there are two steps involved:
+        ! - first is the higher-order damping using vtdm4,
+        ! - second is the 2nd order damping (scaled by smag_scalar)
         call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
                       xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
-                      mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v) !SHiELD
-
-        !else  ! KGao: add additional 2nd order damping with provided diffusion coeff. (scaled by smag_scalar, which is 1/3) 
-        
-        !!! REF: below is from Lucas's new smag
-        !!!        call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
-        !!!              xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
-        !!!              mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v, damp_smag=flagstruct%smag2D*smag_scalar, damp_Km=smag_q) !SHiELD
-
-        !call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
-        !              xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
-        !              mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v, damp_smag=cs*smag_scalar, damp_Km=smag_q) !SHiELD
-        !endif
+                      mfx=fx, mfy=fy, mass=delp, nord=nord_v, damp_c=damp_v, damp_smag=cs*smag_scalar, damp_Km=smag_q) !SHiELD
 #else
         call fv_tp_2d(pt, crx_adv,cry_adv, npx, npy, hord_tm, gx, gy,  &
                       xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
-                      mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t) !AM4
+                      mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t, damp_smag=cs*smag_scalar, damp_Km=smag_q) !AM4
 #endif
 #endif
 
@@ -1465,23 +1465,6 @@ module sw_core_mod
 
      enddo ! n-loop
 
-!     if ( cs < 1.E-5) then  ! KGao: dddmp -> cs
-!          vort(:,:) = 0.
-!     else
-!      if ( flagstruct%grid_type < 3 ) then
-!! Interpolate relative vort to cell corners
-!          call a2b_ord4(wk, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
-!          do j=js,je+1
-!             do i=is,ie+1
-!! The following is an approxi form of Smagorinsky diffusion
-!                vort(i,j) = abs(dt)*sqrt(delpc(i,j)**2 + vort(i,j)**2)
-!             enddo
-!          enddo
-!      else  ! Correct form: works only for doubly preiodic domain
-!          call smag_corner(abs(dt), u, v, ua, va, vort, bd, npx, npy, gridstruct, ng)
-!      endif
-!     endif
-
      if (gridstruct%stretched_grid ) then
 ! Stretched grid with variable damping ~ area
          dd8 = gridstruct%da_min * d4_bg**n2
@@ -1505,9 +1488,9 @@ module sw_core_mod
 !   - ke(i,j) = ke(i,j) + vort(i,j); ke here combines ke and damp2 * D; why no negative sign?
 !   - u(i,j) = ... + ke(i,j) - ke(i+1,j) ; no 1/dx, because u is u*dx here 
 
-     if (damp_flag .eq. 0) then ! original method
+     if (damp_flag .eq. 0 .or. damp_flag .eq. 1) then ! original method
 
-        if ( cs < 1.E-5) then  ! KGao: dddmp -> cs
+        if ( cs < 1.e-5) then  ! KGao: dddmp -> cs
            vort(:,:) = 0.
         else
            if ( flagstruct%grid_type < 3 ) then
@@ -1520,7 +1503,7 @@ module sw_core_mod
                  enddo
               enddo
            else  
-              ! vort below is the correct form; works only for doubly preiodic domain
+              ! vort below is the correct form
               call smag_corner(abs(dt), u, v, ua, va, vort, bd, npx, npy, gridstruct, ng)
            endif
         endif
@@ -1533,15 +1516,15 @@ module sw_core_mod
            enddo
         enddo
 
-     elseif (damp_flag .eq. 1) then ! tke-based
+     elseif (damp_flag .eq. 2) then ! tke-based
 
         ! KGao: obtain a new damping coeff at cell corners, where divergence is defined
 
-        ! vort below becomes tke at cell corners
+        ! vort below is the tke at cell corners
         call a2b_ord4(tke, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
         do j = js, je+1
            do i = is, ie+1
-              ! vort below becomes 'smag_q' at cell corners
+              ! vort below is the damping coeff at cell corners
               vort(i,j) = min(0.2/cs, abs(dt)*sqrt(max(vort(i,j),tkemin))/sqrt(gridstruct%da_min_c))
 
               damp2 = gridstruct%da_min_c * max( d2_bg, cs*vort(i,j) )
@@ -1622,16 +1605,10 @@ module sw_core_mod
         vt=0.
    endif
 
-   ! KGao: apply tke-based 2nd order damping to vorticity, following Lucas's code
-   !       note this is an additional step after the vtdm4 step
-
-   !! if ( flagstruct%smag2d > 1.E-5  ) then
-   !!    damp4 = flagstruct%smag2D*gridstruct%da_min_c
-   !!    call del6_vt_flux(0, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd, damp_Km=smag_q)
-   !! endif
-   
-   if ( damp_flag .eq. 1 ) then
-       damp4 = cs * gridstruct%da_min_c ! KGao note: damp4 is a constant
+   ! KGao: apply 2nd order damping to vorticity (using Lucas's code)
+   !       this is an additional step after the higher-order damping using vtdm4
+   if ( damp_flag .gt. 0 .and. cs > 1.e-5) then
+       damp4 = cs * gridstruct%da_min_c
        call del6_vt_flux(0, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd, damp_Km=smag_q)
     endif
 
@@ -2052,8 +2029,9 @@ end subroutine divergence_corner_nest
 
 
  subroutine smag_corner(dt, u, v, ua, va, smag_c, bd, npx, npy, gridstruct, ng)
-! Compute the Tension_Shear strain at cell corners for Smagorinsky diffusion
-!!!  work only if (grid_type==4)
+! Compute the cell-corner Smagorinsky diffusion coefficients
+! works only if (grid_type==4) (need to add corner handling on cubed sphere)
+
  type(fv_grid_bounds_type), intent(IN) :: bd
  real, intent(in):: dt
  integer, intent(IN) :: npx, npy, ng
@@ -2092,71 +2070,70 @@ end subroutine divergence_corner_nest
  rarea   => gridstruct%rarea
  rarea_c => gridstruct%rarea_c
 
-  is2 = max(2,is); ie1 = min(npx-1,ie+1)
+ is2 = max(2,is); ie1 = min(npx-1,ie+1)
 
 ! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
 ! where T = du/dx - dv/dy;   S = du/dy + dv/dx
-! Compute tension strain at corners:
-       do j=js,je+1
-          do i=is-1,ie+1
-             ut(i,j) = u(i,j)*dyc(i,j)
-          enddo
-       enddo
-       do j=js-1,je+1
-          do i=is,ie+1
-             vt(i,j) = v(i,j)*dxc(i,j)
-          enddo
-       enddo
-       do j=js,je+1
-          do i=is,ie+1
-             smag_c(i,j) = rarea_c(i,j)*(vt(i,j-1)-vt(i,j)-ut(i-1,j)+ut(i,j))
-          enddo
-       enddo
-! Fix the corners?? if grid_type /= 4
 
-! Compute shear strain:
-       do j=jsd,jed+1
-          do i=isd,ied
-             vt(i,j) = u(i,j)*dx(i,j)
-          enddo
-       enddo
-       do j=jsd,jed
-          do i=isd,ied+1
-             ut(i,j) = v(i,j)*dy(i,j)
-          enddo
-       enddo
+! Compute tension strain T at corners
+ do j=js,je+1
+    do i=is-1,ie+1
+       ut(i,j) = u(i,j)*dyc(i,j)
+    enddo
+ enddo
+ do j=js-1,je+1
+    do i=is,ie+1
+       vt(i,j) = v(i,j)*dxc(i,j)
+    enddo
+ enddo
+ do j=js,je+1
+    do i=is,ie+1
+       smag_c(i,j) = rarea_c(i,j)*(vt(i,j-1)-vt(i,j)-ut(i-1,j)+ut(i,j))
+    enddo
+ enddo
 
-       do j=jsd,jed
-          do i=isd,ied
-             wk(i,j) = rarea(i,j)*(vt(i,j)-vt(i,j+1)+ut(i,j)-ut(i+1,j))
-          enddo
-       enddo
-       call a2b_ord4(wk, sh, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
-       do j=js,je+1
-          do i=is,ie+1
-             smag_c(i,j) = dt*sqrt( sh(i,j)**2 + smag_c(i,j)**2 )
-          enddo
-       enddo
+! Compute cell-mean shear strain S
+  do j=jsd,jed+1
+     do i=isd,ied
+        vt(i,j) = u(i,j)*dx(i,j)
+     enddo
+  enddo
+  do j=jsd,jed
+     do i=isd,ied+1
+        ut(i,j) = v(i,j)*dy(i,j)
+     enddo
+  enddo
+  do j=jsd,jed
+     do i=isd,ied
+        wk(i,j) = rarea(i,j)*(vt(i,j)-vt(i,j+1)+ut(i,j)-ut(i+1,j))
+    enddo
+  enddo
+
+! Interpolate cell-mean S to cell corners
+  call a2b_ord4(wk, sh, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
+
+  do j=js,je+1
+     do i=is,ie+1
+        smag_c(i,j) = dt*sqrt( sh(i,j)**2 + smag_c(i,j)**2 )
+     enddo
+  enddo
 
  end subroutine smag_corner
 
+ subroutine smag_cell(dt, u, v, smag_q, bd, npx, npy, gridstruct, ng, smag2d) !, do_smag, dudz, dvdz)
+! Compute the cell-mean Smagorinsky diffusion coefficients
+! works only if (grid_type==4) (need to add corner handling on cubed sphere)
 
- subroutine smag_cell(dt, u, v, ua, va, smag_q, bd, npx, npy, gridstruct, ng, do_smag, dudz, dvdz, smag2d)
-! Compute the cell-mean Tension_Shear strain for Smagorinsky diffusion
-!!!  works only if (grid_type==4) (need to add corner handling on cubed sphere)
-!!! Next want to add in vertical shear terms
-   !!! To complete the calculation
  type(fv_grid_bounds_type), intent(IN) :: bd
  real, intent(in):: dt, smag2d
  integer, intent(IN) :: npx, npy, ng
  real, intent(in),  dimension(bd%isd:bd%ied,  bd%jsd:bd%jed+1):: u
  real, intent(in),  dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ):: v
- real, intent(in),  dimension(bd%isd:bd%ied,bd%jsd:bd%jed):: ua, va
  real, intent(out), dimension(bd%isd:bd%ied,bd%jsd:bd%jed):: smag_q
  type(fv_grid_type), intent(IN), target :: gridstruct
- logical, intent(in) :: do_smag
- real , intent(IN) :: dudz(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
- real , intent(IN) :: dvdz(bd%isd:bd%ied+1,bd%jsd:bd%jed)
+ !logical, intent(in) :: do_smag
+ !real , intent(IN) :: dudz(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
+ !real , intent(IN) :: dvdz(bd%isd:bd%ied+1,bd%jsd:bd%jed)
 
 ! local
  real:: ut(bd%isd:bd%ied+1,bd%jsd:bd%jed)
@@ -2189,89 +2166,77 @@ end subroutine divergence_corner_nest
  rarea   => gridstruct%rarea
  rarea_c => gridstruct%rarea_c
 
-  is2 = max(2,is); ie1 = min(npx-1,ie+1)
+ is2 = max(2,is); ie1 = min(npx-1,ie+1)
 
-  if (smag2d > 1.e-3) then
-     smag_limit = 0.20/smag2d
-  elseif (do_smag) then
-     smag_q = 0.0
-     return
-  endif
+ if (smag2d > 1.e-3) then
+    smag_limit = 0.20/smag2d
+ !elseif (do_smag) then
+ else
+    smag_q = 0.0
+    return
+ endif
 
 ! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
 ! where T = du/dx - dv/dy;   S = du/dy + dv/dx
-! Compute tension strain at corners:
-       do j=js-1,je+2
-          do i=is-2,ie+2
-             ut(i,j) = u(i,j)*dyc(i,j)
-          enddo
-       enddo
-       do j=js-2,je+2
-          do i=is-1,ie+2
-             vt(i,j) = v(i,j)*dxc(i,j)
-          enddo
-       enddo
-       do j=js-1,je+2
-          do i=is-1,ie+2
-            ! KGao notes:
-            !  T     =               -dv/dy             + du/dx
-            !wk(i,j) = rarea_c(i,j)*( vt(i,j-1)-vt(i,j) -ut(i-1,j)+ut(i,j) )
-             wk(i,j) = rarea_c(i,j)*(vt(i,j-1)-vt(i,j)-ut(i-1,j)+ut(i,j))
-          enddo
-       enddo
-! Fix the corners?? if grid_type /= 4
-       do j=js-1,je+1
-          do i=is-1,ie+1
-             ! KGao note: mean of 4 corners
-             smag_q(i,j) = 0.25*(wk(i,j) + wk(i,j+1) + wk(i+1,j) + wk(i+1,j+1))
-          enddo
-       enddo
+! Compute tension strain T at corners and then the 4-corner mean
+ do j=js-1,je+2
+    do i=is-2,ie+2
+       ut(i,j) = u(i,j)*dyc(i,j)
+    enddo
+ enddo
+ do j=js-2,je+2
+    do i=is-1,ie+2
+       vt(i,j) = v(i,j)*dxc(i,j)
+    enddo
+ enddo
+ do j=js-1,je+2
+    do i=is-1,ie+2
+       wk(i,j) = rarea_c(i,j)*( vt(i,j-1)-vt(i,j) -ut(i-1,j)+ut(i,j) )
+    enddo
+ enddo
 
-       if (do_smag) then
-          do j=js-1,je+1
-             do i=is-1,ie+1
-                smag_q(i,j) = smag_q(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
-                smag_q(i,j) = smag_q(i,j) + 0.5*(dudz(i-1,j)+dudz(i,j))
-             enddo
-          enddo
-       endif
+ do j=js-1,je+1
+    do i=is-1,ie+1
+       smag_q(i,j) = 0.25*(wk(i,j) + wk(i,j+1) + wk(i+1,j) + wk(i+1,j+1))
+    enddo
+ enddo
 
-! Compute shear strain:
-       do j=js-1,je+2
-          do i=is-1,ie+1
-             vt(i,j) = u(i,j)*dx(i,j)
-          enddo
-       enddo
-       do j=js-1,je+1
-          do i=is-1,ie+2
-             ut(i,j) = v(i,j)*dy(i,j)
-          enddo
-       enddo
+! Compute shear strain S
+ do j=js-1,je+2
+    do i=is-1,ie+1
+       vt(i,j) = u(i,j)*dx(i,j)
+    enddo
+ enddo
+ do j=js-1,je+1
+    do i=is-1,ie+2
+       ut(i,j) = v(i,j)*dy(i,j)
+    enddo
+ enddo
 
-       do j=js-1,je+1
-          do i=is-1,ie+1
-            ! KGao notes
-            !S       =              du/dy             + dv/dx
-            !                     why j - j+1         why i - i+1; negative S??? 
-            !wk(i,j) = rarea(i,j)*( vt(i,j)-vt(i,j+1) +ut(i,j)-ut(i+1,j) )
-             wk(i,j) = rarea(i,j)*(vt(i,j)-vt(i,j+1)+ut(i,j)-ut(i+1,j))
-          enddo
+ do j=js-1,je+1
+    do i=is-1,ie+1
+       ! KGao: negative S below? 
+       wk(i,j) = rarea(i,j)*( vt(i,j)-vt(i,j+1) +ut(i,j)-ut(i+1,j) )
+    enddo
+ enddo
+
+ !if (do_smag) then ! KGao: considers du/dz and dv/dz
+ !    do j=js-1,je+1
+ !       do i=is-1,ie+1
+ !          smag_q(i,j) = smag_q(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
+ !          smag_q(i,j) = smag_q(i,j) + 0.5*(dudz(i-1,j)+dudz(i,j))
+ !          wk(i,j) = wk(i,j) - 0.5*(dvdz(i-1,j)+dvdz(i,j))
+ !          wk(i,j) = wk(i,j) - 0.5*(dudz(i,j-1)+dudz(i,j))
+ !          smag_q(i,j) = min(dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 ), smag_limit)
+ !      enddo
+ !   enddo
+ !else
+    do j=js-1,je+1
+       do i=is-1,ie+1
+          smag_q(i,j) = dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 )
        enddo
-       if (do_smag) then
-          do j=js-1,je+1
-             do i=is-1,ie+1
-                wk(i,j) = wk(i,j) - 0.5*(dvdz(i-1,j)+dvdz(i,j))
-                wk(i,j) = wk(i,j) - 0.5*(dudz(i,j-1)+dudz(i,j))
-                smag_q(i,j) = min(dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 ), smag_limit)
-             enddo
-          enddo
-       else
-          do j=js-1,je+1
-             do i=is-1,ie+1
-                smag_q(i,j) = dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 )
-             enddo
-          enddo
-       endif
+   enddo
+ !endif
 
  end subroutine smag_cell
 
