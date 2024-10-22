@@ -6106,6 +6106,7 @@ end subroutine terminator_tracers
         if (flagstruct%do_inline_pbl) then
             inline_pbl%lsm = 0
             inline_pbl%zorl = 0.1
+            inline_pbl%ztrl = 0.1
             inline_pbl%ffmm = 10.0
             inline_pbl%ffhh = 10.0
             inline_pbl%tsfc = 300.

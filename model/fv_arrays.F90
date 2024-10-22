@@ -1131,6 +1131,7 @@ module fv_arrays_mod
 
     integer, _ALLOCATABLE :: lsm(:,:)     _NULL
     real, _ALLOCATABLE :: zorl(:,:)     _NULL
+    real, _ALLOCATABLE :: ztrl(:,:)     _NULL
     real, _ALLOCATABLE :: ffmm(:,:)     _NULL
     real, _ALLOCATABLE :: ffhh(:,:)     _NULL
     real, _ALLOCATABLE :: tsfc(:,:)     _NULL
@@ -1728,6 +1729,7 @@ contains
     if (Atm%flagstruct%do_inline_pbl) then
        allocate ( Atm%inline_pbl%lsm(is:ie,js:je) )
        allocate ( Atm%inline_pbl%zorl(is:ie,js:je) )
+       allocate ( Atm%inline_pbl%ztrl(is:ie,js:je) )
        allocate ( Atm%inline_pbl%ffmm(is:ie,js:je) )
        allocate ( Atm%inline_pbl%ffhh(is:ie,js:je) )
        allocate ( Atm%inline_pbl%tsfc(is:ie,js:je) )
@@ -1961,7 +1963,8 @@ contains
         do j=js, je
            do i=is, ie
               Atm%inline_pbl%lsm(i,j) = 0
-              Atm%inline_pbl%zorl(i,j) = real_big
+              Atm%inline_pbl%zorl(i,j) = 0
+              Atm%inline_pbl%ztrl(i,j) = 0
               Atm%inline_pbl%ffmm(i,j) = real_big
               Atm%inline_pbl%ffhh(i,j) = real_big
               Atm%inline_pbl%tsfc(i,j) = real_big
@@ -2384,6 +2387,7 @@ contains
     if (Atm%flagstruct%do_inline_pbl) then
        deallocate ( Atm%inline_pbl%lsm )
        deallocate ( Atm%inline_pbl%zorl )
+       deallocate ( Atm%inline_pbl%ztrl )
        deallocate ( Atm%inline_pbl%ffmm )
        deallocate ( Atm%inline_pbl%ffhh )
        deallocate ( Atm%inline_pbl%tsfc )

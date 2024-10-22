@@ -449,6 +449,7 @@ contains
       if ( Atm%flagstruct%do_inline_pbl ) then
         call register_restart_field(SFC_restart, 'slmsk', Atm%inline_pbl%lsm, dim_names_alloc)
         call register_restart_field(SFC_restart, 'zorl', Atm%inline_pbl%zorl, dim_names_alloc)
+        !call register_restart_field(SFC_restart, 'ztrl', Atm%inline_pbl%ztrl, dim_names_alloc)
         call register_restart_field(SFC_restart, 'ffmm', Atm%inline_pbl%ffmm, dim_names_alloc)
         call register_restart_field(SFC_restart, 'ffhh', Atm%inline_pbl%ffhh, dim_names_alloc)
         Atm%inline_pbl%tsfc = Atm%ts
@@ -1946,6 +1947,7 @@ contains
             call register_axis(SFC_restart, dim_names_alloc(1), "x")
             call register_restart_field(SFC_restart, 'slmsk', Atm%inline_pbl%lsm, dim_names_alloc)
             call register_restart_field(SFC_restart, 'zorl', Atm%inline_pbl%zorl, dim_names_alloc)
+            !call register_restart_field(SFC_restart, 'ztrl', Atm%inline_pbl%ztrl, dim_names_alloc)
             call register_restart_field(SFC_restart, 'ffmm', Atm%inline_pbl%ffmm, dim_names_alloc)
             call register_restart_field(SFC_restart, 'ffhh', Atm%inline_pbl%ffhh, dim_names_alloc)
             Atm%inline_pbl%tsfc = Atm%ts

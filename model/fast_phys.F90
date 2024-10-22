@@ -440,7 +440,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                 pik (is:ie, 1) / pmk (is:ie, 1), inline_pbl%evap (is:ie, j), &
                 inline_pbl%hflx (is:ie, j), inline_pbl%ffmm (is:ie, j), &
                 inline_pbl%ffhh (is:ie, j), zm (is:ie, 1) / grav, &
-                inline_pbl%snowd (is:ie, j), inline_pbl%zorl (is:ie, j), &
+                inline_pbl%snowd (is:ie, j), inline_pbl%zorl (is:ie, j), inline_pbl%ztrl (is:ie, j), &
                 inline_pbl%lsm (is:ie, j), inline_pbl%uustar (is:ie, j), sigmaf, vegtype, &
                 inline_pbl%shdmax (is:ie, j), inline_pbl%sfcemis (is:ie, j), &
                 inline_pbl%dlwflx (is:ie, j), inline_pbl%sfcnsw (is:ie, j), &
