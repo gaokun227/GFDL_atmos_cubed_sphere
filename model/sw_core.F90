@@ -25,7 +25,7 @@ module sw_core_mod
  use fv_mp_mod, only: fill_corners, XDir, YDir, is_master
  use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_flags_type
  use a2b_edge_mod, only: a2b_ord4
- use mpp_mod, only: mpp_pe !DEBUG
+ use mpp_mod, only: mpp_pe, mpp_error, FATAL
 
 #ifdef SW_DYNAMICS
  use test_cases_mod,   only: test_case
@@ -493,13 +493,12 @@ module sw_core_mod
 
    subroutine d_sw(delpc, delp,  ptc,   pt, u,  v, w, uc,vc, &
                    ua, va, divg_d, xflux, yflux, cx, cy,              &
-                   tke, & ! KGao: for tke-based damping
                    crx_adv, cry_adv,  xfx_adv, yfx_adv, q_con, z_rat, kgb, heat_source,    &
                    diss_est, zvir, sphum, nq, q, k, km, inline_q,  &
                    dt, hord_tr, hord_mt, hord_vt, hord_tm, hord_dp, nord,   &
-                   nord_v, nord_w, nord_t, damp_flag, cs, & ! KGao: dddmp removed
+                   nord_v, nord_w, nord_t, & 
                    d2_bg, d4_bg, damp_v, damp_w, &
-                   damp_t, d_con, hydrostatic, gridstruct, flagstruct, use_cond, bd)
+                   damp_t, d_con, hydrostatic, gridstruct, flagstruct, use_cond, bd, tke)
 
       integer, intent(IN):: hord_tr, hord_mt, hord_vt, hord_tm, hord_dp
       integer, intent(IN):: nord   ! nord=1 divergence damping; (del-4) or 3 (del-8)
@@ -507,14 +506,11 @@ module sw_core_mod
       integer, intent(IN):: nord_w ! vertical velocity
       integer, intent(IN):: nord_t ! pt
       integer, intent(IN):: sphum, nq, k, km
-      integer, intent(IN):: damp_flag ! KGao
-      real   , intent(IN):: cs ! KGao 
       real   , intent(IN):: dt, d2_bg, d4_bg, d_con
       real   , intent(IN):: zvir
       real   , intent(IN):: damp_v, damp_w, damp_t, kgb
       logical, intent(IN):: use_cond
       type(fv_grid_bounds_type), intent(IN) :: bd
-      real, intent(INOUT), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: tke ! KGao
       real, intent(INOUT):: divg_d(bd%isd:bd%ied+1,bd%jsd:bd%jed+1) ! divergence
       real, intent(IN), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: z_rat
       real, intent(INOUT), dimension(bd%isd:bd%ied,  bd%jsd:bd%jed):: delp, pt, ua, va
@@ -537,6 +533,7 @@ module sw_core_mod
       real, intent(OUT), dimension(bd%isd:bd%ied,bd%js:bd%je+1):: cry_adv, yfx_adv
       type(fv_grid_type), intent(IN), target :: gridstruct
       type(fv_flags_type), intent(IN), target :: flagstruct
+      real, intent(INOUT), optional :: tke(bd%isd:bd%ied,  bd%jsd:bd%jed) ! KGao
 ! Local:
       logical:: sw_corner, se_corner, ne_corner, nw_corner
       real :: ut(bd%isd:bd%ied+1,bd%jsd:bd%jed)
@@ -566,7 +563,8 @@ module sw_core_mod
       real :: u_lon, tmp
       integer :: i,j, is2, ie1, js2, je1, n, nt, n2, iq
       logical :: prevent_diss_cooling
-
+      integer :: damp_flag ! KGao
+      real    :: cs ! KGao 
       real, parameter :: tkemin = 0.001 ! KGao
 
       real, pointer, dimension(:,:) :: area, area_c, rarea
@@ -629,6 +627,8 @@ module sw_core_mod
       ne_corner = gridstruct%ne_corner
 
       prevent_diss_cooling = flagstruct%prevent_diss_cooling
+      damp_flag = flagstruct%damp_flag ! KGao
+      cs = flagstruct%cs ! KGao
 
 #ifdef SW_DYNAMICS
       if ( test_case == 1 ) then
@@ -924,14 +924,17 @@ module sw_core_mod
       enddo
 
       ! KGao: get diffusion coefficient to be used for 2nd order damping/diffusion of 
-      !       the physical fields defined at cell centers (potential temp., vorticity)
+      !       the physical fields defined at cell centers (e.g., potential temp., vorticity, etc)
 
       if (damp_flag .eq. 1 .and. cs > 1.e-5) then ! smag-type
+
+         ! Lucas's code below
          if (flagstruct%grid_type<3 .and. .not. bounded_domain .and. &
               ( sw_corner .or. se_corner .or. ne_corner .or. nw_corner ) ) call fill_corners(u, v, npx, npy, VECTOR=.true., DGRID=.true.)
          call smag_cell(abs(dt), u, v, smag_q, bd, npx, npy, gridstruct, ng, cs) !, flagstruct%smag2d > 1.e-5, dudz, dvdz)
 
       elseif (damp_flag .eq. 2 .and. cs > 1.e-5) then ! tke-based
+         if ( .not. present(tke) ) call mpp_error(FATAL,'tke not defined but using tke-based damping') 
          do j = jsd, jed
             do i = isd, ied
                ! cs * smag_q should be no larger than 0.2
@@ -1518,7 +1521,7 @@ module sw_core_mod
 
      elseif (damp_flag .eq. 2) then ! tke-based
 
-        ! KGao: obtain a new damping coeff at cell corners, where divergence is defined
+        ! KGao: get new tke-based damping coeff at cell corners, where divergence is defined
 
         ! vort below is the tke at cell corners
         call a2b_ord4(tke, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
@@ -1526,7 +1529,6 @@ module sw_core_mod
            do i = is, ie+1
               ! vort below is the damping coeff at cell corners
               vort(i,j) = min(0.2/cs, abs(dt)*sqrt(max(vort(i,j),tkemin))/sqrt(gridstruct%da_min_c))
-
               damp2 = gridstruct%da_min_c * max( d2_bg, cs*vort(i,j) )
               vort(i,j) = damp2*delpc(i,j) + dd8*divg_d(i,j)
               ke(i,j) = ke(i,j) + vort(i,j)

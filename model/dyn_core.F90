@@ -23,7 +23,7 @@ module dyn_core_mod
 
   use constants_mod,      only: rdgas, cp_air, pi
   use fv_arrays_mod,      only: radius ! scaled for small earth
-  use mpp_mod,            only: mpp_pe
+  use mpp_mod,            only: mpp_pe, mpp_error, FATAL
   use mpp_domains_mod,    only: CGRID_NE, DGRID_NE, mpp_get_boundary, mpp_update_domains,  &
                                 domain2d
   use mpp_parameter_mod,  only: CORNER
@@ -56,10 +56,9 @@ module dyn_core_mod
   use fv_regional_mod,      only: current_time_in_seconds, bc_time_interval
   use fv_regional_mod,      only: delz_regBC ! TEMPORARY --- lmh
 
-  !KGao: 3D-SA-TKE
+  !KGao: for tke-based damping 
   use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
   use field_manager_mod,  only: MODEL_ATMOS
-  !3D-SA-TKE-end
 
 #ifdef SW_DYNAMICS
   use test_cases_mod,      only: test_case, case9_forcing1, case9_forcing2
@@ -209,10 +208,7 @@ contains
 
     integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed
-
-    ! KGao: 3D-SA-TKE
-    integer :: ntke
-    ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+    integer :: ntke ! KGao: for tke-based damping
 
       is  = bd%is
       ie  = bd%ie
@@ -317,15 +313,16 @@ contains
     endif
 
 
+  ! KGao: for tke-based damping
+  ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+  if (ntke < 0 .and. flagstruct%damp_flag .eq. 2) call mpp_error(FATAL,'no tke defined but calling tke-based damping') 
 
 !-----------------------------------------------------
   do it=1,n_split
 !-----------------------------------------------------
 
-     ! KGao: 3D-SA-TKE
-     ! tke will be used to calculate damping coeff at halo points
-     ! here we do mpp_update_domains for tke at every acoustic step; necessary if using fast inline phys
-     call mpp_update_domains(q(:,:,:,ntke), domain)
+     ! KGao: for tke-based damping
+     if (flagstruct%damp_flag .eq. 2) call mpp_update_domains(q(:,:,:,ntke), domain)
 
 #ifdef ROT3
      call start_group_halo_update(i_pack(8), u, v, domain, gridtype=DGRID_NE)
@@ -776,20 +773,38 @@ contains
           k_q_con = 1
        endif
 
-       call d_sw(vt(isd,jsd,k), delp(isd,jsd,k), ptc(isd,jsd,k),  pt(isd,jsd,k),      &
+       ! KGao: pass tke field to d_sw if using tke-based damping; note error control is already done above
+       if (flagstruct%damp_flag .eq. 2) then
+
+          call d_sw(vt(isd,jsd,k), delp(isd,jsd,k), ptc(isd,jsd,k),  pt(isd,jsd,k),      &
                   u(isd,jsd,k),    v(isd,jsd,k),   w(isd:,jsd:,k),  uc(isd,jsd,k),      &
                   vc(isd,jsd,k),   ua(isd,jsd,k),  va(isd,jsd,k), divgd(isd,jsd,k),   &
                   mfx(is, js, k),  mfy(is, js, k),  cx(is, jsd,k),  cy(isd,js, k),    &
-                  q(isd, jsd, k, ntke), & ! KGao: for tke-based damping
                   crx(is, jsd,k),  cry(isd,js, k), xfx(is, jsd,k), yfx(isd,js, k),    &
                   q_con(isd:,jsd:,k_q_con),  z_rat(isd,jsd),  &
                   kgb, heat_s, diss_e, zvir, sphum, nq,  q,  k,  npz, flagstruct%inline_q,  dt,  &
                   flagstruct%hord_tr, hord_m, hord_v, hord_t, hord_p,    &
                   nord_k, nord_v(k), nord_w, nord_t, &
-                  flagstruct%damp_flag, flagstruct%cs, & ! KGao; dddmp removed
+                  d2_divg, flagstruct%d4_bg,  &
+                  damp_vt(k), damp_w, damp_t, d_con_k, &
+                  hydrostatic, gridstruct, flagstruct, thermostruct%use_cond, bd, &
+                  tke = q(isd, jsd, k, ntke))  ! KGao: for tke-based damping
+       else
+
+          call d_sw(vt(isd,jsd,k), delp(isd,jsd,k), ptc(isd,jsd,k),  pt(isd,jsd,k),      &
+                  u(isd,jsd,k),    v(isd,jsd,k),   w(isd:,jsd:,k),  uc(isd,jsd,k),      &
+                  vc(isd,jsd,k),   ua(isd,jsd,k),  va(isd,jsd,k), divgd(isd,jsd,k),   &
+                  mfx(is, js, k),  mfy(is, js, k),  cx(is, jsd,k),  cy(isd,js, k),    &
+                  crx(is, jsd,k),  cry(isd,js, k), xfx(is, jsd,k), yfx(isd,js, k),    &
+                  q_con(isd:,jsd:,k_q_con),  z_rat(isd,jsd),  &
+                  kgb, heat_s, diss_e, zvir, sphum, nq,  q,  k,  npz, flagstruct%inline_q,  dt,  &
+                  flagstruct%hord_tr, hord_m, hord_v, hord_t, hord_p,    &
+                  nord_k, nord_v(k), nord_w, nord_t, &
                   d2_divg, flagstruct%d4_bg,  &
                   damp_vt(k), damp_w, damp_t, d_con_k, &
                   hydrostatic, gridstruct, flagstruct, thermostruct%use_cond, bd)
+
+       endif ! end of if damp_flag
 
        if((.not.flagstruct%use_old_omega) .and. last_step ) then
 ! Average horizontal "convergence" to cell center
