@@ -1106,7 +1106,8 @@ contains
              dt, consv, akap, ptop, phis, te0_2d, u, v, w, pt, &
              delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, inline_pbl, inline_gwd, &
              gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
-             flagstruct%do_inline_pbl, flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
+             flagstruct%do_inline_pbl, flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr, &
+             flagstruct%inline_pbl_flag)
 
           call timing_on('COMM_TOTAL')
           !some mpp domains updates are commented out at this moment -- Linjiong

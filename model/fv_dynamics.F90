@@ -632,7 +632,7 @@ contains
                      flagstruct%do_inline_pbl, flagstruct%do_inline_cnv, flagstruct%do_inline_gwd, &
                      inline_mp, inline_pbl, inline_cnv, inline_gwd, bd, flagstruct%fv_debug, &
                      flagstruct%do_fast_phys, flagstruct%do_intermediate_phys, &
-                     flagstruct%consv_checker, flagstruct%adj_mass_vmr, flagstruct%inline_cnv_flag)
+                     flagstruct%consv_checker, flagstruct%adj_mass_vmr, flagstruct%inline_pbl_flag, flagstruct%inline_cnv_flag)
 
      if ( flagstruct%fv_debug ) then
         if (is_master()) write(*,'(A, I3, A1, I3)') 'finished k_split ', n_map, '/', k_split

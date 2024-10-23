@@ -393,6 +393,9 @@ module fv_arrays_mod
    integer :: inline_cnv_flag = 1   !< inline convection scheme
                                     !< 1: Scale-Aware Simplified-Arakawa-Schubert (SA-SAS) Convection Scheme
                                     !< 2: Scale-Aware Aerosol-Aware Mass-Flux (SA-AAMP) Convection Scheme
+   integer :: inline_pbl_flag = 1   !< inline pbl scheme
+                                    !< 1: Scale-Aware Turbulent-Kinetic-Energy based Moist-Eddy-Diffusivity-Mass-Flux scheme
+                                    !< 2: A New Scale-Aware Turbulent-Kinetic-Energy based Moist-Eddy-Diffusivity-Mass-Flux scheme
    logical :: do_aerosol = .false.  !< Controls climatological aerosol data used in the GFDL cloud microphyiscs.
                                     !< .false. by default.
    logical :: do_cosp = .false.     !< Controls COSP
