@@ -27,7 +27,11 @@
 
 module fast_phys_mod
 
+#ifdef OVERLOAD_R4
+    use constantsR4_mod, only: rdgas, rvgas, grav, kappa, cp_air
+#else
     use constants_mod, only: rdgas, rvgas, grav, kappa, cp_air
+#endif
     use fv_grid_utils_mod, only: cubed_to_latlon, update_dwinds_phys
     use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_thermo_type
     use fv_arrays_mod, only: inline_pbl_type, inline_gwd_type
