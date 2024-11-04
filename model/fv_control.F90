@@ -26,7 +26,11 @@
 
 module fv_control_mod
 
+#ifdef OVERLOAD_R4
+   use constantsR4_mod,     only: pi=>pi_8, kappa, grav, rdgas
+#else
    use constants_mod,       only: pi=>pi_8, kappa, grav, rdgas
+#endif
    use fv_arrays_mod,       only: radius ! scaled for small earth
    use field_manager_mod,   only: MODEL_ATMOS
    use fms_mod,             only: write_version_number, check_nml_error
@@ -168,6 +172,7 @@ module fv_control_mod
      logical , pointer :: do_inline_pbl
      logical , pointer :: do_inline_cnv
      logical , pointer :: do_inline_gwd
+     integer , pointer :: inline_pbl_flag
      integer , pointer :: inline_cnv_flag
      logical , pointer :: do_aerosol
      logical , pointer :: do_cosp
@@ -715,6 +720,7 @@ module fv_control_mod
        do_inline_pbl                 => Atm%flagstruct%do_inline_pbl
        do_inline_cnv                 => Atm%flagstruct%do_inline_cnv
        do_inline_gwd                 => Atm%flagstruct%do_inline_gwd
+       inline_pbl_flag               => Atm%flagstruct%inline_pbl_flag
        inline_cnv_flag               => Atm%flagstruct%inline_cnv_flag
        do_aerosol                    => Atm%flagstruct%do_aerosol
        do_cosp                       => Atm%flagstruct%do_cosp
@@ -1154,7 +1160,7 @@ module fv_control_mod
 
        integer :: ios, ierr
        namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_intermediate_phys, do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
-            inline_cnv_flag, do_aerosol, do_cosp, consv_checker, te_err, tw_err
+            inline_pbl_flag, inline_cnv_flag, do_aerosol, do_cosp, consv_checker, te_err, tw_err
 
        read (input_nml_file,integ_phys_nml,iostat=ios)
        ierr = check_nml_error(ios,'integ_phys_nml')

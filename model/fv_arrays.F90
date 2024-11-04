@@ -29,7 +29,11 @@ module fv_arrays_mod
   use horiz_interp_type_mod, only: horiz_interp_type
   use mpp_mod,               only: mpp_broadcast
   use platform_mod,          only: r8_kind
+#ifdef OVERLOAD_R4
+  use constantsR4_mod,       only: cnst_radius => radius, cnst_omega => omega
+#else
   use constants_mod,         only: cnst_radius => radius, cnst_omega => omega
+#endif
   public
 
   integer, public, parameter :: R_GRID = r8_kind
@@ -70,6 +74,12 @@ module fv_arrays_mod
      integer :: id_inline_cnv_intm_te_a_chg, id_inline_cnv_intm_te_b_chg, id_inline_cnv_intm_tw_a_chg, id_inline_cnv_intm_tw_b_chg
      integer :: id_inline_gwd_fast_te_a_chg, id_inline_gwd_fast_te_b_chg, id_inline_gwd_fast_tw_a_chg, id_inline_gwd_fast_tw_b_chg
      integer :: id_inline_gwd_intm_te_a_chg, id_inline_gwd_intm_te_b_chg, id_inline_gwd_intm_tw_a_chg, id_inline_gwd_intm_tw_b_chg
+
+     ! As a special case, we implement te_coarse through the fv_diag_type;
+     ! initialize to -1 to robustly allow its use as a proxy for both whether
+     ! coarse-graining is enabled in this simulation *and* whether this
+     ! diagnostic was called for in the diag_table.
+     integer :: id_te_coarse = -1
 
   end type fv_diag_type
 
@@ -387,6 +397,9 @@ module fv_arrays_mod
    integer :: inline_cnv_flag = 1   !< inline convection scheme
                                     !< 1: Scale-Aware Simplified-Arakawa-Schubert (SA-SAS) Convection Scheme
                                     !< 2: Scale-Aware Aerosol-Aware Mass-Flux (SA-AAMP) Convection Scheme
+   integer :: inline_pbl_flag = 1   !< inline pbl scheme
+                                    !< 1: Scale-Aware Turbulent-Kinetic-Energy based Moist-Eddy-Diffusivity-Mass-Flux scheme
+                                    !< 2: A New Scale-Aware Turbulent-Kinetic-Energy based Moist-Eddy-Diffusivity-Mass-Flux scheme
    logical :: do_aerosol = .false.  !< Controls climatological aerosol data used in the GFDL cloud microphyiscs.
                                     !< .false. by default.
    logical :: do_cosp = .false.     !< Controls COSP
@@ -1125,6 +1138,7 @@ module fv_arrays_mod
 
     integer, _ALLOCATABLE :: lsm(:,:)     _NULL
     real, _ALLOCATABLE :: zorl(:,:)     _NULL
+    real, _ALLOCATABLE :: ztrl(:,:)     _NULL
     real, _ALLOCATABLE :: ffmm(:,:)     _NULL
     real, _ALLOCATABLE :: ffhh(:,:)     _NULL
     real, _ALLOCATABLE :: tsfc(:,:)     _NULL
@@ -1722,6 +1736,7 @@ contains
     if (Atm%flagstruct%do_inline_pbl) then
        allocate ( Atm%inline_pbl%lsm(is:ie,js:je) )
        allocate ( Atm%inline_pbl%zorl(is:ie,js:je) )
+       allocate ( Atm%inline_pbl%ztrl(is:ie,js:je) )
        allocate ( Atm%inline_pbl%ffmm(is:ie,js:je) )
        allocate ( Atm%inline_pbl%ffhh(is:ie,js:je) )
        allocate ( Atm%inline_pbl%tsfc(is:ie,js:je) )
@@ -1955,7 +1970,8 @@ contains
         do j=js, je
            do i=is, ie
               Atm%inline_pbl%lsm(i,j) = 0
-              Atm%inline_pbl%zorl(i,j) = real_big
+              Atm%inline_pbl%zorl(i,j) = 0
+              Atm%inline_pbl%ztrl(i,j) = 0
               Atm%inline_pbl%ffmm(i,j) = real_big
               Atm%inline_pbl%ffhh(i,j) = real_big
               Atm%inline_pbl%tsfc(i,j) = real_big
@@ -2378,6 +2394,7 @@ contains
     if (Atm%flagstruct%do_inline_pbl) then
        deallocate ( Atm%inline_pbl%lsm )
        deallocate ( Atm%inline_pbl%zorl )
+       deallocate ( Atm%inline_pbl%ztrl )
        deallocate ( Atm%inline_pbl%ffmm )
        deallocate ( Atm%inline_pbl%ffhh )
        deallocate ( Atm%inline_pbl%tsfc )

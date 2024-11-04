@@ -84,6 +84,7 @@ use fv_grid_utils_mod,  only: g_sum
 use mpp_domains_mod, only:  mpp_get_data_domain, mpp_get_compute_domain
 use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
 use sa_tke_edmf_mod,    only: sa_tke_edmf_init
+use sa_tke_edmf_new_mod,only: sa_tke_edmf_new_init
 use sa_sas_mod,         only: sa_sas_init
 use sa_aamf_mod,        only: sa_aamf_init
 use sa_gwd_mod,         only: sa_gwd_init
@@ -301,7 +302,10 @@ contains
    allocate(pref(npz+1,2), dum1d(npz+1))
 
    call gfdl_mp_init(input_nml_file, stdlog(), Atm(mygrid)%flagstruct%hydrostatic)
-   if (Atm(mygrid)%flagstruct%do_inline_pbl) call sa_tke_edmf_init(input_nml_file, stdlog())
+   if (Atm(mygrid)%flagstruct%do_inline_pbl) then
+     if (Atm(mygrid)%flagstruct%inline_pbl_flag .eq. 1) call sa_tke_edmf_init(input_nml_file, stdlog())
+     if (Atm(mygrid)%flagstruct%inline_pbl_flag .eq. 2) call sa_tke_edmf_new_init(input_nml_file, stdlog())
+   endif
    if (Atm(mygrid)%flagstruct%do_inline_cnv) then
      if (Atm(mygrid)%flagstruct%inline_cnv_flag .eq. 1) call sa_sas_init(input_nml_file, stdlog())
      if (Atm(mygrid)%flagstruct%inline_cnv_flag .eq. 2) call sa_aamf_init(input_nml_file, stdlog())
@@ -1360,6 +1364,7 @@ contains
          Atm(n)%inline_pbl%ffhh(i,j) = IPD_Data(nb)%Stateout%ffhh(ix)
          Atm(n)%inline_pbl%snowd(i,j) = IPD_Data(nb)%Stateout%snowd(ix)
          Atm(n)%inline_pbl%zorl(i,j) = IPD_Data(nb)%Stateout%zorl(ix)
+         Atm(n)%inline_pbl%ztrl(i,j) = IPD_Data(nb)%Stateout%ztrl(ix)
          Atm(n)%inline_pbl%uustar(i,j) = IPD_Data(nb)%Stateout%uustar(ix)
          Atm(n)%inline_pbl%shdmax(i,j) = IPD_Data(nb)%Stateout%shdmax(ix)
          Atm(n)%inline_pbl%sfcemis(i,j) = IPD_Data(nb)%Stateout%sfcemis(ix)
@@ -1914,6 +1919,7 @@ contains
            IPD_Data(nb)%Statein%ffhh(ix) = _DBL_(_RL_(Atm(mygrid)%inline_pbl%ffhh(i,j)))
            IPD_Data(nb)%Statein%snowd(ix) = _DBL_(_RL_(Atm(mygrid)%inline_pbl%snowd(i,j)))
            IPD_Data(nb)%Statein%zorl(ix) = _DBL_(_RL_(Atm(mygrid)%inline_pbl%zorl(i,j)))
+           IPD_Data(nb)%Statein%ztrl(ix) = _DBL_(_RL_(Atm(mygrid)%inline_pbl%ztrl(i,j)))
            IPD_Data(nb)%Statein%uustar(ix) = _DBL_(_RL_(Atm(mygrid)%inline_pbl%uustar(i,j)))
            IPD_Data(nb)%Statein%shdmax(ix) = _DBL_(_RL_(Atm(mygrid)%inline_pbl%shdmax(i,j)))
            IPD_Data(nb)%Statein%srflag(ix) = _DBL_(_RL_(Atm(mygrid)%inline_pbl%srflag(i,j)))

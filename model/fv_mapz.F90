@@ -23,7 +23,11 @@
 ! Revise the OpenMP code to avoid crash
 module fv_mapz_mod
 
+#ifdef OVERLOAD_R4
+  use constantsR4_mod,   only: pi=>pi_8, rdgas, grav, cp_air, cp_vapor
+#else
   use constants_mod,     only: pi=>pi_8, rdgas, grav, cp_air, cp_vapor
+#endif
   use fv_arrays_mod,     only: radius ! scaled for small earth
   use tracer_manager_mod,only: get_tracer_index
   use field_manager_mod, only: MODEL_ATMOS
@@ -62,7 +66,8 @@ contains
                       fv_time, hydrostatic, hybrid_z, adiabatic, do_adiabatic_init, &
                       do_inline_mp, do_inline_pbl, do_inline_cnv, do_inline_gwd, &
                       inline_mp, inline_pbl, inline_cnv, inline_gwd, bd, fv_debug, &
-                      do_fast_phys, do_intermediate_phys, consv_checker, adj_mass_vmr, inline_cnv_flag)
+                      do_fast_phys, do_intermediate_phys, consv_checker, adj_mass_vmr, &
+                      inline_pbl_flag, inline_cnv_flag)
 
   logical, intent(in):: last_step
   logical, intent(in):: fv_debug
@@ -84,6 +89,7 @@ contains
   integer, intent(in):: kord_wz               ! Mapping order/option for w
   integer, intent(in):: kord_tr(nq)           ! Mapping order for tracers
   integer, intent(in):: kord_tm               ! Mapping order for thermodynamics
+  integer, intent(in):: inline_pbl_flag
   integer, intent(in):: inline_cnv_flag
 
   real, intent(in):: consv                 ! factor for TE conservation
@@ -798,7 +804,7 @@ contains
                  inline_mp, inline_pbl, inline_cnv, inline_gwd, gridstruct, thermostruct, domain, bd, &
                  hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, do_inline_cnv, &
                  do_inline_gwd, do_sat_adj, last_step, do_fast_phys, consv_checker, adj_mass_vmr, &
-                 inline_cnv_flag)
+                 inline_pbl_flag, inline_cnv_flag)
 
         if (idiag%id_inline_mp_fast_te_a_chg>0) &
             used = send_data(idiag%id_inline_mp_fast_te_a_chg, inline_mp%fast_te_a_chg, fv_time)

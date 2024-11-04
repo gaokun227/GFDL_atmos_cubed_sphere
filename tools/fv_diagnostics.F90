@@ -24,8 +24,13 @@
 
 module fv_diagnostics_mod
 
+#ifdef OVERLOAD_R4
+ use constantsR4_mod,    only: grav, rdgas, rvgas, pi=>pi_8, kappa, WTMAIR, WTMCO2, &
+                               hlv, cp_air, cp_vapor, TFREEZE
+#else
  use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, kappa, WTMAIR, WTMCO2, &
                                hlv, cp_air, cp_vapor, TFREEZE
+#endif
  use fv_arrays_mod,      only: radius ! scaled for small earth
  use fms_mod,            only: write_version_number
  use time_manager_mod,   only: time_type, get_date, get_time
@@ -596,7 +601,7 @@ contains
        field= 'dynamics'
 
 #ifdef DYNAMICS_ZS
-       id_zsurf = register_diag_field ( trim(field), 'zsurf', axes(1:2), Time,           &
+       id_zsurf_t = register_diag_field ( trim(field), 'zsurf_t', axes(1:2), Time,           &
                                        'surface height', 'm', interp_method='conserve_order1')
 #endif
 !-------------------
@@ -3441,23 +3446,24 @@ contains
 
 ! cloud water mass mixing ratio
 !NOTE: Can set this up for *ANY* tracers
-       call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,liq_wat), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
+
+       if (liq_wat > 0) call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,liq_wat), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
                         npz, 0, id_ql_plev, id_ql_levs, nplev, Atm(n)%bd, Time)
 
-       call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,ice_wat), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
+       if (ice_wat > 0) call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,ice_wat), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
                         npz, 0, id_qi_plev, id_qi_levs, nplev, Atm(n)%bd, Time)
 
-       call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,rainwat), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
+       if (rainwat > 0) call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,rainwat), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
                         npz, 0, id_qr_plev, id_qr_levs, nplev, Atm(n)%bd, Time)
 
-       call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,snowwat), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
+       if (snowwat > 0) call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,snowwat), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
                         npz, 0, id_qs_plev, id_qs_levs, nplev, Atm(n)%bd, Time)
 
-       call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,graupel), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
+       if (graupel > 0) call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,graupel), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
                         npz, 0, id_qg_plev, id_qg_levs, nplev, Atm(n)%bd, Time)
 
 ! cloud fraction
-       call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,cld_amt), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
+       if (cld_amt > 0) call make_plevs( Atm(n)%q(isc:iec,jsc:jec,:,cld_amt), plevs, Atm(n)%pe(isc:iec,1:npz+1,jsc:jec), &
                         npz, 0, id_cf_plev, id_cf_levs, nplev, Atm(n)%bd, Time)
 
 ! Omega
