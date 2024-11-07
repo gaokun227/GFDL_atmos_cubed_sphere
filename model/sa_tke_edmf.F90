@@ -138,7 +138,8 @@ module sa_tke_edmf_mod
     logical :: no_mf         = .false. ! flag for turning off mass-flux effect
     logical :: use_const_l2  = .false. ! flag for using a constant l2 parameter 
     logical :: use_const_cd  = .false. ! flag for using constant surface exchange coeff
-    real    :: cd0           = 0.0011
+    real    :: cd0           = 0.0011  ! constant surface drag coeff for idealized tests
+    real    :: cs            = 0.      ! cs parameter for kh (should be same as in dycore)
 
     ! -----------------------------------------------------------------------
     ! namelist
@@ -150,7 +151,7 @@ module sa_tke_edmf_mod
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        no_mf, use_const_l2, use_const_cd, cd0
+        no_mf, use_const_l2, use_const_cd, cd0, cs
 
 contains
 
@@ -258,6 +259,8 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         cku (im, km - 1), ckt (im, km - 1), q1g (im, km, ntrac), &
         vdt (im, km), udt (im, km), tdt (im, km), qdt (im, km)
     
+    real :: dkh(im, km - 1) ! KGao
+
     real :: plyr (im, km), rhly (im, km), cfly (im, km), &
         qstl (im, km)
     
@@ -1335,19 +1338,25 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             endif
 
             !KGao: 3D-SA-TKE
-            !TODO: 1. dku_v and dku_h will be treated separately
+            !TODO: 1. dku_v and dku_h are treated separately
             !         shrp_3d = dku_h * shr3d_h + dku_v * shr3d_v
             !      2. how to get dku_h?
-            !         dku_h = cs * l_h * e (can be determined internally with knowledge of cs and l_h)
+            !         dku_h = cs * l_h * sqrt(e)
 
             if ( present(shr3d_h) .and. present(shr3d_v)) then
-              if (k ==1) then
-                tem = dku(i,k) * (shr3d_h(i,k) + shr3d_v(i,k))
-                !if (is_master() .and. i .eq. 1 ) print*, 'KGao debug using 3dtke budget'
+
+              if (cs < 1.e-5) then
+                 dkh(i, k) = dku(i, k)
               else
-                tem1 = dku(i,k-1) * (shr3d_h(i,k-1) + shr3d_v(i,k-1))  ! KGao: dku is at layer interfaces 
-                tem2 = dku(i,k) * (shr3d_h(i,k) + shr3d_v(i,k))
-                tem = 0.5*(tem1+tem2)
+                 dkh(i, k) = cs * sqrt( gdx(i) ) * sqrt (tkeh (i, k)) 
+              endif
+
+              if (k ==1) then
+                tem = dkh(i, k) * shr3d_h(i, k) + dku(i, k) * shr3d_v(i, k)
+              else
+                tem1 = dkh(i, k-1) * shr3d_h(i, k-1) + dku(i, k-1) * shr3d_v(i, k-1) ! dku is at layer interfaces 
+                tem2 = dkh(i, k) * shr3d_h(i, k)     + dku(i, k) * shr3d_v(i, k)
+                tem = 0.5 * (tem1 + tem2)
               endif
               shrp = tem
             endif
