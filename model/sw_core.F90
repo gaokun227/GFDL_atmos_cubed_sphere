@@ -938,7 +938,7 @@ module sw_core_mod
          do j = jsd, jed
             do i = isd, ied
                ! cs * smag_q should be no larger than 0.2
-               smag_q(i,j) = min(0.2/cs, abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min_c))
+               smag_q(i,j) = min(0.2/cs, abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min))
             enddo
          enddo
 
