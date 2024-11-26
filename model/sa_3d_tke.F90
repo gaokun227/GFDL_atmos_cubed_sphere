@@ -19,10 +19,6 @@
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
 
-! KGao notes:
-! - cannot use edge_profile1 from nh_util; cannot compile - mess up dependencies?
-! - need to think about where to put cal_3d_tke_budget
-
 module sa_3d_tke_mod
 
   use fv_arrays_mod,      only: fv_grid_bounds_type, fv_grid_type
@@ -35,9 +31,15 @@ module sa_3d_tke_mod
 
 contains
 
-!-----------------------------------------------------------------------
-! cal_3d_tke_budget :: a new version by Kun using D grid wind
-!-----------------------------------------------------------------------
+! =======================================================================
+! cal_3d_tke_budget :: calculate 3D TKE shear production
+! - this version is created based on Ping Zhu's anisotropic 
+!   turbulence shear production formulation (REF to be added) and also
+!   his code for 3D TKE shear production  
+! - in this verion we use D-grid wind, instead of A-grid wind 
+! - the algorithms are updated to be consistent with FV3
+! - created by Kun Gao (kun.gao@noaa.gov)
+! =======================================================================
 
   subroutine cal_3d_tke_budget(u, v, ua, va, w, tke,  &
                    delz, npz, ak, bk, gridstruct, bd, &
@@ -118,7 +120,7 @@ contains
 !===========================================================
 ! Calculate deform_1h and deform_1v
 !
-!      shr_prod = kmh * deform_1h + kmv * deform_1v
+!      shr_prod = kh * deform_1h + kv * deform_1v
 !
 !     deform_1h = (2*(du/dx**2 + dv/dy**2)
 !                  + (du/dy + dv/dx)**2
@@ -136,10 +138,11 @@ contains
 !$OMP                          private(ut,vt,wk1,wk2)
    do k=1,npz
 
-!-------------------------------------
+!---------------------------------------------
 ! Calculate du/dx and dv/dy:
 !  get corner values first, and 
 !  then average the 4 corners to get cell-mean
+!---------------------------------------------
 
       do j=js-1,je+2
          do i=is-2,ie+2
@@ -168,6 +171,7 @@ contains
 
 !-------------------------------------
 ! Calculate du/dy and dv/dx
+!-------------------------------------
 
       do j=js,je+1
          do i=is,ie
@@ -187,11 +191,12 @@ contains
          enddo
       enddo
 
-!-------------------------------------
+!-------------------------------------------
 ! Calculate dw/dx and dw/dy:
 !  get edge values of w first, and then 
 !  use the two edge values to get cell-mean 
 !  dw/dx and dw/dy
+!-------------------------------------------
 
       do j=js,je
          do i=is,ie
@@ -209,27 +214,13 @@ contains
          enddo
       enddo
 
-
-      ! KGao: below is a finite diff method; not consistent with FV3
-      !do j=js,je+1
-      !   do i=is,ie+1
-      !      wk1(i,j) = 1./dxc(i,j) * ( -w(i-1,j,k) + w(i,j,k))
-      !      wk2(i,j) = 1./dyc(i,j) * ( -w(i,j-1,k) + w(i,j,k))
-      !   enddo
-      !enddo
-      !do j=js,je
-      !   do i=is,ie
-      !      dwdx(i,j,k) = 0.5*(wk1(i,j) + wk2(i+1,j))
-      !      dwdy(i,j,k) = 0.5*(wk1(i,j) + wk2(i,j+1))
-      !   enddo
-      !enddo
-
    enddo   !z loop
 
 !-------------------------------------
 ! get du/dz, dv/dz and dw/dz
+!-------------------------------------
 
-! TODO: use $OMP ??? 
+! TODO: use $OMP 
    do k=1,npz
       dp_ref(k) = ak(k+1)-ak(k) + (bk(k+1)-bk(k))*1.E5
    enddo
@@ -248,24 +239,9 @@ contains
       enddo
    enddo
 
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,delz, &
-!!$OMP                                  dudz,dvdz,dwdz)
-
-!   do j=js,je
-!       do i=is,ie
-!          do k=1,npz-1
-!             dudz(i,j,k)=(ua(i,j,k+1)-ua(i,j,k))/delz(i,j,k) ! KGao: this is problematic
-!             dvdz(i,j,k)=(va(i,j,k+1)-va(i,j,k))/delz(i,j,k)
-!             dwdz(i,j,k)=(w(i,j,k+1)-w(i,j,k))/delz(i,j,k)
-!          enddo
-!          dudz(i,j,npz)=0.0
-!          dvdz(i,j,npz)=0.0
-!          dwdz(i,j,npz)=0.0
-!       enddo
-!   enddo
-
-!-------------------------------------
+!-----------------------------------------------
 ! get deform_1h and deform_1v based on all terms
+!-----------------------------------------------
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je, &
 !$OMP                                  deform_1h, deform_1v, &
@@ -299,6 +275,7 @@ contains
        enddo
    enddo
 
+   ! KGao: debug code
    !if (is_master())  then
    !   write(*,*) 'KGao debug - max deform_1 ', maxval(abs(deform_1(is:ie,js:je,:)))
    !   write(*,*) 'KGao debug - max dudx ', maxval(abs(dudx(is:ie,js:je,:)))
@@ -307,145 +284,15 @@ contains
    !   write(*,*) 'KGao debug - max dx ', maxval(abs(dx))
    !endif
 
-!===========================================================
-! Calculate deform_2
-! deform_2 = (d^2e/dx^2 + d^2e/dy^2 + d^2e/dz^2)
-! where e is tke
-!===========================================================
-
-!find scale of energy containin eddies using TKE
-
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,tke, &
-!!$OMP     tkemax,l_tkemax,kscl,scl,zh)
-!   do j=js,je
-!      do i=is,ie
-!         !scl(i,j)=1000.0
-!         l_tkemax=10
-!         kscl=10
-!         tkemax=0.0
-!         do k=1,npz
-!            tkemax=max(tkemax,tke(i,j,k))
-!         enddo
-!         do k=1,npz
-!            if (abs(tke(i,j,k)-tkemax)/tkemax .lt. 1.0e-9) then
-!               l_tkemax=k
-!            endif
-!         enddo
-!         do k=l_tkemax,npz
-!            if (tke(i,j,k)-0.5*tkemax .gt. 0.0) then
-!               kscl=k
-!            endif
-!         enddo
-!         kscl=min(kscl,npz-10)
-!         !scl(i,j)=zh(i,j,kscl+1) ! KGao: use zh, not gz; zh is needed as input !!!
-!      enddo
-!   enddo
-
-! KGao: make the 2d temporay arrays private - as suggested by Lucas
-
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,ua,va,w,dx,dy,rarea, &
-!!$OMP                                  tke,dedy_2,dedx_2)                &
-!!$OMP                           private(ut,vt,tke_1,dedx_1,dedy_1)
-!   do k=1,npz
-
-!-------------------------------------
-! get d^2e/dy^2
-
-!       do j=js,je+2
-!          do i=is,ie+2
-!             tke_1(i,j)=tke(i,j,k)
-!          enddo
-!       enddo
-!       do j=js,je+2
-!          do i=is,ie
-!             vt(i,j)=tke_1(i,j)*dx(i,j)
-!          enddo
-!       enddo
-!       do j=js,je+1
-!          do i=is,ie
-!             dedy_1(i,j)=rarea(i,j)*(vt(i,j+1)-vt(i,j))
-!          enddo
-!       enddo
-!       do j=js,je+1
-!          do i=is,ie
-!             vt(i,j)=dedy_1(i,j)*dx(i,j)
-!          enddo
-!       enddo
-!       do j=js,je
-!          do i=is,ie
-!             dedy_2(i,j,k)=rarea(i,j)*(vt(i,j+1)-vt(i,j))
-!          enddo
-!       enddo
-
-!-------------------------------------
-! get d^2e/dx^2
-
-!       do j=js,je
-!          do i=is,ie+2
-!             ut(i,j)=tke_1(i,j)*dy(i,j)
-!          enddo
-!       enddo
-!       do j=js,je
-!          do i=is,ie+1
-!             dedx_1(i,j)=rarea(i,j)*(ut(i+1,j)-ut(i,j))
-!          enddo
-!       enddo
-!       do j=js,je
-!          do i=is,ie+1
-!             ut(i,j)=dedx_1(i,j)*dy(i,j)
-!          enddo
-!       enddo
-!       do j=js,je
-!          do i=is,ie
-!             dedx_2(i,j,k)=rarea(i,j)*(ut(i+1,j)-ut(i,j))
-!          enddo
-!       enddo
-!   enddo ! z loop
-
-!-------------------------------------
-! get d^2e/dz^2
-
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,q,delz, &
-!!$OMP     tke_2,dedz_1,dedz_2)
-!   do j=js,je
-!       do i=is,ie
-!          do k=1,npz
-!             tke_2(k)=tke(i,j,k)
-!          enddo
-!          do k=1,npz-1
-!             dedz_1(k)=(tke_2(k+1)-tke_2(k))/delz(i,j,k)
-!          enddo
-!          do k=1,npz-2
-!             dedz_2(i,j,k)=(dedz_1(k+1)-dedz_1(k))/delz(i,j,k)
-!          enddo
-!          dedz_2(i,j,npz-1)=0.0
-!          dedz_2(i,j,npz)=0.0
-!       enddo
-!   enddo
-
-!-------------------------------------
-! get deform_2 based on all terms
-
-!!$OMP parallel do default(none) shared(npz,is,ie,js,je,deform_2, &
-!!$OMP                                  dedx_2,dedy_2)
-!   do k=1,npz
-!       do j=js,je
-!          do i=is,ie
-!   !          deform_2(i,j,k)=dedx_2(i,j,k)+dedy_2(i,j,k)+dedz_2(i,j,k)
-!             deform_2(i,j,k)=dedx_2(i,j,k)+dedy_2(i,j,k)
-!          enddo
-!       enddo
-!   enddo
-
   end subroutine cal_3d_tke_budget
 
-
-!-----------------------------------------------------------------------
+! =======================================================================
 ! cal_3d_tke_budget_agrid :: Ping Zhu's scheme for 3D TKE budget terms
-!-----------------------------------------------------------------------
+! This version calculate the shear production terms based on A-grid wind 
+! =======================================================================
 
   subroutine cal_3d_tke_budget_agrid(ua, va, w, tke, delz, npz, ak, bk, gridstruct, bd, &
-                   deform_1) !, deform_2) !, scl ! KGao - test
+                   deform_1) !, deform_2)
 
 
     integer, intent(in) :: npz
