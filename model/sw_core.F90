@@ -926,9 +926,8 @@ module sw_core_mod
       ! KGao: get diffusion coefficient to be used for 2nd order damping/diffusion of 
       !       the physical fields defined at cell centers (e.g., potential temp., vorticity, etc)
 
-      if (damp_flag .eq. 1 .and. cs > 1.e-5) then ! smag-type
-
-         ! Lucas's code below
+      if (damp_flag .eq. 1 .and. cs > 1.e-5) then ! Lucas's updated smag-type diffusion below 
+         ! smag_q here is dt * sqrt(T**2 + S**2) 
          if (flagstruct%grid_type<3 .and. .not. bounded_domain .and. &
               ( sw_corner .or. se_corner .or. ne_corner .or. nw_corner ) ) call fill_corners(u, v, npx, npy, VECTOR=.true., DGRID=.true.)
          call smag_cell(abs(dt), u, v, smag_q, bd, npx, npy, gridstruct, ng, cs) !, flagstruct%smag2d > 1.e-5, dudz, dvdz)
@@ -937,6 +936,7 @@ module sw_core_mod
          if ( .not. present(tke) ) call mpp_error(FATAL,'tke not defined but using tke-based damping') 
          do j = jsd, jed
             do i = isd, ied
+               ! smag_q here is dt * sqrt(e) / sqrt (A)
                ! cs * smag_q should be no larger than 0.2
                smag_q(i,j) = min(0.2/cs, abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min))
             enddo
@@ -1308,7 +1308,7 @@ module sw_core_mod
                enddo
             enddo
         endif
-        if ( damp_w>1.E-5 ) then
+        if ( damp_w>1.E-5 .or. ( damp_flag .gt. 0 .and. cs > 1.e-5 ) ) then
           do j=js,je
              do i=is,ie
                 w(i,j) = w(i,j) + dw(i,j)
@@ -1682,7 +1682,7 @@ module sw_core_mod
    endif !  d_con > 1.e-5 .or. flagstruct%do_diss_est 
 
 ! Add diffusive fluxes to the momentum equation:
-   if ( damp_v>1.E-5 ) then
+   if ( damp_v>1.E-5 .or. ( damp_flag .gt. 0 .and. cs > 1.e-5 )) then
       do j=js,je+1
          do i=is,ie
             u(i,j) = u(i,j) + vt(i,j)
