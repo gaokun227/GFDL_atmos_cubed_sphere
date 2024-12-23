@@ -982,12 +982,18 @@ module sw_core_mod
               dd8 = kgb*abs(dt)
               damp4 = (damp_w*gridstruct%da_min_c)**(nord_w+1)
               call del6_vt_flux(nord_w, npx, npy, damp4, w, wk, fx2, fy2, gridstruct, bd)
+           else 
+              fx2 = 0.
+              fy2 = 0. 
            endif
 
-           ! KGao: apply 2nd order damping to w (using Lucas's code)
+           ! KGao: apply 2nd order damping to w
+           !       ensure the 2nd diffusive fluxes do not override the diffusive flux above
            if ( damp_flag .gt. 0 .and. cs > 1.e-5 ) then
               damp4 = cs * gridstruct%da_min_c
-              call del6_vt_flux(0, npx, npy, damp4, w, wk, fx2, fy2, gridstruct, bd, damp_Km=smag_q)
+              call del6_vt_flux(0, npx, npy, damp4, w, wk, fx3, fy3, gridstruct, bd, damp_Km=smag_q)
+              fx2 = fx2 + fx3 
+              fy2 = fy2 + fy3 
            endif
 
            if ( damp_w > 1.e-5 .or. ( damp_flag .gt. 0 .and. cs > 1.e-5 )) then
@@ -1602,16 +1608,18 @@ module sw_core_mod
    if ( damp_v>1.E-5 ) then
         damp4 = (damp_v*gridstruct%da_min_c)**(nord_v+1)
         call del6_vt_flux(nord_v, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd)
-   elseif (flagstruct%do_diss_est) then
-        ut=0.
-        vt=0.
+   else !elseif (flagstruct%do_diss_est) then
+        ut = 0.
+        vt = 0.
    endif
 
    ! KGao: apply 2nd order damping to vorticity (using Lucas's code)
    !       this is an additional step after the higher-order damping using vtdm4
    if ( damp_flag .gt. 0 .and. cs > 1.e-5) then
        damp4 = cs * gridstruct%da_min_c
-       call del6_vt_flux(0, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd, damp_Km=smag_q)
+       call del6_vt_flux(0, npx, npy, damp4, wk, vort, fx3, fy3, gridstruct, bd, damp_Km=smag_q)
+       ut = ut + fx3
+       vt = vt + fy3
     endif
 
    !estimate dissipation for dissipative heating
