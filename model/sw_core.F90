@@ -930,7 +930,7 @@ module sw_core_mod
          ! smag_q here is dt * sqrt(T**2 + S**2) 
          if (flagstruct%grid_type<3 .and. .not. bounded_domain .and. &
               ( sw_corner .or. se_corner .or. ne_corner .or. nw_corner ) ) call fill_corners(u, v, npx, npy, VECTOR=.true., DGRID=.true.)
-         call smag_cell(abs(dt), u, v, smag_q, bd, npx, npy, gridstruct, ng, cs) !, flagstruct%smag2d > 1.e-5, dudz, dvdz)
+         call smag_cell(abs(dt), u, v, smag_q, bd, npx, npy, gridstruct, ng, cs)
 
       elseif (damp_flag .eq. 2 .and. cs > 1.e-5) then ! tke-based
          if ( .not. present(tke) ) call mpp_error(FATAL,'tke not defined but using tke-based damping') 
@@ -2130,7 +2130,7 @@ end subroutine divergence_corner_nest
 
  end subroutine smag_corner
 
- subroutine smag_cell(dt, u, v, smag_q, bd, npx, npy, gridstruct, ng, smag2d) !, do_smag, dudz, dvdz)
+ subroutine smag_cell(dt, u, v, smag_q, bd, npx, npy, gridstruct, ng, smag2d, dudz, dvdz)
 ! Compute the cell-mean Smagorinsky diffusion coefficients
 ! works only if (grid_type==4) (need to add corner handling on cubed sphere)
 
@@ -2141,9 +2141,8 @@ end subroutine divergence_corner_nest
  real, intent(in),  dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ):: v
  real, intent(out), dimension(bd%isd:bd%ied,bd%jsd:bd%jed):: smag_q
  type(fv_grid_type), intent(IN), target :: gridstruct
- !logical, intent(in) :: do_smag
- !real , intent(IN) :: dudz(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
- !real , intent(IN) :: dvdz(bd%isd:bd%ied+1,bd%jsd:bd%jed)
+ real , intent(IN), optional :: dudz(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
+ real , intent(IN), optional :: dvdz(bd%isd:bd%ied+1,bd%jsd:bd%jed)
 
 ! local
  real:: ut(bd%isd:bd%ied+1,bd%jsd:bd%jed)
@@ -2178,9 +2177,8 @@ end subroutine divergence_corner_nest
 
  is2 = max(2,is); ie1 = min(npx-1,ie+1)
 
- if (smag2d > 1.e-3) then
+ if (smag2d > 1.e-5) then
     smag_limit = 0.20/smag2d
- !elseif (do_smag) then
  else
     smag_q = 0.0
     return
@@ -2225,28 +2223,29 @@ end subroutine divergence_corner_nest
 
  do j=js-1,je+1
     do i=is-1,ie+1
-       ! KGao: negative S below? 
+       ! KGao: negative S? 
        wk(i,j) = rarea(i,j)*( vt(i,j)-vt(i,j+1) +ut(i,j)-ut(i+1,j) )
     enddo
  enddo
 
- !if (do_smag) then ! KGao: considers du/dz and dv/dz
- !    do j=js-1,je+1
- !       do i=is-1,ie+1
- !          smag_q(i,j) = smag_q(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
- !          smag_q(i,j) = smag_q(i,j) + 0.5*(dudz(i-1,j)+dudz(i,j))
- !          wk(i,j) = wk(i,j) - 0.5*(dvdz(i-1,j)+dvdz(i,j))
- !          wk(i,j) = wk(i,j) - 0.5*(dudz(i,j-1)+dudz(i,j))
- !          smag_q(i,j) = min(dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 ), smag_limit)
- !      enddo
- !   enddo
- !else
+ if ( present(dudz) .and. present(dvdz) ) then
+     ! KGao: needs to confirm the signs below are correct 
+     do j=js-1,je+1
+        do i=is-1,ie+1
+           smag_q(i,j) = smag_q(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
+           smag_q(i,j) = smag_q(i,j) + 0.5*(dudz(i-1,j)+dudz(i,j))
+           wk(i,j) = wk(i,j) - 0.5*(dvdz(i-1,j)+dvdz(i,j))
+           wk(i,j) = wk(i,j) - 0.5*(dudz(i,j-1)+dudz(i,j))
+           smag_q(i,j) = min(dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 ), smag_limit)
+       enddo
+    enddo
+ else
     do j=js-1,je+1
        do i=is-1,ie+1
           smag_q(i,j) = dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 )
        enddo
    enddo
- !endif
+ endif
 
  end subroutine smag_cell
 
