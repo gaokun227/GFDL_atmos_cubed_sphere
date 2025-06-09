@@ -21,7 +21,11 @@
 
 module dyn_core_mod
 
+#ifdef OVERLOAD_R4
+  use constantsR4_mod,    only: rdgas, cp_air, pi
+#else
   use constants_mod,      only: rdgas, cp_air, pi
+#endif
   use fv_arrays_mod,      only: radius ! scaled for small earth
   use mpp_mod,            only: mpp_pe, mpp_error, FATAL
   use mpp_domains_mod,    only: CGRID_NE, DGRID_NE, mpp_get_boundary, mpp_update_domains,  &
@@ -1145,7 +1149,8 @@ contains
              delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, inline_pbl, inline_gwd, &
              gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
              flagstruct%do_inline_pbl, flagstruct%do_3dtke, &
-             flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr)
+             flagstruct%do_inline_gwd, flagstruct%consv_checker, flagstruct%adj_mass_vmr, &
+             flagstruct%inline_pbl_flag)
 
           call timing_on('COMM_TOTAL')
           !some mpp domains updates are commented out at this moment -- Linjiong

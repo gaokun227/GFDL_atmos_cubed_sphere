@@ -20,13 +20,13 @@
 !***********************************************************************
 
 ! =======================================================================
-! Scale-Aware Turbulent-Kinetic-Energy based Moist-Eddy-Diffusivity-Mass-Flux
-! (SA-TKE-EDMF) Subgrid Vertical Turbulence Mixing Scheme
+! A New Scale-Aware Turbulent-Kinetic-Energy based Moist-Eddy-Diffusivity-Mass-Flux
+! (SA-TKE-EDMF-NEW) Subgrid Vertical Turbulence Mixing Scheme
 ! For the convective boundary layer, the scheme adopts EDMF parameterization
 ! (Siebesma et al. 2007) to take into account non-local transport by
-! large eddies (mfpblt.f).
+! large eddies (mfpbltq.f).
 ! A new mass-flux parameterizaiton for stratocumulus-top-induced turbulence
-! mixing has been introduced (previously, it was eddy diffusion form) (mfscu.f).
+! mixing has been introduced (previously, it was eddy diffusion form) (mfscuq.f).
 ! For local turbulence mixing, a TKE closure model is used.
 ! Developers: Jongil Han, Kun Gao, Linjiong Zhou, and the GFDL FV3 Team
 ! References: Han et al. (2016), Han and Bretherton (2019)
@@ -34,26 +34,38 @@
 
 ! =======================================================================
 ! Updates at GFDL:
-! 1) Jul 2019 by Kun Gao
+! 1) May 2019 by Jongil Han
+!    goals: to have better low-level inversion,
+!           to reduce the cold bias in lower troposphere,
+!           to reduce the negative wind speed bias in upper troposphere
+!    changes: reduce the minimum and maximum characteristic mixing lengths,
+!             reduce core downdraft and updraft fractions,
+!             change of updraft top height calculation,
+!             reduce the background diffusivity with increasing surface layer stability (for inversion)
+! 2) Jul 2019 by Kun Gao
 !    goal: to allow for tke advection
 !    change: rearange tracers (q1g)
 !    TKE no longer needs to be the last tracer
-! 2) Nov 2019 by Kun Gao
+! 3) Nov 2019 by Kun Gao
 !    turn off non-local mixing for hydrometers to avoid unphysical negative values
-! 3) Jun 2020 by Kun Gao
+! 4) Jan 2020 by Kun Gao
+!    add rlmn2 parameter (set to 10.) to be consistent with emc's version
+! 5) Jun 2020 by Kun Gao
 !    a) add option for turning off upper-limter on background diff. in inversion layer
 !       over land/ice points (cap_k0_land)
 !    b) use different xkzm_m, xkzm_h for land, ocean and sea ice points
 !    c) add option for turning off hb19 formula for surface backgroud diff. (do_dk_hb19)
-! 4) May 2022 by Linjiong Zhou
+! 6) Jul 2020 by Jongil Han to significant revisions to improve scu
+!    a) revised xkzo and rlmnz in inversion layer
+!    b) limited updraft overshooting
+! 7) Oct 2024 by Linjiong Zhou
 !    put it into the FV3 dynamical core and revise accordingly
 ! =======================================================================
 
-module sa_tke_edmf_mod
+module sa_tke_edmf_new_mod
 
     use fms_mod, only: check_nml_error
     use gfdl_mp_mod, only: mqs
-    !use fv_mp_mod, only: is_master ! KGao - debug
 
     implicit none
 
@@ -63,9 +75,9 @@ module sa_tke_edmf_mod
     ! public subroutines, functions, and variables
     ! -----------------------------------------------------------------------
     
-    public :: sa_tke_edmf_init
-    public :: sa_tke_edmf_pbl
-    public :: sa_tke_edmf_sfc
+    public :: sa_tke_edmf_new_init
+    public :: sa_tke_edmf_new_pbl
+    public :: sa_tke_edmf_new_sfc
 
     ! -----------------------------------------------------------------------
     ! physics constants
@@ -102,6 +114,11 @@ module sa_tke_edmf_mod
     logical :: dspheat     = .false. ! flag for tke dissipative heating
     logical :: sfc_gfdl    = .false. ! flag for using updated sfc layer scheme
 
+    logical :: use_lup_only  = .false. ! flag for using l_up as l2
+    logical :: use_l1_sfc    = .false. ! flag for using l1 as l at lowest layer
+    logical :: use_tke_pbl   = .false. ! flag for adjusting entrainment/detrainment rate
+    logical :: use_shear_pbl = .false. ! flag for considering shear effect on updraft/downdraft diagnosis
+
     logical :: redrag              = .false. ! flag for reduced drag coeff. over sea
     logical :: do_z0_moon          = .false. ! flag for using z0 scheme in Moon et al. 2007
     logical :: do_z0_hwrf15        = .false. ! flag for using z0 scheme in 2015 HWRF
@@ -111,6 +128,9 @@ module sa_tke_edmf_mod
     integer :: ivegsrc = 2 ! ivegsrc = 0   => USGS,
                            ! ivegsrc = 1   => IGBP (20 category)
                            ! ivegsrc = 2   => UMD  (13 category)
+
+    integer :: l2_diag_opt    = 0 ! flag for choosing a diagnosis method for l2
+    integer :: l1l2_blend_opt = 0 ! flag for choosing a blending method for l1 and l2
 
     real :: xkzm_mo  = 1.0   ! bkgd_vdif_m background vertical diffusion for momentum over ocean
     real :: xkzm_ho  = 1.0   ! bkgd_vdif_h background vertical diffusion for heat q over ocean
@@ -126,6 +146,12 @@ module sa_tke_edmf_mod
     real :: rlmn     = 30.   ! lower-limter on asymtotic mixing length in satmedmfdiff.f
     real :: rlmx     = 300.  ! upper-limter on asymtotic mixing length in satmedmfdiff.f
 
+    real :: zolcru  = - 0.02 ! a threshold for activating the surface-driven updraft transports
+    real :: dspfac  = 0.5    ! tke dissipative heating factor
+    real :: bl_upfr = 0.13   ! updraft fraction in boundary layer mass flux scheme
+    real :: bl_dnfr = 0.1    ! downdraft fraction in boundary layer mass flux scheme
+    real :: cs0     = 0.2    ! a parameter that controls the shear effect on the mixing length
+
     real :: czilc        = 0.8     ! Zilintkivitch constant
     real :: z0s_max      = .317e-2 ! a limiting value for z0 under high windskk
     real :: wind_th_hwrf = 33.     ! wind speed threshold when z0 level off as in HWRF
@@ -135,32 +161,26 @@ module sa_tke_edmf_mod
     real :: ch0 = 0.4  ! proportionality coefficient for heat & q in PBL
     real :: ch1 = 0.15 ! proportionality coefficient for heat & q above PBL
 
-    ! KGao: parameters below are for LES and/or idealized simulatons
-    logical :: no_mf         = .false. ! flag for turning off mass-flux effect
-    logical :: use_const_l2  = .false. ! flag for using a constant l2 parameter 
-    logical :: use_const_cd  = .false. ! flag for using constant surface exchange coeff
-    real    :: cd0           = 0.0011  ! constant surface drag coeff for idealized tests
-    real    :: cs            = 0.      ! cs parameter for kh (should be same as in dycore)
-
     ! -----------------------------------------------------------------------
     ! namelist
     ! -----------------------------------------------------------------------
     
-    namelist / sa_tke_edmf_nml / &
+    namelist / sa_tke_edmf_new_nml / &
         xkzm_mo, xkzm_ho, xkzm_ml, xkzm_hl, xkzm_mi, xkzm_hi, xkzm_s, &
         xkzm_lim, xkzm_fac, xkzinv, xkgdx, rlmn, rlmx, sfc_gfdl, &
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        no_mf, use_const_l2, use_const_cd, cd0, cs
+        zolcru, dspfac, bl_upfr, bl_dnfr, cs0, l2_diag_opt, l1l2_blend_opt, &
+        use_lup_only, use_l1_sfc, use_tke_pbl, use_shear_pbl
 
 contains
 
 ! =======================================================================
-! SA-TKE-EDMF initialization
+! SA-TKE-EDMF-NEW initialization
 ! =======================================================================
 
-subroutine sa_tke_edmf_init (input_nml_file, logunit)
+subroutine sa_tke_edmf_new_init (input_nml_file, logunit)
     
     implicit none
     
@@ -182,31 +202,30 @@ subroutine sa_tke_edmf_init (input_nml_file, logunit)
     ! read namelist
     ! -----------------------------------------------------------------------
     
-    read (input_nml_file, nml = sa_tke_edmf_nml, iostat = ios)
-    ierr = check_nml_error (ios, 'sa_tke_edmf_nml')
+    read (input_nml_file, nml = sa_tke_edmf_new_nml, iostat = ios)
+    ierr = check_nml_error (ios, 'sa_tke_edmf_new_nml')
     
     ! -----------------------------------------------------------------------
     ! write namelist to log file
     ! -----------------------------------------------------------------------
     
     write (logunit, *) " ================================================================== "
-    write (logunit, *) "sa_tke_edmf_mod"
-    write (logunit, nml = sa_tke_edmf_nml)
+    write (logunit, *) "sa_tke_edmf_new_mod"
+    write (logunit, nml = sa_tke_edmf_new_nml)
     
-end subroutine sa_tke_edmf_init
+end subroutine sa_tke_edmf_new_init
 
 ! =======================================================================
-! SA-TKE-EDMF scheme
+! SA-TKE-EDMF-NEW scheme
 ! =======================================================================
 
-subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
+subroutine sa_tke_edmf_new_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         delt, u1, v1, t1, q1, gsize, islimsk, &
-        radh, rbsoil, zorl, u10m, v10m, fm, fh, &
+        radh, rbsoil, sigmaf, zorl, u10m, v10m, fm, fh, &
         tsea, heat, evap, stress, spd1, kinver, &
         psk, del, prsi, prsl, prslk, phii, phil, &
-        hpbl, kpbl, &
-        shr3d_h, shr3d_v, & ! KGao: 3D-SA-TKE 
-        dusfc, dvsfc, dtsfc, dqsfc, dkt_out)
+        hpbl, kpbl, dusfc, dvsfc, dtsfc, dqsfc, dkt_out, &
+        flux_up, flux_dn)
     
     implicit none
     
@@ -227,7 +246,8 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         stress (im), spd1 (im), &
         prsi (im, km + 1), del (im, km), &
         prsl (im, km), prslk (im, km), &
-        phii (im, km + 1), phil (im, km)
+        phii (im, km + 1), phil (im, km), &
+        sigmaf (im)
 
     real, intent (inout) :: u1 (im, km), v1 (im, km), &
         t1 (im, km), q1 (im, km, ntrac)
@@ -235,22 +255,19 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     integer, intent (out) :: kpbl (im)
     
     real, intent (out) :: hpbl (im)
-  
-    ! KGao: 3D-SA-TKE
-    real, intent (in), optional :: shr3d_h (im, km), shr3d_v (im, km)
-
+    
     real, intent (out), optional :: dusfc (im), dvsfc (im), dtsfc (im), dqsfc (im), &
-        dkt_out (im, km)
+        dkt_out (im, km), flux_up (im, km), flux_dn (im, km)
     
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
 
-    integer :: i, is, k, kk, n, km1, kmpbl, kmscu, ntrac1, ntcw_new
+    integer :: i, is, k, kk, n, ndt, km1, kmpbl, kmscu, ntrac1, kps, ntcw_new
     integer :: lcld (im), kcld (im), krad (im), mrad (im)
     integer :: kx1 (im), kpblx (im)
     
-    real :: tke (im, km), tkeh (im, km - 1)
+    real :: tke (im, km), tkeh (im, km - 1), e2 (im, 0:km)
     
     real :: theta (im, km), thvx (im, km), thlvx (im, km), &
         qlx (im, km), thetae (im, km), thlx (im, km), &
@@ -260,35 +277,39 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         cku (im, km - 1), ckt (im, km - 1), q1g (im, km, ntrac), &
         vdt (im, km), udt (im, km), tdt (im, km), qdt (im, km)
     
-    real :: dkh(im, km - 1) ! KGao
-
     real :: plyr (im, km), rhly (im, km), cfly (im, km), &
         qstl (im, km)
     
     real :: dtdz1 (im), gdx (im), &
-        phih (im), phim (im), prn (im, km - 1), &
+        phih (im), phim (im), &
+        phims (im), prn (im, km - 1), &
         rbdn (im), rbup (im), thermal (im), &
         ustar (im), wstar (im), hpblx (im), &
         ust3 (im), wst3 (im), &
         z0 (im), crb (im), &
         hgamt (im), hgamq (im), &
         wscale (im), vpert (im), &
-        zol (im), sflux (im), radj (im), &
-        tx1 (im), tx2 (im)
+        zol (im), sflux (im), &
+        tx1 (im), tx2 (im), &
+        vez0fun (im), tkemean (im), sumx (im), &
+        zvfun (im)
+    
+    real :: vegflo, vegfup, z0lo, z0up, vc0, zc0, csmf, z0fun
     
     real :: radmin (im)
     
     real :: zi (im, km + 1), zl (im, km), zm (im, km), &
-        xkzo (im, km - 1), xkzmo (im, km - 1), &
+        xkzo (im, km), xkzmo (im, km), &
         xkzm_hx (im), xkzm_mx (im), &
-        rdzt (im, km - 1), &
+        ri (im, km - 1), tkmnz (im, km - 1), &
+        rdzt (im, km - 1), rlmnz (im, km), &
         al (im, km - 1), ad (im, km), au (im, km - 1), &
         f1 (im, km), f2 (im, km * (ntrac - 1))
     
-    real :: elm (im, km), ele (im, km), rle (im, km - 1), &
-        ckz (im, km), chz (im, km), &
+    real :: elm (im, km), ele (im, km), &
+        ckz (im, km), chz (im, km), frik (im), &
         diss (im, km - 1), prod (im, km - 1), &
-        bf (im, km - 1), shr2 (im, km - 1), &
+        bf (im, km - 1), shr2 (im, km - 1), wush (im, km), &
         xlamue (im, km - 1), xlamde (im, km - 1), &
         gotvx (im, km), rlam (im, km - 1)
     
@@ -314,10 +335,11 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         dsdz2, dsdzt, dkmax, &
         dsig, dt2, dtodsd, &
         dtodsu, g, factor, dz, &
-        gocp, gravi, zol1, zolcru, &
-        buop, shrp, dtn, cdtn, &
+        gocp, gravi, zol1, &
+        buop, shrp, dtn, &
         prnum, prmax, prmin, prtke, &
-        prscu, dw2, dw2min, zk, &
+        prscu, pr0, &
+        dw2, dw2min, zk, &
         elmfac, elefac, dspmax, &
         alp, clwt, cql, &
         f0, robn, crbmin, crbmax, &
@@ -325,45 +347,55 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         cfh, gamma, elocp, el2orc, &
         epsi, beta, chx, cqx, &
         rdt, rdz, qmin, qlmin, &
-        ri, rimin, &
-        rbcr, rbint, tdzmin, &
+        rimin, rbcr, rbint, tdzmin, &
+        rlmn, rlmn1, rlmn2, &
         elmx, &
         ttend, utend, vtend, qtend, &
         zfac, zfmin, vk, spdk2, &
-        tkmin, dspfac, &
+        tkmin, tkminx, &
         zlup, zldn, bsum, &
-        tem, tem1, tem2, &
+        tem, tem1, tem2, tem3, &
         ptem, ptem0, ptem1, ptem2
     
-    real :: ce0, rchck
+    real :: ck0, ck1, ch0, ch1, ce0, rchck
     
-    real :: qlcr, zstblmax
+    real :: qlcr, zstblmax, hcrinv
     
     real :: h1
     
     parameter (gravi = 1.0 / grav)
     parameter (g = grav)
     parameter (gocp = g / cp_air)
-    parameter (cont = cp_air / g, conq = hlv / g, conw = 1.0 / g)
+    parameter (cont = cp_air / g, conq = hlv / g, conw = 1.0 / g) ! for del in pa
     parameter (elocp = hlv / cp_air, el2orc = hlv * hlv / (rvgas * cp_air))
     parameter (wfac = 7.0, cfac = 4.5)
     parameter (gamcrt = 3., gamcrq = 0., sfcfrac = 0.1)
     parameter (vk = 0.4, rimin = - 100.)
-    parameter (rbcr = 0.25, zolcru = - 0.02, tdzmin = 1.e-3)
-    parameter (prmin = 0.25, prmax = 4.0, prtke = 1.0, prscu = 0.67)
+    parameter (rbcr = 0.25, tdzmin = 1.e-3)
+    parameter (rlmn = 30., rlmn1 = 5., rlmn2 = 10.)
+    parameter (prmin = 0.25, prmax = 4.0)
+    parameter (pr0 = 1.0, prtke = 1.0, prscu = 0.67)
     parameter (f0 = 1.e-4, crbmin = 0.15, crbmax = 0.35)
-    parameter (tkmin = 1.e-9, dspfac = 0.5, dspmax = 10.0)
+    parameter (tkmin = 1.e-9, tkminx = 0.2, dspmax = 10.0)
     parameter (qmin = 1.e-8, qlmin = 1.e-12, zfmin = 1.e-8)
     parameter (aphi5 = 5., aphi16 = 16.)
     parameter (elmfac = 1.0, elefac = 1.0, cql = 100.)
     parameter (dw2min = 1.e-4, dkmax = 1000.)
-    parameter (qlcr = 3.5e-5, zstblmax = 2500.)
-    parameter (h1 = 0.33333333)
+    parameter (qlcr = 3.5e-5, zstblmax = 2500.) !, xkzinv = 0.1)
+    parameter (h1 = 0.33333333, hcrinv = 250.)
+    parameter (ck0 = 0.4, ck1 = 0.15, ch0 = 0.4, ch1 = 0.15)
     parameter (ce0 = 0.4)
-    parameter (rchck = 1.5, cdtn = 25.)
+    parameter (rchck = 1.5, ndt = 20)
+    parameter (vegflo = 0.1, vegfup = 1.0, z0lo = 0.1, z0up = 1.0)
+    parameter (vc0 = 1.0, zc0 = 1.0)
+    parameter (csmf = 0.5)
     
     elmx = rlmx
 
+    if (present (dkt_out)) dkt_out = 0.
+    if (present (flux_up)) flux_up = 0.
+    if (present (flux_dn)) flux_dn = 0.
+    
     ! -----------------------------------------------------------------------
     ! kgao note (jul 2019)
     ! the code was originally written assuming ntke = ntrac
@@ -403,9 +435,13 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             buod (i, k) = 0.
             ckz (i, k) = ck1
             chz (i, k) = ch1
+            rlmnz (i, k) = rlmn
         enddo
     enddo
 
+    do i = 1, im
+        frik (i) = 1.0
+    enddo
     do i = 1, im
         zi (i, km + 1) = phii (i, km + 1) * gravi
     enddo
@@ -437,7 +473,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     do k = 1, km1
         do i = 1, im
             rdzt (i, k) = 1.0 / (zl (i, k + 1) - zl (i, k))
-            prn (i, k) = 1.0
+            prn (i, k) = pr0
         enddo
     enddo
     
@@ -459,6 +495,18 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         ! kgao change - set surface value of background diff (dk) below
         ! -----------------------------------------------------------------------
 
+        !if (gdx (i) >= xkgdx) then
+        ! xkzm_hx (i) = xkzm_h
+        ! xkzm_mx (i) = xkzm_m
+        !else
+        ! tem = 1. / (xkgdx - 5.)
+        ! tem1 = (xkzm_h - 0.01) * tem
+        ! tem2 = (xkzm_m - 0.01) * tem
+        ! ptem = gdx (i) - 5.
+        ! xkzm_hx (i) = 0.01 + tem1 * ptem
+        ! xkzm_mx (i) = 0.01 + tem2 * ptem
+        !endif
+        
         if (do_dk_hb19) then ! use eq43 in hb2019
             
             if (gdx (i) >= xkgdx) then ! resolution coarser than xkgdx
@@ -505,7 +553,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         endif
     enddo
     
-    do k = 1, km1
+    do k = 1, km
         do i = 1, im
             xkzo (i, k) = 0.0
             xkzmo (i, k) = 0.0
@@ -515,8 +563,16 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
                 ! -----------------------------------------------------------------------
                 ptem = prsi (i, k + 1) * tx1 (i)
                 tem1 = 1.0 - ptem
-                tem1 = tem1 * tem1 * 10.0
-                xkzo (i, k) = xkzm_hx (i) * min (1.0, exp (- tem1))
+                tem2 = tem1 * tem1 * 10.0
+                tem2 = min (1.0, exp (- tem2))
+                xkzo (i, k) = xkzm_hx (i) * tem2
+                
+                ptem = prsl (i, k) * tx1 (i)
+                tem1 = 1.0 - ptem
+                tem2 = tem1 * tem1 * 2.5
+                tem2 = min (1.0, exp (- tem2))
+                rlmnz (i, k) = rlmn * tem2
+                rlmnz (i, k) = max (rlmnz (i, k), rlmn1)
                 ! -----------------------------------------------------------------------
                 ! vertical background diffusivity for momentum
                 ! -----------------------------------------------------------------------
@@ -547,14 +603,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         sfcflg (i) = .true.
         if (rbsoil (i) > 0.) sfcflg (i) = .false.
         pcnvflg (i) = .false.
-
-        ! KGao: no mass flux
-        if (no_mf) then
-           scuflg (i) = .false.
-        else
-           scuflg (i) = .true.
-        endif
-
+        scuflg (i) = .true.
         if (scuflg (i)) then
             radmin (i) = 0.
             mrad (i) = km1
@@ -562,6 +611,19 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             lcld (i) = km1
             kcld (i) = km1
         endif
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! compute a function for green vegetation fraction and surface roughness
+    ! -----------------------------------------------------------------------
+    
+    do i = 1, im
+        !tem = (sigmaf (i) - vegflo) / (vegfup - vegflo)
+        !tem = min (max (tem, 0.), 1.)
+        !tem1 = sqrt (tem)
+        !ptem = (z0 (i) - z0lo) / (z0up - z0lo)
+        !ptem = min (max (ptem, 0.), 1.)
+        vez0fun (i) = 1. ! (1. + vc0 * tem1) * (1. + zc0 * ptem)
     enddo
     
     do k = 1, km
@@ -588,34 +650,6 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             ptem1 = elocp * pix (i, k) * max (q1g (i, k, 1), qmin)
             thetae (i, k) = theta (i, k) + ptem1
             gotvx (i, k) = g / tvx (i, k)
-        enddo
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! the background vertical diffusivities in the inversion layers are limited
-    ! to be less than or equal to xkzminv
-    ! -----------------------------------------------------------------------
-    
-    do k = 1, km1
-        do i = 1, im
-            tem1 = (tvx (i, k + 1) - tvx (i, k)) * rdzt (i, k)
-            
-            if (cap_k0_land) then
-                if (tem1 > 1.e-5) then
-                    xkzo (i, k) = min (xkzo (i, k), xkzinv)
-                    xkzmo (i, k) = min (xkzmo (i, k), xkzinv)
-                endif
-            else
-                ! -----------------------------------------------------------------------
-                ! kgao note: do not apply upper - limiter over land and sea ice points
-                ! (consistent with change in satmedmfdifq.f in jun 2020)
-                ! -----------------------------------------------------------------------
-                if (tem1 > 0. .and. islimsk (i) == 0) then
-                    xkzo (i, k) = min (xkzo (i, k), xkzinv)
-                    xkzmo (i, k) = min (xkzmo (i, k), xkzinv)
-                endif
-            endif
-            
         enddo
     enddo
     
@@ -731,6 +765,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             dw2 = (u1 (i, k) - u1 (i, k + 1)) ** 2 + &
                 (v1 (i, k) - v1 (i, k + 1)) ** 2
             shr2 (i, k) = max (dw2, dw2min) * rdz * rdz
+            ri (i, k) = max (bf (i, k) / shr2 (i, k), rimin)
         enddo
     enddo
     
@@ -781,6 +816,44 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     enddo
     
     ! -----------------------------------------------------------------------
+    ! compute mean tke within pbl
+    ! -----------------------------------------------------------------------
+    
+    do i = 1, im
+        sumx (i) = 0.
+        tkemean (i) = 0.
+    enddo
+    do k = 1, kmpbl
+        do i = 1, im
+            if (k < kpbl (i)) then
+                dz = zi (i, k + 1) - zi (i, k)
+                tkemean (i) = tkemean (i) + tke (i, k) * dz
+                sumx (i) = sumx (i) + dz
+            endif
+        enddo
+    enddo
+    do i = 1, im
+        if (tkemean (i) > 0. .and. sumx (i) > 0.) then
+            tkemean (i) = tkemean (i) / sumx (i)
+        endif
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! compute wind shear term as a sink term for updraft and downdraft
+    ! velocity
+    ! -----------------------------------------------------------------------
+    
+    kps = max (kmpbl, kmscu)
+    do k = 2, kps
+        do i = 1, im
+            dz = zi (i, k + 1) - zi (i, k)
+            tem = (0.5 * (u1 (i, k - 1) - u1 (i, k + 1)) / dz) ** 2
+            tem1 = tem + (0.5 * (v1 (i, k - 1) - v1 (i, k + 1)) / dz) ** 2
+            wush (i, k) = csmf * sqrt (tem1)
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
     ! compute similarity parameters
     ! -----------------------------------------------------------------------
     
@@ -797,9 +870,12 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             tem = 1.0 / (1. - aphi16 * zol1)
             phih (i) = sqrt (tem)
             phim (i) = sqrt (phih (i))
+            tem1 = 1.0 / (1. - aphi16 * zol (i))
+            phims (i) = sqrt (sqrt (tem1))
         else
             phim (i) = 1. + aphi5 * zol1
             phih (i) = phim (i)
+            phims (i) = 1. + aphi5 * zol (i)
         endif
     enddo
     
@@ -807,8 +883,6 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         if (pblflg (i)) then
             if (zol (i) < zolcru) then
                 pcnvflg (i) = .true.
-                ! KGao: no mass flux
-                if (no_mf) pcnvflg (i) = .false.
             endif
             wst3 (i) = gotvx (i, 1) * sflux (i) * hpbl (i)
             wstar (i) = wst3 (i) ** h1
@@ -883,10 +957,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     ! -----------------------------------------------------------------------
     ! look for stratocumulus
     ! -----------------------------------------------------------------------
-   
-    ! KGao: if not using mass flux, skip this step to save time
-    if (.not. no_mf) then
-
+    
     do i = 1, im
         flg (i) = scuflg (i)
     enddo
@@ -937,8 +1008,6 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         if (scuflg (i) .and. radmin (i) >= 0.) scuflg (i) = .false.
     enddo
     
-    endif ! <--- endif (.not. no_mf)
-
     ! -----------------------------------------------------------------------
     ! compute components for mass flux mixing by large thermals
     ! -----------------------------------------------------------------------
@@ -980,30 +1049,29 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         ntcw_new = ntcw - 1
     endif
 
-    ! KGao: if not using mass flux, skip steps below to save time
-    if (.not. no_mf) then
-
     ! -----------------------------------------------------------------------
     ! edmf parameterization siebesma et al. (2007)
     ! -----------------------------------------------------------------------
 
-    call mfpblt (im, km, kmpbl, ntcw_new, ntrac1, dt2, &
+    call mfpbltq (im, km, kmpbl, ntcw_new, ntrac1, dt2, &
         pcnvflg, zl, zm, q1g, t1, u1, v1, plyr, pix, thlx, thvx, &
-        gdx, hpbl, kpbl, vpert, buou, xmf, &
-        tcko, qcko, ucko, vcko, xlamue)
+        gdx, hpbl, kpbl, vpert, buou, &
+        use_shear_pbl, wush, &
+        use_tke_pbl, tkemean, vez0fun, xmf, &
+        tcko, qcko, ucko, vcko, xlamue, bl_upfr)
 
     ! -----------------------------------------------------------------------
     ! mass - flux parameterization for stratocumulus - top - induced turbulence mixing
     ! -----------------------------------------------------------------------
 
-    call mfscu (im, km, kmscu, ntcw_new, ntrac1, dt2, &
+    call mfscuq (im, km, kmscu, ntcw_new, ntrac1, dt2, &
         scuflg, zl, zm, q1g, t1, u1, v1, plyr, pix, &
-        thlx, thvx, thlvx, gdx, thetae, radj, &
-        krad, mrad, radmin, buod, xmfd, &
-        tcdo, qcdo, ucdo, vcdo, xlamde)
-
-    endif ! <--- endif (.not. no_mf)
-
+        thlx, thvx, thlvx, gdx, thetae, &
+        krad, mrad, radmin, buod, &
+        use_shear_pbl, wush, &
+        use_tke_pbl, tkemean, vez0fun, xmfd, &
+        tcdo, qcdo, ucdo, vcdo, xlamde, bl_dnfr)
+    
     ! -----------------------------------------------------------------------
     ! compute prandtl number and exchange coefficient varying with height
     ! -----------------------------------------------------------------------
@@ -1012,22 +1080,63 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         do i = 1, im
             if (k < kpbl (i)) then
                 tem = phih (i) / phim (i)
-                ptem = - 3. * (max (zi (i, k + 1) - sfcfrac * hpbl (i), 0.)) ** 2. &
-                     / hpbl (i) ** 2.
+                ptem = sfcfrac * hpbl (i)
+                tem1 = max (zi (i, k + 1) - ptem, 0.)
+                tem2 = tem1 / (hpbl (i) - ptem)
                 if (pcnvflg (i)) then
-                    prn (i, k) = 1. + (tem - 1.) * exp (ptem)
+                    tem = min (tem, pr0)
+                    prn (i, k) = tem + (pr0 - tem) * tem2
                 else
+                    tem = max (tem, pr0)
                     prn (i, k) = tem
                 endif
                 prn (i, k) = min (prn (i, k), prmax)
                 prn (i, k) = max (prn (i, k), prmin)
                 
-                ckz (i, k) = ck1 + (ck0 - ck1) * exp (ptem)
-                ckz (i, k) = min (ckz (i, k), ck0)
-                ckz (i, k) = max (ckz (i, k), ck1)
-                chz (i, k) = ch1 + (ch0 - ch1) * exp (ptem)
-                chz (i, k) = min (chz (i, k), ch0)
-                chz (i, k) = max (chz (i, k), ch1)
+                ckz (i, k) = ck0 + (ck1 - ck0) * tem2
+                ckz (i, k) = max (min (ckz (i, k), ck0), ck1)
+                chz (i, k) = ch0 + (ch1 - ch0) * tem2
+                chz (i, k) = max (min (chz (i, k), ch0), ch1)
+                
+            endif
+        enddo
+    enddo
+    
+    ! -----------------------------------------------------------------------
+    ! above a threshold height (hcrinv), the background vertical diffusivities and mixing length
+    ! in the inversion layers are set to much smaller values (xkzinv and rlmn2)
+    ! below the threshold height (hcrinv), the background vertical diffusivities and mixing length
+    ! in the inversion layers are increased with increasing roughness length and vegetation fraction
+    ! -----------------------------------------------------------------------
+
+    do i = 1, im
+        if (islimsk (i) == 1) then
+            z0fun =  min (max ( (zorl (i) * 0.01 - 0.1) / 0.9, 0.0), 1.0) ! jih jul2020: (z0fun = 0. ~ 1.0)
+            zvfun (i) = sqrt (max (sigmaf (i), 0.1) * z0fun) !jih jul2020: over land, zvfun = 0 over ocean
+        else
+            zvfun (i) = 0.
+        endif
+    enddo
+    
+    do k = 1, km1
+        do i = 1, im
+            if (zi (i, k + 1) > hcrinv) then
+                tem1 = tvx (i, k + 1) - tvx (i, k)
+                if (tem1 >= 0. .and. islimsk (i) == 0) then ! kgao note: only apply limiter over ocean points
+                    xkzo (i, k) = min (xkzo (i, k), xkzinv)
+                    xkzmo (i, k) = min (xkzmo (i, k), xkzinv)
+                    rlmnz (i, k) = min (rlmnz (i, k), rlmn2)
+                endif
+            else
+                tem1 = tvx (i, k + 1) - tvx (i, k)
+                if (tem1 > 0.) then
+                    ptem = xkzo (i, k) * zvfun (i)
+                    xkzo (i, k) = min (max (ptem, xkzinv), xkzo (i, k))
+                    ptem = xkzmo (i, k) * zvfun (i)
+                    xkzmo (i, k) = min (max (ptem, xkzinv), xkzmo (i, k))
+                    ptem = rlmnz (i, k) * zvfun (i)
+                    rlmnz (i, k) = min (max (ptem, rlmn2), rlmnz (i, k))
+                endif
             endif
         enddo
     enddo
@@ -1038,64 +1147,136 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     
     do k = 1, km1
         do i = 1, im
-            zlup = 0.0
-            bsum = 0.0
-            mlenflg = .true.
-            do n = k, km1
-                if (mlenflg) then
-                    dz = zl (i, n + 1) - zl (i, n)
-                    ptem = gotvx (i, n) * (thvx (i, n + 1) - thvx (i, k)) * dz
-                    ! ptem = gotvx (i, n) * (thlvx (i, n + 1) - thlvx (i, k)) * dz
-                    bsum = bsum + ptem
-                    zlup = zlup + dz
-                    if (bsum >= tke (i, k)) then
-                        if (ptem >= 0.) then
-                            tem2 = max (ptem, zfmin)
-                        else
-                            tem2 = min (ptem, - zfmin)
+            
+            if (l2_diag_opt == 0) then
+                ! kgao 12 / 08 / 2023: original method as in han and bretherton 2019
+                ! but additionally considers shear effect
+                zlup = 0.0
+                bsum = 0.0
+                mlenflg = .true.
+                do n = k, km1
+                    if (mlenflg) then
+                        dz = zl (i, n + 1) - zl (i, n)
+                        tem3 = ((u1 (i, n + 1) - u1 (i, n)) / dz) ** 2
+                        tem3 = tem3 + ((v1 (i, n + 1) - v1 (i, n)) / dz) ** 2
+                        tem3 = cs0 * sqrt (tem3) * sqrt (tke (i, k))
+                        ptem = (gotvx (i, n) * (thvx (i, n + 1) - thvx (i, k)) + tem3) * dz
+                        bsum = bsum + ptem
+                        zlup = zlup + dz
+                        if (bsum >= tke (i, k)) then
+                            if (ptem >= 0.) then
+                                tem2 = max (ptem, zfmin)
+                            else
+                                tem2 = min (ptem, - zfmin)
+                            endif
+                            ptem1 = (bsum - tke (i, k)) / tem2
+                            zlup = zlup - ptem1 * dz
+                            zlup = max (zlup, 0.)
+                            mlenflg = .false.
                         endif
-                        ptem1 = (bsum - tke (i, k)) / tem2
-                        zlup = zlup - ptem1 * dz
-                        zlup = max (zlup, 0.)
-                        mlenflg = .false.
                     endif
-                endif
-            enddo
-            zldn = 0.0
-            bsum = 0.0
-            mlenflg = .true.
-            do n = k, 1, - 1
-                if (mlenflg) then
-                    if (n == 1) then
-                        dz = zl (i, 1)
-                        tem1 = tsea (i) * (1. + zvir * max (q1g (i, 1, 1), qmin))
-                    else
-                        dz = zl (i, n) - zl (i, n - 1)
-                        tem1 = thvx (i, n - 1)
-                        ! tem1 = thlvx (i, n - 1)
-                    endif
-                    ptem = gotvx (i, n) * (thvx (i, k) - tem1) * dz
-                    ! ptem = gotvx (i, n) * (thlvx (i, k) - tem1) * dz
-                    bsum = bsum + ptem
-                    zldn = zldn + dz
-                    if (bsum >= tke (i, k)) then
-                        if (ptem >= 0.) then
-                            tem2 = max (ptem, zfmin)
+                enddo
+                zldn = 0.0
+                bsum = 0.0
+                mlenflg = .true.
+                do n = k, 1, - 1
+                    if (mlenflg) then
+                        if (n == 1) then
+                            dz = zl (i, 1)
+                            tem1 = tsea (i) * (1. + zvir * max (q1g (i, 1, 1), qmin))
+                            !jih jul2020
+                            tem3 = (u1 (i, 1) / dz) ** 2
+                            tem3 = tem3 + (v1 (i, 1) / dz) ** 2
+                            tem3 = cs0 * sqrt (tem3) * sqrt (tke (i, 1))
                         else
-                            tem2 = min (ptem, - zfmin)
+                            dz = zl (i, n) - zl (i, n - 1)
+                            tem1 = thvx (i, n - 1)
+                            ! tem1 = thlvx (i, n - 1)
+                            tem3 = ((u1 (i, n) - u1 (i, n - 1)) / dz) ** 2
+                            tem3 = tem3 + ((v1 (i, n) - v1 (i, n - 1)) / dz) ** 2
+                            tem3 = cs0 * sqrt (tem3) * sqrt (tke (i, k))
                         endif
-                        ptem1 = (bsum - tke (i, k)) / tem2
-                        zldn = zldn - ptem1 * dz
-                        zldn = max (zldn, 0.)
-                        mlenflg = .false.
+                        ptem = (gotvx (i, n) * (thvx (i, k) - tem1) + tem3) * dz
+                        bsum = bsum + ptem
+                        zldn = zldn + dz
+                        if (bsum >= tke (i, k)) then
+                            if (ptem >= 0.) then
+                                tem2 = max (ptem, zfmin)
+                            else
+                                tem2 = min (ptem, - zfmin)
+                            endif
+                            ptem1 = (bsum - tke (i, k)) / tem2
+                            zldn = zldn - ptem1 * dz
+                            zldn = max (zldn, 0.)
+                            mlenflg = .false.
+                        endif
                     endif
-                endif
-            enddo
+                enddo
+                
+            else if (l2_diag_opt == 1) then
+                ! kgao 12 / 08 / 2023: a new method for diagnosing l2
+                zlup = 0.0
+                mlenflg = .true.
+                e2 (i, k) = max (2. * tke (i, k), 0.001)
+                do n = k, km1
+                    if (mlenflg) then
+                        dz = zl (i, n + 1) - zl (i, n)
+                        tem1 = 2. * gotvx (i, n + 1) * (thvx (i, k) - thvx (i, n + 1))
+                        tem2 = cs0 * sqrt (e2 (i, n)) * sqrt (shr2 (i, n))
+                        e2 (i, n + 1) = e2 (i, n) + (tem1 - tem2) * dz
+                        zlup = zlup + dz
+                        if (e2 (i, n + 1) < 0.) then
+                            ptem = e2 (i, n + 1) / (e2 (i, n + 1) - e2 (i, n))
+                            zlup = zlup - ptem * dz
+                            zlup = max (zlup, 0.)
+                            mlenflg = .false.
+                        endif
+                    endif
+                enddo
+                zldn = 0.0
+                mlenflg = .true.
+                do n = k, 1, - 1
+                    if (mlenflg) then
+                        if (n == 1) then
+                            dz = zl (i, 1)
+                            tem = tsea (i) * (1. + zvir * max (q1g (i, 1, 1), qmin))
+                            tem1 = 2. * gotvx (i, n) * (tem - thvx (i, k))
+                            tem2 = ustar (i) * phims (i) / (vk * dz)
+                            tem2 = cs0 * sqrt (e2 (i, n)) * tem2
+                            e2 (i, n - 1) = e2 (i, n) + (tem1 - tem2) * dz
+                        else
+                            dz = zl (i, n) - zl (i, n - 1)
+                            tem1 = 2. * gotvx (i, n - 1) * (thvx (i, n - 1) - thvx (i, k))
+                            tem2 = cs0 * sqrt (e2 (i, n)) * sqrt (shr2 (i, n - 1))
+                            e2 (i, n - 1) = e2 (i, n) + (tem1 - tem2) * dz
+                        endif
+                        zldn = zldn + dz
+                        if (e2 (i, n - 1) < 0.) then
+                            ptem = e2 (i, n - 1) / (e2 (i, n - 1) - e2 (i, n))
+                            zldn = zldn - ptem * dz
+                            zldn = max (zldn, 0.)
+                            mlenflg = .false.
+                        endif
+                    endif
+                enddo
+            endif ! end - if of l2_diag_opt
             
             tem = 0.5 * (zi (i, k + 1) - zi (i, k))
-            tem1 = min (tem, rlmn)
+            tem1 = min (tem, rlmnz (i, k))
             
-            ptem2 = min (zlup, zldn)
+            
+            ! -----------------------------------------------------------------------
+            ! kgao 08 / 29 / 23: add option to use l_up as l2
+            ! zldn is strongly limited by the layer height for the near - surface levels
+            ! it is not physical to use limiter below because zk already considers this factor
+            ! -----------------------------------------------------------------------
+
+            if (use_lup_only) then
+                ptem2 = zlup
+            else
+                ptem2 = min (zlup, zldn)
+            endif
+            
             rlam (i, k) = elmfac * ptem2
             rlam (i, k) = max (rlam (i, k), tem1)
             rlam (i, k) = min (rlam (i, k), rlmx)
@@ -1104,11 +1285,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             ele (i, k) = elefac * ptem2
             ele (i, k) = max (ele (i, k), tem1)
             ele (i, k) = min (ele (i, k), elmx)
-           
-            ! KGao: use const l2
-            if (use_const_l2) rlam(i,k) = rlmx
-            if (use_const_l2) ele(i,k)  = elefac * rlmx
-
+            
         enddo
     enddo
     
@@ -1125,17 +1302,36 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
                 ptem = 1. + 2.7 * zol (i)
                 zk = tem / ptem
             endif
-            elm (i, k) = zk * rlam (i, k) / (rlam (i, k) + zk)
+            
+            ! kgao 12 / 08 / 2023: introduce multiple l1 and l2 blending options
+            if (l1l2_blend_opt == 0) then
+                ! original as in hk19
+                elm (i, k) = zk * rlam (i, k) / (rlam (i, k) + zk)
+                
+            else if (l1l2_blend_opt == 1) then
+                ! hafa method as in wang et al 2023 waf; use zk as elm within surface layer
+                tem = 1.
+                if (sfcflg (i) .and. hpbl (i) > 200.) then
+                    tem1 = min (100., hpbl (i) * 0.05) ! sfc layer height
+                    if (zl (i, k) < tem1) then ! for layers below sfc layer
+                        tem = 0.
+                    elseif (zl (i, k) >= tem1 .and. zl (i, k) < 2 * tem1) then ! transition layers
+                        tem = (zl (i, k) - tem1) / tem1
+                    endif
+                endif
+                elm (i, k) = 1. / (1. / zk + tem * 1. / rlam (i, k))
+                
+            else if (l1l2_blend_opt == 2) then
+                ! hafb blending method
+                elm (i, k) = sqrt (1.0 / (1.0 / (zk ** 2) + 1.0 / (rlam (i, k) ** 2)))
+            endif
+            
+            ! kgao 12 / 08 / 2023: use l1 as l at the lowest layer
+            if (use_l1_sfc) then
+                if (k == 1) elm (i, k) = zk
+            endif
             
             dz = zi (i, k + 1) - zi (i, k)
-
-            ! KGao: notes on mixing lengths and their limiters
-            ! elm - mixing length used for Kz calculations
-            !     - no larger than max(dx, dz)
-            ! ele - mixing length used for TKE dissipation calculations 
-            !     - no larger than max(dx, dz)
-            ! example:
-            ! if dx = 35m, elm and ele are capped at 35m
             tem = max (gdx (i), dz)
             elm (i, k) = min (elm (i, k), tem)
             ele (i, k) = min (ele (i, k), tem)
@@ -1153,24 +1349,34 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     
     do k = 1, km1
         do i = 1, im
+            xkzo (i, k) = 0.5 * (xkzo (i, k) + xkzo (i, k + 1))
+            xkzmo (i, k) = 0.5 * (xkzmo (i, k) + xkzmo (i, k + 1))
+        enddo
+    enddo
+    do k = 1, km1
+        do i = 1, im
             tem = 0.5 * (elm (i, k) + elm (i, k + 1))
             tem = tem * sqrt (tkeh (i, k))
             if (k < kpbl (i)) then
-                if (pblflg (i)) then
+                if (pcnvflg (i)) then
                     dku (i, k) = ckz (i, k) * tem
                     dkt (i, k) = dku (i, k) / prn (i, k)
                 else
-                    dkt (i, k) = chz (i, k) * tem
-                    dku (i, k) = dkt (i, k) * prn (i, k)
+                    if (ri (i, k) < 0.) then ! unstable regime
+                        dku (i, k) = ckz (i, k) * tem
+                        dkt (i, k) = dku (i, k) / prn (i, k)
+                    else ! stable regime
+                        dkt (i, k) = chz (i, k) * tem
+                        dku (i, k) = dkt (i, k) * prn (i, k)
+                    endif
                 endif
             else
-                ri = max (bf (i, k) / shr2 (i, k), rimin)
-                if (ri < 0.) then ! unstable regime
+                if (ri (i, k) < 0.) then ! unstable regime
                     dku (i, k) = ck1 * tem
                     dkt (i, k) = rchck * dku (i, k)
                 else ! stable regime
                     dkt (i, k) = ch1 * tem
-                    prnum = 1.0 + 2.1 * ri
+                    prnum = 1.0 + 2.1 * ri (i, k)
                     prnum = min (prnum, prmax)
                     dku (i, k) = dkt (i, k) * prnum
                 endif
@@ -1197,18 +1403,26 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         enddo
     enddo
     
-    do i = 1, im
-        if (scuflg (i)) then
-            k = krad (i)
-            tem = bf (i, k) / gotvx (i, k)
-            tem1 = max (tem, tdzmin)
-            ptem = radj (i) / tem1
-            dkt (i, k) = dkt (i, k) + ptem
-            dku (i, k) = dku (i, k) + ptem
-            dkq (i, k) = dkq (i, k) + ptem
-        endif
-    enddo
+    ! -----------------------------------------------------------------------
+    ! compute a minimum tke deduced from background diffusivity for momentum.
+    ! -----------------------------------------------------------------------
     
+    do k = 1, km1
+        do i = 1, im
+            if (k == 1) then
+                tem = ckz (i, 1)
+                tem1 = 0.5 * xkzmo (i, 1)
+            else
+                tem = 0.5 * (ckz (i, k - 1) + ckz (i, k))
+                tem1 = 0.5 * (xkzmo (i, k - 1) + xkzmo (i, k))
+            endif
+            ptem = tem1 / (tem * elm (i, k))
+            tkmnz (i, k) = ptem * ptem
+            tkmnz (i, k) = min (tkmnz (i, k), tkminx)
+            tkmnz (i, k) = max (tkmnz (i, k), tkmin)
+        enddo
+    enddo
+
     if (present (dkt_out)) then
         do k = 1, km1
             do i = 1, im
@@ -1337,32 +1551,6 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
                 endif
                 shrp = shrp + ptem1 + ptem2
             endif
-
-            !KGao: 3D-SA-TKE
-            !TODO: 1. dku_v and dku_h are treated separately
-            !         shrp_3d = dku_h * shr3d_h + dku_v * shr3d_v
-            !      2. how to get dku_h?
-            !         dku_h = cs * l_h * sqrt(e)
-
-            if ( present(shr3d_h) .and. present(shr3d_v)) then
-
-              if (cs < 1.e-5) then
-                 dkh(i, k) = dku(i, k)
-              else
-                 dkh(i, k) = cs * sqrt( gdx(i) ) * sqrt (tkeh (i, k)) 
-              endif
-
-              if (k ==1) then
-                tem = dkh(i, k) * shr3d_h(i, k) + dku(i, k) * shr3d_v(i, k)
-              else
-                tem1 = dkh(i, k-1) * shr3d_h(i, k-1) + dku(i, k-1) * shr3d_v(i, k-1) ! dku is at layer interfaces 
-                tem2 = dkh(i, k) * shr3d_h(i, k)     + dku(i, k) * shr3d_v(i, k)
-                tem = 0.5 * (tem1 + tem2)
-              endif
-              shrp = tem
-            endif
-            !3D-SA-TKE-end
-
             prod (i, k) = buop + shrp
         enddo
     enddo
@@ -1371,22 +1559,18 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     ! first predict tke due to tke production & dissipation (diss)
     ! -----------------------------------------------------------------------
     
-    do k = 1, km1
-        do i = 1, im
-            rle (i, k) = ce0 / ele (i, k)
-        enddo
-    enddo
-    kk = max (nint (dt2 / cdtn), 1)
-    dtn = dt2 / float (kk)
-    do n = 1, kk
+    dtn = dt2 / float (ndt)
+    do n = 1, ndt
         do k = 1, km1
             do i = 1, im
                 tem = sqrt (tke (i, k))
-                diss (i, k) = rle (i, k) * tke (i, k) * tem
+                ptem = ce0 / ele (i, k)
+                diss (i, k) = ptem * tke (i, k) * tem
                 tem1 = prod (i, k) + tke (i, k) / dtn
                 diss (i, k) = max (min (diss (i, k), tem1), 0.)
                 tke (i, k) = tke (i, k) + dtn * (prod (i, k) - diss (i, k)) ! no diffusion yet
-                tke (i, k) = max (tke (i, k), tkmin)
+                ! tke (i, k) = max (tke (i, k), tkmin)
+                tke (i, k) = max (tke (i, k), tkmnz (i, k))
             enddo
         enddo
     enddo
@@ -1553,6 +1737,8 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
                 ptem = tcko (i, k) + tcko (i, k + 1)
                 f1 (i, k) = f1 (i, k) + dtodsd * dsdzt - (ptem - tem) * ptem1
                 f1 (i, k + 1) = t1 (i, k + 1) - dtodsu * dsdzt + (ptem - tem) * ptem2
+                ! kgao - updraft mass flux
+                if (present (flux_up)) flux_up (i, k) = xmf (i, k) !0.5 * (ptem - tem) * xmf (i, k)
                 tem = q1g (i, k, 1) + q1g (i, k + 1, 1)
                 ptem = qcko (i, k, 1) + qcko (i, k + 1, 1)
                 f2 (i, k) = f2 (i, k) - (ptem - tem) * ptem1
@@ -1572,6 +1758,8 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
                     tem = t1 (i, k) + t1 (i, k + 1)
                     f1 (i, k) = f1 (i, k) + (ptem - tem) * ptem1
                     f1 (i, k + 1) = f1 (i, k + 1) - (ptem - tem) * ptem2
+                    ! kgao - downdraft mass flux
+                    if (present (flux_dn)) flux_dn (i, k) = xmfd (i, k) ! - 0.5 * (ptem - tem) * xmfd (i, k)
                     tem = q1g (i, k, 1) + q1g (i, k + 1, 1)
                     ptem = qcdo (i, k, 1) + qcdo (i, k + 1, 1)
                     f2 (i, k) = f2 (i, k) + (ptem - tem) * ptem1
@@ -1782,13 +1970,13 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     
     return
 
-end subroutine sa_tke_edmf_pbl
+end subroutine sa_tke_edmf_new_pbl
     
 ! =======================================================================
 ! subroutine to calcualte surface variables for PBL
 ! =======================================================================
 
-subroutine sa_tke_edmf_sfc (im, lsoil, ps, u1, v1, t1, q1, &
+subroutine sa_tke_edmf_new_sfc (im, lsoil, ps, u1, v1, t1, q1, &
         delt, tsurf, prsl1, prslki, evap, hflx, fm, fh, &
         z1, snwdph, zorl, ztrl, islimsk, ustar, sigmaf, &
         vegtype, shdmax, sfcemis, dlwflx, sfcnsw, &
@@ -1898,7 +2086,7 @@ subroutine sa_tke_edmf_sfc (im, lsoil, ps, u1, v1, t1, q1, &
     if (present (stress_out)) stress_out = stress
     if (present (wind_out)) wind_out = wind
 
-end subroutine sa_tke_edmf_sfc
+end subroutine sa_tke_edmf_new_sfc
     
 ! =======================================================================
 ! subroutine to calculate surface exchange coefficients and near-surface wind
@@ -1998,7 +2186,7 @@ subroutine sfc_exch (im, ps, u1, v1, t1, q1, z1, &
 
     ddvel = 0.0
     flag_iter = .true.
-
+    
     do i = 1, im
         if (flag_iter (i)) then
             wind (i) = max (sqrt (u1 (i) * u1 (i) + v1 (i) * v1 (i)) &
@@ -2019,7 +2207,7 @@ subroutine sfc_exch (im, ps, u1, v1, t1, q1, z1, &
             
             if (islimsk (i) == 0) then ! over ocean
                 ustar (i) = sqrt (grav * z0 / charnock)
-
+                
                 ! ** test xubin's new z0
                 
                 ! ztmax = z0max
@@ -2205,13 +2393,6 @@ subroutine sfc_exch (im, ps, u1, v1, t1, q1, z1, &
             tem1 = 0.00001 / z1 (i)
             cm (i) = max (cm (i), tem1)
             ch (i) = max (ch (i), tem1)
-
-            ! KGao - constant cd
-            if ( use_const_cd ) then
-               cm (i) = cd0
-               ch (i) = cd0
-            endif
-
             stress (i) = cm (i) * wind (i) * wind (i)
             ustar (i) = sqrt (stress (i))
             
@@ -3772,10 +3953,11 @@ end subroutine tridit
 ! edmf parameterization siebesma et al. (2007)
 ! =======================================================================
 
-subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
+subroutine mfpbltq (im, km, kmpbl, ntcw, ntrac1, delt, &
         cnvflg, zl, zm, q1, t1, u1, v1, plyr, pix, thlx, thvx, &
-        gdx, hpbl, kpbl, vpert, buo, xmf, &
-        tcko, qcko, ucko, vcko, xlamue)
+        gdx, hpbl, kpbl, vpert, buo, use_shear_pbl, wush, &
+        use_tke_pbl, tkemean, vez0fun, xmf, &
+        tcko, qcko, ucko, vcko, xlamue, a1)
     
     implicit none
     
@@ -3789,28 +3971,31 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
         t1 (im, km), u1 (im, km), v1 (im, km), &
         plyr (im, km), pix (im, km), thlx (im, km), &
         thvx (im, km), zl (im, km), zm (im, km), &
-        gdx (im), &
-        hpbl (im), vpert (im), &
+        wush (im, km), &
+        gdx (im), hpbl (im), vpert (im), &
+        tkemean (im), vez0fun (im), &
         buo (im, km), xmf (im, km), &
         tcko (im, km), qcko (im, km, ntrac1), &
         ucko (im, km), vcko (im, km), &
         xlamue (im, km - 1)
+    logical use_tke_pbl, use_shear_pbl
     
     ! -----------------------------------------------------------------------
     ! local variables
     ! -----------------------------------------------------------------------
     
-    integer :: i, j, k, n, ndc
-    integer :: kpblx (im), kpbly (im)
+    integer i, j, k, n, ndc
+    integer kpblx (im), kpbly (im)
     
     real :: dt2, dz, ce0, cm, &
         factor, gocp, &
         g, b1, f1, &
         bb1, bb2, &
-        alp, a1, pgcon, &
+        alp, vprtmax, a1, pgcon, &
         qmin, qlmin, xmmx, rbint, &
         tem, tem1, tem2, &
-        ptem, ptem1, ptem2
+        ptem, ptem1, ptem2, &
+        tkcrt, cmxfac
     
     real :: elocp, el2orc, qs, es, &
         tlu, gamma, qlu, &
@@ -3818,6 +4003,7 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
     
     real :: rbdn (im), rbup (im), hpblx (im), &
         xlamuem (im, km - 1)
+    real :: delz (im), xlamax (im), ce0t (im)
     
     real :: wu2 (im, km), thlu (im, km), &
         qtx (im, km), qtu (im, km)
@@ -3825,16 +4011,17 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
     real :: xlamavg (im), sigma (im), &
         scaldfunc (im), sumx (im)
     
-    logical :: totflg, flg (im)
+    logical totflg, flg (im)
     
     ! physical parameters
     parameter (g = grav)
     parameter (gocp = g / cp_air)
     parameter (elocp = hlv / cp_air, el2orc = hlv * hlv / (rvgas * cp_air))
     parameter (ce0 = 0.4, cm = 1.0)
+    parameter (tkcrt = 2., cmxfac = 5.)
     parameter (qmin = 1.e-8, qlmin = 1.e-12)
-    parameter (alp = 1.0, pgcon = 0.55)
-    parameter (a1 = 0.13, b1 = 0.5, f1 = 0.15)
+    parameter (alp = 1.5, vprtmax = 3.0, pgcon = 0.55)
+    parameter (b1 = 0.5, f1 = 0.15)
     
     totflg = .true.
     do i = 1, im
@@ -3861,7 +4048,7 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
     do i = 1, im
         if (cnvflg (i)) then
             ptem = alp * vpert (i)
-            ptem = min (ptem, 3.0)
+            ptem = min (ptem, vprtmax)
             thlu (i, 1) = thlx (i, 1) + ptem
             qtu (i, 1) = qtx (i, 1)
             buo (i, 1) = g * ptem / thvx (i, 1)
@@ -3869,20 +4056,55 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
     enddo
     
     ! -----------------------------------------------------------------------
+    ! kgao 12 / 08 / 2023: adjust entrainment / detrainment rate based on pbl - mean tke
+    ! if tkemean > tkcrt, ce0t = sqrt (tkemean / tkcrt) * ce0
+    ! -----------------------------------------------------------------------
+    
+    do i = 1, im
+        if (use_tke_pbl .and. cnvflg (i)) then
+            ce0t (i) = ce0 * vez0fun (i)
+            if (tkemean (i) > tkcrt) then
+                tem = sqrt (tkemean (i) / tkcrt)
+                tem1 = min (tem, cmxfac)
+                tem2 = tem1 * ce0
+                ce0t (i) = max (ce0t (i), tem2)
+            endif
+        endif
+    enddo
+    
+    ! -----------------------------------------------------------------------
     ! compute entrainment rate
     ! -----------------------------------------------------------------------
+    
+    do i = 1, im
+        if (cnvflg (i)) then
+            k = kpbl (i) / 2
+            k = max (k, 1)
+            delz (i) = zl (i, k + 1) - zl (i, k)
+            ! kgao 12 / 08 / 2023
+            if (use_tke_pbl) then
+                xlamax (i) = ce0t (i) / delz (i)
+            else
+                xlamax (i) = ce0 / delz (i)
+            endif
+        endif
+    enddo
     
     do k = 1, kmpbl
         do i = 1, im
             if (cnvflg (i)) then
-                dz = zl (i, k + 1) - zl (i, k)
                 if (k < kpbl (i)) then
-                    ptem = 1. / (zm (i, k) + dz)
-                    tem = max ((hpbl (i) - zm (i, k) + dz), dz)
+                    ptem = 1. / (zm (i, k) + delz (i))
+                    tem = max ((hpbl (i) - zm (i, k) + delz (i)), delz (i))
                     ptem1 = 1. / tem
-                    xlamue (i, k) = ce0 * (ptem + ptem1)
+                    ! kgao 12 / 08 / 2023
+                    if (use_tke_pbl) then
+                        xlamue (i, k) = ce0t (i) * (ptem + ptem1)
+                    else
+                        xlamue (i, k) = ce0 * (ptem + ptem1)
+                    endif
                 else
-                    xlamue (i, k) = ce0 / dz
+                    xlamue (i, k) = xlamax (i)
                 endif
                 xlamuem (i, k) = cm * xlamue (i, k)
             endif
@@ -3903,7 +4125,7 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
                 thlu (i, k) = ((1. - tem) * thlu (i, k - 1) + tem * &
                     (thlx (i, k - 1) + thlx (i, k))) / factor
                 qtu (i, k) = ((1. - tem) * qtu (i, k - 1) + tem * &
-                     (qtx (i, k - 1) + qtx (i, k))) / factor
+                    (qtx (i, k - 1) + qtx (i, k))) / factor
                 
                 tlu = thlu (i, k) / pix (i, k)
                 es = 0.01 * mqs (tlu) ! mqs in pa
@@ -3959,11 +4181,21 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
         do i = 1, im
             if (cnvflg (i)) then
                 dz = zm (i, k) - zm (i, k - 1)
-                tem = 0.25 * bb1 * (xlamue (i, k) + xlamue (i, k - 1)) * dz
-                tem1 = bb2 * buo (i, k) * dz
-                ptem = (1. - tem) * wu2 (i, k - 1)
-                ptem1 = 1. + tem
-                wu2 (i, k) = (ptem + tem1) / ptem1
+                tem = 0.25 * bb1 * (xlamue (i, k - 1) + xlamue (i, k)) * dz
+                ! kgao 12 / 15 / 2023 - consider shear effect on wu diagnosis
+                if (use_shear_pbl) then
+                    tem1 = max (wu2 (i, k - 1), 0.)
+                    tem1 = bb2 * buo (i, k) - wush (i, k) * sqrt (tem1)
+                    tem2 = tem1 * dz
+                    ptem = (1. - tem) * wu2 (i, k - 1)
+                    ptem1 = 1. + tem
+                    wu2 (i, k) = (ptem + tem1) / ptem1
+                else
+                    tem1 = bb2 * buo (i, k) * dz
+                    ptem = (1. - tem) * wu2 (i, k - 1)
+                    ptem1 = 1. + tem
+                    wu2 (i, k) = (ptem + tem1) / ptem1
+                endif
             endif
         enddo
     enddo
@@ -3974,6 +4206,7 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
     
     do i = 1, im
         flg (i) = .true.
+        kpblx (i) = 1
         kpbly (i) = kpbl (i)
         if (cnvflg (i)) then
             flg (i) = .false.
@@ -4006,10 +4239,11 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
     
     do i = 1, im
         if (cnvflg (i)) then
-            if (kpbl (i) > kpblx (i)) then
+            if (kpblx (i) < kpbl (i)) then
                 kpbl (i) = kpblx (i)
                 hpbl (i) = hpblx (i)
             endif
+            if (kpbl (i) <= 1) cnvflg (i) = .false.
         endif
     enddo
     
@@ -4019,16 +4253,22 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
     
     do k = 1, kmpbl
         do i = 1, im
-            if (cnvflg (i) .and. kpbly (i) > kpblx (i)) then
-                dz = zl (i, k + 1) - zl (i, k)
+            if (cnvflg (i) .and. kpblx (i) < kpbly (i)) then
+                ! if (cnvflg (i)) then
                 if (k < kpbl (i)) then
-                    ptem = 1. / (zm (i, k) + dz)
-                    tem = max ((hpbl (i) - zm (i, k) + dz), dz)
+                    ptem = 1. / (zm (i, k) + delz (i))
+                    tem = max ((hpbl (i) - zm (i, k) + delz (i)), delz (i))
                     ptem1 = 1. / tem
-                    xlamue (i, k) = ce0 * (ptem + ptem1)
+                    ! kgao 12 / 08 / 2023
+                    if (use_tke_pbl) then
+                        xlamue (i, k) = ce0t (i) * (ptem + ptem1)
+                    else
+                        xlamue (i, k) = ce0 * (ptem + ptem1)
+                    endif
                 else
-                    xlamue (i, k) = ce0 / dz
+                    xlamue (i, k) = xlamax (i)
                 endif
+                
                 xlamuem (i, k) = cm * xlamue (i, k)
             endif
         enddo
@@ -4064,12 +4304,7 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
     do k = 1, kmpbl
         do i = 1, im
             if (cnvflg (i) .and. k < kpbl (i)) then
-                if (wu2 (i, k) > 0.) then
-                    tem = sqrt (wu2 (i, k))
-                else
-                    tem = 0.
-                endif
-                xmf (i, k) = a1 * tem
+                xmf (i, k) = a1 * sqrt (wu2 (i, k))
             endif
         enddo
     enddo
@@ -4229,17 +4464,19 @@ subroutine mfpblt (im, km, kmpbl, ntcw, ntrac1, delt, &
     
     return
 
-end subroutine mfpblt
+end subroutine mfpbltq
     
 ! =======================================================================
 ! mass - flux parameterization for stratocumulus - top - induced turbulence mixing
 ! =======================================================================
     
-subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
+subroutine mfscuq (im, km, kmscu, ntcw, ntrac1, delt, &
         cnvflg, zl, zm, q1, t1, u1, v1, plyr, pix, &
-        thlx, thvx, thlvx, gdx, thetae, radj, &
-        krad, mrad, radmin, buo, xmfd, &
-        tcdo, qcdo, ucdo, vcdo, xlamde)
+        thlx, thvx, thlvx, gdx, thetae, &
+        krad, mrad, radmin, buo, &
+        use_shear_pbl, wush, &
+        use_tke_pbl, tkemean, vez0fun, xmfd, &
+        tcdo, qcdo, ucdo, vcdo, xlamde, a1)
     
     implicit none
     
@@ -4252,15 +4489,17 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     real :: q1 (im, km, ntrac1), t1 (im, km), &
         u1 (im, km), v1 (im, km), &
         plyr (im, km), pix (im, km), &
-        thlx (im, km), &
+        thlx (im, km), wush (im, km), &
         thvx (im, km), thlvx (im, km), &
-        gdx (im), radj (im), &
+        gdx (im), &
         zl (im, km), zm (im, km), &
         thetae (im, km), radmin (im), &
+        tkemean (im), vez0fun (im), &
         buo (im, km), xmfd (im, km), &
         tcdo (im, km), qcdo (im, km, ntrac1), &
         ucdo (im, km), vcdo (im, km), &
         xlamde (im, km - 1)
+    logical use_tke_pbl, use_shear_pbl
     
     ! -----------------------------------------------------------------------
     ! local variables
@@ -4268,16 +4507,17 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     
     integer :: i, j, indx, k, n, kk, ndc
 
-    integer :: krad1 (im), mradx (im), mrady (im)
+    integer :: krad1 (im)
     
     real :: dt2, dz, ce0, cm, &
         gocp, factor, g, tau, &
         b1, f1, bb1, bb2, &
-        a1, a2, a11, a22, &
+        a1, a2, &
         cteit, pgcon, &
         qmin, qlmin, &
         xmmx, tem, tem1, tem2, &
-        ptem, ptem1, ptem2
+        ptem, ptem1, ptem2, &
+        tkcrt, cmxfac
     
     real :: elocp, el2orc, qs, es, &
         tld, gamma, qld, thdn, &
@@ -4286,12 +4526,13 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     real :: wd2 (im, km), thld (im, km), &
         qtx (im, km), qtd (im, km), &
         thlvd (im), hrad (im), &
-        xlamdem (im, km - 1), ra1 (im), ra2 (im)
+        xlamdem (im, km - 1), ra1 (im)
+    real :: delz (im), xlamax (im), ce0t (im)
     
     real :: xlamavg (im), sigma (im), &
         scaldfunc (im), sumx (im)
     
-    logical :: totflg, flg (im)
+    logical totflg, flg (im)
     
     real :: actei, cldtime
     
@@ -4300,10 +4541,10 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     parameter (gocp = g / cp_air)
     parameter (elocp = hlv / cp_air, el2orc = hlv * hlv / (rvgas * cp_air))
     parameter (ce0 = 0.4, cm = 1.0, pgcon = 0.55)
+    parameter (tkcrt = 2., cmxfac = 5.)
     parameter (qmin = 1.e-8, qlmin = 1.e-12)
     parameter (b1 = 0.45, f1 = 0.15)
-    parameter (a1 = 0.12, a2 = 0.5)
-    parameter (a11 = 0.2, a22 = 1.0)
+    parameter (a2 = 0.5)
     parameter (cldtime = 500.)
     parameter (actei = 0.7)
     ! parameter (actei = 0.23)
@@ -4353,7 +4594,6 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     do i = 1, im
         if (cnvflg (i)) then
             ra1 (i) = a1
-            ra2 (i) = a11
         endif
     enddo
     
@@ -4371,19 +4611,8 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
                 cteit = cp_air * tem / (hlv * tem1)
                 if (cteit > actei) then
                     ra1 (i) = a2
-                    ra2 (i) = a22
                 endif
             endif
-        endif
-    enddo
-    
-    ! -----------------------------------------------------------------------
-    ! compute radiative flux jump at stratocumulus top
-    ! -----------------------------------------------------------------------
-    
-    do i = 1, im
-        if (cnvflg (i)) then
-            radj (i) = - ra2 (i) * radmin (i)
         endif
     enddo
     
@@ -4419,25 +4648,61 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     enddo
     if (totflg) return
     
+    
+    ! -----------------------------------------------------------------------
+    ! kgao 12 / 08 / 2023: compute entrainment / detrainment rate based on pbl - mean tke
+    ! if tkemean > tkcrt, ce0t = sqrt (tkemean / tkcrt) * ce0
+    ! -----------------------------------------------------------------------
+    
+    do i = 1, im
+        if (use_tke_pbl .and. cnvflg (i)) then
+            ce0t (i) = ce0 * vez0fun (i)
+            if (tkemean (i) > tkcrt) then
+                tem = sqrt (tkemean (i) / tkcrt)
+                tem1 = min (tem, cmxfac)
+                tem2 = tem1 * ce0
+                ce0t (i) = max (ce0t (i), tem2)
+            endif
+        endif
+    enddo
+    
     ! -----------------------------------------------------------------------
     ! compute entrainment rate
     ! -----------------------------------------------------------------------
     
+    do i = 1, im
+        if (cnvflg (i)) then
+            k = mrad (i) + (krad (i) - mrad (i)) / 2
+            k = max (k, mrad (i))
+            delz (i) = zl (i, k + 1) - zl (i, k)
+            ! kgao 12 / 08 / 2023
+            if (use_tke_pbl) then
+                xlamax (i) = ce0t (i) / delz (i)
+            else
+                xlamax (i) = ce0 / delz (i)
+            endif
+        endif
+    enddo
+    
     do k = 1, kmscu
         do i = 1, im
             if (cnvflg (i)) then
-                dz = zl (i, k + 1) - zl (i, k)
                 if (k >= mrad (i) .and. k < krad (i)) then
                     if (mrad (i) == 1) then
-                        ptem = 1. / (zm (i, k) + dz)
+                        ptem = 1. / (zm (i, k) + delz (i))
                     else
-                        ptem = 1. / (zm (i, k) - zm (i, mrad (i) - 1) + dz)
+                        ptem = 1. / (zm (i, k) - zm (i, mrad (i) - 1) + delz (i))
                     endif
-                    tem = max ((hrad (i) - zm (i, k) + dz), dz)
+                    tem = max ((hrad (i) - zm (i, k) + delz (i)), delz (i))
                     ptem1 = 1. / tem
-                    xlamde (i, k) = ce0 * (ptem + ptem1)
+                    ! kgao 12 / 08 / 2023
+                    if (use_tke_pbl) then
+                        xlamde (i, k) = ce0t (i) * (ptem + ptem1)
+                    else
+                        xlamde (i, k) = ce0 * (ptem + ptem1)
+                    endif
                 else
-                    xlamde (i, k) = ce0 / dz
+                    xlamde (i, k) = xlamax (i)
                 endif
                 xlamdem (i, k) = cm * xlamde (i, k)
             endif
@@ -4517,37 +4782,38 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
             if (cnvflg (i) .and. k < krad1 (i)) then
                 dz = zm (i, k + 1) - zm (i, k)
                 tem = 0.25 * bb1 * (xlamde (i, k) + xlamde (i, k + 1)) * dz
-                tem1 = bb2 * buo (i, k + 1) * dz
-                ptem = (1. - tem) * wd2 (i, k + 1)
-                ptem1 = 1. + tem
-                wd2 (i, k) = (ptem + tem1) / ptem1
-            endif
-        enddo
-    enddo
-    
-    do i = 1, im
-        flg (i) = cnvflg (i)
-        mrady (i) = mrad (i)
-        if (flg (i)) mradx (i) = krad (i)
-    enddo
-    do k = kmscu, 1, - 1
-        do i = 1, im
-            if (flg (i) .and. k < krad (i)) then
-                if (wd2 (i, k) > 0.) then
-                    mradx (i) = k
+                ! kgao 12 / 15 / 2023 - consider shear effect on wd diagnosis
+                if (use_shear_pbl) then
+                    tem1 = max (wd2 (i, k + 1), 0.)
+                    tem1 = bb2 * buo (i, k + 1) - wush (i, k + 1) * sqrt (tem1)
+                    tem2 = tem1 * dz
+                    ptem = (1. - tem) * wd2 (i, k + 1)
+                    ptem1 = 1. + tem
+                    wd2 (i, k) = (ptem + tem2) / ptem1
                 else
-                    flg (i) = .false.
+                    tem1 = bb2 * buo (i, k + 1) * dz
+                    ptem = (1. - tem) * wd2 (i, k + 1)
+                    ptem1 = 1. + tem
+                    wd2 (i, k) = (ptem + tem1) / ptem1
                 endif
             endif
         enddo
     enddo
     
     do i = 1, im
-        if (cnvflg (i)) then
-            if (mrad (i) < mradx (i)) then
-                mrad (i) = mradx (i)
+        flg (i) = cnvflg (i)
+        if (flg (i)) mrad (i) = krad (i)
+    enddo
+    do k = kmscu, 1, - 1
+        do i = 1, im
+            if (flg (i) .and. k < krad (i)) then
+                if (wd2 (i, k) > 0.) then
+                    mrad (i) = k
+                else
+                    flg (i) = .false.
+                endif
             endif
-        endif
+        enddo
     enddo
     
     do i = 1, im
@@ -4569,19 +4835,23 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     
     do k = 1, kmscu
         do i = 1, im
-            if (cnvflg (i) .and. mrady (i) < mradx (i)) then
-                dz = zl (i, k + 1) - zl (i, k)
+            if (cnvflg (i)) then
                 if (k >= mrad (i) .and. k < krad (i)) then
                     if (mrad (i) == 1) then
-                        ptem = 1. / (zm (i, k) + dz)
+                        ptem = 1. / (zm (i, k) + delz (i))
                     else
-                        ptem = 1. / (zm (i, k) - zm (i, mrad (i) - 1) + dz)
+                        ptem = 1. / (zm (i, k) - zm (i, mrad (i) - 1) + delz (i))
                     endif
-                    tem = max ((hrad (i) - zm (i, k) + dz), dz)
+                    tem = max ((hrad (i) - zm (i, k) + delz (i)), delz (i))
                     ptem1 = 1. / tem
-                    xlamde (i, k) = ce0 * (ptem + ptem1)
+                    ! kgao 12 / 08 / 2023
+                    if (use_tke_pbl) then
+                        xlamde (i, k) = ce0t (i) * (ptem + ptem1)
+                    else
+                        xlamde (i, k) = ce0 * (ptem + ptem1)
+                    endif
                 else
-                    xlamde (i, k) = ce0 / dz
+                    xlamde (i, k) = xlamax (i)
                 endif
                 xlamdem (i, k) = cm * xlamde (i, k)
             endif
@@ -4617,15 +4887,11 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     
     do k = kmscu, 1, - 1
         do i = 1, im
-            if (cnvflg (i) .and. (k >= mrad (i) .and. k < krad (i))) then
-                if (wd2 (i, k) > 0.) then
-                    tem = sqrt (wd2 (i, k))
-                else
-                    tem = 0.
-                endif
-                xmfd (i, k) = ra1 (i) * tem
-            endif
-        enddo
+            if (cnvflg (i) .and. &
+                (k >= mrad (i) .and. k < krad (i))) then
+            xmfd (i, k) = ra1 (i) * sqrt (wd2 (i, k))
+        endif
+    enddo
     enddo
     
     ! -----------------------------------------------------------------------
@@ -4664,13 +4930,14 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     
     do k = kmscu, 1, - 1
         do i = 1, im
-            if (cnvflg (i) .and. (k >= mrad (i) .and. k < krad (i))) then
-                xmfd (i, k) = scaldfunc (i) * xmfd (i, k)
-                dz = zl (i, k + 1) - zl (i, k)
-                xmmx = dz / dt2
-                xmfd (i, k) = min (xmfd (i, k), xmmx)
-            endif
-        enddo
+            if (cnvflg (i) .and. &
+                (k >= mrad (i) .and. k < krad (i))) then
+            xmfd (i, k) = scaldfunc (i) * xmfd (i, k)
+            dz = zl (i, k + 1) - zl (i, k)
+            xmmx = dz / dt2
+            xmfd (i, k) = min (xmfd (i, k), xmmx)
+        endif
+    enddo
     enddo
     
     ! -----------------------------------------------------------------------
@@ -4697,36 +4964,36 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     
     do k = kmscu, 1, - 1
         do i = 1, im
-            if (cnvflg (i) .and. (k >= mrad (i) .and. k < krad (i))) then
-                dz = zl (i, k + 1) - zl (i, k)
-                tem = 0.5 * xlamde (i, k) * dz
-                factor = 1. + tem
-                
-                thld (i, k) = ((1. - tem) * thld (i, k + 1) + tem * &
-                     (thlx (i, k) + thlx (i, k + 1))) / factor
-                qtd (i, k) = ((1. - tem) * qtd (i, k + 1) + tem * &
-                     (qtx (i, k) + qtx (i, k + 1))) / factor
-                
-                tld = thld (i, k) / pix (i, k)
-                es = 0.01 * mqs (tld) ! mqs in pa
-                qs = max (qmin, eps * es / (plyr (i, k) + epsm1 * es))
-                dq = qtd (i, k) - qs
-                
-                if (dq > 0.) then
-                    gamma = el2orc * qs / (tld ** 2)
-                    qld = dq / (1. + gamma)
-                    qtd (i, k) = qs + qld
-                    qcdo (i, k, 1) = qs
-                    qcdo (i, k, ntcw) = qld
-                    tcdo (i, k) = tld + elocp * qld
-                else
-                    qcdo (i, k, 1) = qtd (i, k)
-                    qcdo (i, k, ntcw) = 0.
-                    tcdo (i, k) = tld
-                endif
-                
+            if (cnvflg (i) .and. &
+                (k >= mrad (i) .and. k < krad (i))) then
+            dz = zl (i, k + 1) - zl (i, k)
+            tem = 0.5 * xlamde (i, k) * dz
+            factor = 1. + tem
+            
+            thld (i, k) = ((1. - tem) * thld (i, k + 1) + tem * &
+                (thlx (i, k) + thlx (i, k + 1))) / factor
+            qtd (i, k) = ((1. - tem) * qtd (i, k + 1) + tem * &
+                (qtx (i, k) + qtx (i, k + 1))) / factor
+            
+            tld = thld (i, k) / pix (i, k)
+            es = 0.01 * mqs (tld) ! mqs in pa
+            qs = max (qmin, eps * es / (plyr (i, k) + epsm1 * es))
+            dq = qtd (i, k) - qs
+            
+            if (dq > 0.) then
+                gamma = el2orc * qs / (tld ** 2)
+                qld = dq / (1. + gamma)
+                qtd (i, k) = qs + qld
+                qcdo (i, k, 1) = qs
+                qcdo (i, k, ntcw) = qld
+                tcdo (i, k) = tld + elocp * qld
+            else
+                qcdo (i, k, 1) = qtd (i, k)
+                qcdo (i, k, ntcw) = 0.
+                tcdo (i, k) = tld
             endif
-        enddo
+        endif
+    enddo
     enddo
     
     do k = kmscu, 1, - 1
@@ -4739,10 +5006,10 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
                     ptem = tem - pgcon
                     ptem1 = tem + pgcon
                     
-                    ucdo (i, k) = ((1. - tem) * ucdo (i, k + 1) + ptem * u1 (i, k + 1) &
-                         + ptem1 * u1 (i, k)) / factor
-                    vcdo (i, k) = ((1. - tem) * vcdo (i, k + 1) + ptem * v1 (i, k + 1) &
-                         + ptem1 * v1 (i, k)) / factor
+                    ucdo (i, k) = ((1. - tem) * ucdo (i, k + 1) + ptem * u1 (i, k + 1) + &
+                        ptem1 * u1 (i, k)) / factor
+                    vcdo (i, k) = ((1. - tem) * vcdo (i, k + 1) + ptem * v1 (i, k + 1) + &
+                        ptem1 * v1 (i, k)) / factor
                 endif
             endif
         enddo
@@ -4794,7 +5061,7 @@ subroutine mfscu (im, km, kmscu, ntcw, ntrac1, delt, &
     
     return
 
-end subroutine mfscu
+end subroutine mfscuq
 
 ! =======================================================================
 ! routine to solve the tridiagonal system to calculate temperature and
@@ -4912,4 +5179,4 @@ subroutine tridin (l, n, nt, cl, cm, cu, r1, r2, au, a1, a2)
 
 end subroutine tridin
 
-end module sa_tke_edmf_mod
+end module sa_tke_edmf_new_mod

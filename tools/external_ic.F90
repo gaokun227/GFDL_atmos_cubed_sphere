@@ -42,7 +42,11 @@ module external_ic_mod
    use tracer_manager_mod, only: set_tracer_profile
    use field_manager_mod,  only: MODEL_ATMOS
 
+#ifdef OVERLOAD_R4
+   use constantsR4_mod,   only: pi=>pi_8, grav, kappa, rdgas, rvgas, cp_air
+#else
    use constants_mod,     only: pi=>pi_8, grav, kappa, rdgas, rvgas, cp_air
+#endif
    use fv_arrays_mod,     only: omega ! scaled for small earth
    use fv_arrays_mod,     only: fv_atmos_type, fv_grid_type, fv_grid_bounds_type, R_GRID
    use fv_diagnostics_mod,only: prt_maxmin, prt_mxm, prt_gb_nh_sh, prt_height
@@ -449,6 +453,7 @@ contains
       if ( Atm%flagstruct%do_inline_pbl ) then
         call register_restart_field(SFC_restart, 'slmsk', Atm%inline_pbl%lsm, dim_names_alloc)
         call register_restart_field(SFC_restart, 'zorl', Atm%inline_pbl%zorl, dim_names_alloc)
+        !call register_restart_field(SFC_restart, 'ztrl', Atm%inline_pbl%ztrl, dim_names_alloc)
         call register_restart_field(SFC_restart, 'ffmm', Atm%inline_pbl%ffmm, dim_names_alloc)
         call register_restart_field(SFC_restart, 'ffhh', Atm%inline_pbl%ffhh, dim_names_alloc)
         Atm%inline_pbl%tsfc = Atm%ts
@@ -1946,6 +1951,7 @@ contains
             call register_axis(SFC_restart, dim_names_alloc(1), "x")
             call register_restart_field(SFC_restart, 'slmsk', Atm%inline_pbl%lsm, dim_names_alloc)
             call register_restart_field(SFC_restart, 'zorl', Atm%inline_pbl%zorl, dim_names_alloc)
+            !call register_restart_field(SFC_restart, 'ztrl', Atm%inline_pbl%ztrl, dim_names_alloc)
             call register_restart_field(SFC_restart, 'ffmm', Atm%inline_pbl%ffmm, dim_names_alloc)
             call register_restart_field(SFC_restart, 'ffhh', Atm%inline_pbl%ffhh, dim_names_alloc)
             Atm%inline_pbl%tsfc = Atm%ts

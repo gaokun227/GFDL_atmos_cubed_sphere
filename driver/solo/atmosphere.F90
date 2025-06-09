@@ -54,6 +54,7 @@ use fv_dynamics_mod,    only: fv_dynamics
 use fv_nesting_mod,     only: twoway_nesting
 use gfdl_mp_mod,        only: gfdl_mp_init, gfdl_mp_end
 use sa_tke_edmf_mod,    only: sa_tke_edmf_init
+use sa_tke_edmf_new_mod,only: sa_tke_edmf_new_init
 use sa_sas_mod,         only: sa_sas_init
 use sa_aamf_mod,        only: sa_aamf_init
 use sa_gwd_mod,         only: sa_gwd_init
@@ -167,13 +168,18 @@ contains
                           Time, axes, Atm(mygrid)%gridstruct%agrid(isc:iec,jsc:jec,2))
      endif
 
-     if (.not. Atm(mygrid)%flagstruct%adiabatic) call gfdl_mp_init (input_nml_file, stdlog(), Atm(mygrid)%flagstruct%hydrostatic)
-     if (Atm(mygrid)%flagstruct%do_inline_pbl) call sa_tke_edmf_init(input_nml_file, stdlog())
-     if (Atm(mygrid)%flagstruct%do_inline_cnv) then
-       if (Atm(mygrid)%flagstruct%inline_cnv_flag .eq. 1) call sa_sas_init(input_nml_file, stdlog())
-       if (Atm(mygrid)%flagstruct%inline_cnv_flag .eq. 2) call sa_aamf_init(input_nml_file, stdlog())
+     if (.not. Atm(mygrid)%flagstruct%adiabatic) then
+         call gfdl_mp_init (input_nml_file, stdlog(), Atm(mygrid)%flagstruct%hydrostatic)
+         if (Atm(mygrid)%flagstruct%do_inline_pbl) then
+           if (Atm(mygrid)%flagstruct%inline_pbl_flag .eq. 1) call sa_tke_edmf_init(input_nml_file, stdlog())
+           if (Atm(mygrid)%flagstruct%inline_pbl_flag .eq. 2) call sa_tke_edmf_new_init(input_nml_file, stdlog())
+         endif
+         if (Atm(mygrid)%flagstruct%do_inline_cnv) then
+           if (Atm(mygrid)%flagstruct%inline_cnv_flag .eq. 1) call sa_sas_init(input_nml_file, stdlog())
+           if (Atm(mygrid)%flagstruct%inline_cnv_flag .eq. 2) call sa_aamf_init(input_nml_file, stdlog())
+         endif
+         if (Atm(mygrid)%flagstruct%do_inline_gwd) call sa_gwd_init(input_nml_file, stdlog())
      endif
-     if (Atm(mygrid)%flagstruct%do_inline_gwd) call sa_gwd_init(input_nml_file, stdlog())
 
      if ( Atm(mygrid)%flagstruct%nudge )    &
           call fv_nwp_nudge_init( Time, axes, Atm(mygrid)%npz, zvir, Atm(mygrid)%ak, Atm(mygrid)%bk, Atm(mygrid)%ts, &

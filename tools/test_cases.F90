@@ -21,7 +21,11 @@
 
  module test_cases_mod
 
+#ifdef OVERLOAD_R4
+      use constantsR4_mod,   only: cnst_radius=>radius, pi=>pi_8, cnst_omega=>omega, grav, kappa, rdgas, cp_air, rvgas
+#else
       use constants_mod,     only: cnst_radius=>radius, pi=>pi_8, cnst_omega=>omega, grav, kappa, rdgas, cp_air, rvgas
+#endif
       use fv_arrays_mod,     only: radius, omega ! scaled for small earth
       use init_hydro_mod,    only: p_var, hydro_eq, hydro_eq_ext
       use fv_mp_mod,         only: is_master,        &
@@ -6106,9 +6110,10 @@ end subroutine terminator_tracers
         if (flagstruct%do_inline_pbl) then
             inline_pbl%lsm = 0
             inline_pbl%zorl = 0.1
+            inline_pbl%ztrl = 0.1
             inline_pbl%ffmm = 10.0
             inline_pbl%ffhh = 10.0
-            inline_pbl%tsfc = Ts_TC ! KGao !300.
+            inline_pbl%tsfc = Ts_TC !300.
             inline_pbl%shdmax = 0.0
             inline_pbl%vtype = 0.0
             inline_pbl%vfrac = 0.0
