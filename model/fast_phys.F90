@@ -557,7 +557,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
                     !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
 
->>>>>>> shield2024_inline_ljz
             endif
 
             ! update u, v, T, q, and delp, vertical index flip over
