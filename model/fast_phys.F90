@@ -145,9 +145,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
    
-    real, allocatable, dimension (:,:,:) :: deform_1h, deform_1v, deform_2 ! KGao: 3D-SA-TKE
+    real, allocatable, dimension (:,:,:) :: deform_1h, deform_1v ! KGao: 3D-SA-TKE
                 
-    real, allocatable, dimension (:,:) :: def_1h, def_1v, def_2 ! KGao: 3D-SA-TKE
+    real, allocatable, dimension (:,:) :: def_1h, def_1v ! KGao: 3D-SA-TKE
     
     real (kind = r8), allocatable, dimension (:) :: tz
 
@@ -259,8 +259,6 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         allocate (deform_1v (isd:ied, jsd:jed, km))
         allocate (def_1h (is:ie, 1:km)) 
         allocate (def_1v (is:ie, 1:km)) 
-        !allocate (deform_2 (isd:ied, jsd:jed, km))
-        !allocate (def_2 (is:ie, 1:km))
 
         ! initialize wind tendencies
         do k = 1, km
@@ -292,12 +290,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
         ! KGao: 3D-SA-TKE
         if (do_3dtke) then
-            ! deform_2 is not considered yet (requires mpp_update_domains for tke)
             call mpp_update_domains(ua, va, domain, gridtype=AGRID)
             call mpp_update_domains(u , v , domain, gridtype=DGRID_NE)
-            !call mpp_update_domains(q(:,:,:,ntke), domain)
+            call mpp_update_domains(w, domain)
 
-            call cal_3d_tke_budget(u, v, ua, va, w, q(:,:,:,ntke),   &
+            call cal_3d_tke_budget(u, v, ua, va, w, &
                                    delz, km, ak, bk, gridstruct, bd, &
                                    deform_1h, deform_1v)
         endif

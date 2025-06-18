@@ -946,8 +946,15 @@ module sw_core_mod
          smag_q(:,:) = 0.
       endif
 
-      call fv_tp_2d(delp, crx_adv, cry_adv, npx, npy, hord_dp, fx, fy,  &
+      ! KGao: apply 2nd order damping to delp via calling fv_tp_2d
+      if (damp_flag .gt. 0 .and. cs > 1.e-5) then
+        call fv_tp_2d(delp, crx_adv, cry_adv, npx, npy, hord_dp, fx, fy,  &
+                    xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, nord=nord_v, damp_c=damp_v, &
+                    damp_smag=cs, damp_Km=smag_q)
+      else 
+        call fv_tp_2d(delp, crx_adv, cry_adv, npx, npy, hord_dp, fx, fy,  &
                     xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, nord=nord_v, damp_c=damp_v)
+      endif
 
 ! <<< Save the mass fluxes to the "Flux Capacitor" for tracer transport >>>
         do j=jsd,jed
@@ -1052,7 +1059,7 @@ module sw_core_mod
 !       enddo
 !    endif
 #if defined(GFS_PHYS) || defined(DCMIP)
-        ! KGao: apply damping to pt (using Lucas's code)
+        ! KGao: apply damping to pt via calling fv_tp_2d (using Lucas's code)
         ! there are two steps involved:
         ! - first is the higher-order damping using vtdm4,
         ! - second is the 2nd order damping (scaled by smag_scalar)
@@ -1613,7 +1620,7 @@ module sw_core_mod
         vt = 0.
    endif
 
-   ! KGao: apply 2nd order damping to vorticity (using Lucas's code)
+   ! KGao: apply 2nd order damping to vorticity via calling del6_vt_flux (using Lucas's code)
    !       this is an additional step after the higher-order damping using vtdm4
    if ( damp_flag .gt. 0 .and. cs > 1.e-5) then
        damp4 = cs * gridstruct%da_min_c

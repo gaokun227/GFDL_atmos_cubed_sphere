@@ -139,8 +139,11 @@ module sa_tke_edmf_mod
     logical :: no_mf         = .false. ! flag for turning off mass-flux effect
     logical :: use_const_l2  = .false. ! flag for using a constant l2 parameter 
     logical :: use_const_cd  = .false. ! flag for using constant surface exchange coeff
+    logical :: use_simple_k  = .false. ! flag for using a simple k formula, where cm and pr are set to constants
+                                       ! ck0 and pr0 are used 
     real    :: cd0           = 0.0011  ! constant surface drag coeff for idealized tests
     real    :: cs            = 0.      ! cs parameter for kh (should be same as in dycore)
+    real    :: pr0           = 1./3  
 
     ! -----------------------------------------------------------------------
     ! namelist
@@ -152,7 +155,7 @@ module sa_tke_edmf_mod
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        no_mf, use_const_l2, use_const_cd, cd0, cs
+        no_mf, use_const_l2, use_const_cd, use_simple_k, cd0, cs, pr0
 
 contains
 
@@ -1096,6 +1099,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             tem1 = min (tem, rlmn)
             
             ptem2 = min (zlup, zldn)
+
             rlam (i, k) = elmfac * ptem2
             rlam (i, k) = max (rlam (i, k), tem1)
             rlam (i, k) = min (rlam (i, k), rlmx)
@@ -1150,7 +1154,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     ! -----------------------------------------------------------------------
     ! compute eddy diffusivities
     ! -----------------------------------------------------------------------
-    
+
     do k = 1, km1
         do i = 1, im
             tem = 0.5 * (elm (i, k) + elm (i, k + 1))
@@ -1208,7 +1212,20 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             dkq (i, k) = dkq (i, k) + ptem
         endif
     enddo
-    
+
+    ! KGao: use a simple K formulation, in which cm and pr are constant
+    ! Are TKE lagged?
+    if ( use_simple_k ) then  
+      do k = 1, km1
+         do i = 1, im
+            tem = 0.5 * (elm (i, k) + elm (i, k + 1))
+            tem = tem * sqrt (tkeh (i, k))
+            dku (i, k) = ck0 * tem
+            dkt (i, k) = dku (i, k) / pr0
+         enddo
+      enddo
+    endif
+       
     if (present (dkt_out)) then
         do k = 1, km1
             do i = 1, im
