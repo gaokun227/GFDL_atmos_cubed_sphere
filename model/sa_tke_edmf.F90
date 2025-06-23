@@ -1220,7 +1220,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
          do i = 1, im
             tem = 0.5 * (elm (i, k) + elm (i, k + 1))
             tem = tem * sqrt (tkeh (i, k))
-            dku (i, k) = ck0 * tem
+            dku (i, k) = cs * tem
             dkt (i, k) = dku (i, k) / pr0
          enddo
       enddo
