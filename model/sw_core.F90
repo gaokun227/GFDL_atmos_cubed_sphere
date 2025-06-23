@@ -1087,9 +1087,17 @@ module sw_core_mod
            enddo
         enddo
         do iq=1,nq
-           call fv_tp_2d(q(isd,jsd,k,iq), crx_adv,cry_adv, npx, npy, hord_tr, gx, gy,  &
+           ! KGao: apply 2nd-order TKE-based damping to tracers via calling fv_tp_2d
+           if (damp_flag .eq. 2 .and. cs > 1.e-5) then
+              call fv_tp_2d(q(isd,jsd,k,iq), crx_adv,cry_adv, npx, npy, hord_tr, gx, gy,  &
+                         xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
+                         mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t, damp_smag=cs*smag_scalar, damp_Km=smag_q)
+           else
+              call fv_tp_2d(q(isd,jsd,k,iq), crx_adv,cry_adv, npx, npy, hord_tr, gx, gy,  &
                          xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
                          mfx=fx, mfy=fy, mass=delp, nord=nord_t, damp_c=damp_t)
+           endif
+
            do j=js,je
               do i=is,ie
                  q(i,j,k,iq) = (q(i,j,k,iq)*wk(i,j) +               &
