@@ -1728,7 +1728,7 @@ module sw_core_mod
       enddo
       do j=js,je+1
          do i=is,ie
-            fy2(i,j) = fy2(i,j)*0.5(damp_km(i,j-1)+damp_km(i,j))
+            fy2(i,j) = fy2(i,j)*0.5*(damp_km(i,j-1)+damp_km(i,j))
          enddo
       enddo
 
