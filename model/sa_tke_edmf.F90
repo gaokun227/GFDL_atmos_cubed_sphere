@@ -1363,20 +1363,33 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
 
             if ( present(shr3d_h) .and. present(shr3d_v)) then
 
-              if (cs < 1.e-5) then
-                 dkh(i, k) = dku(i, k)
-              else
-                 dkh(i, k) = cs * sqrt( gdx(i) ) * sqrt (tkeh (i, k)) 
+              !if (cs < 1.e-5) then
+              !   dkh(i, k) = dku(i, k)
+              !else
+              !   dkh(i, k) = cs * sqrt( gdx(i) ) * sqrt (tkeh (i, k)) 
+              !endif
+
+              !if (k == 1 ) then
+              !  tem = dkh(i, k) * shr3d_h(i, k) + dku(i, k) * shr3d_v(i, k)
+              !else
+              !  tem1 = dkh(i, k-1) * shr3d_h(i, k-1) + dku(i, k-1) * shr3d_v(i, k-1) ! dku is at layer interfaces 
+              !  tem2 = dkh(i, k) * shr3d_h(i, k)     + dku(i, k) * shr3d_v(i, k)
+              !  tem = 0.5 * (tem1 + tem2)
+              !endif
+              !shrp = tem
+
+              dkh(i, k) = cs * sqrt(gdx(i)) * sqrt(tke(i, k)) ! define dkh at layer center
+
+              tem1 = dkh(i, k) * shr3d_h(i, k)
+
+              if ( k == 1 ) then
+                 tem2 = dku(i, k) * shr3d_v(i, k)
+              else  
+                 tem2 = 0.5 * ( dku(i, k-1) + dku(i, k) ) * shr3d_v(i, k) ! dku is at layer interface
               endif
 
-              if (k ==1) then
-                tem = dkh(i, k) * shr3d_h(i, k) + dku(i, k) * shr3d_v(i, k)
-              else
-                tem1 = dkh(i, k-1) * shr3d_h(i, k-1) + dku(i, k-1) * shr3d_v(i, k-1) ! dku is at layer interfaces 
-                tem2 = dkh(i, k) * shr3d_h(i, k)     + dku(i, k) * shr3d_v(i, k)
-                tem = 0.5 * (tem1 + tem2)
-              endif
-              shrp = tem
+              shrp = tem1 + tem2
+
             endif
             !3D-SA-TKE-end
 
@@ -1796,7 +1809,20 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         hpbl (i) = hpblx (i)
         kpbl (i) = kpblx (i)
     enddo
-    
+   
+    ! KGao: diag tke budget
+    k = 8 
+    do i = 1, im
+       if ( present(shr3d_h) .and. present(shr3d_v)) then
+         tem = dkh(i, k)*shr3d_h(i, k) + 0.5*(dku(i,k-1)+dku(i, k))*shr3d_v(i, k)
+       else
+         tem1 = dku (i, k - 1) * shr2 (i, k - 1)
+         tem2 = dku (i, k) * shr2 (i, k)
+         tem = 0.5 * (tem1 + tem2) 
+       endif
+
+       hpbl (i) = tem
+    enddo 
     return
 
 end subroutine sa_tke_edmf_pbl
