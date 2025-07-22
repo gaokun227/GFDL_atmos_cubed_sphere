@@ -34,10 +34,12 @@ contains
 ! =======================================================================
 ! cal_3d_tke_budget :: calculate 3D TKE shear production
 ! - this version is created based on Ping Zhu's anisotropic 
-!   turbulence shear production formulation (REF to be added) and also
-!   his code for 3D TKE shear production  
-! - in this verion we use D-grid wind, instead of A-grid wind 
-! - the algorithms are updated to be consistent with FV3
+!   turbulence shear production formulation (Zhu et al. 2025) and also
+!   his original code for 3D TKE shear production  
+! - in this verion we use the native D-grid wind as much as possbile for
+!   computing strain-rate tensor elements
+! - each element is strictly defined at D-grid cell center and layer center
+! - the algorithms are updated to be consistent with finite-volume method 
 ! - created by Kun Gao (kun.gao@noaa.gov)
 ! =======================================================================
 
@@ -107,7 +109,9 @@ contains
 !===========================================================
 ! Calculate deform_1h and deform_1v
 !
-!      shr_prod = kh * deform_1h + kv * deform_1v
+! See Eq.11 in Zhu et al. 2025 (doi.org/10.1038/s41612-025-01117-6) 
+!
+!      shr_prod = kh * deform_1h + kv * deform_1v 
 !
 !     deform_1h = (2*(du/dx**2 + dv/dy**2)
 !                  + (du/dy + dv/dx)**2
