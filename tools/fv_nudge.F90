@@ -105,7 +105,12 @@ module fv_nwp_nudge_mod
                                                  ! proportional to pfull/P_relax
 
  real   :: P_norelax = 0.0                       ! from P_norelax upwards, no nudging
-! <--- h1g, 2012-10-22
+
+ logical :: use_target  = .false.
+
+ real   :: P_target(5) = [0, 0, 0, 0, 0] 
+
+ ! <--- h1g, 2012-10-22
 
  character(len=128):: file_names(nfile_max)
  character(len=128):: track_file_name
@@ -222,7 +227,7 @@ module fv_nwp_nudge_mod
                           kbot_t, kbot_q, p_wvp, time_varying, time_interval, use_pt_inc, pt_lim,  &
                           tau_vt_rad, r_lo, r_hi, use_high_top, add_bg_wind, conserve_mom, conserve_hgt,  &
                           min_nobs, min_mslp, nudged_time, r_fac, r_min, r_inc, ibtrack, track_file_name, file_names,         &
-                          input_fname_list, analysis_file_first, analysis_file_last, P_relax, P_norelax, &
+                          input_fname_list, analysis_file_first, analysis_file_last, use_target, P_target, P_relax, P_norelax, &
                           nwp_nudge_int, time_varying_nwp, using_merra2, climate_nudging
 
  contains
@@ -345,6 +350,34 @@ module fv_nwp_nudge_mod
      if( press(k) < P_norelax ) profile(k) = 0.0
   enddo
   profile(1) = 0.
+
+  ! KGao test: only nudge the level closest to P_target
+  if (use_target) then
+     profile(:) = 0.
+
+     do j = 1, 5 ! loop over P_target
+
+       if ( P_target(j) > 1) then
+
+         ! find the model level closest to P_target(j)
+         i = 1
+         rms = abs(press(1) - P_target(j))
+         do k = 2, npz
+            ptmp = abs(press(k) - P_target(j))
+            if (ptmp < rms) then
+              rms = ptmp
+              i = k
+            end if
+         enddo
+         ! set weight to 1 at this level
+         profile(i) = 1.
+
+         if (master) write(*,*) 'Using nudging for this level (target and model levels):', P_target(j), press(i)
+
+       endif
+     enddo
+
+  endif
 
 ! Thermodynamics:
   prof_t(:) = 1.
@@ -769,7 +802,7 @@ module fv_nwp_nudge_mod
       real, intent(inout):: q(isd:ied,jsd:jed,npz,nwat)
 ! local
       real, dimension(is:ie,js:je):: ps_dt
-      integer, parameter:: kmax = 100
+      integer, parameter:: kmax = 127 !100
       real:: pn0(kmax+1), pk0(kmax+1)
       real, dimension(is:ie,npz+1):: pe2, peln
       real:: pst, dbk, pt0, rdt, bias
@@ -1328,9 +1361,9 @@ module fv_nwp_nudge_mod
 !        call mpp_error(FATAL,'==> Error from get_ncep_analysis: T field not found')
 !   endif
     call open_ncfile( file_names(1), ncid )        ! open the file
-    call get_ncdim1( ncid, 'lon', im )
-    call get_ncdim1( ncid, 'lat', jm )
-    call get_ncdim1( ncid, 'lev', km )
+    call get_ncdim1( ncid, 'grid_xt', im )
+    call get_ncdim1( ncid, 'grid_yt', jm )
+    call get_ncdim1( ncid, 'pfull', km )
     if(master)  write(*,*) 'NCEP analysis dimensions:', im, jm, km
 
     allocate ( s2c(is:ie,js:je,4) )
@@ -1341,8 +1374,8 @@ module fv_nwp_nudge_mod
     allocate (  lon(im) )
     allocate (  lat(jm) )
 
-    call _GET_VAR1 (ncid, 'lon', im, lon )
-    call _GET_VAR1 (ncid, 'lat', jm, lat )
+    call _GET_VAR1 (ncid, 'grid_xt', im, lon )
+    call _GET_VAR1 (ncid, 'grid_yt', jm, lat )
 
 ! Convert to radian
     do i=1,im
@@ -1355,17 +1388,55 @@ module fv_nwp_nudge_mod
     allocate ( ak0(km+1) )
     allocate ( bk0(km+1) )
 
-    call _GET_VAR1 (ncid, 'hyai', km+1, ak0, found )
-    if ( .not. found )  ak0(:) = 0.
+    ak0 = (/ &
+     0.999, 1.605, 2.532, 3.924, 5.976, 8.947, 13.177, 19.096, &
+     27.243, 38.276, 52.984, 72.293, 97.269, 129.11, 169.135, 218.767, &
+     279.506, 352.894, 440.481, 543.782, 664.236, 803.164, 961.734, 1140.931, &
+     1341.538, 1564.119, 1809.028, 2076.415, 2366.252, 2678.372, 3012.51, 3368.363, &
+     3745.646, 4144.164, 4563.881, 5004.995, 5468.017, 5953.848, 6463.864, 7000.0, &
+     7563.494, 8150.661, 8756.529, 9376.141, 10004.55, 10636.85, 11268.16, 11893.64, &
+     12508.52, 13108.09, 13687.73, 14242.89, 14769.15, 15262.2, 15717.86, 16132.09, &
+     16501.02, 16820.94, 17088.32, 17299.85, 17453.08, 17548.35, 17586.77, 17569.7, &
+     17498.7, 17375.56, 17202.3, 16981.14, 16714.5, 16405.02, 16055.49, 15668.86, &
+     15248.25, 14796.87, 14318.04, 13815.15, 13291.63, 12750.92, 12196.47, 11631.66, &
+     11059.83, 10484.21, 9907.927, 9333.967, 8765.155, 8204.142, 7653.387, 7115.147, &
+     6591.468, 6084.176, 5594.876, 5124.949, 4675.554, 4247.633, 3841.918, 3458.933, &
+     3099.01, 2762.297, 2448.768, 2158.238, 1890.375, 1644.712, 1420.661, 1217.528, &
+     1034.524, 870.778, 725.348, 597.235, 485.392, 388.734, 306.149, 236.502, &
+     178.651, 131.447, 93.74, 64.392, 42.274, 26.274, 15.302, 8.287, &
+     4.19, 1.994, 0.81, 0.232, 0.029, 0.0, 0.0, 0.0 /)
 
-    call _GET_VAR1 (ncid, 'hybi', km+1, bk0 )
+    bk0 = (/ &
+     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, &
+     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, &
+     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, &
+     0.0, 0.0, 0.0, 0.0, 1.018e-05, 8.141e-05, 0.00027469, 0.00065078, &
+     0.00127009, 0.00219248, 0.00347713, 0.00518228, 0.00736504, 0.0100812, &
+     0.01338492, 0.01732857, 0.02196239, 0.02733428, 0.03348954, 0.04047056, &
+     0.04831661, 0.05706358, 0.06674372, 0.07738548, 0.08900629, 0.101594, &
+     0.1151262, 0.1295762, 0.1449129, 0.1611008, 0.1780999, 0.195866, &
+     0.2143511, 0.2335031, 0.2532663, 0.2735822, 0.294389, 0.3156229, &
+     0.337218, 0.3591072, 0.3812224, 0.4034951, 0.4258572, 0.4482413, &
+     0.4705813, 0.492813, 0.5148743, 0.5367062, 0.5582525, 0.5794605, &
+     0.6002815, 0.6206707, 0.6405875, 0.6599957, 0.6788633, 0.6971631, &
+     0.714872, 0.7319713, 0.7484465, 0.7642871, 0.7794867, 0.7940422, &
+     0.8079541, 0.8212263, 0.8338652, 0.8458801, 0.8572826, 0.8680866, &
+     0.8783077, 0.8879632, 0.8970718, 0.9056532, 0.9137284, 0.9213187, &
+     0.9284464, 0.9351338, 0.9414037, 0.9472789, 0.9527821, 0.957936, &
+     0.962763, 0.9672851, 0.971524, 0.9755009, 0.9792364, 0.9827508, &
+     0.9860625, 0.9891851, 0.9921299, 0.9949077, 0.9975282, 1.0 /)
+
+    !call _GET_VAR1 (ncid, 'hyai', km+1, ak0, found )
+    !if ( .not. found )  ak0(:) = 0.
+
+    !call _GET_VAR1 (ncid, 'hybi', km+1, bk0 )
     call close_ncfile( ncid )
 
 ! Note: definition of NCEP hybrid is p(k) = a(k)*1.E5 + b(k)*ps
-    if ( .not. using_merra2) then
-      ! This is not needed for MERRA2 data
-      ak0(:) = ak0(:) * 1.E5
-    endif
+    !if ( .not. using_merra2) then
+    !  ! This is not needed for MERRA2 data
+    !  ak0(:) = ak0(:) * 1.E5
+    !endif
 ! Limiter to prevent NAN at top during remapping
     if ( bk0(1) < 1.E-9 ) ak0(1) = max(1.e-9, ak0(1))
 
@@ -1432,7 +1503,7 @@ module fv_nwp_nudge_mod
   integer:: i, j, k, npt
   integer:: i1, i2, j1, ncid
   logical found
-  logical:: read_ts = .true.
+  logical:: read_ts = .false.
   logical:: land_ts = .false.
 
   integer:: status, var3id    ! h1g, 2016-08-10
@@ -1536,7 +1607,7 @@ module fv_nwp_nudge_mod
 !----------------------------------
 
      allocate ( wk2(im,jbeg:jend) )
-     call get_var3_r4( ncid, 'PS', 1,im, jbeg,jend, 1,1, wk2 )
+     call get_var3_r4( ncid, 'pressfc', 1,im, jbeg,jend, 1,1, wk2 )
 
      do j=js,je
         do i=is,ie
@@ -1548,6 +1619,7 @@ module fv_nwp_nudge_mod
         enddo
      enddo
 
+     call prt_maxmin('PS_ncep', ps, is, ie, js, je, 0, 1, 1.)
 
 ! ---> h1g, read either 'PHIS' or 'PHI', 2016-08-10
      status = nf_inq_varid (ncid,  'PHIS', var3id)
@@ -1555,9 +1627,9 @@ module fv_nwp_nudge_mod
        call get_var3_r4( ncid, 'PHIS', 1,im, jbeg,jend, 1,1, wk2 )
 
      else !there is no 'PHIS'
-       status = nf_inq_varid (ncid,  'PHI', var3id)
+       status = nf_inq_varid (ncid,  'hgtsfc', var3id)
        if (status .eq. NF_NOERR)  then
-         call get_var3_r4( ncid, 'PHI', 1,im, jbeg,jend, 1,1, wk2 )
+         call get_var3_r4( ncid, 'hgtsfc', 1,im, jbeg,jend, 1,1, wk2 )
          wk2 = wk2 * grav  ! convert unit from geopotential meter (m) to geopotential height (m2/s2)
        else
          call mpp_error(FATAL,'Neither PHIS nor PHI exists in re-analysis data')
@@ -1584,7 +1656,7 @@ module fv_nwp_nudge_mod
 ! Winds:
    if ( nudge_winds ) then
 
-      call get_var3_r4( ncid, 'U', 1,im, jbeg,jend, 1,km, wk3 )
+      call get_var3_r4( ncid, 'ugrd', 1,im, jbeg,jend, 1,km, wk3 )
 
       do k=1,km
       do j=js,je
@@ -1598,7 +1670,7 @@ module fv_nwp_nudge_mod
       enddo
       enddo
 
-      call get_var3_r4( ncid, 'V', 1,im, jbeg,jend, 1,km, wk3 )
+      call get_var3_r4( ncid, 'vgrd', 1,im, jbeg,jend, 1,km, wk3 )
 
       do k=1,km
       do j=js,je
@@ -1615,7 +1687,7 @@ module fv_nwp_nudge_mod
    endif
 
 ! Read in tracers: only sphum at this point
-      call get_var3_r4( ncid, 'Q', 1,im, jbeg,jend, 1,km , wk3 )
+      call get_var3_r4( ncid, 'spfh', 1,im, jbeg,jend, 1,km , wk3 )
 
       do k=1,km
       do j=js,je
@@ -1629,7 +1701,7 @@ module fv_nwp_nudge_mod
       enddo
       enddo
 
-      call get_var3_r4( ncid, 'T', 1,im, jbeg,jend, 1,km , wk3 )
+      call get_var3_r4( ncid, 'tmp', 1,im, jbeg,jend, 1,km , wk3 )
       call close_ncfile ( ncid )
 
       do k=1,km
