@@ -4601,7 +4601,9 @@ end subroutine terminator_tracers
         real :: sigma, mu, amp, zint, zmid, qsum, pint, pmid
         real :: N2, N2b, th0, ths, pks, rkap, ampb, thl
         real :: dz, thp, pp, zt, p_t, pkp, dlogp, logpb, lcl, tl, qt
-        integer :: o3mr, liq_wat
+        integer :: o3mr, liq_wat, cnt
+        real :: Cstrch ! xyc added to specify vertical grid for case 104
+        real :: u1(npz), v1(npz)
 
 !Test case 20
         real, dimension(npz+1) :: pe0, gz0, ue, ve, we, pte, qe
@@ -6105,6 +6107,189 @@ end subroutine terminator_tracers
                      moist_phys, hydrostatic, nwat, domain, flagstruct%adiabatic, .not. hydrostatic )
 
 
+        case ( 104 ) !ATOMIC Shallow Cumulus
+           zvir = rvgas/rdgas - 1.
+
+           sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
+           liq_wat = get_tracer_index (MODEL_ATMOS, 'liq_wat')
+           if (liq_wat <= 0) call mpp_error(FATAL, "liq_wat not defined")
+
+           !No topography (simpler)
+
+           t00 = 297.25 ! surface air temperature (to be changed)
+           !N2 = 0.0
+           !N2b = 0.01**2
+           p00 = 101624.77  ! surface pressure, to be changed based on the forcings profiles.
+           pk0 = exp(kappa*log(p00))
+           !th0 = t00/pk0
+
+           !Variable grid spacing: 10 m near surface, 5m near cloud top
+           dz = 40.
+           Cstrch = 1.08
+           ze = 0.
+           zt = 3000. !cloud top, this is set to 3000 for trade Cu
+           !thp = th0  ! this does not get used
+           pkp = pk0
+           ak(npz+1) = 0.0
+           bk(npz+1) = 1.0
+           if (is_master()) print*, 'ATOMIC Test case (104)'
+           if (is_master()) write(*,'(I3, 2F11.3)') npz+1, ak(npz+1), bk(npz+1)
+           if ( is_master() ) write(*,*) 'Model top (pa)=', ptop ! xyc added:
+           ! initialize ze1:
+           ze1=0.0
+           ze1(npz+1) = ze
+           pk1(npz+1) = pk0
+           pe1(npz+1) = p00
+           
+           ! this block defines the vertical grid
+           cnt = 0
+           do k=npz,1,-1
+              !dz1(k) = 10.-5.*sin(pi*ze/1600.)**8  ! this controls the vertical resolution
+              if (ze <= zt) then
+                 dz1(k) = dz
+              elseif (ze>zt) then
+                 cnt = cnt + 1
+                 dz1(k) = dz * exp(cnt * log(Cstrch))
+              endif
+              ze = ze+dz1(k)
+              ze1(k) = ze
+           enddo
+           
+           ! this block specifies the idealized temperature and moisture profiles
+           ! my specific inputs for ATOMIC is the liquid water potential temperature and specific humidity (different from DYCOMSII)
+           do k=1,npz
+              zmid = 0.5*(ze1(k)+ze1(k+1))
+              lcl = 600.
+              !Temperature, moisture is in z-coordinates
+              if ( zmid > zt) then  ! >  3km
+                 tl = 311.54 + 0.004103 * (zmid - zt)
+                 qv1(k) = exp(-0.000491 * (zmid-zt) + 0.86)/1000
+                 qc1(k) = exp(-0.0015*(zmid - zt) -12.53)/1000
+              else if (zmid>lcl) then
+                 tl = 297.25 + 0.005953 * (zmid - lcl)
+                 qv1(k) = (13.67 - 0.004706 * (zmid- lcl))/1000 !kg/kg
+                 if (zmid <=1560) then
+                    qc1(k) = 1e-5 * (cos(pi/1200 * (zmid - 1560)) + 1)
+                 else
+                    qc1(k) = 1e-5 * (cos(pi/2000 * (zmid - 1560)) + 1)
+                 endif
+              else
+                 tl = t00
+                 qv1(k) = 13.67e-3  ! kg/kg
+                 qc1(k) = 0.0
+              endif
+
+              !Liquid water temperature
+              !new constants!
+              ! ts1 is the actual temperature: (I need to convert potential temperature to temperature here)
+               ts1(k) = tl + (hlv*qc1(k) - grav*zmid)/cp_air + 1.34  !GFDL legacy from case 103 
+              !(1.34 is added to reduce diff. with SAM ts1)
+
+
+              if (is_master()) write(*,'(I3, 4(2x,F11.3)), 2x, F9.5') k, ze1(k), tl, ts1(k), qv1(k), qc1(k)
+           enddo
+
+           phis = 0.
+           !u = Umean !m/s input from namelist to allow flexibility
+           !v = Vmean
+           w = 0.
+
+           ! test geostropic wind profile:
+           do k=1, npz
+             ! zmid: 
+             zmid = 0.5*(ze1(k)+ze1(k+1))
+
+             if (zmid >lcl) then
+               u1(k) = 3.50*1e-11*zmid**3 - 3.65*1e-7*zmid**2 + 3.17*1e-3*zmid - 10.97
+             else
+               u1(k) = -7.73 - 0.0026*(zmid - 10.0)
+             endif
+             
+             if (zmid >lcl) then
+               if (zmid >=8000.0) then
+                   v1(k) = 2.50*cos(pi*(zmid-zt)/6200)-3.30
+               else
+                   v1(k) = 2.50*cos(pi*(zmid-zt)/6500)-3.30
+               endif
+             else
+               v1(k) = -2.31
+             endif
+
+              if (is_master()) write(*,'(I3, 3(2x,F11.3))') k, ze1(k),u1(k), v1(k) 
+           enddo
+
+           !Compute pressure, integrating upward
+           pp = p00
+           do k=npz,1,-1
+              dlogp = dz1(k)*grav/(Rdgas * ts1(k)*(1.+zvir*qv1(k)))
+              logpb = log(pp)
+              pp = exp(logpb - dlogp)
+
+              if (ze1(k) >= zt) then
+                 ak(k) = pp
+                 bk(k) = 0.0
+              else
+                 bk(k) = ((zt-ze1(k))/zt)**2
+                 ak(k) = pp - bk(k)*p00
+              endif
+
+              pe1(k) = pp
+              pk1(k) = exp(kappa*log(pp))
+
+              if (is_master()) write(*,'(I3, 4(2x,F11.3))') k, ak(k), bk(k), pp, ze1(k)
+
+           enddo
+
+           call mpp_sync()
+
+
+         do j=js,je
+            do i=is,ie
+               ps(i,j) = p00
+               pe(i,npz+1,j) = p00
+               pk(i,j,npz+1) = pk0
+               peln(i,npz+1,j) = log(p00)
+            enddo
+         enddo
+
+         do k=npz,1,-1
+            do j=js,je
+               do i=is,ie
+                  peln(i,k,j) = log(pe1(k))
+                  delp(i,j,k) = pe1(k+1) - pe1(k)
+                  delz(i,j,k) = ze1(k+1) - ze1(k)
+                  pe(i,k,j) = pe1(k)
+                  pk(i,j,k) = pk1(k)
+                  pkz(i,j,k) = delp(i,j,k)/(peln(i,k+1,j)-peln(i,k,j))
+                  pkz(i,j,k) = exp(kappa*log(pkz(i,j,k)))
+                  pt(i,j,k) = ts1(k)
+                  q(i,j,k,sphum) = qv1(k)
+                  q(i,j,k,liq_wat) = qc1(k)
+               enddo
+            enddo
+            ! u :
+            
+            do j=js,je+1
+              do i=is,ie
+                 ! note: this is idealized geostrophic wind
+                 !u(i,j,k) = -10.5 + 0.003480*(zmid - 10)
+                 u(i,j,k) = u1(k)
+
+             enddo
+            enddo
+
+            do j=js,je
+              do i = is,ie+1
+                !v(i,j,k) = 1.0 - 0.000902*(zmid - 10) 
+                v(i,j,k) = v1(k)
+              enddo
+            enddo
+         enddo
+         ptop = ak(1)
+
+          call p_var(npz, is, ie, js, je, ptop, ptop_min, delp, delz, pt, ps,   &
+                     pe, peln, pk, pkz, kappa, q, ng, ncnst, area, dry_mass, .false., .false., &
+                     moist_phys, hydrostatic, nwat, domain, flagstruct%adiabatic, .not. hydrostatic )
         end select
 
         if (flagstruct%do_inline_pbl) then
@@ -6133,7 +6318,8 @@ end subroutine terminator_tracers
         endif
 
         if (w_forcing) then
-           call init_w_forcing(bd, npx, npy, npz, flagstruct%grid_type, agrid, flagstruct)
+           !call init_w_forcing(bd, npx, npy, npz, flagstruct%grid_type, agrid, flagstruct)
+           call init_w_forcing(bd, npx, npy, npz, flagstruct%grid_type, agrid, flagstruct, test_case)
         endif
 
         flagstruct%is_ideal_case = .true.

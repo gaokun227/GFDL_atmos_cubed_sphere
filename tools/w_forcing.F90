@@ -28,14 +28,19 @@ module w_forcing_mod
 
 contains
 
- subroutine init_w_forcing(bd, npx, npy, npz, grid_type, agrid, flagstruct)!, wft)
+ !subroutine init_w_forcing(bd, npx, npy, npz, grid_type, agrid, flagstruct)!, wft)
+ subroutine init_w_forcing(bd, npx, npy, npz, grid_type, agrid, flagstruct, wft)
 
    type(fv_grid_bounds_type), intent(IN) :: bd
    real  , intent(IN)      :: agrid(bd%isd:bd%ied, bd%jsd:bd%jed)
    integer,intent(IN)      :: npx, npy, npz, grid_type!, wft
+   integer,intent(IN),optional :: wft  ! xyc added
    type(fv_flags_type), target, intent(IN) :: flagstruct
 
    !w_forcing_type = wft
+   if (present(wft)) then
+       w_forcing_type = wft
+   endif
 
    if (grid_type == 4) then
 
@@ -126,10 +131,17 @@ contains
             enddo
          enddo
 
-      case(101)
+      !case(101)
+      case(101, 103, 104)  ! XYC added multiple LES test cases 
          !PBL simulations with specified divergence
          !Nudging domain to w = Dz
          !do not apply in sponge layer
+
+      ! XC note: 104 will update the value of w_forcing_Divg
+         if (w_forcing_type == 104) then
+            w_forcing_Divg = 1.43e-6  !/s
+            w_forcing_tau = dt  !strong nudging at the compute time step
+         endif
 
          dttau=dt/w_forcing_tau
          forc = 1./(1.+dttau)
