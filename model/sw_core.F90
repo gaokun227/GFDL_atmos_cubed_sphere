@@ -1723,12 +1723,12 @@ module sw_core_mod
    if (present(damp_Km)) then !Coefficient multiplied in earlier
       do j=js,je
          do i=is,ie+1
-            fx2(i,j) = fx2(i,j)*0.5*damp_km(i,j)
+            fx2(i,j) = fx2(i,j)*0.5*(damp_km(i-1,j)+damp_km(i,j))
          enddo
       enddo
       do j=js,je+1
          do i=is,ie
-            fy2(i,j) = fy2(i,j)*0.5*damp_km(i,j)
+            fy2(i,j) = fy2(i,j)*0.5*(damp_km(i,j-1)+damp_km(i,j))
          enddo
       enddo
 
