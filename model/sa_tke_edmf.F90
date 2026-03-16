@@ -137,9 +137,9 @@ module sa_tke_edmf_mod
 
     ! KGao: parameters below are for LES and/or idealized simulatons
     logical :: no_mf         = .false. ! flag for turning off mass-flux effect
-    logical :: use_const_l2  = .false. ! flag for using a constant l2 parameter 
+    logical :: use_const_l2  = .false. ! flag for using a constant l2 parameter (set by rlmx)
     logical :: use_const_cd  = .false. ! flag for using constant surface exchange coeff
-    logical :: use_simple_k  = .false. ! flag for using a simple k formula, where cm and pr are set to constants
+    logical :: use_simple_k  = .false. ! flag for using a simple k formula, in which cm and pr are set to constants
                                        ! ck0 and pr0 are used 
     real    :: cd0           = 0.0011  ! constant surface drag coeff for idealized tests
     real    :: cs            = 0.      ! cs parameter for kh (should be same as in dycore)
