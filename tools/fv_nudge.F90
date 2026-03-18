@@ -110,6 +110,7 @@ module fv_nwp_nudge_mod
                                                  ! AI data are assumed to be on fixed pressure levels
                                                  ! if true, nudge_ps is not supported yet
 
+ real    :: ps_tc_mask  = 1020.E2                ! a critical slp value for masking out model tc region  
  logical :: use_target  = .false.                ! a flag to control to apply nuding to selected levels only
  real   :: P_target(15) = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
  character(len=10)::  lon_name = "lon"
@@ -231,7 +232,7 @@ module fv_nwp_nudge_mod
   integer :: isd, ied, jsd, jed
 
  namelist /fv_nwp_nudge_nml/use_ai_data, lon_name, lat_name, lev_name, u_name, v_name, t_name, &
-                          q_name, ps_name, zs_name, use_target, P_target, &
+                          q_name, ps_name, zs_name, ps_tc_mask, use_target, P_target, &
                           T_is_Tv, nudge_ps, nudge_virt, nudge_hght, nudge_q, nudge_winds,  &
                           do_ps_bias, tau_ps, tau_winds, tau_q, tau_virt, tau_hght,  kstart, kbot_winds, &
                           k_breed, k_trop, p_trop, dps_min, kord_data, tc_mask, nudge_debug, nf_ps, nf_t, nf_ht,  &
@@ -420,6 +421,18 @@ module fv_nwp_nudge_mod
        kht = k_trop
   else
        kht = npz-kbot_t
+  endif
+
+  ! KGao: mask out model TC region (determined by sea-level pres) 
+  if (ps_tc_mask .lt. 1010.e2) then 
+    call compute_slp(is, ie, js, je, tv, ps(is:ie,js:je), phis(is:ie,js:je), slp_m)
+    do j = js, je
+       do i = is, ie
+         if (slp_m(i,j) < ps_tc_mask) then
+            mask(i,j) = 0.
+         endif
+       enddo
+    enddo
   endif
 
   ! KGao: only apply nudging at the levels closest to those specified in P_target
@@ -1406,9 +1419,12 @@ module fv_nwp_nudge_mod
        call mpp_error(FATAL, 'nudge_ps is not supported yet when using AI data for nudging') 
     endif
 
+    allocate ( pfull0(km) )
+    allocate ( phalf0(km+1) )
+    allocate ( ak0(km+1) )
+    allocate ( bk0(km+1) )
+
     if (use_ai_data) then
-      allocate ( pfull0(km) )
-      allocate ( phalf0(km+1) )
 
       call _GET_VAR1 (ncid, lev_name, km, pfull0 )
 
@@ -1428,9 +1444,6 @@ module fv_nwp_nudge_mod
       endif
 
     else ! GFS analysis or other dataset that contains ak, bk info
-
-      allocate ( ak0(km+1) )
-      allocate ( bk0(km+1) )
 
       call _GET_VAR1 (ncid, 'hyai', km+1, ak0, found )
       if ( .not. found )  ak0(:) = 0.
@@ -2131,6 +2144,8 @@ module fv_nwp_nudge_mod
     deallocate ( id2 )
     deallocate ( jdc )
 
+    deallocate ( pfull0 )
+    deallocate ( phalf0 )
     deallocate ( ak0 )
     deallocate ( bk0 )
     deallocate ( lat )
