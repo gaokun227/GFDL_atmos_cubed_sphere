@@ -1,3 +1,25 @@
+# RELEASE NOTES for FV3 202604: Summary
+FV3-202604-public --- April 2026
+Primary Point of Contact: Lucas Harris, GFDL lucas.harris@noaa.gov
+
+This version has been tested with:
+SHiELD physics release FV3-202604-public from https://github.com/NOAA-GFDL/SHiELD_physics
+FMS release 2026.01 from https://github.com/NOAA-GFDL/FMS
+FMS Coupler release 2026.01 from https://github.com/NOAA-GFDL/FMScoupler
+Atmos Drivers release FV3-202604-public from https://github.com/NOAA-GFDL/atmos_drivers
+
+This release includes the following:  
+- Updates for running SHiELD with full FMSCoupler, elimination of old simple coupler interfaces (@JosephMouallem)
+- Compilers and CI support (@laurenchilutti)
+- Preparation for forthcoming integrated physics update (@linjiongzhou, @vithikashah001)
+- Bugfix to turn off n_cond_con dissipative heating if do_vort_damp = .T. (@gaokun227)
+- Edge handling bugfix for hord = 5 (@luanfs)
+- Fixed calculation of auxiliary pressure variables during adiabatic initialization (@JosephMouallem)
+- Fix for I/O remap_restart() when restarting with different numbers of vertical levels (npz_rst > 0) (@laurenchilutti)
+- Enable manual triggering for CI workflow  (@laurenchilutti)
+- Update CI for AWS (@vithikashah001)
+
+
 # RELEASE NOTES for FV3 202411: Summary
 FV3-202411-public --- November 2024  
 Primary Point of Contact: Lucas Harris, GFDL lucas.harris@noaa.gov  
