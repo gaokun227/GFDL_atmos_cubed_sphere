@@ -12,7 +12,7 @@ This release includes the following:
 - Updates for running SHiELD with full FMSCoupler, elimination of old simple coupler interfaces (@JosephMouallem)
 - Compilers and CI support (@laurenchilutti)
 - Preparation for forthcoming integrated physics update (@linjiongzhou, @vithikashah001)
-- Bugfix to turn off d_cond_con dissipative heating if do_vort_damp = .F. (@gaokun227)  
+- Bugfix to turn off d__con dissipative heating if do_vort_damp = .F. (@gaokun227)  
 - Edge handling bugfix for hord = 5 (@luanfs)
 - Fixed calculation of auxiliary pressure variables during adiabatic initialization (@JosephMouallem)
 - Fix for I/O remap_restart() when restarting with different numbers of vertical levels (npz_rst > 0) (@laurenchilutti)
