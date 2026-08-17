@@ -1222,7 +1222,6 @@ module fv_nwp_nudge_mod
   allocate ( vt(is:ie,js:je,npz) )
 
   if ( nudge_winds ) then
-
        call remap_uv(npz, ak,  bk, ps(is:ie,js:je), delp,  ut,     vt,   &
                      km, ps_dat(is:ie,js:je,1),  u_dat(:,:,:,1), v_dat(:,:,:,1) )
 
@@ -1435,7 +1434,7 @@ module fv_nwp_nudge_mod
       !phalf0(km+1) = pfull0(km) + 10.E2
       !phalf0(1) = pfull0(1)/2.
 
-      phalf0(1) = 2*pfull0(1) - phalf0(2)
+      phalf0(1) = max(2*pfull0(1) - phalf0(2), 1.E2)
       phalf0(km+1) = min(2*pfull0(km) - phalf0(km), 1010.E2)
 
       if ( master ) then
@@ -1715,6 +1714,9 @@ module fv_nwp_nudge_mod
    endif
 
 ! Read in tracers: only sphum at this point
+
+   if ( nudge_q ) then
+
       call get_var3_r4( ncid, q_name, 1,im, jbeg,jend, 1,km , wk3 )
 
       do k=1,km
@@ -1728,6 +1730,14 @@ module fv_nwp_nudge_mod
          enddo
       enddo
       enddo
+
+   else
+
+      q(:,:,:) = 0.
+
+   endif
+
+   !if ( nudge_virt ) then
 
       call get_var3_r4( ncid, t_name, 1,im, jbeg,jend, 1,km , wk3 )
       call close_ncfile ( ncid )
@@ -1759,7 +1769,7 @@ module fv_nwp_nudge_mod
       endif
       endif
 
-!  endif
+   !endif
 
    deallocate ( wk3 )
 
