@@ -423,18 +423,6 @@ module fv_nwp_nudge_mod
        kht = npz-kbot_t
   endif
 
-  ! KGao: mask out model TC region (determined by sea-level pres) 
-  if (ps_tc_mask .lt. 1010.e2) then 
-    call compute_slp(is, ie, js, je, tv, ps(is:ie,js:je), phis(is:ie,js:je), slp_m)
-    do j = js, je
-       do i = is, ie
-         if (slp_m(i,j) < ps_tc_mask) then
-            mask(i,j) = 0.
-         endif
-       enddo
-    enddo
-  endif
-
   ! KGao: only apply nudging at the levels closest to those specified in P_target
   if (use_target) then
      profile(:) = 0.
@@ -500,6 +488,23 @@ module fv_nwp_nudge_mod
   call get_obs(Time, dt, zvir, ak, bk, ps, ts, ps_obs, delp, pt, nwat, q, u_obs, v_obs, t_obs, q_obs,   &
                phis, ua, va, u_dt, v_dt, npx, npy, npz, factor, factor_nwp, mask, bd, gridstruct, domain)
 ! *t_obs* is virtual temperature
+
+  ! KGao: set mask(i,j) to 0 in the  model TC core region (determined by sea-level pres)
+  if (ps_tc_mask .lt. 1010.e2) then
+    do j=js,je
+       do i=is,ie
+          tv(i,j) = pt(i,j,npz)*(1.+zvir*q(i,j,npz,1))
+       enddo
+    enddo
+    call compute_slp(is, ie, js, je, tv, ps(is:ie,js:je), phis(is:ie,js:je), slp_m)
+    do j = js, je
+       do i = is, ie
+         if (slp_m(i,j) < ps_tc_mask) then
+            mask(i,j) = 0.
+         endif
+       enddo
+    enddo
+  endif
 
   if ( no_obs ) then
        deallocate (ps_obs)
@@ -1715,7 +1720,13 @@ module fv_nwp_nudge_mod
 
 ! Read in tracers: only sphum at this point
 
-   if ( nudge_q ) then
+! KGao notes on Aug 18, 2026: 
+! Do not read q if using AI NWP data
+! This is because q in 2026 AIFS has one less layer than u,v,t
+! Meant to be a quick fix only; can be relaxed if q has the same levels as other vars
+! Note q is used when nudge_virt, or nudge_hght, or nudge_q is on
+
+   if ( .not. use_ai_data ) then
 
       call get_var3_r4( ncid, q_name, 1,im, jbeg,jend, 1,km , wk3 )
 
