@@ -66,6 +66,7 @@ module fv_nwp_nudge_mod
  integer jm     ! Data y-dimension
  integer km     ! Data z-dimension
  real, allocatable:: ak0(:), bk0(:)
+ real, allocatable:: phalf0(:), pfull0(:)
  real, allocatable:: lat(:), lon(:)
 
  logical :: module_is_initialized = .false.
@@ -100,12 +101,27 @@ module fv_nwp_nudge_mod
                                                  ! by default, the first file in the "input_fname_list"
  character(len=128):: analysis_file_last=""      ! the last NCEP analysis file to be used for nudging
                                                  ! by default, the last file in the "input_fname_list"
-
  real   :: P_relax = 30.E2                       ! from P_relax upwards, nudging is reduced linearly
                                                  ! proportional to pfull/P_relax
-
  real   :: P_norelax = 0.0                       ! from P_norelax upwards, no nudging
-! <--- h1g, 2012-10-22
+ ! <--- h1g, 2012-10-22
+
+ logical :: use_ai_data                          ! a flag to control is nudging to AI NWP data
+                                                 ! AI data are assumed to be on fixed pressure levels
+                                                 ! if true, nudge_ps is not supported yet
+
+ real    :: ps_tc_mask  = 1020.E2                ! a critical slp value for masking out model tc region  
+ logical :: use_target  = .false.                ! a flag to control to apply nuding to selected levels only
+ real   :: P_target(15) = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+ character(len=10)::  lon_name = "lon"
+ character(len=10)::  lat_name = "lat"
+ character(len=10)::  lev_name = "lev"
+ character(len=10)::  u_name = "U"
+ character(len=10)::  v_name = "V"
+ character(len=10)::  t_name = "T"
+ character(len=10)::  q_name = "Q"
+ character(len=10)::  ps_name = "PS"
+ character(len=10)::  zs_name = "PHIS"           ! var name for surface geopotential height
 
  character(len=128):: file_names(nfile_max)
  character(len=128):: track_file_name
@@ -215,7 +231,9 @@ module fv_nwp_nudge_mod
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
 
- namelist /fv_nwp_nudge_nml/T_is_Tv, nudge_ps, nudge_virt, nudge_hght, nudge_q, nudge_winds,  &
+ namelist /fv_nwp_nudge_nml/use_ai_data, lon_name, lat_name, lev_name, u_name, v_name, t_name, &
+                          q_name, ps_name, zs_name, ps_tc_mask, use_target, P_target, &
+                          T_is_Tv, nudge_ps, nudge_virt, nudge_hght, nudge_q, nudge_winds,  &
                           do_ps_bias, tau_ps, tau_winds, tau_q, tau_virt, tau_hght,  kstart, kbot_winds, &
                           k_breed, k_trop, p_trop, dps_min, kord_data, tc_mask, nudge_debug, nf_ps, nf_t, nf_ht,  &
                           nf_uv, breed_srf_w, tau_vt_wind, tau_vt_slp, strong_mask, mask_fac, del2_cd,   &
@@ -405,6 +423,39 @@ module fv_nwp_nudge_mod
        kht = npz-kbot_t
   endif
 
+  ! KGao: only apply nudging at the levels closest to those specified in P_target
+  if (use_target) then
+     profile(:) = 0.
+     prof_t(:) = 0.
+     prof_q(:) = 0.
+
+     do j = 1, 15 ! loop over P_target
+
+       if ( P_target(j) > 1) then
+
+         ! find the model level closest to P_target(j)
+         i = 1
+         rms = abs(press(1) - P_target(j))
+         do k = 2, npz
+            ptmp = abs(press(k) - P_target(j))
+            if (ptmp < rms) then
+              rms = ptmp
+              i = k
+            end if
+         enddo
+         ! set weight to 1 at this level
+         profile(i) = 1.
+         prof_t(i) = 1.
+         prof_q(i) = 1.
+
+         if ( nudge_debug ) then
+           if (master) write(*,*) 'Using nudging for this level (target and model levels):', P_target(j), press(i)
+         endif
+       endif
+     enddo
+
+  endif
+
   if ( time_varying ) then
        factor = 1. + cos(real(mod(seconds,time_interval))/real(time_interval)*2.*pi)
        factor = max(1.e-5, factor)
@@ -437,6 +488,23 @@ module fv_nwp_nudge_mod
   call get_obs(Time, dt, zvir, ak, bk, ps, ts, ps_obs, delp, pt, nwat, q, u_obs, v_obs, t_obs, q_obs,   &
                phis, ua, va, u_dt, v_dt, npx, npy, npz, factor, factor_nwp, mask, bd, gridstruct, domain)
 ! *t_obs* is virtual temperature
+
+  ! KGao: set mask(i,j) to 0 in the  model TC core region (determined by sea-level pres)
+  if (ps_tc_mask .lt. 1010.e2) then
+    do j=js,je
+       do i=is,ie
+          tv(i,j) = pt(i,j,npz)*(1.+zvir*q(i,j,npz,1))
+       enddo
+    enddo
+    call compute_slp(is, ie, js, je, tv, ps(is:ie,js:je), phis(is:ie,js:je), slp_m)
+    do j = js, je
+       do i = is, ie
+         if (slp_m(i,j) < ps_tc_mask) then
+            mask(i,j) = 0.
+         endif
+       enddo
+    enddo
+  endif
 
   if ( no_obs ) then
        deallocate (ps_obs)
@@ -1159,7 +1227,6 @@ module fv_nwp_nudge_mod
   allocate ( vt(is:ie,js:je,npz) )
 
   if ( nudge_winds ) then
-
        call remap_uv(npz, ak,  bk, ps(is:ie,js:je), delp,  ut,     vt,   &
                      km, ps_dat(is:ie,js:je,1),  u_dat(:,:,:,1), v_dat(:,:,:,1) )
 
@@ -1272,7 +1339,7 @@ module fv_nwp_nudge_mod
           if ( trim(fname_tmp) == trim(analysis_file_last) ) then
             nt = nt + 1
             file_names(nt) = trim(fname_tmp)
-            if(master .and. nudge_debug) write(*,*) 'From NCEP file list, last file: ', nt, file_names(nt)
+            if(master .and. nudge_debug) write(*,*) 'From file list, last file: ', nt, file_names(nt)
             nt = 0
             goto 101  ! read last analysis data and then close file
           endif ! trim(fname_tmp) == trim(analysis_file_last)
@@ -1282,9 +1349,9 @@ module fv_nwp_nudge_mod
             file_names(nt) = trim(fname_tmp)
             if(master .and. nudge_debug) then
               if( nt .eq. 1 ) then
-               write(*,*) 'From NCEP file list, first file: ', nt, file_names(nt),trim(analysis_file_first)
+               write(*,*) 'From file list, first file: ', nt, file_names(nt),trim(analysis_file_first)
               else
-               write(*,*) 'From NCEP file list: ', nt, file_names(nt)
+               write(*,*) 'From file list: ', nt, file_names(nt)
               endif ! nt .eq. 1
             endif ! master .and. nudge_debug
           else
@@ -1293,9 +1360,9 @@ module fv_nwp_nudge_mod
               file_names(nt) = trim(fname_tmp)
               if(master .and. nudge_debug) then
                 if( nt .eq. 1 ) then
-                  write(*,*) 'From NCEP file list, first file: ', nt,  file_names(nt),trim(analysis_file_first)
+                  write(*,*) 'From file list, first file: ', nt,  file_names(nt),trim(analysis_file_first)
                 else
-                  write(*,*) 'From NCEP file list: ', nt, file_names(nt)
+                  write(*,*) 'From file list: ', nt, file_names(nt)
                 endif !  nt .eq. 1
               endif  ! master .and. nudge_debug
             endif  ! trim(fname_tmp) == trim(analysis_file_first) .or. nt > 0
@@ -1309,7 +1376,7 @@ module fv_nwp_nudge_mod
     do nt=1,nfile_max
       if ( file_names(nt) == "No_File_specified" ) then
            nfile_total = nt - 1
-           if(master) write(*,*) 'Total of NCEP files specified=', nfile_total
+           if(master) write(*,*) 'Total of files specified=', nfile_total
            exit
       endif
     enddo
@@ -1328,10 +1395,10 @@ module fv_nwp_nudge_mod
 !        call mpp_error(FATAL,'==> Error from get_ncep_analysis: T field not found')
 !   endif
     call open_ncfile( file_names(1), ncid )        ! open the file
-    call get_ncdim1( ncid, 'lon', im )
-    call get_ncdim1( ncid, 'lat', jm )
-    call get_ncdim1( ncid, 'lev', km )
-    if(master)  write(*,*) 'NCEP analysis dimensions:', im, jm, km
+    call get_ncdim1( ncid, lon_name, im )
+    call get_ncdim1( ncid, lat_name, jm )
+    call get_ncdim1( ncid, lev_name, km )
+    if(master)  write(*,*) 'Data dimensions:', im, jm, km
 
     allocate ( s2c(is:ie,js:je,4) )
     allocate ( id1(is:ie,js:je) )
@@ -1341,8 +1408,8 @@ module fv_nwp_nudge_mod
     allocate (  lon(im) )
     allocate (  lat(jm) )
 
-    call _GET_VAR1 (ncid, 'lon', im, lon )
-    call _GET_VAR1 (ncid, 'lat', jm, lat )
+    call _GET_VAR1 (ncid, lon_name, im, lon )
+    call _GET_VAR1 (ncid, lat_name, jm, lat )
 
 ! Convert to radian
     do i=1,im
@@ -1352,22 +1419,53 @@ module fv_nwp_nudge_mod
        lat(j) = lat(j) * deg2rad
     enddo
 
+    if (use_ai_data .and. nudge_ps) then
+       call mpp_error(FATAL, 'nudge_ps is not supported yet when using AI data for nudging') 
+    endif
+
+    allocate ( pfull0(km) )
+    allocate ( phalf0(km+1) )
     allocate ( ak0(km+1) )
     allocate ( bk0(km+1) )
 
-    call _GET_VAR1 (ncid, 'hyai', km+1, ak0, found )
-    if ( .not. found )  ak0(:) = 0.
+    if (use_ai_data) then
 
-    call _GET_VAR1 (ncid, 'hybi', km+1, bk0 )
-    call close_ncfile( ncid )
+      call _GET_VAR1 (ncid, lev_name, km, pfull0 )
 
-! Note: definition of NCEP hybrid is p(k) = a(k)*1.E5 + b(k)*ps
-    if ( .not. using_merra2) then
-      ! This is not needed for MERRA2 data
-      ak0(:) = ak0(:) * 1.E5
+      do k = 2, km
+        phalf0(k) = 0.5 * ( pfull0(k-1) + pfull0(k) )
+      enddo
+
+      !phalf0(km+1) = pfull0(km) + 10.E2
+      !phalf0(1) = pfull0(1)/2.
+
+      phalf0(1) = max(2*pfull0(1) - phalf0(2), 1.E2)
+      phalf0(km+1) = min(2*pfull0(km) - phalf0(km), 1010.E2)
+
+      if ( master ) then
+         write(*,*) 'Using AI data for nudging, in which pfull = ', pfull0
+         write(*,*) 'estimated phalf = ', phalf0
+      endif
+
+    else ! GFS analysis or other dataset that contains ak, bk info
+
+      call _GET_VAR1 (ncid, 'hyai', km+1, ak0, found )
+      if ( .not. found )  ak0(:) = 0.
+
+      call _GET_VAR1 (ncid, 'hybi', km+1, bk0 )
+
+      ! Note: definition of NCEP hybrid is p(k) = a(k)*1.E5 + b(k)*ps
+      if ( .not. using_merra2) then
+        ! This is not needed for MERRA2 data
+        ak0(:) = ak0(:) * 1.E5
+      endif
+
+      ! Limiter to prevent NAN at top during remapping
+      if ( bk0(1) < 1.E-9 ) ak0(1) = max(1.e-9, ak0(1))
+
     endif
-! Limiter to prevent NAN at top during remapping
-    if ( bk0(1) < 1.E-9 ) ak0(1) = max(1.e-9, ak0(1))
+
+    call close_ncfile( ncid )
 
    if ( master ) then
       do k=1,npz
@@ -1438,15 +1536,18 @@ module fv_nwp_nudge_mod
   integer:: status, var3id    ! h1g, 2016-08-10
 #include <netcdf.inc>
 
+  ! KGao: do not override model ts if using AI data for nudging
+  if ( use_ai_data ) read_ts = .false.
+
+  if ( climate_nudging ) read_ts = .false.
 
   if( .not. file_exists(fname) ) then
      call mpp_error(FATAL,'==> Error from get_ncep_analysis: file not found: '//fname)
   else
      call open_ncfile( fname, ncid )        ! open the file
-     if(master) write(*,*) 'Reading NCEP anlysis file:', fname
+     if(master) write(*,*) 'Reading file:', fname
   endif
 
-  if ( climate_nudging ) read_ts =.false.
   if ( read_ts ) then       ! read skin temperature; could be used for SST
        allocate ( wk1(im,jm) )
 
@@ -1536,7 +1637,7 @@ module fv_nwp_nudge_mod
 !----------------------------------
 
      allocate ( wk2(im,jbeg:jend) )
-     call get_var3_r4( ncid, 'PS', 1,im, jbeg,jend, 1,1, wk2 )
+     call get_var3_r4( ncid, ps_name, 1,im, jbeg,jend, 1,1, wk2 )
 
      do j=js,je
         do i=is,ie
@@ -1548,43 +1649,46 @@ module fv_nwp_nudge_mod
         enddo
      enddo
 
+     call prt_maxmin('PS', ps, is, ie, js, je, 0, 1, 1.)
 
-! ---> h1g, read either 'PHIS' or 'PHI', 2016-08-10
-     status = nf_inq_varid (ncid,  'PHIS', var3id)
-     if (status .eq. NF_NOERR)  then
-       call get_var3_r4( ncid, 'PHIS', 1,im, jbeg,jend, 1,1, wk2 )
+     ! KGao: get gz0 only if module is not initialized
+     if ( .not. module_is_initialized ) then
 
-     else !there is no 'PHIS'
-       status = nf_inq_varid (ncid,  'PHI', var3id)
+       status = nf_inq_varid (ncid,  zs_name, var3id)
        if (status .eq. NF_NOERR)  then
-         call get_var3_r4( ncid, 'PHI', 1,im, jbeg,jend, 1,1, wk2 )
-         wk2 = wk2 * grav  ! convert unit from geopotential meter (m) to geopotential height (m2/s2)
-       else
-         call mpp_error(FATAL,'Neither PHIS nor PHI exists in re-analysis data')
+         call get_var3_r4( ncid, zs_name, 1,im, jbeg,jend, 1,1, wk2 )
+
+       else ! there is no surface geopotential height
+         status = nf_inq_varid (ncid,  'PHI', var3id)
+         if (status .eq. NF_NOERR)  then
+           call get_var3_r4( ncid, 'PHI', 1,im, jbeg,jend, 1,1, wk2 )
+           wk2 = wk2 * grav  ! convert unit from geopotential meter (m) to geopotential height (m2/s2)
+         else
+           call mpp_error(FATAL,'Cannot find surface geopotential height in data for nudging')
+         endif
        endif
-     endif
-! <--- h1g, 2016-08-10
 
-
-     do j=js,je
-        do i=is,ie
+       do j=js,je
+         do i=is,ie
            i1 = id1(i,j)
            i2 = id2(i,j)
            j1 = jdc(i,j)
            gz0(i,j) = s2c(i,j,1)*wk2(i1,j1  ) + s2c(i,j,2)*wk2(i2,j1  ) +  &
                       s2c(i,j,3)*wk2(i2,j1+1) + s2c(i,j,4)*wk2(i1,j1+1)
-        enddo
-     enddo
-     call prt_maxmin('ZS_ncep', gz0, is, ie, js, je, 0, 1, 1./grav)
-     deallocate ( wk2 )
+         enddo
+       enddo
 
+     endif
+
+     call prt_maxmin('ZS', gz0, is, ie, js, je, 0, 1, 1./grav)
+     deallocate ( wk2 )
 
    allocate ( wk3(1:im, jbeg:jend, 1:km) )
 
 ! Winds:
    if ( nudge_winds ) then
 
-      call get_var3_r4( ncid, 'U', 1,im, jbeg,jend, 1,km, wk3 )
+      call get_var3_r4( ncid, u_name, 1,im, jbeg,jend, 1,km, wk3 )
 
       do k=1,km
       do j=js,je
@@ -1598,7 +1702,7 @@ module fv_nwp_nudge_mod
       enddo
       enddo
 
-      call get_var3_r4( ncid, 'V', 1,im, jbeg,jend, 1,km, wk3 )
+      call get_var3_r4( ncid, v_name, 1,im, jbeg,jend, 1,km, wk3 )
 
       do k=1,km
       do j=js,je
@@ -1615,7 +1719,16 @@ module fv_nwp_nudge_mod
    endif
 
 ! Read in tracers: only sphum at this point
-      call get_var3_r4( ncid, 'Q', 1,im, jbeg,jend, 1,km , wk3 )
+
+! KGao notes on Aug 18, 2026: 
+! Do not read q if using AI NWP data
+! This is because q in 2026 AIFS has one less layer than u,v,t
+! Meant to be a quick fix only; can be relaxed if q has the same levels as other vars
+! Note q is used when nudge_virt, or nudge_hght, or nudge_q is on
+
+   if ( .not. use_ai_data ) then
+
+      call get_var3_r4( ncid, q_name, 1,im, jbeg,jend, 1,km , wk3 )
 
       do k=1,km
       do j=js,je
@@ -1629,7 +1742,15 @@ module fv_nwp_nudge_mod
       enddo
       enddo
 
-      call get_var3_r4( ncid, 'T', 1,im, jbeg,jend, 1,km , wk3 )
+   else
+
+      q(:,:,:) = 0.
+
+   endif
+
+   !if ( nudge_virt ) then
+
+      call get_var3_r4( ncid, t_name, 1,im, jbeg,jend, 1,km , wk3 )
       call close_ncfile ( ncid )
 
       do k=1,km
@@ -1659,7 +1780,7 @@ module fv_nwp_nudge_mod
       endif
       endif
 
-!  endif
+   !endif
 
    deallocate ( wk3 )
 
@@ -1889,7 +2010,11 @@ module fv_nwp_nudge_mod
 
      do k=1,kmd+1
         do i=is,ie
-           pe0(i,k) = ak0(k) + bk0(k)*ps0(i,j)
+           if ( use_ai_data ) then
+             pe0(i,k) = phalf0(k) ! assuming AI fields are on fixed pressure levels
+           else
+             pe0(i,k) = ak0(k) + bk0(k)*ps0(i,j)
+           endif
            pn0(i,k) = log(pe0(i,k))
        enddo
      enddo
@@ -1969,7 +2094,11 @@ module fv_nwp_nudge_mod
 !------
      do k=1,kmd+1
        do i=is,ie
-          pe0(i,k) = ak0(k) + bk0(k)*ps0(i,j)
+          if ( use_ai_data ) then
+            pe0(i,k) = phalf0(k) ! assume AI fields are on fixed pressure levels
+          else
+            pe0(i,k) = ak0(k) + bk0(k)*ps0(i,j)
+          endif
        enddo
      enddo
 !------
@@ -2036,6 +2165,8 @@ module fv_nwp_nudge_mod
     deallocate ( id2 )
     deallocate ( jdc )
 
+    deallocate ( pfull0 )
+    deallocate ( phalf0 )
     deallocate ( ak0 )
     deallocate ( bk0 )
     deallocate ( lat )
