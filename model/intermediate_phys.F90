@@ -37,7 +37,7 @@ module intermediate_phys_mod
     use fv_arrays_mod, only: inline_pbl_type, inline_cnv_type, inline_gwd_type
     use fv_arrays_mod, only: fv_thermo_type
     use mpp_domains_mod, only: domain2d, mpp_update_domains
-    use mpp_domains_mod, only: DGRID_NE, AGRID ! KGao: 3D-SA-TKE
+    use mpp_domains_mod, only: DGRID_NE, AGRID
     use tracer_manager_mod, only: get_tracer_index, get_tracer_names
     use field_manager_mod, only: model_atmos
     use gfdl_mp_mod, only: gfdl_mp_driver, fast_sat_adj, c_liq, c_ice, cv_air, &
@@ -48,7 +48,7 @@ module intermediate_phys_mod
     use sa_aamf_mod, only: sa_aamf_deep, sa_aamf_shal
     use sa_gwd_mod, only: sa_gwd_oro, sa_gwd_cnv
     use fv_timing_mod, only: timing_on, timing_off
-    use sa_3d_tke_mod, only: cal_3d_tke_budget ! KGao: 3D-SA-TKE
+    use sa_3d_tke_mod, only: cal_3d_tke_budget
 
     implicit none
 
@@ -85,13 +85,13 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_mp, do_inline_pbl, consv_checker
     logical, intent (in) :: do_inline_cnv, do_inline_gwd, do_sat_adj, last_step, do_fast_phys
-    logical, intent (in) :: do_3dtke ! KGao: 3D-SA-TKE
+    logical, intent (in) :: do_3dtke
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
     real, intent (in), dimension (km) :: pfull
 
-    real, intent (in), dimension (km+1) :: ak, bk !KGao: 3D-SA-TKE
+    real, intent (in), dimension (km+1) :: ak, bk
 
     real, intent (in), dimension (isd:ied, jsd:jed) :: hs
 
@@ -162,9 +162,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
-    real, allocatable, dimension (:,:,:) :: deform_1h, deform_1v ! KGao: 3D-SA-TKE
+    real, allocatable, dimension (:,:,:) :: deform_1h, deform_1v
 
-    real, allocatable, dimension (:,:) :: def_1h, def_1v ! KGao: 3D-SA-TKE 
+    real, allocatable, dimension (:,:) :: def_1h, def_1v
 
     real (kind = r8), allocatable, dimension (:) :: tz
 
@@ -509,8 +509,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
-        ! KGao: 3D-SA-TKE
-        ! do allocation regardless if do_3dtke is true
         allocate (deform_1h (isd:ied, jsd:jed, km))
         allocate (deform_1v (isd:ied, jsd:jed, km))
         allocate (def_1h (is:ie, 1:km))
@@ -544,7 +542,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
             dp0 = delp
         endif
 
-        ! KGao: 3D-SA-TKE
+        ! 3D-TKE budget terms
         if (do_3dtke) then
             call mpp_update_domains(ua, va, domain, gridtype=AGRID)
             call mpp_update_domains(u , v , domain, gridtype=DGRID_NE)
@@ -555,7 +553,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                                    deform_1h, deform_1v)
 
         endif
-        ! 3D-SA-TKE-end
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, w, &
 !$OMP                                    do_3dtke, deform_1h, deform_1v, &
@@ -679,8 +676,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
-                def_1h (is:ie, k) = deform_1h (is:ie, j, kr) ! KGao: 3D-SA-TKE
-                def_1v (is:ie, k) = deform_1v (is:ie, j, kr) ! KGao: 3D-SA-TKE
+                def_1h (is:ie, k) = deform_1h (is:ie, j, kr)
+                def_1v (is:ie, k) = deform_1v (is:ie, j, kr)
                 radh (is:ie, k) = inline_pbl%radh (is:ie, j, kr)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
@@ -757,7 +754,6 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                            inline_pbl%evap (is:ie, j), stress, wind, kinver, &
                            pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
                            inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j), &
-                           ! KGao: 3D-SA-TKE
                            shr3d_h = def_1h, shr3d_v = def_1v)
                            !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
                            !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))

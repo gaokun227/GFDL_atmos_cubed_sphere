@@ -60,7 +60,7 @@ module dyn_core_mod
   use fv_regional_mod,      only: current_time_in_seconds, bc_time_interval
   use fv_regional_mod,      only: delz_regBC ! TEMPORARY --- lmh
 
-  !KGao: for tke-based damping 
+  !for tke-based damping
   use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
   use field_manager_mod,  only: MODEL_ATMOS
 
@@ -212,7 +212,7 @@ contains
 
     integer :: is,  ie,  js,  je
     integer :: isd, ied, jsd, jed
-    integer :: ntke ! KGao: for tke-based damping
+    integer :: ntke
 
       is  = bd%is
       ie  = bd%ie
@@ -318,8 +318,7 @@ contains
          endif
     endif
 
-
-  ! KGao: for tke-based damping
+  ! for tke-based damping
   ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
   if (ntke < 0 .and. flagstruct%damp_flag .eq. 2) call mpp_error(FATAL,'no tke defined but calling tke-based damping') 
 
@@ -327,7 +326,7 @@ contains
   do it=1,n_split
 !-----------------------------------------------------
 
-     ! KGao: for tke-based damping
+     ! for tke-based damping
      if (flagstruct%damp_flag .eq. 2) call mpp_update_domains(q(:,:,:,ntke), domain)
 
 #ifdef ROT3
@@ -779,7 +778,7 @@ contains
           k_q_con = 1
        endif
 
-       ! KGao: pass tke field to d_sw if using tke-based damping; note error control is already done above
+       ! pass tke field to d_sw if using tke-based damping; note error control is already done above
        if (flagstruct%damp_flag .eq. 2) then
 
           call d_sw(vt(isd,jsd,k), delp(isd,jsd,k), ptc(isd,jsd,k),  pt(isd,jsd,k),      &
@@ -794,7 +793,7 @@ contains
                   d2_divg, flagstruct%d4_bg,  &
                   damp_vt(k), damp_w, damp_t, d_con_k, &
                   hydrostatic, gridstruct, flagstruct, thermostruct%use_cond, bd, &
-                  tke = q(isd, jsd, k, ntke))  ! KGao: for tke-based damping
+                  tke = q(isd, jsd, k, ntke))
        else
 
           call d_sw(vt(isd,jsd,k), delp(isd,jsd,k), ptc(isd,jsd,k),  pt(isd,jsd,k),      &
@@ -1143,7 +1142,6 @@ contains
 
           call timing_on('FAST_PHYS')
 
-          ! KGao: pass ak, bk as inputs for 3D-SA-TKE
           call fast_phys (is, ie, js, je, isd, ied, jsd, jed, npz, npx, npy, nq, flagstruct%nwat, &
              dt, consv, akap, ptop, ak, bk, phis, te0_2d, u, v, w, pt, &
              delp, delz, q_con, cappa, q, pkz, zvir, flagstruct%te_err, flagstruct%tw_err, inline_pbl, inline_gwd, &

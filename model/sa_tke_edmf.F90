@@ -47,13 +47,14 @@
 !    c) add option for turning off hb19 formula for surface backgroud diff. (do_dk_hb19)
 ! 4) May 2022 by Linjiong Zhou
 !    put it into the FV3 dynamical core and revise accordingly
+! 5) Aug 2024 by Kun Gao
+!    introduce inline 3D-TKE related updates
 ! =======================================================================
 
 module sa_tke_edmf_mod
 
     use fms_mod, only: check_nml_error
     use gfdl_mp_mod, only: mqs
-    !use fv_mp_mod, only: is_master ! KGao - debug
 
     implicit none
 
@@ -208,7 +209,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         tsea, heat, evap, stress, spd1, kinver, &
         psk, del, prsi, prsl, prslk, phii, phil, &
         hpbl, kpbl, &
-        shr3d_h, shr3d_v, & ! KGao: 3D-SA-TKE 
+        shr3d_h, shr3d_v, &
         dusfc, dvsfc, dtsfc, dqsfc, dkt_out)
     
     implicit none
@@ -239,7 +240,6 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
 
     real, intent (out) :: hpbl (im)
   
-    ! KGao: 3D-SA-TKE
     real, intent (in), optional :: shr3d_h (im, km), shr3d_v (im, km)
 
     real, intent (out), optional :: dusfc (im), dvsfc (im), dtsfc (im), dqsfc (im), &
@@ -263,7 +263,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         cku (im, km - 1), ckt (im, km - 1), q1g (im, km, ntrac), &
         vdt (im, km), udt (im, km), tdt (im, km), qdt (im, km)
     
-    real :: dkh(im, km - 1) ! KGao
+    real :: dkh(im, km - 1)
 
     real :: plyr (im, km), rhly (im, km), cfly (im, km), &
         qstl (im, km)
@@ -551,7 +551,6 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         if (rbsoil (i) > 0.) sfcflg (i) = .false.
         pcnvflg (i) = .false.
 
-        ! KGao: no mass flux
         if (no_mf) then
            scuflg (i) = .false.
         else
@@ -810,7 +809,6 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         if (pblflg (i)) then
             if (zol (i) < zolcru) then
                 pcnvflg (i) = .true.
-                ! KGao: no mass flux
                 if (no_mf) pcnvflg (i) = .false.
             endif
             wst3 (i) = gotvx (i, 1) * sflux (i) * hpbl (i)
@@ -887,7 +885,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     ! look for stratocumulus
     ! -----------------------------------------------------------------------
    
-    ! KGao: if not using mass flux, skip this step to save time
+    ! if not using mass flux transports, skip the following steps 
     if (.not. no_mf) then
 
     do i = 1, im
@@ -983,7 +981,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         ntcw_new = ntcw - 1
     endif
 
-    ! KGao: if not using mass flux, skip steps below to save time
+    ! if not using mass flux, skip the following steps
     if (.not. no_mf) then
 
     ! -----------------------------------------------------------------------
@@ -1109,7 +1107,6 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             ele (i, k) = max (ele (i, k), tem1)
             ele (i, k) = min (ele (i, k), elmx)
            
-            ! KGao: use const l2
             if (use_const_l2) rlam(i,k) = rlmx
             if (use_const_l2) ele(i,k)  = elefac * rlmx
 
@@ -1213,8 +1210,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         endif
     enddo
 
-    ! KGao: use a simple K formulation, in which cm and pr are constant
-    ! Are TKE lagged?
+    ! use a simple K formulation, in which cm and pr are constant
     if ( use_simple_k ) then  
       do k = 1, km1
          do i = 1, im
@@ -1355,28 +1351,13 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
                 shrp = shrp + ptem1 + ptem2
             endif
 
-            !KGao: 3D-SA-TKE
-            !TODO: 1. dku_v and dku_h are treated separately
-            !         shrp_3d = dku_h * shr3d_h + dku_v * shr3d_v
-            !      2. how to get dku_h?
-            !         dku_h = cs * l_h * sqrt(e)
+            !obtain 3D TKE shear production:
+            !a. dku_v and dku_h are treated separately
+            !   shrp_3d = dku_h * shr3d_h + dku_v * shr3d_v
+            !b. how to get dku_h?
+            !   dku_h = cs * l_h * sqrt(e)
 
             if ( present(shr3d_h) .and. present(shr3d_v)) then
-
-              !if (cs < 1.e-5) then
-              !   dkh(i, k) = dku(i, k)
-              !else
-              !   dkh(i, k) = cs * sqrt( gdx(i) ) * sqrt (tkeh (i, k)) 
-              !endif
-
-              !if (k == 1 ) then
-              !  tem = dkh(i, k) * shr3d_h(i, k) + dku(i, k) * shr3d_v(i, k)
-              !else
-              !  tem1 = dkh(i, k-1) * shr3d_h(i, k-1) + dku(i, k-1) * shr3d_v(i, k-1) ! dku is at layer interfaces 
-              !  tem2 = dkh(i, k) * shr3d_h(i, k)     + dku(i, k) * shr3d_v(i, k)
-              !  tem = 0.5 * (tem1 + tem2)
-              !endif
-              !shrp = tem
 
               dkh(i, k) = cs * sqrt(gdx(i)) * sqrt(tke(i, k)) ! define dkh at layer center
 
@@ -1391,7 +1372,6 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
               shrp = tem1 + tem2
 
             endif
-            !3D-SA-TKE-end
 
             prod (i, k) = buop + shrp
         enddo
@@ -2236,7 +2216,7 @@ subroutine sfc_exch (im, ps, u1, v1, t1, q1, z1, &
             cm (i) = max (cm (i), tem1)
             ch (i) = max (ch (i), tem1)
 
-            ! KGao - constant cd
+            ! use constant cd
             if ( use_const_cd ) then
                cm (i) = cd0
                ch (i) = cd0

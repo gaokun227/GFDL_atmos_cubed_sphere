@@ -68,7 +68,7 @@ module sw_core_mod
   real, parameter:: b3 = -13./60.
   real, parameter:: b4 =  0.45
   real, parameter:: b5 = -0.05
-  real, parameter :: smag_scalar = r3 ! KGao TODO: make this a namelist
+  real, parameter :: smag_scalar = r3 ! TODO: make this a namelist
 
   private
   public :: c_sw, d_sw, fill_4corners, del6_vt_flux, divergence_corner, divergence_corner_nest
@@ -533,7 +533,7 @@ module sw_core_mod
       real, intent(OUT), dimension(bd%isd:bd%ied,bd%js:bd%je+1):: cry_adv, yfx_adv
       type(fv_grid_type), intent(IN), target :: gridstruct
       type(fv_flags_type), intent(IN), target :: flagstruct
-      real, intent(INOUT), optional :: tke(bd%isd:bd%ied,  bd%jsd:bd%jed) ! KGao
+      real, intent(INOUT), optional :: tke(bd%isd:bd%ied,  bd%jsd:bd%jed) 
 ! Local:
       logical:: sw_corner, se_corner, ne_corner, nw_corner
       real :: ut(bd%isd:bd%ied+1,bd%jsd:bd%jed)
@@ -563,9 +563,9 @@ module sw_core_mod
       real :: u_lon, tmp
       integer :: i,j, is2, ie1, js2, je1, n, nt, n2, iq
       logical :: prevent_diss_cooling
-      integer :: damp_flag ! KGao
-      real    :: cs ! KGao 
-      real, parameter :: tkemin = 0.001 ! KGao
+      integer :: damp_flag
+      real    :: cs
+      real, parameter :: tkemin = 0.001
 
       real, pointer, dimension(:,:) :: area, area_c, rarea
 
@@ -627,8 +627,8 @@ module sw_core_mod
       ne_corner = gridstruct%ne_corner
 
       prevent_diss_cooling = flagstruct%prevent_diss_cooling
-      damp_flag = flagstruct%damp_flag ! KGao
-      cs = flagstruct%cs ! KGao
+      damp_flag = flagstruct%damp_flag
+      cs = flagstruct%cs
 
 #ifdef SW_DYNAMICS
       if ( test_case == 1 ) then
@@ -923,8 +923,8 @@ module sw_core_mod
          enddo
       enddo
 
-      ! KGao: get diffusion coefficient to be used for 2nd order damping/diffusion of 
-      !       the physical fields defined at cell centers (e.g., potential temp., vorticity, etc)
+      ! get diffusion coefficient to be used for 2nd order damping/diffusion of 
+      ! the physical fields defined at cell centers (e.g., potential temp., vorticity, etc)
 
       if (damp_flag .eq. 1 .and. cs > 1.e-5) then ! Lucas's updated smag-type diffusion below 
          ! smag_q here is dt * sqrt(T**2 + S**2) 
@@ -946,7 +946,7 @@ module sw_core_mod
          smag_q(:,:) = 0.
       endif
 
-      ! KGao: apply 2nd order damping to delp via calling fv_tp_2d
+      ! apply 2nd order damping to delp via calling fv_tp_2d
       if (damp_flag .gt. 0 .and. cs > 1.e-5) then
         call fv_tp_2d(delp, crx_adv, cry_adv, npx, npy, hord_dp, fx, fy,  &
                     xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, nord=nord_v, damp_c=damp_v, &
@@ -994,8 +994,8 @@ module sw_core_mod
               fy2 = 0. 
            endif
 
-           ! KGao: apply 2nd order damping to w
-           !       ensure the 2nd diffusive fluxes do not override the diffusive flux above
+           ! apply 2nd order damping to w
+           ! ensure the 2nd diffusive fluxes do not override the diffusive flux above
            if ( damp_flag .gt. 0 .and. cs > 1.e-5 ) then
               damp4 = cs * gridstruct%da_min_c
               call del6_vt_flux(0, npx, npy, damp4, w, wk, fx3, fy3, gridstruct, bd, damp_Km=smag_q)
@@ -1059,7 +1059,7 @@ module sw_core_mod
 !       enddo
 !    endif
 #if defined(GFS_PHYS) || defined(DCMIP)
-        ! KGao: apply damping to pt via calling fv_tp_2d (using Lucas's code)
+        ! apply damping to pt via calling fv_tp_2d (using Lucas's code)
         ! there are two steps involved:
         ! - first is the higher-order damping using vtdm4,
         ! - second is the 2nd order damping (scaled by smag_scalar)
@@ -1087,7 +1087,7 @@ module sw_core_mod
            enddo
         enddo
         do iq=1,nq
-           ! KGao: apply 2nd-order TKE-based damping to tracers via calling fv_tp_2d
+           ! apply 2nd-order TKE-based damping to tracers via calling fv_tp_2d
            if (damp_flag .eq. 2 .and. cs > 1.e-5) then
               call fv_tp_2d(q(isd,jsd,k,iq), crx_adv,cry_adv, npx, npy, hord_tr, gx, gy,  &
                          xfx_adv,yfx_adv, gridstruct, bd, ra_x, ra_y, flagstruct%lim_fac, &
@@ -1428,7 +1428,7 @@ module sw_core_mod
       do j=js,je+1
          do i=is,ie+1
             delpc(i,j) = gridstruct%rarea_c(i,j)*delpc(i,j)
-                damp = gridstruct%da_min_c*max(d2_bg, min(0.20, cs*abs(delpc(i,j)*dt))) ! KGao: dddmp->cs
+                damp = gridstruct%da_min_c*max(d2_bg, min(0.20, cs*abs(delpc(i,j)*dt))) ! dddmp->cs
                 vort(i,j) = damp*delpc(i,j)
                 ke(i,j) = ke(i,j) + vort(i,j)
          enddo
@@ -1514,7 +1514,7 @@ module sw_core_mod
 
      if (damp_flag .eq. 0 .or. damp_flag .eq. 1) then ! original method
 
-        if ( cs < 1.e-5) then  ! KGao: dddmp -> cs
+        if ( cs < 1.e-5) then  ! dddmp -> cs
            vort(:,:) = 0.
         else
            if ( flagstruct%grid_type < 3 ) then
@@ -1542,7 +1542,7 @@ module sw_core_mod
 
      elseif (damp_flag .eq. 2) then ! tke-based
 
-        ! KGao: get new tke-based damping coeff at cell corners, where divergence is defined
+        ! get new tke-based damping coeff at cell corners, where divergence is defined
 
         ! vort below is the tke at cell corners
         call a2b_ord4(tke, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
@@ -1565,7 +1565,7 @@ module sw_core_mod
              ke(i,j) = ke(i,j) + vort(i,j)
           enddo
         enddo
-     endif !KGao: end of the new 2nd order damping
+     endif ! end of the new 2nd order damping
 
    endif
 
@@ -1628,8 +1628,8 @@ module sw_core_mod
         vt = 0.
    endif
 
-   ! KGao: apply 2nd order damping to vorticity via calling del6_vt_flux (using Lucas's code)
-   !       this is an additional step after the higher-order damping using vtdm4
+   ! apply 2nd order damping to vorticity via calling del6_vt_flux (using Lucas's code)
+   ! this is an additional step after the higher-order damping using vtdm4
    if ( damp_flag .gt. 0 .and. cs > 1.e-5) then
        damp4 = cs * gridstruct%da_min_c
        call del6_vt_flux(0, npx, npy, damp4, wk, vort, fx3, fy3, gridstruct, bd, damp_Km=smag_q)

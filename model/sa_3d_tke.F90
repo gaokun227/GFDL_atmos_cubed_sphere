@@ -23,7 +23,6 @@ module sa_3d_tke_mod
 
   use fv_arrays_mod,      only: fv_grid_bounds_type, fv_grid_type
   !use nh_utils_mod,       only: edge_profile1  
-  !use fv_mp_mod,          only: is_master ! KGao - debug
 
   implicit none
   private
@@ -33,14 +32,14 @@ contains
 
 ! =======================================================================
 ! cal_3d_tke_budget :: calculate 3D TKE shear production
-! - this version is created based on Ping Zhu's anisotropic 
-!   turbulence shear production formulation (Zhu et al. 2025) and also
-!   his original code for 3D TKE shear production  
-! - in this verion we use the native D-grid wind as much as possbile for
-!   computing strain-rate tensor elements
-! - each element is strictly defined at D-grid cell center and layer center
-! - the algorithms are updated to be consistent with finite-volume method 
-! - created by Kun Gao (kun.gao@noaa.gov)
+! - this code is created based on Ping Zhu's anisotropic
+!   turbulence shear production formulation (Zhu et al. 2025; doi: 10.1038/s41612-025-01117-6)
+!   and also his original code for 3D TKE shear production calculations
+! - in this verion the native FV3 D-grid wind is used for
+!   computing strain-rate tensor elements (Gao et al. 2026; doi: 10.1029/2026MS005916)
+! - each element is strictly defined at FV3 D-grid cell center and layer center
+! - the algorithms are updated to be consistent with finite-volume method
+! - contact: Kun Gao (kun.gao@noaa.gov)
 ! =======================================================================
 
   subroutine cal_3d_tke_budget(u, v, ua, va, w, &
@@ -109,7 +108,7 @@ contains
 !===========================================================
 ! Calculate deform_1h and deform_1v
 !
-! See Eq.11 in Zhu et al. 2025 (doi.org/10.1038/s41612-025-01117-6) 
+! See Eq.11 in Zhu et al. 2025
 !
 !      shr_prod = kh * deform_1h + kv * deform_1v 
 !
@@ -211,7 +210,6 @@ contains
 ! get du/dz, dv/dz and dw/dz
 !-------------------------------------
 
-! TODO: use $OMP 
    do k=1,npz
       dp_ref(k) = ak(k+1)-ak(k) + (bk(k+1)-bk(k))*1.E5
    enddo
@@ -242,10 +240,6 @@ contains
    do k=1,npz
        do j=js,je
           do i=is,ie
-             !deform_1(i,j,k)=2*(dudx(i,j,k)**2+dvdy(i,j,k)**2+  &
-             !   dwdz(i,j,k)**2)+(dudy(i,j,k)+dvdx(i,j,k))**2+   &
-             !   (dudz(i,j,k)+dwdx(i,j,k))**2+                   &
-             !   (dvdz(i,j,k)+dwdy(i,j,k))**2
 
              tmp = dwdx(i,j,k)*dudz(i,j,k)+dwdy(i,j,k)*dvdz(i,j,k)
 
@@ -265,15 +259,6 @@ contains
           enddo
        enddo
    enddo
-
-   ! KGao: debug code
-   !if (is_master())  then
-   !   write(*,*) 'KGao debug - max deform_1 ', maxval(abs(deform_1(is:ie,js:je,:)))
-   !   write(*,*) 'KGao debug - max dudx ', maxval(abs(dudx(is:ie,js:je,:)))
-   !   write(*,*) 'KGao debug - max dudz ', maxval(abs(dudz(is:ie,js:je,:)))
-   !   write(*,*) 'KGao debug - max dz ', maxval(abs(delz))
-   !   write(*,*) 'KGao debug - max dx ', maxval(abs(dx))
-   !endif
 
   end subroutine cal_3d_tke_budget
 

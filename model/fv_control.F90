@@ -641,13 +641,20 @@ module fv_control_mod
 
      ! Finish up initialization; write solver information and damping coefficients
 
-     ! KGao: check value of dddmp when damp_flag = 0 
+     ! Check value of dddmp and smag2d when damp_flag = 0 or 1
      if (Atm(this_grid)%flagstruct%damp_flag .eq. 0 .and. Atm(this_grid)%flagstruct%dddmp .gt. 0) then
         Atm(this_grid)%flagstruct%cs = Atm(this_grid)%flagstruct%dddmp
         if ( is_master() ) then
            write(*,*) 'Using the old 2nd order divergence damping'
-           write(*,*) '!!! dddmp is deprecated !!!'
-           write(*,*) '!!! please specify cs parameter instead in the future !!!'
+           write(*,*) '!!! dddmp is deprecated; please specify cs parameter instead in the future !!!'
+        endif
+     endif
+
+     if (Atm(this_grid)%flagstruct%damp_flag .eq. 1 .and. Atm(this_grid)%flagstruct%smag2d .gt. 0) then
+        Atm(this_grid)%flagstruct%cs = Atm(this_grid)%flagstruct%smag2d
+        if ( is_master() ) then
+           write(*,*) 'Using the updated smag-type 2nd order damping'
+           write(*,*) '!!! smag2d is deprecated; please specify cs parameter instead in the future !!!'
         endif
      endif
 
