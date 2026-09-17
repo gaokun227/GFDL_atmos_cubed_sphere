@@ -150,8 +150,8 @@ module fv_control_mod
 
      integer , pointer :: nord
      integer , pointer :: nord_tr
-     integer , pointer :: damp_flag ! KGao
-     real    , pointer :: cs  ! KGao 
+     integer , pointer :: damp_flag
+     real    , pointer :: cs
      real    , pointer :: dddmp
      real    , pointer :: smag2d
      real    , pointer :: d2_bg
@@ -673,7 +673,7 @@ module fv_control_mod
            write(*,*) ' '
            write(*,*) 'Divergence damping Coefficients'
            write(*,*) 'External mode del-2 (m**2/s)=',  Atm(this_grid)%flagstruct%d_ext*Atm(this_grid)%gridstruct%da_min_c/sdt
-           write(*,*) 'Internal mode del-2 SMAG dimensionless coeff=',  Atm(this_grid)%flagstruct%cs ! KGao: dddmp->cs
+           write(*,*) 'Internal mode del-2 SMAG dimensionless coeff=',  Atm(this_grid)%flagstruct%cs
            write(*,*) 'Internal mode del-2 background diff=', Atm(this_grid)%flagstruct%d2_bg*Atm(this_grid)%gridstruct%da_min_c/sdt
 
            if (nord==1) then
@@ -716,8 +716,8 @@ module fv_control_mod
        lim_fac                       => Atm%flagstruct%lim_fac
        nord                          => Atm%flagstruct%nord
        nord_tr                       => Atm%flagstruct%nord_tr
-       damp_flag                     => Atm%flagstruct%damp_flag ! KGao
-       cs                            => Atm%flagstruct%cs ! KGao
+       damp_flag                     => Atm%flagstruct%damp_flag
+       cs                            => Atm%flagstruct%cs
        dddmp                         => Atm%flagstruct%dddmp
        smag2d                        => Atm%flagstruct%smag2d
        d2_bg                         => Atm%flagstruct%d2_bg
@@ -968,7 +968,7 @@ module fv_control_mod
             nudge, do_f3d, external_ic, is_ideal_case, read_increment, &
             ncep_ic, nggps_ic, hrrrv3_ic, ecmwf_ic, do_diss_est, use_gfsO3, fv_diag_ic, &
             external_eta, res_latlon_dynamics, res_latlon_tracers, d2bg_zq, lim_fac, &
-            damp_flag, cs, & ! KGao
+            damp_flag, cs, &
             dddmp, smag2d, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
             warm_start, adjust_dry_mass, mountain, d_con, prevent_diss_cooling, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
             dry_mass, grid_type, do_Held_Suarez, &
@@ -1177,7 +1177,7 @@ module fv_control_mod
 
        integer :: ios, ierr
        namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_intermediate_phys, do_inline_mp, do_inline_pbl, &
-            do_3dtke, & ! KGao: 3D-SA-TKE
+            do_3dtke, &
             do_inline_cnv, do_inline_gwd, &
             inline_pbl_flag, inline_cnv_flag, do_aerosol, do_cosp, consv_checker, te_err, tw_err
 

@@ -77,8 +77,8 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, adj_mass_vmr, inline_pbl_flag
 
     logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_pbl, do_inline_gwd
+    logical, intent (in) :: consv_checker
     logical, intent (in) :: do_3dtke
-    logical, intent (in) :: consv_checker, adj_mass_vmr
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
