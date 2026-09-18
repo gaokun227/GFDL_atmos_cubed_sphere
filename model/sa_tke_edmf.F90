@@ -143,7 +143,7 @@ module sa_tke_edmf_mod
     logical :: use_simple_k  = .false. ! flag for using a simple k formula, in which cm and pr are set to constants
                                        ! ck0 and pr0 are used 
     real    :: cd0           = 0.0011  ! constant surface drag coeff for idealized tests
-    real    :: cs            = 0.      ! cs parameter for kh (should be same as in dycore)
+    real    :: cs            = 0.      ! cs parameter for kh (should be same as the cs in fv3 namelist)
     real    :: pr0           = 1./3  
 
     ! -----------------------------------------------------------------------

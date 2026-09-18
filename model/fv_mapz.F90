@@ -105,7 +105,7 @@ contains
   logical, intent(in):: do_sat_adj
   logical, intent(in):: do_inline_mp
   logical, intent(in):: do_inline_pbl
-  logical, intent(in):: do_3dtke ! KGao: 3D-SA-TKE
+  logical, intent(in):: do_3dtke
   logical, intent(in):: do_inline_cnv
   logical, intent(in):: do_inline_gwd
   logical, intent(in):: fill                  ! fill negative tracers
@@ -799,7 +799,6 @@ contains
 
         call timing_on('INTERMEDIATE_PHYS')
 
-        ! KGao: pass ak, bk as inputs for 3D-SA-TKE
         call intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, &
                  mdt, consv, akap, ptop, ak, bk, pfull, hs, te0_2d, u, &
                  v, w, omga, pt, delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, &
