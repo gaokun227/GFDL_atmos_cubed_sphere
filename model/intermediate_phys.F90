@@ -693,7 +693,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 enddo
             endif
 
-            if (inline_pbl_flag .eq. 1) &
+            if (inline_pbl_flag .eq. 1) then
                 ! diagnose surface variables for PBL parameterization
                 call sa_tke_edmf_sfc (ie-is+1, lsoil, pi (is:ie, 1), uu (is:ie, 1), &
                     vv (is:ie, 1), ta (is:ie, 1), qa (is:ie, 1, sphum), &
@@ -726,7 +726,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
                     !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
 
-            if (inline_pbl_flag .eq. 2) &
+            elseif (inline_pbl_flag .eq. 2) then
                 ! diagnose surface variables for PBL parameterization
                 call sa_tke_edmf_new_sfc (ie-is+1, lsoil, pi (is:ie, 1), uu (is:ie, 1), &
                     vv (is:ie, 1), ta (is:ie, 1), qa (is:ie, 1, sphum), &
@@ -758,6 +758,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                     inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j))
                     !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
                     !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
+            endif
 
             ! update u, v, T, q, and delp, vertical index flip over
             do k = 1, km
