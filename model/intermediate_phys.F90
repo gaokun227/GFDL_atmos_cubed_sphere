@@ -771,7 +771,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                             !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
                     endif
 
-            else if (inline_pbl_flag .eq. 2) then 
+            elseif (inline_pbl_flag .eq. 2) then
                 ! diagnose surface variables for PBL parameterization
                 call sa_tke_edmf_new_sfc (ie-is+1, lsoil, pi (is:ie, 1), uu (is:ie, 1), &
                     vv (is:ie, 1), ta (is:ie, 1), qa (is:ie, 1, sphum), &
