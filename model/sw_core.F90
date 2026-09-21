@@ -926,8 +926,8 @@ module sw_core_mod
       ! get diffusion coefficient to be used for 2nd order damping/diffusion of 
       ! the physical fields defined at cell centers (e.g., potential temp., vorticity, etc)
 
-      if (damp_flag .eq. 1 .and. cs > 1.e-5) then ! Lucas's updated smag-type diffusion below 
-         ! smag_q here is dt * sqrt(T**2 + S**2) 
+      if (damp_flag .eq. 1 .and. cs > 1.e-5) then ! Lucas's updated smag-type diffusion
+         ! smag_q is dt * sqrt(T**2 + S**2); du/dz and dv/dz not considered yet 
          if (flagstruct%grid_type<3 .and. .not. bounded_domain .and. &
               ( sw_corner .or. se_corner .or. ne_corner .or. nw_corner ) ) call fill_corners(u, v, npx, npy, VECTOR=.true., DGRID=.true.)
          call smag_cell(abs(dt), u, v, smag_q, bd, npx, npy, gridstruct, ng, cs)
@@ -936,7 +936,7 @@ module sw_core_mod
          if ( .not. present(tke) ) call mpp_error(FATAL,'tke not defined but using tke-based damping') 
          do j = jsd, jed
             do i = isd, ied
-               ! smag_q here is dt * sqrt(e) / sqrt (A)
+               ! smag_q is dt * sqrt(e) / sqrt (A)
                ! cs * smag_q should be no larger than 0.2
                smag_q(i,j) = min(0.2/cs, abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min))
             enddo
@@ -1059,7 +1059,7 @@ module sw_core_mod
 !       enddo
 !    endif
 #if defined(GFS_PHYS) || defined(DCMIP)
-        ! apply damping to pt via calling fv_tp_2d (using Lucas's code)
+        ! apply damping to pt via calling fv_tp_2d
         ! there are two steps involved:
         ! - first is the higher-order damping using vtdm4,
         ! - second is the 2nd order damping (scaled by smag_scalar)
@@ -1500,17 +1500,15 @@ module sw_core_mod
 ! 
 ! - about the damping coeff:
 !   - damp2 is a coeff (dt * Km) to be used together with horizontal divergence (D or delpc) for 2nd order divergence damping 
-!   - for smag type: Km = cs * l^2 * sqrt(T^2+S^2); cs * dt * sqrt(T^2+S^2) is limited below 0.2 
-!     * the original method:
+!   - for smag type: Km = cs * l^2 * sqrt(T^2+S^2); cs * dt * sqrt(T^2+S^2) is capped at 0.2 
 !       damp2 = cs * A * vort, 
-!       where vort  = dt * sqrt(T^2+S^2) (vort is dimensionless and obtained above)
+!       where vort  = dt * sqrt(T^2+S^2) and it is dimensionless
 !   - for TKE based: Km = cs * l * sqrt(e) 
 !
 ! - about the damping tendency:
-!   - delpc is divergence (D), divg_d is high-order derivatives of divergence
-!   - term = damp2 * D = dt * Km * D  => 1/dx * (term[i+1,j] - term[i,j]) is u tendency term
-!   - ke(i,j) = ke(i,j) + vort(i,j); ke here combines ke and damp2 * D; why no negative sign?
-!   - u(i,j) = ... + ke(i,j) - ke(i+1,j) ; no 1/dx, because u is u*dx here 
+!   - Let's define term = damp2 * D = dt * Km * D; then 1/dx * (term[i+1,j] - term[i,j]) becomes a momentum tendency term [m/s^2]
+!   - ke(i,j) = ke(i,j) + vort(i,j); ke here combines ke and damp2 * D
+!   - u(i,j) = ... + ke(i,j) - ke(i+1,j) ; no 1/dx factor, because u is u*dx here 
 
      if (damp_flag .eq. 0 .or. damp_flag .eq. 1) then ! original method
 
@@ -1628,7 +1626,7 @@ module sw_core_mod
         vt = 0.
    endif
 
-   ! apply 2nd order damping to vorticity via calling del6_vt_flux (using Lucas's code)
+   ! apply 2nd order damping to vorticity via calling del6_vt_flux
    ! this is an additional step after the higher-order damping using vtdm4
    if ( damp_flag .gt. 0 .and. cs > 1.e-5) then
        damp4 = cs * gridstruct%da_min_c
@@ -2057,6 +2055,9 @@ end subroutine divergence_corner_nest
 ! Compute the cell-corner Smagorinsky diffusion coefficients
 ! works only if (grid_type==4) (need to add corner handling on cubed sphere)
 
+! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
+! where T = du/dx - dv/dy;   S = du/dy + dv/dx
+
  type(fv_grid_bounds_type), intent(IN) :: bd
  real, intent(in):: dt
  integer, intent(IN) :: npx, npy, ng
@@ -2096,9 +2097,6 @@ end subroutine divergence_corner_nest
  rarea_c => gridstruct%rarea_c
 
  is2 = max(2,is); ie1 = min(npx-1,ie+1)
-
-! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
-! where T = du/dx - dv/dy;   S = du/dy + dv/dx
 
 ! Compute tension strain T at corners
  do j=js,je+1
@@ -2148,6 +2146,9 @@ end subroutine divergence_corner_nest
  subroutine smag_cell(dt, u, v, smag_q, bd, npx, npy, gridstruct, ng, smag2d, dudz, dvdz)
 ! Compute the cell-mean Smagorinsky diffusion coefficients
 ! works only if (grid_type==4) (need to add corner handling on cubed sphere)
+
+! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
+! where T = du/dx - dv/dy;   S = du/dy + dv/dx
 
  type(fv_grid_bounds_type), intent(IN) :: bd
  real, intent(in):: dt, smag2d
@@ -2199,8 +2200,6 @@ end subroutine divergence_corner_nest
     return
  endif
 
-! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
-! where T = du/dx - dv/dy;   S = du/dy + dv/dx
 ! Compute tension strain T at corners and then the 4-corner mean
  do j=js-1,je+2
     do i=is-2,ie+2
@@ -2214,7 +2213,7 @@ end subroutine divergence_corner_nest
  enddo
  do j=js-1,je+2
     do i=is-1,ie+2
-       wk(i,j) = rarea_c(i,j)*( vt(i,j-1)-vt(i,j) -ut(i-1,j)+ut(i,j) )
+       wk(i,j) = rarea_c(i,j)*(vt(i,j-1) - vt(i,j) - ut(i-1,j) + ut(i,j))
     enddo
  enddo
 
@@ -2238,13 +2237,13 @@ end subroutine divergence_corner_nest
 
  do j=js-1,je+1
     do i=is-1,ie+1
-       ! KGao: negative S? 
-       wk(i,j) = rarea(i,j)*( vt(i,j)-vt(i,j+1) +ut(i,j)-ut(i+1,j) )
+       wk(i,j) = rarea(i,j)*(vt(i,j) - vt(i,j+1) + ut(i,j) - ut(i+1,j))
     enddo
  enddo
 
+ ! KGao: This scheme can be further expanded to consider the vertical wind shear; 
+ !       currently note used and we need to confirm the signs below are correct
  if ( present(dudz) .and. present(dvdz) ) then
-     ! KGao: needs to confirm the signs below are correct 
      do j=js-1,je+1
         do i=is-1,ie+1
            smag_q(i,j) = smag_q(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
