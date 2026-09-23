@@ -456,6 +456,23 @@ module fv_nwp_nudge_mod
 
   endif
 
+  ! KGao: set mask(i,j) to 0 in the  model TC core region (determined by sea-level pres)
+  if (ps_tc_mask .lt. 1010.e2) then
+    do j=js,je
+       do i=is,ie
+          tv(i,j) = pt(i,j,npz)*(1.+zvir*q(i,j,npz,1))
+       enddo
+    enddo
+    call compute_slp(is, ie, js, je, tv, ps(is:ie,js:je), phis(is:ie,js:je), slp_m)
+    do j = js, je
+       do i = is, ie
+         if (slp_m(i,j) < ps_tc_mask) then
+            mask(i,j) = 0.
+         endif
+       enddo
+    enddo
+  endif
+
   if ( time_varying ) then
        factor = 1. + cos(real(mod(seconds,time_interval))/real(time_interval)*2.*pi)
        factor = max(1.e-5, factor)
@@ -484,27 +501,9 @@ module fv_nwp_nudge_mod
        allocate (v_obs(is:ie,js:je,npz) )
   endif
 
-
   call get_obs(Time, dt, zvir, ak, bk, ps, ts, ps_obs, delp, pt, nwat, q, u_obs, v_obs, t_obs, q_obs,   &
                phis, ua, va, u_dt, v_dt, npx, npy, npz, factor, factor_nwp, mask, bd, gridstruct, domain)
 ! *t_obs* is virtual temperature
-
-  ! KGao: set mask(i,j) to 0 in the  model TC core region (determined by sea-level pres)
-  if (ps_tc_mask .lt. 1010.e2) then
-    do j=js,je
-       do i=is,ie
-          tv(i,j) = pt(i,j,npz)*(1.+zvir*q(i,j,npz,1))
-       enddo
-    enddo
-    call compute_slp(is, ie, js, je, tv, ps(is:ie,js:je), phis(is:ie,js:je), slp_m)
-    do j = js, je
-       do i = is, ie
-         if (slp_m(i,j) < ps_tc_mask) then
-            mask(i,j) = 0.
-         endif
-       enddo
-    enddo
-  endif
 
   if ( no_obs ) then
        deallocate (ps_obs)
