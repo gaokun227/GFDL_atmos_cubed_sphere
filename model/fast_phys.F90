@@ -44,7 +44,7 @@ module fast_phys_mod
     use sa_tke_edmf_new_mod, only: sa_tke_edmf_new_sfc, sa_tke_edmf_new_pbl
     use sa_gwd_mod, only: sa_gwd_oro
     use fv_timing_mod, only: timing_on, timing_off
-    use sa_3d_tke_mod, only: cal_3d_tke_budget
+    use deform_utils_mod, only: cal_3d_tke_budget
 
     implicit none
 

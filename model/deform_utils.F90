@@ -19,16 +19,25 @@
 !* If not, see <http://www.gnu.org/licenses/>.
 !***********************************************************************
 
-module sa_3d_tke_mod
+! =======================================================================
+! This module contains utilities for calculating flow deformation.
+! Developers: Lucas Harris, Kun Gao
+! =======================================================================
+
+module deform_utils_mod
 
   use fv_arrays_mod,      only: fv_grid_bounds_type, fv_grid_type
-  !use nh_utils_mod,       only: edge_profile1  
+  use constants_mod,      only: grav
 
   implicit none
   private
   public :: cal_3d_tke_budget
 
 contains
+
+  subroutine cal_3d_tke_budget(u, v, ua, va, w, &
+                   delz, npz, ak, bk, gridstruct, bd, &
+                   deform_1h, deform_1v)
 
 ! =======================================================================
 ! cal_3d_tke_budget :: calculate 3D TKE shear production
@@ -41,10 +50,6 @@ contains
 ! - the algorithms are updated to be consistent with finite-volume method
 ! - contact: Kun Gao (kun.gao@noaa.gov)
 ! =======================================================================
-
-  subroutine cal_3d_tke_budget(u, v, ua, va, w, &
-                   delz, npz, ak, bk, gridstruct, bd, &
-                   deform_1h, deform_1v)
 
     integer, intent(in) :: npz
     type(fv_grid_bounds_type), intent(IN) :: bd
@@ -262,22 +267,85 @@ contains
 
   end subroutine cal_3d_tke_budget
 
-  subroutine edge_profile1(q1, q1e, i1, i2, km, dp0, limiter)
-! Edge profiles for a single scalar quantity
- integer, intent(in):: i1, i2
- integer, intent(in):: km
- integer, intent(in):: limiter
- real, intent(in):: dp0(km)
- real, intent(in),  dimension(i1:i2,km):: q1
- real, intent(out), dimension(i1:i2,km+1):: q1e
-!-----------------------------------------------------------------------
- real, dimension(i1:i2,km+1):: qe1, gam  ! edge values
- real  gak(km)
- real  bet, r2o3, r4o3
- real  g0, gk, xt1, xt2, a_bot
- integer i, k
+  subroutine compute_dudz(bd, npz, u, v, dudz, dvdz, gz, dp_ref)
 
-! Assuming grid varying in vertical only
+ !routine to compute vertical gradients in winds
+ ! for 2D smag damping
+ ! Call AFTER updating gz
+ !TODO needs cubed-sphere support (don't compute in corners)
+
+   type(fv_grid_bounds_type), intent(IN) :: bd
+   integer, intent(IN) :: npz
+   real, intent(in) :: u(bd%isd:bd%ied,  bd%jsd:bd%jed+1,npz)
+   real, intent(in) :: v(bd%isd:bd%ied+1,bd%jsd:bd%jed,  npz)
+   real, intent(in) :: gz(bd%isd:bd%ied, bd%jsd:bd%jed,  npz+1)
+   real, intent(IN) :: dp_ref(npz)
+   real, intent(OUT) :: dudz(bd%isd:bd%ied,bd%jsd:bd%jed+1,npz)
+   real, intent(OUT) :: dvdz(bd%isd:bd%ied+1,bd%jsd:bd%jed,npz)
+
+   real :: dz
+   real :: ue(bd%isd:bd%ied  ,npz+1)
+   real :: ve(bd%isd:bd%ied+1,npz+1)
+   integer :: i,j,k
+   integer :: is,  ie,  js,  je
+   integer :: isd, ied, jsd, jed
+
+   is  = bd%is
+   ie  = bd%ie
+   js  = bd%js
+   je  = bd%je
+   isd  = bd%isd
+   ied  = bd%ied
+   jsd  = bd%jsd
+   jed  = bd%jed
+
+   dudz = -1.e50
+   dvdz = -1.e50
+
+   do j=jsd,jed
+      !TODO: pass by reference and not copy
+      call edge_profile1(v(isd:ied+1,j,:), ve, isd,  ied+1, npz, dp_ref, 0)
+      do k=1,npz
+         do i=isd+1,ied
+            dz = gz(i,j,k) + gz(i-1,j,k)
+            dz = dz - (gz(i,j,k+1) + gz(i-1,j,k+1))
+            dz = 0.5*dz/grav
+            dvdz(i,j,k) = (ve(i,k)-ve(i,k+1))/dz
+         enddo
+      enddo
+   enddo
+
+   do j=jsd+1,jed
+      call edge_profile1(u(isd:ied,j,:), ue, isd, ied, npz, dp_ref, 0)
+      do k=1,npz
+         do i=isd,ied
+            dz = gz(i,j,k) + gz(i,j-1,k)
+            dz = dz - (gz(i,j,k+1) + gz(i,j-1,k+1))
+            dz = 0.5*dz/grav
+            dudz(i,j,k) = (ue(i,k)-ue(i,k+1))/dz
+         enddo
+      enddo
+   enddo
+
+  end subroutine compute_dudz
+
+  subroutine edge_profile1(q1, q1e, i1, i2, km, dp0, limiter)
+  ! Edge profiles for a single scalar quantity
+  ! also see edge_profile in model/nh_utils.F90
+  integer, intent(in):: i1, i2
+  integer, intent(in):: km
+  integer, intent(in):: limiter
+  real, intent(in):: dp0(km)
+  real, intent(in),  dimension(i1:i2,km):: q1
+  real, intent(out), dimension(i1:i2,km+1):: q1e
+  !-----------------------------------------------------------------------
+  real, dimension(i1:i2,km+1):: qe1, gam  ! edge values
+  real  gak(km)
+  real  bet, r2o3, r4o3
+  real  g0, gk, xt1, xt2, a_bot
+  integer i, k
+
+  ! Assuming grid varying in vertical only
    g0 = dp0(2) / dp0(1)
   xt1 = 2.*g0*(g0+1. )
   bet =    g0*(g0+0.5)
@@ -308,14 +376,14 @@ contains
      enddo
   enddo
 
-!------------------
-! Apply constraints
-!------------------
+  !------------------
+  ! Apply constraints
+  !------------------
     if ( limiter/=0 ) then   ! limit the top & bottom winds
          do i=i1,i2
-! Top
+  ! Top
             if ( q1(i,1)*qe1(i,1) < 0. ) qe1(i,1) = 0.
-! Surface:
+  ! Surface:
             if ( q1(i,km)*qe1(i,km+1) < 0. ) qe1(i,km+1) = 0.
          enddo
     endif
@@ -328,4 +396,4 @@ contains
 
   end subroutine edge_profile1
 
-end module sa_3d_tke_mod
+end module deform_utils_mod
