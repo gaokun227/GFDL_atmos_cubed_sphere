@@ -390,8 +390,19 @@ contains
                 call remap_restart( Atm(n:n) )
                 if( is_master() ) write(*,*) 'Done remapping dynamical IC'
              else
+
                 if( is_master() ) write(*,*) 'Warm starting, calling fv_io_restart'
-                call fv_io_read_restart(Atm(n)%domain_for_read,Atm(n:n))
+
+                ! KGao test code: do not call fv_io_read_restart for nest
+
+                !call fv_io_read_restart(Atm(n)%domain_for_read,Atm(n:n))
+
+                if (Atm(n)%neststruct%nested) then
+                    if( is_master() ) write(*,*) 'KGao: Will do warm starting nest from parent data'
+                else
+                  call fv_io_read_restart(Atm(n)%domain_for_read,Atm(n:n))
+                endif
+
                 !====== PJP added DA functionality ======
                 if (Atm(n)%flagstruct%read_increment) then
                    ! print point in middle of domain for a sanity check
@@ -520,6 +531,15 @@ contains
 
        endif !n==this_grid
 
+
+       ! KGao test code: now fill nest
+       if (Atm(n)%neststruct%nested) then
+          if( is_master() ) write(*,*) 'KGao: Warm starting nest from parent data'
+          if (n==this_grid .or. this_grid==Atm(n)%parent_grid%grid_number) then
+             !if( is_master() ) write(*,*) n, this_grid, Atm(n)%parent_grid%grid_number
+             call fill_nested_grid_data(Atm(n:n), n==this_grid)
+          endif
+       endif
 
           !!!! NOT NEEDED??
           !Currently even though we do fill in the nested-grid IC from
@@ -968,9 +988,10 @@ contains
     real zvir, gh0, p1(2), p2(2), r, r0
 
     integer :: p, sending_proc, gid
-    logical process
+    logical :: process
+    logical :: flag = .false.  ! KGao: for indicating if this pe need to collect parent domain data
 
-    call mpp_error(FATAL, " FILL_NESTED_GRID_DATA not yet updated for remap BCs")
+    !call mpp_error(FATAL, " FILL_NESTED_GRID_DATA not yet updated for remap BCs")
 
     if (present(proc_in)) then
        process = proc_in
@@ -988,12 +1009,13 @@ contains
 
     gid = mpp_pe()
 
+    ! KGao: use same as in fill_nested_grid_topo?
     sending_proc = Atm(1)%parent_grid%pelist(1) + (Atm(1)%neststruct%parent_tile-1)*Atm(1)%parent_grid%npes_per_tile
 
-       call mpp_get_data_domain( Atm(1)%parent_grid%domain, &
-            isd_p,  ied_p,  jsd_p,  jed_p  )
-       call mpp_get_compute_domain( Atm(1)%parent_grid%domain, &
-            isc_p,  iec_p,  jsc_p,  jec_p  )
+    call mpp_get_data_domain( Atm(1)%parent_grid%domain, &
+         isd_p,  ied_p,  jsd_p,  jed_p  )
+    call mpp_get_compute_domain( Atm(1)%parent_grid%domain, &
+         isc_p,  iec_p,  jsc_p,  jec_p  )
     call mpp_get_global_domain( Atm(1)%parent_grid%domain, &
          isg, ieg, jsg, jeg, xsize=npx_p, ysize=npy_p)
 
@@ -1007,7 +1029,11 @@ contains
 
     endif
 
-    !delp
+    if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+       flag = .true.
+    endif
+
+    ! ===> delp
 
     allocate(g_dat( isg:ieg, jsg:jeg, npz) )
 
@@ -1015,7 +1041,8 @@ contains
 
     !Call mpp_global_field on the procs that have the required data.
     !Then broadcast from the head PE to the receiving PEs
-    if (Atm(1)%neststruct%parent_proc .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+    !if (Atm(1)%neststruct%parent_proc .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+    if (flag) then
        call mpp_global_field( &
             Atm(1)%parent_grid%domain, &
             Atm(1)%parent_grid%delp(isd_p:ied_p,jsd_p:jed_p,:), g_dat, position=CENTER)
@@ -1037,12 +1064,24 @@ contains
 
     call mpp_sync_self
 
-    !tracers
-    do nq=1,ncnst
+    ! ===> tracers
+
+    ! KGao: fill tracers with zero (except for sphum)
+    if (ANY(Atm(1)%pelist == gid)) then
+      do nq = 2, ncnst
+         call mpp_error(NOTE, "KGao: filling tracer field with 0 ", nq)
+         !write(*,*) gid, isd, ied, jsd, jed
+         Atm(1)%q(isd:ied,jsd:jed,:,nq) = 0.
+      enddo
+    endif
+
+    !do nq=1, ncnst ! KGao: does not work for nq > 1
+    nq = 1
 
        call timing_on('COMM_TOTAL')
 
-       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+       !if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+       if (flag) then
           call mpp_global_field( &
             Atm(1)%parent_grid%domain, &
             Atm(1)%parent_grid%q(isd_p:ied_p,jsd_p:jed_p,:,nq), g_dat, position=CENTER)
@@ -1064,19 +1103,20 @@ contains
 
        call mpp_sync_self
 
-    end do
+    !end do ! KGao: remove the nq loop
 
     !Note that we do NOT fill in phis (surface geopotential), which should
     !be computed exactly instead of being interpolated.
 
 
 #ifndef SW_DYNAMICS
-    !pt --- actually temperature
+    ! ===> pt (actually temperature)
 
     call timing_on('COMM_TOTAL')
 
-    if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
-          call mpp_global_field( &
+    !if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+    if (flag) then
+       call mpp_global_field( &
             Atm(1)%parent_grid%domain, &
             Atm(1)%parent_grid%pt(isd_p:ied_p,jsd_p:jed_p,:), g_dat, position=CENTER)
        if (gid == sending_proc) then
@@ -1097,116 +1137,123 @@ contains
          Atm(1)%neststruct%ind_h, Atm(1)%neststruct%wt_h, &
          0, 0,  isg, ieg, jsg, jeg, npz, Atm(1)%bd)
 
+    call mpp_sync_self ! KGao: this was missing
 
-    if ( Atm(1)%flagstruct%nwat > 0 ) then
-       sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
-    else
-       sphum = 1
-    endif
-    if ( Atm(1)%parent_grid%flagstruct%adiabatic .or. Atm(1)%parent_grid%flagstruct%do_Held_Suarez ) then
-       zvir = 0.         ! no virtual effect
-    else
-       zvir = rvgas/rdgas - 1.
-    endif
+    ! KGao: following are for t->pt at nested boundaries (not needed according to lucas)
 
-    call timing_on('COMM_TOTAL')
+    !if ( Atm(1)%flagstruct%nwat > 0 ) then
+    !   sphum = get_tracer_index (MODEL_ATMOS, 'sphum')
+    !else
+    !   sphum = 1
+    !endif
+    !if ( Atm(1)%parent_grid%flagstruct%adiabatic .or. Atm(1)%parent_grid%flagstruct%do_Held_Suarez ) then
+    !   zvir = 0.         ! no virtual effect
+    !else
+    !   zvir = rvgas/rdgas - 1.
+    !endif
 
-    if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
-          call mpp_global_field( &
-            Atm(1)%parent_grid%domain, &
-            Atm(1)%parent_grid%pkz(isc_p:iec_p,jsc_p:jec_p,:), g_dat, position=CENTER)
-       if (gid == sending_proc) then
-          do p=1,size(Atm(1)%pelist)
-             call mpp_send(g_dat,size(g_dat),Atm(1)%pelist(p))
-          enddo
-       endif
-    endif
-    if (ANY(Atm(1)%pelist == gid)) then
-       call mpp_recv(g_dat, size(g_dat), sending_proc)
-    endif
+    !call timing_on('COMM_TOTAL')
 
-    call mpp_sync_self
+    !if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+    !      call mpp_global_field( &
+    !        Atm(1)%parent_grid%domain, &
+    !        Atm(1)%parent_grid%pkz(isc_p:iec_p,jsc_p:jec_p,:), g_dat, position=CENTER)
+    !   if (gid == sending_proc) then
+    !      do p=1,size(Atm(1)%pelist)
+    !         call mpp_send(g_dat,size(g_dat),Atm(1)%pelist(p))
+    !      enddo
+    !   endif
+    !endif
+    !if (ANY(Atm(1)%pelist == gid)) then
+    !   call mpp_recv(g_dat, size(g_dat), sending_proc)
+    !endif
 
-    call timing_off('COMM_TOTAL')
+    !call mpp_sync_self
 
-    if (process) then
-       allocate(pt_coarse(isd:ied,jsd:jed,npz))
-       call fill_nested_grid(pt_coarse, g_dat, &
-            Atm(1)%neststruct%ind_h, Atm(1)%neststruct%wt_h, &
-            0, 0,  isg, ieg, jsg, jeg, npz, Atm(1)%bd)
+    !call timing_off('COMM_TOTAL')
 
-       if (Atm(1)%bd%is == 1) then
-          do k=1,npz
-             do j=Atm(1)%bd%jsd,Atm(1)%bd%jed
-                do i=Atm(1)%bd%isd,0
-                   Atm(1)%pt(i,j,k) = cp_air*Atm(1)%pt(i,j,k)/pt_coarse(i,j,k)*(1.+zvir*Atm(1)%q(i,j,k,sphum))
-                end do
-             end do
-          end do
-       end if
+    !if (process) then
+    !   allocate(pt_coarse(isd:ied,jsd:jed,npz))
+    !   call fill_nested_grid(pt_coarse, g_dat, &
+    !        Atm(1)%neststruct%ind_h, Atm(1)%neststruct%wt_h, &
+    !        0, 0,  isg, ieg, jsg, jeg, npz, Atm(1)%bd)
 
-       if (Atm(1)%bd%js == 1) then
-          if (Atm(1)%bd%is == 1) then
-             istart = Atm(1)%bd%is
-          else
-             istart = Atm(1)%bd%isd
-          end if
-          if (Atm(1)%bd%ie == Atm(1)%npx-1) then
-             iend = Atm(1)%bd%ie
-          else
-             iend = Atm(1)%bd%ied
-          end if
+    !   if (Atm(1)%bd%is == 1) then
+    !      do k=1,npz
+    !         do j=Atm(1)%bd%jsd,Atm(1)%bd%jed
+    !            do i=Atm(1)%bd%isd,0
+    !               Atm(1)%pt(i,j,k) = cp_air*Atm(1)%pt(i,j,k)/pt_coarse(i,j,k)*(1.+zvir*Atm(1)%q(i,j,k,sphum))
+    !            end do
+    !         end do
+    !      end do
+    !   end if
 
-          do k=1,npz
-             do j=Atm(1)%bd%jsd,0
-                do i=istart,iend
-                   Atm(1)%pt(i,j,k) = cp_air*Atm(1)%pt(i,j,k)/pt_coarse(i,j,k)*(1.+zvir*Atm(1)%q(i,j,k,sphum))
-                end do
-             end do
-          end do
-       end if
+    !   if (Atm(1)%bd%js == 1) then
+    !      if (Atm(1)%bd%is == 1) then
+    !         istart = Atm(1)%bd%is
+    !      else
+    !         istart = Atm(1)%bd%isd
+    !      end if
+    !      if (Atm(1)%bd%ie == Atm(1)%npx-1) then
+    !         iend = Atm(1)%bd%ie
+    !      else
+    !         iend = Atm(1)%bd%ied
+    !      end if
 
-       if (Atm(1)%bd%ie == Atm(1)%npx-1) then
-          do k=1,npz
-             do j=Atm(1)%bd%jsd,Atm(1)%bd%jed
-                do i=Atm(1)%npx,Atm(1)%bd%ied
-                   Atm(1)%pt(i,j,k) = cp_air*Atm(1)%pt(i,j,k)/pt_coarse(i,j,k)*(1.+zvir*Atm(1)%q(i,j,k,sphum))
-                end do
-             end do
-          end do
-       end if
+    !      do k=1,npz
+    !         do j=Atm(1)%bd%jsd,0
+    !            do i=istart,iend
+    !               Atm(1)%pt(i,j,k) = cp_air*Atm(1)%pt(i,j,k)/pt_coarse(i,j,k)*(1.+zvir*Atm(1)%q(i,j,k,sphum))
+    !            end do
+    !         end do
+    !      end do
+    !   end if
 
-       if (Atm(1)%bd%je == Atm(1)%npy-1) then
-          if (Atm(1)%bd%is == 1) then
-             istart = Atm(1)%bd%is
-          else
-             istart = Atm(1)%bd%isd
-          end if
-          if (Atm(1)%bd%ie == Atm(1)%npx-1) then
-             iend = Atm(1)%bd%ie
-          else
-             iend = Atm(1)%bd%ied
-          end if
+    !   if (Atm(1)%bd%ie == Atm(1)%npx-1) then
+    !      do k=1,npz
+    !         do j=Atm(1)%bd%jsd,Atm(1)%bd%jed
+    !            do i=Atm(1)%npx,Atm(1)%bd%ied
+    !               Atm(1)%pt(i,j,k) = cp_air*Atm(1)%pt(i,j,k)/pt_coarse(i,j,k)*(1.+zvir*Atm(1)%q(i,j,k,sphum))
+    !            end do
+    !         end do
+    !      end do
+    !   end if
 
-          do k=1,npz
-             do j=Atm(1)%npy,Atm(1)%bd%jed
-                do i=istart,iend
-                   Atm(1)%pt(i,j,k) = cp_air*Atm(1)%pt(i,j,k)/pt_coarse(i,j,k)*(1.+zvir*Atm(1)%q(i,j,k,sphum))
-                end do
-             end do
-          end do
-       end if
+    !   if (Atm(1)%bd%je == Atm(1)%npy-1) then
+    !      if (Atm(1)%bd%is == 1) then
+    !         istart = Atm(1)%bd%is
+    !      else
+    !         istart = Atm(1)%bd%isd
+    !      end if
+    !      if (Atm(1)%bd%ie == Atm(1)%npx-1) then
+    !         iend = Atm(1)%bd%ie
+    !      else
+    !         iend = Atm(1)%bd%ied
+    !      end if
 
-       deallocate(pt_coarse)
+    !      do k=1,npz
+    !         do j=Atm(1)%npy,Atm(1)%bd%jed
+    !            do i=istart,iend
+    !               Atm(1)%pt(i,j,k) = cp_air*Atm(1)%pt(i,j,k)/pt_coarse(i,j,k)*(1.+zvir*Atm(1)%q(i,j,k,sphum))
+    !            end do
+    !         end do
+    !      end do
+    !   end if
 
-    end if
+    !   deallocate(pt_coarse)
 
-    if (.not. Atm(1)%flagstruct%hydrostatic) then
+    !end if ! KGao: end of t->pt
 
-       !delz
+
+    ! KGao: why parent PES does not satify this???
+    !if (.not. Atm(1)%flagstruct%hydrostatic) then
+
+       ! ===> delz
+
        call timing_on('COMM_TOTAL')
 
-       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+       !if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+       if (flag) then
           call mpp_global_field( &
             Atm(1)%parent_grid%domain, &
             Atm(1)%parent_grid%delz(isd_p:ied_p,jsd_p:jed_p,:), g_dat, position=CENTER)
@@ -1228,11 +1275,12 @@ contains
             Atm(1)%neststruct%ind_h, Atm(1)%neststruct%wt_h, &
             0, 0,  isg, ieg, jsg, jeg, npz, Atm(1)%bd)
 
-       !w
+       ! ===> w
 
        call timing_on('COMM_TOTAL')
 
-       if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+       !if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+       if (flag) then
           call mpp_global_field( &
             Atm(1)%parent_grid%domain, &
             Atm(1)%parent_grid%w(isd_p:ied_p,jsd_p:jed_p,:), g_dat, position=CENTER)
@@ -1253,22 +1301,22 @@ contains
        if (process) call fill_nested_grid(Atm(1)%w, g_dat, &
             Atm(1)%neststruct%ind_h, Atm(1)%neststruct%wt_h, &
             0, 0,  isg, ieg, jsg, jeg, npz, Atm(1)%bd)
-       !
 
-    end if
+    !endif ! KGao: end if (.not. Atm(1)%flagstruct%hydrostatic)
 
 #endif
     deallocate(g_dat)
 
-    !u
+    ! ===> u
 
     allocate(g_dat( isg:ieg, jsg:jeg+1, npz) )
     g_dat = 1.e25
 
     call timing_on('COMM_TOTAL')
 
-    if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
-          call mpp_global_field( &
+    !if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+    if (flag) then
+       call mpp_global_field( &
             Atm(1)%parent_grid%domain, &
             Atm(1)%parent_grid%u(isd_p:ied_p,jsd_p:jed_p+1,:), g_dat, position=NORTH)
        if (gid == sending_proc) then
@@ -1291,15 +1339,16 @@ contains
          0, 1,  isg, ieg, jsg, jeg, npz, Atm(1)%bd)
     deallocate(g_dat)
 
-    !v
+    ! ===> v
 
     allocate(g_dat( isg:ieg+1, jsg:jeg, npz) )
     g_dat = 1.e25
 
     call timing_on('COMM_TOTAL')
 
-    if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
-          call mpp_global_field( &
+    !if (ANY(Atm(1)%parent_grid%pelist == gid) .and. Atm(1)%neststruct%parent_tile == Atm(1)%parent_grid%global_tile) then
+    if (flag) then
+       call mpp_global_field( &
             Atm(1)%parent_grid%domain, &
             Atm(1)%parent_grid%v(isd_p:ied_p+1,jsd_p:jed_p,:), g_dat, position=EAST)
        if (gid == sending_proc) then
