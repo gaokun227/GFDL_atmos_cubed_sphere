@@ -172,7 +172,6 @@ module fv_control_mod
      logical , pointer :: do_intermediate_phys
      logical , pointer :: do_inline_mp
      logical , pointer :: do_inline_pbl
-     logical , pointer :: do_3dtke
      logical , pointer :: do_inline_cnv
      logical , pointer :: do_inline_gwd
      integer , pointer :: inline_pbl_flag
@@ -658,6 +657,12 @@ module fv_control_mod
         endif
      endif
 
+     ! Ensure related paramters are set correctly when damp_flag = 2
+     if (Atm(this_grid)%flagstruct%damp_flag .eq. 2) then
+        if (.not. Atm(this_grid)%flagstruct%do_inline_pbl .or. Atm(this_grid)%flagstruct%inline_pbl_flag .ne. 1) &
+           call mpp_error(FATAL, "Must set do_inline_pbl to true and inline_pbl_flag to 1 when using damp_flag=2")
+     endif
+
      if ( is_master() ) then
         write(*,*) ' '
         write(*,300) Atm(this_grid)%flagstruct%hydrostatic, Atm(this_grid)%thermostruct%use_cond, Atm(this_grid)%thermostruct%moist_kappa
@@ -737,7 +742,6 @@ module fv_control_mod
        do_intermediate_phys          => Atm%flagstruct%do_intermediate_phys
        do_inline_mp                  => Atm%flagstruct%do_inline_mp
        do_inline_pbl                 => Atm%flagstruct%do_inline_pbl
-       do_3dtke                      => Atm%flagstruct%do_3dtke
        do_inline_cnv                 => Atm%flagstruct%do_inline_cnv
        do_inline_gwd                 => Atm%flagstruct%do_inline_gwd
        inline_pbl_flag               => Atm%flagstruct%inline_pbl_flag
@@ -1177,7 +1181,6 @@ module fv_control_mod
 
        integer :: ios, ierr
        namelist /integ_phys_nml/ do_sat_adj, do_fast_phys, do_intermediate_phys, do_inline_mp, do_inline_pbl, &
-            do_3dtke, &
             do_inline_cnv, do_inline_gwd, &
             inline_pbl_flag, inline_cnv_flag, do_aerosol, do_cosp, consv_checker, te_err, tw_err
 

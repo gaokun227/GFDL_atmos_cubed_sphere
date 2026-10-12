@@ -143,7 +143,6 @@ module sa_tke_edmf_mod
     logical :: use_simple_k  = .false. ! flag for using a simple k formula, in which cm and pr are set to constants
                                        ! ck0 and pr0 are used 
     real    :: cd0           = 0.0011  ! constant surface drag coeff for idealized tests
-    real    :: cs            = 0.      ! cs parameter for kh (should be same as the cs in fv3 namelist)
     real    :: pr0           = 1./3  
 
     ! -----------------------------------------------------------------------
@@ -156,7 +155,7 @@ module sa_tke_edmf_mod
         cap_k0_land, do_dk_hb19, dspheat, redrag, do_z0_moon, &
         do_z0_hwrf15, do_z0_hwrf17, do_z0_hwrf17_hwonly, czilc, &
         z0s_max, wind_th_hwrf, ivegsrc, ck0, ck1, ch0, ch1, &
-        no_mf, use_const_l2, use_const_cd, use_simple_k, cd0, cs, pr0
+        no_mf, use_const_l2, use_const_cd, use_simple_k, cd0, pr0
 
 contains
 
@@ -209,7 +208,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
         tsea, heat, evap, stress, spd1, kinver, &
         psk, del, prsi, prsl, prslk, phii, phil, &
         hpbl, kpbl, &
-        shr3d_h, shr3d_v, &
+        damp_flag, cs_lh, shr3d_h, shr3d_v, &
         dusfc, dvsfc, dtsfc, dqsfc, dkt_out)
     
     implicit none
@@ -239,8 +238,12 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
     integer, intent (out) :: kpbl (im)
 
     real, intent (out) :: hpbl (im)
-  
-    real, intent (in), optional :: shr3d_h (im, km), shr3d_v (im, km)
+ 
+    integer, intent (in) :: damp_flag
+
+    real, intent(in) :: cs_lh
+
+    real, intent (in) :: shr3d_h (im, km), shr3d_v (im, km)
 
     real, intent (out), optional :: dusfc (im), dvsfc (im), dtsfc (im), dqsfc (im), &
         dkt_out (im, km)
@@ -1216,7 +1219,7 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
          do i = 1, im
             tem = 0.5 * (elm (i, k) + elm (i, k + 1))
             tem = tem * sqrt (tkeh (i, k))
-            dku (i, k) = cs * tem
+            dku (i, k) = ck0 * tem
             dkt (i, k) = dku (i, k) / pr0
          enddo
       enddo
@@ -1352,14 +1355,12 @@ subroutine sa_tke_edmf_pbl (im, km, ntrac, ntcw, ntiw, ntke, &
             endif
 
             !obtain 3D TKE shear production:
-            !a. dku_v and dku_h are treated separately
-            !   shrp_3d = dku_h * shr3d_h + dku_v * shr3d_v
-            !b. how to get dku_h?
-            !   dku_h = cs * l_h * sqrt(e)
+            !   shrp_3d = k_h * shr3d_h + k_v * shr3d_v
+            !   k_h = cs * l_h * sqrt(e)
 
-            if ( present(shr3d_h) .and. present(shr3d_v)) then
+            if ( damp_flag .eq. 2 ) then
 
-              dkh(i, k) = cs * sqrt(gdx(i)) * sqrt(tke(i, k)) ! define dkh at layer center
+              dkh(i, k) = cs_lh * sqrt(tke(i, k)) ! dkh is at layer center
 
               tem1 = dkh(i, k) * shr3d_h(i, k)
 

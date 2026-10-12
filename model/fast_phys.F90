@@ -66,7 +66,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                mdt, consv, akap, ptop, ak, bk, hs, te0_2d, u, v, w, pt, &
                delp, delz, q_con, cappa, q, pkz, r_vir, te_err, tw_err, inline_pbl, inline_gwd, &
                gridstruct, thermostruct, domain, bd, hydrostatic, do_adiabatic_init, &
-               do_inline_pbl, do_3dtke, do_inline_gwd, consv_checker, adj_mass_vmr, inline_pbl_flag)
+               do_inline_pbl, damp_flag, cs, do_inline_gwd, consv_checker, adj_mass_vmr, inline_pbl_flag)
     
     implicit none
 
@@ -76,9 +76,11 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
     integer, intent (in) :: is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat, adj_mass_vmr, inline_pbl_flag
 
-    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_pbl, do_inline_gwd
-    logical, intent (in) :: consv_checker
-    logical, intent (in) :: do_3dtke
+    logical, intent (in) :: hydrostatic, do_adiabatic_init, do_inline_pbl, do_inline_gwd, consv_checker
+
+    integer, intent (in) :: damp_flag
+
+    real, intent (in)    :: cs
 
     real, intent (in) :: consv, mdt, akap, r_vir, ptop, te_err, tw_err
 
@@ -123,9 +125,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
     logical, allocatable, dimension (:) :: conv_vmr_mmr
 
     integer :: i, j, k, m, kr, kmp, ncld, ntke, sphum, liq_wat, ice_wat, lsoil
+
     integer :: rainwat, snowwat, graupel, cld_amt, ccn_cm3, cin_cm3, aerosol
 
-    real :: rrg
+    real :: rrg, cs_lh
 
     real, dimension (is:ie) :: gsize, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, q_liq, q_sol, c_moist
 
@@ -288,7 +291,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
         endif
 
         ! 3D-TKE budget terms
-        if (do_3dtke) then
+        if (damp_flag .eq. 2) then
             call mpp_update_domains(ua, va, domain, gridtype=AGRID)
             call mpp_update_domains(u , v , domain, gridtype=DGRID_NE)
             call mpp_update_domains(w, domain)
@@ -300,7 +303,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, w, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, delz, q_con, &
-!$OMP                                    do_3dtke, deform_1h, deform_1v, &
+!$OMP                                    damp_flag, cs, deform_1h, deform_1v, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
 !$OMP                                    mdt, cappa, rrg, akap, r_vir, u_dt, v_dt, &
@@ -313,7 +316,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 !$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, &
 !$OMP                                    tz, wz, dte, te_beg, tw_beg, te_b_beg, tw_b_beg, &
-!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss, &
+!$OMP                                    te_end, tw_end, te_b_end, tw_b_end, te_loss, cs_lh, &
 !$OMP                                    dtsfc, dqvsfc, dqlsfc, dqisfc, dqrsfc, dqssfc, dqgsfc)
 
         do j = js, je
@@ -489,8 +492,10 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                     rb_out = rb, stress_out = stress, wind_out = wind)
 
                 ! SA-TKE-EDMF main program
-                if (do_3dtke) then
-                   call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
+                
+                cs_lh = cs * sqrt(gridstruct%da_min_c) ! used when damp_flag = 2
+
+                call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
                       abs (mdt), uu, vv, ta, qa, &
                       gsize, inline_pbl%lsm (is:ie, j), &
                       radh, rb, inline_pbl%zorl (is:ie, j), u10m, v10m, &
@@ -499,22 +504,9 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
                       inline_pbl%evap (is:ie, j), stress, wind, kinver, &
                       pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
                       inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j), &
-                      shr3d_h = def_1h, shr3d_v = def_1v)
+                      damp_flag, cs_lh, def_1h, def_1v)
                       !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
                       !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
-                else
-                  call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
-                      abs (mdt), uu, vv, ta, qa, &
-                      gsize, inline_pbl%lsm (is:ie, j), &
-                      radh, rb, inline_pbl%zorl (is:ie, j), u10m, v10m, &
-                      inline_pbl%ffmm (is:ie, j), inline_pbl%ffhh (is:ie, j), &
-                      inline_pbl%tsfc (is:ie, j), inline_pbl%hflx (is:ie, j), &
-                      inline_pbl%evap (is:ie, j), stress, wind, kinver, &
-                      pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
-                      inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j))
-                      !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
-                      !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
-                endif
             endif
 
             if (inline_pbl_flag .eq. 2) then
