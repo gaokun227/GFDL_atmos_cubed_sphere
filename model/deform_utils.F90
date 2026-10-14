@@ -37,7 +37,7 @@ contains
 
   subroutine cal_3d_tke_budget(u, v, ua, va, w, &
                    delz, npz, ak, bk, gridstruct, bd, &
-                   deform_1h, deform_1v)
+                   deform_h, deform_v)
 
 ! =======================================================================
 ! cal_3d_tke_budget :: calculate 3D TKE shear production
@@ -62,8 +62,8 @@ contains
     real, intent(in) ::      w(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
     real, intent(in) ::   delz(bd%is:bd%ie,   bd%js:bd%je,   npz)
 
-    real, intent(out) ::    deform_1h(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
-    real, intent(out) ::    deform_1v(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
+    real, intent(out) ::    deform_h(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
+    real, intent(out) ::    deform_v(bd%isd:bd%ied, bd%jsd:bd%jed, npz)
 
 ! local
 
@@ -111,20 +111,20 @@ contains
     jed  = bd%jed
 
 !===========================================================
-! Calculate deform_1h and deform_1v
+! Calculate deform_h and deform_v
 !
 ! See Eq.11 in Zhu et al. 2025
 !
-!      shr_prod = kh * deform_1h + kv * deform_1v 
+!      shr_prod = kh * deform_h + kv * deform_v 
 !
-!     deform_1h = (2*(du/dx**2 + dv/dy**2)
-!                  + (du/dy + dv/dx)**2
-!                  + (dw/dx**2 + dw/dy**2)
-!                  + (dw/dx*du/dz + dw/dy*dv/dz))
+!     deform_h = (2*(du/dx**2 + dv/dy**2)
+!              + (du/dy + dv/dx)**2
+!              + (dw/dx**2 + dw/dy**2)
+!              + (dw/dx*du/dz + dw/dy*dv/dz))
 !
-!     deform_1v = (2*dw/dz**2 
-!                  + (du/dz**2 + dv/dz**2)
-!                  + (dw/dx*du/dz + dw/dy*dv/dz))
+!     deform_v = (2*dw/dz**2 
+!              + (du/dz**2 + dv/dz**2)
+!              + (dw/dx*du/dz + dw/dy*dv/dz))
 !===========================================================
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je,u,v,w, &
@@ -234,11 +234,11 @@ contains
    enddo
 
 !-----------------------------------------------
-! get deform_1h and deform_1v based on all terms
+! get deform_h and deform_v based on all terms
 !-----------------------------------------------
 
 !$OMP parallel do default(none) shared(npz,is,ie,js,je, &
-!$OMP                                  deform_1h, deform_1v, &
+!$OMP                                  deform_h, deform_v, &
 !$OMP                                  dudx,dudy,dudz,dvdx, &
 !$OMP                                  dvdy,dvdz,dwdx,dwdy,dwdz) &
 !$OMP                          private(tmp)
@@ -248,19 +248,19 @@ contains
 
              tmp = dwdx(i,j,k)*dudz(i,j,k)+dwdy(i,j,k)*dvdz(i,j,k)
 
-             deform_1h(i,j,k)=                            &
+             deform_h(i,j,k)=                             &
                (2*(dudx(i,j,k)**2 + dvdy(i,j,k)**2)       &
                 + (dudy(i,j,k) + dvdx(i,j,k))**2+         &
                 + dwdx(i,j,k)**2 + dwdy(i,j,k)**2 + tmp)
 
 
-             deform_1v(i,j,k)=                            &
+             deform_v(i,j,k)=                             &
                (2*dwdz(i,j,k)**2                          &
                 + dudz(i,j,k)**2 + dvdz(i,j,k)**2 + tmp)
 
              ! apply limiters
-             deform_1h(i,j,k) = min( 1.e3, deform_1h(i,j,k) )
-             !deform_1v(i,j,k) = min( 1.e3, deform_1v(i,j,k) )
+             deform_h(i,j,k) = min( 1.e3, deform_h(i,j,k) )
+             !deform_v(i,j,k) = min( 1.e3, deform_v(i,j,k) )
           enddo
        enddo
    enddo

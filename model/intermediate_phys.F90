@@ -169,9 +169,9 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
     real, allocatable, dimension (:,:,:) :: u_dt, v_dt, dp0, u0, v0, qa
     
-    real, allocatable, dimension (:,:,:) :: deform_1h, deform_1v
+    real, allocatable, dimension (:,:,:) :: deform_h, deform_v
 
-    real, allocatable, dimension (:,:) :: def_1h, def_1v
+    real, allocatable, dimension (:,:) :: def_h, def_v
 
     real (kind = r8), allocatable, dimension (:) :: tz
 
@@ -516,10 +516,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         allocate (u_dt (isd:ied, jsd:jed, km))
         allocate (v_dt (isd:ied, jsd:jed, km))
 
-        allocate (deform_1h (isd:ied, jsd:jed, km))
-        allocate (deform_1v (isd:ied, jsd:jed, km))
-        allocate (def_1h (is:ie, 1:km))
-        allocate (def_1v (is:ie, 1:km))
+        allocate (deform_h (isd:ied, jsd:jed, km))
+        allocate (deform_v (isd:ied, jsd:jed, km))
+        allocate (def_h (is:ie, 1:km))
+        allocate (def_v (is:ie, 1:km))
 
         ! initialize wind tendencies
         do k = 1, km
@@ -557,12 +557,12 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 
             call cal_3d_tke_budget(u, v, ua, va, w, &
                                    delz, km, ak, bk, gridstruct, bd, &
-                                   deform_1h, deform_1v)
+                                   deform_h, deform_v)
 
         endif
 
 !$OMP parallel do default (none) shared (is, ie, js, je, isd, jsd, km, nq, ua, va, w, &
-!$OMP                                    damp_flag, cs, deform_1h, deform_1v, &
+!$OMP                                    damp_flag, cs, deform_h, deform_v, &
 !$OMP                                    te, delp, hydrostatic, hs, pt, delz, q_con, &
 !$OMP                                    rainwat, liq_wat, ice_wat, snowwat, graupel, &
 !$OMP                                    sphum, pkz, consv, te0_2d, gridstruct, q, &
@@ -571,7 +571,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
 !$OMP                                    adj_mass_vmr, conv_vmr_mmr, consv_checker, &
 !$OMP                                    te_err, tw_err, inline_pbl_flag, thermostruct) &
 !$OMP                           private (gsize, dz, zi, pi, pik, pmk, lsoil, pe, &
-!$OMP                                    zm, dp, pm, ta, uu, vv, def_1h, def_1v, qliq, qsol, qa, adj_vmr, &
+!$OMP                                    zm, dp, pm, ta, uu, vv, def_h, def_v, qliq, qsol, qa, adj_vmr, &
 !$OMP                                    radh, rb, u10m, v10m, sigmaf, vegtype, q_liq, &
 !$OMP                                    stress, wind, kinver, q_sol, c_moist, peln, &
 !$OMP                                    cvm, kr, dqv, dql, dqi, dqr, dqs, dqg, ps_dt, &
@@ -683,8 +683,8 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                 uu (is:ie, k) = ua (is:ie, j, kr)
                 vv (is:ie, k) = va (is:ie, j, kr)
                 qa (is:ie, k, 1:nq) = q (is:ie, j, kr, 1:nq)
-                def_1h (is:ie, k) = deform_1h (is:ie, j, kr)
-                def_1v (is:ie, k) = deform_1v (is:ie, j, kr)
+                def_h (is:ie, k) = deform_h (is:ie, j, kr)
+                def_v (is:ie, k) = deform_v (is:ie, j, kr)
                 radh (is:ie, k) = inline_pbl%radh (is:ie, j, kr)
                 c_moist = (1 - (q (is:ie, j, kr, sphum) + q_liq + q_sol)) * cv_air + &
                     q (is:ie, j, kr, sphum) * cv_vap + q_liq * c_liq + q_sol * c_ice
@@ -763,7 +763,7 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
                      inline_pbl%evap (is:ie, j), stress, wind, kinver, &
                      pik (is:ie, 1), dp, pi, pm, pmk, zi, zm, &
                      inline_pbl%hpbl (is:ie, j), inline_pbl%kpbl (is:ie, j), &
-                     damp_flag, cs_lh, def_1h, def_1v)
+                     damp_flag, cs_lh, def_h, def_v)
                      !inline_pbl%dusfc (is:ie, j), inline_pbl%dvsfc (is:ie, j), &
                      !inline_pbl%dtsfc (is:ie, j), inline_pbl%dqsfc (is:ie, j))
 
@@ -985,10 +985,10 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         deallocate (tz)
         deallocate (wz)
 
-        deallocate (deform_1h)
-        deallocate (deform_1v)
-        deallocate (def_1h)
-        deallocate (def_1v)
+        deallocate (deform_h)
+        deallocate (deform_v)
+        deallocate (def_h)
+        deallocate (def_v)
 
         ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
         call timing_on('COMM_TOTAL')

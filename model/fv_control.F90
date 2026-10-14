@@ -153,7 +153,6 @@ module fv_control_mod
      integer , pointer :: damp_flag
      real    , pointer :: cs
      real    , pointer :: dddmp
-     real    , pointer :: smag2d
      real    , pointer :: d2_bg
      real    , pointer :: d4_bg
      real    , pointer :: vtdm4
@@ -640,20 +639,12 @@ module fv_control_mod
 
      ! Finish up initialization; write solver information and damping coefficients
 
-     ! Check value of dddmp and smag2d when damp_flag = 0 or 1
+     ! Check value of dddmp when damp_flag = 0
      if (Atm(this_grid)%flagstruct%damp_flag .eq. 0 .and. Atm(this_grid)%flagstruct%dddmp .gt. 0) then
         Atm(this_grid)%flagstruct%cs = Atm(this_grid)%flagstruct%dddmp
         if ( is_master() ) then
            write(*,*) 'Using the old 2nd order divergence damping'
            write(*,*) '!!! dddmp is deprecated; please specify cs parameter instead in the future !!!'
-        endif
-     endif
-
-     if (Atm(this_grid)%flagstruct%damp_flag .eq. 1 .and. Atm(this_grid)%flagstruct%smag2d .gt. 0) then
-        Atm(this_grid)%flagstruct%cs = Atm(this_grid)%flagstruct%smag2d
-        if ( is_master() ) then
-           write(*,*) 'Using the updated smag-type 2nd order damping'
-           write(*,*) '!!! smag2d is deprecated; please specify cs parameter instead in the future !!!'
         endif
      endif
 
@@ -724,7 +715,6 @@ module fv_control_mod
        damp_flag                     => Atm%flagstruct%damp_flag
        cs                            => Atm%flagstruct%cs
        dddmp                         => Atm%flagstruct%dddmp
-       smag2d                        => Atm%flagstruct%smag2d
        d2_bg                         => Atm%flagstruct%d2_bg
        d4_bg                         => Atm%flagstruct%d4_bg
        vtdm4                         => Atm%flagstruct%vtdm4
@@ -973,7 +963,7 @@ module fv_control_mod
             ncep_ic, nggps_ic, hrrrv3_ic, ecmwf_ic, do_diss_est, use_gfsO3, fv_diag_ic, &
             external_eta, res_latlon_dynamics, res_latlon_tracers, d2bg_zq, lim_fac, &
             damp_flag, cs, &
-            dddmp, smag2d, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
+            dddmp, d2_bg, d4_bg, vtdm4, trdm2, d_ext, delt_max, beta, non_ortho, n_sponge, &
             warm_start, adjust_dry_mass, mountain, d_con, prevent_diss_cooling, ke_bg, nord, nord_tr, convert_ke, use_old_omega, &
             dry_mass, grid_type, do_Held_Suarez, &
             consv_te, fill, filter_phys, fill_dp, fill_wz, fill_gfs, consv_am, RF_fast, &
