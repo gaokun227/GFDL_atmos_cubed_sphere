@@ -306,11 +306,11 @@ module fv_arrays_mod
    ! KGao: 10/09/2024
    ! - two new parameters, damp_flag and cs are introduced below for a unified control of the 2nd order damping/diffusion in FV3
    ! - the new cs parameter replaces dddmp, which should be removed in the future
-   integer :: damp_flag = 0  !< a flag control the 2nd order damping used in fv3
-                             !< 0 - default 2nd order divergence damping; applied to divergence damping only
-                             !< 1 - updated smagorinsky type damping 
+   integer :: damp_flag = 0  !< a flag controlling the 2nd order damping used in fv3
+                             !< 0 - default 2nd order Smagorinsky-type divergence damping; applied as divergence damping only
+                             !< 1 - updated Smagorinsky type damping 
                              !< 2 - 3d-tke based damping
-   real    :: cs = 0         !< Dimensionless coefficient for the second-order damping coefficients
+   real    :: cs = 0         !< A unified dimensionless coefficient for the second-order damping
    real    :: dddmp = 0.0    !< Dimensionless coefficient for the second-order Smagorinsky-type
                              !< divergence damping. The default is value is 0.0. 0.2
                              !< (the Smagorinsky constant) is recommended if ICs are noisy.

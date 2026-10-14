@@ -1510,23 +1510,22 @@ module sw_core_mod
 !   - ke(i,j) = ke(i,j) + vort(i,j); ke here combines ke and damp2 * D
 !   - u(i,j) = ... + ke(i,j) - ke(i+1,j) ; no 1/dx factor, because u is u*dx here 
 
-     if (damp_flag .eq. 0 .or. damp_flag .eq. 1) then ! original method
+     if (damp_flag .eq. 0 .or. damp_flag .eq. 1) then ! smag type 
 
-        if ( cs < 1.e-5) then  ! dddmp -> cs
+        if ( cs < 1.e-5) then  ! the old dddmp is now cs
            vort(:,:) = 0.
         else
-           if ( flagstruct%grid_type < 3 ) then
-              ! vort below is relative vort at cell corners
+           if ( damp_flag .eq.1 .or. flagstruct%grid_type >= 3 ) then
+              call smag_corner(abs(dt), u, v, ua, va, vort, bd, npx, npy, gridstruct, ng, cs)
+           else
+              ! vort in the following line is relative vort at cell corners
               call a2b_ord4(wk, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
               do j = js, je+1
                  do i = is, ie+1
-                    ! vort below is only an approxi form of dt * sqrt(T^2+S^2)
+                    ! vort in the following line is an approxi form of dt * sqrt(T^2+S^2)
                     vort(i,j) = abs(dt)*sqrt(delpc(i,j)**2 + vort(i,j)**2)
                  enddo
               enddo
-           else  
-              ! vort below is the correct form
-              call smag_corner(abs(dt), u, v, ua, va, vort, bd, npx, npy, gridstruct, ng)
            endif
         endif
 
@@ -1538,15 +1537,15 @@ module sw_core_mod
            enddo
         enddo
 
-     elseif (damp_flag .eq. 2) then ! tke-based
+     elseif (damp_flag .eq. 2) then ! 3d-tke based
 
         ! get new tke-based damping coeff at cell corners, where divergence is defined
 
-        ! vort below is the tke at cell corners
+        ! vort in the following line is the tke at cell corners
         call a2b_ord4(tke, vort, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
         do j = js, je+1
            do i = is, ie+1
-              ! vort below is the damping coeff at cell corners
+              ! vort in the following line is the damping coeff at cell corners
               vort(i,j) = min(0.2/cs, abs(dt)*sqrt(max(vort(i,j),tkemin))/sqrt(gridstruct%da_min_c))
               damp2 = gridstruct%da_min_c * max( d2_bg, cs*vort(i,j) )
               vort(i,j) = damp2*delpc(i,j) + dd8*divg_d(i,j)
@@ -2051,8 +2050,7 @@ module sw_core_mod
 end subroutine divergence_corner_nest
 
 
-
- subroutine smag_corner(dt, u, v, ua, va, smag_c, bd, npx, npy, gridstruct, ng)
+ subroutine smag_corner(dt, u, v, ua, va, smag_c, bd, npx, npy, gridstruct, ng, smag2d, dudz, dvdz)
 ! Compute the cell-corner Smagorinsky diffusion coefficients
 ! works only if (grid_type==4) (need to add corner handling on cubed sphere)
 
@@ -2060,20 +2058,23 @@ end subroutine divergence_corner_nest
 ! where T = du/dx - dv/dy;   S = du/dy + dv/dx
 
  type(fv_grid_bounds_type), intent(IN) :: bd
- real, intent(in):: dt
+ real, intent(in):: dt, smag2d
  integer, intent(IN) :: npx, npy, ng
  real, intent(in),  dimension(bd%isd:bd%ied,  bd%jsd:bd%jed+1):: u
  real, intent(in),  dimension(bd%isd:bd%ied+1,bd%jsd:bd%jed  ):: v
  real, intent(in),  dimension(bd%isd:bd%ied,bd%jsd:bd%jed):: ua, va
  real, intent(out), dimension(bd%isd:bd%ied,bd%jsd:bd%jed):: smag_c
  type(fv_grid_type), intent(IN), target :: gridstruct
+ real , intent(IN), optional :: dudz(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
+ real , intent(IN), optional :: dvdz(bd%isd:bd%ied+1,bd%jsd:bd%jed)
+
 ! local
  real:: ut(bd%isd:bd%ied+1,bd%jsd:bd%jed)
  real:: vt(bd%isd:bd%ied,  bd%jsd:bd%jed+1)
  real:: wk(bd%isd:bd%ied,bd%jsd:bd%jed) !  work array
  real:: sh(bd%isd:bd%ied,bd%jsd:bd%jed)
  integer i,j
- integer is2, ie1
+ real :: smag_limit
 
  real, pointer, dimension(:,:) :: dxc, dyc, dx, dy, rarea, rarea_c
 
@@ -2097,7 +2098,12 @@ end subroutine divergence_corner_nest
  rarea   => gridstruct%rarea
  rarea_c => gridstruct%rarea_c
 
- is2 = max(2,is); ie1 = min(npx-1,ie+1)
+ if (smag2d > 1.e-5) then
+    smag_limit = 0.20/smag2d
+ else
+    smag_c = 0.0
+    return
+ endif
 
 ! Compute tension strain T at corners
  do j=js,je+1
@@ -2136,11 +2142,29 @@ end subroutine divergence_corner_nest
 ! Interpolate cell-mean S to cell corners
   call a2b_ord4(wk, sh, gridstruct, npx, npy, is, ie, js, je, ng, .false.)
 
-  do j=js,je+1
-     do i=is,ie+1
-        smag_c(i,j) = dt*sqrt( sh(i,j)**2 + smag_c(i,j)**2 )
+  if ( present(dudz) .and. present(dvdz) ) then
+
+  ! This scheme can be expanded to a 3D form by considering the vertical wind shear as below;
+  ! currently not used
+     do j=js,je+1
+       do i=is,ie+1
+           smag_c(i,j) = smag_c(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
+           smag_c(i,j) = smag_c(i,j) + 0.5*(dudz(i-1,j)+dudz(i,j))
+           sh(i,j) = sh(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
+           sh(i,j) = sh(i,j) - 0.5*(dudz(i-1,j)+dudz(i,j))
+           smag_c(i,j) = min(dt*sqrt( sh(i,j)**2 + smag_c(i,j)**2 ), smag_limit)
+       enddo
+    enddo
+
+  else
+
+     do j=js,je+1
+        do i=is,ie+1
+          smag_c(i,j) = dt*sqrt( sh(i,j)**2 + smag_c(i,j)**2 )
+        enddo
      enddo
-  enddo
+
+  endif
 
  end subroutine smag_corner
 
@@ -2167,7 +2191,6 @@ end subroutine divergence_corner_nest
  real:: wk(bd%isd:bd%ied,bd%jsd:bd%jed) !  work array
  real:: sh(bd%isd:bd%ied,bd%jsd:bd%jed)
  integer i,j
- integer is2, ie1
  real smag_limit
 
  real, pointer, dimension(:,:) :: dxc, dyc, dx, dy, rarea, rarea_c
@@ -2191,8 +2214,6 @@ end subroutine divergence_corner_nest
  dy  => gridstruct%dy
  rarea   => gridstruct%rarea
  rarea_c => gridstruct%rarea_c
-
- is2 = max(2,is); ie1 = min(npx-1,ie+1)
 
  if (smag2d > 1.e-5) then
     smag_limit = 0.20/smag2d
@@ -2243,10 +2264,11 @@ end subroutine divergence_corner_nest
  enddo
 
  if ( present(dudz) .and. present(dvdz) ) then
- ! KGao: This scheme can be expanded to consider the vertical wind shear as below;
- !       currently not used and we need to confirm the signs are correct
-     do j=js-1,je+1
-        do i=is-1,ie+1
+ 
+ ! This scheme can be expanded to a 3D form by considering the vertical wind shear as below;
+ ! currently not used
+    do j=js-1,je+1
+       do i=is-1,ie+1
            smag_q(i,j) = smag_q(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))
            smag_q(i,j) = smag_q(i,j) + 0.5*(dudz(i-1,j)+dudz(i,j))
            wk(i,j) = wk(i,j) - 0.5*(dvdz(i-1,j)+dvdz(i,j))
@@ -2254,12 +2276,14 @@ end subroutine divergence_corner_nest
            smag_q(i,j) = min(dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 ), smag_limit)
        enddo
     enddo
+ 
  else
+
     do j=js-1,je+1
        do i=is-1,ie+1
           smag_q(i,j) = dt*sqrt( wk(i,j)**2 + smag_q(i,j)**2 )
        enddo
-   enddo
+    enddo
  endif
 
  end subroutine smag_cell
