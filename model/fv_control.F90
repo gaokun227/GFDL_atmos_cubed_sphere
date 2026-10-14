@@ -648,10 +648,13 @@ module fv_control_mod
         endif
      endif
 
-     ! Ensure related paramters are set correctly when damp_flag = 2
+     ! Ensure the inline 3D TKE scheme is used correctly 
      if (Atm(this_grid)%flagstruct%damp_flag .eq. 2) then
         if (.not. Atm(this_grid)%flagstruct%do_inline_pbl .or. Atm(this_grid)%flagstruct%inline_pbl_flag .ne. 1) &
            call mpp_error(FATAL, "Must set do_inline_pbl to true and inline_pbl_flag to 1 when using damp_flag=2")
+
+        if (Atm(this_grid)%flagstruct%grid_type < 3 .and. .not. Atm(this_grid)%gridstruct%bounded_domain) &
+           call mpp_error(FATAL, "The inline 3D TKE scheme is not intended to be used for global cubed-sphere grid")
      endif
 
      if ( is_master() ) then
@@ -669,7 +672,7 @@ module fv_control_mod
            write(*,*) ' '
            write(*,*) 'Divergence damping Coefficients'
            write(*,*) 'External mode del-2 (m**2/s)=',  Atm(this_grid)%flagstruct%d_ext*Atm(this_grid)%gridstruct%da_min_c/sdt
-           write(*,*) 'Internal mode del-2 SMAG dimensionless coeff=',  Atm(this_grid)%flagstruct%cs
+           write(*,*) 'Internal mode del-2 damping dimensionless coeff=',  Atm(this_grid)%flagstruct%cs
            write(*,*) 'Internal mode del-2 background diff=', Atm(this_grid)%flagstruct%d2_bg*Atm(this_grid)%gridstruct%da_min_c/sdt
 
            if (nord==1) then

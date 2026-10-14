@@ -155,7 +155,6 @@ contains
             wk2(i,j) = rarea_c(i,j)*( -vt(i,j-1) + vt(i,j) ) ! dv/dy at corners
          enddo
       enddo
-! Fix the corners if grid_type /= 4
       do j=js,je
          do i=is,ie
             ! mean of 4 corners
@@ -269,10 +268,7 @@ contains
 
   subroutine compute_dudz(bd, npz, u, v, dudz, dvdz, gz, dp_ref)
 
- !routine to compute vertical gradients in winds
- ! for 2D smag damping
- ! Call AFTER updating gz
- !TODO needs cubed-sphere support (don't compute in corners)
+  ! For computing vertical wind shear 
 
    type(fv_grid_bounds_type), intent(IN) :: bd
    integer, intent(IN) :: npz

@@ -925,9 +925,8 @@ module sw_core_mod
 
       ! get diffusion coefficient to be used for 2nd order damping/diffusion of 
       ! the physical fields defined at cell centers (e.g., potential temp., vorticity, etc)
-
       if (damp_flag .eq. 1 .and. cs > 1.e-5) then ! Lucas's updated smag-type diffusion
-         ! smag_q is dt * sqrt(T**2 + S**2); du/dz and dv/dz not considered yet 
+         ! smag_q is dt * sqrt(T**2 + S**2)
          if (flagstruct%grid_type<3 .and. .not. bounded_domain .and. &
               ( sw_corner .or. se_corner .or. ne_corner .or. nw_corner ) ) call fill_corners(u, v, npx, npy, VECTOR=.true., DGRID=.true.)
          call smag_cell(abs(dt), u, v, smag_q, bd, npx, npy, gridstruct, ng, cs)
@@ -941,7 +940,6 @@ module sw_core_mod
                smag_q(i,j) = min(0.2/cs, abs(dt)*sqrt(max(tke(i,j),tkemin))/sqrt(gridstruct%da_min))
             enddo
          enddo
-
       else
          smag_q(:,:) = 0.
       endif
@@ -2052,7 +2050,6 @@ end subroutine divergence_corner_nest
 
  subroutine smag_corner(dt, u, v, ua, va, smag_c, bd, npx, npy, gridstruct, ng, smag2d, dudz, dvdz)
 ! Compute the cell-corner Smagorinsky diffusion coefficients
-! works only if (grid_type==4) (need to add corner handling on cubed sphere)
 
 ! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
 ! where T = du/dx - dv/dy;   S = du/dy + dv/dx
@@ -2170,7 +2167,6 @@ end subroutine divergence_corner_nest
 
  subroutine smag_cell(dt, u, v, smag_q, bd, npx, npy, gridstruct, ng, smag2d, dudz, dvdz)
 ! Compute the cell-mean Smagorinsky diffusion coefficients
-! works only if (grid_type==4) (need to add corner handling on cubed sphere)
 
 ! Smag = sqrt [ T**2 + S**2 ]:  unit = 1/s
 ! where T = du/dx - dv/dy;   S = du/dy + dv/dx
