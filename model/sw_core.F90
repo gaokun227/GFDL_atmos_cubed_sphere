@@ -1496,7 +1496,7 @@ module sw_core_mod
          dd8 = ( gridstruct%da_min_c*d4_bg )**n2
      endif
 
-! KGao: redesign the 2nd order damping
+! KGao: redesign the 2nd order divergence damping
 ! 
 ! - about the damping coeff:
 !   - damp2 is a coeff (dt * Km) to be used together with horizontal divergence (D or delpc) for 2nd order divergence damping 
@@ -1555,6 +1555,7 @@ module sw_core_mod
         enddo
 
      else
+
         if (is_master()) print*, 'Warning: the damp_flag parameter is not valid !!!' 
         damp2 = 0.
         do j = js, je+1
@@ -1563,7 +1564,7 @@ module sw_core_mod
              ke(i,j) = ke(i,j) + vort(i,j)
           enddo
         enddo
-     endif ! end of the new 2nd order damping
+     endif ! end of 2nd order divergence damping
 
    endif
 
@@ -1621,7 +1622,7 @@ module sw_core_mod
    if ( damp_v>1.E-5 ) then
         damp4 = (damp_v*gridstruct%da_min_c)**(nord_v+1)
         call del6_vt_flux(nord_v, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd)
-   else !elseif (flagstruct%do_diss_est) then
+   elseif (flagstruct%do_diss_est) then
         ut = 0.
         vt = 0.
    endif
@@ -2200,7 +2201,7 @@ end subroutine divergence_corner_nest
     return
  endif
 
-! Compute tension strain T at corners and then the 4-corner mean
+! Compute tension strain T at corners and then apply the 4-corner mean
  do j=js-1,je+2
     do i=is-2,ie+2
        ut(i,j) = u(i,j)*dyc(i,j)
@@ -2241,9 +2242,9 @@ end subroutine divergence_corner_nest
     enddo
  enddo
 
- ! KGao: This scheme can be further expanded to consider the vertical wind shear; 
- !       currently note used and we need to confirm the signs below are correct
  if ( present(dudz) .and. present(dvdz) ) then
+ ! KGao: This scheme can be expanded to consider the vertical wind shear as below;
+ !       currently not used and we need to confirm the signs are correct
      do j=js-1,je+1
         do i=is-1,ie+1
            smag_q(i,j) = smag_q(i,j) - 0.5*(dvdz(i,j-1)+dvdz(i,j))

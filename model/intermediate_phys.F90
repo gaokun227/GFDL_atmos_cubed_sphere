@@ -985,6 +985,11 @@ subroutine intermediate_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, 
         deallocate (tz)
         deallocate (wz)
 
+        deallocate (deform_1h)
+        deallocate (deform_1v)
+        deallocate (def_1h)
+        deallocate (def_1v)
+
         ! Note: (ua, va) are *lat-lon* wind tendenies on cell centers
         call timing_on('COMM_TOTAL')
         if ( gridstruct%square_domain ) then
