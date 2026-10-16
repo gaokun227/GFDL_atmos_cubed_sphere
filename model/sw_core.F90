@@ -1616,22 +1616,30 @@ module sw_core_mod
 
 !--------------------------------------------------------
 ! damping applied to relative vorticity (wk):
-   if ( damp_v>1.E-5 ) then
+
+   if ( damp_v > 1.E-5 .or. (damp_flag .gt. 0 .and. cs > 1.E-5) ) then
+
+     ! vorticity damping using vtdm4
+     if ( damp_v > 1.E-5 ) then
         damp4 = (damp_v*gridstruct%da_min_c)**(nord_v+1)
         call del6_vt_flux(nord_v, npx, npy, damp4, wk, vort, ut, vt, gridstruct, bd)
+     else
+        ut = 0.
+        vt = 0.
+     endif
+
+     ! additional 2nd order damping
+     if ( damp_flag .gt. 0 .and. cs > 1.E-5) then
+        damp4 = cs * gridstruct%da_min_c
+        call del6_vt_flux(0, npx, npy, damp4, wk, vort, fx3, fy3, gridstruct, bd, damp_Km=smag_q)
+        ut = ut + fx3
+        vt = vt + fy3
+     endif
+
    elseif (flagstruct%do_diss_est) then
         ut = 0.
         vt = 0.
    endif
-
-   ! apply 2nd order damping to vorticity via calling del6_vt_flux
-   ! this is an additional step after the higher-order damping using vtdm4
-   if ( damp_flag .gt. 0 .and. cs > 1.e-5) then
-       damp4 = cs * gridstruct%da_min_c
-       call del6_vt_flux(0, npx, npy, damp4, wk, vort, fx3, fy3, gridstruct, bd, damp_Km=smag_q)
-       ut = ut + fx3
-       vt = vt + fy3
-    endif
 
    !estimate dissipation for dissipative heating
    ! or dissipation estimate diagnostic
