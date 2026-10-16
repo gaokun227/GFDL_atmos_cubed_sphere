@@ -60,8 +60,7 @@ module dyn_core_mod
   use fv_regional_mod,      only: current_time_in_seconds, bc_time_interval
   use fv_regional_mod,      only: delz_regBC ! TEMPORARY --- lmh
 
-  !for tke-based damping
-  use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
+  use tracer_manager_mod, only: get_tracer_index
   use field_manager_mod,  only: MODEL_ATMOS
 
 #ifdef SW_DYNAMICS
@@ -318,15 +317,12 @@ contains
          endif
     endif
 
-  ! for tke-based damping
-  ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
-  if (ntke < 0 .and. flagstruct%damp_flag .eq. 2) call mpp_error(FATAL,'no tke defined but calling tke-based damping') 
-
 !-----------------------------------------------------
   do it=1,n_split
 !-----------------------------------------------------
 
      ! for tke-based damping
+     ntke = get_tracer_index(MODEL_ATMOS, 'sgs_tke')
      if (flagstruct%damp_flag .eq. 2) call mpp_update_domains(q(:,:,:,ntke), domain)
 
 #ifdef ROT3

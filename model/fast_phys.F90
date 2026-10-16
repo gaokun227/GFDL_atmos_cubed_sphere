@@ -493,7 +493,7 @@ subroutine fast_phys (is, ie, js, je, isd, ied, jsd, jed, km, npx, npy, nq, nwat
 
                 ! SA-TKE-EDMF main program
                 
-                cs_lh = cs * sqrt(gridstruct%da_min_c) ! used when damp_flag = 2
+                cs_lh = cs * sqrt(gridstruct%da_min) ! used when damp_flag = 2
 
                 call sa_tke_edmf_pbl (ie-is+1, km, nq, liq_wat, ice_wat, ntke, &
                       abs (mdt), uu, vv, ta, qa, &

@@ -25,7 +25,7 @@ module sw_core_mod
  use fv_mp_mod, only: fill_corners, XDir, YDir, is_master
  use fv_arrays_mod, only: fv_grid_type, fv_grid_bounds_type, fv_flags_type
  use a2b_edge_mod, only: a2b_ord4
- use mpp_mod, only: mpp_pe, mpp_error, FATAL
+ use mpp_mod, only: mpp_pe, mpp_error, FATAL, NOTE
 
 #ifdef SW_DYNAMICS
  use test_cases_mod,   only: test_case
@@ -932,7 +932,8 @@ module sw_core_mod
          call smag_cell(abs(dt), u, v, smag_q, bd, npx, npy, gridstruct, ng, cs)
 
       elseif (damp_flag .eq. 2 .and. cs > 1.e-5) then ! tke-based
-         if ( .not. present(tke) ) call mpp_error(FATAL,'tke not defined but using tke-based damping') 
+         if ( .not. present(tke) ) call mpp_error(FATAL,'sgs_tke not defined but using 3d-tke based damping')
+         if ( sqrt(gridstruct%da_min) .gt. 1.e3 ) call mpp_error(NOTE,'Warning: the 3d-tke based damping should only be used for sub-km applications')
          do j = jsd, jed
             do i = isd, ied
                ! smag_q is dt * sqrt(e) / sqrt (A)

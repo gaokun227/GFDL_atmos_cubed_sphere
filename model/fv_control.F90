@@ -106,6 +106,7 @@ module fv_control_mod
      integer, intent(INOUT) :: p_split
      character(100) :: pe_list_name, errstring
      integer :: n, npes, pecounter, i, num_family, ntiles_nest_all, num_tile_top
+     integer :: ntke
      integer, allocatable :: global_pelist(:)
      integer, dimension(MAX_NNEST) :: grid_pes = 0
      integer, dimension(MAX_NNEST) :: grid_coarse = -1
@@ -648,7 +649,14 @@ module fv_control_mod
         endif
      endif
 
-     ! Ensure the inline 3D TKE scheme is used correctly 
+     ! Ensure the inline PBL and 3D-TKE scheme is used correctly
+     if (Atm(this_grid)%flagstruct%do_inline_pbl) then
+        ntke = tm_get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+        n = ncnst - dnats ! index for the 1st tracer that is not to be advected
+        if ( ntke .gt. n) &
+           call mpp_error(FATAL, "Must advect sgs_tke when using inline PBL; check field_table and dnats")
+     endif
+
      if (Atm(this_grid)%flagstruct%damp_flag .eq. 2) then
         if (.not. Atm(this_grid)%flagstruct%do_inline_pbl .or. Atm(this_grid)%flagstruct%inline_pbl_flag .ne. 1) &
            call mpp_error(FATAL, "Must set do_inline_pbl to true and inline_pbl_flag to 1 when using damp_flag=2")

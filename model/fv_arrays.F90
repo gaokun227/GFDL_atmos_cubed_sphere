@@ -309,7 +309,7 @@ module fv_arrays_mod
    integer :: damp_flag = 0  !< a flag controlling the 2nd order damping used in fv3
                              !< 0 - default 2nd order Smagorinsky-type divergence damping; applied as divergence damping only
                              !< 1 - updated Smagorinsky type damping 
-                             !< 2 - 3d-tke based damping
+                             !< 2 - 3d-tke based damping; only for turbulent gray-zone or LES applications 
    real    :: cs = 0         !< A unified dimensionless coefficient for the second-order damping
    real    :: dddmp = 0.0    !< Dimensionless coefficient for the second-order Smagorinsky-type
                              !< divergence damping. The default is value is 0.0. 0.2
