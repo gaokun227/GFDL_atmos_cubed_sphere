@@ -932,7 +932,6 @@ module sw_core_mod
          call smag_cell(abs(dt), u, v, smag_q, bd, npx, npy, gridstruct, ng, cs)
 
       elseif (damp_flag .eq. 2 .and. cs > 1.e-5) then ! tke-based
-         if ( .not. present(tke) ) call mpp_error(FATAL,'sgs_tke not defined but using 3d-tke based damping')
          if ( sqrt(gridstruct%da_min) .gt. 1.e3 ) call mpp_error(NOTE,'Warning: the 3d-tke based damping should only be used for sub-km applications')
          do j = jsd, jed
             do i = isd, ied

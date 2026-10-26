@@ -652,6 +652,7 @@ module fv_control_mod
      ! Ensure the inline PBL and 3D-TKE scheme is used correctly
      if (Atm(this_grid)%flagstruct%do_inline_pbl) then
         ntke = tm_get_tracer_index(MODEL_ATMOS, 'sgs_tke')
+        if ( ntke < 0 ) call mpp_error(FATAL,'Must define sgs_tke when using inline PBL')
         n = ncnst - dnats ! index for the 1st tracer that is not to be advected
         if ( ntke .gt. n) &
            call mpp_error(FATAL, "Must advect sgs_tke when using inline PBL; check field_table and dnats")
